@@ -12532,7 +12532,7 @@
           7
         ],
         "ratingUsers": 7,
-        "updated": 1786707280000,
+        "updated": 1786993067000,
         "users": 90
       },
       "metadata": {
@@ -12548,7 +12548,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Icon Separators",
-        "version": "0.5.38"
+        "version": "1.0.13"
       }
     },
     "taskbar-icon-size": {
@@ -13119,7 +13119,7 @@
           12
         ],
         "ratingUsers": 15,
-        "updated": 1785954199000,
+        "updated": 1786993008000,
         "users": 121
       },
       "metadata": {
@@ -13135,7 +13135,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Separators",
-        "version": "1.0.0"
+        "version": "1.2.0"
       }
     },
     "taskbar-shadow-border": {

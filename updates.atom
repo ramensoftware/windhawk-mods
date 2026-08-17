@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-15T21:50:35.000Z</updated>
+    <updated>2026-08-17T18:57:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.13]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-separators#97365b9596a9f59d13cd702ac18ac010a9b2f319</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
+        <updated>2026-08-17T18:57:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added dynamic taskbar management: add separators from the taskbar menu, drag to reorder, and right-click to remove.</li>
+<li>Moved separator identities and positions to persistent mod storage, with automatic migration from previous settings.</li>
+<li>Moved to MaxWidth-only styling for better compatibility and maintainability. </li>
+<li>Expanded the original worker backend for reliable persistence and genuine hot-reload.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Separators 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-separators#b807c19f31ce498aa59fd2dda16deded1f11ad45</id>
+        <link href="https://windhawk.net/mods/taskbar-separators"/>
+        <updated>2026-08-17T18:56:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add configurable physical divider gaps</li>
+<li>Add Dot, Ring, Square, and Diamond styles</li>
+<li>Improve divider positioning after taskbar button reordering</li>
+<li>Improve pixel alignment for consistent rendering</li>
+<li>Preserve existing taskbar button margins when applying divider spacing</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Settings Styler 1.1]]></title>
         <id>https://windhawk.net/mods/windows-11-settings-styler#8be5d442cd3d958f58b91428d3cf9039536924bd</id>
@@ -555,144 +588,6 @@ they move right/down from center.</p>]]></content>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel in Modern File Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/control-panel-in-modern-file-explorer#f619cf783ed8630d4973aaa7b10dd5ecf0bddf9f</id>
-        <link href="https://windhawk.net/mods/control-panel-in-modern-file-explorer"/>
-        <updated>2026-08-08T11:26:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="controlpanelinmodernfileexplorer">Control Panel in Modern File Explorer</h1>
-<p>Windows 11 normally routes the Control Panel namespace to a dedicated legacy
-Explorer window. This mod disables only that special host-selection rule, so
-Control Panel opens in the regular modern File Explorer.</p>
-<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Painel%20de%20Controle.jpg" alt="Control Panel in modern File Explorer" /></p>
-<p>The Control Panel contents remain unchanged, but they are hosted by the modern
-Explorer frame with its current address bar, command bar, and tab interface.
-Its window also keeps File Explorer's taskbar identity instead of appearing as
-a separately pinned application.</p>
-<p>The mod allows normal File Explorer behavior and compatible tab-management mods
-and programs to handle Control Panel like other File Explorer locations.
-Separate-process behavior for regular folders is not changed, and there
-are no settings or background tasks.</p>
-<p>Unlike <code>aerexplorer</code>, this mod changes host selection only for Control Panel
-items and also removes their separate taskbar identity. It doesn't modify the
-host selection of other File Explorer locations or include legacy Explorer
-customizations. <code>cpl-classic-view-lite</code> is complementary rather than
-overlapping — it changes how the Control Panel folder's contents are
-presented, not which frame hosts the window.</p>
-<h2 id="knownbehavior">Known behavior</h2>
-<ul>
-<li>Control Panel is intentionally kept in the modern File Explorer even when
-"Launch folder windows in a separate process" is enabled. Regular folders
-continue to follow that setting.</li>
-<li>Pinning a Control Panel window pins File Explorer because the window shares
-File Explorer's taskbar identity.</li>
-<li>Control Panel launched via Run (<code>Win+R</code> → <code>control</code>) or <code>control.exe</code>
-directly is also covered — the mod hooks <code>control.exe</code> too, since it goes
-through the same host-selection functions before launching its own
-Explorer window.</li>
-</ul>
-<hr />
-<h1 id="paineldecontrolenoexploradormoderno">Painel de Controle no Explorador moderno</h1>
-<p>Normalmente, o Windows 11 encaminha o namespace do Painel de Controle para uma
-janela legada dedicada do Explorer. Este mod desativa somente essa regra especial
-de seleção de host, fazendo o Painel de Controle abrir no Explorador de Arquivos
-moderno normal.</p>
-<p>O conteúdo do Painel de Controle não é alterado, mas passa a ser hospedado pelo
-frame moderno do Explorer, com a barra de endereços, a barra de comandos e a
-interface de abas atuais.
-A janela também mantém a identidade do Explorador de Arquivos na barra de
-tarefas, em vez de aparecer como um aplicativo fixado separado.</p>
-<p>O mod permite que o comportamento normal do Explorador de Arquivos e mods e
-programas compatíveis de gerenciamento de abas tratem o Painel de Controle como
-outras localizações do Explorador de Arquivos. O comportamento de processo separado
-das pastas comuns não é alterado, e não há configurações nem tarefas em segundo plano.</p>
-<p>Ao contrário do <code>aerexplorer</code>, este mod altera a seleção de host somente para
-itens do Painel de Controle e também remove sua identidade separada na barra de
-tarefas. Ele não altera o host de outras localizações nem inclui personalizações
-do Explorador legado. O <code>cpl-classic-view-lite</code> é complementar, não
-concorrente — ele muda como o conteúdo da pasta do Painel de Controle é
-apresentado, não qual frame hospeda a janela.</p>
-<h2 id="comportamentoconhecido">Comportamento conhecido</h2>
-<ul>
-<li>O Painel de Controle é mantido intencionalmente no Explorador moderno mesmo
-quando "Iniciar as janelas de pastas em um processo separado" está ativado.
-As pastas comuns continuam seguindo essa configuração.</li>
-<li>Fixar uma janela do Painel de Controle fixa o Explorador de Arquivos, pois a
-janela compartilha a identidade do Explorador na barra de tarefas.</li>
-<li>O Painel de Controle aberto pelo Executar (<code>Win+R</code> → <code>control</code>) ou
-diretamente pelo <code>control.exe</code> também é coberto — o mod também intercepta
-o <code>control.exe</code>, pois ele passa pelas mesmas funções de seleção de host
-antes de abrir sua própria janela do Explorer.</li>
-</ul>
-<hr />
-<h1 id="paneldecontrolenelexploradormoderno">Panel de control en el Explorador moderno</h1>
-<p>Windows 11 normalmente dirige el espacio de nombres del Panel de control a una
-ventana heredada dedicada de Explorer. Este mod desactiva solamente esa regla
-especial de selección de host, haciendo que el Panel de control se abra en el
-Explorador de archivos moderno normal.</p>
-<p>El contenido del Panel de control no cambia, pero pasa a estar alojado en el
-marco moderno de Explorer, con la barra de direcciones, la barra de comandos y
-la interfaz de pestañas actuales.
-La ventana también conserva la identidad del Explorador de archivos en la barra
-de tareas, en vez de aparecer como una aplicación anclada independiente.</p>
-<p>Este mod permite que el Explorador de archivos funcione con normalidad y que los
-mods y programas compatibles de gestión de pestañas traten el Panel de control como
-cualquier otra ubicación del Explorador de archivos. El comportamiento de los procesos
-independientes de las carpetas comunes no se ve alterado, y no hay configuraciones ni
-tareas en segundo plano.</p>
-<p>A diferencia de <code>aerexplorer</code>, este mod cambia la selección del host solamente
-para los elementos del Panel de control y también elimina su identidad separada
-en la barra de tareas. No cambia el host de otras ubicaciones ni incluye las
-personalizaciones heredadas de Explorer. <code>cpl-classic-view-lite</code> es
-complementario, no competidor — cambia cómo se presenta el contenido de la
-carpeta del Panel de control, no qué marco aloja la ventana.</p>
-<h2 id="comportamientoconocido">Comportamiento conocido</h2>
-<ul>
-<li>El Panel de control se mantiene intencionadamente en el Explorador moderno
-incluso cuando está activada la opción de iniciar ventanas de carpeta en un
-proceso independiente. Las carpetas normales siguen respetando esa opción.</li>
-<li>Anclar una ventana del Panel de control ancla el Explorador de archivos porque
-la ventana comparte su identidad en la barra de tareas.</li>
-<li>El Panel de control abierto mediante Ejecutar (<code>Win+R</code> → <code>control</code>) o
-directamente con <code>control.exe</code> también está cubierto — el mod también
-engancha <code>control.exe</code>, ya que pasa por las mismas funciones de selección
-de host antes de abrir su propia ventana de Explorer.</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 "Please Wait" Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-please-wait-restorer#8f52521d39ea694fc4809a963808a6bfafcc2b5e</id>
-        <link href="https://windhawk.net/mods/win7-please-wait-restorer"/>
-        <updated>2026-08-07T15:30:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781pleasewaitrestorer">Windows 7/8.1 "Please Wait" Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod shows the small classic "Please wait" box from Windows 7/8.1 while the
-system changes the theme, instead of the modern full-screen overlay. The
-built-in text is localized for several common display languages while unsupported
-languages use English.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/PleaseWait.PNG" alt="screenshot" /></p>
-<h2 id="notes">Notes</h2>
-<p>The mod has been tested on Windows 10 1809 and Windows 10 21H2.
-Additionally, the mod only attaches when <code>themeui.dll</code> is actually loaded by one of the
-included processes. If the private themeui symbol is unavailable on a Windows
-build, the mod remains inactive in that process.
-For specific setups (such as unsupported language), it is recommended to apply the required changes using the mod's settings.</p>
-<h2 id="knownlimitations">Known Limitations</h2>
-<p>On legacy Windows 10 builds (particularly version 1809 and prior), altering the display DPI scaling while the mod is running can result in slight rendering anomalies. For instance, the captured backdrop or classic box may appear misaligned until a subsequent theme change occurs. To ensure full restoration of proper rendering, it is advisable to restart explorer.exe or perform a user logoff/logon cycle following any DPI modification.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Nex — Testing on Windows 10 21H2 and providing feedback</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
