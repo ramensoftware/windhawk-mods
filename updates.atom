@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-17T18:57:47.000Z</updated>
+    <updated>2026-08-17T19:06:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.17.2]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#f863c7afea97a688a83ef22cc951a99b9d5111d0</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-08-17T19:06:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Say that the watched folder can be your own, in the mod description, the readme, and the folder setting itself</li>
+<li>Shorten the settings descriptions</li>
+<li>New readme screenshot showing the notification with renaming turned on</li>
+<li>Fix a colon in a setting description that broke the settings YAML</li>
+<li>Say what happens when SnapSentry's notifications are turned off in Windows</li>
+<li>Make clear the Recycle Bin covers automatic deletions, not just the popup buttons</li>
+<li>Name the Start Menu shortcut and registry entry the popup leaves, instead of describing them vaguely</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Icon Separators 1.0.13]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-separators#97365b9596a9f59d13cd702ac18ac010a9b2f319</id>
@@ -566,28 +585,6 @@ already published by the playing application to Windows.</p>]]></content>
         <author>
             <name>Spartacus</name>
             <uri>https://github.com/spartaaacus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Widget Board Size and Position 0.1]]></title>
-        <id>https://windhawk.net/mods/widget-board-size-position#3464f4b275a5b6b7c1f34c94244904f631142a0e</id>
-        <link href="https://windhawk.net/mods/widget-board-size-position"/>
-        <updated>2026-08-08T13:02:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="widgetboardsizeandposition">Widget Board Size and Position</h1>
-<p>Set a custom size and position for the new Widget Board on Windows 11.</p>
-<p>Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (<code>WidgetBoard.exe</code>).</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/widget-board-size-position/wboard-size.png" alt="Screenshot" />
-<em>Example for making the Widget Board smaller</em></p>
-<p>Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
-700x600 setting becomes 1400x1200 native pixels on a 200% display.</p>
-<p><code>horizontalAnchor</code> accepts: <code>system</code>, <code>left</code>, <code>center</code>, <code>right</code>.
-<code>verticalAnchor</code> accepts: <code>system</code>, <code>top</code>, <code>center</code>, <code>bottom</code>.</p>
-<p>When an anchor is <code>system</code>, Windows' requested position is preserved on that
-axis. Positive offsets move inward from left/top/right/bottom; for <code>center</code>,
-they move right/down from center.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
