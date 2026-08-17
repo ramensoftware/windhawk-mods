@@ -2,7 +2,7 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        2.0.0
+// @version        2.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -41,8 +41,8 @@ Windows 8.1 theme
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
 - **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
-- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian are currently supported.
-- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
+- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian and Turkish are currently supported.
+- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO/TR). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
 ## Hotkeys
 These are the hotkeys that can be configured in the mod.
@@ -72,6 +72,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - TheWolf - Testing on Windows 11 23H2
+- cips_35 - Testing on Windows 11 25H2 and Turkish Translation
 - ✮⋆˙ Holly B!!──★ ˙🍓 ̟ ˙✧˖°🪼⋆.ೃ [NURO] - Screenshot of the mod under a Windows 7 theme
 */
 // ==/WindhawkModReadme==
@@ -107,6 +108,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
     - nl: Nederlands
     - pl: Polski
     - ro: Română
+    - tr: Türkçe
 - restoreCplHubLinks: true
   $name: Control Panel links
   $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
@@ -409,10 +411,13 @@ static GdiplusShutdown_t pGdiplusShutdown = NULL;
 static void* g_pBmpFlyoutGood = NULL;
 static void* g_pBmpFlyoutWarning = NULL;
 static void* g_pBmpFlyoutAlert = NULL;
-// GDI+ richiede che ogni stream PNG resti vivo quanto la relativa immagine.
 static IStream* g_pStreamFlyoutGood = NULL;
 static IStream* g_pStreamFlyoutWarning = NULL;
 static IStream* g_pStreamFlyoutAlert = NULL;
+static void* g_pBmpShield16 = NULL;      // native 16x16, used when drawing at <=16 px
+static void* g_pBmpShield64 = NULL;      // 64x64 source, downscaled above 16 px
+static IStream* g_pStreamShield16 = NULL;
+static IStream* g_pStreamShield64 = NULL;
 
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
@@ -479,7 +484,6 @@ static BYTE B64Val(WCHAR c) {
 }
 
 
-// Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
 static void ShutdownGdiPlus() {
     // Dispose cached GDI+ bitmaps BEFORE shutting down the runtime
     if (g_pBmpFlyoutGood) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutGood); g_pBmpFlyoutGood = NULL; }
@@ -488,6 +492,10 @@ static void ShutdownGdiPlus() {
     if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
     if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
+    if (g_pBmpShield16) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield16); g_pBmpShield16 = NULL; }
+    if (g_pStreamShield16) { g_pStreamShield16->Release(); g_pStreamShield16 = NULL; }
+    if (g_pBmpShield64) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield64); g_pBmpShield64 = NULL; }
+    if (g_pStreamShield64) { g_pStreamShield64->Release(); g_pStreamShield64 = NULL; }
 
     // Shutdown GDI+ runtime
     if (g_hGdiPlus) {
@@ -516,9 +524,7 @@ static void ShutdownGdiPlus() {
     pGdipCreateBitmapFromStream = NULL;
     pGdipCreateHICON = NULL;
     pGdiplusShutdown = NULL;
-
 }
-
 
 // ============================================================================
 // RAII Guard Classes
@@ -692,6 +698,7 @@ void LoadSettings() {
         else if (_wcsicmp(lang, L"nl") == 0) g_Settings.language = 8;
         else if (_wcsicmp(lang, L"pl") == 0) g_Settings.language = 9;
         else if (_wcsicmp(lang, L"ro") == 0) g_Settings.language = 10;
+        else if (_wcsicmp(lang, L"tr") == 0) g_Settings.language = 11;
         else g_Settings.language = 0;
     } else {
         g_Settings.language = 0; // auto-detect
@@ -1276,6 +1283,48 @@ static const LocalePack g_Locales[] = {
         L"A fost detectat\u0103 o nou\u0103 problem\u0103 critic\u0103. Face\u021Bi clic pentru a o examina acum.",
         L"Problema critic\u0103 este \u00EEnc\u0103 prezent\u0103. Face\u021Bi clic pentru a o remedia."
     }},
+    // Turco (0x041F) - COMPLETO - autentico Windows 7/8.1 turco
+{ 0x041F, {
+    L"Eylem Merkezi",
+    L"Eylem Merkezi'ni a\u00E7",
+    L"Eylem Merkezi",
+    L"Sorun Giderme",
+    L"Windows Update",
+    L"2 \u00F6nemli ileti",
+    L"1 \u00F6nemli ileti",
+    L"\u015Eu anda alg\u0131lanan sorun yok\nBilgisayar\u0131n\u0131z\u0131n durumuyla ilgili son iletilere g\u00F6z atmak ve sorunlara \u00E7\u00F6z\u00FCm bulmak i\u00E7in Eylem Merkezi'ni kullanabilirsiniz.",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Windows G\u00FCvenlik Duvar\u0131 kapat\u0131ld\u0131.",
+    L"Vir\u00FCsten koruma kapat\u0131ld\u0131.",
+    L"Windows Update yap\u0131land\u0131r\u0131lmad\u0131.",
+    L"Kullan\u0131c\u0131 Hesab\u0131 Denetimi kapat\u0131ld\u0131.",
+    L"Eylem Merkezi'ni a\u00E7mak i\u00E7in t\u0131klay\u0131n.",
+    L"Eylem Merkezi yeni sorunlar alg\u0131lad\u0131.",
+    L"Windows Update otomatik g\u00FCncelle\u015Ftirme olarak ayarlanmad\u0131.",
+    L"Casus yaz\u0131l\u0131mdan koruma kapat\u0131ld\u0131.",
+    L"\u0130nternet g\u00FCvenli\u011Fi ayarlar\u0131nda dikkat edilmesi gerekenler var.",
+    L"G\u00FCvenlik Merkezi hizmeti \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Defender ger\u00E7ek zamanl\u0131 korumas\u0131 kapat\u0131ld\u0131.",
+    L"...ve daha fazlas\u0131",
+    L"\u015Eu anda alg\u0131lanan sorun yok",
+    L"%d sorun alg\u0131land\u0131.",
+    L"Bir sorun alg\u0131land\u0131. L\u00FCtfen g\u00FCvenlik durumunuzu g\u00F6zden ge\u00E7irin.",
+    L"SmartScreen kapat\u0131ld\u0131. Web'den al\u0131nan uygulamalar denetlenmeyecek.",
+    L"Sistem yedeklemesi yap\u0131land\u0131r\u0131lmad\u0131 veya \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Hata Bildirimi hizmeti devre d\u0131\u015F\u0131 b\u0131rak\u0131ld\u0131.",
+    L"Disk durumu denetimi \u00F6nerilir.",
+    L"Sorunlar\u0131 incelemek ve d\u00FCzeltmek i\u00E7in Eylem Merkezi'ni a\u00E7\u0131n.",
+    L"Sistem durumunuzu g\u00F6zden ge\u00E7irin",
+    L"Pil zay\u0131f. Cihaz\u0131n\u0131z\u0131 bir g\u00FC\u00E7 kayna\u011F\u0131na ba\u011Flay\u0131n.",
+    L"Windows g\u00FCncelle\u015Ftirmeleri bekliyor. Bunlar\u0131 uygulamak i\u00E7in bilgisayar\u0131n\u0131z\u0131 yeniden ba\u015Flat\u0131n.",
+    L"Uzak Masa\u00FCst\u00FC, A\u011F D\u00FCzeyi Kimlik Do\u011Frulamas\u0131 olmadan etkinle\u015Ftirildi.",
+    L"Sistem s\u00FCr\u00FCc\u00FCs\u00FC BitLocker ile korunmuyor.",
+    L"Yenilikleri g\u00F6rmek i\u00E7in t\u0131klay\u0131n.",
+    L"Yeni kritik sorun alg\u0131land\u0131. \u015Eimdi incelemek i\u00E7in t\u0131klay\u0131n.",
+    L"Kritik sorun h\u00E2l\u00E2 mevcut. D\u00FCzeltmek i\u00E7in t\u0131klay\u0131n."
+}},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
 #define LOC(id) (g_CurrentLocalePack->strings[id])
@@ -1452,6 +1501,7 @@ void DetermineLocale() {
         case 8: g_CurrentLocalePack = FindLocalePack(0x0413); g_LastDetectedUILang = 0x0413; break;
         case 9: g_CurrentLocalePack = FindLocalePack(0x0415); g_LastDetectedUILang = 0x0415; break;
         case 10: g_CurrentLocalePack = FindLocalePack(0x0418); g_LastDetectedUILang = 0x0418; break;
+        case 11: g_CurrentLocalePack = FindLocalePack(0x041F); g_LastDetectedUILang = 0x041F; break;
         default: {
             LANGID ui = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(ui);
@@ -1646,7 +1696,13 @@ static const WCHAR icon_id4_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzen
 static const WCHAR icon_id5_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAQMSURBVFhHvZdtTFNXGMdNZjDTZhLsC7O4pWZlvqAze/GL21wWGhRBtymJug+YfUGyxESyBJeFpEMZyeL4YpQQPqxLlgg4dcsSjCykDhS0WBgqatfIpsDYSjvubW9b2gLPnuf0nNqgzpZe+Se/9N7ec/7P/5x7zz3tIpQe+QSxcuiYvlswJRdPhU+Rfcj7SAHyApKRmDFwifM02Y+sQuYlZsLrQ15eXj0/fKzGx8c9AwMDd9va2rpqamrOGI3GeuGBlCJpK60As7OzMD09DZFIBEKhEExMTEw1NjZ2ZGVlfcm9NpNpOsooQCAQAFmWobOz8xb3omcqLakSYHJyEnQ63VfcbwkZpyrVAggvZBmSsp5FgM+QXCQlqRqgqqqqRXgitCpWInOlRRbHD1UOgKtitqGhoV34PoWdSPyE+2ccwOfzsePh4WEPLs8LRUVFJ0UNQWFh4QmNRnOUnz+bAIqisDYzMzO850N5vV4fr3sIWfgAzc3NF3jdD5CFDSBJkt9gMIj3BXtAFzRAXV3dWV5zD8L02ADhcHiqo6PjWnV19emysrKm0tLSU6JtSUnJqYqKiu9sNlsnPmzeVAMMDg7e5R5HkOUI0yMB7Hb7dfoU1/4Ps9n8dXl5+be4Q96ncxFgYqQL+s/lQ//5fAh4HeByuYaTnvwtSELMiNdno0iC9nn60UH3yoAI0bEJsVoslpPt7e39tbW1P9JeIAL89vNbMHTRBPd6CsB5flMsaUBs7SfrSQFeQ56mA4g1Ozv7GL18hoaGxinAmPsncLRoQR6zQNC7A/padbCv+Pnvse1u1muOnhQgVdFSEn2sBevXfmO3rZRu//IKxIIfMWgWLtlWjGKo56jDXGUagEQbTzFysHLv0rOOVi0E/t6WCBDyxWcBA9AtfURqBGDCAllXT2vdLns+xEIfkxcjPgsbKICL2rDGSVIzQCWNVPFsh5jyYSJA1L8LQp5tYhYqWeMkqRIAjTU0QnfXWogFdkFU3vkwwGQx44+e9WIWNKwTl1oBjvS16XGkRRCVdkDk3+2JABGPhREcew+oDbVlnbgyDoCGOTQyGuHUX1shPPouhEfegcMH8xjhB1vijLwNf/auE7OQw7urEqDe+YMBFPebEHRtguCdDaDcLmAE72yMf0e4X4fA72+IWaAXE9MXiDUajcbmEwCNjDSi0R585Q7mg99pAn/fy+B3vJS4BQHnanZNufEqKDfXwMgVs5gFI3l8jlhp85lngKaBc7lYeDXIV40gX8kF+bIepG59IoDc8yK7RqEI+boJnGfYLDSRB70cRFFByn8uaCT/XDOzIlKXDqRfV4B0KSf+mUAbv9ZN6DGgAUa7TWwWyIO2RQrBZgJJ6+85mvS2Hl8O88HRou39D0aewSDtJRCqAAAAAElFTkSuQmCC";  // Tray: Bianca + Triangolo
 static const WCHAR icon_id6_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARLSURBVFhHvZd/SJx1HMcf2fxRuttynid3mjk7XWLLVcoG7o/ixAVa/pFBgzCKMPr1hxQWJl00GxQIJZuEf2QQFEYkBbOkS7AoEtO2GW1e2rEs5+6cZ5qPP+/d+/Pc97HLtna3c77hxfN9Hp/7vN/P9/n+eNSoTPIYcSukLde2TJHm0fA0eZjcS4qJhcQlozCUzPMYOUJyyDXJKKL8kZ2dfUw1L6vJycmLw8PDZ7u6uvqbm5s/cjgcx8wapJrErJgChEIhrK6uYmlpCQsLC/D7/Yvt7e29SUlJr6paZVI0FsUVYG5uDrOzs/B4PCOqloypmLQpAWZmZmC1Wl9X9ZKlcLTatABmLZJKotb1CPA8ySJRaVMDNDQ0fGjWJDIr7GSjMsj2cHOTA3BWhFpbW0+ada/C/SR8ourHHWB6etpoj4+PX+T07KmsrDxuepi4XK62tLS019T59QkwPz9v3LO2tqZ++Y8CgcC08n2ObH2Ajo6OHuVbQ7Y2QDAY/NNms5nrhTFAtzRAS0vLx8rzQWLosgF0XV/s7e39vrGx8YPa2tp3qqurT5j3VlVVnaivr3+vs7PTw8EWiAxwaeQM9BY3psoPQC9wYDYnAxMHS7B49ChGPvt0TNV4kewkhv4ToK+vb1CO5t/+D6fT+UZdXd27P3Z/8sebO5K7cXchUOwADh8CDu4D7iwASouAjETMp6fgZU3rfiIz/RH+dl1GIeVvPEUEss/LR4e8KxsxJe084q6oqDj+VdtbZydvsYaQvxu4zQ7kWICiHKCQ7fwsII/XUzUDXdMwtl1b+Wm/c33XvFKAO8jV9Chxv23P6IF9J3A7n3xfLlCyRwoBWamA7YZw+y4ncE8pkKAhwPNRTXsqXOLKAaLSrUmJR1CSD6TRZD+NTZXtNZ52Xswfuk9dBFZKC+FPS8F4OITxORdXAF++owm5fPr0bcCBYmBpUVWiXngWeObxcFtd/4LmZxQ/52Y2SY24Alwo4lPnZwJ21dU5u/4dQqTOOarxLY2HyAj5ja9IasQVYMpC04xkYHcijynwW3dgRoJsCMHvNXSTczQ+TaQHThGpEVeACTGjeYjmQZr7yFzlIeiqnhlErzkc7nbiJWObFcCXx+633YhLNJ5y3AT9gQpVidr4Kp6sw680nSDnGdxr2RZ/gFEOJB8L/sIA+l5OQ5EyfoUm70sPRQapqUCQ9w/z+imnI/5BKFNpkMV+YNEphjDNuOJhgNeGePRFhOD9YgJ5dUMJ4WkoKdzLy8srcoO0FVHrNBcVGd1fEwnSxuJyLgNOutw0NY/cEPBdxEL0EnHL5nOtAc4VOMoGE7QVbnP4RgzZEzLVZMCdJxeUsfA7GUhPWRl1la8vxbLem6YmMf9z4S28ufhLLs39NOinqRzl1YjhX8RL+BkED+/xusplf1mXbIsSwugJEte/533cpBikyZuejM9pyDZ8WRbp8qaB8AYWIU37G1xt2pFGvWvBAAAAAElFTkSuQmCC";  // Tray: Bianca + X Rossa
 
-static const WCHAR icon_shield_b64[] = L"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";
+static const WCHAR icon_shield_b64[] = L"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";
+
+// Smaller variant of the shield asset, used on lower-resolution displays
+// (e.g. ~1366x768 and similar common laptop panels) to keep the icon crisp
+// without downscaling a larger source image.
+static const WCHAR icon_shield_small_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAC9klEQVR4nG2TTWgcdRjGf//5yM7sxP2o2aRGa5rDVgUjEgpV0UOFzUG9RBGhohfxIAiFTXPTi0IRY2YuoifFU1i9LEgMIhK9iEKMhZWUYmqaQJqEWdPsrNmZnZ2Pv4fYmMa+l/fyPD/e93l5BXeparU6Ojg4+LkQ4hFASdO00Ww2X7Fte/e4Vhwzni6Xy9NCiJfGx8dP5HI5VUop2+12vLS0dEtV1a9XV1c/sG17/Q7A1NTUC6VS6V1FUUYmJiaKQgjt0o++0sLgo+Kb5PIFvPw7vf7+/nRxcdFL03Sl2Ww6s7Oz8xqAaZqXK5XKw5Zlac9/qwo96HDh/Bm+/HmL+/Mup8abXLtysa+zM0ylcllN0/SZer0+AswrAIqiWIVCQat8lxPnRi0uPPsgV3clcRDRly0h9JcZO6dzcnidcOktPZvNKqqqZgCU26tIKens74Ou88vNHldXW+itAEUN0NQNpHyckbJPTHJHiNq/PRXiIM9fNzyinsDa9oiDGEXvcmv9CqqmoWYstEwKgJTyP4CU0hdCyDj4W4SxDt0OfhSj6DoyhtBTSBH0ejEiUgFSKeXeISBJkmXf9898cuL1zPkn+skWMwd7CcnoF/OEsaBPE+QzCqf2b/Dx2TBJkuT3wwziOP7Ndd3wsYESGjpG9h6MooEQCgiFxBzCGBhB3jdIsziA67qtOI6XjwK+aTQaW/rZT6O224PIgOhgCkWAmTUxCymFtXXef7ovWllZ2Y6i6KtDgG3ba67rbgoh0r/CIfwgQaZZEKBpguEHUiy/w70Zj0dLauK67jXHcTaPnpEgCF6bm5vbKox92LtxXefmnz7hXkoGyDX+YGBjGefFfFir1Ta73W71tu8Q4DjOju/7b9dqtZb10Hu9be8pfvo+Ymj7OmOnd3FePRnW6/W27/sXHcfZueszAUxPTz9nmuZnk5OTRcMwNEB6npcsLCzsBUHwxszMzMJR/f8AANVqtWwYhq3r+pOAGkXRD91u95Jt22vHtf8AU4dOukbuXlEAAAAASUVORK5CYII=";
+
 
 static HICON Base64ToIcon(const WCHAR* b64) {
     if (!b64 || !*b64) return NULL;
@@ -2073,33 +2129,8 @@ HICON LoadActionCenterIcon(int index) {
 }
 
 
-// Returns TRUE if the running OS is older than Windows 10 21H2 (build 19044).
-// Uses VerifyVersionInfoW so it is NOT affected by the compatibility shim that
-// makes GetVersionExW report 6.2 on Windows 8.1 and later.
-static BOOL IsSystemOlderThanWin1021H2(void) {
-    OSVERSIONINFOEXW osvi = { sizeof(osvi) };
-    osvi.dwMajorVersion = 10;
-    osvi.dwMinorVersion = 0;
-    osvi.dwBuildNumber  = 19044; // Windows 10 21H2
-
-    DWORDLONG mask = 0;
-    mask = VerSetConditionMask(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_BUILDNUMBER,  VER_GREATER_EQUAL);
-
-    // VerifyVersionInfoW returns TRUE only if ALL conditions hold:
-    // Major >= 10 AND Minor >= 0 AND Build >= 19044.
-    if (VerifyVersionInfoW(&osvi,
-            VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask))
-        return FALSE; // Windows 10 21H2 or newer (includes Windows 11)
-
-    return TRUE; // older than Windows 10 21H2
-}
 void InitFlyoutIcons() {
-
-    // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
-    // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
-    // la rasterizzazione aggiuntiva introdotta dalla conversione in HICON.
+    // Clean up existing flyout flag bitmaps
     if (g_pBmpFlyoutGood && pGdipDisposeImage) {
         pGdipDisposeImage(g_pBmpFlyoutGood);
         g_pBmpFlyoutGood = NULL;
@@ -2124,40 +2155,65 @@ void InitFlyoutIcons() {
         g_pStreamFlyoutAlert->Release();
         g_pStreamFlyoutAlert = NULL;
     }
-
-    g_pBmpFlyoutGood = Base64ToGdipBitmap(
-        icon_id0_b64, &g_pStreamFlyoutGood);
-    g_pBmpFlyoutWarning = Base64ToGdipBitmap(
-        icon_id1_b64, &g_pStreamFlyoutWarning);
-    g_pBmpFlyoutAlert = Base64ToGdipBitmap(
-        icon_id2_b64, &g_pStreamFlyoutAlert);
-
     
-    g_hFlyoutIconGood    = Base64ToIcon(icon_id0_b64);
-    
-    g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
-    
-    g_hFlyoutIconAlert   = Base64ToIcon(icon_id2_b64);
-        // Choose the shield icon based on the OS version:
-    //  - Older than Windows 10 21H2 (build 19044): use the embedded base64 shield.
-    //  - Windows 10 21H2 or newer (incl. Windows 11): use the original system shield.
-    if (IsSystemOlderThanWin1021H2()) {
-        g_hShieldIcon = Base64ToIcon(icon_shield_b64);
-    } else {
-        g_hShieldIcon = NULL;
+    // Clean up existing shield bitmaps
+    if (g_pBmpShield16 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield16);
+        g_pBmpShield16 = NULL;
     }
+    if (g_pStreamShield16) {
+        g_pStreamShield16->Release();
+        g_pStreamShield16 = NULL;
+    }
+    if (g_pBmpShield64 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield64);
+        g_pBmpShield64 = NULL;
+    }
+    if (g_pStreamShield64) {
+        g_pStreamShield64->Release();
+        g_pStreamShield64 = NULL;
+    }
+
+    // Load flyout flag GDI+ bitmaps for high-quality rendering
+    g_pBmpFlyoutGood = Base64ToGdipBitmap(icon_id0_b64, &g_pStreamFlyoutGood);
+    g_pBmpFlyoutWarning = Base64ToGdipBitmap(icon_id1_b64, &g_pStreamFlyoutWarning);
+    g_pBmpFlyoutAlert = Base64ToGdipBitmap(icon_id2_b64, &g_pStreamFlyoutAlert);
+
+    // Load flyout flag HICON fallbacks
+    g_hFlyoutIconGood = Base64ToIcon(icon_id0_b64);
+    g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
+    g_hFlyoutIconAlert = Base64ToIcon(icon_id2_b64);
+    
+    // Load SHIELD GDI+ bitmaps for high-quality rendering.
+    // Both the native 16x16 and the 64x64 source are decoded once;
+    // the paint site picks between them based on the actual DPI-scaled
+    // draw size, since resolution and DPI are independent.
+    g_pBmpShield16 = Base64ToGdipBitmap(icon_shield_small_b64, &g_pStreamShield16);
+    g_pBmpShield64 = Base64ToGdipBitmap(icon_shield_b64, &g_pStreamShield64);
+    
+    // Load shield HICON as fallback (always from the 64x64 source)
+    g_hShieldIcon = Base64ToIcon(icon_shield_b64);
+    
+    // --- FALLBACK CHAIN FOR SHIELD ICON ---
+    // If the embedded shield icon failed to decode, try system DLLs
     if (!g_hShieldIcon) {
-        // Original system shield (imageres.dll / IDI_SHIELD / shell32.dll)
+        // First try imageres.dll (Windows 10/11 native shield)
         ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
+        
+        // If still not found, try shell32.dll (fallback for older Windows)
         if (!g_hShieldIcon) {
-            HICON hSharedShield = (HICON)LoadImageW(
-                NULL, (LPCWSTR)32518, IMAGE_ICON, 16, 16, LR_SHARED); // IDI_SHIELD
-            if (hSharedShield) g_hShieldIcon = CopyIcon(hSharedShield);
-            if (!g_hShieldIcon) ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
+            ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
         }
     }
     
-    // Fallback se Base64 decode fallisce
+    // Also ensure the GDI+ shield bitmaps have a fallback
+    // If GDI+ failed, we'll still have the HICON from above
+    if (!g_pBmpShield16 && !g_pBmpShield64 && g_hShieldIcon) {
+        // GDI+ bitmaps not available, but we have the HICON - that's fine
+        // The paint code will fall back to DrawIconEx
+    }
+    
+    // Fallbacks for flyout flag icons if Base64 decode fails
     if (!g_hFlyoutIconGood)
         g_hFlyoutIconGood = LoadActionCenterIcon(0);
     if (!g_hFlyoutIconWarning)
@@ -4389,6 +4445,9 @@ if (activeProblems > 0) {
         case 0x0418: // Română
             totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
             break;
+        case 0x041F: // Türkçe
+            totalText = L"toplam ileti";
+            break;
         default:     // English
             totalText = (activeProblems == 1) ? L"total message" : L"total messages";
             break;
@@ -4523,13 +4582,14 @@ if (activeProblems > 0) {
                     RoundRect(hdcMem, rcHover.left, rcHover.top, rcHover.right, rcHover.bottom, 3, 3);
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                 }
-                if (g_hShieldIcon) {
+if (g_pBmpShield16 || g_pBmpShield64 || g_hShieldIcon) {
     int iconSize = ScaleDpi(16);
-    // Allinea lo scudo alla prima riga di testo: il bordo superiore dello
-    // scudo coincide con quello del testo (g_hFontNormal = -ScaleDpi(12))
     int shieldY = rowTop;
-    DrawIconEx(hdcMem, shieldX, shieldY,
-              g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+    void* bmpShield = (iconSize <= 16 && g_pBmpShield16) ? g_pBmpShield16 : g_pBmpShield64;
+    if (!DrawGdipBitmapHighQuality(hdcMem, bmpShield, shieldX, shieldY, iconSize, iconSize)) {
+        // Fallback 
+        DrawIconEx(hdcMem, shieldX, shieldY, g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+    }
 }
                 SelectObject(hdcMem, g_hFontNormal);
                 SetTextColor(hdcMem, rowTextColor);
@@ -5343,19 +5403,38 @@ struct LangPack {
 };
 
 static const LangPack g_langPacks[] = {
+    // English (0x09)
     {0x09, L"If the problem isn't listed, try one of these:", L"Troubleshooting", L"Find and fix problems with your computer.", L"Recovery", L"Refresh your PC without affecting your files, or reset it and start over."},
+    
+    // Italian (0x10)
     {0x10, L"Se il problema non \u00e8 incluso nell'elenco, provare uno dei metodi seguenti:", L"Risoluzione dei problemi", L"Trovare e risolvere i problemi del computer.", L"Ripristino", L"Aggiorna il PC mantenendo i file o reimpostalo e ricomincia dall'inizio."},
+    
+    // French (0x0c)
     {0x0c, L"Si le probl\u00e8me n'est pas r\u00e9pertori\u00e9, essayez l'une des m\u00e9thodes suivantes :", L"R\u00e9solution des probl\u00e8mes", L"Rechercher et r\u00e9soudre les probl\u00e8mes de l'ordinateur.", L"R\u00e9cup\u00e9ration", L"Actualisez le PC sans affecter vos fichiers, ou r\u00e9initialisez-le et recommencez."},
+    
+    // Spanish (0x0a)
     {0x0a, L"Si el problema no est\u00e1 en la lista, pruebe uno de estos m\u00e9todos:", L"Soluci\u00f3n de problemas", L"Buscar y solucionar problemas del equipo.", L"Recuperaci\u00f3n", L"Actualiza el PC sin afectar a los archivos o restabl\u00e9celo y empieza de nuevo."},
+    
+    // Russian (0x19)
     {0x19, L"\u0415\u0441\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0434\u0438\u043d \u0438\u0437 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u0441\u043f\u043e\u0441\u043e\u0431\u043e\u0432:", L"\u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043e\u043a", L"\u041f\u043e\u0438\u0441\u043a \u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c \u0441 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c.", L"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435", L"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u041f\u041a, \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0432 \u0444\u0430\u0439\u043b\u044b, \u0438\u043b\u0438 \u0441\u0431\u0440\u043e\u0441\u044c\u0442\u0435 \u0435\u0433\u043e \u0438 \u043d\u0430\u0447\u043d\u0438\u0442\u0435 \u0441\u043d\u0430\u0447\u0430\u043b\u0430."},
+    
+    // Portuguese (0x16)
     {0x16, L"Se o problema n\u00E3o estiver na lista, experimente um destes m\u00E9todos:", L"Resolu\u00E7\u00E3o de Problemas", L"Encontrar e corrigir problemas do computador.", L"Recupera\u00E7\u00E3o", L"Atualize o PC sem afetar os ficheiros ou restaure-o e recomece do in\u00EDcio."},
+    
+    // German (0x07)
     {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."},
+    
     // Dutch (primary lang 0x13)
     {0x13, L"Als het probleem niet in de lijst staat, probeer dan een van deze methoden:", L"Probleemoplossing", L"Zoek naar en los problemen met uw computer op.", L"Herstel", L"Werk uw pc bij zonder uw bestanden te verliezen, of stel deze opnieuw in en begin opnieuw."},
+    
     // Polish (primary lang 0x15)
     {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017C problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
+    
     // Romanian (primary lang 0x18)
-    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."}
+    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."},
+    
+    // Turkish (primary lang 0x1f) - NUOVO
+    {0x1f, L"Sorun listede yoksa a\u015Fa\u011F\u0131daki y\u00F6ntemlerden birini deneyin:", L"Sorun Giderme", L"Bilgisayar\u0131n\u0131zla ilgili sorunlar\u0131 bulur ve d\u00FCzeltir.", L"Kurtarma", L"Bilgisayar\u0131n\u0131z\u0131 dosyalar\u0131n\u0131z\u0131 etkilemeden yenileyin veya s\u0131f\u0131rlay\u0131p yeniden ba\u015Flay\u0131n."}
 };
 
 static const LangPack* GetLangPack() {
