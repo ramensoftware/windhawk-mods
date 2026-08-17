@@ -155,7 +155,8 @@ play/pause, and next controls.
   - ExpandedWidth: 360
     $name: Expanded player width
   - ExpandedHeight: 500
-    $name: Expanded player height
+    $name: Expanded player maximum height
+    $description: In Fullsize mode, the smaller width or height limit determines the final player size.
   - PopupSpacing: 20
     $name: Expanded player outer spacing
   - PopupCardGap: 8
@@ -271,6 +272,7 @@ extern "C" HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice(
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 
 #include <algorithm>
 #include <array>
@@ -304,6 +306,7 @@ namespace controls = winrt::Windows::UI::Xaml::Controls;
 namespace input = winrt::Windows::UI::Xaml::Input;
 namespace mediax = winrt::Windows::UI::Xaml::Media;
 namespace imaging = winrt::Windows::UI::Xaml::Media::Imaging;
+namespace shapes = winrt::Windows::UI::Xaml::Shapes;
 namespace hosting = winrt::Windows::UI::Xaml::Hosting;
 namespace streams = winrt::Windows::Storage::Streams;
 namespace gsm = winrt::Windows::Media::Control;
@@ -343,7 +346,7 @@ struct Settings {
     bool sideExpand = false;
     bool autoSizeToTaskbar = true;
     int expandedWidth = 360;
-    int expandedHeight = 430;
+    int expandedHeight = 500;
     bool compact = false;
     int popupSpacing = 20;
     int popupCardGap = 8;
@@ -427,6 +430,26 @@ bool g_popupSeekCommitPending = false;
 double g_popupSeekCommitRatio = 0.0;
 int64_t g_popupSeekCommitTargetTicks = 0;
 std::chrono::steady_clock::time_point g_popupSeekCommitUntil;
+bool g_popupSeekFeedbackPressed = false;
+bool g_popupSeekFeedbackTapPulse = false;
+double g_popupSeekFeedbackPhaseTime = 0.0;
+
+enum class PopupSeekLayer : size_t {
+    Progress,
+    Controls,
+    Artwork,
+    Backdrop,
+    Count,
+};
+
+struct PopupSeekLayerMotion {
+    double value = 0.0;
+    double velocity = 0.0;
+    double phaseHoldValue = 0.0;
+};
+
+[[clang::no_destroy]] std::array<PopupSeekLayerMotion,
+    static_cast<size_t>(PopupSeekLayer::Count)> g_popupSeekLayerMotions{};
 
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_modActive = false;
@@ -520,6 +543,7 @@ struct DynamicTransportButtonMotion {
     double translateVelocity = 0.0;
     int direction = 0;
     bool pressStarted = false;
+    double seekScaleMultiplier = 1.0;
     bool releasePending = false;
     int failurePhasesRemaining = 0;
 };
@@ -536,8 +560,35 @@ void ResetDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion) {
     motion.translateVelocity = 0.0;
     motion.direction = 0;
     motion.pressStarted = false;
+    motion.seekScaleMultiplier = 1.0;
     motion.releasePending = false;
     motion.failurePhasesRemaining = 0;
+}
+
+void NeutralizeDynamicTransportButtonMotion(
+    DynamicTransportButtonMotion& motion) {
+    // Keep the element/transform handles and direction, but remove any
+    // residual click or rejection spring while the progress surface owns the
+    // interaction. Otherwise the play button can rebound a second time inside
+    // the already-rebounding playback content layer.
+    motion.scaleValue = 1.0;
+    motion.scaleTarget = 1.0;
+    motion.scaleVelocity = 0.0;
+    motion.translateValue = 0.0;
+    motion.translateTarget = 0.0;
+    motion.translateVelocity = 0.0;
+    motion.pressStarted = false;
+    motion.seekScaleMultiplier = 1.0;
+    motion.releasePending = false;
+    motion.failurePhasesRemaining = 0;
+    if (motion.scale) {
+        motion.scale.ScaleX(1.0);
+        motion.scale.ScaleY(1.0);
+    }
+    if (motion.translate) {
+        motion.translate.X(0.0);
+        motion.translate.Y(0.0);
+    }
 }
 [[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPrevMotion;
 [[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPlayMotion;
@@ -646,6 +697,7 @@ void ClearPopupBackdropOverlayHandoffCache() {
 
 std::mutex g_popupOverlayWgcMutex;
 std::atomic<bool> g_popupOverlayWgcRendering{false};
+std::atomic<unsigned int> g_popupOverlayWgcCallbacksInFlight{0};
 struct PopupOverlayWgcRenderParameters {
     int targetRadiusPx = 1;
     bool morphing = false;
@@ -743,6 +795,8 @@ bool g_popupXamlChildSubclassed = false;
 [[clang::no_destroy]] TranslateTransform g_popupXamlArtTranslate = nullptr;
 [[clang::no_destroy]] Image g_popupXamlArtFade = nullptr;
 [[clang::no_destroy]] Image g_popupXamlArt = nullptr;
+[[clang::no_destroy]] controls::Canvas g_popupXamlPlaybackContent = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlPlaybackContentScale = nullptr;
 [[clang::no_destroy]] FrameworkElement g_popupXamlTitleHost = nullptr;
 [[clang::no_destroy]] FrameworkElement g_popupXamlArtistHost = nullptr;
 [[clang::no_destroy]] FrameworkElement g_popupXamlOutgoingTitleHost = nullptr;
@@ -800,6 +854,7 @@ void ResetPopupProgressLayerVectors() {
     g_popupXamlProgressGlowLayers.emplace();
     g_popupXamlProgressCoreBlurLayers.emplace();
 }
+
 [[clang::no_destroy]] Border g_popupXamlProgressGlowCore = nullptr;
 [[clang::no_destroy]] controls::Canvas g_popupXamlControls = nullptr;
 uint64_t g_popupXamlThumbnailHash = UINT64_MAX;
@@ -879,6 +934,9 @@ bool g_compactTextEdgeFadeActive = false;
 HWND g_taskbarLayoutTimerWindow = nullptr;
 [[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchRoot = nullptr;
 [[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchTarget = nullptr;
+[[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchSystemTrayFrame = nullptr;
+[[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchTaskbarFrame = nullptr;
+bool g_taskbarLayoutWatchElementsCached = false;
 bool g_compactTextInitialized = false;
 std::wstring g_compactLastTitle;
 std::wstring g_compactLastArtist;
@@ -1039,7 +1097,8 @@ void AttachGpuFriendlyTransform(FrameworkElement const& element,
 
 void SetElementSizeIfChanged(FrameworkElement const& element,
                              double width,
-                             double height) {
+                             double height,
+                             double epsilon = 0.5) {
     if (!element) {
         return;
     }
@@ -1048,27 +1107,30 @@ void SetElementSizeIfChanged(FrameworkElement const& element,
     height = std::max(1.0, height);
     double currentWidth = element.Width();
     double currentHeight = element.Height();
-    if (std::isnan(currentWidth) || std::abs(currentWidth - width) > 0.5) {
+    epsilon = std::max(0.0001, epsilon);
+    if (std::isnan(currentWidth) || std::abs(currentWidth - width) > epsilon) {
         element.Width(width);
     }
-    if (std::isnan(currentHeight) || std::abs(currentHeight - height) > 0.5) {
+    if (std::isnan(currentHeight) || std::abs(currentHeight - height) > epsilon) {
         element.Height(height);
     }
 }
 
 void SetCanvasPositionIfChanged(FrameworkElement const& element,
                                 double left,
-                                double top) {
+                                double top,
+                                double epsilon = 0.25) {
     if (!element) {
         return;
     }
 
     double currentLeft = controls::Canvas::GetLeft(element);
     double currentTop = controls::Canvas::GetTop(element);
-    if (std::isnan(currentLeft) || std::abs(currentLeft - left) > 0.25) {
+    epsilon = std::max(0.0001, epsilon);
+    if (std::isnan(currentLeft) || std::abs(currentLeft - left) > epsilon) {
         controls::Canvas::SetLeft(element, left);
     }
-    if (std::isnan(currentTop) || std::abs(currentTop - top) > 0.25) {
+    if (std::isnan(currentTop) || std::abs(currentTop - top) > epsilon) {
         controls::Canvas::SetTop(element, top);
     }
 }
@@ -1754,7 +1816,7 @@ bool LooksLikeNativeMusicMediaSource(std::wstring const& source) {
     // path. Some providers use AppUserModelIds that contain generic substrings
     // which can otherwise be over-matched by the browser heuristics below.
     return lower.find(L"qqmusic") != std::wstring::npos ||
-           lower.find(L"qq音乐") != std::wstring::npos ||
+           lower.find(L"qq闊充箰") != std::wstring::npos ||
            lower.find(L"tencent.qqmusic") != std::wstring::npos ||
            lower.find(L"tencentmusic") != std::wstring::npos ||
            lower.find(L"spotify") != std::wstring::npos ||
@@ -3784,6 +3846,7 @@ mediax::Brush MakePopupProgressGradientBrush() {
     return brush;
 }
 
+
 std::wstring FormatMediaTime(int64_t ticks) {
     if (ticks <= 0) {
         return L"0:00";
@@ -3860,17 +3923,32 @@ void ApplyElementClip(FrameworkElement const& element, double width, double heig
 void ApplyElementClipWithPadding(FrameworkElement const& element,
                                  double width,
                                  double height,
-                                 double horizontalPadding) {
+                                 double horizontalPadding,
+                                 float epsilon = 0.25f) {
     if (!element || width <= 0.0 || height <= 0.0) {
         return;
     }
     try {
         horizontalPadding = std::max(0.0, horizontalPadding);
-        mediax::RectangleGeometry clip;
-        clip.Rect({static_cast<float>(-horizontalPadding), 0.0f,
-                   static_cast<float>(std::max(1.0, width + horizontalPadding * 2.0)),
-                   static_cast<float>(std::max(1.0, height))});
-        element.Clip(clip);
+        winrt::Windows::Foundation::Rect target{
+            static_cast<float>(-horizontalPadding), 0.0f,
+            static_cast<float>(std::max(1.0, width + horizontalPadding * 2.0)),
+            static_cast<float>(std::max(1.0, height))};
+        auto clip = element.Clip().try_as<mediax::RectangleGeometry>();
+        if (!clip) {
+            clip = mediax::RectangleGeometry();
+            clip.Rect(target);
+            element.Clip(clip);
+        } else {
+            auto current = clip.Rect();
+            epsilon = std::max(0.0001f, epsilon);
+            if (std::abs(current.X - target.X) > epsilon ||
+                std::abs(current.Y - target.Y) > epsilon ||
+                std::abs(current.Width - target.Width) > epsilon ||
+                std::abs(current.Height - target.Height) > epsilon) {
+                clip.Rect(target);
+            }
+        }
     } catch (...) {
     }
 }
@@ -4371,17 +4449,32 @@ double PopupTextEdgeFadeWidth() {
 
 void ConfigurePopupTextEdgeFade(Border const& fade,
                                 bool leftEdge,
-                                double height) {
+                                double height,
+                                bool refreshBrush = true,
+                                double layoutScale = 1.0,
+                                double epsilon = 0.5) {
     if (!fade) {
         return;
     }
 
-    double clipPadding = PopupTextClipPadding();
-    fade.Width(PopupTextEdgeFadeWidth() + clipPadding);
-    fade.Height(std::max(1.0, height));
-    fade.Margin(leftEdge ? xaml::Thickness{-clipPadding, 0, 0, 0}
-                         : xaml::Thickness{0, 0, -clipPadding, 0});
-    fade.Background(PopupTextEdgeFadeBrush(leftEdge));
+    layoutScale = std::max(0.01, layoutScale);
+    double clipPadding = PopupTextClipPadding() * layoutScale;
+    SetElementSizeIfChanged(
+        fade,
+        (PopupTextEdgeFadeWidth() + PopupTextClipPadding()) * layoutScale,
+        std::max(1.0, height), epsilon);
+    xaml::Thickness targetMargin =
+        leftEdge ? xaml::Thickness{-clipPadding, 0, 0, 0}
+                 : xaml::Thickness{0, 0, -clipPadding, 0};
+    auto currentMargin = fade.Margin();
+    double marginEpsilon = std::min(0.01, epsilon);
+    if (std::abs(currentMargin.Left - targetMargin.Left) > marginEpsilon ||
+        std::abs(currentMargin.Right - targetMargin.Right) > marginEpsilon) {
+        fade.Margin(targetMargin);
+    }
+    if (refreshBrush) {
+        fade.Background(PopupTextEdgeFadeBrush(leftEdge));
+    }
 }
 
 void SetPopupTextEdgeFadeOpacity(double opacity) {
@@ -5701,6 +5794,8 @@ void ResetPopupXamlElementState() {
     g_popupXamlArtTranslate = nullptr;
     g_popupXamlArtFade = nullptr;
     g_popupXamlArt = nullptr;
+    g_popupXamlPlaybackContent = nullptr;
+    g_popupXamlPlaybackContentScale = nullptr;
     g_popupXamlTitleHost = nullptr;
     g_popupXamlArtistHost = nullptr;
     g_popupXamlOutgoingTitleHost = nullptr;
@@ -5832,7 +5927,20 @@ bool InitializePopupXamlHost(HWND hwnd) {
         backdropCoverHost.Children().Append(backdropRimHighlight);
         backdrop.Child(backdropCoverHost);
         AttachGpuFriendlyTransform(backdrop, g_popupXamlBackdropScale, g_popupXamlBackdropTranslate);
+        backdrop.RenderTransformOrigin({0.5, 0.5});
         canvas.Children().Append(backdrop);
+
+        // One logical playback-control subtree: card surface + album wash +
+        // all text, progress and transport controls. Seek feedback gives the
+        // entire block one shared spring and center.
+        controls::Canvas playbackContent;
+        playbackContent.UseLayoutRounding(false);
+        playbackContent.RenderTransformOrigin({0.0, 0.0});
+        ScaleTransform playbackContentScale;
+        playbackContentScale.ScaleX(1.0);
+        playbackContentScale.ScaleY(1.0);
+        playbackContent.RenderTransform(playbackContentScale);
+        canvas.Children().Append(playbackContent);
 
         Border panelCoverFrame;
         panelCoverFrame.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
@@ -5840,6 +5948,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         panelCoverFrame.BorderThickness({0, 0, 0, 0});
         panelCoverFrame.Opacity(0.0);
         AttachGpuFriendlyTransform(panelCoverFrame, g_popupXamlPanelCoverScale, g_popupXamlPanelCoverTranslate);
+        panelCoverFrame.RenderTransformOrigin({0.5, 0.5});
         Grid panelCoverHost;
         Image panelCoverFade;
         panelCoverFade.Stretch(mediax::Stretch::UniformToFill);
@@ -5850,7 +5959,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         panelCoverHost.Children().Append(panelCoverFade);
         panelCoverHost.Children().Append(panelCover);
         panelCoverFrame.Child(panelCoverHost);
-        canvas.Children().Append(panelCoverFrame);
+        playbackContent.Children().Append(panelCoverFrame);
 
         Border panel;
         panel.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
@@ -5859,7 +5968,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         panel.BorderBrush(PopupSurfaceStrokeBrush());
         panel.Opacity(0.0);
         AttachGpuFriendlyTransform(panel, g_popupXamlPanelScale, g_popupXamlPanelTranslate);
-        canvas.Children().Append(panel);
+        panel.RenderTransformOrigin({0.5, 0.5});
+        playbackContent.Children().Append(panel);
 
         Border artFrame;
         artFrame.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
@@ -5870,6 +5980,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
                                      : Thickness{1.2, 1.2, 1.2, 1.2});
         artFrame.BorderBrush(PopupAlbumArtStrokeBrush());
         AttachGpuFriendlyTransform(artFrame, g_popupXamlArtScale, g_popupXamlArtTranslate);
+        artFrame.RenderTransformOrigin({0.5, 0.5});
         Grid artHost;
         Image artFade;
         artFade.Stretch(mediax::Stretch::UniformToFill);
@@ -5896,7 +6007,9 @@ bool InitializePopupXamlHost(HWND hwnd) {
 
         Grid outgoingTitleHost;
         outgoingTitleHost.IsHitTestVisible(false);
+        outgoingTitleHost.UseLayoutRounding(false);
         TextBlock outgoingTitle;
+        outgoingTitle.UseLayoutRounding(false);
         outgoingTitle.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         outgoingTitle.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
         outgoingTitle.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
@@ -5909,11 +6022,13 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border outgoingTitleRightFade = makePopupTextFade(false);
         outgoingTitleHost.Children().Append(outgoingTitleLeftFade);
         outgoingTitleHost.Children().Append(outgoingTitleRightFade);
-        canvas.Children().Append(outgoingTitleHost);
+        playbackContent.Children().Append(outgoingTitleHost);
 
         Grid outgoingArtistHost;
         outgoingArtistHost.IsHitTestVisible(false);
+        outgoingArtistHost.UseLayoutRounding(false);
         TextBlock outgoingArtist;
+        outgoingArtist.UseLayoutRounding(false);
         outgoingArtist.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         outgoingArtist.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
         outgoingArtist.VerticalAlignment(VerticalAlignment::Center);
@@ -5925,11 +6040,13 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border outgoingArtistRightFade = makePopupTextFade(false);
         outgoingArtistHost.Children().Append(outgoingArtistLeftFade);
         outgoingArtistHost.Children().Append(outgoingArtistRightFade);
-        canvas.Children().Append(outgoingArtistHost);
+        playbackContent.Children().Append(outgoingArtistHost);
 
         Grid titleHost;
         titleHost.IsHitTestVisible(false);
+        titleHost.UseLayoutRounding(false);
         TextBlock title;
+        title.UseLayoutRounding(false);
         title.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         title.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
         title.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
@@ -5941,11 +6058,13 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border titleRightFade = makePopupTextFade(false);
         titleHost.Children().Append(titleLeftFade);
         titleHost.Children().Append(titleRightFade);
-        canvas.Children().Append(titleHost);
+        playbackContent.Children().Append(titleHost);
 
         Grid artistHost;
         artistHost.IsHitTestVisible(false);
+        artistHost.UseLayoutRounding(false);
         TextBlock artist;
+        artist.UseLayoutRounding(false);
         artist.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         artist.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
         artist.VerticalAlignment(VerticalAlignment::Center);
@@ -5956,40 +6075,45 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border artistRightFade = makePopupTextFade(false);
         artistHost.Children().Append(artistLeftFade);
         artistHost.Children().Append(artistRightFade);
-        canvas.Children().Append(artistHost);
+        playbackContent.Children().Append(artistHost);
 
         TextBlock elapsed;
+        elapsed.UseLayoutRounding(false);
         elapsed.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         elapsed.FontSize(11);
         elapsed.Text(L"0:00");
         elapsed.VerticalAlignment(VerticalAlignment::Center);
-        canvas.Children().Append(elapsed);
+        playbackContent.Children().Append(elapsed);
 
         TextBlock duration;
+        duration.UseLayoutRounding(false);
         duration.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         duration.FontSize(11);
         duration.Text(L"0:00");
         duration.TextAlignment(xaml::TextAlignment::Right);
         duration.VerticalAlignment(VerticalAlignment::Center);
-        canvas.Children().Append(duration);
+        playbackContent.Children().Append(duration);
 
         Border progressTrack;
+        progressTrack.UseLayoutRounding(false);
         progressTrack.Height(6);
         progressTrack.CornerRadius({kPopupG2ProgressCornerRadius,
                                     kPopupG2ProgressCornerRadius,
                                     kPopupG2ProgressCornerRadius,
                                     kPopupG2ProgressCornerRadius});
         progressTrack.IsHitTestVisible(false);
-        canvas.Children().Append(progressTrack);
+        playbackContent.Children().Append(progressTrack);
 
         Border progressFill;
+        progressFill.UseLayoutRounding(false);
         progressFill.Height(6);
         progressFill.CornerRadius({kPopupG2ProgressCornerRadius,
                                    kPopupG2ProgressCornerRadius,
                                    kPopupG2ProgressCornerRadius,
                                    kPopupG2ProgressCornerRadius});
         progressFill.IsHitTestVisible(false);
-        canvas.Children().Append(progressFill);
+        playbackContent.Children().Append(progressFill);
+
 
         ProgressBar progress;
         progress.Height(6);
@@ -6006,6 +6130,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
 
         controls::Canvas progressGlowMask;
         progressGlowMask.IsHitTestVisible(false);
+        progressGlowMask.Visibility(Visibility::Collapsed);
         progressGlowMask.Opacity(0.0);
         mediax::RectangleGeometry progressGlowClip;
         progressGlowMask.Clip(progressGlowClip);
@@ -6013,6 +6138,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         for (int i = 0; i < 6; ++i) {
             Border layer;
             layer.IsHitTestVisible(false);
+            layer.Visibility(Visibility::Collapsed);
             layer.Opacity(0.0);
             progressGlowMask.Children().Append(layer);
             progressGlowLayers.push_back(layer);
@@ -6023,6 +6149,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         for (int i = 0; i < 6; ++i) {
             Border layer;
             layer.IsHitTestVisible(false);
+            layer.Visibility(Visibility::Collapsed);
             layer.Opacity(0.0);
             canvas.Children().Append(layer);
             progressCoreBlurLayers.push_back(layer);
@@ -6036,6 +6163,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
                                        kPopupG2ProgressCornerRadius,
                                        kPopupG2ProgressCornerRadius});
         progressGlowCore.IsHitTestVisible(false);
+        progressGlowCore.Visibility(Visibility::Collapsed);
         progressGlowCore.Opacity(0.0);
         canvas.Children().Append(progressGlowCore);
 
@@ -6047,6 +6175,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         controls::Canvas controlsPanel;
         controlsPanel.Width(PopupControlsWidth());
         controlsPanel.Height(PopupControlsHeight());
+        controlsPanel.UseLayoutRounding(false);
 
         Border prevButton = MakePopupXamlButton(
             L"Popup_Prev", [] {
@@ -6101,31 +6230,32 @@ bool InitializePopupXamlHost(HWND hwnd) {
         controlsPanel.Children().Append(prevButton);
         controlsPanel.Children().Append(playButton);
         controlsPanel.Children().Append(nextButton);
-        canvas.Children().Append(controlsPanel);
+        playbackContent.Children().Append(controlsPanel);
 
         progressHitTarget.PointerPressed([](auto const& sender,
                                             input::PointerRoutedEventArgs const& e) {
             try {
-                if (!g_popupXamlProgressTrack || PopupProgress() < 0.75) {
+                auto hitTarget = sender.template try_as<Border>();
+                if (!hitTarget || PopupProgress() < 0.75) {
                     return;
                 }
 
-                auto point = e.GetCurrentPoint(g_popupXamlProgressTrack).Position();
-                double width = g_popupXamlProgressTrack.ActualWidth();
-                double height = g_popupXamlProgressTrack.ActualHeight();
+                // Use the always-visible hit target as the coordinate space.
+                // The ordinary capsule track is collapsed during liquid mode;
+                // reading its ActualWidth made pointer ratios freeze or jump.
+                auto point = e.GetCurrentPoint(hitTarget).Position();
+                double width = hitTarget.ActualWidth();
+                double height = hitTarget.ActualHeight();
                 if (width <= 0.0) {
                     return;
                 }
 
-                constexpr double hitPadding = 8.0;
                 if (point.X >= 0.0 && point.X <= width &&
-                    point.Y >= -hitPadding && point.Y <= height + hitPadding) {
+                    point.Y >= 0.0 && point.Y <= height) {
                     UpdatePopupSeekPreview(point.X / width);
-                    if (auto element = sender.template try_as<UIElement>()) {
-                        if (!element.CapturePointer(e.Pointer())) {
-                            EndPopupSeek(false);
-                            return;
-                        }
+                    if (!hitTarget.CapturePointer(e.Pointer())) {
+                        EndPopupSeek(false);
+                        return;
                     }
                     e.Handled(true);
                 }
@@ -6136,16 +6266,20 @@ bool InitializePopupXamlHost(HWND hwnd) {
                 }
             }
         });
-        progressHitTarget.PointerMoved([](auto const&,
+        progressHitTarget.PointerMoved([](auto const& sender,
                                           input::PointerRoutedEventArgs const& e) {
             try {
-                if (!g_popupSeekDragging || !g_popupXamlProgressTrack) {
+                if (!g_popupSeekDragging) {
                     return;
                 }
 
-                double width = g_popupXamlProgressTrack.ActualWidth();
+                auto hitTarget = sender.template try_as<Border>();
+                if (!hitTarget) {
+                    return;
+                }
+                double width = hitTarget.ActualWidth();
                 if (width > 0.0) {
-                    auto point = e.GetCurrentPoint(g_popupXamlProgressTrack).Position();
+                    auto point = e.GetCurrentPoint(hitTarget).Position();
                     UpdatePopupSeekPreview(point.X / width);
                     e.Handled(true);
                 }
@@ -6158,10 +6292,10 @@ bool InitializePopupXamlHost(HWND hwnd) {
                 return;
             }
             try {
-                if (g_popupXamlProgressTrack) {
-                    double width = g_popupXamlProgressTrack.ActualWidth();
+                if (auto hitTarget = sender.template try_as<Border>()) {
+                    double width = hitTarget.ActualWidth();
                     if (width > 0.0) {
-                        auto point = e.GetCurrentPoint(g_popupXamlProgressTrack).Position();
+                        auto point = e.GetCurrentPoint(hitTarget).Position();
                         UpdatePopupSeekPreview(point.X / width);
                     }
                 }
@@ -6224,6 +6358,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_popupXamlArtFrame = artFrame;
         g_popupXamlArtFade = artFade;
         g_popupXamlArt = art;
+        g_popupXamlPlaybackContent = playbackContent;
+        g_popupXamlPlaybackContentScale = playbackContentScale;
         g_popupXamlTitleHost = titleHost;
         g_popupXamlArtistHost = artistHost;
         g_popupXamlOutgoingTitleHost = outgoingTitleHost;
@@ -6281,6 +6417,328 @@ RECT PopupScreenRectToLocalDip(RECT const& rect,
                                RECT const& popupScreenPx,
                                double scale);
 
+PopupSeekLayerMotion& PopupSeekMotion(PopupSeekLayer layer) {
+    return g_popupSeekLayerMotions[static_cast<size_t>(layer)];
+}
+
+double PopupSeekPressDelay(PopupSeekLayer layer) {
+    switch (layer) {
+        case PopupSeekLayer::Progress:
+        case PopupSeekLayer::Controls:
+            return 0.0;
+        case PopupSeekLayer::Artwork:
+            return 0.060;
+        case PopupSeekLayer::Backdrop:
+            return 0.120;
+        default:
+            return 0.0;
+    }
+}
+
+double PopupSeekReleaseDelay(PopupSeekLayer layer) {
+    // Reverse the order on release: shell, artwork, then the complete control
+    // card. Each block remains internally rigid.
+    switch (layer) {
+        case PopupSeekLayer::Backdrop:
+            return 0.0;
+        case PopupSeekLayer::Artwork:
+            return 0.060;
+        case PopupSeekLayer::Progress:
+        case PopupSeekLayer::Controls:
+            return 0.120;
+        default:
+            return 0.0;
+    }
+}
+
+double PopupSeekHoldDepth(PopupSeekLayer) {
+    // All layers share exactly the same resting depth. Different values here
+    // made the artwork, card and shell slide relative to each other even after
+    // their timing delays had been removed.
+    return 0.72;
+}
+
+double PopupSeekTapMinimum(PopupSeekLayer) {
+    // A short tap also remains a single coherent component response.
+    return 0.40;
+}
+
+double PopupSeekLayerValue(PopupSeekLayer layer) {
+    if (layer == PopupSeekLayer::Progress) {
+        layer = PopupSeekLayer::Controls;
+    }
+    return Clamp(PopupSeekMotion(layer).value, -0.18, 1.08);
+}
+
+double PopupSeekLayerPressAmount(PopupSeekLayer layer) {
+    if (layer == PopupSeekLayer::Progress) {
+        layer = PopupSeekLayer::Controls;
+    }
+    return Clamp(PopupSeekMotion(layer).value, 0.0, 1.0);
+}
+
+double PopupSeekLayerVisualValue(PopupSeekLayer layer) {
+    double value = PopupSeekLayerValue(layer);
+    // A four-percent press makes both endpoint overshoots physically subtle.
+    // Accentuate only the portions beyond the two targets: release below zero
+    // and press beyond one. Motion inside the normal range stays unchanged, so
+    // the initial response remains light while both ends visibly rebound.
+    if (value < 0.0) {
+        return value * 2.15;
+    }
+    return value > 1.0 ? 1.0 + (value - 1.0) * 1.85 : value;
+}
+
+constexpr double kPopupSeekComponentShrink = 0.012;
+
+double PopupSeekLayerScale(PopupSeekLayer layer, double shrink) {
+    return 1.0 - shrink * PopupSeekLayerVisualValue(layer);
+}
+
+RECT ScalePopupSeekRect(RECT rect, double scale, double centerX, double centerY) {
+    if (std::abs(scale - 1.0) < 0.0001) {
+        return rect;
+    }
+
+    auto scaleCoord = [&](LONG value, double origin) -> LONG {
+        return static_cast<LONG>(std::lround(origin +
+            (static_cast<double>(value) - origin) * scale));
+    };
+
+    RECT scaled{scaleCoord(rect.left, centerX),
+                scaleCoord(rect.top, centerY),
+                scaleCoord(rect.right, centerX),
+                scaleCoord(rect.bottom, centerY)};
+    if (scaled.right <= scaled.left) {
+        scaled.right = scaled.left + 1;
+    }
+    if (scaled.bottom <= scaled.top) {
+        scaled.bottom = scaled.top + 1;
+    }
+    return scaled;
+}
+
+void ApplyPopupSeekScaledLayout(FrameworkElement const& element,
+                                ScaleTransform const& scaleTransform,
+                                TranslateTransform const& translateTransform,
+                                RECT const& baseScreen,
+                                RECT const& popupScreen,
+                                double seekScale,
+                                double centerX,
+                                double centerY) {
+    if (!element) {
+        return;
+    }
+
+    // Keep the element and every child at their natural layout size. Move the
+    // element to the shared scaled position and apply one visual transform to
+    // the whole subtree. Resizing the frame itself made Image keep its old
+    // arranged size, which looked like the cover was merely being clipped.
+    double width = std::max(1.0,
+        static_cast<double>(baseScreen.right - baseScreen.left));
+    double height = std::max(1.0,
+        static_cast<double>(baseScreen.bottom - baseScreen.top));
+    double scaledLeft = centerX +
+        (static_cast<double>(baseScreen.left) - centerX) * seekScale;
+    double scaledTop = centerY +
+        (static_cast<double>(baseScreen.top) - centerY) * seekScale;
+    SetElementSizeIfChanged(element, width, height);
+    SetCanvasPositionIfChanged(element,
+                               scaledLeft - popupScreen.left,
+                               scaledTop - popupScreen.top,
+                               0.001);
+    element.RenderTransformOrigin({0.0, 0.0});
+    if (scaleTransform) {
+        scaleTransform.ScaleX(seekScale);
+        scaleTransform.ScaleY(seekScale);
+    }
+    if (translateTransform) {
+        translateTransform.X(0.0);
+        translateTransform.Y(0.0);
+    }
+}
+
+bool StepPopupSeekFeedback(double dtSec) {
+    if (!g_popupSeekFeedbackPressed && !g_popupSeekFeedbackTapPulse) {
+        bool hasReleaseMotion = false;
+        for (auto const& motion : g_popupSeekLayerMotions) {
+            if (std::abs(motion.value) > 0.001 ||
+                std::abs(motion.velocity) > 0.001) {
+                hasReleaseMotion = true;
+                break;
+            }
+        }
+        if (!hasReleaseMotion) {
+            return true;
+        }
+    }
+
+    double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+    g_popupSeekFeedbackPhaseTime += dtSec * speed;
+    int substeps = std::max(1,
+        static_cast<int>(std::ceil(dtSec / (1.0 / 120.0))));
+    double step = dtSec / static_cast<double>(substeps);
+    bool settled = true;
+
+    for (size_t index = 0;
+         index < static_cast<size_t>(PopupSeekLayer::Count);
+         ++index) {
+        auto layer = static_cast<PopupSeekLayer>(index);
+        auto& motion = g_popupSeekLayerMotions[index];
+        double target = 0.0;
+        bool timelineElapsed = false;
+        bool usePressSpring = g_popupSeekFeedbackPressed;
+        bool useMagneticReturnSpring = false;
+
+        if (g_popupSeekFeedbackPressed) {
+            double delay = PopupSeekPressDelay(layer);
+            double localPressTime = g_popupSeekFeedbackPhaseTime - delay;
+            timelineElapsed = localPressTime >= 0.0;
+            if (!timelineElapsed) {
+                target = motion.phaseHoldValue;
+            } else {
+                constexpr double kDeepPushDuration = 0.075;
+                constexpr double kMagneticReturnDuration = 0.200;
+                if (localPressTime < kDeepPushDuration) {
+                    target = 1.0;
+                } else {
+                    double magneticPhase = SmootherStep(Clamp(
+                        (localPressTime - kDeepPushDuration) /
+                            kMagneticReturnDuration,
+                        0.0, 1.0));
+                    target = LerpDouble(1.0, PopupSeekHoldDepth(layer),
+                                        magneticPhase);
+                    useMagneticReturnSpring = true;
+                }
+            }
+        } else if (g_popupSeekFeedbackTapPulse) {
+            // A click can end before the press reaches full depth. Give
+            // every synchronized layer a visible minimum response, then let
+            // the fast release spring pull the whole object through a small
+            // overshoot.
+            double pulseStart = PopupSeekPressDelay(layer) * 0.46;
+            double pulsePeakEnd = pulseStart + 0.055;
+            if (g_popupSeekFeedbackPhaseTime < pulseStart) {
+                target = motion.phaseHoldValue;
+            } else if (g_popupSeekFeedbackPhaseTime < pulsePeakEnd) {
+                target = std::max(motion.phaseHoldValue,
+                                  PopupSeekTapMinimum(layer));
+                usePressSpring = true;
+            } else {
+                target = 0.0;
+                timelineElapsed = true;
+            }
+        } else {
+            double delay = PopupSeekReleaseDelay(layer);
+            timelineElapsed = g_popupSeekFeedbackPhaseTime >= delay;
+            target = timelineElapsed ? 0.0 : motion.phaseHoldValue;
+        }
+
+        for (int i = 0; i < substeps; ++i) {
+            // Fast initial compression, unsupported magnetic return while
+            // held, then the play/pause-style jelly spring on release.
+            double baseStiffness = useMagneticReturnSpring
+                                       ? 520.0
+                                       : usePressSpring ? 4200.0 : 1100.0;
+            double baseDamping = useMagneticReturnSpring
+                                     ? 24.0
+                                     : usePressSpring ? 68.0 : 30.0;
+            double stiffness = baseStiffness * speed * speed;
+            double damping = baseDamping * speed;
+            motion.velocity +=
+                ((target - motion.value) * stiffness -
+                 motion.velocity * damping) * step;
+            motion.value += motion.velocity * step;
+            motion.value = Clamp(motion.value, -0.22, 1.12);
+            motion.velocity = Clamp(motion.velocity, -22.0, 22.0);
+        }
+
+        bool magneticTargetStopped = g_popupSeekFeedbackPressed &&
+            useMagneticReturnSpring &&
+            g_popupSeekFeedbackPhaseTime >=
+                PopupSeekPressDelay(layer) + 0.075 + 0.200;
+        bool layerSettled = timelineElapsed &&
+            std::abs(target - motion.value) <
+                (magneticTargetStopped ? 0.0040 : 0.0012) &&
+            std::abs(motion.velocity) <
+                (magneticTargetStopped ? 0.065 : 0.020);
+        if (layerSettled) {
+            motion.value = target;
+            motion.velocity = 0.0;
+        } else {
+            settled = false;
+        }
+    }
+
+    if (settled && g_popupSeekFeedbackTapPulse) {
+        g_popupSeekFeedbackTapPulse = false;
+    }
+    return settled;
+}
+
+bool PopupSeekFeedbackActive() {
+    if (g_popupSeekFeedbackPressed || g_popupSeekFeedbackTapPulse) {
+        return true;
+    }
+    for (auto const& motion : g_popupSeekLayerMotions) {
+        if (std::abs(motion.value) > 0.001 ||
+            std::abs(motion.velocity) > 0.001) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ResetPopupSeekFeedback() {
+    g_popupSeekFeedbackPressed = false;
+    g_popupSeekFeedbackTapPulse = false;
+    g_popupSeekFeedbackPhaseTime = 0.0;
+    for (auto& motion : g_popupSeekLayerMotions) {
+        motion = {};
+    }
+}
+
+void StartPopupSeekFeedback() {
+    if (!g_popupSeekFeedbackPressed) {
+        // Progress dragging owns the complete playback surface. Clear any
+        // sub-button spring that might otherwise be composed with it.
+        NeutralizeDynamicTransportButtonMotion(g_popupPrevMotion);
+        NeutralizeDynamicTransportButtonMotion(g_popupPlayMotion);
+        NeutralizeDynamicTransportButtonMotion(g_popupNextMotion);
+        for (auto& motion : g_popupSeekLayerMotions) {
+            motion.phaseHoldValue = motion.value;
+        }
+        g_popupSeekFeedbackPressed = true;
+        g_popupSeekFeedbackTapPulse = false;
+        g_popupSeekFeedbackPhaseTime = 0.0;
+    }
+    StartPopupXamlRenderLoop();
+}
+
+void EndPopupSeekFeedback() {
+    if (g_popupSeekFeedbackPressed) {
+        // Preserve a very short seek as a compact synchronized pulse so
+        // a tap is still acknowledged without forcing the full held scale.
+        g_popupSeekFeedbackTapPulse =
+            g_popupSeekFeedbackPhaseTime < 0.110;
+        g_popupSeekFeedbackPressed = false;
+        g_popupSeekFeedbackPhaseTime = 0.0;
+        for (auto& motion : g_popupSeekLayerMotions) {
+            motion.phaseHoldValue = motion.value;
+            if (!g_popupSeekFeedbackTapPulse) {
+                // Match the play/pause release: give the spring an immediate
+                // outward kick instead of relying on target attraction alone.
+                motion.velocity -=
+                    5.8 * Clamp(motion.value, 0.0, 1.0);
+            }
+        }
+    }
+
+    if (PopupSeekFeedbackActive()) {
+        StartPopupXamlRenderLoop();
+    }
+}
+
 void UpdatePopupXamlVisuals() {
     if (!g_popupXamlRoot || !g_expandedPopup) {
         return;
@@ -6298,6 +6756,9 @@ void UpdatePopupXamlVisuals() {
     int width = std::max(1, static_cast<int>(std::lround(widthPx / dpiScale)));
     int height = std::max(1, static_cast<int>(std::lround(heightPx / dpiScale)));
     RECT popupScreen{0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+    if (g_popupXamlPlaybackContent) {
+        SetElementSizeIfChanged(g_popupXamlPlaybackContent, width, height);
+    }
     RECT sourceRect = PopupScreenRectToLocalDip(g_popupSourceRect, popupScreenPx, dpiScale);
     RECT sourceArtRect = PopupScreenRectToLocalDip(g_popupSourceArtRect, popupScreenPx, dpiScale);
     RECT sourceTitleRect = PopupScreenRectToLocalDip(g_popupSourceTitleRect, popupScreenPx, dpiScale);
@@ -6389,20 +6850,29 @@ void UpdatePopupXamlVisuals() {
         LerpInt(sourceRect.right, targetBackdrop.right, progress),
         LerpInt(sourceRect.bottom, targetBackdrop.bottom, progress),
     };
+    double seekCenterX =
+        (static_cast<double>(backdropScreen.left) + backdropScreen.right) * 0.5;
+    double seekCenterY =
+        (static_cast<double>(backdropScreen.top) + backdropScreen.bottom) * 0.5;
     double backdropWidth = std::max(1L, targetBackdrop.right - targetBackdrop.left);
     double backdropHeight = std::max(1L, targetBackdrop.bottom - targetBackdrop.top);
+    double seekBackdropScale =
+        PopupSeekLayerScale(PopupSeekLayer::Backdrop,
+                            kPopupSeekComponentShrink);
+    RECT seekBackdropScreen = ScalePopupSeekRect(
+        backdropScreen, seekBackdropScale, seekCenterX, seekCenterY);
     double sourceShellRadius = SourceScaledRadius(g_layout.cornerRadius,
                                                   g_layout.compactHeight,
                                                   sourceRect);
     if (g_popupXamlShadowVisual) {
         float shadowOpacity = static_cast<float>(visibilityProgress);
-        g_popupXamlShadowVisual.Size({static_cast<float>(backdropWidth),
-                                      static_cast<float>(backdropHeight)});
-        g_popupXamlShadowVisual.Offset({static_cast<float>(targetBackdrop.left - popupScreen.left +
-                                                           backdropScreen.left - targetBackdrop.left),
-                                        static_cast<float>(targetBackdrop.top - popupScreen.top +
-                                                           backdropScreen.top - targetBackdrop.top),
-                                        0.0f});
+        g_popupXamlShadowVisual.Size({
+            static_cast<float>(backdropWidth * seekBackdropScale),
+            static_cast<float>(backdropHeight * seekBackdropScale)});
+        g_popupXamlShadowVisual.Offset({
+            static_cast<float>(seekBackdropScreen.left - popupScreen.left),
+            static_cast<float>(seekBackdropScreen.top - popupScreen.top),
+            0.0f});
         g_popupXamlShadowVisual.Opacity(shadowOpacity);
     }
     if (g_popupXamlBackdrop) {
@@ -6466,11 +6936,14 @@ void UpdatePopupXamlVisuals() {
                                         : Thickness{0.0, 0.0, 0.0, 0.0});
             g_popupXamlBackdropRimHighlight.Opacity(liquidHighlightOpacity);
         }
-        ApplyLayoutRect(g_popupXamlBackdrop,
-                        g_popupXamlBackdropScale,
-                        g_popupXamlBackdropTranslate,
-                        backdropScreen,
-                        popupScreen);
+        ApplyPopupSeekScaledLayout(g_popupXamlBackdrop,
+                                   g_popupXamlBackdropScale,
+                                   g_popupXamlBackdropTranslate,
+                                   backdropScreen,
+                                   popupScreen,
+                                   seekBackdropScale,
+                                   seekCenterX,
+                                   seekCenterY);
     }
     double artProgress = PopupDelayedLayerProgress(progress, 0.22);
     double artMorphProgress = Clamp(artProgress, 0.0, 1.0);
@@ -6545,11 +7018,19 @@ void UpdatePopupXamlVisuals() {
     g_popupXamlArtFrame.Opacity(g_popupClosing
                                     ? SmootherStep(Clamp((morphProgress - 0.025) / 0.16, 0.0, 1.0))
                                     : 1.0);
-    ApplyLayoutRect(g_popupXamlArtFrame,
-                    g_popupXamlArtScale,
-                    g_popupXamlArtTranslate,
-                    artScreen,
-                    popupScreen);
+    double seekArtScale =
+        PopupSeekLayerScale(PopupSeekLayer::Artwork,
+                            kPopupSeekComponentShrink);
+    double artSeekCenterY =
+        (static_cast<double>(artScreen.top) + artScreen.bottom) * 0.5;
+    ApplyPopupSeekScaledLayout(g_popupXamlArtFrame,
+                               g_popupXamlArtScale,
+                               g_popupXamlArtTranslate,
+                               artScreen,
+                               popupScreen,
+                               seekArtScale,
+                               seekCenterX,
+                               artSeekCenterY);
 
     RECT cardScreen{
         LerpInt(sourceRect.left, targetCard.left, progress),
@@ -6557,6 +7038,21 @@ void UpdatePopupXamlVisuals() {
         LerpInt(sourceRect.right, targetCard.right, progress),
         LerpInt(sourceRect.bottom, targetCard.bottom, progress),
     };
+    // The complete playback card is one real transform layer. Keep every
+    // descendant at its natural layout so background, text, progress and
+    // buttons are committed together and cannot drift by a XAML layout pass.
+    double controlsSeekScale = PopupSeekLayerScale(
+        PopupSeekLayer::Controls, kPopupSeekComponentShrink);
+    double controlsSeekCenterY =
+        (static_cast<double>(cardScreen.top) + cardScreen.bottom) * 0.5;
+    if (g_popupXamlPlaybackContentScale) {
+        g_popupXamlPlaybackContentScale.CenterX(
+            seekCenterX - popupScreen.left);
+        g_popupXamlPlaybackContentScale.CenterY(
+            controlsSeekCenterY - popupScreen.top);
+        g_popupXamlPlaybackContentScale.ScaleX(controlsSeekScale);
+        g_popupXamlPlaybackContentScale.ScaleY(controlsSeekScale);
+    }
     double panelTargetRadius =
         g_settings.compact
             ? PopupG2CornerRadius(targetCard.right - targetCard.left,
@@ -6576,19 +7072,25 @@ void UpdatePopupXamlVisuals() {
             !g_settings.compact && PopupPanelCoverEffectEnabled()
                 ? cardOpacity * PopupPanelCoverOpacityFactor()
                 : 0.0);
-        ApplyLayoutRect(g_popupXamlPanelCoverFrame,
-                        g_popupXamlPanelCoverScale,
-                        g_popupXamlPanelCoverTranslate,
-                        cardScreen,
-                        popupScreen);
+        ApplyPopupSeekScaledLayout(g_popupXamlPanelCoverFrame,
+                                   g_popupXamlPanelCoverScale,
+                                   g_popupXamlPanelCoverTranslate,
+                                   cardScreen,
+                                   popupScreen,
+                                   1.0,
+                                   seekCenterX,
+                                   seekCenterY);
     }
     g_popupXamlPanel.CornerRadius({panelRadius, panelRadius, panelRadius, panelRadius});
     g_popupXamlPanel.Opacity(g_settings.compact ? 0.0 : cardOpacity);
-    ApplyLayoutRect(g_popupXamlPanel,
-                    g_popupXamlPanelScale,
-                    g_popupXamlPanelTranslate,
-                    cardScreen,
-                    popupScreen);
+    ApplyPopupSeekScaledLayout(g_popupXamlPanel,
+                               g_popupXamlPanelScale,
+                               g_popupXamlPanelTranslate,
+                               cardScreen,
+                               popupScreen,
+                               1.0,
+                               seekCenterX,
+                               seekCenterY);
 
     double textProgress = PopupDelayedLayerProgress(progress, 0.12);
     auto placeText = [&](FrameworkElement const& host,
@@ -6609,19 +7111,18 @@ void UpdatePopupXamlVisuals() {
                     LerpInt(source.bottom, target.bottom, textProgress)};
         double textWidth = std::max(1L, screen.right - screen.left);
         double textHeight = std::max(1L, screen.bottom - screen.top);
-        host.Width(textWidth);
-        host.Height(textHeight);
+        SetElementSizeIfChanged(host, textWidth, textHeight);
         double clipPadding = PopupTextClipPadding();
         ApplyElementClipWithPadding(host, textWidth, textHeight, clipPadding);
-        ConfigurePopupTextEdgeFade(leftFade, true, textHeight);
-        ConfigurePopupTextEdgeFade(rightFade, false, textHeight);
-        text.Width(textWidth);
-        text.Height(textHeight);
+        ConfigurePopupTextEdgeFade(leftFade, true, textHeight, false);
+        ConfigurePopupTextEdgeFade(rightFade, false, textHeight, false);
+        SetElementSizeIfChanged(text, textWidth, textHeight);
         text.TextTrimming(g_popupClosing ? xaml::TextTrimming::None
                                          : xaml::TextTrimming::CharacterEllipsis);
-        text.FontSize(LerpDouble(compactSize, expandedSize, textProgress));
-        controls::Canvas::SetLeft(host, screen.left - popupScreen.left);
-        controls::Canvas::SetTop(host, screen.top - popupScreen.top);
+        double fontSize = LerpDouble(compactSize, expandedSize, textProgress);
+        if (std::abs(text.FontSize() - fontSize) > 0.01) text.FontSize(fontSize);
+        SetCanvasPositionIfChanged(host, screen.left - popupScreen.left,
+                                   screen.top - popupScreen.top);
     };
     placeText(g_popupXamlOutgoingTitleHost, g_popupXamlOutgoingTitle,
               g_popupXamlOutgoingTitleLeftFade, g_popupXamlOutgoingTitleRightFade,
@@ -6683,58 +7184,87 @@ void UpdatePopupXamlVisuals() {
     RECT progressScreen = lerpRect(progressSource, targetProgress, controlsProgress);
     double progressRatio = 0.0;
     if (g_popupXamlProgress && g_popupXamlProgress.Maximum() > 0.0) {
-        progressRatio = Clamp(g_popupXamlProgress.Value() / g_popupXamlProgress.Maximum(), 0.0, 1.0);
+        progressRatio = Clamp(g_popupXamlProgress.Value() /
+                                  g_popupXamlProgress.Maximum(),
+                              0.0, 1.0);
+        // The preview ratio is the authoritative value during a drag. Reading
+        // Value back from the hidden ProgressBar could trail the pointer by one
+        // XAML frame, while the liquid neck already used the new preview ratio.
+        if (g_popupSeekDragging) {
+            progressRatio = Clamp(g_popupSeekPreviewRatio, 0.0, 1.0);
+        } else {
+            std::lock_guard seekLock(g_seekMutex);
+            if (g_popupSeekCommitPending) {
+                progressRatio = Clamp(g_popupSeekCommitRatio, 0.0, 1.0);
+            }
+        }
         g_popupXamlProgress.Visibility(showControls ? Visibility::Visible : Visibility::Collapsed);
         g_popupXamlProgress.Opacity(0.0);
-        g_popupXamlProgress.Width(std::max(1L, progressScreen.right - progressScreen.left));
-        g_popupXamlProgress.Height(std::max(1L, progressScreen.bottom - progressScreen.top));
+        SetElementSizeIfChanged(g_popupXamlProgress,
+            std::max(1L, progressScreen.right - progressScreen.left),
+            std::max(1L, progressScreen.bottom - progressScreen.top));
         if (g_popupXamlProgressScale) {
             g_popupXamlProgressScale.ScaleX(controlsScale);
             g_popupXamlProgressScale.ScaleY(controlsScale);
         }
-        controls::Canvas::SetLeft(g_popupXamlProgress, progressScreen.left - popupScreen.left);
-        controls::Canvas::SetTop(g_popupXamlProgress, progressScreen.top - popupScreen.top);
+        SetCanvasPositionIfChanged(g_popupXamlProgress,
+                                   progressScreen.left - popupScreen.left,
+                                   progressScreen.top - popupScreen.top);
     }
-    double progressWidth = std::max(1L, progressScreen.right - progressScreen.left) * controlsScale;
-    double progressHeight = std::max(1L, progressScreen.bottom - progressScreen.top) * controlsScale;
-    double progressLeft = (progressScreen.left - popupScreen.left) +
-                          (std::max(1L, progressScreen.right - progressScreen.left) - progressWidth) * 0.5;
-    double progressTop = (progressScreen.top - popupScreen.top) +
-                         (std::max(1L, progressScreen.bottom - progressScreen.top) - progressHeight) * 0.5;
-    if (g_popupXamlProgressTrack) {
-        g_popupXamlProgressTrack.Visibility(showControls ? Visibility::Visible : Visibility::Collapsed);
-        g_popupXamlProgressTrack.Opacity(controlsOpacity);
-        g_popupXamlProgressTrack.Width(progressWidth);
-        g_popupXamlProgressTrack.Height(std::max(4.0, progressHeight));
-        double radius = kPopupG2ProgressCornerRadius;
-        g_popupXamlProgressTrack.CornerRadius({radius, radius, radius, radius});
-        controls::Canvas::SetLeft(g_popupXamlProgressTrack, progressLeft);
-        controls::Canvas::SetTop(g_popupXamlProgressTrack, progressTop);
-    }
-    if (g_popupXamlProgressHitTarget) {
-        double hitHeight = std::max(22.0, progressHeight + 16.0);
-        g_popupXamlProgressHitTarget.Visibility(
-            showControls ? Visibility::Visible : Visibility::Collapsed);
-        g_popupXamlProgressHitTarget.Width(progressWidth);
-        g_popupXamlProgressHitTarget.Height(hitHeight);
-        controls::Canvas::SetLeft(g_popupXamlProgressHitTarget, progressLeft);
-        controls::Canvas::SetTop(
-            g_popupXamlProgressHitTarget,
-            progressTop - (hitHeight - std::max(4.0, progressHeight)) * 0.5);
-    }
-    double progressThickness = std::max(4.0, progressHeight);
+    // The visible progress geometry is a child of the rigid playback layer.
+    // Keep its layout immutable; the transparent hit target stays outside.
+    double baseProgressWidth =
+        std::max(1L, progressScreen.right - progressScreen.left) * controlsScale;
+    double baseProgressHeight =
+        std::max(1L, progressScreen.bottom - progressScreen.top) * controlsScale;
+    double progressWidth = baseProgressWidth;
+    double progressLeft = progressScreen.left - popupScreen.left;
+    double progressTop = progressScreen.top - popupScreen.top;
+    double progressThickness = std::max(4.8, baseProgressHeight);
     double playedWidth = std::max(0.0, progressWidth * progressRatio);
     bool hasAnyProgress = playedWidth > 0.5;
+
+    if (g_popupXamlProgressTrack) {
+        g_popupXamlProgressTrack.Visibility(
+            showControls ? Visibility::Visible : Visibility::Collapsed);
+        g_popupXamlProgressTrack.Opacity(controlsOpacity);
+        SetElementSizeIfChanged(g_popupXamlProgressTrack,
+                                progressWidth, progressThickness, 0.001);
+        double radius = std::min(kPopupG2ProgressCornerRadius,
+                                 progressThickness * 0.5);
+        g_popupXamlProgressTrack.CornerRadius(
+            {radius, radius, radius, radius});
+        SetCanvasPositionIfChanged(g_popupXamlProgressTrack,
+                                   progressLeft, progressTop, 0.001);
+    }
+
+    if (g_popupXamlProgressHitTarget) {
+        double baseProgressThickness = std::max(4.8, baseProgressHeight);
+        double hitHeight = std::max(22.0, baseProgressThickness + 16.0);
+        g_popupXamlProgressHitTarget.Visibility(
+            showControls ? Visibility::Visible : Visibility::Collapsed);
+        SetElementSizeIfChanged(g_popupXamlProgressHitTarget,
+                                baseProgressWidth, hitHeight);
+        SetCanvasPositionIfChanged(
+            g_popupXamlProgressHitTarget,
+            progressScreen.left - popupScreen.left,
+            progressScreen.top - popupScreen.top -
+                (hitHeight - baseProgressThickness) * 0.5);
+    }
+
     if (g_popupXamlProgressFill) {
         double fillWidth = hasAnyProgress ? playedWidth : 0.0;
-        g_popupXamlProgressFill.Visibility(showControls && hasAnyProgress ? Visibility::Visible : Visibility::Collapsed);
+        g_popupXamlProgressFill.Visibility(
+            showControls && hasAnyProgress
+                ? Visibility::Visible
+                : Visibility::Collapsed);
         g_popupXamlProgressFill.Opacity(controlsOpacity);
-        g_popupXamlProgressFill.Width(fillWidth);
-        g_popupXamlProgressFill.Height(progressThickness);
-        double fillRadius = kPopupG2ProgressCornerRadius;
+        SetElementSizeIfChanged(g_popupXamlProgressFill,
+                                fillWidth, progressThickness, 0.001);
+        double fillRadius = std::min(kPopupG2ProgressCornerRadius, progressThickness * 0.5);
         g_popupXamlProgressFill.CornerRadius({fillRadius, fillRadius, fillRadius, fillRadius});
-        controls::Canvas::SetLeft(g_popupXamlProgressFill, progressLeft);
-        controls::Canvas::SetTop(g_popupXamlProgressFill, progressTop);
+        SetCanvasPositionIfChanged(g_popupXamlProgressFill,
+                                   progressLeft, progressTop, 0.001);
     }
     if (g_popupXamlProgressGlowMask) {
         g_popupXamlProgressGlowMask.Visibility(Visibility::Collapsed);
@@ -6769,12 +7299,14 @@ void UpdatePopupXamlVisuals() {
         text.Visibility(showControls ? Visibility::Visible
                                      : Visibility::Collapsed);
         text.Opacity(controlsOpacity);
-        text.Width(std::max(1L, screen.right - screen.left));
-        text.Height(std::max(1L, screen.bottom - screen.top));
+        double textWidth = std::max(1L, screen.right - screen.left);
+        double textHeight = std::max(1L, screen.bottom - screen.top);
+        SetElementSizeIfChanged(text, textWidth, textHeight);
+        if (std::abs(text.FontSize() - 11.0) > 0.01) text.FontSize(11.0);
         text.TextAlignment(alignRight ? xaml::TextAlignment::Right
                                       : xaml::TextAlignment::Left);
-        controls::Canvas::SetLeft(text, screen.left - popupScreen.left);
-        controls::Canvas::SetTop(text, screen.top - popupScreen.top);
+        SetCanvasPositionIfChanged(text, screen.left - popupScreen.left,
+                                   screen.top - popupScreen.top);
     };
 
     RECT elapsedSource{progressSource.left,
@@ -6829,8 +7361,8 @@ void UpdatePopupXamlVisuals() {
     if (g_popupXamlControls) {
         g_popupXamlControls.Visibility(showControls ? Visibility::Visible : Visibility::Collapsed);
         g_popupXamlControls.Opacity(controlsOpacity);
-        g_popupXamlControls.Width(controlsWidth);
-        g_popupXamlControls.Height(controlsHeight);
+        SetElementSizeIfChanged(g_popupXamlControls,
+                                controlsWidth, controlsHeight);
 
         double screenWidth = std::max(1L, controlsScreen.right - controlsScreen.left);
         double screenHeight = std::max(1L, controlsScreen.bottom - controlsScreen.top);
@@ -6839,13 +7371,20 @@ void UpdatePopupXamlVisuals() {
         double top = controlsScreen.top - popupScreen.top +
                      (screenHeight - controlsHeight) * 0.5;
 
-        controls::Canvas::SetLeft(g_popupXamlControls, left);
-        controls::Canvas::SetTop(g_popupXamlControls, top);
+        SetCanvasPositionIfChanged(g_popupXamlControls, left, top);
 
-        // Keep child button slots fixed in the local Canvas coordinates instead
-        // of scaling the whole StackPanel. The previous group RenderTransform
-        // could diverge from hit testing under high DPI, making the hover
-        // highlight and glyph appear offset from each other.
+        // Progress interaction owns the parent playback transform. Remove every
+        // local button spring so no child can add delayed translation or bounce.
+        if (PopupSeekFeedbackActive()) {
+            NeutralizeDynamicTransportButtonMotion(g_popupPrevMotion);
+            NeutralizeDynamicTransportButtonMotion(g_popupPlayMotion);
+            NeutralizeDynamicTransportButtonMotion(g_popupNextMotion);
+        }
+        g_popupPrevMotion.seekScaleMultiplier = 1.0;
+        g_popupPlayMotion.seekScaleMultiplier = 1.0;
+        g_popupNextMotion.seekScaleMultiplier = 1.0;
+
+        // Child geometry remains unchanged throughout seek feedback.
         int index = 0;
         for (auto const& child : g_popupXamlControls.Children()) {
             if (auto buttonSurface = child.try_as<Border>()) {
@@ -6873,25 +7412,38 @@ void UpdatePopupXamlVisuals() {
 
                 double buttonTop = sourceButtonTop +
                     (finalButtonTop - sourceButtonTop) * buttonProgress;
-                controls::Canvas::SetLeft(buttonSurface, buttonLeft);
-                controls::Canvas::SetTop(buttonSurface, buttonTop);
-                buttonSurface.Width(buttonWidth);
-                buttonSurface.Height(buttonHeight);
+                SetCanvasPositionIfChanged(buttonSurface, buttonLeft, buttonTop);
+                SetElementSizeIfChanged(buttonSurface, buttonWidth,
+                                        buttonHeight, 0.001);
+                double buttonCorner =
+                    std::min(buttonHeight * 0.5, kPopupG2ButtonCornerRadius);
+                buttonSurface.CornerRadius(
+                    {buttonCorner, buttonCorner, buttonCorner, buttonCorner});
                 buttonSurface.Opacity(1.0);
                 buttonSurface.Visibility(Visibility::Visible);
+                double buttonFontSize =
+                    IsPopupPrimaryButton(buttonSurface)
+                        ? (PopupButtonStyleIs(L"fluent_bold") ? 23.0 : 21.0)
+                        : (PopupButtonStyleIs(L"fluent_bold") ? 22.0 : 20.0);
                 if (auto icon = buttonSurface.Child().try_as<controls::FontIcon>()) {
                     icon.Visibility(Visibility::Visible);
                     icon.Opacity(1.0);
-                    icon.Width(buttonWidth);
-                    icon.Height(buttonHeight);
+                    SetElementSizeIfChanged(icon, buttonWidth, buttonHeight,
+                                            0.001);
+                    if (std::abs(icon.FontSize() - buttonFontSize) > 0.001) {
+                        icon.FontSize(buttonFontSize);
+                    }
                     icon.Margin({0, 0, 0, 0});
                     icon.HorizontalAlignment(HorizontalAlignment::Center);
                     icon.VerticalAlignment(VerticalAlignment::Center);
                 } else if (auto text = buttonSurface.Child().try_as<TextBlock>()) {
                     text.Visibility(Visibility::Visible);
                     text.Opacity(1.0);
-                    text.Width(buttonWidth);
-                    text.Height(buttonHeight);
+                    SetElementSizeIfChanged(text, buttonWidth, buttonHeight,
+                                            0.001);
+                    if (std::abs(text.FontSize() - buttonFontSize) > 0.001) {
+                        text.FontSize(buttonFontSize);
+                    }
                     text.Margin({0, 0, 0, 0});
                 }
                 ++index;
@@ -7211,20 +7763,24 @@ void CapturePopupSourceGeometry() {
             finalWidthDip = PopupCompactFinalWidth(cardWidth);
             finalHeightDip = PopupCompactFinalHeight();
         } else {
-            int maxArtBySetting = std::max(96, g_settings.expandedWidth -
+            int maxArtBySettingWidth = std::max(96, g_settings.expandedWidth -
                 (PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2));
+            int fixedPopupHeight = kPopupCardHeight + PopupArtCardGap() +
+                PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2;
+            int maxArtBySettingHeight = std::max(
+                96, g_settings.expandedHeight - fixedPopupHeight);
             int maxArtByMonitorWidth = std::max(96, monitorWidthDip - 24 -
                 (PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2));
-            int maxArtByHeight = std::max(96, availableHeightDip -
-                (kPopupCardHeight + PopupArtCardGap() +
-                 PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2));
-            int targetArt = Clamp(std::min({maxArtBySetting,
+            int maxArtByMonitorHeight = std::max(
+                96, availableHeightDip - fixedPopupHeight);
+            int targetArt = Clamp(std::min({maxArtBySettingWidth,
+                                            maxArtBySettingHeight,
                                             maxArtByMonitorWidth,
-                                            maxArtByHeight,
+                                            maxArtByMonitorHeight,
                                             kPopupMaximumArtSize}),
                                   96, kPopupMaximumArtSize);
             if (targetArt < kPopupMinimumArtSize &&
-                maxArtByHeight >= kPopupMinimumArtSize) {
+                maxArtByMonitorHeight >= kPopupMinimumArtSize) {
                 targetArt = kPopupMinimumArtSize;
             }
             finalWidthDip = PopupFinalWidthFromArtSize(targetArt);
@@ -7267,9 +7823,16 @@ void CapturePopupSourceGeometry() {
             finalWidthDip = PopupCompactFinalWidth(cardWidth);
             finalHeightDip = PopupCompactFinalHeight();
         } else {
-            int targetArt = Clamp(g_settings.expandedWidth -
-                                      (PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2),
-                                  96, kPopupMaximumArtSize);
+            int maxArtBySettingWidth = std::max(
+                96, g_settings.expandedWidth -
+                        (PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2));
+            int maxArtBySettingHeight = std::max(
+                96, g_settings.expandedHeight -
+                        (kPopupCardHeight + PopupArtCardGap() +
+                         PopupSurfaceGap() * 2 + kPopupHostShadowMargin * 2));
+            int targetArt = Clamp(
+                std::min(maxArtBySettingWidth, maxArtBySettingHeight),
+                96, kPopupMaximumArtSize);
             finalWidthDip = PopupFinalWidthFromArtSize(targetArt);
             finalHeightDip = PopupFinalHeightFromArtSize(targetArt);
         }
@@ -7779,25 +8342,16 @@ void UpdatePopupSeekPreview(double ratio) {
     MediaState state = SnapshotMedia();
     if (!state.hasSession || state.durationTicks <= 0 || !g_popupXamlProgress) {
         g_popupSeekDragging = false;
+        EndPopupSeekFeedback();
         return;
     }
 
     ratio = Clamp(ratio, 0.0, 1.0);
+    StartPopupSeekFeedback();
     g_popupSeekDragging = true;
     g_popupSeekPreviewRatio = ratio;
     g_popupLiveProgressValue = ratio * g_popupXamlProgress.Maximum();
     g_popupXamlProgress.Value(g_popupLiveProgressValue);
-
-    if (g_popupXamlProgressTrack && g_popupXamlProgressFill) {
-        double width = g_popupXamlProgressTrack.ActualWidth();
-        if (width <= 0.0) {
-            width = g_popupXamlProgressTrack.Width();
-        }
-        double fillWidth = std::max(0.0, width * ratio);
-        g_popupXamlProgressFill.Width(fillWidth);
-        g_popupXamlProgressFill.Visibility(
-            fillWidth > 0.5 ? Visibility::Visible : Visibility::Collapsed);
-    }
 
     int64_t previewTicks = static_cast<int64_t>(
         std::llround(static_cast<double>(state.durationTicks) * ratio));
@@ -7821,6 +8375,7 @@ void UpdatePopupLiveProgressFromSnapshot() {
     MediaState state = SnapshotMediaWithTimestamp(timestamp);
     if (!state.hasSession || state.durationTicks <= 0) {
         g_popupSeekDragging = false;
+        EndPopupSeekFeedback();
         g_popupSeekPreviewUntil = {};
         {
             std::lock_guard seekLock(g_seekMutex);
@@ -7843,6 +8398,7 @@ void UpdatePopupLiveProgressFromSnapshot() {
     bool trackChanged = !g_popupLiveProgressValid || key != g_popupLiveProgressKey;
     if (trackChanged) {
         g_popupSeekDragging = false;
+        EndPopupSeekFeedback();
         g_popupSeekPreviewUntil = {};
         {
             std::lock_guard seekLock(g_seekMutex);
@@ -7915,6 +8471,7 @@ void EndPopupSeek(bool commit) {
 
     double ratio = g_popupSeekPreviewRatio;
     g_popupSeekDragging = false;
+    EndPopupSeekFeedback();
     if (commit) {
         auto now = std::chrono::steady_clock::now();
         MediaState state = SnapshotMedia();
@@ -8095,6 +8652,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
     g_popupLiveProgressKey.clear();
     g_popupLiveProgressFrameTime = {};
     g_popupSeekDragging = false;
+    ResetPopupSeekFeedback();
     g_popupSeekPreviewRatio = 0.0;
     g_popupSeekPreviewUntil = {};
     {
@@ -8123,16 +8681,24 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
     g_lastPopupFrameTime = now;
     dt = Clamp(dt, 0.0, 0.05);
     TickPopupMediaTransition(dt);
+    bool popupSeekFeedbackSettled = StepPopupSeekFeedback(dt);
     double popupButtonSpeed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
-    bool popupPrevButtonSettled = StepDynamicTransportButtonMotion(
-        g_popupPrevMotion, dt, popupButtonSpeed);
-    bool popupPlayButtonSettled = StepDynamicTransportButtonMotion(
-        g_popupPlayMotion, dt, popupButtonSpeed);
-    bool popupNextButtonSettled = StepDynamicTransportButtonMotion(
-        g_popupNextMotion, dt, popupButtonSpeed);
-    bool popupButtonsSettled = popupPrevButtonSettled &&
-                               popupPlayButtonSettled &&
-                               popupNextButtonSettled;
+    bool popupButtonsSettled = true;
+    if (PopupSeekFeedbackActive()) {
+        NeutralizeDynamicTransportButtonMotion(g_popupPrevMotion);
+        NeutralizeDynamicTransportButtonMotion(g_popupPlayMotion);
+        NeutralizeDynamicTransportButtonMotion(g_popupNextMotion);
+    } else {
+        bool popupPrevButtonSettled = StepDynamicTransportButtonMotion(
+            g_popupPrevMotion, dt, popupButtonSpeed);
+        bool popupPlayButtonSettled = StepDynamicTransportButtonMotion(
+            g_popupPlayMotion, dt, popupButtonSpeed);
+        bool popupNextButtonSettled = StepDynamicTransportButtonMotion(
+            g_popupNextMotion, dt, popupButtonSpeed);
+        popupButtonsSettled = popupPrevButtonSettled &&
+                              popupPlayButtonSettled &&
+                              popupNextButtonSettled;
+    }
     bool popupAnimationSettled = StepPopupAnimationSpring(dt);
 
     PositionExpandedPopup();
@@ -8169,7 +8735,8 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
             FinishCloseExpandedPopup(g_expandedPopup);
             return;
         }
-        if (g_popupMediaTransitionActive || !popupButtonsSettled) {
+        if (g_popupMediaTransitionActive || !popupButtonsSettled ||
+            !popupSeekFeedbackSettled) {
             return;
         }
         StopPopupXamlRenderLoop();
@@ -9736,9 +10303,11 @@ void StopPopupOverlayWgcBackdrop() {
     } catch (...) {
     }
 
-    for (int i = 0; i < 80 &&
-                    g_popupOverlayWgcRendering.load(std::memory_order_acquire);
-         ++i) {
+    // FrameArrived is free-threaded. Revoking the event prevents new
+    // callbacks, and the unbounded drain keeps the mod loaded until every
+    // already-entered callback has released its frame and left the delegate.
+    while (g_popupOverlayWgcCallbacksInFlight.load(
+               std::memory_order_acquire) != 0) {
         Sleep(1);
     }
 
@@ -9970,30 +10539,44 @@ bool StartPopupOverlayWgcBackdrop(
         g_popupOverlayWgcFrameArrivedToken = g_popupOverlayWgcFramePool.FrameArrived(
             [](capture::Direct3D11CaptureFramePool const& sender,
                winrt::Windows::Foundation::IInspectable const&) {
-                auto frame = sender.TryGetNextFrame();
-                if (!frame) {
-                    return;
-                }
-
-                bool expected = false;
-                if (!g_popupOverlayWgcRendering.compare_exchange_strong(
-                        expected, true, std::memory_order_acq_rel)) {
-                    frame.Close();
-                    return;
-                }
-
-                try {
-                    std::lock_guard callbackLock(g_popupOverlayWgcMutex);
-                    if (g_popupOverlayWgcRunning) {
-                        RenderPopupOverlayWgcFrameLocked(frame);
+                g_popupOverlayWgcCallbacksInFlight.fetch_add(
+                    1, std::memory_order_acq_rel);
+                {
+                    capture::Direct3D11CaptureFrame frame{nullptr};
+                    bool renderingAcquired = false;
+                    try {
+                        frame = sender.TryGetNextFrame();
+                        if (frame) {
+                            bool expected = false;
+                            renderingAcquired =
+                                g_popupOverlayWgcRendering.compare_exchange_strong(
+                                    expected, true, std::memory_order_acq_rel);
+                            if (renderingAcquired) {
+                                std::lock_guard callbackLock(
+                                    g_popupOverlayWgcMutex);
+                                if (g_popupOverlayWgcRunning) {
+                                    RenderPopupOverlayWgcFrameLocked(frame);
+                                }
+                            }
+                        }
+                    } catch (...) {
+                        Wh_Log(
+                            L"Island: overlay WGC callback render escaped exception");
                     }
-                } catch (...) {
-                    Wh_Log(
-                        L"Island: overlay WGC callback render escaped exception");
+
+                    if (frame) {
+                        try {
+                            frame.Close();
+                        } catch (...) {
+                        }
+                    }
+                    if (renderingAcquired) {
+                        g_popupOverlayWgcRendering.store(
+                            false, std::memory_order_release);
+                    }
                 }
-                g_popupOverlayWgcRendering.store(false,
-                                                 std::memory_order_release);
-                frame.Close();
+                g_popupOverlayWgcCallbacksInFlight.fetch_sub(
+                    1, std::memory_order_release);
             });
         g_popupOverlayWgcFrameCallbackHooked = true;
         g_popupOverlayWgcSession =
@@ -10730,6 +11313,17 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
         LerpInt(sourceRect.right, targetBackdrop.right, progress),
         LerpInt(sourceRect.bottom, targetBackdrop.bottom, progress),
     };
+    double seekCenterX =
+        (static_cast<double>(currentDip.left) + currentDip.right) * 0.5;
+    double seekCenterY =
+        (static_cast<double>(currentDip.top) + currentDip.bottom) * 0.5;
+    double seekBackdropScale =
+        PopupSeekLayerScale(PopupSeekLayer::Backdrop,
+                            kPopupSeekComponentShrink);
+    currentDip = ScalePopupSeekRect(currentDip,
+                                    seekBackdropScale,
+                                    seekCenterX,
+                                    seekCenterY);
 
     // Keep the overlay geometry exactly aligned to the XAML backdrop shell.
     // The previous inset experiment helped hide hard native edges in some
@@ -10788,7 +11382,8 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
     double radiusDip = LerpDouble(sourceRadiusDip,
                                   targetRadiusDip,
                                   progress);
-    int desiredRadius = static_cast<int>(std::lround(radiusDip * dpiScale));
+    int desiredRadius = static_cast<int>(std::lround(
+        radiusDip * seekBackdropScale * dpiScale));
     cornerRadiusPx = Clamp(desiredRadius, 1, std::max(1, std::min(width, height) / 2));
 
     RECT currentCardDip{
@@ -10797,6 +11392,14 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
         LerpInt(sourceRect.right, targetCard.right, progress),
         LerpInt(sourceRect.bottom, targetCard.bottom, progress),
     };
+    double cardSeekCenterY =
+        (static_cast<double>(currentCardDip.top) + currentCardDip.bottom) * 0.5;
+    currentCardDip = ScalePopupSeekRect(
+        currentCardDip,
+        PopupSeekLayerScale(PopupSeekLayer::Controls,
+                                kPopupSeekComponentShrink),
+        seekCenterX,
+        cardSeekCenterY);
     RECT panelRect{
         static_cast<LONG>(std::lround(currentCardDip.left * dpiScale)) -
             static_cast<LONG>(std::lround(currentDip.left * dpiScale)),
@@ -10943,7 +11546,8 @@ void UpdatePopupBackdropOverlayWindow() {
     bool morphing =
         std::abs(g_popupAnimationTarget - g_popupAnimationProgress) >= 0.003 ||
         std::abs(g_popupAnimationVelocity) >= 0.05 ||
-        std::abs(PopupElasticDeformation()) >= 0.0002;
+        std::abs(PopupElasticDeformation()) >= 0.0002 ||
+        PopupSeekFeedbackActive();
     if (morphing) {
         int targetWidth = width;
         int targetHeight = height;
@@ -11230,6 +11834,8 @@ void DestroyExpandedPopup() {
     g_popupXamlArtTranslate = nullptr;
     g_popupXamlArtFade = nullptr;
     g_popupXamlArt = nullptr;
+    g_popupXamlPlaybackContent = nullptr;
+    g_popupXamlPlaybackContentScale = nullptr;
     g_popupXamlTitleHost = nullptr;
     g_popupXamlArtistHost = nullptr;
     g_popupXamlOutgoingTitleHost = nullptr;
@@ -11814,8 +12420,9 @@ bool StepDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion,
         motion.translateVelocity = 0.0;
     }
 
-    motion.scale.ScaleX(motion.scaleValue);
-    motion.scale.ScaleY(motion.scaleValue);
+    double visualScale = motion.scaleValue * motion.seekScaleMultiplier;
+    motion.scale.ScaleX(visualScale);
+    motion.scale.ScaleY(visualScale);
     motion.translate.X(motion.translateValue);
     return settled;
 }
@@ -12878,8 +13485,15 @@ double DetectTaskbarHeightDip(HWND hwnd,
     // their visual compression there.
     consider(targetElement);
     if (root) {
-        consider(FindChildByName(root, L"SystemTrayFrameGrid"));
-        consider(FindChildByName(root, L"TaskbarFrame"));
+        if (g_taskbarLayoutWatchElementsCached) {
+            consider(g_taskbarLayoutWatchSystemTrayFrame);
+            consider(g_taskbarLayoutWatchTaskbarFrame);
+        } else {
+            // The initial layout pass runs before the monitor starts. Later
+            // passes use the elements cached by StartTaskbarLayoutMonitor.
+            consider(FindChildByName(root, L"SystemTrayFrameGrid"));
+            consider(FindChildByName(root, L"TaskbarFrame"));
+        }
     }
 
     double height = bestVisualHeight;
@@ -13559,6 +14173,9 @@ void StopTaskbarLayoutMonitor() {
     }
     g_taskbarLayoutWatchRoot = nullptr;
     g_taskbarLayoutWatchTarget = nullptr;
+    g_taskbarLayoutWatchSystemTrayFrame = nullptr;
+    g_taskbarLayoutWatchTaskbarFrame = nullptr;
+    g_taskbarLayoutWatchElementsCached = false;
 }
 
 void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
@@ -13637,6 +14254,11 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
     StopTaskbarLayoutMonitor();
     g_taskbarLayoutWatchRoot = root;
     g_taskbarLayoutWatchTarget = targetElement;
+    g_taskbarLayoutWatchSystemTrayFrame =
+        FindChildByName(root, L"SystemTrayFrameGrid");
+    g_taskbarLayoutWatchTaskbarFrame =
+        FindChildByName(root, L"TaskbarFrame");
+    g_taskbarLayoutWatchElementsCached = true;
 
     HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
                     ? g_taskbarWnd
@@ -13648,6 +14270,9 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
                   OnTaskbarLayoutTimer)) {
         g_taskbarLayoutWatchRoot = nullptr;
         g_taskbarLayoutWatchTarget = nullptr;
+        g_taskbarLayoutWatchSystemTrayFrame = nullptr;
+        g_taskbarLayoutWatchTaskbarFrame = nullptr;
+        g_taskbarLayoutWatchElementsCached = false;
         return;
     }
     g_taskbarLayoutTimerWindow = hwnd;
