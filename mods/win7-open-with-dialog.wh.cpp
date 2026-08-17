@@ -741,6 +741,47 @@ class WindowOwner {
     HWND value_ = nullptr;
 };
 
+// Windows' own OpenWith.exe calls CoAllowSetForegroundWindow on the handler
+// object immediately before invoking it (shell\ext\openwith\openwith.cpp), so
+// the program the user picked is allowed to come to the front. This mod
+// launches from its worker thread instead, and a thread that does not own the
+// foreground window cannot hand the privilege over: the new process opens
+// behind the current window with a flashing taskbar button.
+//
+// AllowSetForegroundWindow(ASFW_ANY) restores the original behavior for the
+// CreateProcess routes, and CoAllowSetForegroundWindow does the same for the
+// IAssocHandler::Invoke route (an out-of-process AppX/Store handler is
+// activated by COM, so the Win32 grant alone would not reach it).
+//
+// Scoped rather than called inline so the grant is always paired with the
+// launch attempt it belongs to, including on the throwing paths. Neither API
+// has a revoke counterpart - the privilege is consumed by the next process
+// that calls SetForegroundWindow, or lapses on its own - so the destructor
+// only closes the scope.
+class ForegroundLaunchGrant {
+   public:
+    ForegroundLaunchGrant() {
+        granted_ = AllowSetForegroundWindow(ASFW_ANY) != FALSE;
+    }
+    ~ForegroundLaunchGrant() = default;
+    ForegroundLaunchGrant(const ForegroundLaunchGrant&) = delete;
+    ForegroundLaunchGrant& operator=(const ForegroundLaunchGrant&) = delete;
+
+    // Extends the grant across a COM activation. Safe to call with a null
+    // object and safe to fail: the launch itself must not depend on it.
+    void ExtendToComObject(IUnknown* object) const {
+        if (!object) return;
+        const HRESULT hr = CoAllowSetForegroundWindow(object, nullptr);
+        Wh_Log(L"Standalone Open With: foreground grant win32=%d com=0x%08X",
+               granted_, static_cast<unsigned int>(hr));
+    }
+
+    bool Granted() const { return granted_; }
+
+   private:
+    bool granted_ = false;
+};
+
 class ComApartment {
    public:
     explicit ComApartment(DWORD flags)
@@ -3327,6 +3368,17 @@ struct PickerRequest {
     // HRESULT_FROM_WIN32(ERROR_CANCELLED) / FALSE + ERROR_CANCELLED), so
     // the waiting hooks need more than "the picker finished".
     std::atomic<bool>* acceptedOut = nullptr;
+    // The caller explicitly forbids persisting a new default association
+    // (IMMERSIVE_OPENWITH DONOT_SETDEFAULT, or a NoOpenWith association).
+    // The "Always use" checkbox is disabled and cleared for the whole
+    // dialog, exactly as the real picker does for these requests.
+    // Appended after acceptedOut so existing aggregate initialization of
+    // this struct keeps compiling unchanged.
+    bool forbidDefault = false;
+    // The caller explicitly asks for the default to be changed
+    // (OpenWithSetDefaultOn / "-override"): pre-tick "Always use" instead of
+    // making the user find the checkbox. Ignored when forbidDefault is set.
+    bool presetAlwaysUse = false;
 };
 
 struct PickerState {
@@ -3604,6 +3656,64 @@ static bool IsOpenWithHandlerName(const std::wstring& internalName,
 static bool RegistryValueExists(HKEY key, PCWSTR name) {
     return key && RegQueryValueExW(key, name, nullptr, nullptr, nullptr,
                                    nullptr) == ERROR_SUCCESS;
+}
+
+// The real OpenWith.exe resolves the target's association element and asks it
+// whether a NoOpenWith value exists (sub_140009414 in the shipping binary);
+// the answer decides whether the picker may persist a new default, not merely
+// whether a row is hidden. The mod already honors NoOpenWith while enumerating
+// HKCR\Applications; this covers the other half - the association reached
+// through the file's own extension and ProgIDs.
+//
+// Deliberately registry-only: AssocCreateElement is an undocumented shell32
+// ordinal, and the registry lookup it wraps is stable, cheap and cannot fail
+// the dialog. Any error answers "no restriction", so a lookup problem can
+// never take away a capability the user would otherwise have had.
+static bool AssociationForbidsOpenWith(const std::wstring& extension) {
+    if (extension.size() < 2 || extension[0] != L'.') return false;
+    try {
+        // The extension key itself, e.g. HKCR\.txt
+        {
+            RegKeyOwner key;
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, extension.c_str(), 0,
+                              KEY_READ, key.Put()) == ERROR_SUCCESS &&
+                RegistryValueExists(key.Get(), L"NoOpenWith")) {
+                return true;
+            }
+        }
+
+        // SystemFileAssociations\<ext>, where Windows keeps the per-type
+        // policy for media and other shell-managed classes.
+        {
+            wchar_t subKey[1024] = {};
+            if (swprintf_s(subKey, L"SystemFileAssociations\\%s",
+                           extension.c_str()) > 0) {
+                RegKeyOwner key;
+                if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKey, 0, KEY_READ,
+                                  key.Put()) == ERROR_SUCCESS &&
+                    RegistryValueExists(key.Get(), L"NoOpenWith")) {
+                    return true;
+                }
+            }
+        }
+
+        // The ProgID the extension points at, e.g. HKCR\.txt -> "txtfile".
+        wchar_t progId[512] = {};
+        DWORD bytes = sizeof(progId);
+        if (RegGetValueW(HKEY_CLASSES_ROOT, extension.c_str(), nullptr,
+                         RRF_RT_REG_SZ, nullptr, progId,
+                         &bytes) == ERROR_SUCCESS && progId[0]) {
+            RegKeyOwner key;
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, progId, 0, KEY_READ,
+                              key.Put()) == ERROR_SUCCESS &&
+                RegistryValueExists(key.Get(), L"NoOpenWith")) {
+                return true;
+            }
+        }
+    } catch (...) {
+        // Fall through: absence of evidence is not a restriction.
+    }
+    return false;
 }
 
 static std::wstring ExecutableFromCommand(PCWSTR command) {
@@ -4659,7 +4769,14 @@ static void UpdateSelectionUi(PickerState& state) {
         (state.handlers[static_cast<size_t>(index)].handler ||
          !state.handlers[static_cast<size_t>(index)].progId.empty());
 
-    if (state.request.setDefaultOnly) {
+    if (state.request.forbidDefault) {
+        // The caller forbids persisting a default (DONOT_SETDEFAULT, or a
+        // NoOpenWith association): show the checkbox greyed and clear, the
+        // way the real picker does, instead of letting the user tick it and
+        // discover afterwards that nothing was saved.
+        EnableWindow(state.alwaysUse, FALSE);
+        SetAlwaysUseChecked(state, false);
+    } else if (state.request.setDefaultOnly) {
         EnableWindow(state.alwaysUse, FALSE);
         SetAlwaysUseChecked(state, true);
     } else {
@@ -5857,6 +5974,17 @@ static void BuildPickerControls(PickerState& state) {
     if (state.request.setDefaultOnly && state.alwaysUse) {
         SetAlwaysUseChecked(state, true);
         EnableWindow(state.alwaysUse, FALSE);
+    } else if (state.request.forbidDefault && state.alwaysUse) {
+        // Locked off for the whole dialog; UpdateSelectionUi keeps it that
+        // way as the selection changes.
+        SetAlwaysUseChecked(state, false);
+        EnableWindow(state.alwaysUse, FALSE);
+    } else if (state.request.presetAlwaysUse && state.alwaysUse) {
+        // "-override" / OpenWithSetDefaultOn: the caller's whole intent is
+        // to change the default, so start with the box ticked. It stays
+        // editable - UpdateSelectionUi may still disable it for a selection
+        // that cannot be made default.
+        SetAlwaysUseChecked(state, true);
     }
 }
 
@@ -6541,6 +6669,8 @@ static HRESULT InvokeCommandTemplate(const std::wstring& commandTemplate,
     const std::wstring executable = ExecutableFromCommand(commandLine.c_str());
     if (IsOpenWithExecutable(executable))
         return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
+    // Matches the real dialog: let the launched program take the foreground.
+    ForegroundLaunchGrant foregroundGrant;
     HRESULT hr = CreateProcessFromCommandLine(commandLine);
     if (hr == HRESULT_FROM_WIN32(ERROR_ELEVATION_REQUIRED)) {
         hr = LaunchElevatedFallback(executable,
@@ -6561,6 +6691,8 @@ static HRESULT InvokeExecutableWithFile(const std::wstring& executable,
     const std::wstring commandLine =
         QuoteCommandLineArgument(executable) + L" " +
         QuoteCommandLineArgument(path);
+    // Matches the real dialog: let the launched program take the foreground.
+    ForegroundLaunchGrant foregroundGrant;
     HRESULT hr = CreateProcessFromCommandLine(commandLine);
     if (hr == HRESULT_FROM_WIN32(ERROR_ELEVATION_REQUIRED)) {
         hr = LaunchElevatedFallback(executable,
@@ -6594,6 +6726,10 @@ static HRESULT InvokeHandlerWithDataObject(StandaloneAssocHandler* handler,
         nullptr, 1, pidls, nullptr, IID_PPV_ARGS(dataObject.Put()));
     ILFree(pidl);
     if (FAILED(createHr) || !dataObject) return createHr;
+    // An AppX/Store handler is activated out of process by COM, so the Win32
+    // grant alone would not reach it; extend it across the activation too.
+    ForegroundLaunchGrant foregroundGrant;
+    foregroundGrant.ExtendToComObject(handler);
     const HRESULT invokeHr = handler->Invoke(dataObject.Get());
     Wh_Log(L"Standalone Open With: handler invoker fallback hr=0x%08X",
            static_cast<unsigned int>(invokeHr));
@@ -6702,6 +6838,16 @@ static ComPtr<StandaloneAssocHandler> FindAssocHandlerForSelection(
 
 static HRESULT MakeSelectedDefault(PickerState& state,
                                    HandlerEntry& selected) {
+    // Defense in depth: the checkbox is already disabled and cleared for these
+    // requests, so this should be unreachable. Enforcing the restriction at
+    // the single point that actually writes the association means a future UI
+    // change cannot silently start persisting defaults the caller forbade.
+    if (state.request.forbidDefault) {
+        Wh_Log(L"Standalone Open With: association change refused "
+               L"(caller forbids setting a default)");
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
+    }
+
     const std::wstring extension = ExtensionOf(state.request.path);
     if (extension.size() <= 1) return E_INVALIDARG;
 
@@ -7189,8 +7335,16 @@ static bool QueuePicker(HWND owner, PCWSTR path,
 // the mod declined the request and the original API has to run.
 enum class PickerOutcome { NotHandled, Cancelled, Accepted };
 
-static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
-                                        bool setDefaultOnly = false) {
+// Optional, caller-supplied association intent. Defaulted everywhere, so the
+// existing call sites keep their previous behavior exactly.
+struct PickerAssociationIntent {
+    bool forbidDefault = false;
+    bool presetAlwaysUse = false;
+};
+
+static PickerOutcome QueuePickerAndWait(
+    HWND owner, PCWSTR path, bool setDefaultOnly = false,
+    PickerAssociationIntent intent = {}) {
     if (!path ||
         !g_replaceSystemDialog.load(std::memory_order_acquire) ||
         g_shuttingDown.load(std::memory_order_acquire)) {
@@ -7243,7 +7397,10 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
         try {
             g_requestQueue.emplace_back(
                 PickerRequest{std::move(copy), owner, completion.get(),
-                              setDefaultOnly, &accepted});
+                              setDefaultOnly, &accepted,
+                              intent.forbidDefault,
+                              // A forbidden default wins over a requested one.
+                              intent.presetAlwaysUse && !intent.forbidDefault});
         } catch (...) {
             return PickerOutcome::NotHandled;
         }
@@ -7653,7 +7810,20 @@ static bool InstallOpenWithMenuMethodHooks() {
 // object, so no external reference can outlive the mod image.
 // -----------------------------------------------------------------------------
 
+// IMMERSIVE_OPENWITH flags, as used by the real OpenWith.exe. Only DoNotExec
+// was needed before; the rest are decoded from the shipping binary's own
+// bitmask arithmetic and are honored in ServerLauncherLaunchHook below.
+static constexpr DWORD kImmersiveOpenWithOverride = 0x00000001;
 static constexpr DWORD kImmersiveOpenWithDoNotExec = 0x00000004;
+static constexpr DWORD kImmersiveOpenWithProtocol = 0x00000008;
+static constexpr DWORD kImmersiveOpenWithUrl = 0x00000010;
+static constexpr DWORD kImmersiveOpenWithDoNotSetDefault = 0x00000040;
+
+// The real dialog treats these two as "this request is not about a file on
+// disk". IsSupportedFile already rejects such targets, so this is a second,
+// explicit gate rather than the only one.
+static constexpr DWORD kImmersiveOpenWithNonFileMask =
+    kImmersiveOpenWithProtocol | kImmersiveOpenWithUrl;
 
 static bool ClassNameEquals(HWND window, PCWSTR expected) {
     if (!window || !expected) return false;
@@ -7676,6 +7846,26 @@ static bool ShouldSetDefaultOnly(HWND owner, DWORD flags) {
     Wh_Log(L"Standalone Open With: launcher intent flags=0x%08X owner=%p "
            L"setDefaultOnly=%d", flags, owner, properties);
     return properties;
+}
+
+// Whether the caller explicitly forbids changing the default association.
+// The shipping OpenWith.exe sets DONOT_SETDEFAULT unconditionally on its
+// command-line path, and again whenever the target association carries
+// NoOpenWith. Honoring it keeps the classic dialog from persisting a default
+// that Windows' own picker would not have persisted.
+static bool ForbidsSettingDefault(DWORD flags) {
+    return (flags & kImmersiveOpenWithDoNotSetDefault) != 0;
+}
+
+// Whether the caller explicitly asks for the default to be changed
+// (the "OpenWith.exe -override" / OpenWithSetDefaultOn route).
+static bool RequestsDefaultOverride(DWORD flags) {
+    return (flags & kImmersiveOpenWithOverride) != 0;
+}
+
+// A protocol/URL request is not a file pick; leave those to Windows.
+static bool IsNonFileRequest(DWORD flags) {
+    return (flags & kImmersiveOpenWithNonFileMask) != 0;
 }
 
 MIDL_INTERFACE("6A283FE2-ECFA-4599-91C4-E80957137B26")
@@ -7891,12 +8081,29 @@ static HRESULT STDMETHODCALLTYPE ServerLauncherLaunchHook(
     HookCallGuard hookCallGuard;
     try {
         const bool setDefaultOnly = ShouldSetDefaultOnly(owner, flags);
+
+        // Association intent, straight from the caller's flags plus the
+        // target's own NoOpenWith policy. Both only ever remove or preselect
+        // the "Always use" capability; neither can stop the picker showing.
+        PickerAssociationIntent intent;
+        intent.forbidDefault =
+            ForbidsSettingDefault(flags) ||
+            (path && AssociationForbidsOpenWith(ExtensionOf(path)));
+        intent.presetAlwaysUse = RequestsDefaultOverride(flags);
+
         Wh_Log(L"Standalone Open With: server Launch path=%s owner=%p "
-               L"flags=0x%08X", path ? path : L"(null)", owner, flags);
-        if (g_replaceSystemDialog.load(std::memory_order_acquire) && path &&
-            IsSupportedFile(path) &&
-            QueuePickerAndWait(owner, path, setDefaultOnly) !=
-                PickerOutcome::NotHandled) {
+               L"flags=0x%08X forbidDefault=%d presetAlwaysUse=%d",
+               path ? path : L"(null)", owner, flags,
+               intent.forbidDefault, intent.presetAlwaysUse);
+
+        // A protocol/URL activation is not a file pick - leave it to Windows.
+        if (IsNonFileRequest(flags)) {
+            Wh_Log(L"Standalone Open With: non-file request, deferring to "
+                   L"the system picker");
+        } else if (g_replaceSystemDialog.load(std::memory_order_acquire) &&
+                   path && IsSupportedFile(path) &&
+                   QueuePickerAndWait(owner, path, setDefaultOnly, intent) !=
+                       PickerOutcome::NotHandled) {
             return S_OK;
         }
     } catch (...) {
@@ -8055,10 +8262,19 @@ static void WINAPI OpenWithEntryPointHook() {
     bool handled = false;
     if (IsSupportedFile(g_directOpenWithPath) &&
         g_replaceSystemDialog.load(std::memory_order_acquire)) {
+        // The shipping OpenWith.exe sets DONOT_SETDEFAULT unconditionally on
+        // its command-line path (it ORs 0x40 in before dispatching), so a
+        // drag/drop or explicit launch opens the file once and never rewrites
+        // the association. Mirror that here rather than offering an "Always
+        // use" the real dialog would not have offered.
+        PickerAssociationIntent intent;
+        intent.forbidDefault = true;
+
         // The process was launched purely to show this dialog, so a
         // cancelled picker is still a completed run: exit rather than
         // letting the real OpenWith.exe put a second dialog on screen.
-        handled = QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str()) !=
+        handled = QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str(),
+                                     /*setDefaultOnly=*/false, intent) !=
                   PickerOutcome::NotHandled;
     }
     if (handled) {
