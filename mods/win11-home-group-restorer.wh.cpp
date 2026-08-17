@@ -19,7 +19,7 @@
 This mod restores the classic **HomeGroup** page in Control Panel and Windows 11 (and Windows 10 1803+ if necessary). The HomeGroup feature was removed starting with Windows 10 version 1803 (April 2018). This mod restores the visual Control Panel page using the original `hgcpl.dll` downloaded and verified from Microsoft's symbol servers.
 
 Note: This mod is a fix for the [Windows 7 Legacy Applet Restorer mod](https://windhawk.net/mods/win7-legacy-applet-restorer) because the HomeGroup page was removed from Windows 11 while on Windows 10 it is still present despite the service not being functional/hard to restore properly.
-The mod has been tested on Windows 11 24H2.
+The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 **IMPORTANT**: This is a **cosmetic restoration only**. The underlying HomeGroup networking services (`HomeGroupListener`, `HomeGroupProvider`) were removed from Windows 10 1803+ and completely stripped from Windows 11. The page will display, but actual homegroup creation/joining/sharing will not work because the backend services no longer exist.
 
 ## Screenshot
