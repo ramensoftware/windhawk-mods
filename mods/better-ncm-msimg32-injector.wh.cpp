@@ -3,7 +3,8 @@
 // @name            BetterNCM direct runtime loader
 // @description     Load a configured BetterNCM DLL directly into every cloudmusic.exe process.
 // @version         0.2.0
-// @author          local-test
+// @author          Jurangren
+// @github          https://github.com/Jurangren
 // @include         cloudmusic.exe
 // ==/WindhawkMod==
 
