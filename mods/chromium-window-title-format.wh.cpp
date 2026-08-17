@@ -596,6 +596,10 @@ struct Grammar {
     std::vector<std::wstring> slot2Seps;   // profile separators, longest first
     std::vector<CountForm>    countForms;
     std::wstring              browserName;
+    // Display names of the profiles this install actually has, read from the
+    // browser's own Local State. Empty means "could not be determined", which is
+    // treated as "do not guess" - see the profile slot in Decompose.
+    std::vector<std::wstring> profileNames;
 };
 
 std::wstring TrimCopy(std::wstring_view s) {
@@ -744,6 +748,23 @@ bool ParsePluralForms(const std::wstring& msg, std::vector<CountForm>* out) {
                 form.fixedValue = _wtoi(sel.c_str() + 1);
             }
             if (form.fixedValue <= 0) form.fixedValue = 1;
+        }
+        // REFUSE A FORM THAT MATCHES EVERYTHING.
+        //
+        // A branch whose body is exactly "{0}" - a natural way to write "add
+        // nothing when there is nothing to add" - produces a form with no fixed
+        // text, no prefix and no suffix. tryStripCount skips the fixed path
+        // because fixed is empty, then tests EndsWith(in, post) and
+        // EndsWith(head, pre) against empty strings, both of which are trivially
+        // true. Every title ending in a digit would then parse as carrying a tab
+        // count: "Bug 42" becomes title "Bug" with a count of 43.
+        //
+        // That is the opposite of this parser's contract, which is to leave a
+        // title alone when it cannot recognise it. A form carrying no literal
+        // carries no evidence, so it is dropped at discovery rather than
+        // defended against at every match.
+        if (form.fixed.empty() && form.pre.empty() && form.post.empty()) {
+            continue;
         }
         out->push_back(std::move(form));
         any = true;
@@ -954,13 +975,60 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
     if (!tryStripCount(r2, out, &r3)) {
         // No count at this level. A trailing segment may therefore be a profile;
         // strip one and try the count again behind it.
-        if (out->profile.empty()) {
+        //
+        // MATCH A REAL PROFILE NAME, never just a trailing segment.
+        //
+        // Reached when no count clause matched at this level - typically a
+        // one-tab window, but also a multi-profile title whose count sits BEHIND
+        // the profile, which is why the count is retried below after stripping.
+        // It used to strip whatever followed the last separator, and
+        // slot2Seps is always {" - "} on Edge, discovered from the InPrivate
+        // resource, even on an install with a single profile that never puts a
+        // profile in a title at all. So a one-tab window titled
+        //
+        //     "GitHub - Some Repo - Microsoft Edge"
+        //
+        // parsed as title "GitHub" with profile "Some Repo", and every preset
+        // that does not render {profile} - which is all of them except
+        // keep_profile - displayed just "GitHub". Silent truncation of the
+        // user's own text, in the default configuration, on the exact windows
+        // the presets are tuned for.
+        //
+        // TWO conditions, and the count is the important one. Chromium only
+        // writes a profile into the title when the install has MORE THAN ONE
+        // profile, so a single-profile install never does - and matching by name
+        // alone still truncated "GitHub - Personal - Microsoft Edge" on an
+        // install whose one profile happened to be called Personal. Requiring
+        // both "more than one profile exists" and "this is one of their names"
+        // makes the rule identity, not position.
+        //
+        // When the names cannot be read the slot is skipped entirely: losing
+        // {profile} is a missing field, while guessing is a mangled title, and
+        // this parser's contract is to leave what it does not recognise alone.
+        // Note the degradation is slightly wider than the field itself - a count
+        // that sits behind a profile cannot be reached either, so such a title
+        // keeps its count wording inside {title}.
+        if (out->profile.empty() && g.profileNames.size() >= 2) {
             for (const std::wstring& sep : g.slot2Seps) {
                 const size_t at = r2.rfind(sep);
                 if (at == std::wstring::npos || at == 0) continue;
                 const std::wstring cand = r2.substr(at + sep.size());
                 if (cand.empty() || cand.size() > 64) continue;
-                out->profile = cand;
+                // EXACTLY equal, not case-insensitively. The browser renders
+                // the stored name verbatim, so folding case buys nothing real and
+                // only widens the false-positive window - with a profile named
+                // "Work", a case-insensitive test truncates
+                // "How to go on vacation - work - Microsoft Edge".
+                const std::wstring trimmed = TrimCopy(cand);
+                bool known = false;
+                for (const std::wstring& name : g.profileNames) {
+                    if (trimmed == name) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) continue;
+                out->profile = trimmed;
                 r3 = r2.substr(0, at);
                 break;
             }
@@ -3959,6 +4027,125 @@ std::wstring DirOfModule(const wchar_t* name) {
     return (at == std::wstring::npos) ? std::wstring() : s.substr(0, at);
 }
 
+// The user-data directory this browser is actually running with.
+//
+// --user-data-dir wins, exactly as it does for the browser: the command line is
+// already parsed a few lines below for --lang=, and reading the default location
+// while the browser runs from somewhere else means answering about the wrong
+// install. Falls back to the per-channel default.
+std::wstring UserDataDir() {
+    int     argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    std::wstring fromArgs;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (_wcsnicmp(argv[i], L"--user-data-dir=", 16) == 0) {
+                fromArgs = argv[i] + 16;
+                // Chromium accepts it quoted; the shell usually strips them.
+                if (fromArgs.size() >= 2 && fromArgs.front() == L'"' &&
+                    fromArgs.back() == L'"') {
+                    fromArgs = fromArgs.substr(1, fromArgs.size() - 2);
+                }
+            }
+        }
+        LocalFree(argv);
+    }
+    if (!fromArgs.empty()) return fromArgs;
+
+    const wchar_t* la = _wgetenv(L"LOCALAPPDATA");
+    if (!la) return {};
+    return std::wstring(la) +
+           (g_isChrome ? L"\\Google\\Chrome\\User Data"
+                       : L"\\Microsoft\\Edge\\User Data");
+}
+
+// The display names of the profiles this install has, from the browser's own
+// Local State.
+//
+// A narrow scan rather than a JSON parser, but a syntax-aware one: keys are
+// distinguished from values by requiring the ':' that follows a key, because
+// inferring it positionally let a field whose VALUE was the word "name" be taken
+// as a key - which both invented a profile called "name" and swallowed the real
+// one after it. A wrong name here is not cosmetic: it is what decides whether a
+// piece of the user's title gets discarded.
+//
+// Several keys are collected, not just "name". Chromium composes the displayed
+// profile through GetNameToDisplay(), which prefers the GAIA name over the local
+// one, so on a signed-in profile the segment in the title may never equal "name"
+// - and the slot would then quietly stop working for exactly the multi-profile
+// users it exists for. Collecting the alternatives keeps the test anchored to
+// identity while covering the shapes the browser can actually display.
+//
+// Anything unexpected returns what was found so far, and an empty result means
+// "unknown", which the caller treats as "do not strip a profile".
+std::vector<std::wstring> DiscoverProfileNames() {
+    std::vector<std::wstring> names;
+    const std::wstring root = UserDataDir();
+    if (root.empty()) return names;
+
+    const std::vector<uint8_t> buf = ReadWholeFile(root + L"\\Local State");
+    if (buf.empty()) return names;
+
+    const std::string_view sv(reinterpret_cast<const char*>(buf.data()),
+                              buf.size());
+    size_t at = sv.find("\"info_cache\"");
+    if (at == std::string_view::npos) return names;
+    at = sv.find('{', at);
+    if (at == std::string_view::npos) return names;
+
+    // Any of these can be what the browser puts in the title.
+    auto wanted = [](std::string_view k) {
+        return k == "name" || k == "gaia_name" || k == "gaia_given_name" ||
+               k == "shortcut_name";
+    };
+
+    int    depth  = 0;
+    bool   inStr  = false;
+    bool   esc    = false;
+    size_t strAt  = 0;
+    std::string key;
+    for (size_t i = at; i < sv.size(); ++i) {
+        const char c = sv[i];
+        if (inStr) {
+            if (esc)            { esc = false; continue; }
+            if (c == '\\')      { esc = true;  continue; }
+            if (c != '"')       continue;
+            inStr = false;
+            const std::string_view tok = sv.substr(strAt, i - strAt);
+            if (depth == 2) {
+                if (!key.empty()) {
+                    // This string is the VALUE of a key we were waiting on.
+                    std::wstring w;
+                    if (!tok.empty() && tok.size() < 128 &&
+                        pak::Utf8ToWide(tok, w)) {
+                        // Escapes are not decoded, so a name containing one
+                        // simply never matches a title - which fails closed.
+                        if (std::find(names.begin(), names.end(), w) ==
+                            names.end()) {
+                            names.push_back(std::move(w));
+                        }
+                    }
+                    key.clear();
+                } else if (wanted(tok)) {
+                    // Only a real KEY is followed by ':'. Without this test a
+                    // value that happens to read "name" was mistaken for one.
+                    size_t j = i + 1;
+                    while (j < sv.size() && (sv[j] == ' ' || sv[j] == '\t' ||
+                                             sv[j] == '\r' || sv[j] == '\n')) {
+                        ++j;
+                    }
+                    if (j < sv.size() && sv[j] == ':') key.assign(tok);
+                }
+            }
+            continue;
+        }
+        if (c == '"')  { inStr = true; strAt = i + 1; continue; }
+        if (c == '{')  { ++depth; continue; }
+        if (c == '}')  { if (--depth == 0) break; key.clear(); continue; }
+    }
+    return names;
+}
+
 // Locale candidates, best first. A wrong guess is safe: the discovered suffix
 // then fails to match real titles and nothing is rewritten.
 std::vector<std::wstring> LocaleCandidates() {
@@ -4308,9 +4495,19 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         if (DiscoverGrammar(f, hint, &cand)) {
             g  = std::move(cand);
             ok = true;
-            Wh_Log(L"grammar from %s: %zu suffix, %zu marker, %zu sep, %zu count",
+            // The install's real profile names, so the profile slot can require
+            // a match rather than taking whatever follows a separator.
+            g.profileNames = DiscoverProfileNames();
+            Wh_Log(L"grammar from %s: %zu suffix, %zu marker, %zu sep, %zu count, "
+                   L"%zu profile name(s)",
                    path.c_str(), g.suffixes.size(), g.markerTails.size(),
-                   g.slot2Seps.size(), g.countForms.size());
+                   g.slot2Seps.size(), g.countForms.size(),
+                   g.profileNames.size());
+            if (g.profileNames.empty()) {
+                Wh_Log(L"could not read this install's profile names, so "
+                       L"{profile} will stay empty rather than guess at a "
+                       L"trailing segment of the page title");
+            }
             break;
         }
     }
