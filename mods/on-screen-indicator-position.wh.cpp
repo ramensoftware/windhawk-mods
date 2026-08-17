@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.1.1
+// @version         1.1.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -89,18 +89,20 @@ both target the same function and work out the origin handling.
   $name: Horizontal offset
   $description: >-
     Pixels to nudge the indicator by. Positive moves right, negative moves left.
-    The indicator is kept on screen, so an offset that would push it past the
-    edge stops at the edge instead.
+    The indicator is kept inside the area Windows lays it out in, so an offset
+    that would push it past an edge stops at the edge instead.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
     Pixels to nudge the indicator by. Positive moves down, negative moves up.
-    The indicator is kept on screen, so an offset that would push it past the
-    edge stops at the edge instead.
+    The indicator is kept inside the area Windows lays it out in, so an offset
+    that would push it past an edge stops at the edge instead.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+
+#include <atomic>
 
 enum class Position {
     windowsDefault,
@@ -115,10 +117,14 @@ enum class Position {
     bottomRight,
 };
 
+// Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
+// confirmator's UI thread, so the members are atomic. There is nothing to tear
+// so it costs nothing here, and it keeps a settings change from being read
+// half-applied.
 struct {
-    Position position;
-    int offsetX;
-    int offsetY;
+    std::atomic<Position> position;
+    std::atomic<int> offsetX;
+    std::atomic<int> offsetY;
 } g_settings;
 
 HMODULE g_hardwareConfirmatorModule;
@@ -136,52 +142,59 @@ struct WinrtRect {
 // and the position it picked from the built-in setting; only the position is
 // replaced.
 void PlaceInArea(const WinrtRect& area, WinrtRect* rect) {
-    float left = 0;
     float centerX = (area.Width - rect->Width) / 2;
     float right = area.Width - rect->Width;
 
-    float top = 0;
     float middleY = (area.Height - rect->Height) / 2;
     float bottom = area.Height - rect->Height;
 
-    switch (g_settings.position) {
+    switch (g_settings.position.load()) {
         case Position::topLeft:
-            rect->X = left, rect->Y = top;
+            rect->X = 0;
+            rect->Y = 0;
             break;
         case Position::topCenter:
-            rect->X = centerX, rect->Y = top;
+            rect->X = centerX;
+            rect->Y = 0;
             break;
         case Position::topRight:
-            rect->X = right, rect->Y = top;
+            rect->X = right;
+            rect->Y = 0;
             break;
         case Position::middleLeft:
-            rect->X = left, rect->Y = middleY;
+            rect->X = 0;
+            rect->Y = middleY;
             break;
         case Position::center:
-            rect->X = centerX, rect->Y = middleY;
+            rect->X = centerX;
+            rect->Y = middleY;
             break;
         case Position::middleRight:
-            rect->X = right, rect->Y = middleY;
+            rect->X = right;
+            rect->Y = middleY;
             break;
         case Position::bottomLeft:
-            rect->X = left, rect->Y = bottom;
+            rect->X = 0;
+            rect->Y = bottom;
             break;
         case Position::bottomCenter:
-            rect->X = centerX, rect->Y = bottom;
+            rect->X = centerX;
+            rect->Y = bottom;
             break;
         case Position::bottomRight:
-            rect->X = right, rect->Y = bottom;
+            rect->X = right;
+            rect->Y = bottom;
             break;
         case Position::windowsDefault:
             // Keep the position Windows picked and only apply the offsets.
             break;
     }
 
-    rect->X += g_settings.offsetX;
-    rect->Y += g_settings.offsetY;
+    rect->X += g_settings.offsetX.load();
+    rect->Y += g_settings.offsetY.load();
 
-    // An offset large enough to push the indicator off screen would just make
-    // it invisible with no way to tell why, so keep it within the area.
+    // An offset large enough to push the indicator out of the area would just
+    // make it invisible with no way to tell why, so keep it inside.
     if (rect->X < 0) {
         rect->X = 0;
     } else if (rect->X > right) {
@@ -245,6 +258,12 @@ Position PositionFromString(PCWSTR value) {
         return Position::bottomCenter;
     } else if (wcscmp(value, L"bottomRight") == 0) {
         return Position::bottomRight;
+    }
+
+    // A stale or mistyped stored value would otherwise look like the mod simply
+    // isn't working.
+    if (wcscmp(value, L"windowsDefault") != 0) {
+        Wh_Log(L"Unknown position \"%s\", using the Windows default", value);
     }
 
     return Position::windowsDefault;
