@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.9.1
+// @version         3.9.2
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -970,6 +970,15 @@ std::vector<DiskInfo> EnumerateDisks() {
             QueryVolumePlacement(volume.guidPath, &volume.diskNumber,
                                  &volume.offset, &volume.extents);
 
+            // A volume that cannot be placed on a physical disk is dropped
+            // below, so it is dropped here instead - before it is given a shell
+            // icon. Allocating one first leaked it: the icon and bitmap handles
+            // hang off VolumeInfo and are released by ReleaseDiskIcons, which
+            // only ever sees the volumes that made it onto a disk.
+            if (volume.diskNumber < 0) {
+                continue;
+            }
+
             WCHAR windowsDir[MAX_PATH] = L"";
             if (GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir)) &&
                 !volume.letter.empty()) {
@@ -1332,7 +1341,15 @@ void JoinThreadPumping(HANDLE thread) {
     for (;;) {
         DWORD wait = MsgWaitForMultipleObjectsEx(1, &thread, INFINITE,
                                                  QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (wait == WAIT_OBJECT_0) {
+            return;  // the worker finished, which is the whole point of this
+        }
         if (wait != WAIT_OBJECT_0 + 1) {
+            // WAIT_FAILED, or anything else this does not understand. Returning
+            // here would leave the caller free to close the thread handle and
+            // reuse the request the worker is still writing to, so the join
+            // still has to happen - just without the pumping.
+            WaitForSingleObject(thread, INFINITE);
             return;
         }
 
@@ -2166,6 +2183,11 @@ void Show(HWND parent, HINSTANCE instance, DiskInfo disk, VolumeInfo volume,
 }
 
 }  // namespace props
+
+// Defined with the takeover code at the bottom of the file, and read up here:
+// the window will not open a modal dialog once unloading has started, because
+// Wh_ModUninit would then have to talk that dialog down before it could return.
+extern std::atomic<bool> g_modUnloading;
 
 namespace diskui {
 
@@ -3298,6 +3320,14 @@ void HandOffToConsole(State* state, PCWSTR what) {
 }
 
 void Invoke(State* state, ActionKind kind) {
+    // Format and Properties run their own message loop, and one that opens as
+    // the mod is being unloaded has to be closed again by Wh_ModUninit's sweep
+    // before it can return. Cheaper not to open it.
+    if (g_modUnloading &&
+        (kind == ActionKind::Format || kind == ActionKind::Properties)) {
+        return;
+    }
+
     switch (kind) {
         case ActionKind::Close:
             DestroyWindow(state->hwnd);
@@ -4157,6 +4187,35 @@ HANDLE g_uiFinished = nullptr;
 // with the code in it.
 HANDLE g_hookExited = nullptr;
 
+// Windhawk calls FreeLibrary on this image as soon as Wh_ModUninit returns, and
+// there is one stretch of code this mod cannot get out of the way in time: the
+// epilogue of the hook below. SetEvent is its last statement, but the stack
+// cleanup and the ret still execute out of this image afterwards, and the return
+// address sitting on MMC's stack points into it as well. No amount of signalling
+// from inside the function can cover the instructions that do the signalling.
+//
+// So the image is pinned instead. FreeLibrary can no longer unmap it, the
+// epilogue is guaranteed to be running mapped code, and the crash window closes
+// completely rather than getting narrower.
+//
+// The cost is real and worth stating: the DLL stays resident in this one mmc.exe
+// until the process exits, which on the unload path is until the user closes the
+// real console it falls back into. A mapped file cannot be replaced, so
+// recompiling the mod while a taken-over window is still open can fail to write
+// the DLL. That is a developer inconvenience; the alternative is a
+// nanosecond-wide crash on every unload, on a machine that unloads mods often.
+void PinModule() {
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
+                                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<PCWSTR>(&PinModule), &self)) {
+        // Nothing to fall back on: the epilogue stays as exposed as it was
+        // before. Worth a line in the log rather than silence.
+        Wh_Log(L"could not pin the module (%u); unload is racy",
+               GetLastError());
+    }
+}
+
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 
@@ -4209,37 +4268,53 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
                                         instance, param);
     };
 
-    // Deciding to take over and publishing the thread that does it are one
-    // step as far as unloading is concerned, so they happen under the lock.
-    {
+    // Deciding to take over and publishing the thread that does it are one step
+    // as far as unloading is concerned, so they happen under the lock.
+    //
+    // Nothing else does, and in particular not the call into user32 below. Every
+    // window in this process is created through this hook, and creating a window
+    // runs WM_NCCREATE and WM_CREATE handlers before CreateWindowExW returns - a
+    // handler that creates a child window, which is what dialogs and common
+    // controls do, re-enters this function on this thread. Holding a
+    // non-recursive mutex across that is a deadlock, and it deadlocks with
+    // mmc.exe's window creation halfway down the stack.
+    bool tookOver = false;
+
+    // Class names can be atoms rather than pointers; ignore those.
+    if (!IS_INTRESOURCE(className) &&
+        _wcsicmp(className, kMmcFrameClass) == 0) {
         std::lock_guard<std::mutex> guard(g_takeoverMutex);
+        if (!g_tookOver && !g_modUnloading) {
+            g_tookOver = true;
 
-        // Class names can be atoms rather than pointers; ignore those.
-        if (g_tookOver || g_modUnloading || IS_INTRESOURCE(className) ||
-            _wcsicmp(className, kMmcFrameClass) != 0) {
-            return passThrough();
-        }
-        g_tookOver = true;
-
-        // The window runs on its own thread, not here. Building windows and
-        // pumping messages inside user32's own CreateWindowExW - with MMC's
-        // window creation still on the stack - is reentrancy user32 does not
-        // expect, and it crashes.
-        //
-        // MMC's thread simply waits here instead. That is the same "stop the
-        // console loading" effect as suspending it, but at a point this mod
-        // chose, with no locks held, rather than wherever SuspendThread
-        // happened to catch it.
-        g_uiThread =
-            CreateThread(nullptr, 0, WindowThread, nullptr, 0, &g_uiThreadId);
-        if (!g_uiThread) {
-            Wh_Log(
-                L"could not start the window thread; falling back to the "
-                L"console");
-            g_tookOver = false;
-            return passThrough();
+            // The window runs on its own thread, not here. Building windows and
+            // pumping messages inside user32's own CreateWindowExW - with MMC's
+            // window creation still on the stack - is reentrancy user32 does not
+            // expect, and it crashes.
+            //
+            // MMC's thread simply waits here instead. That is the same "stop the
+            // console loading" effect as suspending it, but at a point this mod
+            // chose, with no locks held, rather than wherever SuspendThread
+            // happened to catch it.
+            g_uiThread = CreateThread(nullptr, 0, WindowThread, nullptr, 0,
+                                      &g_uiThreadId);
+            if (g_uiThread) {
+                tookOver = true;
+            } else {
+                Wh_Log(
+                    L"could not start the window thread; falling back to the "
+                    L"console");
+                g_tookOver = false;
+            }
         }
     }
+
+    if (!tookOver) {
+        return passThrough();
+    }
+
+    // Pinned before parking, on the one thread that has the problem: MMC's.
+    PinModule();
 
     // Parked, but not deaf. A plain WaitForSingleObject here stops this thread
     // dispatching anything for as long as the window is open, and this is
@@ -4286,9 +4361,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
 
     // The last statement in this module that MMC's thread executes. Wh_ModUninit
     // blocks on this before returning, which is what keeps the image mapped
-    // until now. It cannot cover the function epilogue itself - the return
-    // address lives in this image - but that is a handful of instructions
-    // rather than the whole tail of the function.
+    // until now; the epilogue after it is covered by PinModule above rather than
+    // by this event, which cannot reach it.
     SetEvent(g_hookExited);
     return result;
 }
