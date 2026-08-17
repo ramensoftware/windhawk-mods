@@ -2,11 +2,12 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.1.2
+// @version         1.1.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -57,7 +58,10 @@ a monitor by number or by interface name. The two work together.
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
   like, then let this mod do the actual placement.
-* Tested on Windows 11 build 26200 (25H2) x64.
+* Offsets are given at 100% scaling and scaled to whichever monitor the
+  indicator appears on, so the same value moves the same distance on a display
+  running at 150%.
+* Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
 
 ## Credits
 
@@ -88,19 +92,25 @@ both target the same function and work out the origin handling.
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Pixels to nudge the indicator by. Positive moves right, negative moves left.
-    The indicator is kept inside the area Windows lays it out in, so an offset
-    that would push it past an edge stops at the edge instead.
+    Pixels to nudge the indicator by, at 100% scaling. Positive moves right,
+    negative moves left. The value is scaled to match the monitor, so the same
+    setting moves the same distance on a scaled display. The indicator is kept
+    inside the area Windows lays it out in, so an offset that would push it past
+    an edge stops at the edge instead.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Pixels to nudge the indicator by. Positive moves down, negative moves up.
-    The indicator is kept inside the area Windows lays it out in, so an offset
-    that would push it past an edge stops at the edge instead.
+    Pixels to nudge the indicator by, at 100% scaling. Positive moves down,
+    negative moves up. The value is scaled to match the monitor, so the same
+    setting moves the same distance on a scaled display. The indicator is kept
+    inside the area Windows lays it out in, so an offset that would push it past
+    an edge stops at the edge instead.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+
+#include <shellscalingapi.h>
 
 #include <atomic>
 
@@ -141,7 +151,7 @@ struct WinrtRect {
 // `rect` comes back from the original function holding the size Windows chose
 // and the position it picked from the built-in setting; only the position is
 // replaced.
-void PlaceInArea(const WinrtRect& area, WinrtRect* rect) {
+void PlaceInArea(const WinrtRect& area, UINT dpiX, UINT dpiY, WinrtRect* rect) {
     float centerX = (area.Width - rect->Width) / 2;
     float right = area.Width - rect->Width;
 
@@ -190,8 +200,11 @@ void PlaceInArea(const WinrtRect& area, WinrtRect* rect) {
             break;
     }
 
-    rect->X += g_settings.offsetX.load();
-    rect->Y += g_settings.offsetY.load();
+    // The rect is in the target monitor's physical pixels, so a raw offset
+    // would cover less ground the more the monitor is scaled up. Scaling by the
+    // monitor's DPI keeps the setting meaning the same distance everywhere.
+    rect->X += MulDiv(g_settings.offsetX.load(), dpiX, 96);
+    rect->Y += MulDiv(g_settings.offsetY.load(), dpiY, 96);
 
     // An offset large enough to push the indicator out of the area would just
     // make it invisible with no way to tell why, so keep it inside.
@@ -218,6 +231,25 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              const WinrtRect* rect) {
     Wh_Log(L">");
 
+    // Resolve the scaling of the monitor this rect belongs to, before the
+    // origin is shifted away.
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    RECT areaRect{
+        .left = (LONG)rect->X,
+        .top = (LONG)rect->Y,
+        .right = (LONG)(rect->X + rect->Width),
+        .bottom = (LONG)(rect->Y + rect->Height),
+    };
+    if (HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST)) {
+        UINT x = 96;
+        UINT y = 96;
+        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &x, &y)) && x && y) {
+            dpiX = x;
+            dpiY = y;
+        }
+    }
+
     // Shift the input rect to 0,0 since the original function assumes that.
     WinrtRect shiftedRect = *rect;
     float offsetX = shiftedRect.X;
@@ -229,7 +261,7 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
         pThis, retval, &shiftedRect);
 
     if (result) {
-        PlaceInArea(shiftedRect, result);
+        PlaceInArea(shiftedRect, dpiX, dpiY, result);
 
         // Shift the result back.
         result->X += offsetX;
