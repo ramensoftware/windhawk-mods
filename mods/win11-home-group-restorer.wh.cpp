@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id             win11-homegroup-restorer
+// @id             win11-home-group-restorer
 // @name           Windows 11 HomeGroup Page Restorer
 // @description    This mod restores the classic HomeGroup Control Panel page on Windows 11 (cosmetic only)
 // @version        1.0.0
@@ -28,13 +28,13 @@ The mod has been tested on Windows 11 24H2.
 
 ## Features
 
-- **Classic HomeGroup page**: Restores the "HomeGroup" entry in Control Panel (Large/Small icons view)
+- **Classic HomeGroup page**: The mod restores the "HomeGroup" entry in the Control Panel
 - **Automatic setup**: The required `hgcpl.dll` is downloaded and SHA-256 verified automatically from Microsoft's symbol servers
 - **Registry virtualization**: All registry entries are provided through an in-memory virtualization layer and nothing is written to the real registry
 - **Conservative resource handling**: The mod is designed to be stable and user friendly using a conservative approach
 - **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately
-- **25 embedded languages**: Author-written replacement text is provided for all 249 HomeGroup resource IDs in 25 languages; no MUI content is copied, downloaded, or required
-- **Language selector**: Follows the Windows UI language automatically or allows a manual language override
+- **25 embedded languages**: The replacement text is provided for all 249 HomeGroup resource IDs in 25 languages; no MUI content is copied, downloaded, or required
+- **Language selector**: The mod follows the Windows UI language automatically or allows a manual language override
 - **Offline re-enable**: Once downloaded, the base DLL is cached locally for offline use
 
 ## Design and safety notes
@@ -947,18 +947,18 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {63, L"D'ACCORD"},
     {64, L"Afficher ou imprimer le mot de passe du groupe résidentiel"},
     {65, L"24pt;;;Consolas"},
-    {66, L"Date d'impression : %1 %2"},
-    {67, L"Option : afficher et imprimer le mot de passe de votre groupe résidentiel"},
+    {66, L"Date d'impression : %1 %2"},
+    {67, L"Option : afficher et imprimer le mot de passe de votre groupe résidentiel"},
     {68, L"Mot de passe:"},
     {69, L"Utilisez ce mot de passe pour connecter d'autres ordinateurs à votre groupe résidentiel."},
-    {70, L"Sur chaque ordinateur :"},
-    {71, L"Remarque : Les ordinateurs éteints ou en veille n'apparaîtront pas dans votre groupe résidentiel."},
+    {70, L"Sur chaque ordinateur :"},
+    {71, L"Remarque : Les ordinateurs éteints ou en veille n'apparaîtront pas dans votre groupe résidentiel."},
     {72, L"1. Cliquez sur Démarrer, puis sur Panneau de configuration."},
     {73, L"2. Sous Réseau et Internet, cliquez sur Choisir les options de groupe résidentiel et de partage."},
     {74, L"3. Cliquez sur Rejoindre maintenant et suivez l'assistant HomeGroup pour saisir votre mot de passe."},
     {75, L"Cliquez sur Démarrer, puis cliquez sur Panneau de configuration."},
     {76, L"Impossible d'imprimer le mot de passe du groupe résidentiel"},
-    {77, L"Une erreur s'est produite lorsque Windows a tenté d'afficher le mot de passe du groupe résidentiel. (Code d'erreur : %1!u!)"},
+    {77, L"Une erreur s'est produite lorsque Windows a tenté d'afficher le mot de passe du groupe résidentiel. (Code d'erreur : %1!u!)"},
     {78, L"Vous n'êtes actuellement pas connecté à votre réseau domestique. Pour afficher les fichiers et les ressources sur d'autres ordinateurs du groupe résidentiel, connectez-vous d'abord à votre réseau domestique."},
     {79, L"%1 a joint l'ordinateur au groupe résidentiel. Je n'ai pas partagé la bibliothèque avec mon groupe résidentiel. Cliquez sur le lien ci-dessous pour modifier ce que vous avez partagé. N'éteignez pas et ne redémarrez pas votre ordinateur tant que le partage n'est pas terminé."},
     {80, L"Je n'ai pas partagé la bibliothèque avec mon groupe résidentiel. Cliquez sur le lien ci-dessous pour modifier ce que vous avez partagé. N'éteignez pas et ne redémarrez pas votre ordinateur tant que le partage n'est pas terminé."},
@@ -996,7 +996,7 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {115, L"Modifier les membres du groupe résidentiel %1"},
     {116, L"Le mot de passe du groupe résidentiel a été réinitialisé"},
     {117, L"HomeGroup partage des fichiers"},
-    {118, L"Option : Cet ordinateur appartient à un groupe résidentiel"},
+    {118, L"Option : Cet ordinateur appartient à un groupe résidentiel"},
     {119, L"Un groupe résidentiel est disponible pour rejoindre"},
     {120, L"Un groupe résidentiel peut être créé"},
     {121, L"Le groupe résidentiel n'est pas disponible"},
@@ -1058,7 +1058,7 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {617, L"Réseau de domaines"},
     {619, L"Connexions de groupe résidentiel"},
     {620, L"Windows gère généralement les connexions aux autres ordinateurs du groupe résidentiel. Cependant, si vous utilisez le même compte utilisateur et le même mot de passe sur tous vos ordinateurs, vous pouvez demander à HomeGroup d'utiliser ce compte à la place."},
-    {621, L"Option : Autoriser Windows à gérer les connexions des groupes résidentiels (recommandé)"},
+    {621, L"Option : Autoriser Windows à gérer les connexions des groupes résidentiels (recommandé)"},
     {622, L"Connectez-vous à d'autres ordinateurs en utilisant votre compte utilisateur et votre mot de passe"},
     {624, L"Démarrez l'utilitaire de résolution des problèmes de groupe résidentiel"},
     {627, L"Connexions de partage de fichiers"},
@@ -1070,14 +1070,14 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {637, L"Fermer"},
     {639, L"Accès à distance au groupe résidentiel"},
     {640, L"Les autres membres du groupe résidentiel peuvent se connecter à votre groupe résidentiel depuis n'importe où via leur ordinateur."},
-    {641, L"Option : Désactiver l'accès au groupe résidentiel distant via cet ordinateur"},
-    {642, L"Option : Activer l'accès au groupe résidentiel distant via cet ordinateur"},
+    {641, L"Option : Désactiver l'accès au groupe résidentiel distant via cet ordinateur"},
+    {642, L"Option : Activer l'accès au groupe résidentiel distant via cet ordinateur"},
     {648, L"Sélectionnez les fichiers et les appareils à mettre à disposition, puis choisissez leurs niveaux d'autorisation."},
     {649, L"Bibliothèque ou répertoire"},
     {650, L"Niveau d'accès"},
     {652, L"Activez la configuration automatique des appareils connectés au réseau."},
     {46000, L"AccueilGroupe"},
-    {46004, L"Option : Choisissez un mot de passe pour votre groupe résidentiel"},
+    {46004, L"Option : Choisissez un mot de passe pour votre groupe résidentiel"},
     {46005, L"Tapez le mot de passe du groupe résidentiel"},
     {46006, L"&Créer maintenant"},
     {46007, L"&Rejoignez-nous maintenant"},
@@ -1088,7 +1088,7 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {46013, L"Étant donné que cet ordinateur fait partie d'un domaine, le partage de sa bibliothèque avec d'autres ordinateurs du groupe résidentiel n'est pas disponible."},
     {46014, L"Les mots de passe doivent contenir au moins 8 caractères et aucun espace de début ou de fin."},
     {46015, L"Le mot de passe est incorrect.\nVeuillez réessayer. Les mots de passe sont sensibles à la casse."},
-    {46016, L"Option : toutes les connexions du groupe résidentiel sur cet ordinateur seront déconnectées"},
+    {46016, L"Option : toutes les connexions du groupe résidentiel sur cet ordinateur seront déconnectées"},
     {46017, L"Vous avez quitté votre groupe résidentiel avec succès"},
     {46018, L"Modifier ce qui est partagé avec votre groupe résidentiel"},
     {46019, L"Partagez vos photos, vidéos, musiques, documents et imprimantes avec d'autres ordinateurs de votre maison."},
@@ -1110,8 +1110,8 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {46035, L"Rejoindre un groupe résidentiel"},
     {46036, L"Changez le mot de passe de votre groupe résidentiel"},
     {46037, L"Quitter le groupe résidentiel"},
-    {46038, L"Pour accéder aux fichiers et aux imprimantes sur d'autres ordinateurs, vous devez les ajouter à votre groupe résidentiel. Le mot de passe suivant est requis :"},
-    {46039, L"Tapez le nouveau mot de passe du groupe résidentiel :"},
+    {46038, L"Pour accéder aux fichiers et aux imprimantes sur d'autres ordinateurs, vous devez les ajouter à votre groupe résidentiel. Le mot de passe suivant est requis :"},
+    {46039, L"Tapez le nouveau mot de passe du groupe résidentiel :"},
     {46040, L"Mettre à jour le mot de passe"},
     {46041, L"Sauvegardez tous les PC de votre groupe résidentiel sur une cible locale de protection des données."},
     {46042, L"Sauvegardez votre PC à l’aide des cibles de protection des données HomeGroup"},
@@ -1136,7 +1136,7 @@ static const EmbeddedTextEntry kStrings_FR_FR[] = {
     {46061, L"Partager avec d'autres ordinateurs personnels"},
     {46062, L"Vous pouvez partager des fichiers et des imprimantes avec d'autres ordinateurs. Vous pouvez également diffuser des médias sur votre appareil.\n\nLes groupes résidentiels sont protégés par mot de passe et vous pouvez choisir ce que vous souhaitez partager à tout moment."},
     {46063, L"Ajoutez d'autres ordinateurs à votre groupe résidentiel en utilisant ce mot de passe"},
-    {46064, L"Pour accéder aux fichiers et aux imprimantes sur d'autres ordinateurs, vous devez les ajouter à votre groupe résidentiel. Le mot de passe suivant est requis :"},
+    {46064, L"Pour accéder aux fichiers et aux imprimantes sur d'autres ordinateurs, vous devez les ajouter à votre groupe résidentiel. Le mot de passe suivant est requis :"},
     {46065, L"Pour créer ou rejoindre un groupe résidentiel, votre connexion réseau doit avoir IPv6 activé. Pour activer IPv6, démarrez l'utilitaire de résolution des problèmes HomeGroup."},
     {46066, L"Ajouter des personnes au groupe résidentiel"},
     {46067, L"Configurer la protection des données du groupe résidentiel"},
@@ -4033,7 +4033,7 @@ static const EmbeddedTextEntry kStrings_CS_CZ[] = {
     {116, L"Heslo domácí skupiny bylo resetováno"},
     {117, L"Domácí skupina sdílí soubory"},
     {118, L"Možnost: Tento počítač patří do domácí skupiny"},
-    {119, L"K připojení je k dispozici domácí skupina"},
+    {119, L"K připojení je k dispozici domácí skupina"},
     {120, L"Lze vytvořit domácí skupinu"},
     {121, L"Domácí skupina není k dispozici"},
     {122, L"Nedůvěryhodná tiskárna"},
