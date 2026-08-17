@@ -41,15 +41,17 @@ I focus a game (and the alternate command will reset it to the original type).
 #include <gdiplus.h>
 #include <regex>
 #include <string>
-
-#define Init WhTool_ModInit 
-#define SettingsChanged WhTool_ModSettingsChanged 
-#define Uninit WhTool_ModUninit  
+#include <vector>
 
 using namespace Gdiplus;
 
+struct pattern_obj {
+    std::wstring filter;
+    std::wregex regex;
+};
+
 struct {
-    std::vector<std::wstring> pathFilters;
+    std::vector<pattern_obj> pathFilters;
     std::wstring cmd;
     bool negcmd_enable;
     std::wstring negcmd;
@@ -61,11 +63,15 @@ void LoadSettings() {
     settings.pathFilters.clear();
     PCWSTR current = L"";
     while( ( current = Wh_GetStringSetting(L"filters[%d]", i++))[0] != L'\0') {
-        settings.pathFilters.push_back(current);
+        pattern_obj current_pattern;
+        current_pattern.filter = current;
+        current_pattern.regex = std::wregex(current);
+        settings.pathFilters.push_back(current_pattern);
         Wh_FreeStringSetting(current);
     
     }
-    for (int i =0; i < settings.pathFilters.size(); i++) Wh_Log(L"LIST VALUE:  %s", settings.pathFilters[i].c_str());
+	Wh_FreeStringSetting(current);
+    for (int i =0; i < settings.pathFilters.size(); i++) Wh_Log(L"LIST VALUE:  %s", settings.pathFilters[i].filter.c_str());
     PCWSTR cmd = Wh_GetStringSetting(L"cmd");
     settings.cmd = cmd;
     Wh_FreeStringSetting(cmd);
@@ -153,18 +159,18 @@ void CALLBACK WinEventProc(
     std::wregex pattern;
     Wh_Log(L"Found %d regexes to try", settings.pathFilters.size());
     for (int i =0; i < settings.pathFilters.size(); i++) {
-        Wh_Log(L"Trying %s, iterator %d", settings.pathFilters[i].c_str(), i);
+        Wh_Log(L"Trying %s, iterator %d", settings.pathFilters[i].filter.c_str(), i);
         try {
-            pattern = std::wregex(settings.pathFilters[i]);
+            pattern = settings.pathFilters[i].regex;
             PCWSTR exePathStr = exePath;
             if (std::regex_match(exePathStr, pattern)) {
                 match = true;
                 break;
             } else {
-                Wh_Log(L"%s and %s: NO MATCH", exePathStr, settings.pathFilters[i].c_str() );
+                Wh_Log(L"%s and %s: NO MATCH", exePathStr, settings.pathFilters[i].filter.c_str() );
             }  
         } catch (const std::regex_error&) {
-            Wh_Log(L"Invalid Regex: %s", settings.pathFilters[i].c_str());
+            Wh_Log(L"Invalid Regex: %s", settings.pathFilters[i].filter.c_str());
            continue;
         }
  
@@ -215,7 +221,7 @@ DWORD WINAPI HookThreadProc(LPVOID)
 
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
-BOOL Init() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
     LoadSettings();
 
@@ -230,7 +236,7 @@ BOOL Init() {
 
 
 // The mod is being unloaded, free all allocated resources.
-void Uninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
     if (g_hThread) {
         PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
@@ -241,7 +247,7 @@ void Uninit() {
 }
 
 // The mod setting were changed, reload them.
-void SettingsChanged() {
+void WhTool_ModSettingsChanged () {
     Wh_Log(L"SettingsChanged");
 
     LoadSettings();
