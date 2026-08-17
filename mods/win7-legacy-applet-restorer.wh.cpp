@@ -236,6 +236,18 @@ static std::atomic<bool> g_tabletPcClsidRegistered{ false };
 static std::atomic<bool> g_injectBitlockerApplet{ false };
 static std::atomic<bool> g_injectTabletPcApplet{ false };
 
+// --- Lazy/virtual-applet probe state (fixes startup-path cost) ---
+static std::atomic<bool> g_lazyDetectionDone{ false };
+static std::mutex g_lazyDetectionMutex;
+static thread_local bool g_inShellProbeBypass{ false };
+static std::atomic<int> g_prevBitLockerMode{ -1 };
+static std::atomic<int> g_prevTabletPcMode{ -1 };
+
+bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered, const wchar_t* logName);
+void InvalidateClassicTaskLinksFile();
+bool EnsureClassicTaskLinksFile();
+void EnsureLazyVirtualAppletDetection();
+
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
 std::wstring g_classicTaskLinksFilePath;
@@ -616,18 +628,21 @@ std::wstring MakeVerdictBuildValueName(const wchar_t* key) {
 bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
                                      const std::wstring& canonicalName,
                                      const wchar_t* storageKey, const wchar_t* logName,
-                                     std::atomic<bool>& outClsidRegistered) {
-    // Cheap and always current: a registry key existence check, no shell work.
+                                     std::atomic<bool>& outClsidRegistered,
+                                     AppletMode mode) {
     const bool registeredClsid = IsRegisteredClsid(realGuid);
     outClsidRegistered.store(registeredClsid);
     if (!registeredClsid) {
         Wh_Log(L"%s: CLSID is absent on this edition/device; applet will not be injected", logName);
         return false;
     }
-
+    if (mode != AppletMode::Auto) {
+        Wh_Log(L"%s: mode is %s, skipping shell probe entirely", logName,
+               mode == AppletMode::Always ? L"Always" : L"Never");
+        return false;
+    }
     const std::wstring verdictName = MakeVerdictValueName(storageKey);
     const std::wstring buildName   = MakeVerdictBuildValueName(storageKey);
-
     const int cachedVerdict = Wh_GetIntValue(verdictName.c_str(), (int)CachedVerdict::Unknown);
     const int cachedBuild   = Wh_GetIntValue(buildName.c_str(), 0);
     if (cachedVerdict != (int)CachedVerdict::Unknown && cachedBuild == (int)g_winBuild) {
@@ -636,11 +651,13 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
             logName, cachedBuild, shown ? L"already shown" : L"not shown");
         return !shown;
     }
-
     Wh_Log(L"%s: no cached verdict for build %u; probing the shell once", logName, g_winBuild);
-
     bool listed = false;
-    if (IsShownByControlPanel(canonicalName, realGuid, listed)) {
+    bool prevBypass = g_inShellProbeBypass;
+    g_inShellProbeBypass = true;
+    bool answered = IsShownByControlPanel(canonicalName, realGuid, listed);
+    g_inShellProbeBypass = prevBypass;
+    if (answered) {
         Wh_Log(L"%s: shell reports the applet is %s", logName,
             listed ? L"already shown; virtual entry skipped to avoid a duplicate"
                    : L"not shown; virtual entry will be injected");
@@ -649,14 +666,53 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
         Wh_SetIntValue(buildName.c_str(), (int)g_winBuild);
         return !listed;
     }
-
-    // No verdict: fall back to the registry hint and deliberately do NOT cache
-    // it, so a later start can still get a real answer from the shell.
     const bool registered = IsListedInControlPanelNameSpace(realGuid);
-    Wh_Log(L"%s: shell gave no verdict, falling back to the registry hint (%s). "
-           L"Use the \"Always add\"/\"Never add\" setting if this is wrong.",
+    Wh_Log(L"%s: shell gave no verdict, falling back to the registry hint (%s) and caching it. Use the \"Always add\"/\"Never add\" setting if this is wrong.",
         logName, registered ? L"registered, assuming already shown" : L"not registered, injecting");
+    Wh_SetIntValue(verdictName.c_str(),
+        (int)(registered ? CachedVerdict::Shown : CachedVerdict::NotShown));
+    Wh_SetIntValue(buildName.c_str(), (int)g_winBuild);
     return !registered;
+}
+
+void EnsureLazyVirtualAppletDetection() {
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    if (g_inShellProbeBypass) return;
+    std::unique_lock<std::mutex> lock(g_lazyDetectionMutex);
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    AppletMode bitMode = (AppletMode)g_settings.bitLockerMode.load();
+    AppletMode tabMode = (AppletMode)g_settings.tabletPcMode.load();
+    bool needBit = (bitMode == AppletMode::Auto) && g_bitlockerClsidRegistered.load();
+    bool needTab = (tabMode == AppletMode::Auto) && g_tabletPcClsidRegistered.load();
+    if (!needBit && !needTab) {
+        g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
+            g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+        g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
+            g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+        g_lazyDetectionDone.store(true, std::memory_order_release);
+        return;
+    }
+    bool bitAuto = g_bitlockerAutoDetected.load();
+    bool tabAuto = g_tabletPcAutoDetected.load();
+    if (needBit) {
+        bitAuto = DetectVirtualAppletNeededCached(kBitLockerGuid, kBitLockerCanonicalName,
+            L"bitlocker", L"BitLocker Drive Encryption", g_bitlockerClsidRegistered, bitMode);
+        g_bitlockerAutoDetected.store(bitAuto);
+    }
+    if (needTab) {
+        tabAuto = DetectVirtualAppletNeededCached(kTabletPcSettingsGuid, kTabletPcCanonicalName,
+            L"tabletpc", L"Tablet PC Settings", g_tabletPcClsidRegistered, tabMode);
+        g_tabletPcAutoDetected.store(tabAuto);
+    }
+    g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
+        g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+    g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
+        g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_lazyDetectionDone.store(true, std::memory_order_release);
+    InvalidateClassicTaskLinksFile();
+    EnsureClassicTaskLinksFile();
+    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d",
+        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load());
 }
 
 // Combines the automatic detection with the user's explicit override.
@@ -1018,9 +1074,7 @@ bool EnsureClassicTaskLinksFile() {
     }
 
 
-    static const char kTaskListTemplate[] = R"xml(<?xml version="1.0" encoding="utf-8"?>
-<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
-  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
+    static const char kClassicTaskLinks[] = R"xml(  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
     <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
     <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
@@ -1063,7 +1117,11 @@ bool EnsureClassicTaskLinksFile() {
     <sh:task id="{D4F4E001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{CHOOSEHOMEGROUP}</sh:name><sh:command>explorer.exe shell:::{67ca7650-96e6-4fdd-bb43-a8e774f73a57}</sh:command></sh:task>
     <sh:task id="{D4F4E002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{SHAREPRINTERS}</sh:name><sh:command>explorer.exe shell:::{67ca7650-96e6-4fdd-bb43-a8e774f73a57}</sh:command></sh:task>
     <category id="3"><sh:task idref="{D4F4E001-0D35-4CB6-A21F-BC1661200001}"/><sh:task idref="{D4F4E002-0D35-4CB6-A21F-BC1661200002}"/></category>
-  </application>
+  </application>\n)xml";
+
+    static const char kTaskListTemplate[] = R"xml(<?xml version="1.0" encoding="utf-8"?>
+<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
+{CLASSIC_TASK_LINKS_BLOCK}
 {CATEGORY_TASK_LINKS_BLOCK}
 {DISPLAY_APPLICATION_BLOCK}
 {VIRTUAL_APPLET_TASKS_BLOCK}
@@ -1079,6 +1137,9 @@ bool EnsureClassicTaskLinksFile() {
         }
     };
     
+    replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
+               g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+
     // Windows 7 Category Task Links
     if (g_settings.restoreWin7CategoryTaskLinks.load()) {
         replaceAll("{CATEGORY_TASK_LINKS_BLOCK}",
@@ -1856,6 +1917,8 @@ using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
 RegOpenKeyExW_t RegOpenKeyExWOriginal;
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
                                  REGSAM samDesired, PHKEY phkResult) {
+    if (g_inShellProbeBypass) return RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    EnsureLazyVirtualAppletDetection();
     std::wstring fullPath;
     if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
         if (lpSubKey && *lpSubKey) {
@@ -1924,6 +1987,7 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
 using RegCloseKey_t = decltype(&RegCloseKey);
 RegCloseKey_t RegCloseKeyOriginal;
 LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
+    if (g_inShellProbeBypass) return RegCloseKeyOriginal(hKey);
     // FreeFake reports whether the handle was ours, so this is one lock
     // acquisition instead of IsFake() followed by FreeFake().
     if (g_keyTracker.FreeFake(hKey)) return ERROR_SUCCESS;
@@ -1936,6 +2000,8 @@ using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExWOriginal;
 LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                     LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
+    if (g_inShellProbeBypass) return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    EnsureLazyVirtualAppletDetection();
     // Unlike RegOpenKeyExW/RegCloseKey/ShellExecuteExW (whose blanket
     // try/catch was removed — see those hooks), this catch is kept
     // deliberately. Everything above the fallback call is a read: it only
@@ -1970,6 +2036,8 @@ using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueWOriginal;
 LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    if (g_inShellProbeBypass) return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    EnsureLazyVirtualAppletDetection();
     // Same reasoning as RegQueryValueExWHook above: everything here only
     // writes into the caller's output buffer, so a fallback call after an
     // exception overwrites that buffer once with the real value instead of
@@ -2001,6 +2069,8 @@ RegEnumKeyExW_t RegEnumKeyExWOriginal;
 LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
                                  LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
                                  PFILETIME lpftLastWriteTime) {
+    if (g_inShellProbeBypass) return RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName, lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
+    EnsureLazyVirtualAppletDetection();
     // RegEnumKeyExW is not a cursor-based iterator with hidden progression —
     // dwIndex is an explicit caller-supplied parameter, and the API always
     // returns the same entry for the same (hKey, dwIndex) pair. The scan
@@ -2103,6 +2173,8 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
 using RegEnumKeyW_t = decltype(&RegEnumKeyW);
 RegEnumKeyW_t RegEnumKeyWOriginal;
 LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
+    if (g_inShellProbeBypass) return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
+    EnsureLazyVirtualAppletDetection();
     // Same reasoning as RegEnumKeyExWHook above: dwIndex is an explicit,
     // caller-supplied parameter, not a hidden cursor, and every call here is
     // a pure read. Re-issuing the original in the catch after an exception
@@ -2478,14 +2550,29 @@ void InvalidateClassicTaskLinksFile() {
 
 void Wh_ModSettingsChanged() {
   try {
-    // Saving settings is the user's way of saying "look again": discard the
-    // cached shell verdicts so the next process start re-probes once. Cheap
-    // (two registry writes) and only happens on an explicit user action.
-    for (const wchar_t* key : { L"bitlocker", L"tabletpc" }) {
-        Wh_DeleteValue(MakeVerdictValueName(key).c_str());
-        Wh_DeleteValue(MakeVerdictBuildValueName(key).c_str());
+    AppletMode oldBitMode = (AppletMode)g_prevBitLockerMode.load();
+    AppletMode oldTabMode = (AppletMode)g_prevTabletPcMode.load();
+    AppletMode newBitMode = ReadAppletMode(L"bitLockerMode");
+    AppletMode newTabMode = ReadAppletMode(L"tabletPcMode");
+    bool bitChanged = (oldBitMode != newBitMode);
+    bool tabChanged = (oldTabMode != newTabMode);
+    if (bitChanged) {
+        Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"bitlocker").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_bitlockerAutoDetected.store(false);
+    }
+    if (tabChanged) {
+        Wh_Log(L"tabletPcMode changed %d -> %d, clearing cached verdict", (int)oldTabMode, (int)newTabMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"tabletpc").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"tabletpc").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_tabletPcAutoDetected.store(false);
     }
     LoadSettings();
+    g_prevBitLockerMode.store((int)newBitMode);
+    g_prevTabletPcMode.store((int)newTabMode);
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
@@ -2510,20 +2597,44 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
-    // Not just "is the CLSID registered": on machines where Windows already
-    // shows these applets, the virtual entries would duplicate them. The
-    // detection asks the shell and is cached here; LoadSettings() then applies
-    // the user's Auto/Always/Never override on top of it. See the comment next
-    // to g_bitlockerAutoDetected.
-    g_bitlockerAutoDetected.store(DetectVirtualAppletNeededCached(
-        kBitLockerGuid, kBitLockerCanonicalName, L"bitlocker",
-        L"BitLocker Drive Encryption", g_bitlockerClsidRegistered));
-    g_tabletPcAutoDetected.store(DetectVirtualAppletNeededCached(
-        kTabletPcSettingsGuid, kTabletPcCanonicalName, L"tabletpc",
-        L"Tablet PC Settings", g_tabletPcClsidRegistered));
-    // Re-apply the overrides now that the auto verdicts are known (the earlier
-    // LoadSettings() call ran before detection and resolved them against the
-    // default-false cache).
+    g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
+    g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
+    g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
+    g_prevTabletPcMode.store(g_settings.tabletPcMode.load());
+    {
+        auto tryLoadCachedVerdict = [&](const wchar_t* key, std::atomic<bool>& outAutoDetected) -> bool {
+            const std::wstring verdictName = MakeVerdictValueName(key);
+            const std::wstring buildName   = MakeVerdictBuildValueName(key);
+            int cachedVerdict = Wh_GetIntValue(verdictName.c_str(), (int)CachedVerdict::Unknown);
+            int cachedBuild   = Wh_GetIntValue(buildName.c_str(), 0);
+            if (cachedVerdict != (int)CachedVerdict::Unknown && cachedBuild == (int)g_winBuild) {
+                bool shown = (cachedVerdict == (int)CachedVerdict::Shown);
+                outAutoDetected.store(!shown);
+                Wh_Log(L"%s: using cached verdict from build %d (applet is %s); shell not probed in Wh_ModInit",
+                    key, cachedBuild, shown ? L"already shown" : L"not shown");
+                return true;
+            }
+            outAutoDetected.store(false);
+            return false;
+        };
+        bool bitCached = false, tabCached = false;
+        if ((AppletMode)g_settings.bitLockerMode.load() == AppletMode::Auto && g_bitlockerClsidRegistered.load()) {
+            bitCached = tryLoadCachedVerdict(L"bitlocker", g_bitlockerAutoDetected);
+            if (!bitCached) Wh_Log(L"BitLocker: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_bitlockerAutoDetected.store(false);
+            bitCached = true;
+        }
+        if ((AppletMode)g_settings.tabletPcMode.load() == AppletMode::Auto && g_tabletPcClsidRegistered.load()) {
+            tabCached = tryLoadCachedVerdict(L"tabletpc", g_tabletPcAutoDetected);
+            if (!tabCached) Wh_Log(L"Tablet PC: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_tabletPcAutoDetected.store(false);
+            tabCached = true;
+        }
+        bool needLazy = !bitCached || !tabCached;
+        g_lazyDetectionDone.store(!needLazy, std::memory_order_release);
+    }
     LoadSettings();
 
     // Build display names / virtual applets first: EnsureClassicTaskLinksFile()
