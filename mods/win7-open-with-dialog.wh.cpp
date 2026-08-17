@@ -22,7 +22,7 @@ This mod restores the classic Windows Vista/7 **Open with** dialog on Windows 10
 11, replacing the modern picker with an accurate recreation of the original while
 keeping file and application paths completely untouched.
 
-The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**, the mod is designed to work reliably and safely on both current and future Windows versions where possible.
+The mod has been tested primarily on **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**. It is designed to work reliably and safely on both current and future Windows versions where possible.
 
 ## Screenshot
 
@@ -4747,8 +4747,15 @@ static void InitializeList(PickerState& state) {
     const UINT listDpi = WindowDpi(state.window);
     const int listIconSize = std::max(32, DpiScale(kListIconSize, listDpi));
     state.listIconSize = listIconSize;
+    // ILC_COLOR32 alone: the icons are 32-bit with a real alpha channel,
+    // so ImageList_Draw(..., ILD_TRANSPARENT) alpha-blends them correctly
+    // over any background. Adding ILC_MASK here made comctl32 fall back
+    // to the legacy 1-bit mask blit path, which only "worked" by luck
+    // over the plain list background - over the hand-painted Win7
+    // hover/selection gradient (PaintWin7RowBackground) it corrupted the
+    // icon into a solid black box, exactly the artifact seen on hover.
     state.images.Reset(ImageList_Create(listIconSize, listIconSize,
-                                        ILC_COLOR32 | ILC_MASK, 8, 8));
+                                        ILC_COLOR32, 8, 8));
     if (state.images) {
         ListView_SetImageList(state.list, state.images.Get(), LVSIL_NORMAL);
         ListView_SetImageList(state.list, state.images.Get(), LVSIL_SMALL);
@@ -5322,10 +5329,17 @@ static RowHighlight PaintRowHighlight(HWND list, HDC hdc, const RECT& rc,
                                       bool dark, bool selected,
                                       bool focusedList) {
     if (!selected) {
-        if (PaintThemedRowBackground(list, hdc, rc, false, focusedList))
-            return RowHighlight::Themed;
+        // Hand-drawn Win7 gradient first, same as selection below: the
+        // Windows 10/11 Explorer::ListView theme does have a LISS_HOT
+        // part and DrawThemeBackground succeeds for it, but what it
+        // paints is that OS's own minimal hot indicator (a thin strip),
+        // not a full Win7-style highlight block. Trying it first made
+        // hover look broken/half-drawn; the themed draw is now only the
+        // fallback for when the hand-drawn path itself can't run.
         if (PaintWin7RowBackground(hdc, rc, dark, false))
             return RowHighlight::Custom;
+        if (PaintThemedRowBackground(list, hdc, rc, false, focusedList))
+            return RowHighlight::Themed;
         return RowHighlight::None;
     }
 
@@ -5346,6 +5360,24 @@ static RowHighlight PaintRowHighlight(HWND list, HDC hdc, const RECT& rc,
 // needs it too, because the stock comctl32 highlight on a modern OS is
 // the flat Windows 10/11 grey rectangle rather than the Windows 7 blue
 // gradient this dialog is recreating.
+// LVIR_BOUNDS is unreliable in LV_VIEW_TILE: it can report a rect
+// noticeably smaller than the tile that's actually painted on screen.
+// The icon and label rects are the pieces comctl32 does report
+// correctly, so use their union as the real tile bounds, falling back
+// to LVIR_BOUNDS only if one of them isn't available. Used both for
+// painting the row and for invalidating it when hover changes, so the
+// invalidated area always matches what actually gets redrawn.
+static bool GetTileFullRect(HWND list, int row, RECT& rc) {
+    RECT rcIcon{};
+    RECT rcLabel{};
+    const bool hasIcon =
+        ListView_GetItemRect(list, row, &rcIcon, LVIR_ICON) != FALSE;
+    const bool hasLabel =
+        ListView_GetItemRect(list, row, &rcLabel, LVIR_LABEL) != FALSE;
+    if (hasIcon && hasLabel) return UnionRect(&rc, &rcIcon, &rcLabel) != FALSE;
+    return ListView_GetItemRect(list, row, &rc, LVIR_BOUNDS) != FALSE;
+}
+
 static void PaintWin7ListRow(PickerState& state,
                              const NMLVCUSTOMDRAW& listDraw) {
     HDC hdc = listDraw.nmcd.hdc;
@@ -5353,8 +5385,14 @@ static void PaintWin7ListRow(PickerState& state,
     const int row = static_cast<int>(listDraw.nmcd.dwItemSpec);
     if (!hdc || !list || row < 0) return;
 
+    // LVIR_BOUNDS is unreliable in LV_VIEW_TILE: it can report a rect
+    // noticeably smaller than the tile that's actually painted on
+    // screen, which is what left the background fill and the hover/
+    // inactive-selection highlight covering only a partial strip of the
+    // row instead of the whole tile. GetTileFullRect unions the icon
+    // and label rects instead, which comctl32 does report correctly.
     RECT rcBounds{};
-    if (!ListView_GetItemRect(list, row, &rcBounds, LVIR_BOUNDS)) return;
+    if (!GetTileFullRect(list, row, rcBounds)) return;
     RECT rcIcon{};
     const bool hasIconRect =
         ListView_GetItemRect(list, row, &rcIcon, LVIR_ICON) != FALSE;
@@ -5647,11 +5685,10 @@ static void UpdateListHover(PickerState& state, POINT clientPoint) {
     const int previous = state.hoverRow;
     state.hoverRow = row;
     RECT rc{};
-    if (previous >= 0 &&
-        ListView_GetItemRect(state.list, previous, &rc, LVIR_BOUNDS)) {
+    if (previous >= 0 && GetTileFullRect(state.list, previous, rc)) {
         InvalidateRect(state.list, &rc, FALSE);
     }
-    if (row >= 0 && ListView_GetItemRect(state.list, row, &rc, LVIR_BOUNDS))
+    if (row >= 0 && GetTileFullRect(state.list, row, rc))
         InvalidateRect(state.list, &rc, FALSE);
     if (row >= 0) {
         TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.list, 0};
@@ -5665,7 +5702,7 @@ static void ClearListHover(PickerState& state) {
     state.hoverRow = -1;
     if (!state.list || !IsWindow(state.list)) return;
     RECT rc{};
-    if (ListView_GetItemRect(state.list, previous, &rc, LVIR_BOUNDS))
+    if (GetTileFullRect(state.list, previous, rc))
         InvalidateRect(state.list, &rc, FALSE);
 }
 
