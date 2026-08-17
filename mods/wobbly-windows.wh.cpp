@@ -114,8 +114,7 @@ ID2D1Factory* g_d2dFactory = nullptr;
 std::recursive_mutex g_wobblyMutex;
 std::atomic<bool> g_isUnloading{false};
 HINSTANCE g_hInstance = NULL;
-
-std::atomic<bool> g_engineInitialized{false};
+static bool g_classRegistered = false;
 
 UINT g_wmAttach = 0;
 UINT g_wmDetach = 0;
@@ -141,7 +140,8 @@ std::atomic<int> g_cornerRadiusSetting{8};
 std::atomic<int> g_tileCountSetting{0};
 std::atomic<bool> g_captureTranslucentBackdrops{false};
 
-static HWND g_mainHwnd = NULL, g_overlayHwnd = NULL;
+static std::atomic<HWND> g_mainHwnd{NULL};
+static HWND g_overlayHwnd = NULL;
 static int g_capX = 0, g_capY = 0, g_capW = 0, g_capH = 0;
 static WobblyInfos g_wwi = {};
 static bool g_isMoving = false, g_isSettling = false;
@@ -209,6 +209,7 @@ static ID2D1PathGeometry* CreateQuadGeo(
     if (!geo) return nullptr;
     ID2D1GeometrySink* sink = nullptr;
     geo->Open(&sink);
+    if (!sink) { geo->Release(); return nullptr; }
     sink->BeginFigure(p0, D2D1_FIGURE_BEGIN_FILLED);
     sink->AddLine(p1);
     sink->AddLine(p2);
@@ -618,9 +619,15 @@ static void DrawOverlayFrameD2D() {
 
     ID2D1PathGeometry* outlineGeo = nullptr;
     g_d2dFactory->CreatePathGeometry(&outlineGeo);
+    ID2D1GeometrySink* sink = nullptr;
     if (outlineGeo) {
-        ID2D1GeometrySink* sink = nullptr;
         outlineGeo->Open(&sink);
+        if (!sink) {
+            outlineGeo->Release();
+            outlineGeo = nullptr;
+        }
+    }
+    if (outlineGeo && sink) {
         Pair startP = ComputeBezierPoint(0.0f, 0.0f);
         sink->BeginFigure(D2D1::Point2F(startP.x - vLeft, startP.y - vTop), D2D1_FIGURE_BEGIN_FILLED);
         for (int x = 1; x <= g_xTiles; x++) {
@@ -813,16 +820,8 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 static void InitializeWobbly(void) {
     if (g_overlayHwnd) return;
+    if (!g_classRegistered) return;
 
-    WNDCLASSA oc = {}; 
-    oc.lpfnWndProc = OverlayProc; 
-    oc.hInstance = g_hInstance;
-    oc.lpszClassName = "WobblyOverlayWindow";
-    if (!RegisterClassA(&oc)) {
-        Wh_Log(L"RegisterClassA failed, error %u", GetLastError());
-        return;
-    }
-    
     g_screenX = GetSystemMetrics(SM_XVIRTUALSCREEN); 
     g_screenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
     g_screenW = GetSystemMetrics(SM_CXVIRTUALSCREEN); 
@@ -832,7 +831,7 @@ static void InitializeWobbly(void) {
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW, 
         "WobblyOverlayWindow", NULL, WS_POPUP, 
         g_screenX, g_screenY, g_screenW, g_screenH, 
-        NULL, NULL, oc.hInstance, NULL
+        NULL, NULL, g_hInstance, NULL
     );
 }
 
@@ -877,7 +876,12 @@ static void OnEnterSizeMove(HWND hwnd) {
         }
 
         CaptureWindowForWobbly(hwnd);
-        
+
+        if (!g_wobblyRT || !g_wobblyBrush) {
+            g_mainHwnd = NULL;
+            return;
+        }
+
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED); 
         SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA);
         
@@ -938,6 +942,8 @@ static void OnSizingMoving(HWND hwnd, LPRECT r) {
 }
 
 static void OnWindowPosChanged(HWND hwnd, WINDOWPOS* wp) {
+    if (hwnd != g_mainHwnd.load(std::memory_order_relaxed)) return;
+
     std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
     if (hwnd != g_mainHwnd || g_isMoving) return;
 
@@ -1057,7 +1063,7 @@ static BOOL CALLBACK AttachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
 static BOOL CALLBACK DetachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) == 0) {
-        SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_NORMAL, 2000, NULL);
+        SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_NORMAL | SMTO_NOTIMEOUTIFNOTHUNG, 500, NULL);
     }
     return TRUE;
 }
@@ -1089,7 +1095,6 @@ BOOL Wh_ModInit() {
     }
 
     g_isUnloading.store(false, std::memory_order_relaxed);
-    g_engineInitialized = false;
     g_isMoving = false;
     g_isSettling = false;
     g_mainHwnd = NULL;
@@ -1111,8 +1116,22 @@ BOOL Wh_ModInit() {
         }
     }
 
+    WNDCLASSA oc = {};
+    oc.lpfnWndProc = OverlayProc;
+    oc.hInstance = g_hInstance;
+    oc.lpszClassName = "WobblyOverlayWindow";
+    if (RegisterClassA(&oc)) {
+        g_classRegistered = true;
+    } else {
+        Wh_Log(L"RegisterClassA failed, error %u", GetLastError());
+    }
+
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, __uuidof(ID2D1Factory), reinterpret_cast<void**>(&g_d2dFactory));
-    if (FAILED(hr)) { g_d2dFactory = nullptr; }
+    if (FAILED(hr)) {
+        g_d2dFactory = nullptr;
+        Wh_Log(L"D2D1CreateFactory failed, error %d", hr);
+        return FALSE;
+    }
 
     g_wmAttach = RegisterWindowMessageW(L"WobblyWindows_Attach");
     g_wmDetach = RegisterWindowMessageW(L"WobblyWindows_Detach");
@@ -1139,17 +1158,17 @@ void Wh_ModUninit() {
     g_isUnloading.store(true, std::memory_order_relaxed);
     EnumerateAndSubclass(FALSE);
 
-    if (g_engineInitialized.exchange(false, std::memory_order_seq_cst)) {
-        if (g_overlayHwnd) {
-            HWND overlayToClose = g_overlayHwnd;
-            SendMessageTimeoutW(overlayToClose, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
-            if (IsWindow(overlayToClose)) {
-                Wh_Log(L"Overlay window did not close during unload; leaving it alive to avoid a dangling class");
-            } else {
-                g_overlayHwnd = NULL;
-            }
+    if (g_overlayHwnd) {
+        HWND overlayToClose = g_overlayHwnd;
+        SendMessageTimeoutW(overlayToClose, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
+        if (IsWindow(overlayToClose)) {
+            Wh_Log(L"Overlay window did not close during unload");
+        } else {
+            g_overlayHwnd = NULL;
         }
+    }
 
+    {
         std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
         CleanupWobblyD2D();
         if (g_wobblyRT) { g_wobblyRT->Release(); g_wobblyRT = nullptr; }
@@ -1160,13 +1179,10 @@ void Wh_ModUninit() {
     }
 
     if (g_hInstance) {
-        if (!g_overlayHwnd) {
-            if (!UnregisterClassA("WobblyOverlayWindow", g_hInstance)) {
-                Wh_Log(L"UnregisterClassA failed, error %u", GetLastError());
-            }
-        } else {
-            Wh_Log(L"Skipping UnregisterClassA: overlay window is still alive");
+        if (g_classRegistered && !UnregisterClassA("WobblyOverlayWindow", g_hInstance)) {
+            Wh_Log(L"UnregisterClassA failed, error %u", GetLastError());
         }
+        g_classRegistered = false;
         g_hInstance = NULL;
     }
 
