@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# HomeGroup Page Restorer
+# Windows 11 HomeGroup Page Restorer
 
 ## About
 This mod restores the classic **HomeGroup** page in Control Panel and Windows 11 (and Windows 10 1803+ if necessary). The HomeGroup feature was removed starting with Windows 10 version 1803 (April 2018). This mod restores the visual Control Panel page using the original `hgcpl.dll` downloaded and verified from Microsoft's symbol servers.
@@ -53,6 +53,7 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 
 - HomeGroup registry structure documented by [Strontic xCyclopedia](https://strontic.github.io/xcyclopedia/)
 - WinClassic community for documenting the HomeGroup restoration approach
+- Cips - Testing on Windows 11 25H2
 */
 // ==/WindhawkModReadme==
 
@@ -6942,12 +6943,16 @@ private:
 // releases on destruction. Times out gracefully instead of blocking forever.
 class ScopedMutexLock {
 public:
-    ScopedMutexLock(HANDLE mutex, DWORD timeoutMs = INFINITE) noexcept
+    ScopedMutexLock(HANDLE mutex, HANDLE stopEvent,
+                    DWORD timeoutMs = INFINITE) noexcept
         : mutex_(mutex), acquired_(false) {
-        if (mutex_) {
-            DWORD r = WaitForSingleObject(mutex_, timeoutMs);
-            acquired_ = (r == WAIT_OBJECT_0);
-        }
+        if (!mutex_) return;
+        HANDLE handles[] = {mutex_, stopEvent};
+        const DWORD count = stopEvent ? ARRAYSIZE(handles) : 1;
+        const DWORD result = WaitForMultipleObjects(count, handles, FALSE, timeoutMs);
+        // WAIT_ABANDONED transfers ownership to this thread. It must be
+        // released just like WAIT_OBJECT_0 to avoid abandoning it again.
+        acquired_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED_0;
     }
     ~ScopedMutexLock() {
         if (acquired_ && mutex_) { ReleaseMutex(mutex_); }
@@ -7112,9 +7117,9 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 // to skip namespace enumeration injection in cooperative mode.
 std::atomic<bool> g_yieldNamespaceInjection{false};
 static HANDLE g_modActiveEvent = nullptr;
-static const wchar_t* kModActiveEventName = L"Global\\WindhawkHomeGroupRestorerActive";
+static const wchar_t* kModActiveEventName = L"WindhawkHomeGroupRestorerActive";
 static const wchar_t* kWin7LegacyActiveEventName =
-    L"Global\\WindhawkWin7LegacyAppletRestorerActive";
+    L"WindhawkWin7LegacyAppletRestorerActive";
 
 // Manual-reset stop event set by Wh_ModUninit.
 static HANDLE g_stopEvent = nullptr;
@@ -7130,6 +7135,17 @@ static const DWORD kRetryDelayMs = 3000;
 static std::mutex g_downloadHandlesMutex;
 static HINTERNET g_downloadHNet = nullptr;
 static HINTERNET g_downloadHUrl = nullptr;
+
+// Cancellation closes the published raw handle while holding this mutex. If
+// it did, release the RAII alias instead of closing a recycled WinInet handle.
+static void UnpublishDownloadHandle(WinInetHandle& owner, HINTERNET& published) {
+    std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+    if (published == owner.get()) {
+        published = nullptr;
+    } else {
+        owner.release();
+    }
+}
 
 const std::wstring* CurrentDllPath() {
     return g_dllPath.load(std::memory_order_acquire);
@@ -7441,8 +7457,7 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                                             INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0));
         if (!hUrl.valid()) {
             Wh_Log(L"HomeGroup: InternetOpenUrl failed (%lu)", GetLastError());
-            std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
-            g_downloadHNet = nullptr;
+            UnpublishDownloadHandle(hNet, g_downloadHNet);
             return false;
         }
 
@@ -7458,9 +7473,8 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                            &statusCode, &statusSize, nullptr)) {
             if (statusCode != 200) {
                 Wh_Log(L"HomeGroup: HTTP %lu for %s", statusCode, url.c_str());
-                std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
-                g_downloadHUrl = nullptr;
-                g_downloadHNet = nullptr;
+                UnpublishDownloadHandle(hUrl, g_downloadHUrl);
+                UnpublishDownloadHandle(hNet, g_downloadHNet);
                 return false;
             }
         }
@@ -7471,9 +7485,8 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
         if (!hFile.valid()) {
             Wh_Log(L"HomeGroup: Cannot create temp file %s", tmpDest.c_str());
-            std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
-            g_downloadHUrl = nullptr;
-            g_downloadHNet = nullptr;
+            UnpublishDownloadHandle(hUrl, g_downloadHUrl);
+            UnpublishDownloadHandle(hNet, g_downloadHNet);
             return false;
         }
 
@@ -7497,11 +7510,8 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
 
         hFile.reset(); // Close the file handle before moving.
 
-        {
-            std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
-            g_downloadHUrl = nullptr;
-            g_downloadHNet = nullptr;
-        }
+        UnpublishDownloadHandle(hUrl, g_downloadHUrl);
+        UnpublishDownloadHandle(hNet, g_downloadHNet);
 
         if (g_shuttingDown.load()) {
             DeleteFileW(tmpDest.c_str());
@@ -7647,7 +7657,17 @@ static bool TryLoadLocalDll(const std::wstring& searchDir, const std::wstring& d
             return false;
         }
     }
-    
+
+    // Verify the file that will actually be pinned and loaded. The source
+    // locations are user-writable and CopyFileW reopens by path.
+    WinHandle destination(CreateFileW(destPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!destination.valid() ||
+        !VerifyDllIsCompatible(destination.get(), kExpectedSha256Primary)) {
+        Wh_Log(L"HomeGroup: Destination copy failed verification");
+        return false;
+    }
+
     Wh_Log(L"HomeGroup: ✓ Local DLL found and verified: %s", candidate.c_str());
     return true;
 }
@@ -7932,18 +7952,21 @@ static void SweepStaleLocalizedResourceModules(const std::wstring& directory) {
 static bool BuildLocalizedResourceModuleLocked(
     const std::wstring& sourceDll, const std::wstring& directory) {
     g_localizedResourcePath.clear();
-    if (sourceDll.empty() || directory.empty()) return false;
+    if (g_shuttingDown.load(std::memory_order_acquire) ||
+        sourceDll.empty() || directory.empty()) return false;
 
     const std::wstring destination =
         directory + L"\\" + NewLocalizedResourceModuleName();
     const std::wstring temporary = destination + L".tmp";
     ScopedTemporaryResourceFile temporaryGuard(temporary);
     DeleteFileW(temporary.c_str());
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     if (!CopyFileW(sourceDll.c_str(), temporary.c_str(), FALSE)) {
         Wh_Log(L"HomeGroup translations: private DLL copy failed (%lu)",
                GetLastError());
         return false;
     }
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     if (!DisableMuiConfigInPrivateCopy(temporary)) {
         Wh_Log(L"HomeGroup translations: RC config neutralization failed");
         return false;
@@ -7965,6 +7988,7 @@ static bool BuildLocalizedResourceModuleLocked(
     std::vector<DecodedStringBlock> blocks;
 
     for (const auto& target : kEmbeddedLanguagePacks) {
+        if (g_shuttingDown.load(std::memory_order_acquire)) return false;
         const EmbeddedLanguage textLanguage =
             automatic ? target.language : forced;
         if (!decodedValid || textLanguage != decodedLanguage) {
@@ -7976,6 +8000,7 @@ static bool BuildLocalizedResourceModuleLocked(
             decodedValid = true;
         }
         for (const auto& block : blocks) {
+            if (g_shuttingDown.load(std::memory_order_acquire)) return false;
             if (!UpdateResourceW(update.get(), MAKEINTRESOURCEW(6),
                                  MAKEINTRESOURCEW(block.blockId),
                                  target.languageId, const_cast<BYTE*>(block.bytes.data()),
@@ -7988,14 +8013,17 @@ static bool BuildLocalizedResourceModuleLocked(
         }
     }
 
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     if (!update.Commit()) {
         Wh_Log(L"HomeGroup translations: EndUpdateResource failed (%lu)",
                GetLastError());
         return false;
     }
 
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     BYTE builtDigest[32]{};
-    if (!ComputeFileSha256ByPath(temporary, builtDigest)) return false;
+    if (!ComputeFileSha256ByPath(temporary, builtDigest) ||
+        g_shuttingDown.load(std::memory_order_acquire)) return false;
     DeleteFileW(destination.c_str());
     if (!MoveFileExW(temporary.c_str(), destination.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
@@ -8005,12 +8033,14 @@ static bool BuildLocalizedResourceModuleLocked(
     }
     temporaryGuard.Commit();
 
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     BYTE movedDigest[32]{};
     WinHandle verify(CreateFileW(destination.c_str(), GENERIC_READ,
                                  FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
     if (!verify.valid() || !VerifyPeStructure(verify.get()) ||
         !ComputeSha256OfHandle(verify.get(), movedDigest) ||
+        g_shuttingDown.load(std::memory_order_acquire) ||
         memcmp(builtDigest, movedDigest, sizeof(builtDigest)) != 0) {
         DeleteFileW(destination.c_str());
         Wh_Log(L"HomeGroup translations: resource integrity check failed");
@@ -8134,7 +8164,8 @@ static bool RunSetupImpl(const std::wstring& dir) {
             // Local file found, verified, and copied to storage.
             // Now load it.
             WinHandle pin = PinDllForLoad(dllPath);
-            if (pin.valid()) {
+            if (pin.valid() &&
+                VerifyDllIsCompatible(pin.get(), kExpectedSha256Primary)) {
                 LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr,
                                                 LOAD_WITH_ALTERED_SEARCH_PATH));
                 if (mod.valid() && ConfirmLoadedModuleMatchesPin(mod.get(), pin.get())) {
@@ -8208,8 +8239,9 @@ static bool RunSetupImpl(const std::wstring& dir) {
                     // Pin → load → confirm.
                     Wh_Log(L"HomeGroup: Pinning downloaded DLL...");
                     WinHandle pin = PinDllForLoad(dllPath);
-                    if (!pin.valid()) {
-                        Wh_Log(L"HomeGroup: ❌ Cannot pin DLL for loading");
+                    if (!pin.valid() ||
+                        !VerifyDllIsCompatible(pin.get(), attempt.sha256)) {
+                        Wh_Log(L"HomeGroup: ❌ Pinned DLL failed verification");
                         return false;
                     }
 
@@ -8286,14 +8318,17 @@ static void RunSetup() {
 
         // Serialize setup across processes with a named mutex.
         WinHandle setupMutex(CreateMutexW(nullptr, FALSE,
-                                          L"Global\\WindhawkHomeGroupRestorerSetup"));
+                                          L"WindhawkHomeGroupRestorerSetup"));
         if (setupMutex.valid()) {
-            ScopedMutexLock lock(setupMutex.get(), 30000);
-            if (!lock.acquired()) {
+            ScopedMutexLock lock(setupMutex.get(), g_stopEvent, 30000);
+            if (lock.acquired()) {
+                if (!g_shuttingDown.load(std::memory_order_acquire)) {
+                    RunSetupImpl(dir);
+                }
+            } else if (!g_shuttingDown.load(std::memory_order_acquire)) {
                 Wh_Log(L"HomeGroup: Could not acquire setup mutex");
             }
-            RunSetupImpl(dir);
-        } else {
+        } else if (!g_shuttingDown.load(std::memory_order_acquire)) {
             // Mutex creation failed — try without serialization.
             RunSetupImpl(dir);
         }
@@ -8589,22 +8624,6 @@ private:
 };
 
 static KeyTracker g_keyTracker;
-static std::mutex g_injectedMutex;
-static std::unordered_map<HKEY, bool> g_injectedForHandle;
-
-static bool ShouldInjectNow(HKEY k, DWORD idx) {
-    std::lock_guard<std::mutex> l(g_injectedMutex);
-    if (idx == 0) g_injectedForHandle[k] = false;
-    bool& a = g_injectedForHandle[k];
-    if (a) return false;
-    a = true;
-    return true;
-}
-
-void ClearInjectedState(HKEY k) {
-    std::lock_guard<std::mutex> l(g_injectedMutex);
-    g_injectedForHandle.erase(k);
-}
 
 // =============================================================================
 // Virtual Node Classification
@@ -8963,16 +8982,34 @@ RegEnumKeyExW_t RegEnumKeyExWOriginal = nullptr;
 RegEnumKeyW_t RegEnumKeyWOriginal = nullptr;
 RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal = nullptr;
 
+// The namespace entry is virtual, so injection must be derived solely from
+// the requested index. Keeping a per-HKEY "already injected" bit is incorrect:
+// Explorer routinely restarts an enumeration on the same handle, while HKEY
+// values can also be recycled after close.
+static DWORD GetRealNamespaceSubKeyCount(HKEY key) {
+    DWORD count = 0;
+    wchar_t name[256];
+    for (;;) {
+        DWORD nameChars = ARRAYSIZE(name);
+        const LSTATUS status = RegEnumKeyExWOriginal(
+            key, count, name, &nameChars, nullptr, nullptr, nullptr, nullptr);
+        if (status != ERROR_SUCCESS) break;
+        ++count;
+    }
+    return count;
+}
+
 static bool IsWriteAccess(REGSAM sam) {
     return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
 
 static bool MightNeedVirtualization(HKEY hk, LPCWSTR sub) {
-    return g_keyTracker.IsTrackedOrFake(hk) ||
-           (sub && (wcsstr(sub, L"clsid") || wcsstr(sub, L"CLSID") ||
-                    wcsstr(sub, L"HomeGroup") || wcsstr(sub, L"homegroup") ||
-                    wcsstr(sub, L"ControlPanel") || wcsstr(sub, L"controlpanel") ||
-                    wcsstr(sub, L"Shell Extensions") || wcsstr(sub, L"shell extensions")));
+    if (g_keyTracker.IsTrackedOrFake(hk)) return true;
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire)) return false;
+    return sub && (wcsstr(sub, L"clsid") || wcsstr(sub, L"CLSID") ||
+                   wcsstr(sub, L"HomeGroup") || wcsstr(sub, L"homegroup") ||
+                   wcsstr(sub, L"ControlPanel") || wcsstr(sub, L"controlpanel") ||
+                   wcsstr(sub, L"Shell Extensions") || wcsstr(sub, L"shell extensions"));
 }
 
 static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
@@ -9078,12 +9115,12 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
             g_keyTracker.FreeFake(k);
             return ERROR_SUCCESS;
         }
-        LSTATUS s = RegCloseKeyOriginal(k);
-        if (g_keyTracker.IsTrackedOrFake(k)) {
+        const bool tracked = g_keyTracker.IsTrackedOrFake(k);
+        if (tracked) {
+            // Remove the mapping before the kernel can recycle this HKEY.
             g_keyTracker.Untrack(k);
-            ClearInjectedState(k);
         }
-        return s;
+        return RegCloseKeyOriginal(k);
     } catch (...) {
         return RegCloseKeyOriginal(k);
     }
@@ -9182,7 +9219,7 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
             *lpcch = static_cast<DWORD>(g_clsidLower.size() + 1);
             return ERROR_MORE_DATA;
         }
-        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        if (idx != GetRealNamespaceSubKeyCount(k)) return ERROR_NO_MORE_ITEMS;
         wcscpy_s(name, *lpcch, g_clsidLower.c_str());
         *lpcch = static_cast<DWORD>(g_clsidLower.size());
         if (ft) GetSystemTimeAsFileTime(ft);
@@ -9234,7 +9271,7 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
 
         if (!name) return ERROR_INVALID_PARAMETER;
         if (cch <= g_clsidLower.size()) return ERROR_MORE_DATA;
-        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        if (idx != GetRealNamespaceSubKeyCount(k)) return ERROR_NO_MORE_ITEMS;
         wcscpy_s(name, cch, g_clsidLower.c_str());
         return ERROR_SUCCESS;
     } catch (...) {
@@ -9492,6 +9529,7 @@ static HRSRC HandleFindResourceExW(HMODULE module, LPCWSTR type, LPCWSTR name,
 }
 
 static HMODULE RedirectedModuleForResource(HRSRC resource) {
+    if (!g_hLocalizedResources.load(std::memory_order_acquire)) return nullptr;
     std::lock_guard<std::mutex> lock(g_redirectedResourcesMutex);
     auto found = g_redirectedResources.find(resource);
     return found == g_redirectedResources.end() ? nullptr : found->second;
@@ -10007,7 +10045,8 @@ CoGetClassObject_t CoGetClassObjectOriginalOle32 = nullptr;
 static bool IsCoreHgcplClass(REFCLSID clsid) {
     return IsEqualGUID(clsid, kProviderGuid) ||
            IsEqualGUID(clsid, kInitializerGuid) ||
-           IsEqualGUID(clsid, kAdvancedWriterGuid);
+           (g_enableAdvancedWriter.load(std::memory_order_acquire) &&
+            IsEqualGUID(clsid, kAdvancedWriterGuid));
 }
 
 // Additional class factories implemented by hgcpl.dll. They aren't needed to
@@ -10223,9 +10262,6 @@ static void InstallComHook() {
 //       b) Registry probe: check if the HomeGroup CLSID exists in the
 //          real registry (HKCR\CLSID\{67CA7650-...}) — if it does, the
 //          other mod (or Windows < 1803) is already handling it
-//       c) Hook chain inspection: check if RegOpenKeyExW's trampoline
-//          target is not the original kernelbase function (meaning another
-//          mod already hooked it)
 //   - If the other mod is detected with HomeGroup active, this mod enters
 //     "cooperative mode": it still downloads and loads hgcpl.dll (for COM
 //     and resource purposes), but DOES NOT inject the CLSID into the
@@ -10253,29 +10289,6 @@ static bool IsHomeGroupClsidInRealRegistry() {
         0, KEY_READ, &hKey);
     if (st == ERROR_SUCCESS) {
         RegCloseKey(hKey);
-        return true;
-    }
-    return false;
-}
-
-// Check if another mod has already hooked RegOpenKeyExW by inspecting
-// whether the current function pointer differs from the raw kernelbase
-// export. This is a heuristic: if the function is already hooked, another
-// mod with overlapping registry virtualization is likely active.
-static bool IsRegOpenKeyExAlreadyHooked() {
-    HMODULE hKb = GetModuleHandleW(L"kernelbase.dll");
-    if (!hKb) return false;
-    void* rawFunc = reinterpret_cast<void*>(GetProcAddress(hKb, "RegOpenKeyExW"));
-    if (!rawFunc) return false;
-
-    // Read the first bytes of the function to check for a JMP trampoline
-    // (typical of inline hooks like Windhawk/Wh_SetFunctionHook uses).
-    // A JMP near (0xE9) or JMP far (0xFF 0x25) indicates a hook is present.
-    BYTE* code = static_cast<BYTE*>(rawFunc);
-    if (code[0] == 0xE9 || code[0] == 0xFF || code[0] == 0x48) {
-        // 0xE9 = JMP rel32, 0xFF = JMP indirect, 0x48 = REX.W prefix
-        // (often preceding a hooked instruction). Any of these at the
-        // very start of the function strongly suggests an inline hook.
         return true;
     }
     return false;
@@ -10311,17 +10324,6 @@ static bool DetectConflictsAndDecideYield(std::wstring& reason) {
                  L"named event; yielding namespace injection to avoid "
                  L"duplicate entries";
         return true;
-    }
-
-    // Check 3: Is RegOpenKeyExW already hooked by another mod?
-    // This is a weaker signal — it could be the Win7 Legacy mod, the
-    // Performance mod, or any other mod that hooks registry functions.
-    // Only yield if combined with other evidence. We use this as a
-    // log-only indicator, not a yield trigger.
-    if (IsRegOpenKeyExAlreadyHooked()) {
-        reason = L"RegOpenKeyExW appears to be already hooked by another "
-                 L"mod; proceeding with injection but monitoring for conflicts";
-        return false; // Don't yield — could be a non-conflicting mod
     }
 
     reason = L"No conflicting mods detected";
@@ -10537,6 +10539,5 @@ void Wh_ModUninit(void) {
         g_keyTracker.ClearWithoutFreeing();
         ReleaseVirtualKeyRoot();
     } catch (...) {
-        // Uninit must never throw.
     }
 }
