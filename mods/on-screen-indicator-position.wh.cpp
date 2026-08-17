@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.1.0
+// @version         1.1.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -58,6 +58,14 @@ a monitor by number or by interface name. The two work together.
   change the built-in setting to whichever of the three has the animation you
   like, then let this mod do the actual placement.
 * Tested on Windows 11 build 26200 (25H2) x64.
+
+## Credits
+
+The hook onto the indicator's own placement function comes from [Volume control
+open location](https://windhawk.net/mods/volume-control-open-location) and
+[Taskbar primary on secondary
+monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor), which
+both target the same function and work out the origin handling.
 */
 // ==/WindhawkModReadme==
 
@@ -82,13 +90,13 @@ a monitor by number or by interface name. The two work together.
   $description: >-
     Pixels to nudge the indicator by. Positive moves right, negative moves left.
     The indicator is kept on screen, so an offset that would push it past the
-    edge is ignored.
+    edge stops at the edge instead.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
     Pixels to nudge the indicator by. Positive moves down, negative moves up.
     The indicator is kept on screen, so an offset that would push it past the
-    edge is ignored.
+    edge stops at the edge instead.
 */
 // ==/WindhawkModSettings==
 
@@ -255,6 +263,15 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
+
+    // Nothing to place and nothing to nudge, so don't load the DLL or install a
+    // hook that would only pass the rect straight through. Windhawk reloads the
+    // mod after a settings change, so it comes back as soon as there is work.
+    if (g_settings.position == Position::windowsDefault && !g_settings.offsetX &&
+        !g_settings.offsetY) {
+        Wh_Log(L"Nothing to do");
+        return FALSE;
+    }
 
     g_hardwareConfirmatorModule =
         LoadLibraryEx(L"Windows.Internal.HardwareConfirmator.dll", nullptr,
