@@ -147,6 +147,8 @@ runs with stock applet ordering.
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <optional>
+#include <thread>
 #include <shellapi.h>
 #include <shobjidl.h>   // IOpenControlPanel, CLSID_OpenControlPanel
 #include <shlwapi.h>
@@ -243,10 +245,36 @@ static thread_local bool g_inShellProbeBypass{ false };
 static std::atomic<int> g_prevBitLockerMode{ -1 };
 static std::atomic<int> g_prevTabletPcMode{ -1 };
 
+// RAII guard covering an ENTIRE critical section that performs our own
+// registry/engine calls, not just a single API call. Every registry read
+// made while this is alive - including any the shell itself issues on our
+// behalf during a COM activation - must be let straight through by the
+// registry hooks instead of re-entering EnsureLazyVirtualAppletDetection.
+struct ShellProbeBypass {
+    bool prev_ = g_inShellProbeBypass;
+    ShellProbeBypass() { g_inShellProbeBypass = true; }
+    ~ShellProbeBypass() { g_inShellProbeBypass = prev_; }
+};
+
+// The one-time virtual-applet probe (CoCreateInstance + up to three
+// IOpenControlPanel::GetPath calls) never runs on a hook's caller thread.
+// It runs exclusively on this dedicated worker, started from
+// Wh_ModAfterInit (hooks are already active, but we're on our own
+// controlled stack, not an arbitrary caller's) and re-armed from
+// Wh_ModSettingsChanged. Registry hooks only ever *request* the probe via
+// RequestLazyVirtualAppletDetection(), which is non-blocking.
+static HANDLE g_lazyDetectionWakeEvent = nullptr;
+static HANDLE g_lazyDetectionStopEvent = nullptr;
+// Must be signalled + joined + reset in Wh_ModUninit, or ~thread() calls
+// std::terminate() at Explorer shutdown. See
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] static std::optional<std::thread> g_lazyDetectionThread;
+
 bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered, const wchar_t* logName);
 void InvalidateClassicTaskLinksFile();
 bool EnsureClassicTaskLinksFile();
-void EnsureLazyVirtualAppletDetection();
+void RunLazyVirtualAppletDetection();
+void RequestLazyVirtualAppletDetection();
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -529,8 +557,13 @@ bool IsListedInControlPanelNameSpace(const std::wstring& guid) {
 // guessing, and the caller falls back to the registry hint.
 //
 // Returns true only when the shell gave a usable verdict, with outListed set.
-// Only ever called from Wh_ModInit / the cached-probe path, before this mod's
-// hooks are installed, so the shell's own registry reads can't re-enter them.
+// Called from Wh_ModInit's synchronous startup probe AND from the dedicated
+// lazy-detection worker thread (see RunLazyVirtualAppletDetection /
+// Wh_ModAfterInit) - never from a registry hook's caller thread. Both
+// callers wrap their own registry/engine calls in a ShellProbeBypass (or run
+// before hooks are installed at all), so the shell's own registry reads
+// during CoCreateInstance/GetPath are let straight through instead of
+// re-entering our hooks.
 bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring& guid,
                            bool& outListed) {
     // Defined locally rather than pulled from the SDK's CLSID_OpenControlPanel /
@@ -630,8 +663,13 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
                                      const wchar_t* storageKey, const wchar_t* logName,
                                      std::atomic<bool>& outClsidRegistered,
                                      AppletMode mode) {
-    const bool registeredClsid = IsRegisteredClsid(realGuid);
-    outClsidRegistered.store(registeredClsid);
+    // Wh_ModInit already probed and cached whether the CLSID is registered
+    // (g_bitlockerClsidRegistered / g_tabletPcClsidRegistered), so read that
+    // instead of hitting the registry again from here - this function now
+    // only ever runs on the dedicated lazy-detection worker thread, but
+    // there's still no reason to repeat a registry read we already have the
+    // answer to.
+    const bool registeredClsid = outClsidRegistered.load();
     if (!registeredClsid) {
         Wh_Log(L"%s: CLSID is absent on this edition/device; applet will not be injected", logName);
         return false;
@@ -652,11 +690,12 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
         return !shown;
     }
     Wh_Log(L"%s: no cached verdict for build %u; probing the shell once", logName, g_winBuild);
+    // No per-call bypass toggling here: RunLazyVirtualAppletDetection() holds
+    // a ShellProbeBypass for the whole detection pass, and this always runs
+    // on the dedicated lazy-detection worker thread, never on a hook's
+    // caller thread.
     bool listed = false;
-    bool prevBypass = g_inShellProbeBypass;
-    g_inShellProbeBypass = true;
     bool answered = IsShownByControlPanel(canonicalName, realGuid, listed);
-    g_inShellProbeBypass = prevBypass;
     if (answered) {
         Wh_Log(L"%s: shell reports the applet is %s", logName,
             listed ? L"already shown; virtual entry skipped to avoid a duplicate"
@@ -675,11 +714,34 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
     return !registered;
 }
 
-void EnsureLazyVirtualAppletDetection() {
+// Registry-hook entry point: NEVER does any work itself. It only wakes the
+// dedicated lazy-detection worker thread and returns immediately, so a
+// registry hook can never block on - or re-enter - the shell probe.
+void RequestLazyVirtualAppletDetection() {
     if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
     if (g_inShellProbeBypass) return;
-    std::unique_lock<std::mutex> lock(g_lazyDetectionMutex);
+    if (g_lazyDetectionWakeEvent) SetEvent(g_lazyDetectionWakeEvent);
+}
+
+// Runs the actual one-time probe. Only ever called from the dedicated
+// lazy-detection worker thread (see Wh_ModAfterInit / LazyDetectionThreadProc),
+// never directly from a registry hook - that's what made the previous
+// version re-entrant and deadlock-prone.
+void RunLazyVirtualAppletDetection() {
     if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    // Don't block every other Explorer thread while we probe: if some other
+    // caller already grabbed the mutex, just bail - RequestLazyVirtualAppletDetection
+    // will be called again by the next registry access and there's only
+    // ever one worker thread doing the real work anyway.
+    std::unique_lock<std::mutex> lock(g_lazyDetectionMutex, std::try_to_lock);
+    if (!lock.owns_lock()) return;
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+
+    // Every registry / engine call made below - including any the shell
+    // issues on our behalf while activating CLSID_OpenControlPanel - is ours
+    // and must be let straight through by the registry hooks.
+    ShellProbeBypass bypass;
+
     AppletMode bitMode = (AppletMode)g_settings.bitLockerMode.load();
     AppletMode tabMode = (AppletMode)g_settings.tabletPcMode.load();
     bool needBit = (bitMode == AppletMode::Auto) && g_bitlockerClsidRegistered.load();
@@ -1918,7 +1980,7 @@ RegOpenKeyExW_t RegOpenKeyExWOriginal;
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
                                  REGSAM samDesired, PHKEY phkResult) {
     if (g_inShellProbeBypass) return RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    EnsureLazyVirtualAppletDetection();
+    RequestLazyVirtualAppletDetection();
     std::wstring fullPath;
     if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
         if (lpSubKey && *lpSubKey) {
@@ -2001,7 +2063,7 @@ RegQueryValueExW_t RegQueryValueExWOriginal;
 LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                     LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
     if (g_inShellProbeBypass) return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    EnsureLazyVirtualAppletDetection();
+    RequestLazyVirtualAppletDetection();
     // Unlike RegOpenKeyExW/RegCloseKey/ShellExecuteExW (whose blanket
     // try/catch was removed — see those hooks), this catch is kept
     // deliberately. Everything above the fallback call is a read: it only
@@ -2037,7 +2099,7 @@ RegGetValueW_t RegGetValueWOriginal;
 LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     if (g_inShellProbeBypass) return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-    EnsureLazyVirtualAppletDetection();
+    RequestLazyVirtualAppletDetection();
     // Same reasoning as RegQueryValueExWHook above: everything here only
     // writes into the caller's output buffer, so a fallback call after an
     // exception overwrites that buffer once with the real value instead of
@@ -2070,7 +2132,7 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
                                  LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
                                  PFILETIME lpftLastWriteTime) {
     if (g_inShellProbeBypass) return RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName, lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
-    EnsureLazyVirtualAppletDetection();
+    RequestLazyVirtualAppletDetection();
     // RegEnumKeyExW is not a cursor-based iterator with hidden progression —
     // dwIndex is an explicit caller-supplied parameter, and the API always
     // returns the same entry for the same (hKey, dwIndex) pair. The scan
@@ -2174,7 +2236,7 @@ using RegEnumKeyW_t = decltype(&RegEnumKeyW);
 RegEnumKeyW_t RegEnumKeyWOriginal;
 LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
     if (g_inShellProbeBypass) return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
-    EnsureLazyVirtualAppletDetection();
+    RequestLazyVirtualAppletDetection();
     // Same reasoning as RegEnumKeyExWHook above: dwIndex is an explicit,
     // caller-supplied parameter, not a hidden cursor, and every call here is
     // a pure read. Re-issuing the original in the catch after an exception
@@ -2576,6 +2638,12 @@ void Wh_ModSettingsChanged() {
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
+    // Re-arm the lazy-detection worker if a mode change invalidated the
+    // cached verdict, instead of waiting for the next incidental registry
+    // access to request it.
+    if ((bitChanged || tabChanged) && g_lazyDetectionWakeEvent) {
+        SetEvent(g_lazyDetectionWakeEvent);
+    }
     Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
@@ -2737,6 +2805,43 @@ BOOL Wh_ModInit() {
   }
 }
 
+// Body of the dedicated lazy-detection worker thread. Waits on either the
+// wake event (probe requested/re-armed) or the stop event (mod unloading).
+static void LazyDetectionThreadProc() {
+    HANDLE waitHandles[2] = { g_lazyDetectionWakeEvent, g_lazyDetectionStopEvent };
+    for (;;) {
+        DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+        if (wait != WAIT_OBJECT_0) {
+            // Stop event, or a wait failure - either way, exit the thread.
+            return;
+        }
+        ResetEvent(g_lazyDetectionWakeEvent);
+        try {
+            RunLazyVirtualAppletDetection();
+        } catch (...) {
+            Wh_Log(L"Exception in lazy-detection worker thread");
+        }
+    }
+}
+
+// Runs once Wh_ModInit has returned TRUE and hooks are fully active. This is
+// still a controlled Windhawk callback, not an arbitrary caller's stack, so
+// starting our own worker thread here is safe.
+void Wh_ModAfterInit() {
+    g_lazyDetectionWakeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_lazyDetectionStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_lazyDetectionWakeEvent || !g_lazyDetectionStopEvent) {
+        Wh_Log(L"Failed to create lazy-detection events; virtual applets will stay un-injected");
+        return;
+    }
+    g_lazyDetectionThread.emplace(LazyDetectionThreadProc);
+    if (!g_lazyDetectionDone.load(std::memory_order_acquire)) {
+        // Kick off the initial probe right away instead of waiting for the
+        // first incidental registry access to request it.
+        SetEvent(g_lazyDetectionWakeEvent);
+    }
+}
+
 static void CleanupTempFiles() {
     // Delete the temp task-links file
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
@@ -2746,8 +2851,32 @@ static void CleanupTempFiles() {
     }
 }
 
+// Signal + join + reset the worker thread, per the required shutdown
+// pattern for a global std::thread (see the no_destroy comment on
+// g_lazyDetectionThread above) - must happen before Wh_ModUninit returns.
+static void StopLazyDetectionThread() {
+    if (g_lazyDetectionStopEvent) {
+        SetEvent(g_lazyDetectionStopEvent);
+    }
+    if (g_lazyDetectionThread.has_value()) {
+        if (g_lazyDetectionThread->joinable()) {
+            g_lazyDetectionThread->join();
+        }
+        g_lazyDetectionThread.reset();
+    }
+    if (g_lazyDetectionWakeEvent) {
+        CloseHandle(g_lazyDetectionWakeEvent);
+        g_lazyDetectionWakeEvent = nullptr;
+    }
+    if (g_lazyDetectionStopEvent) {
+        CloseHandle(g_lazyDetectionStopEvent);
+        g_lazyDetectionStopEvent = nullptr;
+    }
+}
+
 void Wh_ModUninit() {
     try {
+        StopLazyDetectionThread();
         CleanupTempFiles();
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
