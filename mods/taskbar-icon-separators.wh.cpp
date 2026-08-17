@@ -745,12 +745,14 @@ static bool ParseStateInt(
 static bool ReadSeparatorStateFile(
     double width,
     Settings* settingsOut,
-    bool* existsOut) {
-    if (!settingsOut || !existsOut) {
+    bool* existsOut,
+    bool* contentInvalidOut) {
+    if (!settingsOut || !existsOut || !contentInvalidOut) {
         return false;
     }
 
     *existsOut = false;
+    *contentInvalidOut = false;
     settingsOut->identifierPrefix = kSeparatorIdentifierPrefix;
     settingsOut->width = width;
     settingsOut->separators.clear();
@@ -798,15 +800,22 @@ static bool ReadSeparatorStateFile(
     }
 
     LARGE_INTEGER size = {};
-    if (!GetFileSizeEx(file, &size) ||
-        size.QuadPart < 0 ||
-        size.QuadPart > 1024 * 1024) {
+    if (!GetFileSizeEx(file, &size)) {
         DWORD error = GetLastError();
         CloseHandle(file);
         Wh_Log(
-            L"[STATE] Invalid state-file size error=%u size=%lld",
-            error,
+            L"[STATE] GetFileSizeEx failed error=%u",
+            error);
+        return false;
+    }
+
+    if (size.QuadPart < 0 ||
+        size.QuadPart > 1024 * 1024) {
+        CloseHandle(file);
+        Wh_Log(
+            L"[STATE] Invalid state-file size=%lld",
             static_cast<long long>(size.QuadPart));
+        *contentInvalidOut = true;
         return false;
     }
 
@@ -855,6 +864,7 @@ static bool ReadSeparatorStateFile(
         if (!headerSeen) {
             if (line != "v1") {
                 Wh_Log(L"[STATE] Unsupported/corrupt separator state header");
+                *contentInvalidOut = true;
                 return false;
             }
             headerSeen = true;
@@ -864,6 +874,7 @@ static bool ReadSeparatorStateFile(
                 tab == 0 ||
                 tab + 1 >= line.size()) {
                 Wh_Log(L"[STATE] Malformed separator state row");
+                *contentInvalidOut = true;
                 return false;
             }
 
@@ -890,6 +901,7 @@ static bool ReadSeparatorStateFile(
                     &targetIndex) ||
                 targetIndex < -1) {
                 Wh_Log(L"[STATE] Invalid separator state row");
+                *contentInvalidOut = true;
                 return false;
             }
 
@@ -897,6 +909,7 @@ static bool ReadSeparatorStateFile(
                 kMaxSeparators) {
                 Wh_Log(
                     L"[STATE] Too many separators in state file");
+                *contentInvalidOut = true;
                 return false;
             }
 
@@ -909,6 +922,7 @@ static bool ReadSeparatorStateFile(
                 Wh_Log(
                     L"[STATE] Duplicate stable ID in state file: '%s'",
                     stableId.c_str());
+                *contentInvalidOut = true;
                 return false;
             }
 
@@ -936,6 +950,7 @@ static bool ReadSeparatorStateFile(
 
     if (!headerSeen) {
         Wh_Log(L"[STATE] Empty/corrupt separator state file");
+        *contentInvalidOut = true;
         return false;
     }
 
@@ -1285,12 +1300,18 @@ static bool LoadSettingsFromStorage(
         LoadSeparatorWidthSetting();
 
     bool stateExists = false;
+    bool contentInvalid = false;
     Settings settings;
 
     if (!ReadSeparatorStateFile(
             width,
             &settings,
-            &stateExists)) {
+            &stateExists,
+            &contentInvalid)) {
+        if (!contentInvalid) {
+            return false;
+        }
+
         Settings recovered;
         recovered.identifierPrefix =
             kSeparatorIdentifierPrefix;
@@ -1316,11 +1337,11 @@ static bool LoadSettingsFromStorage(
                     backupPath.c_str(),
                     MOVEFILE_WRITE_THROUGH)) {
                 Wh_Log(
-                    L"[STATE] Moved unreadable state file aside as '%s'",
+                    L"[STATE] Moved invalid state file aside as '%s'",
                     backupPath.c_str());
             } else {
                 Wh_Log(
-                    L"[STATE] Couldn't move unreadable state file aside "
+                    L"[STATE] Couldn't move invalid state file aside "
                     L"error=%u; recovery will retry persistence in place",
                     GetLastError());
             }
@@ -4118,6 +4139,7 @@ static bool RunTryMoveGroupObserver(
         outer &&
         result &&
         pinned &&
+        !appId.empty() &&
         oldIndex >= 0 &&
         newIndex >= 0 &&
         oldIndex != newIndex) {
@@ -4293,7 +4315,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskGroupGetAppIdAddress,
             nullptr,
-            true,
         },
         {
             {
@@ -4301,7 +4322,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndIsPinned,
             nullptr,
-            true,
         },
         {
             {
@@ -4309,7 +4329,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndGetRelativeTaskOrder,
             nullptr,
-            true,
         },
         {
             {
@@ -4325,7 +4344,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndTryMoveGroupOriginal,
             TaskListWnd_TryMoveGroup_Hook,
-            true,
         },
         {
             {
