@@ -74,6 +74,7 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 ## Notes
 
 - The mod runs inside `explorer.exe` and requires **64‑bit Windows 10 or Windows 11**. It is **x64-only and is not supported on ARM64** (on an ARM64 device the mod has no effect; see Known Limitations).
+- **Coexistence with Windows 7 Legacy Applet Restorer (fixed in 1.0.1):** the namespace enumeration injection now honors the documented "same `(hKey, index)` → same entry" contract of `RegEnumKeyExW`. The Legacy Applet Restorer probes indices through the hook chain and then re-issues the same index for the selected entry; the previous one-shot injection was consumed by that probe and returned `ERROR_NO_MORE_ITEMS` to the retry, which ended the enumeration early and hid the Display entry from Control Panel whenever the hook order placed the other mod on top (e.g. after a settings save reloaded it). The injection is now re-served for repeated same-index queries, so the entry stays visible regardless of which mod hooks the registry APIs first.
 - On first use, wait a few seconds for the setup to finish, then reopen Control Panel.
 - After changing a setting or language, close any already open Display page and reopen it.
 - If the page does not appear, check the Windhawk log for download or hash verification errors.
@@ -7355,24 +7356,44 @@ private:
 
 static KeyTracker g_keyTracker;
 static std::mutex g_injectedMutex;
-static std::unordered_map<HKEY, bool> g_injectedForHandle;
+// Per-handle index at which the namespace entry was served during the current
+// enumeration pass (no entry = not served yet in this pass).
+static std::unordered_map<HKEY, DWORD> g_injectedIndexForHandle;
 static std::atomic<bool> g_namespaceInjectionLogged{false};
 
-// Inject the namespace entry once per enumeration pass. Resetting when a new
-// pass starts (idx==0) means a caller that enumerates twice on the same handle
+// Inject the namespace entry once per enumeration pass, and remember at which
+// index it was served. RegEnumKeyExW/RegEnumKeyW are documented to return the
+// same entry for the same (hKey, index) pair, and honoring that contract is
+// what lets this mod compose with the Windows 7 Legacy Applet Restorer
+// (win7-legacy-applet-restorer): when that mod sits below this one in the
+// hook chain, its own namespace mapping first PROBES indices into a scratch
+// buffer and then RE-ISSUES the identical (hKey, index) query to fetch the
+// selected entry into the caller's buffer. The previous one-shot latch let
+// the probe consume the single injection, so the re-issue at the same index
+// observed ERROR_NO_MORE_ITEMS and the whole enumeration ended early: the
+// Display applet entry (and every entry injected after it) vanished from
+// Control Panel in exactly the mod-hook orders where Legacy Applet Restorer
+// ended up on top - a load/reload-order race, which is why the entry seemed
+// to disappear at random. A repeated query for the served index now re-serves
+// the entry; any other index after it reports EOF. Resetting when a new pass
+// starts (idx==0) means a caller that enumerates twice on the same handle
 // (e.g. once to size buffers) still sees the entry on each pass.
 static bool ShouldInjectNow(HKEY k, DWORD idx) {
     std::lock_guard<std::mutex> l(g_injectedMutex);
-    if (idx == 0) g_injectedForHandle[k] = false;
-    bool& a = g_injectedForHandle[k];
-    if (a) return false;
-    a = true;
+    if (idx == 0) g_injectedIndexForHandle.erase(k);
+    auto it = g_injectedIndexForHandle.find(k);
+    if (it != g_injectedIndexForHandle.end()) {
+        // Already served once in this pass: re-serve only the very same index
+        // (idempotent (hKey, index) semantics); anything else is past EOF.
+        return it->second == idx;
+    }
+    g_injectedIndexForHandle.emplace(k, idx);
     return true;
 }
 void ClearInjectedState(HKEY k)   {
     try {
         std::lock_guard<std::mutex> l(g_injectedMutex);
-        g_injectedForHandle.erase(k);
+        g_injectedIndexForHandle.erase(k);
     } catch (...) {
     }
 }
@@ -7948,8 +7969,8 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
     //
     // One shared-lock, allocation-free presence check answers both questions at
     // once: KeyTracker::Track only ever records paths that pass
-    // ContainsRelevantKeywordCheap, and g_injectedForHandle entries are only
-    // ever created for tracked namespace-parent handles, so an untracked,
+    // ContainsRelevantKeywordCheap, and g_injectedIndexForHandle entries are
+    // only ever created for tracked namespace-parent handles, so an untracked,
     // non-fake handle can have neither a tracked path nor injection state.
     bool trackedOrFake = false;
     try {
@@ -8066,10 +8087,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
                 return ERROR_NO_MORE_ITEMS;
             }
         }
-        // Validate the output buffer BEFORE latching the one-shot injection
-        // state: a rejected attempt (ERROR_MORE_DATA / ERROR_INVALID_PARAMETER)
-        // must not consume the injection, or the caller's retry at the same
-        // index would hit the latched flag and silently lose the applet entry.
+        // Validate the output buffer BEFORE recording the injection index: a
+        // rejected attempt (ERROR_MORE_DATA / ERROR_INVALID_PARAMETER) must
+        // not mark the index as served (see ShouldInjectNow for why repeated
+        // same-index queries must keep working across sub-hook probes).
         if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
         if (*lpcch < g_clsidLower.size() + 1) {
             *lpcch = static_cast<DWORD>(g_clsidLower.size() + 1);
@@ -14649,7 +14670,7 @@ void InstallComHook() {
 BOOL Wh_ModInit(void) {
     // This must be the first operation so even an architecture, settings, API
     // resolution, or hook-installation failure leaves an actionable log entry.
-    Wh_Log(L"Display Restorer 1.0.0: Wh_ModInit entered (PID %u)",
+    Wh_Log(L"Display Restorer 1.0.1: Wh_ModInit entered (PID %u)",
            GetCurrentProcessId());
     try {
         if (!IsRunningAsAmd64()) {
