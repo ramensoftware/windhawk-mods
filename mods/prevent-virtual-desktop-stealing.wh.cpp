@@ -2182,8 +2182,6 @@ static HWND FindCurrentProcessShellWindow() {
     return shellWindow;
 }
 
-static bool WaitForShellHostRetryDelay();
-
 static bool InstallVirtualDesktopHooks() {
     if (g_virtualDesktopHooksInstalled.load(
             std::memory_order_acquire)) {
@@ -2289,41 +2287,13 @@ static bool InstallVirtualDesktopHooks() {
         },
     };
 
-    constexpr int kMaxSymbolResolutionAttempts = 3;
-    bool symbolsResolved = false;
-
-    for (int attempt = 1;
-         attempt <= kMaxSymbolResolutionAttempts;
-         ++attempt) {
-        if (WindhawkUtils::HookSymbols(
-                twinui,
-                twinuiPcshellHooks,
-                ARRAYSIZE(twinuiPcshellHooks))) {
-            symbolsResolved = true;
-            break;
-        }
-
-        if (RuntimeCancellationRequested()) {
-            return false;
-        }
-
-        if (attempt < kMaxSymbolResolutionAttempts) {
-            Wh_Log(
-                L"Shell host: symbol resolution failed on attempt %d; "
-                L"retrying",
-                attempt);
-
-            if (!WaitForShellHostRetryDelay()) {
-                return false;
-            }
-        }
-    }
-
-    if (!symbolsResolved) {
+    if (!WindhawkUtils::HookSymbols(
+            twinui,
+            twinuiPcshellHooks,
+            ARRAYSIZE(twinuiPcshellHooks))) {
         Wh_Log(
-            L"Shell host: failed to resolve/install virtual-desktop "
-            L"symbols after %d attempts",
-            kMaxSymbolResolutionAttempts);
+            L"Shell host: failed to resolve/install "
+            L"virtual-desktop symbols");
         return false;
     }
 
