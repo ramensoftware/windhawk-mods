@@ -1525,16 +1525,29 @@ struct PinnedItem {
 // own copy of the pinned items rather than from anything the mod believes. This
 // is what makes a native "Unpin from taskbar" visible, and what keeps the button
 // labels honest when a shortcut has been renamed underneath a live pin.
-std::vector<PinnedItem> ReadPinnedItems() {
+// ok, if given, is set to false when the read could not be trusted (the
+// pinned-items folder couldn't be resolved, or listing it failed for a
+// reason other than "no shortcuts there yet"). Callers that treat an empty
+// result as "user unpinned everything" must check this before acting on it.
+std::vector<PinnedItem> ReadPinnedItems(bool* ok = nullptr) {
     std::vector<PinnedItem> items;
+    if (ok) {
+        *ok = true;
+    }
     std::wstring dir = PinnedDir();
     if (dir.empty()) {
+        if (ok) {
+            *ok = false;
+        }
         return items;
     }
 
     WIN32_FIND_DATAW find{};
     HANDLE handle = FindFirstFileW((dir + L"\\*.lnk").c_str(), &find);
     if (handle == INVALID_HANDLE_VALUE) {
+        if (ok && GetLastError() != ERROR_FILE_NOT_FOUND) {
+            *ok = false;
+        }
         return items;
     }
     do {
@@ -1602,7 +1615,15 @@ bool LabelMatchesAccessibleName(const std::wstring& leaf,
     if (leaf.empty() || name.size() < leaf.size()) {
         return false;
     }
-    return _wcsnicmp(name.c_str(), leaf.c_str(), leaf.size()) == 0;
+    if (_wcsnicmp(name.c_str(), leaf.c_str(), leaf.size()) != 0) {
+        return false;
+    }
+    // The shell's state annotation is always appended after a separator
+    // ("Games pinned", "Games angeheftet"), so a bare prefix match still
+    // claims unrelated apps whose name happens to start the same way
+    // ("Discord" for a folder named "D"). Require the match to end on a
+    // word boundary.
+    return name.size() == leaf.size() || !iswalnum(name[leaf.size()]);
 }
 
 // Empty when this label is not one of ours, or when it is ambiguous between
@@ -1670,7 +1691,8 @@ void Reconcile() {
     // full ReadPinnedItems()/ReadPinnedAppIds() COM round-trips per pass.
     // Re-read only after something that can actually change what is pinned
     // (the unpin/pin loops further down).
-    std::vector<PinnedItem> initialPinnedItems = ReadPinnedItems();
+    bool pinnedItemsOk = true;
+    std::vector<PinnedItem> initialPinnedItems = ReadPinnedItems(&pinnedItemsOk);
     std::vector<std::wstring> initialPinnedAppIds;
     initialPinnedAppIds.reserve(initialPinnedItems.size());
     for (const auto& item : initialPinnedItems) {
@@ -1733,7 +1755,11 @@ void Reconcile() {
             // the only evidence that the user unpinned it. Demote it to a draft
             // rather than re-pinning: re-pinning would make native Unpin look
             // broken, and the entry keeps its name and icon either way.
-            if (entry.pinApplied && !Contains(live, AppIdFor(entry.pinId))) {
+            // Only trust this when the read itself succeeded — a failed read
+            // to resolve/list the pinned-items folder also comes back empty,
+            // and treating that the same way would demote every entry at once.
+            if (pinnedItemsOk && entry.pinApplied &&
+                !Contains(live, AppIdFor(entry.pinId))) {
                 Wh_Log(L"Pins: '%s' was unpinned from the taskbar, keeping it "
                        L"as a draft",
                        entry.name.c_str());
@@ -2388,8 +2414,15 @@ void RemovePinnedFolder(const std::wstring& path) {
     Wh_Log(L"Unpinned '%s' (kept as a draft)", path.c_str());
 }
 
+// Seeded from the setting's on-disk value at Wh_ModInit (LoadSettings runs
+// there first), not lazily on first Wh_ModSettingsChanged call — that call
+// only fires after a change, so a lazy static would initialize itself from
+// the value the user just ticked and miss that very rising edge.
+bool g_lastOpenManager = false;
+
 void LoadSettings() {
     LoadFolders(&g_settings.folders);
+    g_lastOpenManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
 
     // "type" was the old folders-first option, which is now unconditional.
     std::wstring sortBy = GetStringSetting(L"content.sortBy");
@@ -6100,8 +6133,13 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
             if (cell >= 0 && cell < (int)level->items.size()) {
                 POINT screenPt = pt;
                 ClientToScreen(hWnd, &screenPt);
-                ShowItemContextMenu(std::wstring(level->items[cell].fullPath),
-                                    screenPt);
+                const GridItem& item = level->items[cell];
+                // iconPath holds the .lnk when fullPath was replaced by its
+                // resolved folder target; the menu must act on what the user
+                // actually sees in the cell.
+                const std::wstring& menuPath =
+                    item.iconPath.empty() ? item.fullPath : item.iconPath;
+                ShowItemContextMenu(menuPath, screenPt);
             }
             return 0;
         }
@@ -8081,8 +8119,9 @@ void RemoveSelected(HWND hWnd) {
 // WriteJumpList put in place. Shared by the user-facing "Remove all folder
 // buttons" action (clearStore = true, wipes the folder list too) and the
 // automatic cleanup Wh_ModUninit runs on every disable/uninstall
-// (clearStore = false, folders survive as unpinned drafts so a later
-// re-enable can re-pin them without retyping anything).
+// (clearStore = false, folders keep their pinned=true intent — only
+// pinApplied is cleared — so the next Reconcile() this mod runs, whether
+// from a real re-enable or a code-update reload, silently re-pins them).
 //
 // CoInitializeEx is refcounted per thread, so this is safe to call whether or
 // not the calling thread already has COM up (Wh_ModUninit's does not).
@@ -8128,7 +8167,10 @@ void RemoveAllFolderButtonsCore(bool clearStore) {
     } else {
         auto stored = FolderStore::Read();
         for (auto& entry : stored) {
-            entry.pinned = false;
+            // Not entry.pinned: that is the user's intent and must survive
+            // this pass so a later Reconcile() re-pins automatically.
+            // pinApplied is state, and now false is the truth.
+            entry.pinApplied = false;
         }
         FolderStore::Write(stored);
     }
@@ -8151,10 +8193,13 @@ void RemoveAllFolderButtons(HWND hWnd) {
 
 // Windhawk's core principle is that disabling a mod puts the system back the
 // way it was. Called from Wh_ModUninit, which fires on every disable and
-// every uninstall alike (Windhawk does not distinguish the two) — so the
-// real taskbar pins, their Start Menu shortcuts and their jump lists never
-// outlive the mod being off. The folder list itself is kept, marked unpinned,
-// so turning the mod back on does not lose it.
+// every uninstall alike (Windhawk does not distinguish the two, and neither
+// does it distinguish a real disable from the reload after a code-update
+// save) — so the real taskbar pins, their Start Menu shortcuts and their
+// jump lists never outlive this pass. The folder list itself keeps its
+// pinned intent, so the next Reconcile() (from a real re-enable, or from
+// the Wh_ModInit that follows an update reload moments later) puts
+// everything straight back without the user re-adding anything.
 void UnpinAllForDisable() {
     RemoveAllFolderButtonsCore(/*clearStore=*/false);
 }
@@ -9873,15 +9918,15 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     // A checkbox-as-link: openManager has no persisted meaning of its own, it
     // is just the closest thing Windhawk's settings page has to a button.
-    // Every rising edge (false -> true, including a fresh unchecked ->
-    // checked as this reads it here) opens the manager; the box is left
-    // however the user leaves it.
-    static bool lastOpenManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
+    // Every rising edge (false -> true) opens the manager; the box is left
+    // however the user leaves it. g_lastOpenManager is seeded in
+    // LoadSettings() at Wh_ModInit, not lazily here, so the very first tick
+    // after a mod (re)load is itself seen as a rising edge.
     bool openManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
-    if (openManager && !lastOpenManager) {
+    if (openManager && !g_lastOpenManager) {
         FolderManager::Open();
     }
-    lastOpenManager = openManager;
+    g_lastOpenManager = openManager;
 
     RequestReloadUI();
 
@@ -9900,11 +9945,12 @@ void Wh_ModUninit() {
     // Disabling (or uninstalling — Wh_ModUninit does not see a difference)
     // must leave the system as it was: real taskbar pins, Start Menu
     // shortcuts and jump lists this mod created do not get to outlive it.
-    // Runs before Pins::Stop() below, while its COM-using helpers are still
-    // safe to call.
-    FolderManager::UnpinAllForDisable();
-    // Joins its STA worker.
+    // Stop and join the reconcile worker first: it can be mid-Reconcile()
+    // (pinned-dir watch, Taskband watch, or the periodic poll — the unpins
+    // below even fire the dir watch) and would otherwise re-create pins and
+    // Start Menu shortcuts the sweep below just removed.
     Pins::Stop();
+    FolderManager::UnpinAllForDisable();
 
     // DestroyWindow / XAML teardown must run on the creating UI thread. Prefer
     // a mod-owned window (level popup or menu owner) when the taskbar HWND is
