@@ -42,9 +42,10 @@ I focus a game (and the alternate command will reset it to the original type).
 #include <regex>
 #include <string>
 #include <vector>
-#include <stdexcept>
 
 using namespace Gdiplus;
+
+
 
 struct pattern_obj {
     std::wstring filter;
@@ -68,11 +69,11 @@ void LoadSettings() {
         current_pattern.filter = current;
 		try { 
 			current_pattern.regex = std::wregex(current);
+			settings.pathFilters.push_back(current_pattern);
 		} catch (const std::regex_error&) {
-            Wh_Log(L"Invalid Regex: %s", settings.pathFilters[i].filter.c_str());
-            throw std::runtime_error("Invalid Regex Found");
+            Wh_Log(L"Invalid Regex: %s", current);
         }
-        settings.pathFilters.push_back(current_pattern);
+
         Wh_FreeStringSetting(current);
     
     }
