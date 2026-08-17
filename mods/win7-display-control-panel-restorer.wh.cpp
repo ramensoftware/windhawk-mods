@@ -61,7 +61,7 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 
 The mod hooks into `explorer.exe`, `control.exe`, and `rundll32.exe` to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component (the Windows 10 1511 DLL which is the last version to have the classic page in the Control Panel) and it is also verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.
 
-The mod has been tested on **Windows 10 1809**, **Windows 10 21H2**, **Windows 11 23H2** and **Windows 11 25H2**, and works with the native 64‑bit Control Panel environment.
+The mod has been tested on **Windows 10 1809**, **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**, and works with the native 64‑bit Control Panel environment.
 
 ---
 
