@@ -50,12 +50,42 @@ right next to Start on whichever side you prefer.
 ## Known limitations (please read before reporting issues)
 
 - **Windows 11 only.** Windows 10's taskbar has no XAML layer to hook into.
-- **Primary monitor only.** Screen-center math and window-side classification
-  use the primary monitor. Taskbars on secondary displays are not specially
-  handled by this mod (their icons keep the default layout Windows gives
-  them) - the mod's positioning plan is only ever computed on the primary
-  taskbar's own thread, so secondary-monitor elements are simply never
-  included in it and fall through to Windows' native positioning.
+- **Primary monitor only**, for both the Start button's position and
+  window-side classification - and on a multi-monitor setup this is a
+  bigger limitation than it might sound: a window's side is decided by
+  comparing its position against the *primary* monitor's center line, so
+  every window on a monitor entirely to one side of the primary reads as a
+  fixed left/right regardless of where on that monitor it actually sits -
+  only movement within the primary monitor (or across its center line) is
+  tracked per-pixel. Taskbars on secondary displays aren't specially
+  handled either (their icons keep Windows' default layout) - the mod's
+  positioning plan is only ever computed on the primary taskbar's own
+  thread, so secondary-monitor elements are simply never included in it
+  and fall through to Windows' native positioning.
+- **Don't enable alongside "Start button always on the left".** Both mods
+  hook the same process-wide `IUIElement::Arrange` vtable slot to force
+  the Start button's own X position; with both enabled, whichever one
+  installed its hook second wins, and the result is undefined. This mod's
+  `systemButtonsPlacement: far-left` setting covers the same "keep
+  everything else out of Start's way" goal that mod's
+  `otherSystemButtonsOnTheLeft` option does, so there's no reason to run
+  both together.
+- **A very crowded side compresses instead of overflowing cleanly.** If
+  enough app icons pile up on one side that they'd run into the system
+  tray/clock on the right (or, in "far left" placement, into Search/Task
+  View/Widgets on the left), icon spacing on that side is compressed just
+  enough to keep the whole group within bounds - icons still render at
+  full size, so once genuinely crowded they visually overlap each other
+  rather than being hidden or scrolled the way the taskbar's own overflow
+  handling would.
+- **Windows' own "Combine taskbar buttons and hide labels: When taskbar
+  is full" doesn't shrink icons under this mod** (icons stay full-size and
+  compress/overlap instead, per the point above) - "Always" isn't
+  affected and works normally. Likely because the "when full" decision is
+  made by native layout logic (this mod only overrides each button's
+  final X position afterward, it never touches sizing), evaluated against
+  the taskbar's native, unsplit layout rather than this mod's split one -
+  unconfirmed, not yet investigated further.
 - **Undocumented internals.** This mod hooks private, unversioned classes
   inside `taskbar.dll` and `Taskbar.View.dll` (via symbols resolved from
   Microsoft's public symbol server at runtime, not hardcoded offsets). A
@@ -223,7 +253,7 @@ enum class UnresolvedAppsDefaultSide {
 // begin with, since it doesn't rank icons by distance at all.
 enum class PinnedAppsAnchor { OuterEdge, AdjacentToStart };
 
-struct {
+struct ModSettings {
     double gapPx;
     SystemButtonsPlacement systemButtonsPlacement;
     Side systemButtonsAdjacentSide;
@@ -232,7 +262,8 @@ struct {
     UnresolvedAppsDefaultSide unresolvedAppsDefaultSide;
     TaskListOrder taskListOrder;
     PinnedAppsAnchor pinnedAppsAnchor;
-} g_settings;
+};
+ModSettings g_settings;
 
 std::wstring ToLower(std::wstring s) {
     for (auto& c : s) {
@@ -245,10 +276,6 @@ std::wstring ToLower(std::wstring s) {
 // non-empty fragments for case-insensitive substring matching later.
 std::vector<std::wstring> ParseAppList(PCWSTR raw) {
     std::vector<std::wstring> result;
-    if (!raw) {
-        return result;
-    }
-
     std::wstring s(raw);
     size_t start = 0;
     while (start <= s.size()) {
@@ -272,20 +299,20 @@ std::vector<std::wstring> ParseAppList(PCWSTR raw) {
 }
 
 Side ParseSide(PCWSTR value, Side fallback) {
-    if (value && wcscmp(value, L"right") == 0) {
+    if (wcscmp(value, L"right") == 0) {
         return Side::Right;
     }
-    if (value && wcscmp(value, L"left") == 0) {
+    if (wcscmp(value, L"left") == 0) {
         return Side::Left;
     }
     return fallback;
 }
 
 UnresolvedAppsDefaultSide ParseUnresolvedAppsDefaultSide(PCWSTR value) {
-    if (value && wcscmp(value, L"right") == 0) {
+    if (wcscmp(value, L"right") == 0) {
         return UnresolvedAppsDefaultSide::Right;
     }
-    if (value && wcscmp(value, L"contralateral-to-system-buttons") == 0) {
+    if (wcscmp(value, L"contralateral-to-system-buttons") == 0) {
         return UnresolvedAppsDefaultSide::ContralateralToSystemButtons;
     }
     return UnresolvedAppsDefaultSide::Left;
@@ -316,7 +343,7 @@ Side ResolveUnresolvedAppsDefaultSide() {
 }
 
 PinnedAppsAnchor ParsePinnedAppsAnchor(PCWSTR value) {
-    if (value && wcscmp(value, L"adjacent-to-start") == 0) {
+    if (wcscmp(value, L"adjacent-to-start") == 0) {
         return PinnedAppsAnchor::AdjacentToStart;
     }
     return PinnedAppsAnchor::OuterEdge;
@@ -334,43 +361,47 @@ double PinnedAppOrderKey() {
                : std::numeric_limits<double>::infinity();
 }
 
-void LoadSettings() {
-    g_settings.gapPx = Wh_GetIntSetting(L"gapPx");
+// Reads every setting into a fresh ModSettings, with no dependency on
+// which thread it runs on - Wh_Get/FreeStringSetting don't touch XAML or
+// COM, unlike almost everything else in this file. Kept separate from
+// LoadSettings/g_settings itself so Wh_ModSettingsChanged can do this part
+// on its own calling thread and marshal only the resulting struct's
+// assignment - see its comment for why.
+ModSettings LoadSettingsFromStore() {
+    ModSettings s;
+    s.gapPx = Wh_GetIntSetting(L"gapPx");
 
-    PCWSTR placement = Wh_GetStringSetting(L"systemButtonsPlacement");
-    g_settings.systemButtonsPlacement =
-        (placement && wcscmp(placement, L"adjacent-start") == 0)
+    auto placement = WindhawkUtils::StringSetting::make(L"systemButtonsPlacement");
+    s.systemButtonsPlacement =
+        (wcscmp(placement, L"adjacent-start") == 0)
             ? SystemButtonsPlacement::AdjacentStart
             : SystemButtonsPlacement::FarLeft;
-    Wh_FreeStringSetting(placement);
 
-    PCWSTR adjacentSide = Wh_GetStringSetting(L"systemButtonsAdjacentSide");
-    g_settings.systemButtonsAdjacentSide = ParseSide(adjacentSide, Side::Left);
-    Wh_FreeStringSetting(adjacentSide);
+    auto adjacentSide =
+        WindhawkUtils::StringSetting::make(L"systemButtonsAdjacentSide");
+    s.systemButtonsAdjacentSide = ParseSide(adjacentSide, Side::Left);
 
-    PCWSTR leftApps = Wh_GetStringSetting(L"leftApps");
-    g_settings.leftApps = ParseAppList(leftApps);
-    Wh_FreeStringSetting(leftApps);
+    s.leftApps =
+        ParseAppList(WindhawkUtils::StringSetting::make(L"leftApps"));
+    s.rightApps =
+        ParseAppList(WindhawkUtils::StringSetting::make(L"rightApps"));
 
-    PCWSTR rightApps = Wh_GetStringSetting(L"rightApps");
-    g_settings.rightApps = ParseAppList(rightApps);
-    Wh_FreeStringSetting(rightApps);
+    s.unresolvedAppsDefaultSide = ParseUnresolvedAppsDefaultSide(
+        WindhawkUtils::StringSetting::make(L"unresolvedAppsDefaultSide"));
 
-    PCWSTR defaultSide = Wh_GetStringSetting(L"unresolvedAppsDefaultSide");
-    g_settings.unresolvedAppsDefaultSide =
-        ParseUnresolvedAppsDefaultSide(defaultSide);
-    Wh_FreeStringSetting(defaultSide);
+    auto taskListOrder = WindhawkUtils::StringSetting::make(L"taskListOrder");
+    s.taskListOrder = (wcscmp(taskListOrder, L"taskbar-order") == 0)
+                           ? TaskListOrder::TaskbarOrder
+                           : TaskListOrder::DistanceFromCenter;
 
-    PCWSTR taskListOrder = Wh_GetStringSetting(L"taskListOrder");
-    g_settings.taskListOrder =
-        (taskListOrder && wcscmp(taskListOrder, L"taskbar-order") == 0)
-            ? TaskListOrder::TaskbarOrder
-            : TaskListOrder::DistanceFromCenter;
-    Wh_FreeStringSetting(taskListOrder);
+    s.pinnedAppsAnchor = ParsePinnedAppsAnchor(
+        WindhawkUtils::StringSetting::make(L"pinnedAppsAnchor"));
 
-    PCWSTR pinnedAppsAnchor = Wh_GetStringSetting(L"pinnedAppsAnchor");
-    g_settings.pinnedAppsAnchor = ParsePinnedAppsAnchor(pinnedAppsAnchor);
-    Wh_FreeStringSetting(pinnedAppsAnchor);
+    return s;
+}
+
+void LoadSettings() {
+    g_settings = LoadSettingsFromStore();
 }
 
 // ============================================================================
@@ -411,6 +442,11 @@ std::atomic<int> g_winEventRawCount;
 std::atomic<int> g_winEventInvalidateCount;
 std::atomic<int> g_invalidateSkippedReentrant;
 std::atomic<int> g_invalidateExceptions;
+
+// Only ever touched from the dedicated WinEventHook thread (see
+// StartWinEventHook) - both WinEventProc and DragFollowTrailingTimerProc
+// run there exclusively, so this needs no synchronization.
+UINT_PTR g_dragFollowTrailingTimerId;
 
 // ============================================================================
 // Generic taskbar/XAML helpers
@@ -696,8 +732,8 @@ using CTaskListWnd_HandleClick_t = HRESULT(WINAPI*)(void* pThis,
 CTaskListWnd_HandleClick_t CTaskListWnd_HandleClick_Original;
 
 WCHAR g_clickSentinel[] = L"click-sentinel";
-void* g_clickSentinel_TaskItem;
-void* g_clickSentinel_TaskGroup;
+thread_local void* g_clickSentinel_TaskItem;
+thread_local void* g_clickSentinel_TaskGroup;
 
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                               void* taskGroup,
@@ -1185,6 +1221,38 @@ double GetMonitorCenterXLocal() {
     return localPx * scale;
 }
 
+// Width of the taskbar window itself, in the repeater's local DIPs. Only
+// used as RecomputeLayoutPlan's fallback bound for the right-side task
+// list group (see its own comment) when the system tray's own element
+// can't be resolved - the taskbar's own frame is a much looser bound than
+// the tray's actual left edge, since the tray only occupies the last
+// portion of the taskbar's full width.
+double GetTaskbarWidthLocal() {
+    RECT taskbarRect;
+    if (!GetWindowRect(g_hTaskbarWnd, &taskbarRect)) {
+        return 0;
+    }
+
+    UINT dpi = GetDpiForWindow(g_hTaskbarWnd);
+    double scale = dpi ? (96.0 / dpi) : 1.0;
+    return (taskbarRect.right - taskbarRect.left) * scale;
+}
+
+// element's own left edge (top-left corner), mapped into relativeTo's
+// coordinate space - e.g. the system tray frame's left edge in the same
+// local DIP space startCenterX and friends already use, since content
+// (the XamlRoot's own root element) shares that space's origin.
+// TransformToVisual/TransformPoint is the same technique
+// taskbar-reorder-right-drag.wh.cpp (already a technique source for this
+// mod) uses to map between an element's own space and an ancestor's.
+double GetElementLeftXLocal(FrameworkElement element,
+                            FrameworkElement relativeTo) {
+    auto transform = element.TransformToVisual(relativeTo);
+    auto point =
+        transform.TransformPoint(winrt::Windows::Foundation::Point{0, 0});
+    return point.X;
+}
+
 double FullFootprintWidth(FrameworkElement element) {
     Thickness m = element.Margin();
     return m.Left + element.ActualWidth() + m.Right;
@@ -1232,6 +1300,14 @@ bool IsTaskListButton(FrameworkElement element) {
 // ============================================================================
 // Layout: computing target X positions
 // ============================================================================
+
+// Small breathing room between the taskbar's own left edge and the first
+// system button in "far left" placement mode.
+constexpr double kFarLeftSystemButtonMarginPx = 8;
+
+// Small breathing room between the right-side task list group and the
+// system tray's own left edge (see RecomputeLayoutPlan's rightBoundLocal).
+constexpr double kTrayMarginPx = 8;
 
 int SystemButtonRank(SystemButton b) {
     switch (b) {
@@ -1305,7 +1381,7 @@ double ComputeSystemButtonX(const std::vector<ChildInfo>& childInfos,
     }
 
     if (g_settings.systemButtonsPlacement == SystemButtonsPlacement::FarLeft) {
-        return 8 + widthBefore;  // small left margin
+        return kFarLeftSystemButtonMarginPx + widthBefore;
     }
 
     double gap = g_settings.gapPx;
@@ -1349,21 +1425,53 @@ struct TaskListPlanEntry {
 
 // Computes every task list button's target X in a single O(n) pass over
 // the repeater's already-enumerated children, classifying each button
-// exactly once. The previous version (ComputeTaskListButtonX, called once
-// per button from RecomputeLayoutPlan's loop) re-walked and re-classified
-// every sibling for every single button it placed - an O(n^2) pass over
-// the whole task list on every ArrangeOverride pass (~1600 classifications
-// at 40 icons), on the shell's layout critical path during a drag. It also
-// re-derived each target's sibling list via VisualTreeHelper::GetParent
-// instead of reusing `children`, so it re-walked the repeater itself once
-// per button too. This also closes a subtle consistency gap the O(n^2)
-// version had: a button classified while being visited as someone else's
-// *sibling* could in principle disagree with its own classification when
-// later visited as the *target* (e.g. its HWND resolving mid-pass), which
-// could produce two buttons at the same X or a gap - classifying once up
-// front removes that possibility entirely.
+// exactly once - avoids both re-walking the repeater and re-classifying
+// every sibling for every single button placed, and the same up-front
+// classification means a button's side/order can't disagree with itself
+// depending on whether it's being visited as a target or as someone
+// else's sibling.
+//
+// Every entry is always written into outPlan, regardless of how far a
+// side's group runs past the taskbar's own edge or under the system tray
+// when enough apps pile up on one side - a real gap (see the mod's own
+// "Known limitations"), but confirmed via live testing NOT to be fixable
+// by leaving overflowing entries out of outPlan and letting them fall
+// through to native Arrange: Start's position is still being forced to
+// true screen-center by this mod's own hook regardless, and native's
+// layout algorithm computes positions assuming the whole row is Windows'
+// own single centered block with no knowledge Start has been moved -
+// mixing forced-position elements with native-position elements in the
+// same pass produced a visually incoherent overlap (confirmed: all task
+// list icons collapsing toward center and overlapping Start whenever one
+// side's group didn't fit). This is the same class of bug as the
+// "gate Start too during settling" fix from the mod's earlier
+// crash-debugging history: forcing part of a layout while leaving the
+// rest native never produces something coherent, only a mix of two
+// incompatible coordinate systems.
+//
+// The actual fix: every icon always stays in this mod's own coordinate
+// system, and a side that doesn't fit gets its inter-icon spacing
+// proportionally compressed (icons rendering at their natural width still
+// visually overlap each other once genuinely crowded) rather than ever
+// falling through to native or running past its bound. leftBoundLocal/
+// rightBoundLocal are the outer edges (local DIPs, same space as
+// startCenterX) each side's group is compressed to fit within -
+// leftBoundLocal is the taskbar's left edge, pushed right by the
+// Search/Task View/Widgets cluster's width in "far left" placement mode;
+// rightBoundLocal is the system tray's own left edge (see
+// RecomputeLayoutPlan's comment for how that's resolved), falling back to
+// the taskbar's own outer edge only if the tray element can't be found
+// this pass. Every side is
+// walked innermost-first, starting exactly at Start's own edge (minus
+// gap) and moving outward - so the innermost icon on a side is always
+// placed at that fixed, bound-independent reference point regardless of
+// how much compression is applied elsewhere in the same side, which is
+// what guarantees Start itself can never be overlapped no matter how
+// severe the overflow is.
 void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
                          double startCenterX,
+                         double leftBoundLocal,
+                         double rightBoundLocal,
                          std::unordered_map<void*, double>& outPlan) {
     std::vector<TaskListPlanEntry> entries;
     for (int i = 0; i < (int)children.size(); i++) {
@@ -1401,16 +1509,25 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
                              ? (g_lastRightSystemClusterWidth + gap)
                              : 0;
 
+    // Innermost reference point for each side - Start's own edge, minus
+    // the gap. Every side's innermost icon is placed exactly here,
+    // regardless of compression (see the function comment for why that's
+    // the Start-overlap safety guarantee).
+    double leftInnerX = startCenterX - startWidth / 2.0 - gap - leftExtra;
+    double rightInnerX = startCenterX + startWidth / 2.0 + gap + rightExtra;
+
+    std::vector<TaskListPlanEntry*> left, right;
+    for (auto& entry : entries) {
+        (entry.info.side == Side::Left ? left : right).push_back(&entry);
+    }
+
     if (g_settings.taskListOrder == TaskListOrder::DistanceFromCenter) {
-        // Innermost (closest to Start) first on each side. Ties - e.g.
-        // multiple pinned/overridden buttons, which all share the same
-        // +/-infinity orderKey - now break on taskbar index instead of
-        // the previous ABI-pointer value: equally stable frame to frame,
-        // but a predictable order instead of an arbitrary one.
-        std::vector<TaskListPlanEntry*> left, right;
-        for (auto& entry : entries) {
-            (entry.info.side == Side::Left ? left : right).push_back(&entry);
-        }
+        // Sort each side closest-to-center-first, i.e. innermost-first -
+        // exactly the walk order used below. Ties - e.g. multiple
+        // pinned/overridden buttons, which all share the same
+        // +/-infinity orderKey - break on taskbar index instead of an
+        // ABI-pointer value: equally stable frame to frame, but a
+        // predictable order instead of an arbitrary one.
         auto byOrderKey = [](const TaskListPlanEntry* a,
                              const TaskListPlanEntry* b) {
             if (a->info.orderKey != b->info.orderKey) {
@@ -1420,40 +1537,57 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
         };
         std::sort(left.begin(), left.end(), byOrderKey);
         std::sort(right.begin(), right.end(), byOrderKey);
-
-        double widthBefore = 0;
-        for (auto* entry : left) {
-            outPlan[winrt::get_abi(entry->element)] =
-                startCenterX - startWidth / 2.0 - gap - leftExtra -
-                widthBefore - entry->width;
-            widthBefore += entry->width;
-        }
-        widthBefore = 0;
-        for (auto* entry : right) {
-            outPlan[winrt::get_abi(entry->element)] = startCenterX +
-                startWidth / 2.0 + gap + rightExtra + widthBefore;
-            widthBefore += entry->width;
-        }
     } else {
-        // Preserve taskbar order: walk `entries` in original (taskbar)
-        // order, accumulating each side's width independently. Unchanged
-        // from before this rewrite: the left side ends up mirrored rather
-        // than laid out outward-from-Start - a pre-existing ordering
-        // quirk (tracked separately in the review) that this efficiency
-        // rewrite deliberately preserves rather than also fixing.
-        double leftWidthBefore = 0, rightWidthBefore = 0;
-        for (auto& entry : entries) {
-            if (entry.info.side == Side::Left) {
-                outPlan[winrt::get_abi(entry.element)] =
-                    startCenterX - startWidth / 2.0 - gap - leftExtra -
-                    leftWidthBefore - entry.width;
-                leftWidthBefore += entry.width;
-            } else {
-                outPlan[winrt::get_abi(entry.element)] = startCenterX +
-                    startWidth / 2.0 + gap + rightExtra + rightWidthBefore;
-                rightWidthBefore += entry.width;
-            }
-        }
+        // Preserve taskbar order, read left-to-right the same way the
+        // native taskbar does: the earliest entry in taskbar order on a
+        // side sits at that side's outer edge, and later entries sit
+        // progressively closer to Start - i.e. innermost-last. `left`/
+        // `right` are already in taskbar order (entries was built that
+        // way); the right side's innermost-last order already matches
+        // the walk order used below (accumulating outward from Start),
+        // but the left side needs reversing to innermost-first - walking
+        // it in original taskbar order here would put the *earliest*
+        // entry innermost instead, mirroring the group relative to
+        // native order.
+        std::reverse(left.begin(), left.end());
+    }
+
+    double leftTotal = 0;
+    for (auto* entry : left) {
+        leftTotal += entry->width;
+    }
+    double rightTotal = 0;
+    for (auto* entry : right) {
+        rightTotal += entry->width;
+    }
+
+    // Scale <1 compresses inter-icon spacing (not each icon's own
+    // rendered width, which this mod never touches) so the outermost
+    // icon's own position never passes leftBoundLocal/rightBoundLocal,
+    // at the cost of consecutive icons visually overlapping each other
+    // once a side is genuinely too full to fit at natural spacing. A
+    // side with plenty of room keeps scale at 1 (identical to natural,
+    // uncompressed spacing).
+    double leftAvailable = leftInnerX - leftBoundLocal;
+    double leftScale = 1.0;
+    if (leftTotal > leftAvailable) {
+        leftScale = leftAvailable > 0 ? (leftAvailable / leftTotal) : 0.0;
+    }
+    double rightAvailable = rightBoundLocal - rightInnerX;
+    double rightScale = 1.0;
+    if (rightTotal > rightAvailable) {
+        rightScale = rightAvailable > 0 ? (rightAvailable / rightTotal) : 0.0;
+    }
+
+    double x = leftInnerX;
+    for (auto* entry : left) {
+        x -= entry->width * leftScale;
+        outPlan[winrt::get_abi(entry->element)] = x;
+    }
+    x = rightInnerX;
+    for (auto* entry : right) {
+        outPlan[winrt::get_abi(entry->element)] = x;
+        x += entry->width * rightScale;
     }
 }
 
@@ -1484,6 +1618,14 @@ void StartWinEventHook();
 // same reason as StartWinEventHook above - starts the timer that drives
 // ResolvePendingButtonHwnds.
 void StartButtonHwndResolveTimer();
+
+// Defined later (Mod lifecycle section); forward-declared here so the
+// ArrangeOverride hook below can request an immediate HWND-resolve attempt
+// (delayMs = 0) as soon as it notices the task list button count changed,
+// rather than waiting for whatever delay the timer last computed for
+// itself - see NextResolveDelayMs' comment for why it can't see a
+// brand-new button coming on its own.
+void ArmButtonHwndResolveTimer(DWORD delayMs);
 
 // g_hTaskbarWnd is normally resolved once, in Wh_ModAfterInit. But if
 // Windhawk injects into explorer.exe before Shell_TrayWnd has been created
@@ -1644,10 +1786,12 @@ struct ArrangePassStats {
 };
 // thread_local: the ArrangeOverride hook (and so this Arrange hook, which
 // only ever runs nested inside it) runs once per taskbar instance's XAML
-// tree, process-wide - with a second monitor enabled that's the primary
-// taskbar and secondary-monitor taskbars potentially interleaving on
-// different threads. A single shared instance here was previously a data
-// race (unsynchronized concurrent reset/read of a non-atomic struct).
+// tree, process-wide. In practice all of them - primary and any
+// secondary-monitor taskbars - run on the same Explorer UI thread (see
+// RecomputeLayoutPlan's comment for how that was confirmed), so a plain
+// global would work too; thread_local costs nothing extra here and stays
+// correct even if that ever stopped being true, so it's kept as cheap
+// insurance rather than because it's currently load-bearing.
 thread_local ArrangePassStats g_passStats;
 
 HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
@@ -1777,7 +1921,17 @@ void RecomputeLayoutPlan() {
         // pass by the time they run, not the previous one.
         for (auto& info : childInfos) {
             if (info.systemButton == SystemButton::Start) {
-                g_lastStartWidth = info.element.ActualWidth();
+                // ActualWidth() reflects the previous arrange pass, and is
+                // 0 for a just-realized element - a freshly (re)created
+                // Start button would otherwise briefly clobber
+                // g_lastStartWidth to 0 and lay out the entire taskbar
+                // around a zero-width Start for that pass. Keep the last
+                // known-good width instead; it'll catch up to the real
+                // one within a pass or two once ActualWidth reports it.
+                double w = info.element.ActualWidth();
+                if (w > 0) {
+                    g_lastStartWidth = w;
+                }
                 newPlan[winrt::get_abi(info.element)] =
                     startCenterX - g_lastStartWidth / 2.0;
                 break;
@@ -1820,10 +1974,35 @@ void RecomputeLayoutPlan() {
                 g_lastStartWidth, systemClusterWidth);
         }
 
+        // Bounds each task list group is compressed to fit within - see
+        // PlanTaskListButtons' own comment for what these mean and why.
+        double leftBoundLocal =
+            (g_settings.systemButtonsPlacement == SystemButtonsPlacement::FarLeft)
+                ? (kFarLeftSystemButtonMarginPx + systemClusterWidth)
+                : 0;
+
+        // The system tray/clock (SystemTray.SystemTrayFrame in this
+        // taskbar's own XAML tree, a sibling of Taskbar.TaskbarFrame
+        // under the same root content) is a real, measurable bound,
+        // unlike the taskbar's own outer edge - the tray only occupies
+        // the last portion of the taskbar's full width, so bounding
+        // against the whole taskbar barely constrains anything in
+        // practice (confirmed via live testing: icons still visibly ran
+        // under the tray with that bound). Falls back to the taskbar's
+        // own width only if the tray frame can't be resolved this pass.
+        FrameworkElement systemTrayFrame =
+            FindChildByClassName(content, L"SystemTray.SystemTrayFrame");
+        double rightBoundLocal =
+            systemTrayFrame
+                ? (GetElementLeftXLocal(systemTrayFrame, content) -
+                   kTrayMarginPx)
+                : GetTaskbarWidthLocal();
+
         // Task list buttons last - see PlanTaskListButtons' own comment
         // for why this is a single O(n) pass over `children` rather than
         // calling a per-button compute function in a loop here.
-        PlanTaskListButtons(children, startCenterX, newPlan);
+        PlanTaskListButtons(children, startCenterX, leftBoundLocal,
+                            rightBoundLocal, newPlan);
 
         g_lastArrangedX = std::move(newPlan);
     } catch (...) {
@@ -1882,17 +2061,19 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
     // simply has no entry for it (see g_lastArrangedX's comment) and it
     // renders at its native position for one pass. Self-correct by
     // invalidating whenever the observed count changes, which is enough
-    // for RecomputeLayoutPlan to pick it up on the next pass. Unlike the
-    // old version of this same self-correction, there's nothing left to
-    // suppress or re-arm here - RecomputeLayoutPlan is safe to call as
-    // often as this triggers it - so this is a plain count comparison
-    // with no gating logic alongside it.
+    // for RecomputeLayoutPlan to pick it up on the next pass; also arm an
+    // immediate HWND-resolve attempt, since a newly-inserted button is
+    // exactly the case ResolvePendingButtonHwnds' own cache-only view
+    // (NextResolveDelayMs) can't see coming on its own. There's nothing
+    // left to suppress or re-arm beyond that - RecomputeLayoutPlan is safe
+    // to call as often as this triggers it - so this is a plain count
+    // comparison with no gating logic alongside it.
     //
     // thread_local: this hook runs process-wide for every taskbar
-    // instance's XAML tree (primary and, with a second monitor enabled,
-    // secondary-monitor taskbars too), which can run on different threads
-    // with independently-changing button counts - a shared global here
-    // previously raced across instances.
+    // instance's XAML tree. In practice they all run on the same Explorer
+    // UI thread (see RecomputeLayoutPlan's comment), so a plain global
+    // would work too - kept thread_local as cheap insurance, same
+    // reasoning as g_passStats above.
     static thread_local int lastPlanTaskListCount = -1;
     int currentTaskListCount = g_planStats.taskListTotal;
     if (currentTaskListCount != lastPlanTaskListCount) {
@@ -1900,15 +2081,25 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
         lastPlanTaskListCount = currentTaskListCount;
         if (countChanged) {
             InvalidateTaskbarLayout();
+            ArmButtonHwndResolveTimer(0);
         }
     }
 
-    g_inTaskbarArrangeOverride = true;
+    // RAII rather than a plain set/clear pair around the original call:
+    // if that call ever exited non-locally, a plain clear below it would
+    // never run, leaving this stuck true and routing every later Arrange
+    // on this thread through the plan lookup regardless of context.
+    struct ScopedArrangeOverrideFlag {
+        ScopedArrangeOverrideFlag() { g_inTaskbarArrangeOverride = true; }
+        ~ScopedArrangeOverrideFlag() { g_inTaskbarArrangeOverride = false; }
+    };
 
-    HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
-        pThis, context, size, resultSize);
-
-    g_inTaskbarArrangeOverride = false;
+    HRESULT ret;
+    {
+        ScopedArrangeOverrideFlag scopedFlag;
+        ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
+            pThis, context, size, resultSize);
+    }
 
     static ULONGLONG lastStatsLog;
     ULONGLONG now = GetTickCount64();
@@ -2034,6 +2225,20 @@ void InvalidateTaskbarLayout() {
     }
 }
 
+// One-shot: fires once the throttle window below has gone quiet, applying
+// whatever position a drag/move most recently landed on. See its arm site
+// in WinEventProc for why this exists.
+void CALLBACK DragFollowTrailingTimerProc(HWND hwnd,
+                                          UINT uMsg,
+                                          UINT_PTR idEvent,
+                                          DWORD dwTime) {
+    KillTimer(nullptr, idEvent);
+    g_dragFollowTrailingTimerId = 0;
+
+    g_winEventInvalidateCount++;
+    InvalidateTaskbarLayout();
+}
+
 void CALLBACK WinEventProc(HWINEVENTHOOK hook,
                            DWORD event,
                            HWND hwnd,
@@ -2056,9 +2261,29 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     static ULONGLONG lastInvalidate;
     ULONGLONG now = GetTickCount64();
     if (now - lastInvalidate < 150) {
+        // The throttle above is leading-edge only, so the final
+        // location-change event of a drag/move - the one carrying its
+        // actual release position - is routinely the one that lands
+        // inside this window and gets dropped, since a drag generates a
+        // continuous event stream right up to release. Without this, the
+        // icon can be left classified by a stale mid-drag position until
+        // some unrelated window happens to move. Re-arm a short one-shot
+        // timer on every throttled event so it always fires once the
+        // burst actually goes quiet, applying the final position. Runs on
+        // this same dedicated WinEventHook thread (see
+        // g_dragFollowTrailingTimerId's comment).
+        if (g_dragFollowTrailingTimerId) {
+            KillTimer(nullptr, g_dragFollowTrailingTimerId);
+        }
+        g_dragFollowTrailingTimerId =
+            SetTimer(nullptr, 0, 200, DragFollowTrailingTimerProc);
         return;
     }
     lastInvalidate = now;
+    if (g_dragFollowTrailingTimerId) {
+        KillTimer(nullptr, g_dragFollowTrailingTimerId);
+        g_dragFollowTrailingTimerId = 0;
+    }
 
     g_winEventInvalidateCount++;
     InvalidateTaskbarLayout();
@@ -2246,52 +2471,92 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 // Mod lifecycle
 // ============================================================================
 
-// WINEVENT_OUTOFCONTEXT delivers its callback on whichever thread called
-// SetWinEventHook, and only if that thread pumps messages. Wh_ModAfterInit
-// doesn't reliably run on the taskbar's own message-pumping UI thread (the
-// raw=0 counter in the logs confirms the callback never fired at all), so
-// registration is marshaled onto g_hTaskbarWnd's thread via
-// RunFromWindowThread, same technique already used for XAML tree access.
+// EVENT_OBJECT_LOCATIONCHANGE fires for every window move on the entire
+// system, not just windows this mod cares about - "thousands of raw
+// events within seconds" has been observed from something on the system
+// spamming it. WINEVENT_OUTOFCONTEXT delivers those callbacks on whichever
+// thread called SetWinEventHook, and only if that thread pumps messages.
+// Registering on g_hTaskbarWnd's own thread (as an earlier version of this
+// function did, via RunFromWindowThread) put every one of those events -
+// plus WinEventProc's IsWindowVisible/GetAncestor/GetWindow calls on each
+// one, all before the 150ms throttle even applies - in direct contention
+// with the shell's own layout work on the one thread responsible for it.
+// A dedicated mod-owned thread with its own message loop (the pattern
+// taskbar-background-helper.wh.cpp and
+// taskbar-auto-hide-when-maximized.wh.cpp both use for the same kind of
+// global WinEventHook) keeps all of that off the shell's thread entirely -
+// InvalidateTaskbarLayout already marshals onto the taskbar thread for the
+// one thing that actually needs to run there.
+DWORD WINAPI WinEventHookThreadProc(LPVOID) {
+    // Forces this thread's message queue into existence before
+    // SetWinEventHook runs, so WINEVENT_OUTOFCONTEXT has somewhere to
+    // deliver callbacks to as soon as registration succeeds, rather than
+    // racing the GetMessage loop below into existence.
+    MSG msg;
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    // Deliberately NOT using WINEVENT_SKIPOWNPROCESS: File Explorer
+    // windows often run inside explorer.exe's own process, and that flag
+    // would silently drop their location-change events too. The taskbar's
+    // own windows are already excluded explicitly in WinEventProc.
+    g_locationChangeHook = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    Wh_Log(L"WinEventHookThreadProc: handle=%p (dedicated thread %lu)",
+           g_locationChangeHook, GetCurrentThreadId());
+    if (!g_locationChangeHook) {
+        Wh_Log(L"Failed to register location-change hook - live "
+               L"drag-follow will not work, but everything else still "
+               L"will");
+    }
+
+    // WM_APP (posted by StopWinEventHook) is this thread's shutdown
+    // signal - it has no window to route to, so it's read directly out of
+    // the queue rather than via a window procedure.
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_APP) {
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_locationChangeHook) {
+        UnhookWinEvent(g_locationChangeHook);
+        g_locationChangeHook = nullptr;
+    }
+
+    return 0;
+}
+
+HANDLE g_winEventThread;
+DWORD g_winEventThreadId;
+
 void StartWinEventHook() {
-    if (g_locationChangeHook || !g_hTaskbarWnd) {
+    if (g_winEventThread) {
         return;
     }
 
-    RunFromWindowThread(g_hTaskbarWnd, [] {
-        if (g_locationChangeHook) {
-            return;
-        }
-
-        // Deliberately NOT using WINEVENT_SKIPOWNPROCESS: File Explorer
-        // windows often run inside explorer.exe's own process, and that
-        // flag would silently drop their location-change events too. The
-        // taskbar's own windows are already excluded explicitly in
-        // WinEventProc.
-        g_locationChangeHook = SetWinEventHook(
-            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-            WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-        Wh_Log(L"StartWinEventHook: handle=%p (registered on taskbar thread "
-               L"%lu)",
-               g_locationChangeHook, GetCurrentThreadId());
-        if (!g_locationChangeHook) {
-            Wh_Log(L"Failed to register location-change hook - live "
-                   L"drag-follow will not work, but everything else still "
-                   L"will");
-        }
-    });
+    g_winEventThread = CreateThread(nullptr, 0, WinEventHookThreadProc,
+                                    nullptr, 0, &g_winEventThreadId);
+    if (!g_winEventThread) {
+        Wh_Log(L"StartWinEventHook: CreateThread failed");
+    }
 }
 
 // RunFromWindowThread can only fail two ways: the taskbar's thread is
 // already gone (GetWindowThreadProcessId returns 0 - in which case the
-// OS already tore down any timer/hook that thread owned, so there's
-// nothing left to clean up), or its own internal SetWindowsHookEx call
-// failed (rare, e.g. transient resource exhaustion) while the thread is
-// still very much alive. That second case is the dangerous one: nothing
-// under mod control runs on the taskbar thread to unregister the real
-// WinEventHook/timer, Wh_ModUninit returns anyway, Windhawk unmaps this
+// OS already tore down any timer that thread owned, so there's nothing
+// left to clean up), or its own internal SetWindowsHookEx call failed
+// (rare, e.g. transient resource exhaustion) while the thread is still
+// very much alive. That second case is the dangerous one: nothing under
+// mod control runs on the taskbar thread to unregister the real
+// HWND-resolve timer, Wh_ModUninit returns anyway, Windhawk unmaps this
 // module's code, and the still-alive thread's next tick calls into
 // unmapped memory. A few retries gives that transient failure a chance to
 // clear without risking an unbounded stall if the thread really is gone.
+// (The WinEventHook itself no longer goes through this - see
+// StopWinEventHook, which owns its thread outright instead.)
 bool RunFromWindowThreadWithRetry(HWND hWnd, RunFromWindowThreadProc_t proc) {
     for (int attempt = 0; attempt < 3; attempt++) {
         if (RunFromWindowThread(hWnd, proc)) {
@@ -2305,27 +2570,27 @@ bool RunFromWindowThreadWithRetry(HWND hWnd, RunFromWindowThreadProc_t proc) {
     return false;
 }
 
+// Unlike the RunFromWindowThread-based teardowns below (which depend on
+// g_hTaskbarWnd's thread still being alive and responsive), this thread is
+// entirely mod-owned: PostThreadMessage can't silently fail the way a
+// marshaled call onto someone else's thread can, and waiting for the
+// thread to actually exit (rather than just requesting it) guarantees
+// UnhookWinEvent has already run, on the thread that registered it, by
+// the time this returns - before Windhawk unmaps this module's code.
 void StopWinEventHook() {
-    if (!g_locationChangeHook) {
+    if (!g_winEventThread) {
         return;
     }
 
-    HWINEVENTHOOK hook = g_locationChangeHook;
-    g_locationChangeHook = nullptr;
-
-    if (g_hTaskbarWnd) {
-        // See RunFromWindowThreadWithRetry's comment for why a bounded
-        // retry, rather than falling back to an inline UnhookWinEvent
-        // here - that's documented as unsafe from the wrong thread, so
-        // it would just trade one crash class for another.
-        if (!RunFromWindowThreadWithRetry(g_hTaskbarWnd,
-                                          [hook] { UnhookWinEvent(hook); })) {
-            Wh_Log(L"StopWinEventHook: RunFromWindowThread failed, "
-                   L"location-change hook left registered");
-        }
-    } else {
-        UnhookWinEvent(hook);
+    PostThreadMessage(g_winEventThreadId, WM_APP, 0, 0);
+    if (WaitForSingleObject(g_winEventThread, 2000) != WAIT_OBJECT_0) {
+        Wh_Log(L"StopWinEventHook: thread did not exit in time, "
+               L"location-change hook may be left registered");
     }
+
+    CloseHandle(g_winEventThread);
+    g_winEventThread = nullptr;
+    g_winEventThreadId = 0;
 }
 
 // Not 1: this is a window (Shell_TrayWnd) the mod doesn't own, shared with
@@ -2336,29 +2601,89 @@ void StopWinEventHook() {
 // classic-taskbar-properties.wh.cpp's kTimerIdMasterLayout).
 constexpr UINT_PTR kButtonHwndResolveTimerId = 0x8C3F;
 
+// How long until the next resolve attempt could possibly do anything
+// useful, based only on g_buttonHwndCache's already-recorded state - no
+// XAML/tree access, just a scan of an in-memory map, so this is cheap
+// enough to call after every timer tick. Mirrors the same backoff formula
+// ResolvePendingButtonHwnds uses to decide needsResolve for an existing
+// entry. Returns INFINITE when nothing currently unresolved is cached, in
+// which case the timer simply doesn't re-arm and stays off until
+// something else requests an attempt - either the ArrangeOverride hook's
+// button-count-change check (a brand-new button isn't in this cache at
+// all yet, so this function has no way to know about it on its own) or a
+// live element's cache entry going stale.
+DWORD NextResolveDelayMs() {
+    ULONGLONG now = GetTickCount64();
+    bool anyPending = false;
+    ULONGLONG earliestDue = 0;
+
+    for (auto& kv : g_buttonHwndCache) {
+        const ButtonHwndCacheEntry& entry = kv.second;
+        if (entry.hwnd) {
+            continue;
+        }
+        int shift = std::min(entry.consecutiveFailures, 4);
+        ULONGLONG dueAt = entry.lastAttempt + (2000ULL << shift);
+        if (!anyPending || dueAt < earliestDue) {
+            earliestDue = dueAt;
+            anyPending = true;
+        }
+    }
+
+    if (!anyPending) {
+        return INFINITE;
+    }
+
+    return earliestDue > now ? (DWORD)(earliestDue - now) : 0;
+}
+
 void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
                                          UINT uMsg,
                                          UINT_PTR idEvent,
                                          DWORD dwTime) {
+    // Self-managing one-shot rather than a recurring interval: stop first,
+    // do the actual work, then only re-arm if there's a concrete reason
+    // to. Without this, the timer would fire at a fixed cadence forever -
+    // running the full resolve pass (XamlRoot lookup, a visual-tree walk,
+    // a click-sentinel probe per due button) even while everything is
+    // already resolved and nothing has changed, which was flagged as a
+    // real objection on submissions here.
+    KillTimer(hwnd, kButtonHwndResolveTimerId);
+
     ResolvePendingButtonHwnds();
+
+    DWORD delay = NextResolveDelayMs();
+    if (delay != INFINITE) {
+        SetTimer(hwnd, kButtonHwndResolveTimerId, delay,
+                 ButtonHwndResolveTimerProc);
+    }
 }
 
 // SetTimer's callback fires on whichever thread registered it, so this is
-// marshaled onto g_hTaskbarWnd's own thread just like StartWinEventHook -
-// both KillTimer and (for reliability) SetTimer itself are documented to
-// need to run on the thread that owns the timer.
-void StartButtonHwndResolveTimer() {
+// marshaled onto g_hTaskbarWnd's own thread - both KillTimer and (for
+// reliability) SetTimer itself are documented to need to run on the
+// thread that owns the timer.
+void ArmButtonHwndResolveTimer(DWORD delayMs) {
     if (!g_hTaskbarWnd) {
         return;
     }
 
-    if (!RunFromWindowThread(g_hTaskbarWnd, [] {
-            SetTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId, 500,
+    if (!RunFromWindowThread(g_hTaskbarWnd, [delayMs] {
+            SetTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId, delayMs,
                      ButtonHwndResolveTimerProc);
         })) {
-        Wh_Log(L"StartButtonHwndResolveTimer: RunFromWindowThread failed, "
+        Wh_Log(L"ArmButtonHwndResolveTimer: RunFromWindowThread failed, "
                L"HWND resolution will not run");
     }
+}
+
+// Kicks off an initial resolve attempt shortly after the taskbar window
+// resolves, so buttons already present at mod startup get picked up -
+// after that, NextResolveDelayMs and the ArrangeOverride hook's
+// button-count-change check keep the timer armed only for as long as
+// there's actually something to do.
+void StartButtonHwndResolveTimer() {
+    ArmButtonHwndResolveTimer(100);
 }
 
 void StopButtonHwndResolveTimer() {
@@ -2366,8 +2691,8 @@ void StopButtonHwndResolveTimer() {
         return;
     }
 
-    // See StopWinEventHook's comment - same reasoning against an inline
-    // fallback call applies to KillTimer from the wrong thread.
+    // See RunFromWindowThreadWithRetry's own comment for why a bounded
+    // retry rather than an inline KillTimer from the wrong thread here.
     if (!RunFromWindowThreadWithRetry(g_hTaskbarWnd, [] {
             KillTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId);
         })) {
@@ -2444,14 +2769,25 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // LoadSettings() reassigns g_settings.leftApps/rightApps
-    // (std::vector<std::wstring>) - marshaled onto the taskbar's own
-    // thread so a concurrent ContainsAnyFragment call during a layout
-    // pass on that thread can't read a vector mid-reassignment.
+    // Read every setting on this calling thread first -
+    // Wh_Get/FreeStringSetting don't touch XAML/COM, so they don't need
+    // to run on the taskbar thread at all. Only the final assignment into
+    // g_settings is marshaled: it reassigns leftApps/rightApps
+    // (std::vector<std::wstring>), which a concurrent ContainsAnyFragment
+    // call during a layout pass on the taskbar thread could otherwise
+    // read mid-reassignment. Doing the reads here means the RunFromWindowThread
+    // call below blocks the taskbar thread (which may be in the middle of
+    // handling this via WH_CALLWNDPROC/SendMessage) for a plain struct
+    // move instead of several setting reads plus string work.
+    ModSettings settings = LoadSettingsFromStore();
+
     if (g_hTaskbarWnd) {
-        RunFromWindowThread(g_hTaskbarWnd, [] { LoadSettings(); });
+        RunFromWindowThread(g_hTaskbarWnd,
+                            [settings = std::move(settings)]() mutable {
+                                g_settings = std::move(settings);
+                            });
     } else {
-        LoadSettings();
+        g_settings = std::move(settings);
     }
 
     InvalidateTaskbarLayout();
