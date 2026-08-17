@@ -97,11 +97,13 @@ hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. The mod waits until supported XAML UI appears before connecting.
-Temporarily unavailable connections are retried with bounded pauses, while
-repeated hard failures are abandoned. Connections blocked by another
-diagnostics consumer aren't retried automatically. An established connection
-can be restored after its XAML host disappears. If the modern path can't be
-initialized, enabled classic menus and tooltips remain active.
+Temporarily unavailable connections are retried with bounded pauses; after
+those automatic retries are exhausted, a later host window or module load can
+still trigger another attempt. Repeated hard failures are abandoned.
+Connections blocked by another diagnostics consumer aren't retried
+automatically. An established connection can be restored after its XAML host
+disappears. If the modern path can't be initialized, enabled classic menus and
+tooltips remain active.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, an intercepted connection attempt can show a confirmation dialog;
 if the tool blocks it by returning success, the walk stops and this mod marks
@@ -1868,9 +1870,13 @@ enum class XamlDiagnosticsFlavor {
 constexpr int kXamlDiagnosticsConnectionLimit = 64;
 constexpr unsigned int kXamlDiagnosticsMaxAttempts = 3;
 // Pause after five empty walks in one startup burst. A later host or module
-// event can resume probing after this cooldown.
+// event, or the cooldown expiring, can resume probing.
 constexpr unsigned int kXamlDiagnosticsMaxEmptyWalks = 5;
 constexpr uint64_t kXamlDiagnosticsEmptyWalkCooldownMilliseconds = 30'000;
+// The worker retries a cooling-down flavor on its own after each cooldown, but
+// stops after this many rounds so a permanently absent XAML core doesn't turn
+// into an endless 30-second polling loop.
+constexpr unsigned int kXamlDiagnosticsMaxCooldownRetries = 3;
 
 struct XamlDiagnosticsConnectionState {
     std::atomic_bool connected{false};
@@ -1879,6 +1885,7 @@ struct XamlDiagnosticsConnectionState {
     std::atomic_uint processedGeneration{0};
     std::atomic_uint failureCount{0};
     std::atomic_uint emptyWalkCount{0};
+    std::atomic_uint cooldownRetryCount{0};
     std::atomic_uint64_t lastEmptyWalkTick{0};
 };
 
@@ -1907,6 +1914,14 @@ bool CanAttemptXamlDiagnosticsConnection(
            HasXamlDiagnosticsEmptyWalkBudget(state, currentTick);
 }
 
+bool IsXamlDiagnosticsFlavorCoolingDown(
+    const XamlDiagnosticsConnectionState& state,
+    uint64_t currentTick = GetTickCount64()) {
+    return state.emptyWalkCount.load(std::memory_order_acquire) >=
+               kXamlDiagnosticsMaxEmptyWalks &&
+           !HasXamlDiagnosticsEmptyWalkBudget(state, currentTick);
+}
+
 bool RefreshXamlDiagnosticsEmptyWalkBudget(
     XamlDiagnosticsConnectionState& state,
     uint64_t currentTick) {
@@ -1918,8 +1933,9 @@ bool RefreshXamlDiagnosticsEmptyWalkBudget(
         return true;
     }
 
-    state.lastEmptyWalkTick.store(0, std::memory_order_relaxed);
+    state.lastEmptyWalkTick.store(0, std::memory_order_release);
     state.emptyWalkCount.store(0, std::memory_order_release);
+    state.cooldownRetryCount.store(0, std::memory_order_release);
     Wh_Log(L"Resuming XAML diagnostics probes after the empty-walk "
            L"cooldown");
     return true;
@@ -2383,20 +2399,23 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
             GetProcAddress(xamlModule,
                            "InitializeXamlDiagnosticsEx"));
     if (!initialize) {
-        return HRESULT_FROM_WIN32(GetLastError());
+        return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
 
     const HMODULE module = GetCurrentModuleHandle();
     if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
+        return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     }
 
     wchar_t modulePath[MAX_PATH];
     const DWORD pathLength =
         GetModuleFileNameW(module, modulePath,
                            ARRAYSIZE(modulePath));
-    if (!pathLength || pathLength == ARRAYSIZE(modulePath)) {
-        return HRESULT_FROM_WIN32(GetLastError());
+    if (!pathLength) {
+        return E_FAIL;
+    }
+    if (pathLength == ARRAYSIZE(modulePath)) {
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
     }
 
     HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
@@ -2455,6 +2474,7 @@ void EnsureXamlDiagnosticsConnection(
             state.connected.store(true, std::memory_order_release);
             state.failureCount.store(0, std::memory_order_release);
             state.emptyWalkCount.store(0, std::memory_order_release);
+            state.cooldownRetryCount.store(0, std::memory_order_release);
             state.lastEmptyWalkTick.store(0, std::memory_order_release);
             Wh_Log(L"Connected to %s diagnostics", displayName);
         } else {
@@ -2515,15 +2535,91 @@ void EnsureModernXamlDiagnostics(bool requestWindows,
     }
 }
 
+bool AnyXamlDiagnosticsFlavorCoolingDown(uint64_t currentTick) {
+    return IsXamlDiagnosticsFlavorCoolingDown(
+               g_windowsUiXamlDiagnostics, currentTick) ||
+           IsXamlDiagnosticsFlavorCoolingDown(
+               g_microsoftUiXamlDiagnostics, currentTick);
+}
+
+DWORD XamlDiagnosticsWorkerTimeout(uint64_t currentTick) {
+    if (!AnyXamlDiagnosticsFlavorCoolingDown(currentTick)) {
+        return INFINITE;
+    }
+
+    DWORD timeout = INFINITE;
+    for (const XamlDiagnosticsConnectionState* state : {
+             &g_windowsUiXamlDiagnostics,
+             &g_microsoftUiXamlDiagnostics}) {
+        if (!IsXamlDiagnosticsFlavorCoolingDown(*state, currentTick)) {
+            continue;
+        }
+
+        const uint64_t lastEmptyWalkTick =
+            state->lastEmptyWalkTick.load(std::memory_order_acquire);
+        const uint64_t elapsed =
+            currentTick >= lastEmptyWalkTick
+                ? currentTick - lastEmptyWalkTick
+                : 0;
+        const uint64_t remaining =
+            kXamlDiagnosticsEmptyWalkCooldownMilliseconds - elapsed;
+        const DWORD candidate =
+            static_cast<DWORD>(remaining > 0 ? remaining : 1);
+        if (candidate < timeout) {
+            timeout = candidate;
+        }
+    }
+    return timeout;
+}
+
+void RetryXamlDiagnosticsAfterCooldown() {
+    const uint64_t currentTick = GetTickCount64();
+    for (XamlDiagnosticsConnectionState* state : {
+             &g_windowsUiXamlDiagnostics,
+             &g_microsoftUiXamlDiagnostics}) {
+        if (!CanAttemptXamlDiagnosticsConnection(*state, currentTick) ||
+            state->cooldownRetryCount.load(std::memory_order_acquire) >=
+                kXamlDiagnosticsMaxCooldownRetries) {
+            continue;
+        }
+
+        // The cooldown elapsed without a new host or module event, so retry
+        // this flavor once. Count the retry before the attempt; a successful
+        // connection resets the count.
+        state->cooldownRetryCount.fetch_add(1, std::memory_order_acq_rel);
+        const LPCWSTR displayName =
+            state == &g_windowsUiXamlDiagnostics ? L"Windows.UI.Xaml"
+                                                 : L"Microsoft.UI.Xaml";
+        Wh_Log(L"Retrying %s diagnostics after the empty-walk cooldown",
+               displayName);
+        if (state == &g_windowsUiXamlDiagnostics) {
+            EnsureXamlDiagnosticsConnection(
+                *state, L"Windows.UI.Xaml.dll", L"VisualDiagConnection",
+                L"Windows.UI.Xaml", XamlDiagnosticsFlavor::Windows);
+        } else {
+            EnsureXamlDiagnosticsConnection(
+                *state, L"Microsoft.Internal.FrameworkUdk.dll",
+                L"WinUIVisualDiagConnection", L"Microsoft.UI.Xaml",
+                XamlDiagnosticsFlavor::Microsoft);
+        }
+    }
+}
+
 DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
     const HANDLE wakeEvent = static_cast<HANDLE>(parameter);
     const HRESULT initializeResult =
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     for (;;) {
-        const DWORD waitResult =
-            WaitForSingleObject(wakeEvent, INFINITE);
+        const uint64_t waitStartedTick = GetTickCount64();
+        const DWORD waitResult = WaitForSingleObject(
+            wakeEvent, XamlDiagnosticsWorkerTimeout(waitStartedTick));
         if (g_stoppingModernUi.load(std::memory_order_acquire)) {
             break;
+        }
+
+        if (waitResult == WAIT_TIMEOUT) {
+            RetryXamlDiagnosticsAfterCooldown();
+            continue;
         }
 
         if (waitResult != WAIT_OBJECT_0) {
@@ -2604,6 +2700,7 @@ void RearmXamlDiagnosticsConnection(
     state->blocked.store(false, std::memory_order_release);
     state->failureCount.store(0, std::memory_order_release);
     state->emptyWalkCount.store(0, std::memory_order_release);
+    state->cooldownRetryCount.store(0, std::memory_order_release);
     state->lastEmptyWalkTick.store(0, std::memory_order_release);
     state->processedGeneration.store(
         state->requestGeneration.load(std::memory_order_acquire),
@@ -2782,6 +2879,8 @@ void NotifyModernXamlHost(HWND window, LPCWSTR className = nullptr) {
 }
 
 BOOL CALLBACK EnumExistingModernXamlHostWindow(HWND window, LPARAM) {
+    // Stop only this top-level window's child walk; EnumWindows continues with
+    // the next top-level window.
     if (!NeedsAnyXamlDiagnosticsHostNotification()) {
         return FALSE;
     }
@@ -2795,6 +2894,7 @@ BOOL CALLBACK EnumExistingModernXamlHostWindow(HWND window, LPARAM) {
 }
 
 BOOL CALLBACK EnumExistingModernXamlTopLevelWindow(HWND window, LPARAM) {
+    // Stop the whole EnumWindows walk once no flavor can accept a notification.
     if (!NeedsAnyXamlDiagnosticsHostNotification()) {
         return FALSE;
     }
@@ -3062,6 +3162,7 @@ bool InitializeModernUi() {
         state->processedGeneration.store(0, std::memory_order_release);
         state->failureCount.store(0, std::memory_order_release);
         state->emptyWalkCount.store(0, std::memory_order_release);
+        state->cooldownRetryCount.store(0, std::memory_order_release);
         state->lastEmptyWalkTick.store(0, std::memory_order_release);
     }
     g_visualTreeWatcherGeneration.store(
