@@ -345,6 +345,7 @@ struct DevicesHeaderEventState {
     winrt::weak_ref<muxc::Button> button;
     winrt::weak_ref<muxc::GridView> grid;
     winrt::event_token clickToken;
+    winrt::event_token themeChangedToken;
     bool expanded = true;
 };
 
@@ -371,6 +372,7 @@ thread_local std::vector<HomeSelectionEventState>
 void RequestDriveRefresh(uint32_t refreshKinds = kDriveRefreshTopology);
 void RequestInitialDriveSnapshot();
 void RefreshDevicesSectionsForCurrentThread();
+void RefreshThemedVisualsForCurrentThread();
 void EnsureShellNotificationsForCurrentThread();
 std::vector<HWND> GetFileExplorerWindows();
 void ClearDriveCardEventHandlersForCurrentThread();
@@ -953,6 +955,12 @@ UINT GetFocusDriveRenameMessage() {
 UINT GetInvokeDrivePropertiesMessage() {
     static const UINT message = RegisterWindowMessageW(
         L"Windhawk_InvokeDriveProperties_" WH_MOD_ID);
+    return message;
+}
+
+UINT GetToggleDevicesExpandedMessage() {
+    static const UINT message = RegisterWindowMessageW(
+        L"Windhawk_ToggleDevicesExpanded_" WH_MOD_ID);
     return message;
 }
 
@@ -1571,6 +1579,14 @@ bool ShowDriveContextMenu(HWND owner,
             _wcsicmp(canonicalVerb, L"rename") == 0 &&
             rootPaths.size() == 1) {
             *renameRequested = true;
+            // Catches up a refresh that RefreshDevicesGridPreservingState
+            // deferred while this menu was open (see
+            // g_openContextMenuCount there) -- otherwise it stays lost,
+            // since the window message that would have applied it was
+            // already dispatched and handled while deferring.
+            if (owner) {
+                PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
+            }
             return true;
         }
 
@@ -1601,6 +1617,11 @@ bool ShowDriveContextMenu(HWND owner,
         }
     }
 
+    // Same catch-up as the rename-requested return above, for the
+    // interactive-popup and other-command-invoked paths.
+    if (owner) {
+        PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
+    }
     return true;
 }
 
@@ -2023,16 +2044,26 @@ void DriveRenameBox_KeyDown(
     }
 
     args.Handled(true);
-    CompleteDriveRename(sender.as<muxc::TextBox>(),
-                        args.Key() ==
-                            winrt::Windows::System::VirtualKey::Enter,
-                        true);
+    try {
+        CompleteDriveRename(sender.as<muxc::TextBox>(),
+                            args.Key() ==
+                                winrt::Windows::System::VirtualKey::Enter,
+                            true);
+    } catch (...) {
+        Wh_Log(L"Couldn't complete the drive rename: %08X",
+               winrt::to_hresult().value);
+    }
 }
 
 void DriveRenameBox_LostFocus(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::RoutedEventArgs const&) {
-    CompleteDriveRename(sender.as<muxc::TextBox>(), true, false);
+    try {
+        CompleteDriveRename(sender.as<muxc::TextBox>(), true, false);
+    } catch (...) {
+        Wh_Log(L"Couldn't complete the drive rename: %08X",
+               winrt::to_hresult().value);
+    }
 }
 
 void DriveCard_DoubleTapped(
@@ -2045,52 +2076,61 @@ void DriveCard_DoubleTapped(
 void DriveCard_KeyDown(
     winrt::Windows::Foundation::IInspectable const& sender,
     muxi::KeyRoutedEventArgs const& args) {
-    auto item = sender.as<muxc::GridViewItem>();
-    if (args.Key() == winrt::Windows::System::VirtualKey::F2) {
-        args.Handled(true);
-        BeginDriveRename(item);
-        return;
-    }
-
-    bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    bool altDown = args.KeyStatus().IsMenuKeyDown ||
-                   (GetKeyState(VK_MENU) & 0x8000) != 0;
-    bool contextMenuKey =
-        args.Key() == winrt::Windows::System::VirtualKey::Application ||
-        (args.Key() == winrt::Windows::System::VirtualKey::F10 &&
-         shiftDown);
-    // AltGr registers as right-Alt plus left-Ctrl, so
-    // DriveKeyboardGetMessageHookProc's Ctrl-excluding Alt+Enter check never
-    // matches it; this routed-input path is what catches that case.
-    bool propertiesKey =
-        args.Key() == winrt::Windows::System::VirtualKey::Enter && altDown;
-    if (contextMenuKey || propertiesKey) {
-        args.Handled(true);
-        SelectDriveCard(item);
-        HWND owner = GetExplorerWindowForCurrentThread();
-        if (!owner) {
-            Wh_Log(L"Couldn't locate the Explorer window for the drive menu");
+    try {
+        auto item = sender.as<muxc::GridViewItem>();
+        if (args.Key() == winrt::Windows::System::VirtualKey::F2) {
+            args.Handled(true);
+            BeginDriveRename(item);
             return;
         }
 
-        auto rootPaths = GetSelectedDriveRootPaths(item);
-        POINT screenPoint = GetDriveKeyboardMenuPoint(item, owner);
-        bool renameRequested = false;
-        ShowDriveContextMenu(owner, rootPaths, screenPoint,
-                             &renameRequested,
-                             propertiesKey ? L"properties" : L"");
-        if (renameRequested && !g_unloading.load()) {
-            BeginDriveRename(item);
+        bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool altDown = args.KeyStatus().IsMenuKeyDown ||
+                       (GetKeyState(VK_MENU) & 0x8000) != 0;
+        bool contextMenuKey =
+            args.Key() == winrt::Windows::System::VirtualKey::Application ||
+            (args.Key() == winrt::Windows::System::VirtualKey::F10 &&
+             shiftDown);
+        // AltGr registers as right-Alt plus left-Ctrl, so
+        // DriveKeyboardGetMessageHookProc's Ctrl-excluding Alt+Enter check
+        // never matches it; this routed-input path is what catches that
+        // case.
+        bool propertiesKey = args.Key() ==
+                                  winrt::Windows::System::VirtualKey::Enter &&
+                              altDown;
+        if (contextMenuKey || propertiesKey) {
+            args.Handled(true);
+            SelectDriveCard(item);
+            HWND owner = GetExplorerWindowForCurrentThread();
+            if (!owner) {
+                Wh_Log(
+                    L"Couldn't locate the Explorer window for the drive "
+                    L"menu");
+                return;
+            }
+
+            auto rootPaths = GetSelectedDriveRootPaths(item);
+            POINT screenPoint = GetDriveKeyboardMenuPoint(item, owner);
+            bool renameRequested = false;
+            ShowDriveContextMenu(owner, rootPaths, screenPoint,
+                                 &renameRequested,
+                                 propertiesKey ? L"properties" : L"");
+            if (renameRequested && !g_unloading.load()) {
+                BeginDriveRename(item);
+            }
+            return;
         }
-        return;
-    }
 
-    if (args.Key() != winrt::Windows::System::VirtualKey::Enter) {
-        return;
-    }
+        if (args.Key() != winrt::Windows::System::VirtualKey::Enter) {
+            return;
+        }
 
-    args.Handled(true);
-    OpenDriveCard(item);
+        args.Handled(true);
+        OpenDriveCard(item);
+    } catch (...) {
+        Wh_Log(L"Couldn't handle the drive card key press: %08X",
+               winrt::to_hresult().value);
+    }
 }
 
 void DriveCard_RightTapped(
@@ -2195,6 +2235,12 @@ winrt::fire_and_forget PopulateDriveDragData(
         }
 
         if (g_unloading.load() || storageItems.Size() == 0) {
+            // DropCompleted, the only other place that clears
+            // g_driveCardDragInProgress, is documented to fire when a
+            // drag-and-drop operation *with this element as the source
+            // ends* -- a drag cancelled here never becomes one, so it's
+            // never raised and the flag would otherwise stay stuck true.
+            g_driveCardDragInProgress = false;
             args.Cancel(true);
         } else {
             args.Data().SetStorageItems(storageItems);
@@ -2204,6 +2250,7 @@ winrt::fire_and_forget PopulateDriveDragData(
         }
     } catch (...) {
         auto error = winrt::to_hresult().value;
+        g_driveCardDragInProgress = false;
         try {
             args.Cancel(true);
         } catch (...) {
@@ -2477,7 +2524,7 @@ winrt::fire_and_forget PerformDriveDrop(
 void DriveCard_Drop(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::DragEventArgs const& args) {
-    if (g_unloading.load()) {
+    if (g_unloading.load() || g_driveCardDragInProgress) {
         return;
     }
 
@@ -2914,7 +2961,14 @@ void RefreshDevicesGridPreservingState(
     muxc::GridView const& grid,
     DriveSnapshot const& drives,
     IFileExplorerNavigationControllerAbi* navigationController) {
-    if (IsDriveCardRenamingInGrid(grid)) {
+    // Also defers while a drive context menu is open or a Shell UI call
+    // (rename, InvokeCommand) is in flight: TrackPopupMenuEx and those
+    // calls all pump, so a refresh landing mid-interaction would otherwise
+    // tear down and recreate every GridViewItem underneath the open menu --
+    // ShowDriveContextMenu posts GetApplyDriveSnapshotMessage() on its way
+    // out, so the deferred refresh isn't lost, just delayed.
+    if (IsDriveCardRenamingInGrid(grid) || g_openContextMenuCount.load() > 0 ||
+        g_pendingShellUiCalls.load() > 0) {
         return;
     }
 
@@ -2934,11 +2988,20 @@ void RefreshDevicesGridPreservingState(
                 winrt::unbox_value<winrt::hstring>(gridViewItem.Tag())
                     .c_str());
         }
-        if (focusedRootPath.empty() &&
-            gridViewItem.FocusState() != mux::FocusState::Unfocused) {
-            focusedRootPath = winrt::unbox_value<winrt::hstring>(
-                                   gridViewItem.Tag())
-                                   .c_str();
+        // Same FocusManager check as FindFocusedDriveCard, not
+        // FocusState(): that reflects the item's own last-known state,
+        // which can go stale once focus has moved outside this XamlRoot
+        // entirely, and would otherwise make an automatic refresh call
+        // Focus(Programmatic) on a card the user isn't actually on.
+        if (focusedRootPath.empty()) {
+            if (auto xamlRoot = gridViewItem.XamlRoot()) {
+                if (muxi::FocusManager::GetFocusedElement(xamlRoot) ==
+                    gridViewItem) {
+                    focusedRootPath = winrt::unbox_value<winrt::hstring>(
+                                           gridViewItem.Tag())
+                                           .c_str();
+                }
+            }
         }
     }
 
@@ -2964,28 +3027,64 @@ void RefreshDevicesGridPreservingState(
 
 constexpr wchar_t kDevicesExpandedValueName[] = L"DevicesExpanded";
 
+// Applies the collapsed/expanded state to every devices header tracked on
+// the current thread -- used both for the thread that owns the clicked
+// button and for every other registered window catching up to it, so a
+// change in one Explorer window doesn't leave the rest stuck showing the
+// state from whenever their own section was last built.
+void ApplyDevicesExpandedState(bool expanded) {
+    for (auto& state : g_devicesHeaderEventStates) {
+        if (state.expanded == expanded) {
+            continue;
+        }
+        state.expanded = expanded;
+        if (auto grid = state.grid.get()) {
+            grid.Visibility(expanded ? mux::Visibility::Visible
+                                     : mux::Visibility::Collapsed);
+        }
+        if (auto button = state.button.get()) {
+            if (auto content = button.Content().try_as<muxc::Grid>()) {
+                for (auto const& child : content.Children()) {
+                    if (auto icon = child.try_as<muxc::FontIcon>()) {
+                        icon.Glyph(expanded ? L"\xE70D" : L"\xE76C");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 void DevicesHeader_Click(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::RoutedEventArgs const&) {
     auto button = sender.as<muxc::Button>();
 
-    for (auto& state : g_devicesHeaderEventStates) {
+    bool newExpanded = true;
+    bool found = false;
+    for (auto const& state : g_devicesHeaderEventStates) {
         if (state.button.get() == button) {
-            state.expanded = !state.expanded;
-            Wh_SetIntValue(kDevicesExpandedValueName, state.expanded ? 1 : 0);
-            if (auto grid = state.grid.get()) {
-                grid.Visibility(state.expanded ? mux::Visibility::Visible
-                                               : mux::Visibility::Collapsed);
-            }
-            if (auto content = button.Content().try_as<muxc::Grid>()) {
-                for (auto const& child : content.Children()) {
-                    if (auto icon = child.try_as<muxc::FontIcon>()) {
-                        icon.Glyph(state.expanded ? L"\xE70D" : L"\xE76C");
-                        break;
-                    }
-                }
-            }
-            return;
+            newExpanded = !state.expanded;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return;
+    }
+
+    Wh_SetIntValue(kDevicesExpandedValueName, newExpanded ? 1 : 0);
+    ApplyDevicesExpandedState(newExpanded);
+
+    std::vector<HWND> windows;
+    {
+        std::lock_guard lock(g_registeredWindowsMutex);
+        windows = g_registeredWindows;
+    }
+    for (HWND window : windows) {
+        if (IsWindow(window)) {
+            PostMessageW(window, GetToggleDevicesExpandedMessage(),
+                        newExpanded ? 1 : 0, 0);
         }
     }
 }
@@ -2995,6 +3094,14 @@ void ClearDevicesHeaderEventHandlersForCurrentThread() {
         if (auto button = state.button.get()) {
             try {
                 button.Click(state.clickToken);
+            } catch (...) {
+                Wh_Log(L"Devices header event cleanup failed: %08X",
+                       winrt::to_hresult().value);
+            }
+        }
+        if (auto grid = state.grid.get()) {
+            try {
+                grid.ActualThemeChanged(state.themeChangedToken);
             } catch (...) {
                 Wh_Log(L"Devices header event cleanup failed: %08X",
                        winrt::to_hresult().value);
@@ -3180,9 +3287,15 @@ void HomeSelection_PointerMoved(
     try {
         auto surface = sender.as<muxc::Grid>();
         auto state = FindHomeSelectionState(surface);
+        if (!state || !state->tracking) {
+            return;
+        }
+
+        // GetCurrentPoint has a real cost, so it's worth skipping on the
+        // common path above (most pointer moves over the Home page aren't
+        // an active marquee drag).
         auto point = args.GetCurrentPoint(surface);
-        if (!state || !state->tracking ||
-            state->pointerId != point.PointerId()) {
+        if (state->pointerId != point.PointerId()) {
             return;
         }
         if (!point.Properties().IsLeftButtonPressed()) {
@@ -3338,6 +3451,46 @@ void RefreshDevicesSectionsForCurrentThread() {
     }
 }
 
+// TryGetBrush()/ApplyBrushIfAvailable() are one-time resource lookups
+// assigned as local values -- a frozen snapshot, not a live {ThemeResource}
+// binding, which only compiled XAML gets. The native tiles don't set
+// Foreground locally at all (confirmed against a live tree dump); their
+// color comes from a Style's ThemeResource setter instead. Re-resolving on
+// ActualThemeChanged is the practical equivalent for code-built UI.
+void RefreshThemedVisualsForCurrentThread() {
+    for (auto& state : g_devicesHeaderEventStates) {
+        if (auto button = state.button.get()) {
+            if (auto brush = TryGetBrush(L"SubtleFillColorTransparentBrush")) {
+                button.Background(brush);
+            }
+            if (auto content = button.Content().try_as<muxc::Grid>()) {
+                for (auto const& child : content.Children()) {
+                    if (auto icon = child.try_as<muxc::FontIcon>()) {
+                        ApplyBrushIfAvailable(icon,
+                                              L"TextFillColorPrimaryBrush");
+                    } else if (auto text = child.try_as<muxc::TextBlock>()) {
+                        ApplyBrushIfAvailable(text,
+                                              L"TextFillColorPrimaryBrush");
+                    }
+                }
+            }
+        }
+    }
+
+    // Rebuilds from the already-cached snapshot (icon pixels included), no
+    // worker round-trip or disk/Shell I/O, so this is as fast as the native
+    // tiles updating.
+    RefreshDevicesSectionsForCurrentThread();
+}
+
+void DevicesGrid_ActualThemeChanged(
+    mux::FrameworkElement const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    if (!g_unloading.load()) {
+        RefreshThemedVisualsForCurrentThread();
+    }
+}
+
 muxc::StackPanel CreateDevicesSection() {
     for (auto it = g_devicesHeaderEventStates.begin();
          it != g_devicesHeaderEventStates.end();) {
@@ -3417,9 +3570,15 @@ muxc::StackPanel CreateDevicesSection() {
     section.Children().Append(driveGrid);
 
     auto clickToken = headerButton.Click(DevicesHeader_Click);
-    g_devicesHeaderEventStates.push_back(
-        {winrt::make_weak(headerButton), winrt::make_weak(driveGrid),
-         clickToken, expanded});
+    auto themeChangedToken =
+        driveGrid.ActualThemeChanged(DevicesGrid_ActualThemeChanged);
+    g_devicesHeaderEventStates.push_back({
+        .button = winrt::make_weak(headerButton),
+        .grid = winrt::make_weak(driveGrid),
+        .clickToken = clickToken,
+        .themeChangedToken = themeChangedToken,
+        .expanded = expanded,
+    });
     return section;
 }
 
@@ -4184,6 +4343,13 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND window, UINT message,
         return 0;
     }
 
+    if (message == GetToggleDevicesExpandedMessage()) {
+        if (!g_unloading.load()) {
+            ApplyDevicesExpandedState(wParam != 0);
+        }
+        return 0;
+    }
+
     if (message == WM_SETTINGCHANGE && !g_unloading.load()) {
         UpdateDriveSelectionCheckBoxesForCurrentThread();
     }
@@ -4448,11 +4614,9 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    // Not DrainModStateForUnload() again: Wh_ModBeforeUninit always runs
-    // first and already did the real work in it, while hooks were still
-    // active.
-    g_unloading.store(true);
-
+    // Not DrainModStateForUnload() again, and not another g_unloading.store:
+    // Wh_ModBeforeUninit always runs first, and DrainModStateForUnload
+    // already did both while hooks were still active.
     for (HWND window : GetFileExplorerWindows()) {
         if (!RunFromWindowThread(
                 window, RemoveDevicesSectionsForCurrentThreadProc, nullptr)) {
