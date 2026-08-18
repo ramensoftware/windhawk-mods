@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.8
+// @version         1.1.9
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -15,76 +15,49 @@
 /*
 # Win-X Hot Corners
 
-macOS-style hot corners **and screen edges** for Windows 10/11 with **full
-multi-monitor support**.
-
-Instantly trigger configurable actions when your cursor reaches any screen
-corner or edge. Configure different actions for each zone on each monitor
-independently.
+macOS-style hot corners **and screen edges** for Windows 10 and 11, with full
+multi-monitor support. Throw the pointer into a corner or against an edge and
+something happens — which corner, which edge, and what happens are all yours.
 
 ![Throwing the pointer into the top-left corner opens Task View](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/hot-corners.gif)
-
-The tray icon's **Zones & settings** window shows what each zone does on each
-display, and the timings actually in effect for whichever one you point at:
-
-![The Zones and settings window](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/dashboard.png)
 
 Inspired by [WinXCorners](https://github.com/vhanla/winxcorners), rebuilt as a
 Windhawk mod.
 
-### Related mods
+## Quick start
 
-If all you want is one specific behaviour, a smaller mod may suit you better:
+Everything lives on this mod's settings page. Out of the box no zone is
+configured, so nothing fires until you add one.
 
-- **edge-hot-corner-desktop-switch** — hovering the left or right screen edge
-  switches virtual desktop. This mod does that too, as one of the actions you
-  can assign, but if it is the only thing you are after that one is far
-  simpler.
-- **hotcorner-hotkeys** — sends a key combination from a corner. Different
-  trigger model: it dispatches on a hotkey rather than on hover.
+1. Open the settings page and add a **display**. Put `*` in the name field to
+   mean "every monitor" — you can get specific later.
+2. Add a **zone** to it, pick the corner or edge, and pick an action.
+3. Save. That is it; there is no restart.
 
-## Features
+A first set worth trying, if you want something concrete:
 
-- **Bounded latency** — a dedicated detection thread asks to sample the cursor
-  every 16 ms (one system timer tick, so 16-31 ms in practice) and only idles
-  when nothing could fire anyway. Nothing can starve it:
-  not a busy explorer, not an elevated foreground app, not a slow action.
-- **Zero impact on the rest of the system** — no global mouse hook, so your
-  games and apps keep their input path to themselves.
-- **Monitors identified by name** — zones bind to a display's friendly name
-  (e.g. `Dell U2720Q`), so rearranging your desktop or changing which display
-  is primary never reshuffles your configuration. (Two displays of the same
-  model are the one exception — see *Identifying your monitors*.)
-- **Per-monitor DPI correct** — detection runs per-monitor-DPI-aware, so
-  zones land in the right place on mixed-scaling setups.
-- **Screen edges, in three parts** — each edge is split into a start, a middle
-  and an end, configured separately. Give neighbouring parts the same action and
-  they merge back into one, so you get whichever of `ABC`, `AAB`, `ABB` or `AAA`
-  you want without a mode switch. See *Dividing an edge*.
-- **Five ways to trigger** — on arrival, after a dwell, on a double knock, only
-  while a modifier is held, or press-and-hold to peek. They combine freely, and
-  any of them works on any zone. See *Ways to trigger a zone*.
-- **Configurable zone size** and a cooldown timer.
-- **Fullscreen protection** — auto-detects games, presentations, and D3D
-  fullscreen apps.
-- **Drag protection** — zones don't fire while a mouse button is held.
-- **App exclusions** — blacklist processes that need corner/edge clicks.
+| Zone | Action | Why |
+| --- | --- | --- |
+| Top-left corner | Task View | The classic. Nothing else lives up there. |
+| Top-right corner | Show desktop, **Hold** set to *The same action again* | Peek at the desktop, move away to put it back. |
+| Bottom-left corner | Start menu | It is where the Start button already is. |
+| Bottom-right corner | Switch to last window | Set **Knock window** to `400` so a stray brush past it does nothing. |
 
-## Configuring
+Then read *Ways to trigger a zone* — the trigger style matters more than the
+action for whether this feels good or infuriating.
 
-**Settings page** — zones, timings and everything else. Add a display, then add
-the zones you want on it. A zone you do not list does nothing.
+## At a glance
 
-**Tray icon**, next to the clock:
-
-- **Left-click** — turn the hot corners on or off. The icon dims when they are off.
-- **Right-click** — suspend for a while, or reset the enable state.
-- **Right-click → Zones & settings...** — the dashboard: a tab per display,
-  a picture of that screen with each zone showing what it does, and the timings
-  actually in effect for whichever zone you point at.
-
-If the tray icon is hidden, it is in the overflow area — drag it onto the
-taskbar to keep it there.
+- **16 zones per display** — four corners, and four edges split into three
+  segments each.
+- **38 actions**, plus any key combination and any command you can name.
+- **Five trigger styles** that combine: arrival, dwell, knock, held modifier,
+  press-and-hold.
+- **Per-monitor everything** — zones bind to a display's name, not its position,
+  so rearranging screens never reshuffles your configuration.
+- **Stays out of the way** — no global mouse hook, so your games and apps keep
+  their input path to themselves. Suppressed automatically while a window is
+  fullscreen and while you are dragging.
 
 ## Ways to trigger a zone
 
@@ -177,7 +150,7 @@ right one, then the left again. Combine either with any trigger above.
 Above, the right edge is set to `Win+Up | Win+Down`: the first visit maximises
 the window and the next one puts it back.
 
-## Available Actions
+## Actions
 
 **Switching**
 
@@ -237,15 +210,53 @@ the window and the next one puts it back.
 | Custom Command | Launch any executable, path, or URL |
 | Nothing | Disabled (default) |
 
-## Dividing an edge
+### Arguments
+
+Four actions take an argument. The rest ignore the field.
+
+**Send key press** — one combination is `Modifier+Key`. Separate several with
+semicolons and they are sent **one after another**, not merged into a single
+chord: `Ctrl+C;Alt+Tab` sends Ctrl+C, then Alt+Tab.
+
+> Modifiers are Ctrl, Alt, Shift and Win. Keys are A-Z, 0-9, F1-F24, Enter,
+> Space, Tab, Escape, Home, End, Delete, the arrows, and so on.
+> Examples: `Ctrl+Shift+Esc`, `Alt+F4`, `Win+L`
+
+**Custom command** — any executable, file, folder or URL. Environment variables
+such as `%AppData%` are expanded. Prefix with `uac;` to request elevation.
+
+> Examples: `notepad.exe`, `C:\Windows\System32\cmd.exe`,
+> `%AppData%\my_script.bat`, `https://example.com`, `uac;cmd.exe`
+
+**Alternate key press** and **Alternate command** — two of the above separated
+by `|`. The zone fires the left one, then the right one, then the left again.
+
+> `Alt+S | Alt+H` — one corner shows notes, then hides them
+> `notepad.exe | calc.exe`
+
+Each side accepts everything the single version does, so `Ctrl+C;Ctrl+V |
+Alt+Tab` is valid. Every zone alternates independently, and the position resets
+whenever settings or the display layout change.
+
+## Shaping the zones
+
+**Corner size** is the side of the square you have to reach. **Edge thickness**
+is how far in the strip along an edge extends. Both are in pixels, both can be
+overridden per zone, and neither can make two zones overlap: each edge's
+thickness is clamped to the smaller of the two corners it runs between.
+
+Small is not always better. A 1-2 px corner is technically reachable, because
+the pointer stops dead at the screen boundary, but a 6-15 px one is far more
+forgiving on a high-DPI display without ever being hit by accident.
+
+### Each edge is three segments
 
 Every edge runs between the two corners it touches and is divided into three
-segments — for the top and bottom edge those are **left, centre, right**; for
-the left and right edge, **top, middle, bottom**. The centre segment's width is
-the *Edge centre width* setting, as a percentage of the edge.
+parts — for the top and bottom edge those are **left, centre, right**; for the
+left and right edge, **top, middle, bottom**. The centre's width is the *Edge
+centre width* setting, as a percentage of the edge.
 
-You do not choose a "mode". Configure the three segments and the mod works out
-the shape:
+You do not choose a "mode". Configure the three segments and the shape follows:
 
 | You set | You get |
 | --- | --- |
@@ -263,13 +274,24 @@ Merging is not cosmetic. Three separate zones all running Task View would each
 re-arm as the pointer crossed a seam, so sliding along the edge would fire it
 repeatedly; one merged zone fires once.
 
-## Identifying your monitors
+## Across multiple monitors
 
-The dashboard has one tab per display, labelled with its name, so normally there
-is nothing to identify — a display that is not plugged in keeps its tab, marked
-with a dot. The names also go to this mod's log every time it loads or your
-display layout changes, which is the place to copy an exact name from when you
-are filling in the settings page:
+Zones bind to a display's **name**, not its position, so rearranging your
+screens or changing which one is primary never repoints a configuration at the
+wrong monitor.
+
+Put `*` in the **Display** field to apply one configuration everywhere.
+Resolution is **per zone**: a name-matched entry wins for the zones it defines,
+and `*` supplies the rest — so you can share most of a layout and override a
+single corner on a single display. To remove a zone on one screen rather than
+replace it, set it to **Disabled here**; leaving it unset means "not
+configured", which falls through to `*`.
+
+### Finding a display's name
+
+The dashboard has a tab per display, labelled with its name, so usually there is
+nothing to look up. The names also go to this mod's log every time it loads or
+your layout changes, which is the place to copy an exact one from:
 
 ```
 +-- Your monitors ---------------------------------------
@@ -281,74 +303,55 @@ are filling in the settings page:
 +--------------------------------------------------------
 ```
 
-Copy the text inside the quotes. If you own two identical displays they get a
-` #2`, ` #3` suffix so each stays separately configurable. Those suffixes are
-handed out in listed order — primary first, then left to right — so unlike the
-names themselves they are not fixed: making the other twin primary swaps which
-one is ` #2`, and swaps the configuration with it. Check the log after such a
-change.
+Copy the text inside the quotes. Two identical displays get a ` #2`, ` #3`
+suffix so each stays separately configurable — but those suffixes are handed out
+in listed order (primary first, then left to right), so unlike the names
+themselves they can move. Making the other twin primary swaps which one is ` #2`
+and swaps the configuration with it. Check the log after a change like that.
 
-Putting `*` in the **Display** field applies one configuration to every screen.
+### Corners between two screens are a trap
 
-Resolution is **per zone**: a name-matched entry wins over `*` for the zones
-it defines, and `*` supplies the rest. So you can put a shared config on `*`
-and override just one corner on one display. To exclude a screen from a shared
-zone rather than replace it, set that zone to **Disabled here** — leaving it
-unset means "not configured", which falls through to `*`.
+Windows lets the pointer cross freely between adjacent monitors, so a corner on
+a shared boundary has nothing to stop the cursor against. It is hard to hit on
+purpose and easy to hit by accident. Prefer the outer perimeter of your
+arrangement — the pointer physically stops there, and that is what makes hot
+corners feel reliable on macOS.
 
-## A note on inner corners
+## The tray icon and dashboard
 
-Windows lets the pointer cross freely between adjacent monitors, so corners
-along a shared boundary have nothing to stop the cursor against. They are hard
-to hit on purpose and easy to hit by accident. Prefer the outer perimeter of
-your desktop arrangement — the pointer physically stops there, which is what
-makes hot corners feel reliable on macOS.
+![The Zones and settings window](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/dashboard.png)
 
-## Virtual Key Press Format
+**Right-click → Zones & settings…** opens the window above: a tab per display, a
+diagram of that screen with each zone's action drawn in it, and — for whichever
+zone you point at — the timings actually in effect, each marked *global* or
+*this zone*. It is a read-only picture of what the settings page produced, so it
+can never disagree with what actually fires.
 
-One combination is `Modifier+Key`. Separate several with semicolons and they
-are sent **one after another**, not merged into a single chord — `Ctrl+C;Alt+Tab`
-sends Ctrl+C, then Alt+Tab.
+**Left-click** turns the hot corners on and off; the icon dims when they are
+off. **Right-click** also offers a temporary suspend.
 
-**Modifiers:** Ctrl, Alt, Shift, Win
-**Keys:** A-Z, 0-9, F1-F24, Enter, Space, Tab, Escape, Home, End, Delete,
-Left, Right, Up, Down, etc.
+If the icon is hidden, it is in the overflow area — drag it onto the taskbar to
+keep it there.
 
-**Examples:** `Ctrl+Shift+Esc`, `Alt+F4`, `Win+L`
+## Staying out of your way
 
-## Alternate Key Press / Alternate Command
+Four separate guards, because a hot corner that fires while you are working is
+worse than one that never fires at all.
 
-Two actions separated by `|`. The zone fires the left one, then the right
-one, then the left again — the "different action on the second trigger" case:
+| Setting | What it does |
+| --- | --- |
+| **Pass-through guard** | Ignores a zone you were merely travelling across. 80 ms by default. Raise this first if things fire while you are just moving around. |
+| **Cooldown** | Minimum gap between two firings of the same zone. A cooldown is a wait, not a refusal — park in the corner and it fires once the wait is over. |
+| **Skip while a window is fullscreen** | Suppresses zones on the display the fullscreen window is on, so games and presentations are left alone. |
+| **Skip while dragging** | Nothing fires while a mouse button is held, so dragging a window or selecting text into a corner is safe. |
 
-```
-Alt+S | Alt+H            one corner shows notes, then hides them
-notepad.exe | calc.exe
-```
+**Excluded applications** takes a semicolon-separated list of process names,
+case-insensitive: `photoshop.exe;premiere.exe;blender.exe`. Every zone goes
+quiet while one of those is in the foreground — for apps that need the corners
+and edges for themselves.
 
-Each side accepts everything the single-action version does, so
-`Ctrl+C;Ctrl+V | Alt+Tab` is valid. Every zone alternates independently, and
-the position resets whenever settings or the display layout change.
-
-## Custom Command Format
-
-Any executable path, file, folder, or URL. Environment variables like
-`%AppData%` are expanded automatically.
-
-**Examples:**
-- `notepad.exe`
-- `C:\Windows\System32\cmd.exe`
-- `%AppData%\my_script.bat`
-- `https://example.com`
-
-Prefix with `uac;` to request elevation: `uac;cmd.exe`
-
-## App Exclusions
-
-Semicolon-separated list of process names (case-insensitive).
-Hot corners are disabled when any excluded process is the foreground window.
-
-**Example:** `photoshop.exe;premiere.exe;blender.exe`
+**Keep zones out of the taskbar** shrinks each display's zones to its working
+area, if you would rather a bottom corner not sit behind the taskbar.
 
 ## Why it works this way
 
@@ -413,6 +416,16 @@ releases and stops there.
 sampling thread, so a slow `OpenProcess` can never delay cursor sampling. The
 cost is that a suppressed trigger still consumes its cooldown — a wait nobody
 can perceive, traded for a sampling path that never stalls.
+
+## Related mods
+
+If all you want is one specific behaviour, a smaller mod may suit you better:
+
+- **edge-hot-corner-desktop-switch** — hovering the left or right screen edge
+  switches virtual desktop. This mod does that too, as one of the actions you
+  can assign, but if it is the only thing you are after that one is far simpler.
+- **hotcorner-hotkeys** — sends a key combination from a corner. Different
+  trigger model: it dispatches on a hotkey rather than on hover.
 
 ## Bugs and requests
 
@@ -2440,7 +2453,12 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
         // two displays still alternate independently.
         std::function<void()> altExec[ZONE_COUNT];
 
-        auto add = [&](Zone z, RECT rect)
+        // spanned says how many of an edge's three segments this zone covers,
+        // so the label can say so. The log is what users are asked to paste
+        // when a zone misbehaves, and a merged edge reporting itself as
+        // "Top edge, left" while actually spanning the whole edge sent more
+        // than one report down the wrong path.
+        auto add = [&](Zone z, RECT rect, int spanned = 1)
         {
             const ZoneConfig *zc = ResolveZone(mon, z);
             if (!zc)
@@ -2500,7 +2518,10 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
             hz.releaseExec = zc->releaseAction == CornerAction::SameAsEntry
                                  ? hz.exec
                                  : zc->releaseExecutor;
-            hz.label = mon.id + L" " + ZoneToString(z) + L" -> " +
+            const wchar_t *span = spanned >= 3   ? L" (whole edge)"
+                                 : spanned == 2 ? L" (two segments)"
+                                                : L"";
+            hz.label = mon.id + L" " + ZoneToString(z) + span + L" -> " +
                        ActionToString(zc->action);
             set->zones.push_back(std::move(hz));
         };
@@ -2555,7 +2576,7 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
                 while (j < 3 && SameZoneConfig(zc, ResolveZone(mon, seg[j])))
                     j++;
                 if (zc && bound[j] > bound[i])
-                    add(seg[i], rectFor(bound[i], bound[j]));
+                    add(seg[i], rectFor(bound[i], bound[j]), j - i);
                 i = j;
             }
         };
