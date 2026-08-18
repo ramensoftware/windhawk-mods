@@ -166,7 +166,9 @@ AppUserModelID, and that shortcut is pinned with the shell's ordinary
 "pin to taskbar" verb. Everything else follows from the buttons being genuine:
 
 - **Drag them** to reorder, like any other taskbar item. The order is the
-  taskbar's, so it survives restarts and is not stored by this mod.
+  taskbar's, so it survives restarts and is not stored by this mod — but it
+  is not preserved across a disable/enable or a settings-page save either,
+  since those unpin and later re-pin every button at the end of the strip.
 - **Right click** gives the normal Windows menu, including
   **Unpin from taskbar** and a **Manage folders...** entry this mod publishes to
   the folder's own jump list. Unpinning keeps the entry in the Taskbar Folders
@@ -175,10 +177,15 @@ AppUserModelID, and that shortcut is pinned with the shell's ordinary
 - Every animation is Windows' own.
 
 **Disabling or uninstalling the mod unpins every button it created**, deletes
-their Start Menu shortcuts and their jump lists — nothing it wrote to the
-shell is left behind. The folder list itself (names, paths, icons) stays in
-the mod's own settings, unpinned, so turning it back on does not mean
-re-adding every folder from scratch.
+their Start Menu shortcuts and their jump lists, and clears the folder list
+itself — nothing it wrote is left behind, and turning it back on starts from
+an empty list rather than silently recreating what was there before.
+
+This cleanup runs from `Wh_ModUninit`, so it does not run on an unclean exit
+(Explorer crashing or being killed, or a hard reboot, while the mod is still
+enabled). If that happens, the leftovers are the shortcuts under
+`%AppData%\Microsoft\Windows\Start Menu\Programs\Taskbar Folder Hover Tray` —
+delete that folder and unpin any of its buttons still on the taskbar by hand.
 
 Earlier versions drew an overlay instead, seated in a gap carved by widening a
 neighbouring icon's margin. It could never be exactly right: taskbar positions are
@@ -221,14 +228,6 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 // ==WindhawkModSettings==
 /*
 - behavior:
-  - openManager: false
-    $name: Open the Taskbar Folders window
-    $description: >-
-      There is no button widget on a Windhawk settings page, so this checkbox
-      is the closest thing to one: tick it to open the Taskbar Folders window
-      immediately. It does not save any state of its own and is left however
-      you leave it — untick and tick again to reopen the window.
-
   - openFolderOnClick: true
     $name: Click opens the folder
     $description: >-
@@ -456,6 +455,7 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1031,6 +1031,10 @@ int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
 //     arrives by SendMessage, cannot be used: every outgoing COM call from there
 //     fails with RPC_E_CANTCALLOUT_ININPUTSYNCCALL having done nothing, which
 //     looks exactly like a permissions refusal and is not one.
+
+// Pumps the calling STA's message queue. Defined with the scan thread further
+// down; forward-declared here so the pin worker (also an STA) can use it.
+void PumpScanThreadMessages();
 
 namespace Pins {
 
@@ -1926,6 +1930,7 @@ void Reconcile() {
                 dropped = true;
                 break;
             }
+            PumpScanThreadMessages();
             Sleep(25);
         }
         Wh_Log(L"Pins: waited %llums for %s to drop from the pinned list: %s",
@@ -2058,6 +2063,14 @@ HANDLE g_thread = nullptr;
 HANDLE g_stopEvent = nullptr;  // manual-reset
 HANDLE g_kickEvent = nullptr;  // auto-reset
 
+// Set by Stop() before it signals g_stopEvent, run by ThreadProc itself right
+// before it uninitializes COM and exits. This is a known-good STA — the pin
+// verb's COM class is ThreadingModel=Apartment with no marshaler, so cleanup
+// that invokes it must run on an apartment that is guaranteed to still be
+// alive, not on whatever arbitrary thread called Stop(). Safe without a lock:
+// the write happens-before the SetEvent that wakes the worker to read it.
+std::function<void()> g_finalAction;
+
 // Unpinning from the taskbar's own right-click menu is completely silent: it
 // changes nothing the mod owns, so nothing calls RequestReconcile and the entry
 // stays "pinned" in the store until something else happens to trigger a reload
@@ -2147,10 +2160,14 @@ DWORD WINAPI ThreadProc(void*) {
 
     bool stopping = false;
     while (!stopping) {
-        DWORD result =
-            WaitForMultipleObjects(count, waits, FALSE, kReconcilePollMs);
+        DWORD result = MsgWaitForMultipleObjects(count, waits, FALSE,
+                                                  kReconcilePollMs, QS_ALLINPUT);
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) {
             break;
+        }
+        if (result == WAIT_OBJECT_0 + count) {
+            PumpScanThreadMessages();
+            continue;
         }
         if (result != WAIT_TIMEOUT) {
             rearm(result - WAIT_OBJECT_0);
@@ -2162,14 +2179,18 @@ DWORD WINAPI ThreadProc(void*) {
         // passes per user action — and, worse, reconciling while the shell is
         // still half way through writing.
         for (;;) {
-            DWORD more = WaitForMultipleObjects(count, waits, FALSE,
-                                                kPinWatchDebounceMs);
+            DWORD more = MsgWaitForMultipleObjects(
+                count, waits, FALSE, kPinWatchDebounceMs, QS_ALLINPUT);
             if (more == WAIT_TIMEOUT) {
                 break;
             }
             if (more == WAIT_OBJECT_0 || more == WAIT_FAILED) {
                 stopping = true;
                 break;
+            }
+            if (more == WAIT_OBJECT_0 + count) {
+                PumpScanThreadMessages();
+                continue;
             }
             rearm(more - WAIT_OBJECT_0);
         }
@@ -2188,6 +2209,10 @@ DWORD WINAPI ThreadProc(void*) {
     }
     if (taskbandKey) {
         RegCloseKey(taskbandKey);
+    }
+    if (g_finalAction) {
+        g_finalAction();
+        g_finalAction = nullptr;
     }
     CoUninitialize();
     return 0;
@@ -2215,7 +2240,18 @@ void Start() {
     }
 }
 
-void Stop() {
+// finalAction, if given, runs on the worker's own STA right before it
+// uninitializes COM and exits — see g_finalAction above.
+void Stop(std::function<void()> finalAction = nullptr) {
+    if (finalAction) {
+        if (g_thread) {
+            g_finalAction = std::move(finalAction);
+        } else {
+            // Worker never started this session (Start() failed, or was never
+            // called) — nowhere else to run it, so run it here directly.
+            finalAction();
+        }
+    }
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -2418,11 +2454,8 @@ void RemovePinnedFolder(const std::wstring& path) {
 // there first), not lazily on first Wh_ModSettingsChanged call — that call
 // only fires after a change, so a lazy static would initialize itself from
 // the value the user just ticked and miss that very rising edge.
-bool g_lastOpenManager = false;
-
 void LoadSettings() {
     LoadFolders(&g_settings.folders);
-    g_lastOpenManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
 
     // "type" was the old folders-first option, which is now unconditional.
     std::wstring sortBy = GetStringSetting(L"content.sortBy");
@@ -6744,7 +6777,13 @@ void UnbindPinButtons(TaskbarHost* host) {
             if (binding.exitToken.value) {
                 binding.button.PointerExited(binding.exitToken);
             }
-            ToolTipService::SetToolTip(binding.button, binding.savedTooltip);
+            if (binding.savedTooltip ==
+                winrt::Windows::UI::Xaml::DependencyProperty::UnsetValue()) {
+                binding.button.ClearValue(ToolTipService::ToolTipProperty());
+            } else {
+                binding.button.SetValue(ToolTipService::ToolTipProperty(),
+                                        binding.savedTooltip);
+            }
         } catch (...) {
             // The element can already be torn down; nothing to release then.
         }
@@ -6806,15 +6845,40 @@ void RebindPinButtons(TaskbarHost* host) {
 
     UnbindPinButtons(host);
 
-    HWND taskbarWnd = host->hwnd;
-    int matched = 0;
-    for (const auto& child : children) {
+    // Resolve every realized button's folder index up front so a folder whose
+    // label prefix-matches two different realized buttons (e.g. our own
+    // "Games" next to an unrelated app whose title happens to start the same
+    // way) can be caught before either one is bound. Binding the wrong one
+    // would silently steal hover from that other app's button; binding
+    // neither just means this folder's button does nothing until the name
+    // collision goes away.
+    std::unordered_map<int, int> folderIndexCounts;
+    std::vector<int> childFolderIndex(children.size(), -1);
+    for (size_t i = 0; i < children.size(); i++) {
+        const auto& child = children[i];
         if (!child || winrt::get_class_name(child) !=
                           L"Taskbar.TaskListButton") {
             continue;
         }
         int folderIndex = FolderIndexForTaskListButton(child);
+        childFolderIndex[i] = folderIndex;
+        if (folderIndex >= 0) {
+            folderIndexCounts[folderIndex]++;
+        }
+    }
+
+    HWND taskbarWnd = host->hwnd;
+    int matched = 0;
+    for (size_t i = 0; i < children.size(); i++) {
+        const auto& child = children[i];
+        int folderIndex = childFolderIndex[i];
         if (folderIndex < 0) {
+            continue;
+        }
+        if (folderIndexCounts[folderIndex] > 1) {
+            Wh_Log(L"Pins: '%s' matches more than one realized taskbar "
+                   L"button; leaving all of them unbound",
+                   AutomationNameOf(child).c_str());
             continue;
         }
 
@@ -6822,7 +6886,7 @@ void RebindPinButtons(TaskbarHost* host) {
         // grid we open on hover with a second, redundant popup naming the
         // same folder. Suppress it for buttons we've claimed, saving the
         // shell's value so UnbindPinButtons can restore it later.
-        auto savedTooltip = ToolTipService::GetToolTip(child);
+        auto savedTooltip = child.ReadLocalValue(ToolTipService::ToolTipProperty());
         ToolTipService::SetToolTip(child, nullptr);
 
         PinBinding binding;
@@ -8117,15 +8181,13 @@ void RemoveSelected(HWND hWnd) {
 // Unpins every real taskbar button, deletes their Start Menu shortcuts and
 // their per-AppID jump lists — everything InvokeVerb's "taskbarpin" and
 // WriteJumpList put in place. Shared by the user-facing "Remove all folder
-// buttons" action (clearStore = true, wipes the folder list too) and the
-// automatic cleanup Wh_ModUninit runs on every disable/uninstall
-// (clearStore = false, folders keep their pinned=true intent — only
-// pinApplied is cleared — so the next Reconcile() this mod runs, whether
-// from a real re-enable or a code-update reload, silently re-pins them).
+// buttons" action and the automatic cleanup Wh_ModUninit runs on every
+// disable/uninstall, so nothing this mod wrote — on the taskbar, in the
+// Start Menu, or in its own folder list — outlives either path.
 //
 // CoInitializeEx is refcounted per thread, so this is safe to call whether or
 // not the calling thread already has COM up (Wh_ModUninit's does not).
-void RemoveAllFolderButtonsCore(bool clearStore) {
+void RemoveAllFolderButtonsCore() {
     struct ComInit {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         ~ComInit() {
@@ -8134,6 +8196,18 @@ void RemoveAllFolderButtonsCore(bool clearStore) {
             }
         }
     } com;
+
+    // The pin verb's COM class is ThreadingModel=Apartment with no marshaler,
+    // so every InvokeVerb below silently fails if this thread is not really
+    // an STA (RPC_E_CHANGED_MODE means it is already an MTA, which is exactly
+    // that case). Bail loudly rather than grinding through a no-op sweep that
+    // looks like it ran.
+    if (FAILED(com.hr)) {
+        Wh_Log(L"RemoveAllFolderButtonsCore: CoInitializeEx(STA) failed: "
+               L"0x%08X; skipping unpin sweep",
+               com.hr);
+        return;
+    }
 
     for (const auto& item : Pins::ReadPinnedItems()) {
         Pins::InvokeVerb(item.path, "taskbarunpin");
@@ -8162,18 +8236,7 @@ void RemoveAllFolderButtonsCore(bool clearStore) {
     }
 
     std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
-    if (clearStore) {
-        FolderStore::Write({});
-    } else {
-        auto stored = FolderStore::Read();
-        for (auto& entry : stored) {
-            // Not entry.pinned: that is the user's intent and must survive
-            // this pass so a later Reconcile() re-pins automatically.
-            // pinApplied is state, and now false is the truth.
-            entry.pinApplied = false;
-        }
-        FolderStore::Write(stored);
-    }
+    FolderStore::Write({});
 }
 
 void RemoveAllFolderButtons(HWND hWnd) {
@@ -8187,7 +8250,7 @@ void RemoveAllFolderButtons(HWND hWnd) {
         return;
     }
 
-    RemoveAllFolderButtonsCore(/*clearStore=*/true);
+    RemoveAllFolderButtonsCore();
     RefreshAfterStoreChange(hWnd);
 }
 
@@ -8195,13 +8258,17 @@ void RemoveAllFolderButtons(HWND hWnd) {
 // way it was. Called from Wh_ModUninit, which fires on every disable and
 // every uninstall alike (Windhawk does not distinguish the two, and neither
 // does it distinguish a real disable from the reload after a code-update
-// save) — so the real taskbar pins, their Start Menu shortcuts and their
-// jump lists never outlive this pass. The folder list itself keeps its
-// pinned intent, so the next Reconcile() (from a real re-enable, or from
-// the Wh_ModInit that follows an update reload moments later) puts
-// everything straight back without the user re-adding anything.
+// save) — so the real taskbar pins, their Start Menu shortcuts, their jump
+// lists and the folder list itself never outlive this pass. Nothing survives
+// a disable: a re-enable starts from the default, empty folder list rather
+// than silently recreating whatever was configured before.
+//
+// This does mean a code-update / settings-page save (which Windhawk routes
+// through the same Wh_ModUninit -> Wh_ModInit path as a real disable, with no
+// way to tell the two apart from here) wipes the folder list too, not just
+// the code reload it looks like from the user's side.
 void UnpinAllForDisable() {
-    RemoveAllFolderButtonsCore(/*clearStore=*/false);
+    RemoveAllFolderButtonsCore();
 }
 
 // A single-select listbox never lets go of its selection on its own — a click
@@ -9916,18 +9983,6 @@ void ReloadAndRefreshUI() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"SettingsChanged");
 
-    // A checkbox-as-link: openManager has no persisted meaning of its own, it
-    // is just the closest thing Windhawk's settings page has to a button.
-    // Every rising edge (false -> true) opens the manager; the box is left
-    // however the user leaves it. g_lastOpenManager is seeded in
-    // LoadSettings() at Wh_ModInit, not lazily here, so the very first tick
-    // after a mod (re)load is itself seen as a rising edge.
-    bool openManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
-    if (openManager && !g_lastOpenManager) {
-        FolderManager::Open();
-    }
-    g_lastOpenManager = openManager;
-
     RequestReloadUI();
 
     return TRUE;
@@ -9945,12 +10000,16 @@ void Wh_ModUninit() {
     // Disabling (or uninstalling — Wh_ModUninit does not see a difference)
     // must leave the system as it was: real taskbar pins, Start Menu
     // shortcuts and jump lists this mod created do not get to outlive it.
-    // Stop and join the reconcile worker first: it can be mid-Reconcile()
-    // (pinned-dir watch, Taskband watch, or the periodic poll — the unpins
-    // below even fire the dir watch) and would otherwise re-create pins and
-    // Start Menu shortcuts the sweep below just removed.
-    Pins::Stop();
-    FolderManager::UnpinAllForDisable();
+    // Stop the reconcile worker, but run the disable-time unpin sweep as its
+    // very last action before it joins: it can be mid-Reconcile() (pinned-dir
+    // watch, Taskband watch, or the periodic poll — the unpins below even
+    // fire the dir watch) and would otherwise re-create pins and Start Menu
+    // shortcuts the sweep just removed. Running the sweep there, rather than
+    // here on this arbitrary Windhawk engine thread, also guarantees it runs
+    // on a real STA — the pin verb's COM class has no marshaler, so every
+    // InvokeVerb from a thread that isn't one silently fails and leaves every
+    // pinned button, Start Menu shortcut and jump list behind.
+    Pins::Stop(&FolderManager::UnpinAllForDisable);
 
     // DestroyWindow / XAML teardown must run on the creating UI thread. Prefer
     // a mod-owned window (level popup or menu owner) when the taskbar HWND is
