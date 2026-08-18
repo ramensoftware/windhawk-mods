@@ -43,7 +43,10 @@ the Home page already uses.
 **A quick technical note:** the mod reads Explorer's own WinUI page and
 inserts the section directly into it, without relying on XAML Diagnostics,
 so it plays nicely alongside other Explorer styling mods that need that
-facility for themselves.
+facility for themselves. One consequence: a File Explorer window already
+sitting on Home when the mod is enabled may not pick up the section right
+away. Navigate away and back to Home (or open a new tab) to refresh it;
+windows opened after enabling the mod are unaffected.
 
 ---
 
@@ -74,7 +77,11 @@ construída com o mesmo WinUI que o resto da Página Inicial já usa.
 **Um detalhe técnico rápido:** o mod lê a própria página WinUI do Explorador
 e insere a seção diretamente nela, sem depender do XAML Diagnostics, então
 ele convive bem com outros mods de estilo do Explorador que precisam desse
-recurso pra si.
+recurso pra si. Uma consequência disso: uma janela do Explorador de Arquivos
+que já esteja aberta na pasta Início quando o mod for ativado pode não
+mostrar a seção na hora. Saia da pasta Início e volte (ou abra uma nova
+aba) pra atualizar; janelas abertas depois de ativar o mod não têm esse
+problema.
 
 ---
 
@@ -105,7 +112,11 @@ construida con el mismo WinUI que ya usa el resto de la página de Inicio.
 **Un detalle técnico rápido:** el mod lee la propia página WinUI del
 Explorador e inserta la sección directamente en ella, sin depender de XAML
 Diagnostics, así que convive bien con otros mods de estilo del Explorador
-que necesitan ese recurso para sí mismos.
+que necesitan ese recurso para sí mismos. Una consecuencia de esto: una
+ventana del Explorador de archivos que ya esté abierta en la carpeta Inicio
+cuando se active el mod puede no mostrar la sección de inmediato. Sal de
+Inicio y vuelve a entrar (o abre una pestaña nueva) para actualizarla; las
+ventanas abiertas después de activar el mod no tienen este problema.
 */
 // ==/WindhawkModReadme==
 
@@ -271,6 +282,10 @@ std::unordered_map<DWORD, IFileExplorerNavigationControllerAbi*>
 struct HomePanelState {
     winrt::weak_ref<muxc::StackPanel> panel;
     IFileExplorerNavigationControllerAbi* navigationController = nullptr;
+    // The snapshot this panel's grid was last built or confirmed unchanged
+    // against, so a catch-up refresh that finds nothing different can skip
+    // rebuilding every card. Left null until the first populate.
+    std::shared_ptr<const DriveSnapshot> lastAppliedSnapshot;
 };
 
 thread_local std::vector<HomePanelState> g_homePanels;
@@ -1565,17 +1580,40 @@ bool ShowDriveContextMenu(HWND owner,
         g_trackedContextMenu2 = nullptr;
     } else {
         std::wstring commandVerb{commandToInvoke};
-        UINT commandCount = HRESULT_CODE(result);
-        for (UINT offset = 0; offset < commandCount; ++offset) {
+        auto matchesVerb = [&](UINT offset) {
             wchar_t canonicalVerb[128]{};
             HRESULT verbResult = contextMenu->GetCommandString(
                 offset, GCS_VERBW, nullptr,
                 reinterpret_cast<LPSTR>(canonicalVerb),
                 ARRAYSIZE(canonicalVerb));
-            if (SUCCEEDED(verbResult) &&
-                _wcsicmp(canonicalVerb, commandVerb.c_str()) == 0) {
+            return SUCCEEDED(verbResult) &&
+                   _wcsicmp(canonicalVerb, commandVerb.c_str()) == 0;
+        };
+
+        // Every verb this function is ever asked to invoke (currently just
+        // "properties") is a top-level item, so check those first --
+        // GetMenuItemID is a local menu-handle lookup, unlike
+        // GetCommandString, which round-trips into the owning shell
+        // extension. That covers the common case without asking every
+        // installed extension for its verb name. Falls back to the
+        // exhaustive scan below only if nothing on the menu matched, in
+        // case a verb ever ends up nested in a submenu.
+        int menuItemCount = GetMenuItemCount(menu.get());
+        for (int menuIndex = 0;
+             !command && menuIndex < menuItemCount; ++menuIndex) {
+            UINT id = GetMenuItemID(menu.get(), menuIndex);
+            if (id < kFirstCommandId || id > kLastCommandId) {
+                continue;  // Separator or submenu, not a command item.
+            }
+            if (matchesVerb(id - kFirstCommandId)) {
+                command = id;
+            }
+        }
+
+        UINT commandCount = HRESULT_CODE(result);
+        for (UINT offset = 0; !command && offset < commandCount; ++offset) {
+            if (matchesVerb(offset)) {
                 command = kFirstCommandId + offset;
-                break;
             }
         }
         if (!command) {
@@ -1694,6 +1732,11 @@ POINT GetDriveKeyboardMenuPoint(muxc::GridViewItem const& item,
                 {static_cast<float>(item.ActualWidth() / 2),
                  static_cast<float>(item.ActualHeight() / 2)});
             double scale = xamlRoot.RasterizationScale();
+            // ClientToScreen assumes the XAML island's origin coincides
+            // with owner's client origin, which holds for today's File
+            // Explorer frame but isn't a documented guarantee. If it ever
+            // stops holding, keyboard-invoked context menus land at an
+            // offset with no other visible symptom.
             screenPoint.x = static_cast<LONG>(center.X * scale);
             screenPoint.y = static_cast<LONG>(center.Y * scale);
             if (ClientToScreen(owner, &screenPoint)) {
@@ -1871,7 +1914,16 @@ void DriveSelectionCheckBox_Click(
 }
 
 void UpdateDriveSelectionCheckBoxesForCurrentThread() {
+    // Runs on every WM_SETTINGCHANGE, which the shell broadcasts often for
+    // settings this mod doesn't care about. Skipping the card walk when the
+    // setting this function actually reads hasn't changed avoids reapplying
+    // the same value to every card on each one.
+    static thread_local std::optional<bool> lastEnabled;
     bool enabled = IsAutoCheckSelectEnabled();
+    if (lastEnabled == enabled) {
+        return;
+    }
+    lastEnabled = enabled;
     for (auto& state : *g_driveCardEventStates) {
         state.selectionCheckBoxesEnabled = enabled;
         UpdateDriveSelectionCheckBox(state);
@@ -1920,8 +1972,25 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
     // alongside it further down.
     state->renameCompleting = true;
 
-    // state->renaming is cleared further down, only after the Shell call
-    // below returns. RenameDriveWithShell can pump messages, and
+    // Re-resolves rather than closing over the pointer above: RenameDriveWithShell
+    // can pump messages, and a reentrant path (e.g. unload tearing the list
+    // down) could erase this node before the guard runs. Runs on every exit,
+    // including an exception thrown by any of the XAML calls below, so a
+    // card can't get stuck permanently renaming (and blocking every grid in
+    // the window from refreshing) just because one of them threw.
+    struct RenameCompletionGuard {
+        muxc::TextBox renameBox;
+        ~RenameCompletionGuard() {
+            if (auto state = FindDriveRenameState(renameBox)) {
+                state->renaming = false;
+                state->renameCompleting = false;
+            }
+            BroadcastApplyDriveSnapshot();
+        }
+    } renameCompletionGuard{renameBox};
+
+    // state->renaming is cleared by the guard above, only after this function
+    // returns. RenameDriveWithShell can pump messages, and
     // IsDriveCardRenamingInGrid() must keep reporting this card busy for
     // that whole window so a reentrant refresh doesn't rebuild the grid
     // while the call is in flight.
@@ -1962,21 +2031,6 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
                    result);
         }
     }
-
-    // Re-resolve rather than reuse the pointer from before the Shell call:
-    // RenameDriveWithShell can pump messages, and a reentrant path unrelated
-    // to the renaming-guarded grid refresh (e.g. unload tearing the list
-    // down) could have erased this node while it was in flight.
-    state = FindDriveRenameState(renameBox);
-    if (state) {
-        state->renaming = false;
-        state->renameCompleting = false;
-    }
-
-    // A grid refresh arriving while this card was renaming was deferred (see
-    // RefreshDevicesGridPreservingState) so it wouldn't destroy the editor.
-    // Catch it up now that renaming is over, whether committed or cancelled.
-    BroadcastApplyDriveSnapshot();
 }
 
 void CompleteOtherDriveRenames(muxc::GridViewItem const& activeItem) {
@@ -2340,20 +2394,7 @@ void DriveCard_DragStarting(
         auto item = sender.as<muxc::GridViewItem>();
         SelectDriveCard(item);
 
-        std::vector<std::wstring> rootPaths;
-        if (auto grid = muxc::ItemsControl::ItemsControlFromItemContainer(item)
-                            .try_as<muxc::GridView>()) {
-            for (auto const& selected : grid.SelectedItems()) {
-                if (auto selectedItem = selected.try_as<muxc::GridViewItem>()) {
-                    rootPaths.emplace_back(
-                        winrt::unbox_value<winrt::hstring>(selectedItem.Tag()));
-                }
-            }
-        }
-        if (rootPaths.empty()) {
-            rootPaths.emplace_back(
-                winrt::unbox_value<winrt::hstring>(item.Tag()));
-        }
+        auto rootPaths = GetSelectedDriveRootPaths(item);
         g_pendingDragPreparations.fetch_add(1);
         g_driveCardDragInProgress = true;
         try {
@@ -2388,10 +2429,7 @@ GetDriveDropOperation(
     bool controlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     // Matches Explorer's own convention: Shift = move, Ctrl = copy,
-    // Ctrl+Shift = create a shortcut (Link). TransferStorageItemsToDrive
-    // declines Link items rather than creating a shortcut -- IFileOperation
-    // has no method for that -- but declining is still correct where
-    // silently copying instead isn't.
+    // Ctrl+Shift = create a shortcut (Link).
     if (shiftDown && controlDown) {
         return DataPackageOperation::Link;
     }
@@ -2408,6 +2446,63 @@ GetDriveDropOperation(
                : DataPackageOperation::Copy;
 }
 
+// IFileOperation has no shortcut-creation method, so a Ctrl+Shift drop is
+// handled separately with IShellLinkW/IPersistFile instead of being queued
+// into the IFileOperation batch below.
+HRESULT CreateDriveShortcuts(
+    winrt::Windows::Foundation::Collections::IVectorView<
+        winrt::Windows::Storage::IStorageItem> const& storageItems,
+    std::wstring const& targetRoot) {
+    winrt::com_ptr<IShellLinkW> link;
+    HRESULT result =
+        CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(link.put()));
+    if (FAILED(result)) {
+        return result;
+    }
+
+    auto persistFile = link.try_as<IPersistFile>();
+    if (!persistFile) {
+        return E_NOINTERFACE;
+    }
+
+    UINT createdItems = 0;
+    for (auto const& storageItem : storageItems) {
+        auto path = storageItem.Path();
+        if (path.empty() || PathIsRootW(path.c_str())) {
+            continue;
+        }
+
+        result = link->SetPath(path.c_str());
+        if (FAILED(result)) {
+            Wh_Log(L"Couldn't set the shortcut target %s: %08X", path.c_str(),
+                   result);
+            continue;
+        }
+
+        std::wstring desiredPath =
+            targetRoot + L"Shortcut to " + PathFindFileNameW(path.c_str()) +
+            L".lnk";
+        wchar_t uniquePath[MAX_PATH]{};
+        if (!PathYetAnotherMakeUniqueName(uniquePath, desiredPath.c_str(),
+                                          nullptr, nullptr)) {
+            Wh_Log(L"Couldn't build a unique shortcut name for %s",
+                   path.c_str());
+            continue;
+        }
+
+        result = persistFile->Save(uniquePath, TRUE);
+        if (FAILED(result)) {
+            Wh_Log(L"Couldn't save the shortcut %s: %08X", uniquePath,
+                   result);
+            continue;
+        }
+        ++createdItems;
+    }
+
+    return createdItems ? S_OK : HRESULT_FROM_WIN32(ERROR_NO_MORE_ITEMS);
+}
+
 HRESULT TransferStorageItemsToDrive(
     HWND owner,
     winrt::Windows::Foundation::Collections::IVectorView<
@@ -2417,12 +2512,7 @@ HRESULT TransferStorageItemsToDrive(
         operation) {
     if (operation == winrt::Windows::ApplicationModel::DataTransfer::
                           DataPackageOperation::Link) {
-        // IFileOperation has no shortcut-creation method, so this declines
-        // rather than falling through to CopyItem below and silently
-        // copying when the user's gesture (Ctrl+Shift, matching Explorer's
-        // own convention) meant "create a shortcut" instead.
-        Wh_Log(L"Declining a Ctrl+Shift (shortcut) drop: not implemented");
-        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+        return CreateDriveShortcuts(storageItems, targetRoot);
     }
 
     winrt::com_ptr<IShellItem> targetFolder;
@@ -3045,22 +3135,40 @@ void ClearDriveCardEventHandlersForGrid(muxc::GridView const& grid) {
 // by root path across the rebuild otherwise.
 void RefreshDevicesGridPreservingState(
     muxc::GridView const& grid,
-    DriveSnapshot const& drives,
-    IFileExplorerNavigationControllerAbi* navigationController) {
+    std::shared_ptr<const DriveSnapshot> const& snapshot,
+    IFileExplorerNavigationControllerAbi* navigationController,
+    std::shared_ptr<const DriveSnapshot>& lastAppliedSnapshot) {
     // Also defers while a drive context menu is open, a Shell UI call
-    // (rename, InvokeCommand) is in flight, or a card-originated drag is in
-    // progress: TrackPopupMenuEx, those calls, and a WinUI drag all pump,
-    // so a refresh landing mid-interaction would otherwise tear down and
-    // recreate every GridViewItem underneath it -- including the source
-    // card's DropCompleted handler, which is what clears
-    // g_driveCardDragInProgress once the drag ends. ShowDriveContextMenu
+    // (rename, InvokeCommand) is in flight, a card-originated drag is in
+    // progress, or a drop is being applied: TrackPopupMenuEx, those calls,
+    // a WinUI drag, and IFileOperation::PerformOperations()'s own modal
+    // loop (e.g. reacting to the SHCNE_FREESPACE a drop's own copy/move
+    // triggers) all pump, so a refresh landing mid-interaction would
+    // otherwise tear down and recreate every GridViewItem underneath it --
+    // including the source card's DropCompleted handler, which is what
+    // clears g_driveCardDragInProgress once the drag ends. ShowDriveContextMenu
     // and DriveCard_DropCompleted post GetApplyDriveSnapshotMessage() on
-    // their way out, so a deferred refresh isn't lost, just delayed.
+    // their way out, and a successful drop requests its own refresh, so a
+    // deferred refresh isn't lost, just delayed.
     if (IsDriveCardRenamingInGrid(grid) || g_driveCardDragInProgress ||
         g_openContextMenuCount.load() > 0 ||
-        g_pendingShellUiCalls.load() > 0) {
+        g_pendingShellUiCalls.load() > 0 ||
+        g_pendingDropOperations.load() > 0) {
         return;
     }
+
+    // A catch-up refresh (context menu closed, rename finished, drop
+    // completed) posts unconditionally, without knowing whether anything
+    // actually changed since this grid was last built. Most of the time
+    // nothing did, so skip tearing down and recreating every card -- and
+    // dropping hover state, any open tooltip, and every WriteableBitmap
+    // with it -- when the snapshot is identical to what's already showing.
+    if (lastAppliedSnapshot &&
+        DriveSnapshotsEqual(*lastAppliedSnapshot, *snapshot)) {
+        return;
+    }
+
+    DriveSnapshot const& drives = *snapshot;
 
     // Rebuilding replaces every GridViewItem, so selection and keyboard
     // focus (unlike hover and any open tooltip) are captured here and
@@ -3113,6 +3221,8 @@ void RefreshDevicesGridPreservingState(
             gridViewItem.Focus(mux::FocusState::Programmatic);
         }
     }
+
+    lastAppliedSnapshot = snapshot;
 }
 
 constexpr wchar_t kDevicesExpandedValueName[] = L"DevicesExpanded";
@@ -3539,8 +3649,9 @@ void RefreshDevicesSectionsForCurrentThread() {
 
         try {
             if (auto grid = FindDevicesGrid(panel)) {
-                RefreshDevicesGridPreservingState(grid, *snapshot,
-                                                  it->navigationController);
+                RefreshDevicesGridPreservingState(
+                    grid, snapshot, it->navigationController,
+                    it->lastAppliedSnapshot);
             }
         } catch (...) {
             Wh_Log(L"Drive grid refresh failed: %08X",
@@ -3769,9 +3880,10 @@ bool PopulateDevicesSectionIfEmpty(muxc::StackPanel const& panel) {
     }
 
     IFileExplorerNavigationControllerAbi* navigationController = nullptr;
-    for (auto const& state : g_homePanels) {
+    for (auto& state : g_homePanels) {
         if (state.panel.get() == panel) {
             navigationController = state.navigationController;
+            state.lastAppliedSnapshot = snapshot;
             break;
         }
     }
