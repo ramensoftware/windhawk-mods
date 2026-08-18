@@ -724,6 +724,8 @@ static void LoadSettings();
 static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
+static void CreateMirrorSwitchers();
+static void HideSwitcher();
 
 // Helpers
 
@@ -3497,11 +3499,12 @@ static void PaintSwitcher() {
 // Switcher Show / Hide / Switch
 
 static void GetOffscreenDelayPosition(int* x, int* y) {
-    // Position the 1x1 window safely off every monitor by going 2px past
+    // Position the 1x1 window safely far off every monitor by going 32000px past
     // the virtual screen boundary — arrangement-agnostic and guaranteed
-    // to be off-screen even with multiple 4K displays left/above primary.
-    *x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 2;
-    *y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 2;
+    // to be off-screen even with multiple 4K displays left/above primary,
+    // avoiding DWM thickframe/shadow artifacts bleeding into (0, 0).
+    *x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 32000;
+    *y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 32000;
 }
 
 static void CancelPendingShow() {
@@ -3571,6 +3574,7 @@ static void RevealPendingSwitcher() {
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     ApplySwitcherRegion();
+    CreateMirrorSwitchers();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
@@ -3668,6 +3672,12 @@ static void DestroyMirrorSwitchers() {
     g_hMirrorSwitchers.clear();
 }
 
+static void CreateMirrorSwitchers() {
+    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
+        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    }
+}
+
 
 static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
@@ -3724,7 +3734,10 @@ static void ShowSwitcher(bool sticky) {
         g_isAltBacktickSameApp = false;
     }
 
-    if (g_windows.empty()) return;
+    if (g_windows.empty()) {
+        HideSwitcher();
+        return;
+    }
 
     g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
 
@@ -3779,9 +3792,7 @@ static void ShowSwitcher(bool sticky) {
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
-    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
-        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
-    }
+    CreateMirrorSwitchers();
     
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -3860,7 +3871,9 @@ static bool IsWindowTruncated(int idx) {
 static void RecomputeAndReposition() {
     UnregisterThumbnails();
     RegisterThumbnailsEarly();
-    HMONITOR hMon = MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hMon = g_hCurrentMonitor
+                    ? g_hCurrentMonitor
+                    : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
     g_hCurrentMonitor = hMon;
     ComputeLayout(hMon);
     MONITORINFO mi = { sizeof(mi) };
@@ -4895,11 +4908,7 @@ static void LoadSettings() {
         wcscmp(g_settings.thumbnailAlignment, L"right") != 0) {
         wcsncpy_s(g_settings.thumbnailAlignment, L"left", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
-    if (v && *v) {
-        wcsncpy_s(g_settings.backwardShortcut, v, _TRUNCATE);
-    }
-    Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.backwardShortcut", g_settings.backwardShortcut, L"altShiftTab");
     if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altShift") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altBacktick") != 0) {
@@ -5246,8 +5255,11 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModUninit");
-    if (g_dwSwitcherThreadId)
-        PostThreadMessage(g_dwSwitcherThreadId, WM_QUIT, 0, 0);
+    while (g_dwSwitcherThreadId &&
+           !PostThreadMessage(g_dwSwitcherThreadId, WM_QUIT, 0, 0)) {
+        if (GetLastError() != ERROR_INVALID_THREAD_ID) break;
+        if (WaitForSingleObject(g_hSwitcherThread, 10) != WAIT_TIMEOUT) break;
+    }
     if (g_hSwitcherThread) {
         WaitForSingleObject(g_hSwitcherThread, INFINITE);
         CloseHandle(g_hSwitcherThread);
@@ -5534,7 +5546,11 @@ void Wh_ModUninit() {
         HWND promptWnd = g_restartExplorerPromptWindow;
         if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
 
-        if (g_explorerIpcThreadId) PostThreadMessage(g_explorerIpcThreadId, WM_QUIT, 0, 0);
+        while (g_explorerIpcThreadId &&
+               !PostThreadMessage(g_explorerIpcThreadId, WM_QUIT, 0, 0)) {
+            if (GetLastError() != ERROR_INVALID_THREAD_ID) break;
+            if (WaitForSingleObject(g_explorerIpcThread, 10) != WAIT_TIMEOUT) break;
+        }
         if (g_explorerIpcThread) {
             WaitForSingleObject(g_explorerIpcThread, INFINITE);
             CloseHandle(g_explorerIpcThread);
