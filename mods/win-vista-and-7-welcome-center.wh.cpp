@@ -4,7 +4,7 @@
 // @description     This mod restores the Windows Vista Welcome Center with an optional Windows 7 Getting Started skin on Windows 10 and 11
 // @version         1.0.1
 // @author          Cips
-// @github          https://github.com/Cips
+// @github          https://github.com/Cips35
 // @license         MIT
 // @include         explorer.exe
 // @include         windhawk.exe
