@@ -16,6 +16,50 @@
 /*
 # Quick Launch & Media Panel
 
+A modern, native Windows desktop panel for launching applications, organizing
+multiple shortcut pages, and controlling Windows media sessions.
+
+![Quick Launch & Media Panel](https://i.imgur.com/rckHuTB.png)
+
+## Features
+
+- A compact top capsule that expands into the complete panel.
+- 1 to 8 configurable application or game shortcuts per page.
+- Drag and drop support for applications, shortcuts, documents, folders, and URLs.
+- Multiple pages with automatic layout persistence and import/export support.
+- Configurable themes, colors, opacity, tile shape, size, spacing, and position.
+- Live title, artist, artwork, timeline, volume, and media-session selection.
+- Previous, play/pause, and next controls through Windows media sessions.
+- A dedicated Windhawk tool process that automatically recovers after Explorer restarts.
+
+## How it differs from existing media mods
+
+Dynamic Island for Windows, Island Media Controls, Taskbar Fluent Media Player,
+and Taskbar Music Lounge focus on media presentation in an overlay or the
+taskbar. This mod is primarily a pageable desktop application launcher. Its
+compact media card is part of the same stationary desktop dashboard, allowing
+users to launch their usual applications and control music from one place
+without modifying the taskbar or displaying a persistent foreground overlay.
+
+## Usage
+
+- Click the capsule at the top of the screen to open or close the panel.
+- Drag a file or shortcut onto a tile to assign it.
+- Click a populated tile to launch the target or bring its window to the foreground.
+- Right-click a tile to edit its target, label, arguments, icon, color, or elevation mode.
+- Drag one tile onto another to reorder shortcuts.
+- Use the mouse wheel over the panel to change pages, or `Ctrl + mouse wheel` to resize tiles.
+- Use the mouse wheel over the media card to change the master volume.
+- Right-click the media card to select the Windows media session to control.
+- Use the panel context menu to import or export the complete layout.
+
+The panel doesn't authenticate with Spotify or YouTube. It controls the media
+session already published to Windows by the playing application or browser.
+
+---
+
+# Panneau de lancement rapide et multimédia
+
 Un panneau de bureau natif et discret pour lancer rapidement vos applications,
 organiser plusieurs pages de raccourcis et contrôler les sessions multimédias
 de Windows.
@@ -33,26 +77,19 @@ de Windows.
 
 La disposition est enregistrée automatiquement. Le menu contextuel du panneau
 permet également de l'exporter ou de l'importer.
-
----
-
-A discreet native desktop panel for launching applications, organizing several
-shortcut pages and controlling Windows media sessions. Click the top capsule to
-open or close the panel. Drag files onto tiles, right-click tiles to customize
-them, and use the panel context menu to export or import the layout.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- language: fr
+- language: en-US
   $name: Language
   $name:fr-FR: Langue
   $description: Language used by the panel and context menus.
   $description:fr-FR: Langue utilisée par le panneau et ses menus contextuels.
   $options:
+    - en-US: English (US)
     - fr: Français
-    - en: English
 - startCollapsed: true
   $name: Start collapsed
   $name:fr-FR: Démarrer sous forme de capsule
@@ -1838,6 +1875,8 @@ void ReloadSettingsOnUiThread() {
     LoadSettings();
     if (!StateFile().empty()) {
         WritePrivateProfileStringW(L"ui", L"tileSize", nullptr,
+                                   StateFile().c_str());
+        WritePrivateProfileStringW(L"ui", L"lockPosition", nullptr,
                                    StateFile().c_str());
     }
     g_dpi = DpiForMonitor(SelectedMonitor());
