@@ -2,12 +2,12 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.10.1
+// @version         3.11.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
 // @include         mmc.exe
-// @compilerOptions -lcfgmgr32 -ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -lsetupapi -lshell32 -lshlwapi -luser32
+// @compilerOptions -lcfgmgr32 -lcomctl32 -ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -lsetupapi -lshell32 -lshlwapi -luser32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -146,6 +146,8 @@ would be drawing a lie about where the space on the disk went.
 #include <shldisp.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <commctrl.h>
+#include <uxtheme.h>
 #include <windowsx.h>
 
 #include <winioctl.h>
@@ -423,6 +425,7 @@ bool ApplyThemeSetting() {
 struct VolumeInfo {
     std::wstring guidPath;    // the volume GUID path, with trailing separator
     std::wstring letter;      // "C:" or empty
+    std::vector<std::wstring> mountPoints;  // folder mounts, without any letter
     std::wstring label;       // "Windows-SSD"
     std::wstring fileSystem;  // NTFS, FAT32, ...
     std::wstring role;        // "EFI system partition", "Recovery partition", ...
@@ -1044,15 +1047,47 @@ std::vector<DiskInfo> EnumerateDisks() {
                 volume.freeSpace = free.QuadPart;
             }
 
-            // Drive letter, when the volume has one mounted.
-            WCHAR paths[512] = L"";
+            // Where the volume is reachable from. This comes back as a
+            // MULTI_SZ because a volume can be mounted in more than one place:
+            // a drive root, any number of empty NTFS folders, or both, in an
+            // order that is not documented.
+            //
+            // Only a bare "X:\" is a drive letter. Taking the first entry and
+            // keeping two characters read "C:\Mount\Data" - a volume mounted
+            // in a folder on C: - as the letter "C:", and every action here is
+            // resolved from that letter: Format would have offered to format
+            // the host drive, Eject would have locked and dismounted it, and
+            // isBoot would have been set on the wrong volume. Folder mounts are
+            // made by the very dialog this window hands off to, so this is not
+            // an exotic layout for anyone using it.
+            //
+            // The buffer grows rather than being sized once: a volume with
+            // enough folder mounts to overflow it would otherwise fail the call
+            // outright and lose its drive letter, which disables every action
+            // that needs one.
+            std::vector<WCHAR> paths(512);
             DWORD pathsLength = 0;
-            if (GetVolumePathNamesForVolumeNameW(volumeName, paths,
-                                                 ARRAYSIZE(paths), &pathsLength) &&
-                paths[0]) {
-                std::wstring first = paths;
-                if (first.size() >= 2 && first[1] == L':') {
-                    volume.letter = first.substr(0, 2);
+            BOOL gotPaths = GetVolumePathNamesForVolumeNameW(
+                volumeName, paths.data(), static_cast<DWORD>(paths.size()),
+                &pathsLength);
+            if (!gotPaths && GetLastError() == ERROR_MORE_DATA &&
+                pathsLength > paths.size()) {
+                paths.resize(pathsLength);
+                gotPaths = GetVolumePathNamesForVolumeNameW(
+                    volumeName, paths.data(), static_cast<DWORD>(paths.size()),
+                    &pathsLength);
+            }
+            if (gotPaths) {
+                for (PCWSTR path = paths.data(); *path;
+                     path += wcslen(path) + 1) {
+                    if (path[0] && path[1] == L':' && path[2] == L'\\' &&
+                        !path[3]) {
+                        if (volume.letter.empty()) {
+                            volume.letter.assign(path, 2);
+                        }
+                    } else {
+                        volume.mountPoints.push_back(path);
+                    }
                 }
             }
 
@@ -2048,6 +2083,18 @@ void Paint(PropState* state, HDC dc, const RECT& client) {
                                  : L"Data",
               columnWidth);
 
+    // A volume mounted in a folder rather than at a drive root has no letter to
+    // show, and without this it reads as an anonymous partition.
+    if (!volume.mountPoints.empty()) {
+        std::wstring mounted = volume.mountPoints[0];
+        if (volume.mountPoints.size() > 1) {
+            mounted += L" (+" + std::to_wstring(volume.mountPoints.size() - 1) +
+                       L" more)";
+        }
+        DrawField(state, dc, rightX, &rightY, L"Mounted in", mounted,
+                  columnWidth);
+    }
+
     // The volume path is long, so it gets the full width and sits clear of the
     // buttons rather than being drawn underneath them.
     int y = std::max(leftY, rightY);
@@ -2351,6 +2398,24 @@ constexpr UINT kMsgSettingsChanged = WM_APP + 1;
 // Posted by the enumeration thread once it has a result to hand over.
 constexpr UINT kMsgScanDone = WM_APP + 2;
 
+struct Column {
+    PCWSTR title;
+    int width;      // design pixels; 0 means "take what is left"
+    bool rightAlign;
+    int dropOrder;  // dropped in this order as the window narrows; 0 never
+};
+
+// Column order is the console's, which is the order these facts are usually
+// read in. Narrow windows lose columns from the right of the list first, so
+// what remains is always the identifying information.
+const Column kColumns[] = {
+    {L"Volume", 0, false, 0},    {L"Layout", 74, false, 3},
+    {L"Type", 62, false, 2},     {L"File system", 92, false, 6},
+    {L"Status", 232, false, 5},  {L"Capacity", 88, true, 0},
+    {L"Free space", 88, true, 4}, {L"% Free", 62, true, 1},
+};
+constexpr int kColumnCount = static_cast<int>(ARRAYSIZE(kColumns));
+
 struct State {
     HWND hwnd = nullptr;
     HFONT fontCaption = nullptr;  // title bar, regular weight: it is chrome
@@ -2388,9 +2453,29 @@ struct State {
     int selectedVolume = -1;
     int scroll = 0;
     int scrollTarget = 0;
-    int contentTop = 0;
+    int contentTop = 0;  // top of the scrolling map area, below the fixed table
     int contentBottom = 0;
     int contentHeight = 0;
+
+    // The volume table is a real list view rather than something drawn. A
+    // custom-drawn table is invisible to a screen reader, and Disk Management is
+    // not a tool to leave unusable for one. Every pixel of it is still drawn by
+    // this mod, through NM_CUSTOMDRAW - the control is here for the
+    // accessibility tree, and for the keyboard and hit testing that come with
+    // it, not for its looks.
+    //
+    // It is also why the table is a fixed pane with its own scrollbar rather
+    // than part of the canvas below it: a child window cannot take part in the
+    // parent's double-buffered blit, so one that moved with a smooth scroll
+    // would visibly lag the content around it. Nothing moves it now.
+    HWND table = nullptr;
+    std::vector<std::pair<int, int>> rows;  // list index -> disk, volume
+    RECT tableRect{};                       // the card the list sits in
+    int tableWidths[kColumnCount]{};
+    bool tableVisible[kColumnCount]{};
+    int hotRow = -1;
+    bool syncingSelection = false;    // a selection this code made, not the user
+    bool tableClickOnVolume = false;  // the last right-click landed on a row
 };
 
 State* g_state;
@@ -2639,26 +2724,41 @@ void DrawMenuEntry(State* state, const MenuEntry& entry,
 // The volume table
 // -----------------------------------------------------------------------------
 
-struct Column {
-    PCWSTR title;
-    int width;      // design pixels; 0 means "take what is left"
-    bool rightAlign;
-    int dropOrder;  // dropped in this order as the window narrows; 0 never
-};
-
-// Column order is the console's, which is the order these facts are usually
-// read in. Narrow windows lose columns from the right of the list first, so
-// what remains is always the identifying information.
-const Column kColumns[] = {
-    {L"Volume", 0, false, 0},    {L"Layout", 74, false, 3},
-    {L"Type", 62, false, 2},     {L"File system", 92, false, 6},
-    {L"Status", 232, false, 5},  {L"Capacity", 88, true, 0},
-    {L"Free space", 88, true, 4}, {L"% Free", 62, true, 1},
-};
-constexpr int kColumnCount = static_cast<int>(ARRAYSIZE(kColumns));
-
 // Works out which columns fit and how wide each one is, given the space the
 // table has. The Volume column absorbs whatever is left over.
+// What a cell says. Drawn from here, and reported from here to LVN_GETDISPINFO,
+// so what a screen reader is told and what is on screen cannot drift apart.
+std::wstring CellText(const DiskInfo& disk, const VolumeInfo& volume,
+                      int column) {
+    switch (column) {
+        case 0:
+            return VolumeDisplayName(volume);
+        case 1:
+            // Layout and type, as far as they can be known from the partition
+            // table alone: one disk extent is a simple volume, several is not,
+            // and LDM metadata on the disk is what makes it dynamic. Telling
+            // spanned from striped from mirrored needs the dynamic-disk
+            // database this mod does not read, so it does not claim to.
+            return volume.extents > 1    ? L"Multi-disk"
+                   : volume.extents == 1 ? L"Simple"
+                                         : L"\x2014";
+        case 2:
+            return disk.dynamic ? L"Dynamic" : L"Basic";
+        case 3:
+            return volume.fileSystem.empty() ? L"RAW" : volume.fileSystem;
+        case 4:
+            return StatusText(volume);
+        case 5:
+            return ui::FormatSize(volume.size);
+        case 6:
+            return volume.letter.empty() ? L"\x2014"
+                                         : ui::FormatSize(volume.freeSpace);
+        case 7:
+            return PercentFreeText(volume);
+    }
+    return std::wstring();
+}
+
 void LayoutColumns(State* state, int tableWidth, bool visible[kColumnCount],
                    int widths[kColumnCount]) {
     int minimumVolume = ui::Scale(210, state->dpi);
@@ -2688,152 +2788,291 @@ void LayoutColumns(State* state, int tableWidth, bool visible[kColumnCount],
 }
 
 // Paints the table of every volume on every disk, and returns its height.
-int PaintVolumeTable(State* state, HDC dc, int top, int left, int right) {
-    int pad = ui::Scale(14, state->dpi);
-    int headerHeight = ui::Scale(32, state->dpi);
-    int rowHeight = ui::Scale(42, state->dpi);
+int TableRowHeight(State* state) {
+    // What the control actually gave a row. The image list below asks for a
+    // height and comctl32 is free to round it, and every rectangle the rows are
+    // drawn into comes from the control - so the card is sized from the same
+    // number rather than from what was asked for.
+    if (state->table && !state->rows.empty()) {
+        RECT row{};
+        if (ListView_GetItemRect(state->table, 0, &row, LVIR_BOUNDS) &&
+            row.bottom > row.top) {
+            return row.bottom - row.top;
+        }
+    }
+    return ui::Scale(42, state->dpi);
+}
+
+int TableHeaderHeight(State* state) {
+    return ui::Scale(32, state->dpi);
+}
+
+int TableCardPadding(State* state) {
+    return ui::Scale(14, state->dpi);
+}
+
+// How far the control is held inside the card, so the card's rounded corners
+// and its border stay visible around a rectangular child window.
+int TableInset(State* state) {
+    return ui::Scale(6, state->dpi);
+}
+
+// The rows the table is showing, in the order it shows them. Rebuilt whenever
+// the disks or the "show volumes without a drive letter" setting change, and
+// the list view is told how many items it has - it is LVS_OWNERDATA, so the
+// model stays here rather than being copied into the control.
+void BuildRowMap(State* state) {
+    state->rows.clear();
+    for (size_t d = 0; d < state->disks.size(); d++) {
+        for (size_t v = 0; v < state->disks[d].volumes.size(); v++) {
+            if (g_settings.showEmptyVolumes ||
+                !state->disks[d].volumes[v].letter.empty()) {
+                state->rows.emplace_back(static_cast<int>(d),
+                                         static_cast<int>(v));
+            }
+        }
+    }
+    if (state->hotRow >= static_cast<int>(state->rows.size())) {
+        state->hotRow = -1;
+    }
+    if (state->table) {
+        ListView_SetItemCountEx(state->table,
+                                static_cast<int>(state->rows.size()),
+                                LVSICF_NOINVALIDATEALL);
+        // The rows a scan replaced can land on the same indices with different
+        // contents, and the parent's invalidation stops at the child's edge now
+        // that the window clips its children.
+        InvalidateRect(state->table, nullptr, FALSE);
+    }
+}
+
+// Puts the control's selection where the rest of the window thinks it is. The
+// flag is what stops that from looking like the user selecting a row, which
+// would bounce straight back through LVN_ITEMCHANGED.
+void SyncTableSelection(State* state) {
+    if (!state->table) {
+        return;
+    }
+    int index = -1;
+    for (size_t i = 0; i < state->rows.size(); i++) {
+        if (state->rows[i].first == state->selectedDisk &&
+            state->rows[i].second == state->selectedVolume) {
+            index = static_cast<int>(i);
+            break;
+        }
+    }
+
+    state->syncingSelection = true;
+    if (index < 0) {
+        ListView_SetItemState(state->table, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+    } else {
+        ListView_SetItemState(state->table, index, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
+        ListView_EnsureVisible(state->table, index, FALSE);
+    }
+    state->syncingSelection = false;
+}
+
+// Where everything fixed sits, and therefore where the scrolling part starts.
+// Called when the window changes shape rather than while painting: moving a
+// child window from inside WM_PAINT is asking for reentrancy.
+void LayoutWindow(State* state) {
+    RECT client{};
+    GetClientRect(state->hwnd, &client);
+
+    int pad = ui::Scale(ui::kPadding, state->dpi);
+    int titleHeight = ui::Scale(ui::kTitleHeight, state->dpi);
+    int cardPad = TableCardPadding(state);
+    int headerHeight = TableHeaderHeight(state);
+    int rowHeight = TableRowHeight(state);
+
+    // Title bar, the "Volumes" heading, then the card.
+    int cardTop = titleHeight + pad + ui::Scale(26, state->dpi) +
+                  ui::Scale(10, state->dpi);
+
+    int wanted = cardPad + headerHeight +
+                 std::max(static_cast<int>(state->rows.size()), 1) * rowHeight;
+    int smallest = cardPad + headerHeight + rowHeight;
+
+    // What the map needs below it: its own heading, and enough room to be worth
+    // drawing. The table gives way first, because it can scroll internally and
+    // the map cannot.
+    int belowCard = ui::Scale(22, state->dpi) + ui::Scale(26, state->dpi) +
+                    ui::Scale(10, state->dpi);
+    int roomForMap = ui::Scale(190, state->dpi);
+    int available = client.bottom - cardTop - belowCard - roomForMap - pad;
+
+    int cardHeight = std::clamp(wanted, smallest, std::max(smallest, available));
+    state->tableRect = {pad, cardTop, std::max<int>(pad, client.right - pad),
+                        cardTop + cardHeight};
+
+    if (state->table) {
+        int inset = TableInset(state);
+        RECT list{state->tableRect.left + inset,
+                  state->tableRect.top + cardPad / 2 + headerHeight,
+                  state->tableRect.right - inset,
+                  state->tableRect.bottom - cardPad / 2};
+        SetWindowPos(state->table, nullptr, list.left, list.top,
+                     std::max<int>(0, list.right - list.left),
+                     std::max<int>(0, list.bottom - list.top),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+
+        // The drawn header and the control's own column model are laid out from
+        // the same numbers, so a cell is under the heading that names it. The
+        // width they share is the control's client width, measured after the
+        // resize above: laying the columns out across the card instead would
+        // overrun the client by however wide the vertical scrollbar is, and the
+        // control would answer that with a horizontal scrollbar.
+        RECT inner{};
+        GetClientRect(state->table, &inner);
+        int lead = cardPad - inset;  // card padding, as the control sees it
+        int usable = std::max<int>(0, (inner.right - inner.left) - 2 * lead);
+        LayoutColumns(state, usable, state->tableVisible, state->tableWidths);
+        for (int i = 0; i < kColumnCount; i++) {
+            ListView_SetColumnWidth(
+                state->table, i,
+                state->tableVisible[i] ? state->tableWidths[i] : 0);
+        }
+
+        // With nothing to list, the card says so instead - and the control has
+        // to be out of the way for that message to be visible at all.
+        ShowWindow(state->table, state->rows.empty() ? SW_HIDE : SW_SHOW);
+
+        // The window opens on an empty table while the first scan runs, so this
+        // is where the keyboard reaches the list: the moment it has rows.
+        if (!state->rows.empty() && GetFocus() == state->hwnd) {
+            SetFocus(state->table);
+        }
+    }
+
+    state->contentTop = state->tableRect.bottom + belowCard;
+    state->contentBottom = client.bottom;
+}
+
+// The card the list view sits in: its background, its column headings, and the
+// message that stands in for an empty list. The rows themselves are drawn by
+// DrawTableRow, from inside the control.
+void PaintVolumeTable(State* state, HDC dc) {
+    int cardPad = TableCardPadding(state);
+    int headerHeight = TableHeaderHeight(state);
     int radius = ui::Scale(ui::kCardRadius, state->dpi);
 
-    int rows = 0;
-    for (const auto& disk : state->disks) {
-        for (const auto& volume : disk.volumes) {
-            if (g_settings.showEmptyVolumes || !volume.letter.empty()) {
-                rows++;
-            }
-        }
-    }
-
-    int cardHeight = pad / 2 + headerHeight + rows * rowHeight + pad / 2;
-    RECT card{left, top, right, top + cardHeight};
+    RECT card = state->tableRect;
     DrawSurface(dc, card, radius, state->cardColor, ui::kCardBorder);
 
-    int tableLeft = card.left + pad;
-    int tableRight = card.right - pad;
-    bool visible[kColumnCount];
-    int widths[kColumnCount];
-    LayoutColumns(state, tableRight - tableLeft, visible, widths);
+    int tableLeft = card.left + cardPad;
+    int tableRight = card.right - cardPad;
 
-    // Column headers.
-    int headerTop = card.top + pad / 2;
-    {
-        int x = tableLeft;
-        for (int i = 0; i < kColumnCount; i++) {
-            if (!visible[i]) {
-                continue;
-            }
-            RECT cell{x, headerTop, x + widths[i], headerTop + headerHeight};
-            cell.right -= ui::Scale(10, state->dpi);
-            DrawLabel(dc, state->fontSmall, ui::kTextTertiary, kColumns[i].title,
-                      cell, kColumns[i].rightAlign ? kTextRight : kTextLeft);
-            x += widths[i];
+    int headerTop = card.top + cardPad / 2;
+    int x = tableLeft;
+    for (int i = 0; i < kColumnCount; i++) {
+        if (!state->tableVisible[i]) {
+            continue;
         }
-        RECT rule{tableLeft, headerTop + headerHeight - ui::Scale(1, state->dpi),
-                  tableRight, headerTop + headerHeight};
-        FillPlain(dc, rule, ui::kCardBorder);
+        RECT cell{x, headerTop, x + state->tableWidths[i],
+                  headerTop + headerHeight};
+        cell.right -= ui::Scale(10, state->dpi);
+        DrawLabel(dc, state->fontSmall, ui::kTextTertiary, kColumns[i].title,
+                  cell, kColumns[i].rightAlign ? kTextRight : kTextLeft);
+        x += state->tableWidths[i];
     }
 
-    int y = headerTop + headerHeight;
-    for (size_t diskIndex = 0; diskIndex < state->disks.size(); diskIndex++) {
-        const DiskInfo& disk = state->disks[diskIndex];
-        for (size_t volumeIndex = 0; volumeIndex < disk.volumes.size();
-             volumeIndex++) {
-            const VolumeInfo& volume = disk.volumes[volumeIndex];
-            if (!g_settings.showEmptyVolumes && volume.letter.empty()) {
-                continue;
-            }
+    RECT rule{tableLeft, headerTop + headerHeight - ui::Scale(1, state->dpi),
+              tableRight, headerTop + headerHeight};
+    FillPlain(dc, rule, ui::kCardBorder);
 
-            RECT row{card.left + ui::Scale(6, state->dpi), y,
-                     card.right - ui::Scale(6, state->dpi), y + rowHeight};
-            bool selected = state->selectedDisk == static_cast<int>(diskIndex) &&
-                            state->selectedVolume == static_cast<int>(volumeIndex);
-            bool hovered = PtInRect(&row, state->mouse) != FALSE;
-            if (selected) {
-                ui::FillRoundRect(dc, row, ui::Scale(6, state->dpi),
-                                  ui::MixColors(state->cardColor,
-                                                state->accentColor, 26));
-                // The marker on the leading edge, so the selected row is still
-                // obvious against a tinted background.
-                RECT marker{row.left, row.top + ui::Scale(7, state->dpi),
-                            row.left + ui::Scale(3, state->dpi),
-                            row.bottom - ui::Scale(7, state->dpi)};
-                ui::FillRoundRect(dc, marker, ui::Scale(2, state->dpi),
-                                  state->accentColor);
-            } else if (hovered) {
-                ui::FillRoundRect(dc, row, ui::Scale(6, state->dpi),
-                                  Lighten(state, 6));
-            }
-
-            Target target;
-            target.rect = row;
-            target.diskIndex = static_cast<int>(diskIndex);
-            target.volumeIndex = static_cast<int>(volumeIndex);
-            state->targets.push_back(target);
-
-            // Layout and type, as far as they can be known from the partition
-            // table alone: one disk extent is a simple volume, several is not,
-            // and LDM metadata on the disk is what makes it dynamic. Telling
-            // spanned from striped from mirrored needs the dynamic-disk
-            // database this mod does not read, so it does not claim to.
-            const DiskInfo& owner = state->disks[diskIndex];
-            std::wstring layout = volume.extents > 1    ? L"Multi-disk"
-                                  : volume.extents == 1 ? L"Simple"
-                                                        : L"\x2014";
-
-            std::wstring cells[kColumnCount] = {
-                VolumeDisplayName(volume),
-                layout,
-                owner.dynamic ? L"Dynamic" : L"Basic",
-                volume.fileSystem.empty() ? L"RAW" : volume.fileSystem,
-                StatusText(volume),
-                ui::FormatSize(volume.size),
-                volume.letter.empty() ? L"\x2014"
-                                      : ui::FormatSize(volume.freeSpace),
-                PercentFreeText(volume),
-            };
-
-            int x = tableLeft;
-            for (int i = 0; i < kColumnCount; i++) {
-                if (!visible[i]) {
-                    continue;
-                }
-                RECT cell{x, row.top, x + widths[i], row.bottom};
-                cell.right -= ui::Scale(10, state->dpi);
-
-                if (i == 0) {
-                    // The name column carries the volume's own icon.
-                    int icon = ui::Scale(32, state->dpi);
-                    int iconTop = row.top + ((row.bottom - row.top) - icon) / 2;
-                    if (volume.image) {
-                        DrawShellImage(dc, volume.image, cell.left, iconTop, icon);
-                    } else if (volume.icon) {
-                        DrawIconEx(dc, cell.left, iconTop, volume.icon, icon,
-                                   icon, 0, nullptr, DI_NORMAL);
-                    }
-                    cell.left += icon + ui::Scale(10, state->dpi);
-                    DrawLabel(dc, state->fontName, ui::kTextPrimary, cells[i],
-                              cell);
-                } else {
-                    COLORREF color =
-                        i == 4 ? ui::kTextTertiary : ui::kTextSecondary;
-                    DrawLabel(dc, state->fontRow, color, cells[i], cell,
-                              kColumns[i].rightAlign ? kTextRight : kTextLeft);
-                }
-                x += widths[i];
-            }
-
-            y += rowHeight;
-        }
-    }
-
-    if (rows == 0) {
-        RECT empty{tableLeft, y, tableRight, y + rowHeight};
+    if (state->rows.empty()) {
+        RECT empty{tableLeft, headerTop + headerHeight, tableRight,
+                   headerTop + headerHeight + TableRowHeight(state)};
         DrawLabel(dc, state->fontRow, ui::kTextSecondary,
-                  state->scanning ? L"Reading disks…"
+                  state->scanning ? L"Reading disks\x2026"
                                   : L"No volumes could be read.",
                   empty);
     }
+}
 
-    return cardHeight;
+// One row, drawn into the list view's own DC from NM_CUSTOMDRAW. The control
+// owns the rectangle, the selection and the hit testing; everything inside the
+// rectangle is still this mod's, which is how the table keeps its look while
+// being a real list to anything reading the screen.
+void DrawTableRow(State* state, HDC dc, int index) {
+    if (index < 0 || index >= static_cast<int>(state->rows.size())) {
+        return;
+    }
+    RECT row{};
+    if (!ListView_GetItemRect(state->table, index, &row, LVIR_BOUNDS)) {
+        return;
+    }
+
+    int diskIndex = state->rows[index].first;
+    int volumeIndex = state->rows[index].second;
+    if (diskIndex < 0 || diskIndex >= static_cast<int>(state->disks.size())) {
+        return;
+    }
+    const DiskInfo& disk = state->disks[diskIndex];
+    if (volumeIndex < 0 ||
+        volumeIndex >= static_cast<int>(disk.volumes.size())) {
+        return;
+    }
+    const VolumeInfo& volume = disk.volumes[volumeIndex];
+
+    bool selected = state->selectedDisk == diskIndex &&
+                    state->selectedVolume == volumeIndex;
+    bool hovered = state->hotRow == index;
+
+    SetBkMode(dc, TRANSPARENT);
+
+    // The Explorer theme draws faint column dividers under the row before this
+    // runs - a details-view idiom that does not belong in a table with a rounded
+    // selection pill, and one the selected row was already painting over. Every
+    // row starts from the card's own colour instead.
+    FillPlain(dc, row, state->cardColor);
+
+    if (selected) {
+        ui::FillRoundRect(
+            dc, row, ui::Scale(6, state->dpi),
+            ui::MixColors(state->cardColor, state->accentColor, 26));
+        // The marker on the leading edge, so the selected row is still obvious
+        // against a tinted background.
+        RECT marker{row.left, row.top + ui::Scale(7, state->dpi),
+                    row.left + ui::Scale(3, state->dpi),
+                    row.bottom - ui::Scale(7, state->dpi)};
+        ui::FillRoundRect(dc, marker, ui::Scale(2, state->dpi),
+                          state->accentColor);
+    } else if (hovered) {
+        ui::FillRoundRect(dc, row, ui::Scale(6, state->dpi), Lighten(state, 6));
+    }
+
+    // The control is inset from the card, so a cell starts under the heading
+    // that names it only once that inset is taken back off.
+    int x = row.left + TableCardPadding(state) - TableInset(state);
+    for (int i = 0; i < kColumnCount; i++) {
+        if (!state->tableVisible[i]) {
+            continue;
+        }
+        RECT cell{x, row.top, x + state->tableWidths[i], row.bottom};
+        cell.right -= ui::Scale(10, state->dpi);
+        std::wstring text = CellText(disk, volume, i);
+
+        if (i == 0) {
+            // The name column carries the volume's own icon.
+            int icon = ui::Scale(32, state->dpi);
+            int iconTop = row.top + ((row.bottom - row.top) - icon) / 2;
+            if (volume.image) {
+                DrawShellImage(dc, volume.image, cell.left, iconTop, icon);
+            } else if (volume.icon) {
+                DrawIconEx(dc, cell.left, iconTop, volume.icon, icon, icon, 0,
+                           nullptr, DI_NORMAL);
+            }
+            cell.left += icon + ui::Scale(10, state->dpi);
+            DrawLabel(dc, state->fontName, ui::kTextPrimary, text, cell);
+        } else {
+            COLORREF color = i == 4 ? ui::kTextTertiary : ui::kTextSecondary;
+            DrawLabel(dc, state->fontRow, color, text, cell,
+                      kColumns[i].rightAlign ? kTextRight : kTextLeft);
+        }
+        x += state->tableWidths[i];
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -3231,33 +3470,24 @@ void Paint(State* state, HDC dc, const RECT& client) {
                   close, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
     }
 
-    state->contentTop = titleHeight;
-    state->contentBottom = client.bottom;
-
-    int saved = SaveDC(dc);
-    IntersectClipRect(dc, 0, state->contentTop, client.right,
-                      state->contentBottom);
-
     int left = pad;
     int right = client.right - pad;
-    int y = state->contentTop + pad - state->scroll;
+
+    // Everything down to the "Disk layout" heading is fixed: the table is a
+    // control with its own scrollbar, and the headings belong to it and to the
+    // map rather than to either one's contents. Only the map scrolls, which is
+    // what state->contentTop marks - LayoutWindow decides all of it.
 
     // Volumes.
     {
-        RECT heading{left, y, right, y + ui::Scale(26, state->dpi)};
+        RECT heading{left, titleHeight + pad, right,
+                     titleHeight + pad + ui::Scale(26, state->dpi)};
         DrawLabel(dc, state->fontSection, ui::kTextPrimary, L"Volumes", heading);
 
         // Count what the table is actually showing. With letterless volumes
         // hidden, a caption that still counted them described a list the user
         // could not see.
-        size_t volumeCount = 0;
-        for (const auto& disk : state->disks) {
-            for (const auto& volume : disk.volumes) {
-                if (g_settings.showEmptyVolumes || !volume.letter.empty()) {
-                    volumeCount++;
-                }
-            }
-        }
+        size_t volumeCount = state->rows.size();
         std::wstring count =
             state->scanning && state->disks.empty()
                 ? L"Reading…"
@@ -3267,21 +3497,26 @@ void Paint(State* state, HDC dc, const RECT& client) {
                       (state->disks.size() == 1 ? L" disk" : L" disks");
         DrawLabel(dc, state->fontSmall, ui::kTextTertiary, count, heading,
                   kTextRight);
-
-        y = heading.bottom + ui::Scale(10, state->dpi);
-        y += PaintVolumeTable(state, dc, y, left, right);
     }
+
+    PaintVolumeTable(state, dc);
 
     // Disk layout.
-    y += ui::Scale(22, state->dpi);
     {
-        RECT heading{left, y, right, y + ui::Scale(26, state->dpi)};
+        int headingTop = state->tableRect.bottom + ui::Scale(22, state->dpi);
+        RECT heading{left, headingTop, right,
+                     headingTop + ui::Scale(26, state->dpi)};
         DrawLabel(dc, state->fontSection, ui::kTextPrimary, L"Disk layout",
                   heading);
-        PaintLegend(state, dc, y + ui::Scale(4, state->dpi),
+        PaintLegend(state, dc, headingTop + ui::Scale(4, state->dpi),
                     left + ui::Scale(150, state->dpi), right);
-        y = heading.bottom + ui::Scale(10, state->dpi);
     }
+
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, 0, state->contentTop, client.right,
+                      state->contentBottom);
+
+    int y = state->contentTop - state->scroll;
 
     for (size_t i = 0; i < state->disks.size(); i++) {
         y += PaintDiskMap(state, dc, state->disks[i], static_cast<int>(i), y,
@@ -3333,6 +3568,7 @@ void AdoptScan(State* state) {
     ReleaseDiskIcons(state->disks);
     state->disks = std::move(state->scanResult);
     state->scanResult.clear();
+    state->hotRow = -1;
 
     // The window can be dragged onto a differently scaled monitor while a scan
     // is out, and the icons that just arrived were drawn for the monitor it
@@ -3359,6 +3595,13 @@ void AdoptScan(State* state) {
             }
         }
     }
+
+    // The rows the control lists, the height the card needs for them, and the
+    // control's own idea of what is selected - all downstream of the list that
+    // was just replaced.
+    BuildRowMap(state);
+    LayoutWindow(state);
+    SyncTableSelection(state);
 
     InvalidateRect(state->hwnd, nullptr, FALSE);
 }
@@ -3738,17 +3981,40 @@ void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
 void ShowContextMenuForSelection(State* state) {
     POINT point{ui::Scale(ui::kPadding + 40, state->dpi),
                 state->contentTop + ui::Scale(40, state->dpi)};
-    bool onVolume = false;
-    for (const auto& target : state->targets) {
-        if (target.diskIndex == state->selectedDisk &&
-            target.volumeIndex == state->selectedVolume) {
-            point = {target.rect.left + ui::Scale(40, state->dpi),
-                     target.rect.bottom};
-            onVolume = Selected(state) != nullptr;
+    bool anchored = false;
+
+    // The selected row, if the table is showing one. It is where the keyboard
+    // focus is, so it is where the menu belongs.
+    if (state->table && IsWindowVisible(state->table)) {
+        for (size_t i = 0; i < state->rows.size(); i++) {
+            if (state->rows[i].first != state->selectedDisk ||
+                state->rows[i].second != state->selectedVolume) {
+                continue;
+            }
+            RECT row{};
+            if (ListView_GetItemRect(state->table, static_cast<int>(i), &row,
+                                     LVIR_BOUNDS)) {
+                POINT anchor{row.left + ui::Scale(40, state->dpi), row.bottom};
+                MapWindowPoints(state->table, state->hwnd, &anchor, 1);
+                point = anchor;
+                anchored = true;
+            }
             break;
         }
     }
-    ShowContextMenu(state, point, onVolume);
+
+    if (!anchored) {
+        for (const auto& target : state->targets) {
+            if (target.diskIndex == state->selectedDisk &&
+                target.volumeIndex == state->selectedVolume) {
+                point = {target.rect.left + ui::Scale(40, state->dpi),
+                         target.rect.bottom};
+                break;
+            }
+        }
+    }
+
+    ShowContextMenu(state, point, Selected(state) != nullptr);
 }
 
 // Moves the selection up or down the volume list, so the whole window can be
@@ -3781,19 +4047,143 @@ void MoveSelection(State* state, int delta) {
     next = std::clamp(next, 0, static_cast<int>(order.size()) - 1);
     state->selectedDisk = order[next].first;
     state->selectedVolume = order[next].second;
+    SyncTableSelection(state);
     InvalidateRect(state->hwnd, nullptr, FALSE);
 }
 
+// Only the map is hit-tested here now; the table is a control and does its own.
 bool SelectAt(State* state, POINT point) {
     for (const auto& target : state->targets) {
         if (PtInRect(&target.rect, point)) {
             state->selectedDisk = target.diskIndex;
             state->selectedVolume = target.volumeIndex;
+            SyncTableSelection(state);
             InvalidateRect(state->hwnd, nullptr, FALSE);
             return true;
         }
     }
     return false;
+}
+
+constexpr UINT_PTR kTableId = 1;
+constexpr UINT_PTR kTableSubclassId = 1;
+
+// The parent stops getting mouse messages over the table once the table is a
+// child window, and a row that does not light up under the cursor reads as
+// dead. This is the whole reason for the subclass.
+LRESULT CALLBACK TableSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
+                                   LPARAM lParam, UINT_PTR, DWORD_PTR data) {
+    State* state = reinterpret_cast<State*>(data);
+
+    switch (message) {
+        case WM_MOUSEMOVE: {
+            // Sub-item hit testing, not LVM_HITTEST: in report mode the plain
+            // hit test only answers for the first column's label, so anything
+            // hovered further right - most of the row - would read as nothing.
+            LVHITTESTINFO hit{};
+            hit.pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ListView_SubItemHitTest(hwnd, &hit);
+            if (hit.iItem != state->hotRow) {
+                int previous = state->hotRow;
+                state->hotRow = hit.iItem;
+                if (previous >= 0) {
+                    ListView_RedrawItems(hwnd, previous, previous);
+                }
+                if (state->hotRow >= 0) {
+                    ListView_RedrawItems(hwnd, state->hotRow, state->hotRow);
+                }
+            }
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&track);
+            break;
+        }
+
+        case WM_MOUSELEAVE:
+            if (state->hotRow >= 0) {
+                int previous = state->hotRow;
+                state->hotRow = -1;
+                ListView_RedrawItems(hwnd, previous, previous);
+            }
+            break;
+
+        case WM_NCDESTROY:
+            // Before the window goes, so nothing is left pointing at code in a
+            // module that is about to be unmapped.
+            RemoveWindowSubclass(hwnd, TableSubclassProc, kTableSubclassId);
+            break;
+    }
+
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+// A report-mode row is as tall as the small image list, and these rows are
+// taller than a line of text. Nothing is ever drawn from this list - every pixel
+// of a row comes from DrawTableRow - it exists only to set the height.
+void ApplyTableMetrics(State* state) {
+    if (!state->table) {
+        return;
+    }
+    HIMAGELIST spacer =
+        ImageList_Create(1, ui::Scale(38, state->dpi), ILC_COLOR32, 0, 0);
+    if (!spacer) {
+        return;
+    }
+    // Setting a new one hands the old one back rather than freeing it; the last
+    // one goes with the control, which owns it.
+    HIMAGELIST previous =
+        ListView_SetImageList(state->table, spacer, LVSIL_SMALL);
+    if (previous) {
+        ImageList_Destroy(previous);
+    }
+}
+
+// A real SysListView32, owner-data and entirely custom-drawn. It exists for the
+// accessibility tree: a screen reader sees a list with rows and columns here,
+// which is what the console it replaces gave them and what a drawn table cannot.
+void CreateVolumeTable(State* state) {
+    INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LISTVIEW_CLASSES};
+    InitCommonControlsEx(&controls);
+
+    state->table = CreateWindowExW(
+        0, WC_LISTVIEWW, L"Volumes",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_NOCOLUMNHEADER |
+            LVS_OWNERDATA | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        0, 0, 0, 0, state->hwnd, reinterpret_cast<HMENU>(kTableId),
+        ModuleInstance(), nullptr);
+    if (!state->table) {
+        // Not fatal: the window still works, it is just no longer reachable by
+        // a screen reader, which is worth a line in the log.
+        Wh_Log(L"could not create the volume list; the table will be empty");
+        return;
+    }
+
+    ListView_SetExtendedListViewStyle(
+        state->table, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    ApplyTableMetrics(state);
+
+    // The rows are drawn by this mod, but the space around them is the
+    // control's, and so is the scrollbar.
+    ListView_SetBkColor(state->table, state->cardColor);
+    ListView_SetTextBkColor(state->table, CLR_NONE);
+    if (!ui::g_light) {
+        SetWindowTheme(state->table, L"DarkMode_Explorer", nullptr);
+    }
+
+    // The columns are never drawn by the control - LVS_NOCOLUMNHEADER, and every
+    // cell goes through DrawTableRow. They are inserted because they are the
+    // column model a screen reader reads a row through.
+    for (int i = 0; i < kColumnCount; i++) {
+        LVCOLUMNW column{};
+        column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT;
+        column.fmt = kColumns[i].rightAlign ? LVCFMT_RIGHT : LVCFMT_LEFT;
+        column.cx = ui::Scale(kColumns[i].width ? kColumns[i].width : 210,
+                              state->dpi);
+        column.pszText = const_cast<PWSTR>(kColumns[i].title);
+        ListView_InsertColumn(state->table, i, &column);
+    }
+
+    SetWindowSubclass(state->table, TableSubclassProc, kTableSubclassId,
+                      reinterpret_cast<DWORD_PTR>(state));
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -3840,8 +4230,131 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_SIZE:
+            LayoutWindow(state);
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
+
+        case WM_NOTIFY: {
+            auto* header = reinterpret_cast<NMHDR*>(lParam);
+            if (!header || !state->table || header->hwndFrom != state->table) {
+                break;
+            }
+
+            // The notification codes are unsigned constants (NM_FIRST and
+            // LVN_FIRST are both written as 0U - n), so this switches on the
+            // field's own type rather than narrowing it to int.
+            switch (header->code) {
+                case NM_CUSTOMDRAW: {
+                    auto* draw = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
+                    if (draw->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                        return CDRF_NOTIFYITEMDRAW;
+                    }
+                    if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                        DrawTableRow(state, draw->nmcd.hdc,
+                                     static_cast<int>(draw->nmcd.dwItemSpec));
+                        return CDRF_SKIPDEFAULT;
+                    }
+                    return CDRF_DODEFAULT;
+                }
+
+                case LVN_GETDISPINFOW: {
+                    // What the control reports to anything reading the list.
+                    auto* info = reinterpret_cast<NMLVDISPINFOW*>(lParam);
+                    if (!(info->item.mask & LVIF_TEXT) || !info->item.pszText) {
+                        break;
+                    }
+                    info->item.pszText[0] = L'\0';
+
+                    int index = info->item.iItem;
+                    if (index < 0 ||
+                        index >= static_cast<int>(state->rows.size())) {
+                        break;
+                    }
+                    int diskIndex = state->rows[index].first;
+                    int volumeIndex = state->rows[index].second;
+                    if (diskIndex < 0 ||
+                        diskIndex >= static_cast<int>(state->disks.size())) {
+                        break;
+                    }
+                    const DiskInfo& disk = state->disks[diskIndex];
+                    if (volumeIndex < 0 ||
+                        volumeIndex >=
+                            static_cast<int>(disk.volumes.size())) {
+                        break;
+                    }
+                    std::wstring text = CellText(disk, disk.volumes[volumeIndex],
+                                                 info->item.iSubItem);
+                    wcsncpy_s(info->item.pszText, info->item.cchTextMax,
+                              text.c_str(), _TRUNCATE);
+                    break;
+                }
+
+                case LVN_ITEMCHANGED: {
+                    if (state->syncingSelection) {
+                        break;
+                    }
+                    auto* change = reinterpret_cast<NMLISTVIEW*>(lParam);
+                    if (!(change->uChanged & LVIF_STATE) ||
+                        !(change->uNewState & LVIS_SELECTED) ||
+                        (change->uOldState & LVIS_SELECTED)) {
+                        break;
+                    }
+                    int index = change->iItem;
+                    if (index < 0 ||
+                        index >= static_cast<int>(state->rows.size())) {
+                        break;
+                    }
+                    state->selectedDisk = state->rows[index].first;
+                    state->selectedVolume = state->rows[index].second;
+                    // The map shows the same selection, so it is now stale.
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    break;
+                }
+
+                case NM_RCLICK: {
+                    // Selecting only. The menu comes with the WM_CONTEXTMENU
+                    // the control sends afterwards, which is also where the
+                    // keyboard menu key arrives.
+                    auto* item = reinterpret_cast<NMITEMACTIVATE*>(lParam);
+                    state->tableClickOnVolume =
+                        item->iItem >= 0 &&
+                        item->iItem < static_cast<int>(state->rows.size());
+                    if (state->tableClickOnVolume) {
+                        state->selectedDisk = state->rows[item->iItem].first;
+                        state->selectedVolume = state->rows[item->iItem].second;
+                        SyncTableSelection(state);
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
+                    break;
+                }
+
+                case NM_DBLCLK: {
+                    auto* item = reinterpret_cast<NMITEMACTIVATE*>(lParam);
+                    if (item->iItem >= 0) {
+                        ShowProperties(state);
+                    }
+                    break;
+                }
+
+                case LVN_KEYDOWN: {
+                    // Arrows are the control's own; these are the window's.
+                    auto* key = reinterpret_cast<NMLVKEYDOWN*>(lParam);
+                    switch (key->wVKey) {
+                        case VK_F5:
+                            Refresh(state);
+                            break;
+                        case VK_ESCAPE:
+                            DestroyWindow(hwnd);
+                            break;
+                        case VK_RETURN:
+                            ShowProperties(state);
+                            break;
+                    }
+                    break;
+                }
+            }
+            break;
+        }
 
         case WM_GETMINMAXINFO: {
             auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
@@ -4056,6 +4569,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             return 0;
 
+        case WM_SETFOCUS:
+            // The list is what a screen reader has anything to say about, and
+            // every key this window handles is handled there too. Focus that
+            // lands on the frame - after a properties window closes, say - is
+            // passed straight through to it.
+            if (state->table && IsWindowVisible(state->table)) {
+                SetFocus(state->table);
+                return 0;
+            }
+            break;
+
         case WM_KEYDOWN:
             switch (wParam) {
                 case VK_ESCAPE:
@@ -4080,12 +4604,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
 
         case WM_CONTEXTMENU:
-            // Keyboard only: lParam is -1 then. The mouse never reaches this,
-            // because WM_RBUTTONUP is handled above and never passed on. Left
-            // unhandled, this is the message that opens the window's grey
-            // system menu, which is not what the menu key should do here.
+            // Two ways in. lParam of -1 is the keyboard, from this window or
+            // from the list; anything else is the list's right-click, which has
+            // already chosen a row in NM_RCLICK. The mouse never reaches this
+            // from the window itself, because WM_RBUTTONUP is handled above and
+            // never passed on. Left unhandled, this is the message that opens
+            // the window's grey system menu, which is not what either should do.
             if (lParam == -1) {
                 ShowContextMenuForSelection(state);
+            } else if (state->table &&
+                       reinterpret_cast<HWND>(wParam) == state->table) {
+                POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ScreenToClient(hwnd, &point);
+                ShowContextMenu(state, point, state->tableClickOnVolume);
             }
             return 0;
 
@@ -4113,6 +4644,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // nothing here worth rescanning.
             g_iconDpi = state->dpi;
             RebuildDiskIcons(state->disks);
+
+            // The rows are scaled by the image list, which was made for the
+            // monitor the window just left.
+            ApplyTableMetrics(state);
+            LayoutWindow(state);
+            if (state->table) {
+                InvalidateRect(state->table, nullptr, TRUE);
+            }
 
             if (auto* suggested = reinterpret_cast<const RECT*>(lParam)) {
                 SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
@@ -4157,11 +4696,30 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                    ? ui::AccentTinted(ui::kCard, 12)
                                    : ui::kCard;
             state->accentColor = ui::AccentColor();
+
+            if (state->table) {
+                ListView_SetBkColor(state->table, state->cardColor);
+                SetWindowTheme(state->table,
+                               ui::g_light ? nullptr : L"DarkMode_Explorer",
+                               nullptr);
+            }
+            // "Show volumes without a drive letter" decides which volumes are
+            // rows at all, so the control's item count can be wrong now.
+            BuildRowMap(state);
+            LayoutWindow(state);
+            SyncTableSelection(state);
+            if (state->table) {
+                InvalidateRect(state->table, nullptr, TRUE);
+            }
+
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
 
         case WM_DESTROY:
+            // The child outlives this message by a moment, and anything that
+            // reached for it in between would be reaching for a dying window.
+            state->table = nullptr;
             g_windowHwnd = nullptr;
             PostQuitMessage(0);
             return 0;
@@ -4225,7 +4783,7 @@ bool Run() {
     state.hwnd = CreateWindowExW(
         0, kClassName, L"Disk Management",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
-            WS_MAXIMIZEBOX | WS_MINIMIZEBOX,
+            WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, nullptr, nullptr,
         ModuleInstance(), nullptr);
     if (!state.hwnd) {
@@ -4252,6 +4810,9 @@ bool Run() {
     DWORD corner = ui::kDwmCornerRound;
     DwmSetWindowAttribute(state.hwnd, ui::kDwmWindowCornerPreference, &corner, sizeof(corner));
 
+    // After the fonts, the DPI and the palette, all of which it is built from.
+    CreateVolumeTable(&state);
+
     int width = ui::Scale(ui::kWindowWidth, state.dpi);
     int height = ui::Scale(ui::kWindowHeight, state.dpi);
     HMONITOR monitor = MonitorFromWindow(state.hwnd, MONITOR_DEFAULTTOPRIMARY);
@@ -4275,8 +4836,12 @@ bool Run() {
     // the kMsgScanDone handler's job.
     Refresh(&state);
 
+    LayoutWindow(&state);
     ShowWindow(state.hwnd, SW_SHOW);
     SetForegroundWindow(state.hwnd);
+
+    // Focus is handed to the list by LayoutWindow as soon as the first scan
+    // gives it rows; there is nothing to focus before that.
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -4682,9 +5247,17 @@ void Wh_ModSettingsChanged() {
 // return. The answer is stable once it is no: the hooks are removed by then and
 // nothing leads back in.
 //
-// A value that lands in the image range without being a return address would
-// stall this forever, so the loop is bounded. A slow unload is a bug worth
-// having; a hung one is not.
+// Two things keep the cost of that honest. Only the module's code range counts,
+// not the whole image - a spilled pointer to a string literal or a global in this
+// DLL is not a frame that returns here, and treating it as one was the most
+// likely way to stall on nothing. And the sampling backs off rather than running
+// flat out, because each sample suspends MMC's main STA thread: a stall now costs
+// tens of samples across its budget instead of two thousand.
+//
+// It is still a conservative scan, so a stale value in a live frame's padding can
+// hold it. That costs the budget below and nothing else - the wait then ends the
+// same way an unverified one would have, which is why the budget is the backstop
+// rather than the mechanism.
 void WaitForThreadToLeaveModule(HANDLE thread) {
     if (!thread) {
         return;
@@ -4701,12 +5274,23 @@ void WaitForThreadToLeaveModule(HANDLE thread) {
     }
     BYTE* end = base + nt->OptionalHeader.SizeOfImage;
 
+    // Narrower than the image, and deliberately: a return address into this
+    // module is in its code.
+    BYTE* codeBegin = base + nt->OptionalHeader.BaseOfCode;
+    BYTE* codeEnd = codeBegin + nt->OptionalHeader.SizeOfCode;
+    if (codeBegin < base || codeEnd > end || codeEnd < codeBegin) {
+        codeBegin = base;  // nothing sensible in the header; fall back
+        codeEnd = end;
+    }
+
     // Learned from the first sample and then reused: the top of a thread's stack
     // does not move.
     BYTE* stackTop = nullptr;
 
-    constexpr int kMaxAttempts = 2000;  // with the sleep below, about two seconds
-    for (int attempt = 0; attempt < kMaxAttempts; attempt++) {
+    constexpr ULONGLONG kBudgetMs = 2000;
+    ULONGLONG deadline = GetTickCount64() + kBudgetMs;
+    DWORD backoff = 1;
+    for (;;) {
         CONTEXT context{};
         context.ContextFlags = CONTEXT_CONTROL;
 
@@ -4752,7 +5336,7 @@ void WaitForThreadToLeaveModule(HANDLE thread) {
                 auto** last = reinterpret_cast<BYTE**>(stackTop);
                 for (; slot < last; slot++) {
                     BYTE* value = *slot;
-                    if (value >= base && value < end) {
+                    if (value >= codeBegin && value < codeEnd) {
                         inside = true;
                         break;
                     }
@@ -4764,7 +5348,14 @@ void WaitForThreadToLeaveModule(HANDLE thread) {
         if (!ok || !inside) {
             return;
         }
-        Sleep(1);
+        if (GetTickCount64() >= deadline) {
+            break;
+        }
+
+        Sleep(backoff);
+        if (backoff < 64) {
+            backoff *= 2;
+        }
     }
 
     Wh_Log(L"MMC's thread is still in this module after two seconds; unloading "
