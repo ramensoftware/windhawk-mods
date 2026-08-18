@@ -13,11 +13,197 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Quick Launch & Media Panel
+
+Un panneau de bureau natif et discret pour lancer rapidement vos applications,
+organiser plusieurs pages de raccourcis et contrôler les sessions multimédias
+de Windows.
+
+## Utilisation
+
+- Cliquez sur la capsule située en haut de l'écran pour ouvrir ou refermer le panneau.
+- Glissez un fichier ou un raccourci sur une tuile pour l'ajouter.
+- Cliquez sur une tuile pour lancer l'application ou remettre sa fenêtre au premier plan.
+- Faites un clic droit sur une tuile pour modifier son nom, son icône, sa couleur ou ses arguments.
+- Faites glisser une tuile vers une autre pour réorganiser les raccourcis.
+- Utilisez la molette sur le panneau pour changer de page, ou `Ctrl + molette` pour redimensionner les tuiles.
+- Utilisez la molette sur le lecteur multimédia pour régler le volume principal.
+- Faites un clic droit sur le lecteur pour choisir la session multimédia à contrôler.
+
+La disposition est enregistrée automatiquement. Le menu contextuel du panneau
+permet également de l'exporter ou de l'importer.
+
+---
+
+A discreet native desktop panel for launching applications, organizing several
+shortcut pages and controlling Windows media sessions. Click the top capsule to
+open or close the panel. Drag files onto tiles, right-click tiles to customize
+them, and use the panel context menu to export or import the layout.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- language: fr
+  $name: Language
+  $name:fr-FR: Langue
+  $description: Language used by the panel and context menus.
+  $description:fr-FR: Langue utilisée par le panneau et ses menus contextuels.
+  $options:
+    - fr: Français
+    - en: English
+- startCollapsed: true
+  $name: Start collapsed
+  $name:fr-FR: Démarrer sous forme de capsule
+  $description: The panel starts as a small capsule. Click it to open the panel.
+  $description:fr-FR: Le panneau démarre sous la forme d'une petite capsule. Cliquez dessus pour l'ouvrir.
+- capsuleWidth: 176
+  $name: Capsule width
+  $name:fr-FR: Largeur de la capsule
+  $description: Width of the collapsed capsule, from 120 to 320 pixels.
+  $description:fr-FR: Largeur de la capsule fermée, entre 120 et 320 pixels.
+- shortcutCount: 4
+  $name: Number of shortcuts
+  $name:fr-FR: Nombre de raccourcis
+  $description: Number of visible shortcut tiles, from 1 to 8.
+  $description:fr-FR: Nombre de tuiles de raccourci visibles, entre 1 et 8.
+- columns: 4
+  $name: Columns
+  $name:fr-FR: Colonnes
+  $description: Number of shortcut columns.
+  $description:fr-FR: Nombre de colonnes de raccourcis.
+- tileSize: 64
+  $name: Tile size
+  $name:fr-FR: Taille des tuiles
+  $description: Tile size, from 40 to 112 pixels.
+  $description:fr-FR: Taille des tuiles, entre 40 et 112 pixels.
+- gap: 12
+  $name: Tile spacing
+  $name:fr-FR: Espacement des tuiles
+  $description: Space between tiles, from 6 to 24 pixels.
+  $description:fr-FR: Espacement entre les tuiles, entre 6 et 24 pixels.
+- offsetY: 8
+  $name: Vertical offset
+  $name:fr-FR: Décalage vertical
+  $description: Distance from the top of the screen.
+  $description:fr-FR: Distance depuis le haut de l'écran.
+- opacity: 94
+  $name: Panel opacity
+  $name:fr-FR: Opacité du panneau
+  $description: Global panel opacity, from 45 to 100 percent.
+  $description:fr-FR: Opacité générale du panneau, entre 45 et 100 %.
+- cornerRadius: 26
+  $name: Corner radius
+  $name:fr-FR: Arrondi des angles
+  $description: Main panel corner radius, from 8 to 40 pixels.
+  $description:fr-FR: Arrondi du panneau principal, entre 8 et 40 pixels.
+- showLabels: true
+  $name: Show shortcut names
+  $name:fr-FR: Afficher le nom des raccourcis
+- lockPosition: false
+  $name: Lock panel position
+  $name:fr-FR: Verrouiller la position
+- animations: true
+  $name: Enable animations
+  $name:fr-FR: Activer les animations
+- pageCount: 3
+  $name: Number of pages
+  $name:fr-FR: Nombre de pages
+  $description: Number of shortcut pages, from 1 to 5.
+  $description:fr-FR: Nombre de pages de raccourcis, entre 1 et 5.
+- theme: midnight
+  $name: Theme
+  $name:fr-FR: Thème
+  $options:
+    - midnight: Midnight
+    - graphite: Graphite
+    - ocean: Ocean
+    - emerald: Emerald
+    - rose: Rose
+    - automatic: Automatic
+    - custom: Custom
+  $options:fr-FR:
+    - midnight: Minuit
+    - graphite: Graphite
+    - ocean: Océan
+    - emerald: Émeraude
+    - rose: Rose
+    - automatic: Automatique
+    - custom: Personnalisé
+- autoThemeSource: system
+  $name: Automatic theme source
+  $name:fr-FR: Source du thème automatique
+  $description: Accent source used when the Automatic theme is selected.
+  $description:fr-FR: Source de la couleur utilisée avec le thème Automatique.
+  $options:
+    - system: Windows accent
+    - wallpaper: Wallpaper
+    - media: Album artwork
+  $options:fr-FR:
+    - system: Couleur Windows
+    - wallpaper: Fond d'écran
+    - media: Pochette du morceau
+- tileShape: rounded
+  $name: Tile shape
+  $name:fr-FR: Forme des tuiles
+  $options:
+    - rounded: Rounded
+    - circle: Circle
+    - square: Square
+    - minimal: Minimal
+  $options:fr-FR:
+    - rounded: Arrondie
+    - circle: Ronde
+    - square: Carrée
+    - minimal: Minimaliste
+- monitor: primary
+  $name: Display monitor
+  $name:fr-FR: Écran d'affichage
+  $options:
+    - primary: Primary monitor
+    - cursor: Monitor containing the cursor
+  $options:fr-FR:
+    - primary: Écran principal
+    - cursor: Écran contenant le curseur
+- perMonitorLayouts: false
+  $name: Separate layouts for each monitor
+  $name:fr-FR: Dispositions séparées par écran
+- backgroundColor: "#151821"
+  $name: Custom background color
+  $name:fr-FR: Couleur de fond personnalisée
+  $description: Hexadecimal color used by the Custom theme.
+  $description:fr-FR: Couleur hexadécimale utilisée par le thème Personnalisé.
+- accentColor: "#7C5CFC"
+  $name: Custom accent color
+  $name:fr-FR: Couleur d'accent personnalisée
+  $description: Hexadecimal color used by the Custom theme.
+  $description:fr-FR: Couleur hexadécimale utilisée par le thème Personnalisé.
+- shortcut1: ""
+  $name: Default shortcut 1
+  $name:fr-FR: Raccourci par défaut 1
+- shortcut2: ""
+  $name: Default shortcut 2
+  $name:fr-FR: Raccourci par défaut 2
+- shortcut3: ""
+  $name: Default shortcut 3
+  $name:fr-FR: Raccourci par défaut 3
+- shortcut4: ""
+  $name: Default shortcut 4
+  $name:fr-FR: Raccourci par défaut 4
+- shortcut5: ""
+  $name: Default shortcut 5
+  $name:fr-FR: Raccourci par défaut 5
+- shortcut6: ""
+  $name: Default shortcut 6
+  $name:fr-FR: Raccourci par défaut 6
+- shortcut7: ""
+  $name: Default shortcut 7
+  $name:fr-FR: Raccourci par défaut 7
+- shortcut8: ""
+  $name: Default shortcut 8
+  $name:fr-FR: Raccourci par défaut 8
+*/
 // ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
