@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.11.0
+// @version         3.12.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -2398,6 +2398,25 @@ constexpr UINT kMsgSettingsChanged = WM_APP + 1;
 // Posted by the enumeration thread once it has a result to hand over.
 constexpr UINT kMsgScanDone = WM_APP + 2;
 
+// Posted by the window to itself, out of a list view notification.
+//
+// Focus lives on the table, so the control sees the keys and the clicks first
+// and sends the window a notification from inside its own WM_KEYDOWN or
+// WM_RBUTTONUP handler. Two things must not happen while that handler is still
+// on the stack. Destroying the window destroys the control with it, and
+// comctl32 goes on using per-window state it freed at WM_NCDESTROY. Opening a
+// menu or a dialog leaves that handler blocked inside a nested message loop for
+// as long as the thing is on screen - long enough for the unload sweep to
+// destroy the control underneath it.
+//
+// Posting is what unwinds the control's stack first: the notification returns,
+// the control finishes with it, and the work runs from the window's own message
+// loop with nothing below it. Closing goes through WM_CLOSE for the same
+// reason, which DefWindowProcW turns back into DestroyWindow at a moment when
+// nothing else is using the window.
+constexpr UINT kMsgShowProperties = WM_APP + 3;
+constexpr UINT kMsgShowMenu = WM_APP + 4;
+
 struct Column {
     PCWSTR title;
     int width;      // design pixels; 0 means "take what is left"
@@ -2442,6 +2461,12 @@ struct State {
     UINT scanIconDpi = 96;       // the scale the running scan drew its icons at
     bool modalOpen = false;      // a nested message loop owns the UI thread
     bool adoptDeferred = false;  // a result landed while it did
+
+    // What a posted kMsgShowProperties or kMsgShowMenu is about, since neither
+    // carries it. The volume is named rather than numbered for the same reason
+    // a menu's target is - see Invoke.
+    std::wstring pendingGuid;
+    POINT pendingMenuPoint{};
 
     // The one thing in this window that is clicked rather than chosen from a
     // menu. Rebuilt on every paint, like the targets below it.
@@ -3722,6 +3747,18 @@ bool FindVolumeByGuid(State* state, const std::wstring& guidPath, int* diskIndex
     return false;
 }
 
+// Properties, asked for from a list view notification rather than opened there.
+// See kMsgShowProperties: the properties window pumps, and doing that on top of
+// comctl32's own key or click handler leaves it blocked there for as long as
+// the window is up.
+void PostProperties(State* state, const VolumeInfo* volume) {
+    if (!volume) {
+        return;
+    }
+    state->pendingGuid = volume->guidPath;
+    PostMessageW(state->hwnd, kMsgShowProperties, 0, 0);
+}
+
 // Properties for one named volume. The properties window runs its own message
 // loop, so a scan can land while it is on screen - and it is reading a copy of a
 // list that adoption would rebuild. ModalScope makes adoption wait for it.
@@ -3757,7 +3794,11 @@ void HandOffToConsole(State* state, PCWSTR what) {
     if (LaunchClassicConsole()) {
         // The console is what the user is going to use now; two Disk
         // Managements on screen is not helpful.
-        DestroyWindow(state->hwnd);
+        //
+        // Posted, not destroyed here: five of the menu's items reach this, and
+        // the menu can have been opened from the table's own right-click
+        // handling. See kMsgShowMenu.
+        PostMessageW(state->hwnd, WM_CLOSE, 0, 0);
         return;
     }
     std::wstring message = L"The Disk Management console could not be started, ";
@@ -3783,7 +3824,7 @@ void Invoke(State* state, ActionKind kind, const std::wstring& targetGuid) {
 
     switch (kind) {
         case ActionKind::Close:
-            DestroyWindow(state->hwnd);
+            PostMessageW(state->hwnd, WM_CLOSE, 0, 0);
             return;
         case ActionKind::Refresh:
             Refresh(state);
@@ -4331,23 +4372,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case NM_DBLCLK: {
                     auto* item = reinterpret_cast<NMITEMACTIVATE*>(lParam);
                     if (item->iItem >= 0) {
-                        ShowProperties(state);
+                        // The click selected the row before this arrived, so
+                        // the selection is the row that was hit.
+                        PostProperties(state, Selected(state));
                     }
                     break;
                 }
 
                 case LVN_KEYDOWN: {
                     // Arrows are the control's own; these are the window's.
+                    //
+                    // Refresh is the only one that runs here, because it is the
+                    // only one that neither destroys this window nor pumps - it
+                    // starts a thread and returns. The other two are posted.
                     auto* key = reinterpret_cast<NMLVKEYDOWN*>(lParam);
                     switch (key->wVKey) {
                         case VK_F5:
                             Refresh(state);
                             break;
                         case VK_ESCAPE:
-                            DestroyWindow(hwnd);
+                            PostMessageW(hwnd, WM_CLOSE, 0, 0);
                             break;
                         case VK_RETURN:
-                            ShowProperties(state);
+                            PostProperties(state, Selected(state));
                             break;
                     }
                     break;
@@ -4583,7 +4630,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_KEYDOWN:
             switch (wParam) {
                 case VK_ESCAPE:
-                    DestroyWindow(hwnd);
+                    // Nothing the list view put on the stack is under this one,
+                    // but closing is one path rather than two.
+                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
                     return 0;
                 case VK_F5:
                     Refresh(state);
@@ -4610,13 +4659,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // from the window itself, because WM_RBUTTONUP is handled above and
             // never passed on. Left unhandled, this is the message that opens
             // the window's grey system menu, which is not what either should do.
+            //
+            // Both are posted rather than opened here. Either can arrive from
+            // the table - the keyboard one when focus is on it, which is where
+            // focus lives - and the menu is a nested loop that five of its
+            // items end by closing this window. See kMsgShowMenu.
             if (lParam == -1) {
-                ShowContextMenuForSelection(state);
+                PostMessageW(hwnd, kMsgShowMenu, 0, 0);
             } else if (state->table &&
                        reinterpret_cast<HWND>(wParam) == state->table) {
                 POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 ScreenToClient(hwnd, &point);
-                ShowContextMenu(state, point, state->tableClickOnVolume);
+                state->pendingMenuPoint = point;
+                PostMessageW(hwnd, kMsgShowMenu, 1, 0);
             }
             return 0;
 
@@ -4680,6 +4735,34 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             FinishScan(state);
             return 0;
         }
+
+        // Work the table asked for, running now that its notification has
+        // returned and comctl32 is off the stack.
+        //
+        // modalOpen means this window already has a nested loop of its own up,
+        // and this window is disabled while it is. A disabled window still
+        // receives posted messages, so a second request that could never have
+        // been made with the mouse or the keyboard has to be dropped here
+        // instead of opening a second properties window on top of the first.
+        case kMsgShowProperties:
+            if (!state->modalOpen) {
+                // Through Invoke rather than ShowProperties: it resolves the
+                // name back to a position, which is what makes a scan landing
+                // between the post and here harmless.
+                Invoke(state, ActionKind::Properties, state->pendingGuid);
+            }
+            return 0;
+
+        case kMsgShowMenu:
+            if (!state->modalOpen) {
+                if (wParam) {
+                    ShowContextMenu(state, state->pendingMenuPoint,
+                                    state->tableClickOnVolume);
+                } else {
+                    ShowContextMenuForSelection(state);
+                }
+            }
+            return 0;
 
         case kMsgSettingsChanged: {
             // The palette and the tint are both resolved once at creation, so
