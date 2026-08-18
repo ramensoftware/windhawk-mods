@@ -46,6 +46,9 @@ jobs:
         uses: actions/github-script@v9
         with:
           github-token: ${{ steps.app-token.outputs.token }}
+          # A transient 5xx would otherwise fail the run halfway through a label
+          # change. 4xx codes stay exempt, so removeLabels still sees its 404.
+          retries: 3
           script: |
             const flow = require('${{ github.workspace }}/.github/pr_flow.cjs');
             await flow.handlePullRequestEvent({ github, context, core });

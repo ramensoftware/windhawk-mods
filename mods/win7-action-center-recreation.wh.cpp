@@ -2,13 +2,13 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        1.8.0
+// @version        2.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -loleaut32 -ladvapi32 -lshlwapi -lpropsys
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32 -lshlwapi -lpropsys
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -18,7 +18,7 @@ This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout 
 ## Screenshots
 Windows 7 theme
 
-![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png)
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/action.png)
 
 Windows 8.1 theme
 
@@ -31,6 +31,7 @@ Windows 8.1 theme
 - **Rounded Corners**: Rounded corners are supported for a more similar look to the original Windows 7 flyout.
 - **Classic Theme support**: Disable the "Rounded Corners" theme to make the flyout use a classic theme.
 - **Light/Dark Theme**: Flyout and notification popup support light and dark themes. "Auto" follows the Windows light/dark mode setting and updates live when it changes; you can also force Light or Dark from the mod settings.
+- **High Contrast support**: The flyout and the notification popup automatically switch to system colors when a High Contrast theme is active.
 - **Balloon Notifications**: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.
 - **SmartScreen Check**: Monitors Windows Defender SmartScreen status and reports if it is disabled.
 - **Privacy Mode**: The user can enable this mod to hide the eventual problems shown by the flyout.
@@ -38,10 +39,10 @@ Windows 8.1 theme
   - The disk health check is **best-effort**: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside `explorer.exe`, some drives may not answer — in that case the check is simply skipped and never reports a false problem.
   - The battery check fires only on laptops running on battery power and warns when the charge drops to 20 % or below.
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
-- **Startup Notification**: On every Windows session start, if problems are detected at the first check, a balloon notification is shown immediately regardless of cooldown, so you are never left unaware of existing issues after a reboot.
+- **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
-- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German are currently supported.
-- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. 
+- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian and Turkish are currently supported.
+- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO/TR). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
 ## Hotkeys
 These are the hotkeys that can be configured in the mod.
@@ -67,10 +68,12 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
 - If the icon doesn't appear, try restarting Explorer or the mod.
-- The Control Panel hub links activate when you open *Security and Maintenance* (`control /name Microsoft.ActionCenter`). No system files are modified on disk.
+- The Control Panel hub links activate when you open *Security and Maintenance* (`control /name Microsoft.ActionCenter`) and system files are not modified on the disk.
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - TheWolf - Testing on Windows 11 23H2
+- cips_35 - Testing on Windows 11 25H2 and Turkish Translation
+- ✮⋆˙ Holly B!!──★ ˙🍓 ̟ ˙✧˖°🪼⋆.ೃ [NURO] - Screenshot of the mod under a Windows 7 theme
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -102,6 +105,10 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
     - ru: Русский
     - pt: Português
     - de: Deutsch
+    - nl: Nederlands
+    - pl: Polski
+    - ro: Română
+    - tr: Türkçe
 - restoreCplHubLinks: true
   $name: Control Panel links
   $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
@@ -134,7 +141,10 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 #include <strsafe.h>
 #include <shlwapi.h>
 #include <winioctl.h>
-#include <wbemidl.h>
+// Note: wbemidl.h was previously needed for the BitLocker WMI query, but the
+// implementation now uses SHCreateItemFromParsingName + IShellItem2::GetProperty
+// (no WMI symbols are referenced anywhere). The include was removed so the
+// build does not pull in IWbem* types that are never used.
 #include <string>
 #include <propsys.h>
 #include <propkey.h>
@@ -229,6 +239,14 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define TRAY_RETRY_TIMER_ID        1002
 #define TRAY_HEALTH_TIMER_ID       1003
 #define PROBLEM_BALLOON_TIMER_ID   2003
+#define STARTUP_NOTIFY_TIMER_ID    1004
+// Ritardo dopo l'avvio (tray icon aggiunta) prima di controllare ed
+// eventualmente inviare la notifica "problemi presenti all'avvio".
+// Disaccoppiato da refreshInterval: con un intervallo molto corto il primo
+// controllo potrebbe scattare prima che l'area notifiche di Windows sia
+// pronta subito dopo il boot/riavvio di Explorer, con il rischio che il
+// balloon venga perso. Un ritardo fisso garantisce l'invio "dopo un po'".
+#define STARTUP_NOTIFY_DELAY_MS    12000
 #define PROBLEM_BALLOON_FALLBACK_MS 30000
 #define PROBLEM_BALLOON_COOLDOWN_MS 30000
 #define WM_TRAY_SHUTDOWN           (WM_USER + 602)
@@ -308,6 +326,42 @@ static const GUID TRAY_ICON_GUID =
 #define COLOR_DARK_HEADER_BG        RGB(38, 38, 38)
 #define COLOR_DARK_OK_TEXT          RGB(100, 200, 100)
 
+// ----------------------------------------------------------------------------
+// High Contrast support
+// When a High Contrast theme is active, the flyout and the notification
+// popup abandon their custom palettes and follow the system colors, like
+// the original Windows 7 UI did. The state is cached with a short TTL so
+// the paint path does not pay a SystemParametersInfo call on every redraw.
+// A dedicated WM_SETTINGCHANGE/SPI_SETHIGHCONTRAST handler (TrayMsgHandlerProc)
+// force-refreshes the cache and invalidates any open flyout/notify window,
+// so switching into/out of High Contrast is immediate rather than waiting
+// on the TTL to expire on some unrelated repaint (review issue).
+// ----------------------------------------------------------------------------
+static bool g_cachedHighContrast = false;
+static DWORD g_lastHCCheckTick = 0;
+static bool IsHighContrastActive() {
+    DWORD now = GetTickCount();
+    if (now - g_lastHCCheckTick > 2000) {
+        HIGHCONTRASTW hc = { sizeof(hc) };
+        g_cachedHighContrast =
+            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+        g_lastHCCheckTick = now;
+    }
+    return g_cachedHighContrast;
+}
+// Forces an immediate, non-cached re-check of High Contrast state. Used by
+// the WM_SETTINGCHANGE/SPI_SETHIGHCONTRAST handler so an open flyout/notify
+// window can be invalidated right away instead of waiting up to 2s for the
+// paint-time TTL above to expire on its own (review issue).
+static void RefreshHighContrastNow() {
+    HIGHCONTRASTW hc = { sizeof(hc) };
+    g_cachedHighContrast =
+        (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+         (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+    g_lastHCCheckTick = GetTickCount();
+}
+
 // Base64 decoder table
 static const WCHAR kBase64Tbl[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 // ============================================================================
@@ -357,10 +411,13 @@ static GdiplusShutdown_t pGdiplusShutdown = NULL;
 static void* g_pBmpFlyoutGood = NULL;
 static void* g_pBmpFlyoutWarning = NULL;
 static void* g_pBmpFlyoutAlert = NULL;
-// GDI+ richiede che ogni stream PNG resti vivo quanto la relativa immagine.
 static IStream* g_pStreamFlyoutGood = NULL;
 static IStream* g_pStreamFlyoutWarning = NULL;
 static IStream* g_pStreamFlyoutAlert = NULL;
+static void* g_pBmpShield16 = NULL;      // native 16x16, used when drawing at <=16 px
+static void* g_pBmpShield64 = NULL;      // 64x64 source, downscaled above 16 px
+static IStream* g_pStreamShield16 = NULL;
+static IStream* g_pStreamShield64 = NULL;
 
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
@@ -427,7 +484,6 @@ static BYTE B64Val(WCHAR c) {
 }
 
 
-// Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
 static void ShutdownGdiPlus() {
     // Dispose cached GDI+ bitmaps BEFORE shutting down the runtime
     if (g_pBmpFlyoutGood) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutGood); g_pBmpFlyoutGood = NULL; }
@@ -436,6 +492,10 @@ static void ShutdownGdiPlus() {
     if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
     if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
+    if (g_pBmpShield16) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield16); g_pBmpShield16 = NULL; }
+    if (g_pStreamShield16) { g_pStreamShield16->Release(); g_pStreamShield16 = NULL; }
+    if (g_pBmpShield64) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield64); g_pBmpShield64 = NULL; }
+    if (g_pStreamShield64) { g_pStreamShield64->Release(); g_pStreamShield64 = NULL; }
 
     // Shutdown GDI+ runtime
     if (g_hGdiPlus) {
@@ -464,9 +524,7 @@ static void ShutdownGdiPlus() {
     pGdipCreateBitmapFromStream = NULL;
     pGdipCreateHICON = NULL;
     pGdiplusShutdown = NULL;
-
 }
-
 
 // ============================================================================
 // RAII Guard Classes
@@ -530,6 +588,29 @@ public:
     DcStateGuard(const DcStateGuard&) = delete; DcStateGuard& operator=(const DcStateGuard&) = delete;
 };
 
+class MemDcGuard {
+    HDC m_hdc;
+    HBITMAP m_hbm;
+    HGDIOBJ m_old;
+public:
+    MemDcGuard(HDC hdc, int width, int height) {
+        m_hdc = CreateCompatibleDC(hdc);
+        m_hbm = m_hdc ? CreateCompatibleBitmap(hdc, width, height) : NULL;
+        m_old = (m_hdc && m_hbm) ? SelectObject(m_hdc, m_hbm) : NULL;
+    }
+    ~MemDcGuard() {
+        if (m_hdc) {
+            if (m_old) SelectObject(m_hdc, m_old);
+            if (m_hbm) DeleteObject(m_hbm);
+            DeleteDC(m_hdc);
+        }
+    }
+    bool valid() const { return m_hdc != NULL && m_hbm != NULL && m_old != NULL; }
+    HDC get() const { return m_hdc; }
+    MemDcGuard(const MemDcGuard&) = delete;
+    MemDcGuard& operator=(const MemDcGuard&) = delete;
+};
+
 // ============================================================================
 // Forward Declarations (for functions used before definition)
 // ============================================================================
@@ -543,11 +624,9 @@ static void PositionWindowNearTray(HWND hwnd);
 static void InstallClickOutsideHook(void);
 static void RemoveClickOutsideHook(void);
 static void UpdateCachedTrayIconRect(void);
-static void InstallKeyboardHook(void);
-static void RemoveKeyboardHook(void);
-LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CreateFlyoutWindow(void);
 static void CloseFlyout(HWND hwnd);
+static void HideFlyout(HWND hwnd);
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CleanupModResources(void);
 static void EnsureTrayTooltip(void);
@@ -616,6 +695,10 @@ void LoadSettings() {
         else if (_wcsicmp(lang, L"ru") == 0) g_Settings.language = 5;
         else if (_wcsicmp(lang, L"pt") == 0) g_Settings.language = 6;
         else if (_wcsicmp(lang, L"de") == 0) g_Settings.language = 7;
+        else if (_wcsicmp(lang, L"nl") == 0) g_Settings.language = 8;
+        else if (_wcsicmp(lang, L"pl") == 0) g_Settings.language = 9;
+        else if (_wcsicmp(lang, L"ro") == 0) g_Settings.language = 10;
+        else if (_wcsicmp(lang, L"tr") == 0) g_Settings.language = 11;
         else g_Settings.language = 0;
     } else {
         g_Settings.language = 0; // auto-detect
@@ -1074,6 +1157,174 @@ static const LocalePack g_Locales[] = {
         L"Neues kritisches Problem erkannt. Klicken Sie, um es jetzt zu \u00FCberpr\u00FCfen.",
         L"Kritisches Problem besteht weiterhin. Klicken Sie, um es zu beheben."
     }},
+    // Olandese (0x0413) - COMPLETO
+    { 0x0413, {
+        L"Actiecentrum",
+        L"Actiecentrum openen",
+        L"Actiecentrum",
+        L"Probleemoplossing",
+        L"Windows Update",
+        L"2 belangrijke berichten",
+        L"1 belangrijk bericht",
+        L"Geen huidige problemen gedetecteerd.\nU kunt het Actiecentrum gebruiken om recente berichten over de status van uw computer te bekijken en oplossingen voor problemen te vinden.",
+        L"Actiecentrum",
+        L"Actiecentrum",
+        L"Actiecentrum",
+        L"Windows Firewall is uitgeschakeld.",
+        L"Virusbeveiliging is uitgeschakeld.",
+        L"Windows Update is niet geconfigureerd.",
+        L"Gebruikersaccountbeheer is uitgeschakeld.",
+        L"Klik om het Actiecentrum te openen.",
+        L"Het Actiecentrum heeft nieuwe problemen gedetecteerd.",
+        L"Windows Update is niet ingesteld op automatisch bijwerken.",
+        L"Anti-spywarebeveiliging is uitgeschakeld.",
+        L"De internetbeveiligingsinstellingen vragen uw aandacht.",
+        L"De service Beveiligingscentrum wordt niet uitgevoerd.",
+        L"De real-timebeveiliging van Windows Defender is uitgeschakeld.",
+        L"...en meer",
+        L"Geen huidige problemen gedetecteerd",
+        L"%d problemen gedetecteerd.",
+        L"Er is een probleem gedetecteerd. Controleer de beveiligingsstatus van uw systeem.",
+        L"SmartScreen is uitgeschakeld. Apps van internet worden niet gecontroleerd.",
+        L"Systeemback-up is niet geconfigureerd of wordt niet uitgevoerd.",
+        L"De service Windows Foutrapportage is uitgeschakeld.",
+        L"Controle van de schijfstatus aanbevolen.",
+        L"Open het Actiecentrum om problemen te bekijken en op te lossen.",
+        L"Controleer de systeemstatus",
+        L"De batterij is bijna leeg. Sluit het apparaat aan op een voedingsbron.",
+        L"Windows-updates wachten. Start de computer opnieuw op om ze toe te passen.",
+        L"Extern bureaublad is ingeschakeld zonder verificatie op netwerkniveau.",
+        L"Het systeemstation is niet beveiligd met BitLocker.",
+        L"Klik om te zien wat er nieuw is.",
+        L"Nieuw kritiek probleem gedetecteerd. Klik om het nu te bekijken.",
+        L"Kritiek probleem nog steeds aanwezig. Klik om het op te lossen."
+    }},
+    // Polacco (0x0415) - COMPLETO
+    { 0x0415, {
+        L"Centrum akcji",
+        L"Otw\u00F3rz Centrum akcji",
+        L"Centrum akcji",
+        L"Rozwi\u0105zywanie problem\u00F3w",
+        L"Aktualizacje Windows",
+        L"2 wa\u017Cne komunikaty",
+        L"1 wa\u017Cny komunikat",
+        L"Nie wykryto bie\u017C\u0105cych problem\u00F3w.\nMo\u017Cesz u\u017Cy\u0107 Centrum akcji do przegl\u0105dania ostatnich komunikat\u00F3w o stanie komputera i znajdowania rozwi\u0105za\u0144 problem\u00F3w.",
+        L"Centrum akcji",
+        L"Centrum akcji",
+        L"Centrum akcji",
+        L"Zapora systemu Windows jest wy\u0142\u0105czona.",
+        L"Ochrona antywirusowa jest wy\u0142\u0105czona.",
+        L"Aktualizacje Windows nie s\u0105 skonfigurowane.",
+        L"Kontrola konta u\u017Cytkownika jest wy\u0142\u0105czona.",
+        L"Kliknij, aby otworzy\u0107 Centrum akcji.",
+        L"Centrum akcji wykry\u0142o nowe problemy.",
+        L"Aktualizacje Windows nie s\u0105 ustawione na automatyczne aktualizowanie.",
+        L"Ochrona antyspyware jest wy\u0142\u0105czona.",
+        L"Ustawienia zabezpiecze\u0144 internetowych wymagaj\u0105 uwagi.",
+        L"Us\u0142uga Centrum zabezpiecze\u0144 nie jest uruchomiona.",
+        L"Ochrona w czasie rzeczywistym w programie Windows Defender jest wy\u0142\u0105czona.",
+        L"...i wi\u0119cej",
+        L"Nie wykryto bie\u017C\u0105cych problem\u00F3w",
+        L"Wykryto %d problem\u00F3w.",
+        L"Wykryto problem. Sprawd\u017A stan zabezpiecze\u0144 systemu.",
+        L"Funkcja SmartScreen jest wy\u0142\u0105czona. Aplikacje z sieci nie b\u0119d\u0105 sprawdzane.",
+        L"Kopia zapasowa systemu nie jest skonfigurowana lub nie jest uruchomiona.",
+        L"Us\u0142uga Raportowanie b\u0142\u0119d\u00F3w systemu Windows jest wy\u0142\u0105czona.",
+        L"Zalecane sprawdzenie stanu dysku.",
+        L"Otw\u00F3rz Centrum akcji, aby przejrze\u0107 i rozwi\u0105za\u0107 problemy.",
+        L"Sprawd\u017A stan systemu",
+        L"Poziom baterii jest niski. Pod\u0142\u0105cz urz\u0105dzenie do \u017Ar\u00F3d\u0142a zasilania.",
+        L"Aktualizacje systemu Windows oczekuj\u0105. Uruchom ponownie komputer, aby je zastosowa\u0107.",
+        L"Pulpit zdalny jest w\u0142\u0105czony bez uwierzytelniania na poziomie sieci.",
+        L"Dysk systemowy nie jest chroniony przez funkcj\u0119 BitLocker.",
+        L"Kliknij, aby zobaczy\u0107 nowo\u015Bci.",
+        L"Wykryto nowy problem krytyczny. Kliknij, aby sprawdzi\u0107 teraz.",
+        L"Krytyczny problem nadal wyst\u0119puje. Kliknij, aby go naprawi\u0107."
+    }},
+    // Rumeno (0x0418) - COMPLETO
+    { 0x0418, {
+        L"Centru de ac\u021Biune",
+        L"Deschide\u021Bi Centrul de ac\u021Biune",
+        L"Centru de ac\u021Biune",
+        L"Depanare",
+        L"Windows Update",
+        L"2 mesaje importante",
+        L"1 mesaj important",
+        L"Nu au fost detectate probleme curente.\nPute\u021Bi utiliza Centrul de ac\u021Biune pentru a examina mesajele recente despre starea computerului dvs. \u0219i pentru a g\u0103si solu\u021Bii la probleme.",
+        L"Centru de ac\u021Biune",
+        L"Centru de ac\u021Biune",
+        L"Centru de ac\u021Biune",
+        L"Paravanul de protec\u021Bie Windows este dezactivat.",
+        L"Protec\u021Bia antivirus este dezactivat\u0103.",
+        L"Windows Update nu este configurat.",
+        L"Controlul conturilor de utilizator este dezactivat.",
+        L"Face\u021Bi clic pentru a deschide Centrul de ac\u021Biune.",
+        L"Centrul de ac\u021Biune a detectat probleme noi.",
+        L"Windows Update nu este setat s\u0103 se actualizeze automat.",
+        L"Protec\u021Bia anti-spyware este dezactivat\u0103.",
+        L"Set\u0103rile de securitate pentru internet necesit\u0103 aten\u021Bie.",
+        L"Serviciul Centru de securitate nu ruleaz\u0103.",
+        L"Protec\u021Bia \u00EEn timp real din Windows Defender este dezactivat\u0103.",
+        L"...\u0219i altele",
+        L"Nu au fost detectate probleme curente",
+        L"S-au detectat %d probleme.",
+        L"A fost detectat\u0103 o problem\u0103. Verifica\u021Bi starea de securitate a sistemului.",
+        L"SmartScreen este dezactivat. Aplica\u021Biile de pe internet nu vor fi verificate.",
+        L"Copierea de rezerv\u0103 a sistemului nu este configurat\u0103 sau nu ruleaz\u0103.",
+        L"Serviciul Raportare erori Windows este dezactivat.",
+        L"Se recomand\u0103 verificarea st\u0103rii discului.",
+        L"Deschide\u021Bi Centrul de ac\u021Biune pentru a verifica \u0219i remedia problemele.",
+        L"Verifica\u021Bi starea sistemului",
+        L"Bateria este sc\u0103zut\u0103. Conecta\u021Bi dispozitivul la o surs\u0103 de alimentare.",
+        L"Actualiz\u0103ri Windows \u00EEn a\u0219teptare. Reporni\u021Bi computerul pentru a le aplica.",
+        L"Desktopul la distan\u021B\u0103 este activat f\u0103r\u0103 autentificare la nivel de re\u021Bea.",
+        L"Unitatea de sistem nu este protejat\u0103 de BitLocker.",
+        L"Face\u021Bi clic pentru a vedea nout\u0103\u021Bile.",
+        L"A fost detectat\u0103 o nou\u0103 problem\u0103 critic\u0103. Face\u021Bi clic pentru a o examina acum.",
+        L"Problema critic\u0103 este \u00EEnc\u0103 prezent\u0103. Face\u021Bi clic pentru a o remedia."
+    }},
+    // Turco (0x041F) - COMPLETO - autentico Windows 7/8.1 turco
+{ 0x041F, {
+    L"Eylem Merkezi",
+    L"Eylem Merkezi'ni a\u00E7",
+    L"Eylem Merkezi",
+    L"Sorun Giderme",
+    L"Windows Update",
+    L"2 \u00F6nemli ileti",
+    L"1 \u00F6nemli ileti",
+    L"\u015Eu anda alg\u0131lanan sorun yok\nBilgisayar\u0131n\u0131z\u0131n durumuyla ilgili son iletilere g\u00F6z atmak ve sorunlara \u00E7\u00F6z\u00FCm bulmak i\u00E7in Eylem Merkezi'ni kullanabilirsiniz.",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Windows G\u00FCvenlik Duvar\u0131 kapat\u0131ld\u0131.",
+    L"Vir\u00FCsten koruma kapat\u0131ld\u0131.",
+    L"Windows Update yap\u0131land\u0131r\u0131lmad\u0131.",
+    L"Kullan\u0131c\u0131 Hesab\u0131 Denetimi kapat\u0131ld\u0131.",
+    L"Eylem Merkezi'ni a\u00E7mak i\u00E7in t\u0131klay\u0131n.",
+    L"Eylem Merkezi yeni sorunlar alg\u0131lad\u0131.",
+    L"Windows Update otomatik g\u00FCncelle\u015Ftirme olarak ayarlanmad\u0131.",
+    L"Casus yaz\u0131l\u0131mdan koruma kapat\u0131ld\u0131.",
+    L"\u0130nternet g\u00FCvenli\u011Fi ayarlar\u0131nda dikkat edilmesi gerekenler var.",
+    L"G\u00FCvenlik Merkezi hizmeti \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Defender ger\u00E7ek zamanl\u0131 korumas\u0131 kapat\u0131ld\u0131.",
+    L"...ve daha fazlas\u0131",
+    L"\u015Eu anda alg\u0131lanan sorun yok",
+    L"%d sorun alg\u0131land\u0131.",
+    L"Bir sorun alg\u0131land\u0131. L\u00FCtfen g\u00FCvenlik durumunuzu g\u00F6zden ge\u00E7irin.",
+    L"SmartScreen kapat\u0131ld\u0131. Web'den al\u0131nan uygulamalar denetlenmeyecek.",
+    L"Sistem yedeklemesi yap\u0131land\u0131r\u0131lmad\u0131 veya \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Hata Bildirimi hizmeti devre d\u0131\u015F\u0131 b\u0131rak\u0131ld\u0131.",
+    L"Disk durumu denetimi \u00F6nerilir.",
+    L"Sorunlar\u0131 incelemek ve d\u00FCzeltmek i\u00E7in Eylem Merkezi'ni a\u00E7\u0131n.",
+    L"Sistem durumunuzu g\u00F6zden ge\u00E7irin",
+    L"Pil zay\u0131f. Cihaz\u0131n\u0131z\u0131 bir g\u00FC\u00E7 kayna\u011F\u0131na ba\u011Flay\u0131n.",
+    L"Windows g\u00FCncelle\u015Ftirmeleri bekliyor. Bunlar\u0131 uygulamak i\u00E7in bilgisayar\u0131n\u0131z\u0131 yeniden ba\u015Flat\u0131n.",
+    L"Uzak Masa\u00FCst\u00FC, A\u011F D\u00FCzeyi Kimlik Do\u011Frulamas\u0131 olmadan etkinle\u015Ftirildi.",
+    L"Sistem s\u00FCr\u00FCc\u00FCs\u00FC BitLocker ile korunmuyor.",
+    L"Yenilikleri g\u00F6rmek i\u00E7in t\u0131klay\u0131n.",
+    L"Yeni kritik sorun alg\u0131land\u0131. \u015Eimdi incelemek i\u00E7in t\u0131klay\u0131n.",
+    L"Kritik sorun h\u00E2l\u00E2 mevcut. D\u00FCzeltmek i\u00E7in t\u0131klay\u0131n."
+}},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
 #define LOC(id) (g_CurrentLocalePack->strings[id])
@@ -1247,6 +1498,10 @@ void DetermineLocale() {
         case 5: g_CurrentLocalePack = FindLocalePack(0x0419); g_LastDetectedUILang = 0x0419; break;
         case 6: g_CurrentLocalePack = FindLocalePack(0x0816); g_LastDetectedUILang = 0x0816; break;
         case 7: g_CurrentLocalePack = FindLocalePack(0x0407); g_LastDetectedUILang = 0x0407; break;
+        case 8: g_CurrentLocalePack = FindLocalePack(0x0413); g_LastDetectedUILang = 0x0413; break;
+        case 9: g_CurrentLocalePack = FindLocalePack(0x0415); g_LastDetectedUILang = 0x0415; break;
+        case 10: g_CurrentLocalePack = FindLocalePack(0x0418); g_LastDetectedUILang = 0x0418; break;
+        case 11: g_CurrentLocalePack = FindLocalePack(0x041F); g_LastDetectedUILang = 0x041F; break;
         default: {
             LANGID ui = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(ui);
@@ -1355,6 +1610,7 @@ static BOOL g_FlyoutClosing = FALSE;
 static BOOL g_NotifyShowing = FALSE;
 static int g_SimulatedNotificationType = 0; // protected by srwLock
 static int g_ActiveProblems = 0;             // protected by srwLock
+static int g_CriticalProblems = 0;           // protected by srwLock - subset of g_ActiveProblems that is "important"
 // Stato del backoff del refresh periodico (vedi REFRESH_TIMER_ID in TrayMsgHandlerProc).
 // Solo scrittura/lettura dal tray thread (proprietario del timer), niente lock necessario.
 static DWORD g_RefreshNoChangeCount = 0;
@@ -1379,11 +1635,17 @@ static HICON g_hShieldIcon = NULL;
 static HICON g_hProblemBalloonIcon = NULL;  
 static BOOL g_ProblemBalloonShowing = FALSE;
 static RECT g_CachedTrayIconRect = {0}; // Cached tray icon rect for mouse hook
+// Latches TRUE the instant a button-down lands on the tray icon while the
+// flyout is visible - i.e. before WM_ACTIVATE/WA_INACTIVE can hide the
+// window on the same click. Without this, ToggleFlyout() runs on the later
+// button-up and sees the flyout as already hidden (auto-hidden by the
+// activation change), so it just re-shows it instead of closing it: the
+// flyout blinks and clicking the icon can only ever open it (review issue #1).
+static BOOL g_TrayClickWhileFlyoutOpen = FALSE;
 static DWORD g_LastProblemBalloonTick = 0;
 static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
-static HHOOK g_hKeyboardHook = NULL;
 static BOOL g_Initialized = FALSE;
 // TRUE for the very first RefreshSecurityState() call after mod startup.
 // Forces a balloon notification even if the cooldown has not elapsed yet,
@@ -1434,7 +1696,13 @@ static const WCHAR icon_id4_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzen
 static const WCHAR icon_id5_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAQMSURBVFhHvZdtTFNXGMdNZjDTZhLsC7O4pWZlvqAze/GL21wWGhRBtymJug+YfUGyxESyBJeFpEMZyeL4YpQQPqxLlgg4dcsSjCykDhS0WBgqatfIpsDYSjvubW9b2gLPnuf0nNqgzpZe+Se/9N7ec/7P/5x7zz3tIpQe+QSxcuiYvlswJRdPhU+Rfcj7SAHyApKRmDFwifM02Y+sQuYlZsLrQ15eXj0/fKzGx8c9AwMDd9va2rpqamrOGI3GeuGBlCJpK60As7OzMD09DZFIBEKhEExMTEw1NjZ2ZGVlfcm9NpNpOsooQCAQAFmWobOz8xb3omcqLakSYHJyEnQ63VfcbwkZpyrVAggvZBmSsp5FgM+QXCQlqRqgqqqqRXgitCpWInOlRRbHD1UOgKtitqGhoV34PoWdSPyE+2ccwOfzsePh4WEPLs8LRUVFJ0UNQWFh4QmNRnOUnz+bAIqisDYzMzO850N5vV4fr3sIWfgAzc3NF3jdD5CFDSBJkt9gMIj3BXtAFzRAXV3dWV5zD8L02ADhcHiqo6PjWnV19emysrKm0tLSU6JtSUnJqYqKiu9sNlsnPmzeVAMMDg7e5R5HkOUI0yMB7Hb7dfoU1/4Ps9n8dXl5+be4Q96ncxFgYqQL+s/lQ//5fAh4HeByuYaTnvwtSELMiNdno0iC9nn60UH3yoAI0bEJsVoslpPt7e39tbW1P9JeIAL89vNbMHTRBPd6CsB5flMsaUBs7SfrSQFeQ56mA4g1Ozv7GL18hoaGxinAmPsncLRoQR6zQNC7A/padbCv+Pnvse1u1muOnhQgVdFSEn2sBevXfmO3rZRu//IKxIIfMWgWLtlWjGKo56jDXGUagEQbTzFysHLv0rOOVi0E/t6WCBDyxWcBA9AtfURqBGDCAllXT2vdLns+xEIfkxcjPgsbKICL2rDGSVIzQCWNVPFsh5jyYSJA1L8LQp5tYhYqWeMkqRIAjTU0QnfXWogFdkFU3vkwwGQx44+e9WIWNKwTl1oBjvS16XGkRRCVdkDk3+2JABGPhREcew+oDbVlnbgyDoCGOTQyGuHUX1shPPouhEfegcMH8xjhB1vijLwNf/auE7OQw7urEqDe+YMBFPebEHRtguCdDaDcLmAE72yMf0e4X4fA72+IWaAXE9MXiDUajcbmEwCNjDSi0R585Q7mg99pAn/fy+B3vJS4BQHnanZNufEqKDfXwMgVs5gFI3l8jlhp85lngKaBc7lYeDXIV40gX8kF+bIepG59IoDc8yK7RqEI+boJnGfYLDSRB70cRFFByn8uaCT/XDOzIlKXDqRfV4B0KSf+mUAbv9ZN6DGgAUa7TWwWyIO2RQrBZgJJ6+85mvS2Hl8O88HRou39D0aewSDtJRCqAAAAAElFTkSuQmCC";  // Tray: Bianca + Triangolo
 static const WCHAR icon_id6_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARLSURBVFhHvZd/SJx1HMcf2fxRuttynid3mjk7XWLLVcoG7o/ixAVa/pFBgzCKMPr1hxQWJl00GxQIJZuEf2QQFEYkBbOkS7AoEtO2GW1e2rEs5+6cZ5qPP+/d+/Pc97HLtna3c77hxfN9Hp/7vN/P9/n+eNSoTPIYcSukLde2TJHm0fA0eZjcS4qJhcQlozCUzPMYOUJyyDXJKKL8kZ2dfUw1L6vJycmLw8PDZ7u6uvqbm5s/cjgcx8wapJrErJgChEIhrK6uYmlpCQsLC/D7/Yvt7e29SUlJr6paZVI0FsUVYG5uDrOzs/B4PCOqloypmLQpAWZmZmC1Wl9X9ZKlcLTatABmLZJKotb1CPA8ySJRaVMDNDQ0fGjWJDIr7GSjMsj2cHOTA3BWhFpbW0+ada/C/SR8ourHHWB6etpoj4+PX+T07KmsrDxuepi4XK62tLS019T59QkwPz9v3LO2tqZ++Y8CgcC08n2ObH2Ajo6OHuVbQ7Y2QDAY/NNms5nrhTFAtzRAS0vLx8rzQWLosgF0XV/s7e39vrGx8YPa2tp3qqurT5j3VlVVnaivr3+vs7PTw8EWiAxwaeQM9BY3psoPQC9wYDYnAxMHS7B49ChGPvt0TNV4kewkhv4ToK+vb1CO5t/+D6fT+UZdXd27P3Z/8sebO5K7cXchUOwADh8CDu4D7iwASouAjETMp6fgZU3rfiIz/RH+dl1GIeVvPEUEss/LR4e8KxsxJe084q6oqDj+VdtbZydvsYaQvxu4zQ7kWICiHKCQ7fwsII/XUzUDXdMwtl1b+Wm/c33XvFKAO8jV9Chxv23P6IF9J3A7n3xfLlCyRwoBWamA7YZw+y4ncE8pkKAhwPNRTXsqXOLKAaLSrUmJR1CSD6TRZD+NTZXtNZ52Xswfuk9dBFZKC+FPS8F4OITxORdXAF++owm5fPr0bcCBYmBpUVWiXngWeObxcFtd/4LmZxQ/52Y2SY24Alwo4lPnZwJ21dU5u/4dQqTOOarxLY2HyAj5ja9IasQVYMpC04xkYHcijynwW3dgRoJsCMHvNXSTczQ+TaQHThGpEVeACTGjeYjmQZr7yFzlIeiqnhlErzkc7nbiJWObFcCXx+633YhLNJ5y3AT9gQpVidr4Kp6sw680nSDnGdxr2RZ/gFEOJB8L/sIA+l5OQ5EyfoUm70sPRQapqUCQ9w/z+imnI/5BKFNpkMV+YNEphjDNuOJhgNeGePRFhOD9YgJ5dUMJ4WkoKdzLy8srcoO0FVHrNBcVGd1fEwnSxuJyLgNOutw0NY/cEPBdxEL0EnHL5nOtAc4VOMoGE7QVbnP4RgzZEzLVZMCdJxeUsfA7GUhPWRl1la8vxbLem6YmMf9z4S28ufhLLs39NOinqRzl1YjhX8RL+BkED+/xusplf1mXbIsSwugJEte/533cpBikyZuejM9pyDZ8WRbp8qaB8AYWIU37G1xt2pFGvWvBAAAAAElFTkSuQmCC";  // Tray: Bianca + X Rossa
 
-static const WCHAR icon_shield_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAEmUlEQVR4nLWVW4iVVRTHf3t/l/Ody5y5OeOMSjg4XcSmSDOKppuUEBrhQ4KpMfVig4UQSg9CQw+BYBJpQQ5EL/miQT5Elwlk1KAwb1jqIF7Gca7OnMucc75zvvvuQUfEZhot+sOGxdprrR9r7Q0L7kEHDx6s2rnzp+S95Ii7Cfpu377aeGNTVyDMV0ytEhRKcv+FvuEd27a9Yf9nQM/3PU+aicTnk6ph6dVsiY5ne8nlGzl/ad7R0dHSOx0dr575V4D+vr6WolvZXHZFZ0WvS5wdKlOwc2xZ0UNcy5GZbOHcwKL8eC7+6cXBse733319eFZAdjT7iDTDZ+yy+1yuUH4xkIladItsxePKcJGCXWRT+yHiagLCAM+PM1y8n/6x+rFc0ejxnPBILjf+Q2dnx9BUTX3KUErJsbHMV8MT2tLhnMJ2DapSUB0P8fyQIFSEkUJhgbIg9DGjMgsTJ1mwMDW3rBo3Zr2Wjb+cSHwCvPc3QH9/r1lxW9Jnhg0ypSIpQ6CImCy6FCs+o/kyjuegQnGzcQkYEEl0r0Q6HEcpmzBqbbx9KrcAmUxRBqokHS9JwXbwdUmu6FJ2fWzXZ6LooEkPFQQgfHBK4JTBD8H1oVyCRANCSm1aAIDv+3h+hF3xmAwCCmWPouPh+hEjBQ9dOISDpyEaAs+HQECkQwh4Dsp0kHd8m1sA67ITlJpDLwgjHD/AcT0mig5D+QoD2QoTxYDm6hBVmoCYC1KCJkBqN48g0gyUkP7tADllPLx2raeiIKeUoOKD7SkujDucGCgxng9QoQSho5saxCQkDUjFIGnetE0iMwWIzIwjUqE/WJ+yqUvYlGwbS+RprancuEPSVKW4nLNIxRRCj6FrMYTQEUiECinojfheNDgjwPU59fLi46+te/BPosoc8LNQ7oegjBIR43nJyq9XUKSWdEInHTdJxWLoQkMqjQ1P1WAEZ8/OCMgV1KGxsVTU2BhIdAc0E0IdZAD4WELiKhNPWoS6iTItAs3A9hXNqQRp07t+uO/0yWnfAKD35/Mnx/M1xz3VAFEJlAFaGkQCVAwlTAxDIx43SCZN4nEDJQWVEB5bmMDA/nHXri+uzwjo7t7kZwrG7sHCIpAeRC7IJGhVoFkgJIZpYFkmVsxESI1KEFFjmSybH/ojV6/s5Q7JOx1He//45uJI3TFHuw9EBYQBWgI0EyElpqkTixlIXcMNIxxPsKqtlipZ+PatzVt+nRWwZ88Wd2Q83HZudLGn4nNuRAgTlEAIQSxmoBs6kQLbVSxpqqK9RWV+P328C1CzAgA6Nqw+cumasWPAXgrpuWBWgV6LtGpJpxPELQPQmJdM8fbzDZSy17Zv3bq9b7pa+nROgAP7f/vIij3dZra1rWmuHwQnhybKLGiqJ+/XkAgF6x9PklQjn72wek33THVmBhz40Fu2bO+but5qeg+0rpo/N4+pTbKkZT7Kj/NodQGjcuXLJ15auXW60Uxp1pXZ1dWVWL68/YOGeqOzvk5LD0zWosqTE5mR/l1r163/GAj+Kf+ulj7A7t17H0qnq9ujoBSdOnbs8J7u7kt3m/u/6i8VOR/oDCBHYgAAAABJRU5ErkJggg==";
+static const WCHAR icon_shield_b64[] = L"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";
+
+// Smaller variant of the shield asset, used on lower-resolution displays
+// (e.g. ~1366x768 and similar common laptop panels) to keep the icon crisp
+// without downscaling a larger source image.
+static const WCHAR icon_shield_small_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAC9klEQVR4nG2TTWgcdRjGf//5yM7sxP2o2aRGa5rDVgUjEgpV0UOFzUG9RBGhohfxIAiFTXPTi0IRY2YuoifFU1i9LEgMIhK9iEKMhZWUYmqaQJqEWdPsrNmZnZ2Pv4fYmMa+l/fyPD/e93l5BXeparU6Ojg4+LkQ4hFASdO00Ww2X7Fte/e4Vhwzni6Xy9NCiJfGx8dP5HI5VUop2+12vLS0dEtV1a9XV1c/sG17/Q7A1NTUC6VS6V1FUUYmJiaKQgjt0o++0sLgo+Kb5PIFvPw7vf7+/nRxcdFL03Sl2Ww6s7Oz8xqAaZqXK5XKw5Zlac9/qwo96HDh/Bm+/HmL+/Mup8abXLtysa+zM0ylcllN0/SZer0+AswrAIqiWIVCQat8lxPnRi0uPPsgV3clcRDRly0h9JcZO6dzcnidcOktPZvNKqqqZgCU26tIKens74Ou88vNHldXW+itAEUN0NQNpHyckbJPTHJHiNq/PRXiIM9fNzyinsDa9oiDGEXvcmv9CqqmoWYstEwKgJTyP4CU0hdCyDj4W4SxDt0OfhSj6DoyhtBTSBH0ejEiUgFSKeXeISBJkmXf9898cuL1zPkn+skWMwd7CcnoF/OEsaBPE+QzCqf2b/Dx2TBJkuT3wwziOP7Ndd3wsYESGjpG9h6MooEQCgiFxBzCGBhB3jdIsziA67qtOI6XjwK+aTQaW/rZT6O224PIgOhgCkWAmTUxCymFtXXef7ovWllZ2Y6i6KtDgG3ba67rbgoh0r/CIfwgQaZZEKBpguEHUiy/w70Zj0dLauK67jXHcTaPnpEgCF6bm5vbKox92LtxXefmnz7hXkoGyDX+YGBjGefFfFir1Ta73W71tu8Q4DjOju/7b9dqtZb10Hu9be8pfvo+Ymj7OmOnd3FePRnW6/W27/sXHcfZueszAUxPTz9nmuZnk5OTRcMwNEB6npcsLCzsBUHwxszMzMJR/f8AANVqtWwYhq3r+pOAGkXRD91u95Jt22vHtf8AU4dOukbuXlEAAAAASUVORK5CYII=";
+
 
 static HICON Base64ToIcon(const WCHAR* b64) {
     if (!b64 || !*b64) return NULL;
@@ -1861,33 +2129,8 @@ HICON LoadActionCenterIcon(int index) {
 }
 
 
-// Returns TRUE if the running OS is older than Windows 10 21H2 (build 19044).
-// Uses VerifyVersionInfoW so it is NOT affected by the compatibility shim that
-// makes GetVersionExW report 6.2 on Windows 8.1 and later.
-static BOOL IsSystemOlderThanWin1021H2(void) {
-    OSVERSIONINFOEXW osvi = { sizeof(osvi) };
-    osvi.dwMajorVersion = 10;
-    osvi.dwMinorVersion = 0;
-    osvi.dwBuildNumber  = 19044; // Windows 10 21H2
-
-    DWORDLONG mask = 0;
-    mask = VerSetConditionMask(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_BUILDNUMBER,  VER_GREATER_EQUAL);
-
-    // VerifyVersionInfoW returns TRUE only if ALL conditions hold:
-    // Major >= 10 AND Minor >= 0 AND Build >= 19044.
-    if (VerifyVersionInfoW(&osvi,
-            VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask))
-        return FALSE; // Windows 10 21H2 or newer (includes Windows 11)
-
-    return TRUE; // older than Windows 10 21H2
-}
 void InitFlyoutIcons() {
-
-    // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
-    // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
-    // la rasterizzazione aggiuntiva introdotta dalla conversione in HICON.
+    // Clean up existing flyout flag bitmaps
     if (g_pBmpFlyoutGood && pGdipDisposeImage) {
         pGdipDisposeImage(g_pBmpFlyoutGood);
         g_pBmpFlyoutGood = NULL;
@@ -1912,40 +2155,65 @@ void InitFlyoutIcons() {
         g_pStreamFlyoutAlert->Release();
         g_pStreamFlyoutAlert = NULL;
     }
-
-    g_pBmpFlyoutGood = Base64ToGdipBitmap(
-        icon_id0_b64, &g_pStreamFlyoutGood);
-    g_pBmpFlyoutWarning = Base64ToGdipBitmap(
-        icon_id1_b64, &g_pStreamFlyoutWarning);
-    g_pBmpFlyoutAlert = Base64ToGdipBitmap(
-        icon_id2_b64, &g_pStreamFlyoutAlert);
-
     
-    g_hFlyoutIconGood    = Base64ToIcon(icon_id0_b64);
-    
-    g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
-    
-    g_hFlyoutIconAlert   = Base64ToIcon(icon_id2_b64);
-        // Choose the shield icon based on the OS version:
-    //  - Older than Windows 10 21H2 (build 19044): use the embedded base64 shield.
-    //  - Windows 10 21H2 or newer (incl. Windows 11): use the original system shield.
-    if (IsSystemOlderThanWin1021H2()) {
-        g_hShieldIcon = Base64ToIcon(icon_shield_b64);
-    } else {
-        g_hShieldIcon = NULL;
+    // Clean up existing shield bitmaps
+    if (g_pBmpShield16 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield16);
+        g_pBmpShield16 = NULL;
     }
+    if (g_pStreamShield16) {
+        g_pStreamShield16->Release();
+        g_pStreamShield16 = NULL;
+    }
+    if (g_pBmpShield64 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield64);
+        g_pBmpShield64 = NULL;
+    }
+    if (g_pStreamShield64) {
+        g_pStreamShield64->Release();
+        g_pStreamShield64 = NULL;
+    }
+
+    // Load flyout flag GDI+ bitmaps for high-quality rendering
+    g_pBmpFlyoutGood = Base64ToGdipBitmap(icon_id0_b64, &g_pStreamFlyoutGood);
+    g_pBmpFlyoutWarning = Base64ToGdipBitmap(icon_id1_b64, &g_pStreamFlyoutWarning);
+    g_pBmpFlyoutAlert = Base64ToGdipBitmap(icon_id2_b64, &g_pStreamFlyoutAlert);
+
+    // Load flyout flag HICON fallbacks
+    g_hFlyoutIconGood = Base64ToIcon(icon_id0_b64);
+    g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
+    g_hFlyoutIconAlert = Base64ToIcon(icon_id2_b64);
+    
+    // Load SHIELD GDI+ bitmaps for high-quality rendering.
+    // Both the native 16x16 and the 64x64 source are decoded once;
+    // the paint site picks between them based on the actual DPI-scaled
+    // draw size, since resolution and DPI are independent.
+    g_pBmpShield16 = Base64ToGdipBitmap(icon_shield_small_b64, &g_pStreamShield16);
+    g_pBmpShield64 = Base64ToGdipBitmap(icon_shield_b64, &g_pStreamShield64);
+    
+    // Load shield HICON as fallback (always from the 64x64 source)
+    g_hShieldIcon = Base64ToIcon(icon_shield_b64);
+    
+    // --- FALLBACK CHAIN FOR SHIELD ICON ---
+    // If the embedded shield icon failed to decode, try system DLLs
     if (!g_hShieldIcon) {
-        // Original system shield (imageres.dll / IDI_SHIELD / shell32.dll)
+        // First try imageres.dll (Windows 10/11 native shield)
         ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
+        
+        // If still not found, try shell32.dll (fallback for older Windows)
         if (!g_hShieldIcon) {
-            HICON hSharedShield = (HICON)LoadImageW(
-                NULL, (LPCWSTR)32518, IMAGE_ICON, 16, 16, LR_SHARED); // IDI_SHIELD
-            if (hSharedShield) g_hShieldIcon = CopyIcon(hSharedShield);
-            if (!g_hShieldIcon) ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
+            ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
         }
     }
     
-    // Fallback se Base64 decode fallisce
+    // Also ensure the GDI+ shield bitmaps have a fallback
+    // If GDI+ failed, we'll still have the HICON from above
+    if (!g_pBmpShield16 && !g_pBmpShield64 && g_hShieldIcon) {
+        // GDI+ bitmaps not available, but we have the HICON - that's fine
+        // The paint code will fall back to DrawIconEx
+    }
+    
+    // Fallbacks for flyout flag icons if Base64 decode fails
     if (!g_hFlyoutIconGood)
         g_hFlyoutIconGood = LoadActionCenterIcon(0);
     if (!g_hFlyoutIconWarning)
@@ -1963,46 +2231,83 @@ void FreeAllIcons() {
 // ============================================================================
 // Security State
 // ============================================================================
-static BOOL IsProblemTypeAlreadyDetected(int type) {
-    for (int i = 0; i < g_ActiveProblems && i < MAX_PROBLEMS; i++) {
-        if (g_ProblemTypes[i] == type) return TRUE;
+static BOOL IsProblemTypeAlreadyDetected(const int* problemTypes, int count, int type) {
+    for (int i = 0; i < count && i < MAX_PROBLEMS; i++) {
+        if (problemTypes[i] == type) return TRUE;
     }
     return FALSE;
 }
-static BOOL AddProblem(int type, int* idx, int* criticalCount) {
+static BOOL IsProblemTypeCritical(int type) {
+    // Single source of truth for "critical" problems. RDP-without-NLA is
+    // counted as critical too (it was previously the only check that bumped
+    // criticalCount manually, which could desync from this table).
+    return (type == PROB_FIREWALL || type == PROB_AUTOUPDATE ||
+            type == PROB_ANTIVIRUS || type == PROB_RDP_NLA);
+}
+// All Check*() functions below build their results into a caller-owned local
+// array/idx/criticalCount instead of touching g_ProblemTypes directly (review
+// issue #3): CheckSecurityProviders() only takes the exclusive srwLock for the
+// final publish, not for the whole battery of slow checks.
+static BOOL AddProblem(int* problemTypes, int type, int* idx, int* criticalCount) {
     if (*idx >= MAX_PROBLEMS) return FALSE;
-    if (IsProblemTypeAlreadyDetected(type)) return FALSE;
-    g_ProblemTypes[(*idx)++] = type;
-    if (type == PROB_FIREWALL || type == PROB_AUTOUPDATE || type == PROB_ANTIVIRUS) (*criticalCount)++;
+    if (IsProblemTypeAlreadyDetected(problemTypes, *idx, type)) return FALSE;
+    problemTypes[(*idx)++] = type;
+    if (IsProblemTypeCritical(type)) (*criticalCount)++;
     return TRUE;
 }
-static void CheckWscProvider(DWORD provider, int problemType, int* idx, int* criticalCount) {
+static void CheckWscProvider(DWORD provider, int problemType, int* problemTypes, int* idx, int* criticalCount) {
     WSC_SECURITY_PROVIDER_HEALTH health;
     if (WscGetSecurityProviderHealth(provider, &health) == S_OK) {
-        if (health == WSC_SECURITY_PROVIDER_HEALTH_POOR) AddProblem(problemType, idx, criticalCount);
+        if (health == WSC_SECURITY_PROVIDER_HEALTH_POOR) AddProblem(problemTypes, problemType, idx, criticalCount);
     }
 }
-static void CheckDefenderRealtime(int* idx, int* criticalCount) {
+static void CheckDefenderRealtime(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKey;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD dwDisabled = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"DisableRealtimeMonitoring", NULL, NULL, (LPBYTE)&dwDisabled, &dwSize) == ERROR_SUCCESS) {
-            if (dwDisabled != 0) AddProblem(PROB_DEFENDER_RT, idx, criticalCount);
+            if (dwDisabled != 0) AddProblem(problemTypes, PROB_DEFENDER_RT, idx, criticalCount);
         }
     }
 }
-static void CheckUACRegistry(int* idx, int* criticalCount) {
+static void CheckUACRegistry(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKey;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD dwEnableLUA = 1, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"EnableLUA", NULL, NULL, (LPBYTE)&dwEnableLUA, &dwSize) == ERROR_SUCCESS) {
-            if (dwEnableLUA == 0) AddProblem(PROB_UAC, idx, criticalCount);
+            if (dwEnableLUA == 0) AddProblem(problemTypes, PROB_UAC, idx, criticalCount);
         }
     }
 }
 static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     // TRUE only when start type is SERVICE_DISABLED.
     // Any failure (no rights / missing service) returns FALSE so other checks continue.
+    //
+    // Service start type rarely changes (review issue #6). Cache the answer
+    // for a few minutes per service so the periodic refresh tick doesn't
+    // open the SCM + service + issue two QueryServiceConfigW calls per
+    // service on every cycle. Three SCM calls + three QueryServiceConfigW
+    // pairs add up to noticeable CPU use over time, for no benefit.
+    static const DWORD kCacheMs = 3 * 60 * 1000; // 3 minutes
+    struct CacheEntry {
+        const WCHAR* name;
+        DWORD tick;
+        BOOL  result;
+        BOOL  valid;
+    };
+    static CacheEntry s_cache[8] = {};
+
+    DWORD now = GetTickCount();
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (s_cache[i].valid && s_cache[i].name == serviceName) {
+            if ((now - s_cache[i].tick) < kCacheMs) {
+                return s_cache[i].result;
+            }
+            s_cache[i].valid = FALSE; // expire
+            break;
+        }
+    }
+
     SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (!hSCM) {
         Wh_Log(L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
@@ -2028,10 +2333,27 @@ static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     }
     CloseServiceHandle(hSvc);
     CloseServiceHandle(hSCM);
+
+    // Store the result in the first free (or matching) cache slot.
+    int slot = -1;
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (!s_cache[i].valid) { slot = (int)i; break; }
+    }
+    if (slot < 0) {
+        // Cache full: evict the oldest entry.
+        slot = 0;
+        for (size_t i = 1; i < ARRAYSIZE(s_cache); ++i) {
+            if (s_cache[i].tick < s_cache[slot].tick) slot = (int)i;
+        }
+    }
+    s_cache[slot].name   = serviceName;
+    s_cache[slot].tick   = now;
+    s_cache[slot].result = disabled;
+    s_cache[slot].valid  = TRUE;
     return disabled;
 }
 
-static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
+static void CheckAutoUpdateRegistry(int* problemTypes, int* idx, int* criticalCount) {
     // 1) Modern GPO: NoAutoUpdate (managed / enterprise environments)
     {
         RegKey hKey;
@@ -2041,7 +2363,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
             DWORD dwNoAuto = 0, dwSize = sizeof(DWORD);
             if (RegQueryValueExW(hKey, L"NoAutoUpdate", NULL, NULL, (LPBYTE)&dwNoAuto, &dwSize) == ERROR_SUCCESS) {
                 if (dwNoAuto != 0) {
-                    AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+                    AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
                     return;
                 }
             }
@@ -2051,7 +2373,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
     // 2) Service start type: Update Orchestrator (UsoSvc) and legacy WU (wuauserv).
     // Only SERVICE_DISABLED counts as "updates off"; stopped-but-auto is normal.
     if (IsServiceStartDisabled(L"UsoSvc") || IsServiceStartDisabled(L"wuauserv")) {
-        AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+        AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
         return;
     }
 
@@ -2063,7 +2385,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
         DWORD dwAUOptions = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"AUOptions", NULL, NULL, (LPBYTE)&dwAUOptions, &dwSize) == ERROR_SUCCESS) {
             if (dwAUOptions == 1) {
-                AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+                AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
             }
         }
     }
@@ -2094,7 +2416,7 @@ const WCHAR* GetProblemText(int problemType) {
 // ============================================================================
 // SmartScreen Check
 // ============================================================================
-static void CheckSmartScreen(int* idx, int* criticalCount) {
+static void CheckSmartScreen(int* problemTypes, int* idx, int* criticalCount) {
     // Check Windows Defender SmartScreen status via registry
     // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -> SmartScreenEnabled
     RegKey hKey;
@@ -2107,7 +2429,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)szValue, &dwSize) == ERROR_SUCCESS) {
             // Value can be "On" or "Off" (REG_SZ)
             if (dwType == REG_SZ && _wcsicmp(szValue, L"Off") == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
         }
@@ -2116,7 +2438,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwType == REG_DWORD && dwVal == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
         }
@@ -2130,7 +2452,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         DWORD dwVal = 1, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKeyEdge, L"SmartScreenEnabled", NULL, NULL, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwVal == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
             }
         }
     }
@@ -2140,40 +2462,42 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
 // Maintenance Checks (non-critical, warning-level)
 // ============================================================================
 
-// Check if system backup is configured and running
-static void CheckBackupStatus(int* idx, int* criticalCount) {
-    // Windows Backup service (SDRSVC) or wbengine
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) return;
+// Service start-type lookup with a TTL cache, shared by CheckBackupStatus()
+// and CheckWerStatus() (review issue #2). Unlike IsServiceStartDisabled(),
+// this distinguishes "service missing" from "service exists and enabled"
+// from "service exists and disabled", because CheckBackupStatus needs that
+// distinction (missing SDRSVC falls back to checking wbengine) while
+// IsServiceStartDisabled's callers only ever cared about the disabled case.
+// Kept as its own cache (separate from IsServiceStartDisabled's) rather than
+// changing that helper's return contract for its existing callers.
+enum { SVC_STATE_MISSING = 0, SVC_STATE_ENABLED = 1, SVC_STATE_DISABLED = 2 };
+static int GetServiceStartStateCached(const WCHAR* serviceName) {
+    static const DWORD kCacheMs = 3 * 60 * 1000; // 3 minutes - matches IsServiceStartDisabled
+    struct CacheEntry {
+        const WCHAR* name;
+        DWORD tick;
+        int   state;
+        BOOL  valid;
+    };
+    static CacheEntry s_cache[8] = {};
 
-    BOOL backupOk = FALSE;
-    // Check the main Windows Backup service
-    SC_HANDLE hSvc = OpenServiceW(hSCM, L"SDRSVC", SERVICE_QUERY_CONFIG);
-    if (hSvc) {
-        DWORD needed = 0;
-        QueryServiceConfigW(hSvc, NULL, 0, &needed);
-        if (needed > 0 && needed < 64 * 1024) {
-            BYTE* buf = (BYTE*)malloc(needed);
-            if (buf) {
-                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
-                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                    // If service is disabled, backup is not configured
-                    if (cfg->dwStartType == SERVICE_DISABLED) {
-                        backupOk = FALSE;
-                    } else {
-                        backupOk = TRUE; // service exists and is not disabled
-                    }
-                }
-                free(buf);
+    DWORD now = GetTickCount();
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (s_cache[i].valid && s_cache[i].name == serviceName) {
+            if ((now - s_cache[i].tick) < kCacheMs) {
+                return s_cache[i].state;
             }
+            s_cache[i].valid = FALSE; // expire
+            break;
         }
-        CloseServiceHandle(hSvc);
     }
 
-    if (!backupOk) {
-        // Also check wbengine (Windows Backup Engine)
-        hSvc = OpenServiceW(hSCM, L"wbengine", SERVICE_QUERY_CONFIG);
+    int state = SVC_STATE_MISSING;
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (hSCM) {
+        SC_HANDLE hSvc = OpenServiceW(hSCM, serviceName, SERVICE_QUERY_CONFIG);
         if (hSvc) {
+            state = SVC_STATE_ENABLED; // service exists; refine below
             DWORD needed = 0;
             QueryServiceConfigW(hSvc, NULL, 0, &needed);
             if (needed > 0 && needed < 64 * 1024) {
@@ -2181,48 +2505,55 @@ static void CheckBackupStatus(int* idx, int* criticalCount) {
                 if (buf) {
                     QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
                     if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                        if (cfg->dwStartType != SERVICE_DISABLED) {
-                            backupOk = TRUE;
-                        }
+                        state = (cfg->dwStartType == SERVICE_DISABLED)
+                                    ? SVC_STATE_DISABLED : SVC_STATE_ENABLED;
                     }
                     free(buf);
                 }
             }
             CloseServiceHandle(hSvc);
         }
+        CloseServiceHandle(hSCM);
+    } else {
+        Wh_Log(L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
     }
 
-    CloseServiceHandle(hSCM);
+    int slot = -1;
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (!s_cache[i].valid) { slot = (int)i; break; }
+    }
+    if (slot < 0) {
+        // Cache full: evict the oldest entry.
+        slot = 0;
+        for (size_t i = 1; i < ARRAYSIZE(s_cache); ++i) {
+            if (s_cache[i].tick < s_cache[slot].tick) slot = (int)i;
+        }
+    }
+    s_cache[slot].name  = serviceName;
+    s_cache[slot].tick  = now;
+    s_cache[slot].state = state;
+    s_cache[slot].valid = TRUE;
+    return state;
+}
 
+// Check if system backup is configured and running
+static void CheckBackupStatus(int* problemTypes, int* idx, int* criticalCount) {
+    // Windows Backup service (SDRSVC) or wbengine
+    BOOL backupOk = (GetServiceStartStateCached(L"SDRSVC") == SVC_STATE_ENABLED);
     if (!backupOk) {
-        AddProblem(PROB_BACKUP, idx, criticalCount);
+        // Also check wbengine (Windows Backup Engine)
+        backupOk = (GetServiceStartStateCached(L"wbengine") == SVC_STATE_ENABLED);
+    }
+    if (!backupOk) {
+        AddProblem(problemTypes, PROB_BACKUP, idx, criticalCount);
     }
 }
 
 // Check Windows Error Reporting service status
-static void CheckWerStatus(int* idx, int* criticalCount) {
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) return;
-
-    SC_HANDLE hSvc = OpenServiceW(hSCM, L"WerSvc", SERVICE_QUERY_CONFIG);
-    if (hSvc) {
-        DWORD needed = 0;
-        QueryServiceConfigW(hSvc, NULL, 0, &needed);
-        if (needed > 0 && needed < 64 * 1024) {
-            BYTE* buf = (BYTE*)malloc(needed);
-            if (buf) {
-                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
-                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                    if (cfg->dwStartType == SERVICE_DISABLED) {
-                        AddProblem(PROB_WER, idx, criticalCount);
-                    }
-                }
-                free(buf);
-            }
-        }
-        CloseServiceHandle(hSvc);
+static void CheckWerStatus(int* problemTypes, int* idx, int* criticalCount) {
+    if (GetServiceStartStateCached(L"WerSvc") == SVC_STATE_DISABLED) {
+        AddProblem(problemTypes, PROB_WER, idx, criticalCount);
     }
-    CloseServiceHandle(hSCM);
 }
 
 // Battery check: warns when on battery power and charge is critically low.
@@ -2230,7 +2561,7 @@ static void CheckWerStatus(int* idx, int* criticalCount) {
 // (BATTERY_FLAG_NO_SYSTEM_BATTERY). Thresholds: <=10% = critical (STATE_ALERT),
 // <=20% = warning (STATE_WARNING). Does not count as a criticalCount hit to
 // avoid overriding genuine security alerts.
-static void CheckBatteryStatus(int* idx, int* criticalCount) {
+static void CheckBatteryStatus(int* problemTypes, int* idx, int* criticalCount) {
     SYSTEM_POWER_STATUS sps;
     if (!GetSystemPowerStatus(&sps)) return;
     // Skip desktops, VMs without battery, or unknown state
@@ -2242,7 +2573,7 @@ static void CheckBatteryStatus(int* idx, int* criticalCount) {
     BYTE pct = sps.BatteryLifePercent;
     if (pct == 255) return;                        // unknown percentage
     if (pct <= 20) {
-        AddProblem(PROB_BATTERY, idx, criticalCount);
+        AddProblem(problemTypes, PROB_BATTERY, idx, criticalCount);
     }
 }
 
@@ -2250,7 +2581,7 @@ static void CheckBatteryStatus(int* idx, int* criticalCount) {
 // Checks the two well-known registry keys that Windows sets when a reboot
 // is required to finish installing updates. This is maintenance-level
 // (warning only) and never bumps criticalCount.
-static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
+static void CheckWindowsUpdatePending(int* problemTypes, int* idx, int* criticalCount) {
     // Key 1: CBS / component-based servicing reboot pending
     {
         HKEY hKey = NULL;
@@ -2258,7 +2589,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending",
                 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            AddProblem(PROB_UPDATE_PENDING, idx, criticalCount);
+            AddProblem(problemTypes, PROB_UPDATE_PENDING, idx, criticalCount);
             return;
         }
     }
@@ -2269,7 +2600,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired",
                 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            AddProblem(PROB_UPDATE_PENDING, idx, criticalCount);
+            AddProblem(problemTypes, PROB_UPDATE_PENDING, idx, criticalCount);
             return;
         }
     }
@@ -2279,7 +2610,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
 // Remote Desktop enabled but without Network Level Authentication: a real
 // network-exposure risk, readable from the registry without elevation.
 // This is treated as critical, same weight as firewall/antivirus/updates.
-static void CheckRdpNla(int* idx, int* criticalCount) {
+static void CheckRdpNla(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKeyRdp;
     DWORD dwDenyConnections = 1, dwSize = sizeof(DWORD);
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
@@ -2297,11 +2628,14 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
         dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKeyWinstations, L"UserAuthentication", NULL, NULL,
                              (LPBYTE)&dwNla, &dwSize) == ERROR_SUCCESS && dwNla == 0) {
-            AddProblem(PROB_RDP_NLA, idx, criticalCount);
-            // RDP without NLA is a direct network attack surface: bump the
-            // critical count even though AddProblem already counts it once
-            // for the well-known types (firewall/autoupdate/antivirus).
-            (*criticalCount)++;
+            // RDP without NLA is a direct network attack surface. Critical
+            // counting is handled by AddProblem() via IsProblemTypeCritical(),
+            // which now lists PROB_RDP_NLA alongside firewall/autoupdate/
+            // antivirus (review issue #4 round 2). Don't bump the counter
+            // manually: doing so used to desync from the rest of the
+            // "important" list when AddProblem returned FALSE because the
+            // array was full (*idx >= MAX_PROBLEMS).
+            AddProblem(problemTypes, PROB_RDP_NLA, idx, criticalCount);
         }
     }
 }
@@ -2313,7 +2647,7 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
 // Win32_EncryptableVolume which requires admin rights.
 // Result is cached (10 min) to avoid hitting the property store on every
 // refresh tick (tray UI thread).
-static void CheckBitLocker(int* idx, int* criticalCount) {
+static void CheckBitLocker(int* problemTypes, int* idx, int* criticalCount) {
     // Cache: encryption status doesn't change minute-to-minute
     static DWORD s_lastTick = 0;
     static bool s_hasCache = false;
@@ -2325,7 +2659,7 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
 
     if (s_hasCache && s_checkedOnce && (now - s_lastTick < kCacheMs)) {
         if (s_isUnprotected) {
-            AddProblem(PROB_BITLOCKER, idx, criticalCount);
+            AddProblem(problemTypes, PROB_BITLOCKER, idx, criticalCount);
         }
         return;
     }
@@ -2400,7 +2734,7 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
     }
 
     if (unprotected) {
-        AddProblem(PROB_BITLOCKER, idx, criticalCount);
+        AddProblem(problemTypes, PROB_BITLOCKER, idx, criticalCount);
     }
 }
 
@@ -2412,7 +2746,23 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
 // we simply skip the drive and report nothing. This never produces a false
 // positive - it only flags a disk when Windows itself reports a predicted
 // failure. See the README ("best-effort") note.
-static void CheckDiskHealth(int* idx, int* criticalCount) {
+//
+// The result is cached for a few minutes (review issue #6): probing
+// \\.\PhysicalDrive0..7 every refresh tick burns CPU and produces the same
+// value 99% of the time. The cache TTL is 5 minutes, and the first probe
+// always runs so the very first refresh reports the real state.
+static void CheckDiskHealth(int* problemTypes, int* idx, int* criticalCount) {
+    static DWORD s_lastTick = 0;
+    static BOOL s_cached = FALSE;
+    static BOOL s_diskIssue = FALSE;
+
+    const DWORD kCacheMs = 5 * 60 * 1000; // 5 minutes
+    DWORD now = GetTickCount();
+    if (s_cached && (now - s_lastTick) < kCacheMs) {
+        if (s_diskIssue) AddProblem(problemTypes, PROB_DISK_HEALTH, idx, criticalCount);
+        return;
+    }
+
     BOOL diskIssue = FALSE;
 
     // Probe a handful of physical drives (\\.\PhysicalDrive0..7).
@@ -2443,48 +2793,85 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
         CloseHandle(hDisk);
     }
 
+    s_diskIssue = diskIssue;
+    s_cached = TRUE;
+    s_lastTick = now;
+
     if (diskIssue) {
-        AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
+        AddProblem(problemTypes, PROB_DISK_HEALTH, idx, criticalCount);
     }
 }
 
 void CheckSecurityProviders() {
-    SRWGuard guard(g_Ctx.srwLock, true); // exclusive write
-    g_ActiveProblems = 0;
-    ZeroMemory(g_ProblemTypes, sizeof(g_ProblemTypes));
-    if (g_SimulatedNotificationType > 0) {
-        g_SecurityState = STATE_ALERT;
-        int idx = 0;
-        switch (g_SimulatedNotificationType) {
-            case 1: g_ProblemTypes[0] = PROB_FIREWALL; g_ProblemTypes[1] = PROB_ANTIVIRUS; idx = 2; break;
-            case 2: g_ProblemTypes[0] = PROB_AUTOUPDATE; g_ProblemTypes[1] = PROB_FIREWALL; idx = 2; break;
-            case 3: g_ProblemTypes[0] = PROB_ANTISPYWARE; g_ProblemTypes[1] = PROB_UAC; idx = 2; break;
-            case 4: g_ProblemTypes[0] = PROB_DEFENDER_RT; g_ProblemTypes[1] = PROB_AUTOUPDATE; idx = 2; break;
+    // Review issue #3: run the whole (slow) battery of checks into locals
+    // first, and only take the exclusive srwLock at the very end to publish
+    // the results. Previously the lock was held across seven WSC RPCs, the
+    // SCM/service queries, disk IOCTLs, and a COM property-store call - all
+    // on the tray thread's STA, which pumps messages during outgoing COM
+    // calls. Several window procs on that same thread (WM_PAINT, the
+    // WM_SETTINGCHANGE-driven tooltip rebuild) take a shared lock, and
+    // SRWLOCK is not recursive, so a message arriving mid-COM-call could
+    // deadlock the thread permanently (and hang CleanupModResources(), which
+    // waits on it). Shrinking the lock to just the final assignment removes
+    // both that hang and the flyout-open latency of doing the full scan
+    // before the window is ever positioned/shown.
+    int localProblemTypes[MAX_PROBLEMS] = { 0 };
+    int idx = 0, criticalCount = 0;
+    int localState;
+
+    BOOL simulated = FALSE;
+    int simulatedType;
+    { SRWGuard guard(g_Ctx.srwLock, false); simulated = (g_SimulatedNotificationType > 0); simulatedType = g_SimulatedNotificationType; }
+
+    if (simulated) {
+        localState = STATE_ALERT;
+        switch (simulatedType) {
+            case 1: localProblemTypes[0] = PROB_FIREWALL; localProblemTypes[1] = PROB_ANTIVIRUS; idx = 2; break;
+            case 2: localProblemTypes[0] = PROB_AUTOUPDATE; localProblemTypes[1] = PROB_FIREWALL; idx = 2; break;
+            case 3: localProblemTypes[0] = PROB_ANTISPYWARE; localProblemTypes[1] = PROB_UAC; idx = 2; break;
+            case 4: localProblemTypes[0] = PROB_DEFENDER_RT; localProblemTypes[1] = PROB_AUTOUPDATE; idx = 2; break;
         }
+        for (int i = 0; i < idx; i++) {
+            if (IsProblemTypeCritical(localProblemTypes[i])) criticalCount++;
+        }
+        SRWGuard guard(g_Ctx.srwLock, true); // exclusive write - publish only
+        memcpy(g_ProblemTypes, localProblemTypes, sizeof(g_ProblemTypes));
         g_ActiveProblems = idx;
+        g_CriticalProblems = criticalCount;
+        g_SecurityState = localState;
         return;
     }
-    if (g_Settings.privacyMode) { g_SecurityState = STATE_GOOD; return; }
-    int idx = 0, criticalCount = 0;
-    CheckWscProvider(WSC_SECURITY_PROVIDER_FIREWALL, PROB_FIREWALL, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_AUTOUPDATE_SETTINGS, PROB_AUTOUPDATE, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTIVIRUS, PROB_ANTIVIRUS, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTISPYWARE, PROB_ANTISPYWARE, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_INTERNET_SETTINGS, PROB_INTERNET, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_USER_ACCOUNT_CONTROL, PROB_UAC, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_SERVICE, PROB_SERVICE, &idx, &criticalCount);
-    CheckDefenderRealtime(&idx, &criticalCount);
-    CheckUACRegistry(&idx, &criticalCount);
-    CheckAutoUpdateRegistry(&idx, &criticalCount);
-    CheckSmartScreen(&idx, &criticalCount);
+
+    BOOL privacyMode;
+    { SRWGuard guard(g_Ctx.srwLock, false); privacyMode = g_Settings.privacyMode; }
+    if (privacyMode) {
+        SRWGuard guard(g_Ctx.srwLock, true);
+        g_ActiveProblems = 0;
+        g_CriticalProblems = 0;
+        ZeroMemory(g_ProblemTypes, sizeof(g_ProblemTypes));
+        g_SecurityState = STATE_GOOD;
+        return;
+    }
+
+    CheckWscProvider(WSC_SECURITY_PROVIDER_FIREWALL, PROB_FIREWALL, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_AUTOUPDATE_SETTINGS, PROB_AUTOUPDATE, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTIVIRUS, PROB_ANTIVIRUS, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTISPYWARE, PROB_ANTISPYWARE, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_INTERNET_SETTINGS, PROB_INTERNET, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_USER_ACCOUNT_CONTROL, PROB_UAC, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_SERVICE, PROB_SERVICE, localProblemTypes, &idx, &criticalCount);
+    CheckDefenderRealtime(localProblemTypes, &idx, &criticalCount);
+    CheckUACRegistry(localProblemTypes, &idx, &criticalCount);
+    CheckAutoUpdateRegistry(localProblemTypes, &idx, &criticalCount);
+    CheckSmartScreen(localProblemTypes, &idx, &criticalCount);
     // Maintenance checks (non-critical, warning-level)
-    CheckBackupStatus(&idx, &criticalCount);
-    CheckWerStatus(&idx, &criticalCount);
-    CheckDiskHealth(&idx, &criticalCount);
-    CheckBatteryStatus(&idx, &criticalCount);
-    CheckWindowsUpdatePending(&idx, &criticalCount);
-    CheckRdpNla(&idx, &criticalCount);
-    CheckBitLocker(&idx, &criticalCount);
+    CheckBackupStatus(localProblemTypes, &idx, &criticalCount);
+    CheckWerStatus(localProblemTypes, &idx, &criticalCount);
+    CheckDiskHealth(localProblemTypes, &idx, &criticalCount);
+    CheckBatteryStatus(localProblemTypes, &idx, &criticalCount);
+    CheckWindowsUpdatePending(localProblemTypes, &idx, &criticalCount);
+    CheckRdpNla(localProblemTypes, &idx, &criticalCount);
+    CheckBitLocker(localProblemTypes, &idx, &criticalCount);
     // Action Center Checks registry
     RegKey hKeyChecks;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Action Center\\Checks", 0, KEY_READ, &hKeyChecks) == ERROR_SUCCESS) {
@@ -2553,28 +2940,35 @@ void CheckSecurityProviders() {
                         mappedType = PROB_SMARTSCREEN;
                     }
 
-                    if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(mappedType)) {
-                        AddProblem(mappedType, &idx, &criticalCount);
+                    if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, mappedType)) {
+                        AddProblem(localProblemTypes, mappedType, &idx, &criticalCount);
                     } else if (mappedType == PROB_NONE) {
                         // Last fallback: localized DisplayName substring matching (existing behavior)
                         WCHAR szLower[256] = { 0 }; dwSize = sizeof(szLower);
                         RegQueryValueExW(hKeySub, L"DisplayName", NULL, NULL, (LPBYTE)szLower, &dwSize);
                         if (!szLower[0]) StringCchCopyW(szLower, 256, szSubKeyName);
                         CharLowerW(szLower);
-                        if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(PROB_FIREWALL)) AddProblem(PROB_FIREWALL, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(PROB_ANTIVIRUS)) AddProblem(PROB_ANTIVIRUS, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(PROB_ANTISPYWARE)) AddProblem(PROB_ANTISPYWARE, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(PROB_UAC)) AddProblem(PROB_UAC, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(PROB_INTERNET)) AddProblem(PROB_INTERNET, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(PROB_AUTOUPDATE)) AddProblem(PROB_AUTOUPDATE, &idx, &criticalCount);
+                        if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_FIREWALL)) AddProblem(localProblemTypes, PROB_FIREWALL, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_ANTIVIRUS)) AddProblem(localProblemTypes, PROB_ANTIVIRUS, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_ANTISPYWARE)) AddProblem(localProblemTypes, PROB_ANTISPYWARE, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_UAC)) AddProblem(localProblemTypes, PROB_UAC, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_INTERNET)) AddProblem(localProblemTypes, PROB_INTERNET, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_AUTOUPDATE)) AddProblem(localProblemTypes, PROB_AUTOUPDATE, &idx, &criticalCount);
                     }
                 }
             }
             dwIdx++; dwSubKeySize = 256;
         }
     }
+
+    localState = (criticalCount > 0) ? STATE_ALERT : ((idx > 0) ? STATE_WARNING : STATE_GOOD);
+
+    // Publish: exclusive lock held only for this final assignment.
+    SRWGuard guard(g_Ctx.srwLock, true);
+    memcpy(g_ProblemTypes, localProblemTypes, sizeof(g_ProblemTypes));
     g_ActiveProblems = idx;
-    g_SecurityState = (criticalCount > 0) ? STATE_ALERT : ((idx > 0) ? STATE_WARNING : STATE_GOOD);
+    g_CriticalProblems = criticalCount;
+    g_SecurityState = localState;
 }
 
 void RefreshSecurityState() {
@@ -2638,17 +3032,95 @@ void RefreshSecurityState() {
         }
     }
 
-    // Startup notification: on the very first check after mod load, show a
-    // balloon unconditionally if problems exist, regardless of cooldown.
-    // This guarantees the user is always notified at every Windows session start.
-    if (g_isStartupCheck && !g_Ctx.isUninitializing) {
+    // La notifica "di avvio" non parte piu' qui al primo check: e' gestita da
+    // CheckStartupNotification(), invocata da un timer dedicato con un
+    // ritardo fisso dopo l'avvio (vedi STARTUP_NOTIFY_TIMER_ID), cosi' non
+    // dipende dal refreshInterval configurato e arriva sempre "dopo un po'"
+    // invece che potenzialmente troppo presto o troppo tardi.
+}
+
+// Controllo eseguito una sola volta, STARTUP_NOTIFY_DELAY_MS dopo l'avvio del
+// thread tray: se a quel punto risultano problemi attivi, mostra il balloon
+// bypassando il cooldown, cosi' l'utente non manca mai la notifica dopo un
+// riavvio/accesso, anche se nel frattempo il balloon normale e' gia' stato
+// soppresso dal cooldown o non e' ancora scattato nessun refresh.
+// ComputeProblemBalloonSignature is defined further down (after this point) so
+// we need a forward declaration to use it from CheckStartupNotification().
+static DWORD ComputeProblemBalloonSignature(
+    int secState, int activeProblems, const int* problemTypes);
+
+// Bound on the number of times we re-arm STARTUP_NOTIFY_TIMER_ID while
+// waiting for the tray icon to appear. RunTrayIconRecoveryAttempt() itself
+// gives up after 40 retries; 40 here would mean ~2 minutes of waiting, which
+// is already a worst case. Pick the same number so the two bounded loops
+// stay in sync and the startup notification can't outlive recovery.
+#define STARTUP_NOTIFY_MAX_ATTEMPTS  40
+void CheckStartupNotification() {
+    if (!g_isStartupCheck || g_Ctx.isUninitializing) return;
+
+    // Issue #2: the periodic REFRESH_TIMER_ID can fire a balloon a few seconds
+    // before the STARTUP_NOTIFY_TIMER_ID does. The first refresh after the
+    // tray icon is added usually shows a balloon (prevState = STATE_GOOD,
+    // prevProblems = 0, so newState > prevState is TRUE), and a few seconds
+    // later this function would clear the cooldown and show the same balloon
+    // again. Bail out if a balloon has already been shown this session.
+    if (g_LastProblemBalloonTick != 0) {
         g_isStartupCheck = FALSE;
-        if (newState > STATE_GOOD && newProblems > 0) {
-            // Clear cooldown so ShowProblemBalloon doesn't suppress the startup alert.
+        return;
+    }
+
+    // Issue #3: the tray icon is added asynchronously after WaitForTaskbarReady
+    // returns, and the notification area can take an additional few hundred
+    // ms to settle. If AddTrayIcon() failed (still in ScheduleTrayIconRecovery)
+    // and the icon is not yet present, ShowProblemBalloon() returns without
+    // doing anything and the user never sees the startup notification.
+    // Re-arm the timer for 3 s and try again, but only up to
+    // STARTUP_NOTIFY_MAX_ATTEMPTS times; after that, clear g_isStartupCheck
+    // so we stop spinning on a condition that the recovery loop has also
+    // given up on (review issue #3 round 2).
+    static int s_startupNotifyAttempts = 0;
+    if (!g_Ctx.trayIconAdded) {
+        if (s_startupNotifyAttempts >= STARTUP_NOTIFY_MAX_ATTEMPTS) {
+            // Recovery has effectively given up; don't loop the timer on
+            // an icon that will never be added this session.
+            g_isStartupCheck = FALSE;
+            s_startupNotifyAttempts = 0;
+            return;
+        }
+        ++s_startupNotifyAttempts;
+        if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler)) {
+            SetTimer(g_Ctx.hWndMsgHandler, STARTUP_NOTIFY_TIMER_ID, 3000, NULL);
+        }
+        return;
+    }
+    // Icon is up: the bound no longer applies; reset the counter so a
+    // future session (e.g. explorer restart) starts fresh.
+    s_startupNotifyAttempts = 0;
+
+    g_isStartupCheck = FALSE;
+
+    // Aggiorna lo stato prima di decidere, cosi' riflette la situazione reale
+    // al momento del controllo e non un valore potenzialmente ancora a zero.
+    RefreshSecurityState();
+
+    int state, problems;
+    int problemSnapshot[MAX_PROBLEMS] = {0};
+    { SRWGuard g(g_Ctx.srwLock, false);
+      state = g_SecurityState;
+      problems = g_ActiveProblems;
+      memcpy(problemSnapshot, g_ProblemTypes, sizeof(problemSnapshot)); }
+
+    if (state > STATE_GOOD && problems > 0) {
+        // Azzera il cooldown cosi' ShowProblemBalloon non sopprime l'alert
+        // di avvio, ma SOLO se il set corrente di problemi e' davvero
+        // diverso da quello che il refresh periodico ha gia' notificato.
+        DWORD curSig = ComputeProblemBalloonSignature(
+            state, problems, problemSnapshot);
+        if (curSig != g_LastProblemBalloonSignature) {
             g_LastProblemBalloonSignature = 0;
             g_LastProblemBalloonTick = 0;
-            ShowProblemBalloon();
         }
+        ShowProblemBalloon();
     }
 }
 
@@ -2667,15 +3139,6 @@ static DWORD ComputeProblemBalloonSignature(
     return hash;
 }
 
-// A problem counts as "critical" for balloon-wording purposes if it's one of
-// the well-known high-impact categories (matches the weighting AddProblem/
-// CheckSecurityProviders already use for firewall/autoupdate/antivirus, plus
-// the new RDP-without-NLA check).
-static BOOL IsCriticalProblemType(int problemType) {
-    return problemType == PROB_FIREWALL || problemType == PROB_AUTOUPDATE ||
-           problemType == PROB_ANTIVIRUS || problemType == PROB_RDP_NLA;
-}
-
 static void BuildProblemBalloonText(
         WCHAR* text, size_t textCount,
         int activeProblems, const int* problemTypes,
@@ -2689,7 +3152,7 @@ static void BuildProblemBalloonText(
 
     int criticalShown = 0;
     for (int i = 0; i < activeProblems && i < MAX_PROBLEMS; i++) {
-        if (IsCriticalProblemType(problemTypes[i])) criticalShown++;
+        if (IsProblemTypeCritical(problemTypes[i])) criticalShown++;
     }
 
     // List up to 3 concrete problems (not just the first one) so the balloon
@@ -3482,19 +3945,33 @@ void PositionWindowNearTray(HWND hwnd) {
 }
 void ToggleFlyout() {
     if (g_Ctx.isUninitializing) return;
-    
+
+    // If the tray icon was clicked while the flyout was visible, the click
+    // itself deactivated Shell_TrayWnd's owner and WM_ACTIVATE/WA_INACTIVE
+    // already hid the flyout before this (button-up-driven) call. Treat that
+    // as the user closing it, instead of falling into the "was auto-hidden:
+    // re-show" branch below, which would make the icon only ever reopen the
+    // flyout (review issue #1).
+    if (g_TrayClickWhileFlyoutOpen) {
+        g_TrayClickWhileFlyoutOpen = FALSE;
+        if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) {
+            CloseFlyout(g_Ctx.hWndFlyout);
+        }
+        return;
+    }
+
     // Dismiss notification popup if showing (Win7 behavior)
     if (g_NotifyShowing && g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) {
         ShowWindow(g_Ctx.hWndNotify, SW_HIDE);
         KillTimer(g_Ctx.hWndNotify, NOTIFY_TIMER_ID);
         g_NotifyShowing = FALSE;
     }
-    
+
     // Ricalcola altezza in base ai problemi correnti
     int activeProblems;
     { SRWGuard guard(g_Ctx.srwLock, false); activeProblems = g_ActiveProblems; }
     RecalcDpiMetrics(g_dpi, activeProblems);
-    
+
     // Toggle: if visible -> close; if hidden (autohide) -> re-show; else create.
     if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
         if (IsWindowVisible(g_Ctx.hWndFlyout)) {
@@ -3502,35 +3979,46 @@ void ToggleFlyout() {
             return;
         }
         // Was auto-hidden: re-show without recreating.
+        // (review issue #4): no longer captures the previous foreground
+        // window. The flyout dismisses on WA_INACTIVE (see WM_ACTIVATE handler)
+        // and lets Windows pick the next foreground window, instead of
+        // restoring a captured handle that almost always points at the
+        // taskbar (because clicking the notification area activates it).
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
-        ShowWindow(g_Ctx.hWndFlyout, SW_SHOWNOACTIVATE);
+        // Actually activate the flyout, like the network flyout recreation's
+        // ToggleFlyoutWindow() does (ShowWindow(SW_SHOW) + SetForegroundWindow()),
+        // instead of SW_SHOWNOACTIVATE. Without this the window never becomes
+        // the active/foreground window, so DWM/OpenGlass keeps it painted with
+        // the inactive glass color and skips the shadow/highlight.
+        ShowWindow(g_Ctx.hWndFlyout, SW_SHOW);
+        SetForegroundWindow(g_Ctx.hWndFlyout);
         UpdateWindow(g_Ctx.hWndFlyout);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
-        InstallKeyboardHook();
         return;
     }
     CreateFlyoutWindow();
     if (g_Ctx.hWndFlyout) {
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
-        ShowWindow(g_Ctx.hWndFlyout, SW_SHOWNOACTIVATE);
+        ShowWindow(g_Ctx.hWndFlyout, SW_SHOW);
+        SetForegroundWindow(g_Ctx.hWndFlyout);
         UpdateWindow(g_Ctx.hWndFlyout);
         AnimateWindow(g_Ctx.hWndFlyout, 180, AW_SLIDE | AW_VER_NEGATIVE);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
-        
+
         // Reset inactivity autohide timer every time the flyout is shown.
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
-        
+
         UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
-        InstallKeyboardHook();
-    }
+            }
+
 }
 
 // ============================================================================
@@ -3566,42 +4054,10 @@ void RemoveClickOutsideHook() {
     }
 }
 
-// ============================================================================
-// Keyboard Hook (Escape to close flyout)
-// ============================================================================
-void InstallKeyboardHook() {
-    if (g_hKeyboardHook) return;
-    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, GetModInstance(), 0);
-    if (!g_hKeyboardHook) {
-        Wh_Log(L"Failed to install keyboard hook (error: %lu)", GetLastError());
-    } else {
-    }
-}
 
-void RemoveKeyboardHook() {
-    if (g_hKeyboardHook) {
-        UnhookWindowsHookEx(g_hKeyboardHook);
-        g_hKeyboardHook = NULL;
-    }
-}
 
-LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (g_Ctx.isUninitializing)
-        return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 
-    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-        KBDLLHOOKSTRUCT* pKbd = (KBDLLHOOKSTRUCT*)lParam;
-        if (pKbd->vkCode == VK_ESCAPE) {
-            // Close flyout if visible
-            if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && 
-                IsWindowVisible(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
-                PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
-                return 1; // Swallow the key
-            }
-        }
-    }
-    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
-}
+
 
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (g_Ctx.isUninitializing)
@@ -3617,7 +4073,13 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
                 // Use cached tray icon rect (updated when flyout opens)
                 // Avoids expensive cross-process Shell_NotifyIconGetRect call in WH_MOUSE_LL
                 BOOL overTrayIcon = PtInRect(&g_CachedTrayIconRect, pMouse->pt);
-                if (!overTrayIcon) {
+                if (overTrayIcon) {
+                    // Latch now, at button-down, before WM_ACTIVATE can hide
+                    // the flyout on this same click (review issue #1).
+                    if (wParam == WM_LBUTTONDOWN) {
+                        g_TrayClickWhileFlyoutOpen = TRUE;
+                    }
+                } else {
                     PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
                 }
             }
@@ -3626,14 +4088,16 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
-// ============================================================================
-// Flyout Window
-// ============================================================================
+void HideFlyout(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    RemoveClickOutsideHook();
+    ShowWindow(hwnd, SW_HIDE);
+}
+
 void CloseFlyout(HWND hwnd) {
     if (g_FlyoutClosing || !hwnd || !IsWindow(hwnd)) return;
     g_FlyoutClosing = TRUE;
     RemoveClickOutsideHook();
-    RemoveKeyboardHook();
     AnimateWindow(hwnd, 150, AW_HIDE);
     // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
@@ -3690,44 +4154,60 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == AUTOHIDE_TIMER_ID) {
             // Inactivity timeout: hide instead of destroy (keeps window ready).
-            RemoveClickOutsideHook();
-            RemoveKeyboardHook();
-            ShowWindow(hwnd, SW_HIDE);
+            // Route through HideFlyout so both hooks are torn down
+            // (review issue #1).
+            HideFlyout(hwnd);
             return 0;
         }
         break;
     case WM_ERASEBKGND: return 1;
-    case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+    case WM_MOUSEACTIVATE:
+        // Let the flyout actually become the active window, same as the
+        // Windows 7 network flyout recreation mod's FlyoutWndProc. This is
+        // required for DWM/OpenGlass to draw the *active* glass frame
+        // (shadow + tint + caption highlighting); with MA_NOACTIVATE the
+        // window is permanently treated as inactive by the compositor.
+        return MA_ACTIVATE;
     case WM_SAFE_CLOSE: CloseFlyout(hwnd); return 0;
-    case WM_CLOSE: 
-        // Come network flyout: nascondi invece di distruggere
-        ShowWindow(hwnd, SW_HIDE); 
+    case WM_CLOSE:
+        // Come network flyout: nascondi invece di distruggere.
+        // Funnel through HideFlyout so hooks are released (review issue #1).
+        HideFlyout(hwnd);
         return 0;
     case WM_ACTIVATE:
-        // Do NOT hide the flyout on deactivation.
-        // Hovering the tray icon / taskbar can steal activation and was
-        // causing rare spontaneous closes. Closing is handled by:
-        //  - click-outside mouse hook
-        //  - inactivity autohide timer (120s)
-        //  - Escape / explicit close
+        // Hide the flyout on deactivation. This is the standard Aero flyout
+        // pattern (matches the Windows 7 network flyout recreation mod): the
+        // user clicks the tray icon, the flyout activates, and as soon as
+        // focus moves to another window the flyout closes itself, leaving
+        // Windows to choose the next foreground window. We do NOT capture
+        // and restore the previous foreground window ourselves: the captured
+        // HWND almost always points at Shell_TrayWnd (because clicking the
+        // notification area activates it), so a manual restore would push
+        // focus back at the taskbar and steal it from the app the user
+        // actually switched to (review issue #1).
         if (LOWORD(wParam) == WA_INACTIVE) {
-            // Soft delay only as a safety net if the mouse hook fails; do not
-            // force-hide immediately (that was the hover-close bug).
-            KillTimer(hwnd, AUTOHIDE_TIMER_ID);
-            SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
+            HideFlyout(hwnd);
         } else {
+            // Re-arming the autohide timer here is harmless now that WA_INACTIVE
+            // closes the flyout directly, but it keeps the timer valid for the
+            // case where someone sets WA_ACTIVE again on the same window
+            // (e.g. tooltip-style behaviour) and matches the previous reset on
+            // mouse move.
             KillTimer(hwnd, AUTOHIDE_TIMER_ID);
             SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         }
         break;
     case WM_KEYDOWN:
-        if (wParam == VK_ESCAPE) { 
-            ShowWindow(hwnd, SW_HIDE); 
-            return 0; 
+        if (wParam == VK_ESCAPE) {
+            HideFlyout(hwnd);
+            return 0;
         }
         if (wParam == VK_RETURN || wParam == VK_SPACE) {
+            // Open Action Center; the ShellExecute call returns immediately
+            // (the new process keeps launching asynchronously), so the flyout
+            // is hidden right after to let the Control Panel page take focus.
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
-            ShowWindow(hwnd, SW_HIDE);
+            HideFlyout(hwnd);
             return 0;
         }
         break;
@@ -3736,26 +4216,29 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         return TRUE;
     case WM_LBUTTONDOWN: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        
+
         // Check click on problem links
         for (int i = 0; i < g_DisplayProblemCount; i++) {
             if (PtInRect(&g_ProblemLinkRects[i], pt)) {
-                
+
                 // Open appropriate action
                 OpenProblemAction(g_ProblemTypesDisplay[i]);
-                
-                // Close flyout
-                ShowWindow(hwnd, SW_HIDE);
+
+                // Close flyout (funnel through HideFlyout to also drop
+                // the low-level hooks).
+                HideFlyout(hwnd);
                 return 0;
             }
         }
-        
+
         // "You can use Action Center..." text is intentionally non-clickable.
 
-        // Check click on footer link (existing)
+        // Check click on footer link (existing). Same note as WM_KEYDOWN
+        // above: ShellExecuteW is async, so we hide the flyout right after
+        // and let the Control Panel page own the focus.
         if (PtInRect(&g_rcFooterLink, pt)) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
-            ShowWindow(hwnd, SW_HIDE);
+            HideFlyout(hwnd);
             return 0;
         }
         break;
@@ -3812,12 +4295,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         if (!hdc) { EndPaint(hwnd, &ps); break; }
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        if (!hdcMem) { EndPaint(hwnd, &ps); break; }
-        HBITMAP hbmMem = CreateCompatibleBitmap(hdc, g_ScaledWidth, g_ScaledHeight);
-        if (!hbmMem) { DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
-        HBITMAP hOldBm = (HBITMAP)SelectObject(hdcMem, hbmMem);
-        if (!hOldBm) { DeleteObject(hbmMem); DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
+        MemDcGuard dcMem(hdc, g_ScaledWidth, g_ScaledHeight);
+        if (!dcMem.valid()) { EndPaint(hwnd, &ps); break; }
+        HDC hdcMem = dcMem.get();
         int borderW = g_BorderPenWidth;
         BOOL dark = g_Ctx.darkMode;
         COLORREF clrBg = dark ? COLOR_DARK_BG : COLOR_BG;
@@ -3828,7 +4308,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         COLORREF clrLink = dark ? COLOR_DARK_LINK : COLOR_LINK;
         COLORREF clrLinkHover = dark ? COLOR_DARK_LINK_HOVER : COLOR_LINK_HOVER;
 
-        int padL = ScaleDpi(10), padR = ScaleDpi(10);
+        // High Contrast themes override the custom palette with system colors.
+        const bool highContrast = IsHighContrastActive();
+        if (highContrast) {
+            clrBg = clrHeaderBg = GetSysColor(COLOR_WINDOW);
+            clrFooterBg = GetSysColor(COLOR_BTNFACE);
+            clrBorderLine1 = GetSysColor(COLOR_GRAYTEXT);
+            clrTitle = GetSysColor(COLOR_WINDOWTEXT);
+            clrLink = clrLinkHover = GetSysColor(COLOR_HOTLIGHT);
+        }
+
+        int padL = ScaleDpi(12), padR = ScaleDpi(12);
         int hdrH = g_ScaledHeaderHeight, ftrH = g_ScaledFooterHeight;
         
         // Sfondo
@@ -3848,9 +4338,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         SetBkMode(hdcMem, TRANSPARENT);
         
         // Leggi problemi e stato in un unico snapshot coerente.
-        int activeProblems, secState, problemTypesCopy[MAX_PROBLEMS];
+        int activeProblems, criticalProblems, secState, problemTypesCopy[MAX_PROBLEMS];
         { SRWGuard guard(g_Ctx.srwLock, false);
           activeProblems = g_ActiveProblems;
+          criticalProblems = g_CriticalProblems;
           secState = g_SecurityState;
           memcpy(problemTypesCopy, g_ProblemTypes, sizeof(g_ProblemTypes)); }
         
@@ -3871,7 +4362,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         int flagY = (hdrH - flagSize) / 2;
         if (!DrawGdipBitmapHighQuality(hdcMem, flagBitmap,
                                        padL, flagY, flagSize, flagSize)) {
-            // Fallback HICON dello stesso stato se GDI+ non e' disponibile.
+            // Fallback HICON dello stesso stato se GDI+ non è disponibile.
             DrawIconEx(hdcMem, padL, flagY, flagFallback,
                        flagSize, flagSize, 0, NULL, DI_NORMAL);
         }
@@ -3879,28 +4370,40 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         int txL = padL + flagSize + ScaleDpi(8);
 
 if (activeProblems > 0) {
+    // Come nell'originale Windows 7/8.1: la prima riga conta solo i problemi
+    // "importanti" (critici), non il totale. La riga "N total messages" va
+    // mostrata SOLO se il totale differisce dagli importanti (es. ci sono
+    // anche avvisi non critici) - altrimenti l'originale mostra una riga sola.
+    int importantCount = (criticalProblems > 0) ? criticalProblems : activeProblems;
+    BOOL showTotalLine = (importantCount != activeProblems);
+
     // "N important messages" in blu e bold (prima riga)
     WCHAR headerBuf[64] = {0};
     const WCHAR* singular = LOC(STR_SUBTITLE_ALERT1);
     const WCHAR* wordPart = wcschr(singular, L' ');
     if (wordPart) {
-        const WCHAR* base = (activeProblems == 1) ? singular : LOC(STR_SUBTITLE_ALERT2);
+        const WCHAR* base = (importantCount == 1) ? singular : LOC(STR_SUBTITLE_ALERT2);
         const WCHAR* wp = wcschr(base, L' ');
         if (wp) {
-            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d%s", activeProblems, wp);
+            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d%s", importantCount, wp);
         } else {
-            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", activeProblems, base);
+            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", importantCount, base);
         }
     } else {
-        StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", activeProblems, singular);
+        StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", importantCount, singular);
     }
     
-    // Prima riga: "N important messages" in blu e bold
+    // Prima riga: "N important messages" in blu e bold.
+    // Se non c'e' una seconda riga, va centrata sull'intera altezza header
+    // (come "Action Center" nello stato senza problemi), non ancorata in alto.
     SelectGuard sg(hdcMem, g_hFontBold);
     SetTextColor(hdcMem, clrLink);  // BLU
-    RECT rcT = {txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(25)};
+    RECT rcT = showTotalLine
+        ? RECT{txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(25)}
+        : RECT{txL, 0, g_ScaledWidth - padR, hdrH};
     DrawTextW(hdcMem, headerBuf, -1, &rcT, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     
+    if (showTotalLine) {
     // Seconda riga: "N total messages" in blu (non bold)
     SelectGuard sg2(hdcMem, g_hFontNormal);
     SetTextColor(hdcMem, clrLink);  // BLU (stesso colore dei link)
@@ -3930,6 +4433,21 @@ if (activeProblems > 0) {
         case 0x0407: // German
             totalText = (activeProblems == 1) ? L"gesamte Meldung" : L"gesamte Meldungen";
             break;
+        case 0x0413: // Nederlands
+            totalText = (activeProblems == 1) ? L"totaalbericht" : L"totaalberichten";
+            break;
+        case 0x0415: // Polski
+            // Flessione polacca: 1 -> "wiadomość" (singolare); tutto il resto
+            // -> "wiadomości" (le forme 2-4 e 5+ coincidono in questa stringa,
+            // quindi non serve un ramo separato per il plurale "poche").
+            totalText = (activeProblems == 1) ? L"\u0142\u0105cznie wiadomo\u015B\u0107" : L"\u0142\u0105cznie wiadomo\u015Bci";
+            break;
+        case 0x0418: // Română
+            totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
+            break;
+        case 0x041F: // Türkçe
+            totalText = L"toplam ileti";
+            break;
         default:     // English
             totalText = (activeProblems == 1) ? L"total message" : L"total messages";
             break;
@@ -3939,6 +4457,7 @@ if (activeProblems > 0) {
     // Riduci lo spazio tra le righe del 5% (da ScaleDpi(22) a ScaleDpi(21))
     RECT rcTotal = {txL, ScaleDpi(24), g_ScaledWidth - padR, ScaleDpi(44)};
     DrawTextW(hdcMem, totalBuf, -1, &rcTotal, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
 } else {
         // "Action Center" in blu e bold
         SelectGuard sg(hdcMem, g_hFontBold);
@@ -3967,8 +4486,13 @@ if (activeProblems > 0) {
         // MESSAGGI / PROBLEMI CON WRAPPING E ALTEZZA DINAMICA
         // ============================================================
         int msgY = hdrH + ScaleDpi(12);
-        int msgL = padL + ScaleDpi(4);
+        int shieldX = padL + ScaleDpi(4);
+        int shieldW = ScaleDpi(16);
+        int msgL = shieldX + shieldW + ScaleDpi(8);
         int msgR = g_ScaledWidth - padR;
+        // Testo dei messaggi: un po' di respiro extra rispetto al bordo destro,
+        // cosi' l'ultima riga del wrap non tocca mai il frame del flyout.
+        int msgTextR = msgR - ScaleDpi(6);
         g_DisplayProblemCount = 0;
         
         if (activeProblems == 0) {
@@ -3978,25 +4502,30 @@ if (activeProblems > 0) {
             if (newline) {
                 const WCHAR* line2 = newline + 1;
                 SelectObject(hdcMem, g_hFontNormal);
-                SetTextColor(hdcMem, dark ? clrTitle : RGB(80, 80, 80));
-                RECT rcLine2 = {msgL, msgY, msgR, g_ScaledHeight - g_ScaledFooterHeight - ScaleDpi(4)};
+                // In High Contrast, body text must be COLOR_WINDOWTEXT so the
+                // user can actually read it; COLOR_GRAYTEXT (the previous
+                // choice) is reserved for disabled labels and gets dropped to
+                // a near-invisible gray on most HC schemes.
+                SetTextColor(hdcMem, highContrast ? GetSysColor(COLOR_WINDOWTEXT)
+                                                  : (dark ? clrTitle : RGB(80, 80, 80)));
+                RECT rcLine2 = {padL, msgY, msgR, g_ScaledHeight - g_ScaledFooterHeight - ScaleDpi(4)};
                 DrawTextW(hdcMem, line2, -1, &rcLine2, DT_LEFT | DT_WORDBREAK);
             }
         } else {
             int displayCount = (activeProblems < MAX_DISPLAY_PROBLEMS) ? activeProblems : MAX_DISPLAY_PROBLEMS;
             int lineH = ScaleDpi(22);
-            int maxWidth = msgR - msgL - ScaleDpi(22) - ScaleDpi(4);
+            int maxWidth = msgTextR - msgL;
             int rowHeights[MAX_DISPLAY_PROBLEMS] = {0};
-            
-            // Prima passata: calcola quante righe servono per ogni problema
+
+            // Prima passata: calcola quante righe servono per ogni problema.
             for (int i = 0; i < displayCount; i++) {
                 const wchar_t* msgText = GetProblemText(problemTypesCopy[i]);
                 if (!msgText || !msgText[0]) continue;
-                
+
                 SIZE textSize;
                 SelectObject(hdcMem, g_hFontNormal);
                 GetTextExtentExPointW(hdcMem, msgText, lstrlenW(msgText), maxWidth, NULL, NULL, &textSize);
-                
+
                 int neededRows = 1;
                 if (textSize.cx > maxWidth && maxWidth > 0) {
                     neededRows = (textSize.cx + maxWidth - 1) / maxWidth;
@@ -4018,61 +4547,63 @@ if (activeProblems > 0) {
                 int rowBottom = rowTop + rowHeight;
                 
                 RECT rcRowFull = {0, rowTop, g_ScaledWidth, rowBottom};
-                RECT rcLink = {msgL + ScaleDpi(22), rowTop, msgR, rowBottom};
+                RECT rcLink = {msgL, rowTop, msgTextR, rowBottom};
                 
                 g_ProblemLinkRects[i] = rcRowFull;
                 g_ProblemTypesDisplay[i] = problemTypesCopy[i];
                 g_DisplayProblemCount = i + 1;
                 BOOL isHovering = (g_HoveredProblemIndex == i);
+                COLORREF rowTextColor = clrLink;
                 if (isHovering) {
-                    COLORREF hoverBg     = dark ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                    COLORREF hoverBorder = dark ? RGB(60, 80, 120)   : RGB(174, 212, 243);
-                    
-                    RECT rcHover = rcRowFull;
-                    rcHover.left += ScaleDpi(2);
-                    rcHover.right -= ScaleDpi(2);
-                    
-                    HBRUSH hBrHov = CreateSolidBrush(hoverBg);
-                    HPEN   hPenHov = CreatePen(PS_SOLID, 1, hoverBorder);
-                    HPEN   hOldPenH  = (HPEN)SelectObject(hdcMem, hPenHov);
-                    HBRUSH hOldBrH   = (HBRUSH)SelectObject(hdcMem, hBrHov);
+                    // In High Contrast the pastel "selected" colors are
+                    // unreadable on most schemes; use the system
+                    // selection colors so the hovered row actually stands out.
+                    COLORREF hoverBg;
+                    COLORREF hoverBorder;
+                    if (highContrast) {
+                        hoverBg     = GetSysColor(COLOR_HIGHLIGHT);
+                        hoverBorder = GetSysColor(COLOR_WINDOWFRAME);
+                        rowTextColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                    } else {
+                        hoverBg     = dark ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                        hoverBorder = dark ? RGB(60, 80, 120)   : RGB(174, 212, 243);
+                    }
+
+                    // Hover a larghezza intera e 1.5% piu' alto per coprire
+                    // meglio tutta l'area cliccabile della riga.
+                    int hovH = rowBottom - rowTop;
+                    int extraV = MulDiv(hovH, 15, 1000); // +1.5%
+                    RECT rcHover = { 0, rowTop - extraV, g_ScaledWidth, rowBottom + extraV };
+
+                    GdiObj hBrHov(CreateSolidBrush(hoverBg));
+                    GdiObj hPenHov(CreatePen(PS_SOLID, 1, hoverBorder));
+                    SelectGuard sgPen(hdcMem, hPenHov);
+                    SelectGuard sgBr(hdcMem, hBrHov);
                     RoundRect(hdcMem, rcHover.left, rcHover.top, rcHover.right, rcHover.bottom, 3, 3);
-                    SelectObject(hdcMem, hOldPenH); 
-                    SelectObject(hdcMem, hOldBrH);
-                    DeleteObject(hBrHov); 
-                    DeleteObject(hPenHov);
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                 }
-                if (g_hShieldIcon) {
-    // Calcola l'altezza effettiva del testo per allineare lo scudo
-    // Usa l'altezza della riga di testo singola (lineH) come riferimento
+if (g_pBmpShield16 || g_pBmpShield64 || g_hShieldIcon) {
     int iconSize = ScaleDpi(16);
-    int textHeight = lineH;  // Altezza di una riga di testo
-    int shieldY = rowTop + (rowHeight - iconSize) / 2;
-    
-    // Se la riga è più alta di una singola riga di testo, centra lo scudo
-    // sulla PRIMA riga di testo, non su tutta l'altezza della riga
-    if (rowHeight > textHeight + ScaleDpi(4)) {
-        // Centra sulla prima riga di testo (le righe successive sono wrapping)
-        shieldY = rowTop + (textHeight - iconSize) / 2;
+    int shieldY = rowTop;
+    void* bmpShield = (iconSize <= 16 && g_pBmpShield16) ? g_pBmpShield16 : g_pBmpShield64;
+    if (!DrawGdipBitmapHighQuality(hdcMem, bmpShield, shieldX, shieldY, iconSize, iconSize)) {
+        // Fallback 
+        DrawIconEx(hdcMem, shieldX, shieldY, g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
     }
-    
-    DrawIconEx(hdcMem, msgL, shieldY,
-              g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
 }
                 SelectObject(hdcMem, g_hFontNormal);
-                SetTextColor(hdcMem, clrLink);
+                SetTextColor(hdcMem, rowTextColor);
                 DrawTextW(hdcMem, msgText, -1, &rcLink,
                          DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX | DT_END_ELLIPSIS);
-                
+
                 currentY += rowHeight + gapBetweenProblems;
             }
             
             if (activeProblems > MAX_DISPLAY_PROBLEMS) {
                 SelectGuard sg(hdcMem, g_hFontSmall); 
                 SetTextColor(hdcMem, clrLink);
-                RECT rcMore = {msgL + ScaleDpi(22), currentY, 
-                               msgR, currentY + ScaleDpi(16)};
+                RECT rcMore = {msgL, currentY, 
+                               msgTextR, currentY + ScaleDpi(16)};
                 DrawTextW(hdcMem, LOC(STR_AND_MORE), -1, &rcMore, DT_LEFT | DT_SINGLELINE);
             }
         }
@@ -4105,13 +4636,16 @@ if (activeProblems > 0) {
         // Il bordo è ora gestito interamente da DWM (DropShadow + Round Corners)
         
         BitBlt(hdc,0,0,g_ScaledWidth,g_ScaledHeight,hdcMem,0,0,SRCCOPY);
-        SelectObject(hdcMem, hOldBm); DeleteObject(hbmMem); DeleteDC(hdcMem);
         EndPaint(hwnd, &ps);
         break;
     }
     case WM_DESTROY:
+        // Both hooks must be removed here, not just the click-outside mouse
+        // hook. CloseFlyout() / HideFlyout() already call them, but a stray
+        // DestroyWindow from the cleanup path (e.g. WM_TRAY_SHUTDOWN) used
+        // to leak the keyboard hook.
         RemoveClickOutsideHook();
-        g_FlyoutClosing = FALSE; 
+        g_FlyoutClosing = FALSE;
         g_IsHoveringLink = FALSE;
         if (g_Ctx.hWndFlyout == hwnd)
             g_Ctx.hWndFlyout = NULL;
@@ -4146,7 +4680,19 @@ void CreateFlyoutWindow() {
     int flyoutHeight = g_ScaledHeight;
     int flyoutWidth = g_ScaledWidth;
     
-    DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    // NOTE: unlike the notify/toast popup below, the flyout is a window the
+    // user explicitly opens by clicking the tray icon, exactly like the
+    // Windows 7 network flyout recreation. That mod does NOT use
+    // WS_EX_NOACTIVATE on its flyout and instead lets it become the
+    // foreground/active window (see its ToggleFlyoutWindow(), which calls
+    // ShowWindow(..., SW_SHOW) followed by SetForegroundWindow()). Keeping
+    // WS_EX_NOACTIVATE here is what causes DWM to always treat this flyout
+    // as an unfocused/inactive window, so with OpenGlass it never gets a
+    // drop shadow or the active glass tint/highlight and instead is stuck
+    // showing the inactive glass color. Dropping WS_EX_NOACTIVATE (and
+    // activating it for real in CreateFlyoutWindow/ToggleFlyout below)
+    // fixes that inconsistency with the rest of the Aero tray flyouts.
+    DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
     DWORD dwStyle = g_Settings.useRoundedCorners ? (WS_POPUP | WS_THICKFRAME) : WS_POPUP;
     
     if (g_Settings.useRoundedCorners) {
@@ -4211,12 +4757,9 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps);
         if (!hdc) { EndPaint(hwnd, &ps); break; }
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        if (!hdcMem) { EndPaint(hwnd, &ps); break; }
-        HBITMAP hbmMem = CreateCompatibleBitmap(hdc, g_ScaledNotifyWidth, g_ScaledNotifyHeight);
-        if (!hbmMem) { DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
-        HBITMAP hOldBm = (HBITMAP)SelectObject(hdcMem, hbmMem);
-        if (!hOldBm) { DeleteObject(hbmMem); DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
+        MemDcGuard dcMem(hdc, g_ScaledNotifyWidth, g_ScaledNotifyHeight);
+        if (!dcMem.valid()) { EndPaint(hwnd, &ps); break; }
+        HDC hdcMem = dcMem.get();
         int iconSize = g_ScaledIconSize, borderW = g_BorderPenWidth;
         BOOL dark = g_Ctx.darkMode;
         COLORREF clrNotifyBg = dark ? COLOR_DARK_NOTIFY_BG : COLOR_NOTIFY_BG;
@@ -4225,6 +4768,16 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         COLORREF clrTitle = dark ? COLOR_DARK_TITLE : COLOR_TITLE;
         COLORREF clrText = dark ? COLOR_DARK_TEXT : COLOR_TEXT_DARK;
         COLORREF clrLink = dark ? COLOR_DARK_LINK : COLOR_LINK;
+
+        // High Contrast themes override the custom palette with system colors.
+        if (IsHighContrastActive()) {
+            clrNotifyBg = GetSysColor(COLOR_WINDOW);
+            clrNotifyBorder = GetSysColor(COLOR_WINDOWFRAME);
+            clrNotifyTitleBg = GetSysColor(COLOR_BTNFACE);
+            clrTitle = GetSysColor(COLOR_WINDOWTEXT);
+            clrText = GetSysColor(COLOR_WINDOWTEXT);
+            clrLink = GetSysColor(COLOR_HOTLIGHT);
+        }
         RECT rc = {0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight};
         GdiObj hBrBg(CreateSolidBrush(clrNotifyBg)); FillRect(hdcMem, &rc, (HBRUSH)hBrBg.get());
         { GdiObj hPen(CreatePen(PS_SOLID,borderW,clrNotifyBorder)); SelectGuard sgPen(hdcMem,hPen);
@@ -4259,7 +4812,6 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
           RECT rcL = {txL,ScaleDpi(44),g_ScaledNotifyWidth-ScaleDpi(8),ScaleDpi(58)};
           DrawTextW(hdcMem, LOC(STR_LINK_OPEN_AC), -1, &rcL, DT_LEFT|DT_SINGLELINE); }
         BitBlt(hdc,0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight,hdcMem,0,0,SRCCOPY);
-        SelectObject(hdcMem, hOldBm); DeleteObject(hbmMem); DeleteDC(hdcMem);
         EndPaint(hwnd, &ps);
         break;
     }
@@ -4367,6 +4919,11 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             }
             return 0;
         }
+        if (wParam == STARTUP_NOTIFY_TIMER_ID) {
+            KillTimer(hwnd, STARTUP_NOTIFY_TIMER_ID);
+            if (!g_Ctx.isUninitializing) CheckStartupNotification();
+            return 0;
+        }
         if (wParam == TRAY_RETRY_TIMER_ID) {
             RunTrayIconRecoveryAttempt();
             return 0;
@@ -4387,6 +4944,7 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         KillTimer(hwnd, REFRESH_TIMER_ID);
         KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
         KillTimer(hwnd, TRAY_HEALTH_TIMER_ID);
+        KillTimer(hwnd, STARTUP_NOTIFY_TIMER_ID);
         RemoveProblemBalloon();
 
         HWND hFly = g_Ctx.hWndFlyout;
@@ -4484,6 +5042,14 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     if (uMsg == WM_SETTINGS_CHANGED) {
         // Handle hotkey and timer updates from the tray thread (correct thread affinity)
         if (!g_Ctx.isUninitializing) {
+            // Rebuild the tray tooltip here, on the tray thread, instead of
+            // calling it directly from Wh_ModSettingsChanged() (which can run
+            // on an arbitrary thread). EnsureTrayTooltip() can reach
+            // AddTrayIcon() -> CheckSecurityProviders() + Shell_NotifyIconW +
+            // SetTimer on windows/timers owned by this thread, so calling it
+            // off-thread would race with the tray thread's own timers
+            // (review issue - optional item).
+            EnsureTrayTooltip();
             // Applica subito l'opzione theme (auto/light/dark) e forza il
             // repaint di flyout e popup di notifica con i nuovi colori.
             ApplyThemeToWindows();
@@ -4528,6 +5094,24 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (ui != g_LastDetectedUILang) {
                 DetermineLocale();
                 RefreshLocalizedUI();
+            }
+        }
+        // High Contrast toggled while the mod is running (SPI_SETHIGHCONTRAST
+        // broadcast, e.g. Left Alt+Left Shift+Print Screen). IsHighContrastActive()
+        // is normally cached with a 2s TTL to keep the paint path cheap, but
+        // that means an already-open flyout/notify window wouldn't pick up
+        // the change until its next unrelated repaint. Force the cache fresh
+        // now and invalidate both windows so the system-color swap is
+        // immediate (review issue).
+        if (wParam == SPI_SETHIGHCONTRAST) {
+            RefreshHighContrastNow();
+            if (!g_Ctx.isUninitializing) {
+                if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && IsWindowVisible(g_Ctx.hWndFlyout)) {
+                    InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
+                }
+                if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify) && IsWindowVisible(g_Ctx.hWndNotify)) {
+                    InvalidateRect(g_Ctx.hWndNotify, NULL, TRUE);
+                }
             }
         }
         return 0;
@@ -4639,6 +5223,13 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 
         SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
 
+        // Notifica di avvio: controlla "dopo un po'" (non subito) se ci sono
+        // problemi, cosi' l'area notifiche di Windows e' gia' pronta e il
+        // balloon non viene perso appena dopo il boot/riavvio di Explorer.
+        if (g_isStartupCheck) {
+            SetTimer(g_Ctx.hWndMsgHandler, STARTUP_NOTIFY_TIMER_ID, STARTUP_NOTIFY_DELAY_MS, NULL);
+        }
+
         if (g_Settings.enableHotkey) {
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
@@ -4680,16 +5271,10 @@ void CleanupModResources() {
     // 1. Blocca immediatamente nuove operazioni e nuove registrazioni.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
 
-    // Remove keyboard hook immediately (no window context needed)
-    RemoveKeyboardHook();
 
-    // 2. Ferma le sorgenti esterne e attendi le callback gia' entrate.
     UnregisterWscNotifications();
     WaitForWscCallbacksToDrain();
     StopRegistryMonitor();
-
-    // Se l'unload arriva immediatamente dopo CreateThread, attendi che il
-    // tray thread abbia creato la propria message window (o sia fallito).
     if (g_Ctx.hTrayThread && g_Ctx.hTrayReadyEvent &&
         (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler))) {
         WaitForSingleObject(g_Ctx.hTrayReadyEvent, 5000);
@@ -4788,6 +5373,19 @@ bool g_useEmbeddedUifile = false;
 bool g_cplRestoreHubLinks = true;
 
 void CplLoadSettings() {
+    // GetLangPack() picks the hub-link language from g_LastDetectedUILang
+    // (set by DetermineLocale(), which honors the mod's Language setting),
+    // not from GetUserDefaultUILanguage() directly - otherwise the CPL links
+    // would always follow Windows' UI language even when the user picked a
+    // different one in the mod settings, out of step with the tray/flyout
+    // strings (review issue). In control.exe, Wh_ModInit() returns right
+    // after CplInit() and never reaches the LoadSettings()/DetermineLocale()
+    // calls that the explorer.exe tray-UI path makes, so this is the only
+    // place those run for that process - call them here too. Both are cheap
+    // and idempotent, so the redundant call from the explorer.exe path is
+    // harmless.
+    LoadSettings();
+    DetermineLocale();
     g_cplRestoreHubLinks = Wh_GetIntSetting(L"restoreCplHubLinks") != 0;
     g_useEmbeddedUifile = Wh_GetIntSetting(L"useEmbeddedUifile") != 0;
 }
@@ -4805,17 +5403,47 @@ struct LangPack {
 };
 
 static const LangPack g_langPacks[] = {
+    // English (0x09)
     {0x09, L"If the problem isn't listed, try one of these:", L"Troubleshooting", L"Find and fix problems with your computer.", L"Recovery", L"Refresh your PC without affecting your files, or reset it and start over."},
+    
+    // Italian (0x10)
     {0x10, L"Se il problema non \u00e8 incluso nell'elenco, provare uno dei metodi seguenti:", L"Risoluzione dei problemi", L"Trovare e risolvere i problemi del computer.", L"Ripristino", L"Aggiorna il PC mantenendo i file o reimpostalo e ricomincia dall'inizio."},
+    
+    // French (0x0c)
     {0x0c, L"Si le probl\u00e8me n'est pas r\u00e9pertori\u00e9, essayez l'une des m\u00e9thodes suivantes :", L"R\u00e9solution des probl\u00e8mes", L"Rechercher et r\u00e9soudre les probl\u00e8mes de l'ordinateur.", L"R\u00e9cup\u00e9ration", L"Actualisez le PC sans affecter vos fichiers, ou r\u00e9initialisez-le et recommencez."},
+    
+    // Spanish (0x0a)
     {0x0a, L"Si el problema no est\u00e1 en la lista, pruebe uno de estos m\u00e9todos:", L"Soluci\u00f3n de problemas", L"Buscar y solucionar problemas del equipo.", L"Recuperaci\u00f3n", L"Actualiza el PC sin afectar a los archivos o restabl\u00e9celo y empieza de nuevo."},
+    
+    // Russian (0x19)
     {0x19, L"\u0415\u0441\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0434\u0438\u043d \u0438\u0437 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u0441\u043f\u043e\u0441\u043e\u0431\u043e\u0432:", L"\u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043e\u043a", L"\u041f\u043e\u0438\u0441\u043a \u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c \u0441 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c.", L"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435", L"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u041f\u041a, \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0432 \u0444\u0430\u0439\u043b\u044b, \u0438\u043b\u0438 \u0441\u0431\u0440\u043e\u0441\u044c\u0442\u0435 \u0435\u0433\u043e \u0438 \u043d\u0430\u0447\u043d\u0438\u0442\u0435 \u0441\u043d\u0430\u0447\u0430\u043b\u0430."},
+    
+    // Portuguese (0x16)
     {0x16, L"Se o problema n\u00E3o estiver na lista, experimente um destes m\u00E9todos:", L"Resolu\u00E7\u00E3o de Problemas", L"Encontrar e corrigir problemas do computador.", L"Recupera\u00E7\u00E3o", L"Atualize o PC sem afetar os ficheiros ou restaure-o e recomece do in\u00EDcio."},
-    {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."}
+    
+    // German (0x07)
+    {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."},
+    
+    // Dutch (primary lang 0x13)
+    {0x13, L"Als het probleem niet in de lijst staat, probeer dan een van deze methoden:", L"Probleemoplossing", L"Zoek naar en los problemen met uw computer op.", L"Herstel", L"Werk uw pc bij zonder uw bestanden te verliezen, of stel deze opnieuw in en begin opnieuw."},
+    
+    // Polish (primary lang 0x15)
+    {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017C problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
+    
+    // Romanian (primary lang 0x18)
+    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."},
+    
+    // Turkish (primary lang 0x1f) - NUOVO
+    {0x1f, L"Sorun listede yoksa a\u015Fa\u011F\u0131daki y\u00F6ntemlerden birini deneyin:", L"Sorun Giderme", L"Bilgisayar\u0131n\u0131zla ilgili sorunlar\u0131 bulur ve d\u00FCzeltir.", L"Kurtarma", L"Bilgisayar\u0131n\u0131z\u0131 dosyalar\u0131n\u0131z\u0131 etkilemeden yenileyin veya s\u0131f\u0131rlay\u0131p yeniden ba\u015Flay\u0131n."}
 };
 
 static const LangPack* GetLangPack() {
-    WORD ui = PRIMARYLANGID(GetUserDefaultUILanguage());
+    // Match the mod's effective UI language (g_Settings.language, resolved by
+    // DetermineLocale() into g_LastDetectedUILang) instead of always following
+    // GetUserDefaultUILanguage() directly - otherwise setting e.g. Italiano on
+    // an English Windows would give an Italian flyout but English
+    // "Troubleshooting"/"Recovery" CPL links (review issue).
+    WORD ui = PRIMARYLANGID(g_LastDetectedUILang);
     for (const auto& p : g_langPacks) {
         if (p.primaryLang == ui) {
             return &p;
@@ -6073,7 +6701,12 @@ void Wh_ModSettingsChanged(void) {
     LoadSettings();
     DetermineLocale();
     CplSettingsChanged();
-    EnsureTrayTooltip();
+    // EnsureTrayTooltip() is deferred to the WM_SETTINGS_CHANGED handler on
+    // the tray thread instead of being called directly here: this callback
+    // can run on a thread other than the tray thread, and EnsureTrayTooltip()
+    // can reach AddTrayIcon() -> CheckSecurityProviders() + Shell_NotifyIconW
+    // + SetTimer on windows/timers owned by the tray thread (review issue -
+    // optional item).
     if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
         PostMessageW(g_Ctx.hWndMsgHandler, WM_SETTINGS_CHANGED, 0, 0);
     }
