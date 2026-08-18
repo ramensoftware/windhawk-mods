@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              vista-welcome-center
+// @id              win-vista-and-7-welcome-center
 // @name            Windows Vista/7 Welcome Center
 // @description     This mod restores the Windows Vista Welcome Center with an optional Windows 7 Getting Started skin on Windows 10 and 11
-// @version         1.0.0
+// @version         1.0.1
 // @author          Cips
+// @github          https://github.com/Cips
 // @license         MIT
 // @include         explorer.exe
 // @include         windhawk.exe
@@ -256,7 +257,7 @@ static constexpr wchar_t kMainClass[] = L"Windhawk.VistaWelcomeCenter";
 static constexpr wchar_t kTaskbarAppId[] = L"Windhawk.VistaWelcomeCenter";
 static constexpr wchar_t kModDisplayName[] =
     L"Windows Vista/7 Welcome Center";
-static constexpr wchar_t kModVersion[] = L"1.0.64";
+static constexpr wchar_t kModVersion[] = L"1.0.1";
 static constexpr wchar_t kModAuthor[] = L"Cips";
 static constexpr wchar_t kCreditContributor[] = L"babamohammed2022";
 
@@ -1042,7 +1043,7 @@ static constexpr const wchar_t* kUiStrings[kConcreteLanguageCount]
         L"الترخيص", L"المؤلف",
         L"المستخدم", L"الكمبيوتر",
         L"معالج ذو %u نواة", L"محول العرض",
-        L"ذاكرة RAM غير معروفة", L"ذاكرة RAM ‏%.2f غيغابايت",
+        L"ذاكرة RAM غير معروفة", L"ذاكرة RAM %.2f غيغابايت",
     },
     // Spanish
     {
@@ -23457,17 +23458,18 @@ static void HideWelcome() {
     ShowWindow(g.main, SW_HIDE);
 }
 
-static WNDPROC g_oldScrollProc = nullptr;
+static constexpr UINT_PTR kScrollSubclassId = 1;
 
 static LRESULT CALLBACK ScrollBarProc(HWND hwnd, UINT msg, WPARAM wParam,
-                                      LPARAM lParam) {
+                                      LPARAM lParam, UINT_PTR uIdSubclass,
+                                      DWORD_PTR /*dwRefData*/) {
     if (msg == WM_MOUSEWHEEL && g.main && IsWindow(g.main)) {
         return SendMessageW(g.main, msg, wParam, lParam);
     }
-    if (g_oldScrollProc) {
-        return CallWindowProcW(g_oldScrollProc, hwnd, msg, wParam, lParam);
+    if (msg == WM_NCDESTROY) {
+        RemoveWindowSubclass(hwnd, ScrollBarProc, uIdSubclass);
     }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 static void RecreateFonts() {
@@ -24106,10 +24108,10 @@ static LRESULT CALLBACK MainProcInner(HWND hwnd, UINT msg, WPARAM wParam,
                 nullptr);
             if (!g.vscroll) {
                 Wh_Log(L"Create scrollbar failed (%u)", GetLastError());
-            } else {
-                g_oldScrollProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
-                    g.vscroll, GWLP_WNDPROC,
-                    reinterpret_cast<LONG_PTR>(ScrollBarProc)));
+            } else if (!SetWindowSubclass(g.vscroll, ScrollBarProc,
+                                          kScrollSubclassId, 0)) {
+                Wh_Log(L"SetWindowSubclass scrollbar failed (%u)",
+                       GetLastError());
             }
             RefreshSkinLabels();
             PlaceCheckbox();
@@ -24417,7 +24419,6 @@ static LRESULT CALLBACK MainProcInner(HWND hwnd, UINT msg, WPARAM wParam,
             g.selectedSection = g.selectedIndex = -1;
             g.checkbox = nullptr;
             g.vscroll = nullptr;
-            g_oldScrollProc = nullptr;
             g.fullScreen = false;
             g.main = nullptr;
             return 0;
