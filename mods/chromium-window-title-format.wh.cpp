@@ -196,7 +196,7 @@ Style short prefixes like `{count}`, not `{title}`.
 // Directly used, and previously reaching this file only through
 // windhawk_utils.h. A translation unit that compiles because of what its
 // dependencies happen to include is one compiler update away from not.
-#include <cstdint>   // uint32_t, uint64_t, intptr_t
+#include <cstdint>   // uint32_t
 #include <cstdlib>   // _wtoi, _wgetenv
 #include <cwchar>    // wcsrchr, _wcsnicmp, wcsncmp
 #include <cwctype>   // iswalnum, towupper, towlower
