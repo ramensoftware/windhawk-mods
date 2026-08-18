@@ -1523,6 +1523,40 @@ BOOL CALLBACK RefreshRunningWindowsProc(HWND hwnd, LPARAM) {
     return TRUE;
 }
 
+bool RunningWindowMatchesShortcut(HWND hwnd, int slot) {
+    if (slot < 0 || slot >= g_settings.count || !IsWindow(hwnd) ||
+        !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER)) {
+        return false;
+    }
+
+    const std::wstring& target = g_shortcuts[slot].resolvedPath;
+    if (target.empty() ||
+        _wcsicmp(PathFindExtensionW(target.c_str()), L".exe") != 0) {
+        return false;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                 processId);
+    if (!process) return false;
+
+    std::array<wchar_t, 32768> processPath{};
+    DWORD chars = static_cast<DWORD>(processPath.size());
+    const bool queried =
+        QueryFullProcessImageNameW(process, 0, processPath.data(), &chars);
+    CloseHandle(process);
+    if (!queried) return false;
+
+    const bool fullPathMatch =
+        _wcsicmp(processPath.data(), target.c_str()) == 0;
+    const bool shortcutFileNameMatch =
+        g_shortcuts[slot].allowFileNameMatch &&
+        _wcsicmp(PathFindFileNameW(processPath.data()),
+                 PathFindFileNameW(target.c_str())) == 0;
+    return fullPathMatch || shortcutFileNameMatch;
+}
+
 bool RefreshRunningWindows() {
     const auto previous = g_runningWindows;
     g_runningWindows.fill(nullptr);
@@ -1552,12 +1586,12 @@ void SyncActiveState() {
     const bool active = IsDesktopForeground();
     const bool changed = g_desktopVisible.exchange(active) != active;
     if (changed && g_activityEvent) SetEvent(g_activityEvent);
-    if (!active) return;
-    if (changed) g_lastRunningWindowSweep = 0;
+    if (changed && active) g_lastRunningWindowSweep = 0;
 
     const ULONGLONG now = GetTickCount64();
+    const ULONGLONG sweepInterval = active ? 15000 : 30000;
     if (g_lastRunningWindowSweep == 0 ||
-        now - g_lastRunningWindowSweep >= 15000) {
+        now - g_lastRunningWindowSweep >= sweepInterval) {
         g_lastRunningWindowSweep = now;
         if (RefreshRunningWindows()) Render();
     }
@@ -1588,9 +1622,11 @@ void LaunchSlot(int slot) {
     if(slot<0||slot>=kMaxShortcuts||g_shortcuts[slot].path.empty()) return;
     DWORD attributes=GetFileAttributesW(g_shortcuts[slot].path.c_str());
     if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_DIRECTORY)){POINT p{};GetCursorPos(&p);ShowFolderContents(slot,p);return;}
-    if(HWND running=g_runningWindows[slot]){
+    if(HWND running=g_runningWindows[slot];
+       running && RunningWindowMatchesShortcut(running, slot)){
         if(IsIconic(running)) ShowWindow(running,SW_RESTORE); SetForegroundWindow(running); return;
     }
+    g_runningWindows[slot] = nullptr;
     ShellExecuteW(g_hwnd,g_shortcuts[slot].runAsAdmin?L"runas":L"open",g_shortcuts[slot].path.c_str(),
                   g_shortcuts[slot].arguments.empty()?nullptr:g_shortcuts[slot].arguments.c_str(),nullptr,SW_SHOWNORMAL);
 }
@@ -2266,7 +2302,7 @@ DWORD WINAPI MediaThreadProc(void*) {
     MediaManager manager{nullptr};
     HANDLE waits[] = {g_stopEvent, g_mediaActionEvent, g_activityEvent};
     for (;;) {
-        const DWORD timeout = g_desktopVisible.load() ? 1000 : INFINITE;
+        const DWORD timeout = g_desktopVisible.load() ? 1000 : 5000;
         DWORD waitResult =
             WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, timeout);
         if (waitResult == WAIT_OBJECT_0) break;
