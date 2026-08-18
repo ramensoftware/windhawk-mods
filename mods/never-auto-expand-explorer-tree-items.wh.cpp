@@ -2,7 +2,7 @@
 // @id              never-auto-expand-explorer-tree-items
 // @name            Never Auto-Expand Explorer Tree Items
 // @description     Stops the unwanted auto-expansion of navigation pane items even if the "Expand to current folder" option is off
-// @version         1.1
+// @version         1.1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -76,12 +76,9 @@ bool IsExplorerNavigationPane(HWND hTreeView)
             return false;
         }
 
-        if (GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        return (GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)) &&
             (_wcsicmp(szClassName, L"CabinetWClass") == 0 ||
-                _wcsicmp(szClassName, L"#32770") == 0))
-        {
-            return true;
-        }
+                _wcsicmp(szClassName, L"#32770") == 0));
     }
 
     return false;
@@ -93,7 +90,10 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
 {
     // Verify keyboard interactions
     HWND hFocusWnd = GetFocus();
-    if (hFocusWnd == hTreeView || IsChild(hTreeView, hFocusWnd))
+    if ((hFocusWnd == hTreeView || IsChild(hTreeView, hFocusWnd)) &&
+        ((GetAsyncKeyState(VK_RIGHT) & 0x8000) ||
+            (GetAsyncKeyState(VK_ADD) & 0x8000) ||
+            (GetAsyncKeyState(VK_MULTIPLY) & 0x8000)))
     {
         return true;
     }
@@ -107,10 +107,7 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
         if (GetCursorPos(&cursorPos))
         {
             HWND hHoverWnd = WindowFromPoint(cursorPos);
-            if (hHoverWnd == hTreeView || IsChild(hTreeView, hHoverWnd))
-            {
-                return true;
-            }
+            return (hHoverWnd == hTreeView || IsChild(hTreeView, hHoverWnd));
         }
     }
 
@@ -169,10 +166,12 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
     {
         auto* pNotifyHeader = reinterpret_cast<LPNMHDR>(lParam);
         if (pNotifyHeader != nullptr &&
+            !IsBadReadPtr(pNotifyHeader, sizeof(NMHDR)) &&
             pNotifyHeader->code == TVN_ITEMEXPANDINGW)
         {
             auto* pTreeViewNotify = reinterpret_cast<LPNMTREEVIEWW>(lParam);
-            if (pTreeViewNotify->action == TVE_EXPAND)
+            if (!IsBadReadPtr(pTreeViewNotify, sizeof(NMTREEVIEWW)) &&
+                pTreeViewNotify->action == TVE_EXPAND)
             {
                 auto hTreeView = pNotifyHeader->hwndFrom;
                 auto hTreeItem = pTreeViewNotify->itemNew.hItem;
