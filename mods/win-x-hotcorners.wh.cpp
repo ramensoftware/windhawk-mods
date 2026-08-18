@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.4
+// @version         1.1.6
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -187,6 +187,7 @@ the window and the next one puts it back.
 | Switch to Last Window | Jump straight back to the previous window (Alt+Tab) |
 | Task Switcher | Persistent switcher you can click through (Ctrl+Alt+Tab) |
 | Virtual Desktop — Next / Previous / New | Move between or create desktops |
+| Close Virtual Desktop | Close the current desktop |
 
 **Windows**
 
@@ -993,6 +994,12 @@ static RECT g_topoWorkArea = {};
 
 static constexpr UINT WM_APP_REBUILD = WM_APP + 1;
 
+// Sent (not posted) from WhTool_ModUninit while both threads are still alive,
+// so a hold that is still engaged gets its release queued before anything is
+// told to stop. Posting would not do - the detection thread would never get
+// round to it.
+static constexpr UINT WM_APP_RELEASE_HOLD = WM_APP + 2;
+
 // Forward declarations
 static const wchar_t *ZoneToString(Zone z);
 static const wchar_t *ActionToString(CornerAction a);
@@ -1687,6 +1694,24 @@ static void SendKeys(const std::vector<WORD> &vks)
         // Part of the batch already: it presses and releases this one itself.
         if (std::find(vks.begin(), vks.end(), mod) != vks.end())
             continue;
+        // Windows opens the Start menu on a Win key-up that had no other key
+        // pressed between it and the matching key-down - and that is exactly
+        // the shape produced here, because this release is the first thing in
+        // the batch. So a Win-guarded zone bound to anything without Win in it
+        // (Mute, Lock, Close window) would open Start and then run the action.
+        // Pressing and releasing Ctrl first makes the Win-up no longer solo;
+        // Ctrl alone does nothing, and Ctrl+Win is not a shortcut either. This
+        // is the same masking trick AutoHotkey uses.
+        if (mod == VK_LWIN || mod == VK_RWIN)
+        {
+            INPUT mask = {};
+            mask.type = INPUT_KEYBOARD;
+            mask.ki.wVk = VK_CONTROL;
+            inputs.push_back(mask);
+            mask.ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs.push_back(mask);
+        }
+
         INPUT up = {};
         up.type = INPUT_KEYBOARD;
         up.ki.wVk = mod;
@@ -2679,16 +2704,23 @@ static bool TopologyChanged()
 // Action Worker Thread
 // =====================================================================
 
-static void EnqueueAction(const HitZone &hz)
+// Returns whether the job was actually taken. The caller needs to know: a hold
+// whose entry was dropped must not go on to queue a release, or the zone
+// undoes something that never happened.
+static bool EnqueueAction(const HitZone &hz)
 {
     EnterCriticalSection(&g_queueLock);
     // A release is never dropped. The cap is there to bound a runaway burst of
     // new work, but discarding the half that undoes something already done is
-    // how a peeked desktop gets stuck with no way back.
-    if (g_queue.size() < kMaxQueue || hz.isRelease)
+    // how a peeked desktop gets stuck with no way back. It cannot grow without
+    // bound either: a release is only queued for an entry that was accepted,
+    // so there is at most one outstanding per hold zone.
+    const bool queued = (g_queue.size() < kMaxQueue) || hz.isRelease;
+    if (queued)
         g_queue.push_back(hz);
     LeaveCriticalSection(&g_queueLock);
     SetEvent(g_hWorkEvent);
+    return queued;
 }
 
 // A hold zone's second half, queued when the pointer leaves. The copy carries
@@ -2717,13 +2749,12 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
     for (;;)
     {
         DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-        if (r == WAIT_OBJECT_0 || r == WAIT_FAILED)
-        {
-            // Release any keep-awake request this thread was holding, so
-            // unloading the mod never leaves the machine unable to sleep.
-            SetThreadExecutionState(ES_CONTINUOUS);
-            break;
-        }
+
+        // On the way out, still drain the queue - but run only the release
+        // half of a hold. Uninit queues that release deliberately, and dropping
+        // it is what strands a peeked desktop; anything else is new work nobody
+        // is waiting for.
+        const bool stopping = (r == WAIT_OBJECT_0 || r == WAIT_FAILED);
 
         for (;;)
         {
@@ -2739,6 +2770,8 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             LeaveCriticalSection(&g_queueLock);
             if (!have)
                 break;
+            if (stopping && !job.isRelease)
+                continue;
 
             // The gates live here, not on the detection thread, so a slow
             // SHQueryUserNotificationState or OpenProcess can never delay the
@@ -2818,6 +2851,14 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
                 holdActive = false;
             else if (job.engagesHold)
                 holdActive = true;
+        }
+
+        if (stopping)
+        {
+            // Release any keep-awake request this thread was holding, so
+            // unloading the mod never leaves the machine unable to sleep.
+            SetThreadExecutionState(ES_CONTINUOUS);
+            break;
         }
     }
     CoUninitialize();
@@ -3020,11 +3061,14 @@ static DWORD DetectTick()
     // behind to undo. This tracks that a release has been *queued*; whether it
     // runs is the worker's call, since the gates it would be suppressed by live
     // there and this thread must not wait on them.
-    g_holdEngaged = (bool)zones->zones[idx].releaseExec;
-
     HitZone job = zones->zones[idx];
     job.engagesHold = (bool)job.releaseExec;
-    EnqueueAction(job);
+
+    // Only owe a release if the entry was actually accepted. A full queue drops
+    // the entry, and arming the release anyway would leave the zone undoing
+    // something that never ran. The worker gates this a second time, from the
+    // far side of the fullscreen and excluded-app checks.
+    g_holdEngaged = EnqueueAction(job) && job.engagesHold;
     return next;
 }
 
@@ -3038,6 +3082,19 @@ static LRESULT CALLBACK DetectWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     if (uMsg == WM_APP_REBUILD)
     {
         RebuildZones();
+        return 0;
+    }
+    // Unload path. Every other way of stopping detection releases a held zone
+    // on the way out; without this one, unloading the mod with the pointer
+    // parked in a Show Desktop hold zone left every window minimised and
+    // nothing running that could put them back.
+    if (uMsg == WM_APP_RELEASE_HOLD)
+    {
+        std::shared_ptr<const ZoneSet> zones;
+        EnterCriticalSection(&g_zonesLock);
+        zones = g_zones;
+        LeaveCriticalSection(&g_zonesLock);
+        ReleaseHeldZone(zones);
         return 0;
     }
     // Both of these arrive as a SendMessage broadcast, so rebuilding inline
@@ -5541,6 +5598,20 @@ void WhTool_ModUninit()
             allStopped = false;
         }
     };
+
+    // Before anything is told to stop: a zone still holding a peek has to be
+    // undone while both the detection thread and the worker are alive. The
+    // release cannot run here - Keep awake is per-thread and Custom command
+    // needs the worker's COM apartment - so this only asks for it to be queued.
+    // A timeout rather than a plain SendMessage, because a wedged detection
+    // thread must not turn unloading into a hang; it is already the case that
+    // that thread never waits on anything Windhawk's thread holds.
+    if (g_hDetectWnd)
+    {
+        DWORD_PTR unused = 0;
+        SendMessageTimeout(g_hDetectWnd, WM_APP_RELEASE_HOLD, 0, 0,
+                           SMTO_ABORTIFHUNG, 500, &unused);
+    }
 
     if (g_hStopEvent)
         SetEvent(g_hStopEvent);
