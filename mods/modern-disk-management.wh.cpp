@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.9.2
+// @version         3.10.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -26,7 +26,7 @@ The layout is the console's, deliberately. A volume table listing every volume
 on every disk with layout, type, file system, status, capacity and free space;
 below it a map per physical disk, each partition a box sized to its share of
 the drive, coloured by what it is. Selecting a volume in either view selects it
-in the other, and the bar along the bottom acts on whatever is selected.
+in the other, and the right-click menu acts on whatever is selected.
 
 ## What it does and does not do
 
@@ -51,11 +51,13 @@ refusal is only reported when nothing worked at all.
 
 There is deliberately no partition editing here. Writing a partition editor is
 how data gets lost, and the dialogs that do it properly already exist in the
-console this replaces. So the four items that rewrite a partition table hand
-over to it - they say `Console` in the menu's right-hand column, and choosing
-one starts the original console rather than pretending to do the work here.
-Turning off **Replace the Disk Management console** in the mod's settings gets
-it back for good.
+console this replaces. So Extend, Shrink and Delete hand over to it, and so does
+Change Drive Letter and Paths - that one does not touch the partition table at
+all, but the console's dialog does mount points and folder paths as well as
+letters, and half of that dialog is worse than none of it. All four say
+`Console` in the menu's right-hand column, and choosing one starts the original
+console rather than pretending to do the work here. Turning off **Replace the
+Disk Management console** in the mod's settings gets it back for good.
 
 Everything is on the right-click menu, and nowhere else: no toolbar, no button
 bar, the same way the console works. Right-click a volume in either view, or
@@ -64,6 +66,11 @@ background offers only Refresh and the console, because a menu that offers to
 delete a volume the user did not click on is offering to act on a selection
 they cannot see. Double-click, or press Enter, for properties; the arrow keys
 move the selection, F5 re-reads the disks and Esc closes the window.
+
+This window is drawn rather than built from controls, so it has no accessibility
+tree: screen readers and other UI Automation clients see one blank window where
+the console gave them a real list view. That is a genuine regression against
+`diskmgmt.msc` and the reason the setting to turn the takeover off exists.
 
 ## What it does not know
 
@@ -149,6 +156,7 @@ would be drawing a lie about where the space on the disk went.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <mutex>
 #include <numbers>
 #include <string>
@@ -478,9 +486,23 @@ std::vector<PartitionMeta> QueryPartitions(int diskNumber, std::wstring* style,
     std::vector<BYTE> buffer(sizeof(DRIVE_LAYOUT_INFORMATION_EX) +
                              128 * sizeof(PARTITION_INFORMATION_EX));
     DWORD returned = 0;
-    if (DeviceIoControl(disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, nullptr, 0,
-                        buffer.data(), static_cast<DWORD>(buffer.size()),
-                        &returned, nullptr)) {
+    BOOL got = DeviceIoControl(disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, nullptr, 0,
+                               buffer.data(), static_cast<DWORD>(buffer.size()),
+                               &returned, nullptr);
+    // A GPT disk may hold up to 128 entries by convention but is not required
+    // to stop there, and a disk with more than the buffer holds answered with
+    // ERROR_INSUFFICIENT_BUFFER - which drew no map at all for that disk.
+    // Doubling twice covers anything a real disk will report.
+    for (int attempt = 0; !got && attempt < 2 &&
+                          (GetLastError() == ERROR_INSUFFICIENT_BUFFER ||
+                           GetLastError() == ERROR_MORE_DATA);
+         attempt++) {
+        buffer.assign(buffer.size() * 2, 0);
+        got = DeviceIoControl(disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, nullptr, 0,
+                              buffer.data(), static_cast<DWORD>(buffer.size()),
+                              &returned, nullptr);
+    }
+    if (got) {
         auto* layout =
             reinterpret_cast<DRIVE_LAYOUT_INFORMATION_EX*>(buffer.data());
         for (DWORD i = 0; i < layout->PartitionCount; i++) {
@@ -753,11 +775,11 @@ HICON StockDriveIcon(SHSTOCKICONID id, int drawnSize) {
 // Icons are requested at the exact size they are drawn at, so the shell's own
 // scaler produces them and nothing is resampled on the way to the screen. That
 // size depends on the window's DPI, which enumeration has no other way to know.
-UINT g_iconDpi = 96;
+std::atomic<UINT> g_iconDpi = 96;
 
 // Volumes and disks are drawn at the same size, so there is one answer.
 int IconPixels() {
-    return MulDiv(32, static_cast<int>(g_iconDpi), 96);
+    return MulDiv(32, static_cast<int>(g_iconDpi.load()), 96);
 }
 
 std::wstring TrimSpaces(const std::wstring& value) {
@@ -852,12 +874,36 @@ bool QueryVolumePlacement(const std::wstring& guidPath, int* diskNumber,
         return false;
     }
 
-    BYTE buffer[1024]{};
+    // Grown on demand rather than fixed. A kilobyte holds about forty extents,
+    // and a volume with more failed the call with ERROR_MORE_DATA - which this
+    // function reported as "cannot be placed", which dropped the volume from the
+    // list. Losing exactly the many-extent volumes is losing the ones the map is
+    // most worth drawing.
+    std::vector<BYTE> buffer(1024);
     DWORD returned = 0;
     bool ok = false;
-    if (DeviceIoControl(volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, nullptr, 0,
-                        buffer, sizeof(buffer), &returned, nullptr)) {
-        auto* layout = reinterpret_cast<VOLUME_DISK_EXTENTS*>(buffer);
+    BOOL got = DeviceIoControl(volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                               nullptr, 0, buffer.data(),
+                               static_cast<DWORD>(buffer.size()), &returned,
+                               nullptr);
+    if (!got && (GetLastError() == ERROR_MORE_DATA ||
+                 GetLastError() == ERROR_INSUFFICIENT_BUFFER)) {
+        // The header is filled in even when the extents did not fit, so the
+        // count in it says exactly how much room the retry needs.
+        auto* partial = reinterpret_cast<VOLUME_DISK_EXTENTS*>(buffer.data());
+        DWORD needed = partial->NumberOfDiskExtents;
+        if (needed > 0 && needed < 4096) {
+            buffer.assign(sizeof(VOLUME_DISK_EXTENTS) +
+                              needed * sizeof(DISK_EXTENT),
+                          0);
+            got = DeviceIoControl(volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                                  nullptr, 0, buffer.data(),
+                                  static_cast<DWORD>(buffer.size()), &returned,
+                                  nullptr);
+        }
+    }
+    if (got) {
+        auto* layout = reinterpret_cast<VOLUME_DISK_EXTENTS*>(buffer.data());
         if (layout->NumberOfDiskExtents > 0) {
             *diskNumber = static_cast<int>(layout->Extents[0].DiskNumber);
             *offset =
@@ -898,6 +944,45 @@ void ReleaseDiskIcons(std::vector<DiskInfo>& disks) {
     }
 }
 
+// Reloads every icon in an existing model at the current IconPixels(), leaving
+// the model itself alone. A monitor change needs new icons and nothing else -
+// the disks and volumes on them did not change because the window moved - and
+// re-running the whole enumeration for that means opening every volume and every
+// physical disk again, on a background thread, for a set of answers already in
+// hand.
+//
+// The disk icon follows the same rule as the enumeration: the first mounted
+// volume that has a shell image lends it to the disk, and a stock drive icon
+// stands in when none does.
+void RebuildDiskIcons(std::vector<DiskInfo>& disks) {
+    ReleaseDiskIcons(disks);
+
+    for (auto& disk : disks) {
+        for (auto& volume : disk.volumes) {
+            if (!volume.letter.empty()) {
+                volume.image = ShellImage(volume.letter + L"\\", IconPixels());
+            }
+            if (!volume.image) {
+                volume.icon = StockDriveIcon(SIID_DRIVEFIXED, IconPixels());
+            }
+        }
+
+        for (const auto& volume : disk.volumes) {
+            if (!volume.letter.empty()) {
+                disk.image = ShellImage(volume.letter + L"\\", IconPixels());
+                if (disk.image) {
+                    break;
+                }
+            }
+        }
+        if (!disk.image) {
+            disk.icon = StockDriveIcon(
+                disk.removable ? SIID_DRIVEREMOVE : SIID_DRIVEFIXED,
+                IconPixels());
+        }
+    }
+}
+
 // Probes \\.\PhysicalDriveN so disks with nothing mounted still show up. A
 // brand-new or uninitialised disk reports no volumes at all, and building the
 // list from volumes alone made exactly the disk you opened this window to look
@@ -930,6 +1015,10 @@ std::vector<DiskInfo> EnumerateDisks() {
     SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previousErrorMode);
 
     std::vector<VolumeInfo> volumes;
+
+    // Asked once. It is the same answer for every volume in the loop below.
+    WCHAR windowsDir[MAX_PATH] = L"";
+    GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir));
 
     WCHAR volumeName[MAX_PATH];
     HANDLE find = FindFirstVolumeW(volumeName, ARRAYSIZE(volumeName));
@@ -979,10 +1068,9 @@ std::vector<DiskInfo> EnumerateDisks() {
                 continue;
             }
 
-            WCHAR windowsDir[MAX_PATH] = L"";
-            if (GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir)) &&
-                !volume.letter.empty()) {
-                volume.isBoot = _wcsnicmp(windowsDir, volume.letter.c_str(), 2) == 0;
+            if (windowsDir[0] && !volume.letter.empty()) {
+                volume.isBoot =
+                    _wcsnicmp(windowsDir, volume.letter.c_str(), 2) == 0;
             }
 
             // A mounted volume gets its own shell icon; the rest get a
@@ -1498,6 +1586,18 @@ DWORD WINAPI EjectThread(LPVOID param) {
 // pulling the rug out from under open handles.
 bool EjectVolume(HWND owner, const VolumeInfo& volume) {
     if (volume.letter.empty()) {
+        return false;
+    }
+
+    // Defence in depth, the same as FormatVolume. Eject is offered on the
+    // strength of the disk reporting itself removable, and some internal
+    // controllers do report RemovableMedia - locking the boot volume would fail
+    // anyway, but failing with a reason beats failing with an IOCTL error.
+    if (volume.isBoot) {
+        MessageBoxW(owner,
+                    L"Windows is running from this volume, so it cannot be "
+                    L"ejected.",
+                    L"Eject", MB_OK | MB_ICONINFORMATION);
         return false;
     }
 
@@ -2057,6 +2157,32 @@ LRESULT CALLBACK PropProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             return 0;
 
+        case WM_DPICHANGED: {
+            // Dragged onto a monitor at a different scale. Everything in this
+            // window is drawn from state->dpi, so only the fonts are actually
+            // stale - they were created at a pixel height, not at a point size.
+            state->dpi = HIWORD(wParam);
+
+            if (state->fontTitle) DeleteObject(state->fontTitle);
+            if (state->fontCaption) DeleteObject(state->fontCaption);
+            if (state->fontBody) DeleteObject(state->fontBody);
+            if (state->fontSmall) DeleteObject(state->fontSmall);
+
+            state->fontTitle = MakeFont(state->dpi, 15, true);
+            state->fontCaption = MakeFontRegular(state->dpi, 10);
+            state->fontBody = MakeFont(state->dpi, 10, true);
+            state->fontSmall = MakeFont(state->dpi, 9, true);
+
+            if (auto* suggested = reinterpret_cast<const RECT*>(lParam)) {
+                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                             suggested->right - suggested->left,
+                             suggested->bottom - suggested->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+
         case WM_DESTROY:
             // Emphatically not PostQuitMessage: this window shares its thread
             // with the disk window, and a WM_QUIT in that queue would end its
@@ -2210,14 +2336,6 @@ enum class ActionKind {
     Close
 };
 
-// The only thing left that is clicked rather than chosen from a menu: the close
-// button in the title bar.
-struct Button {
-    RECT rect{};
-    ActionKind kind = ActionKind::Close;
-    std::wstring label;
-};
-
 // A clickable volume - the same volume is a row in the table and a box on the
 // map, and either one selects it.
 struct Target {
@@ -2256,12 +2374,15 @@ struct State {
     std::vector<DiskInfo> scanResult;
     bool scanning = false;
     bool rescanPending = false;  // asked to refresh while one was in flight
+    UINT scanIconDpi = 96;       // the scale the running scan drew its icons at
     bool modalOpen = false;      // a nested message loop owns the UI thread
     bool adoptDeferred = false;  // a result landed while it did
 
-    std::vector<Button> buttons;  // rebuilt on every paint
+    // The one thing in this window that is clicked rather than chosen from a
+    // menu. Rebuilt on every paint, like the targets below it.
+    RECT closeButton{};
+    bool closeHovered = false;
     std::vector<Target> targets;  // rebuilt on every paint
-    int hoveredButton = -1;
     POINT mouse{-1, -1};
     int selectedDisk = -1;
     int selectedVolume = -1;
@@ -2273,6 +2394,15 @@ struct State {
 };
 
 State* g_state;
+
+// The live window's handle, published for the threads that are not this one.
+// Kept separately rather than read out of g_state: that points at a stack object
+// inside Run, and Windhawk calls Wh_ModSettingsChanged on its own thread, which
+// can land while Run is returning and that object is going away. A stale HWND is
+// harmless by comparison - PostMessage to a window that no longer exists simply
+// fails.
+std::atomic<HWND> g_windowHwnd = nullptr;
+
 
 // -----------------------------------------------------------------------------
 // Small painting helpers
@@ -3074,7 +3204,7 @@ void PaintLegend(State* state, HDC dc, int top, int left, int right) {
 }
 
 void Paint(State* state, HDC dc, const RECT& client) {
-    state->buttons.clear();
+    state->closeButton = {};
     state->targets.clear();
 
     FillPlain(dc, client, state->windowColor);
@@ -3091,13 +3221,8 @@ void Paint(State* state, HDC dc, const RECT& client) {
     {
         RECT close{client.right - ui::Scale(ui::kCloseWidth, state->dpi), 0,
                    client.right, titleHeight};
-        Button button;
-        button.rect = close;
-        button.kind = ActionKind::Close;
-        button.label = L"\x2715";
-        state->buttons.push_back(std::move(button));
-        bool hovered =
-            state->hoveredButton == static_cast<int>(state->buttons.size()) - 1;
+        state->closeButton = close;
+        bool hovered = state->closeHovered;
         if (hovered) {
             FillPlain(dc, close, ui::kCloseHover);
         }
@@ -3209,6 +3334,13 @@ void AdoptScan(State* state) {
     state->disks = std::move(state->scanResult);
     state->scanResult.clear();
 
+    // The window can be dragged onto a differently scaled monitor while a scan
+    // is out, and the icons that just arrived were drawn for the monitor it
+    // left. Cheaper to re-render them here than to throw the whole scan away.
+    if (state->scanIconDpi != g_iconDpi) {
+        RebuildDiskIcons(state->disks);
+    }
+
     if (!Selected(state)) {
         state->selectedDisk = -1;
         state->selectedVolume = -1;
@@ -3251,14 +3383,15 @@ DWORD WINAPI ScanThread(LPVOID param) {
 
 void Refresh(State* state) {
     if (state->scanning) {
-        // Whatever prompted this - F5 held down, a DPI change, a format that
-        // just finished - happened after the running scan started looking, so
+        // Whatever prompted this - F5 held down, a format that just finished, a
+        // volume ejected - happened after the running scan started looking, so
         // its answer is already stale. Queue one more instead of racing.
         state->rescanPending = true;
         return;
     }
 
     state->scanning = true;
+    state->scanIconDpi = g_iconDpi;
     state->scanThread = CreateThread(nullptr, 0, ScanThread, state, 0, nullptr);
     if (!state->scanThread) {
         // A stalled window beats an empty one: without a thread there is no
@@ -3302,11 +3435,14 @@ void ShowProperties(State* state) {
     InvalidateRect(state->hwnd, nullptr, FALSE);
 }
 
-// The four things this window will not do itself. Changing a drive letter,
-// extending, shrinking and deleting all rewrite the partition table, and the
-// dialogs that do it properly already exist in the console this replaces - so
-// these hand over to it rather than reimplementing a partition editor. The menu
-// says so in its right-hand column before anything is clicked.
+// The four things this window will not do itself. Extending, shrinking and
+// deleting rewrite the partition table, and writing a partition editor is how
+// data gets lost - the dialogs that do it properly already exist in the console
+// this replaces. Changing a drive letter is not a partition-table write at all,
+// it is the mount manager, but the console's dialog covers mount points and
+// folder paths as well as letters and a letters-only version of it would be the
+// worse tool. The menu says Console in its right-hand column before any of the
+// four is clicked.
 void HandOffToConsole(State* state, PCWSTR what) {
     if (LaunchClassicConsole()) {
         // The console is what the user is going to use now; two Disk
@@ -3422,7 +3558,7 @@ void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
     if (volume) {
         add(L"Open", ActionKind::Explorer, hasLetter);
         if (removable) {
-            add(L"Eject", ActionKind::Eject, hasLetter);
+            add(L"Eject", ActionKind::Eject, hasLetter && !boot);
         }
         separator();
         add(L"Change Drive Letter and Paths\x2026", ActionKind::ChangeLetter,
@@ -3688,16 +3824,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             POINT previous = state->mouse;
             state->mouse = point;
 
-            int hoveredButton = -1;
-            for (size_t i = 0; i < state->buttons.size(); i++) {
-                if (PtInRect(&state->buttons[i].rect, point)) {
-                    hoveredButton = static_cast<int>(i);
-                    break;
-                }
-            }
+            bool closeHovered = PtInRect(&state->closeButton, point) != FALSE;
 
-            // Three things react to the cursor: a button, a table row and a map
-            // segment. Rows and segments are both in state->targets, so a
+            // Three things react to the cursor: the close button, a table row
+            // and a map segment. Rows and segments are both in state->targets, so a
             // change of hover is a change of target index - and only the two
             // rectangles involved need repainting. Invalidating the whole
             // window on every mouse message, which is what this used to do,
@@ -3713,18 +3843,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             int wasTarget = targetAt(previous);
             int isTarget = targetAt(point);
 
-            if (hoveredButton != state->hoveredButton) {
-                int buttonCount = static_cast<int>(state->buttons.size());
-                if (state->hoveredButton >= 0 &&
-                    state->hoveredButton < buttonCount) {
-                    InvalidateRect(hwnd, &state->buttons[state->hoveredButton].rect,
-                                   FALSE);
-                }
-                if (hoveredButton >= 0) {
-                    InvalidateRect(hwnd, &state->buttons[hoveredButton].rect,
-                                   FALSE);
-                }
-                state->hoveredButton = hoveredButton;
+            if (closeHovered != state->closeHovered) {
+                state->closeHovered = closeHovered;
+                InvalidateRect(hwnd, &state->closeButton, FALSE);
             }
 
             if (wasTarget != isTarget) {
@@ -3742,7 +3863,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_MOUSELEAVE:
-            state->hoveredButton = -1;
+            state->closeHovered = false;
             state->mouse = {-1, -1};
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
@@ -3750,11 +3871,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_LBUTTONDOWN: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             SetFocus(hwnd);
-            // Buttons act on the release; a click anywhere else selects.
-            for (const auto& button : state->buttons) {
-                if (PtInRect(&button.rect, point)) {
-                    return 0;
-                }
+            // The close button acts on the release; a click anywhere else
+            // selects.
+            if (PtInRect(&state->closeButton, point)) {
+                return 0;
             }
             SelectAt(state, point);
             return 0;
@@ -3784,13 +3904,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_LBUTTONUP: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            // By value: invoking rebuilds the button list underneath this.
-            for (const Button& candidate : state->buttons) {
-                if (PtInRect(&candidate.rect, point)) {
-                    ActionKind kind = candidate.kind;
-                    Invoke(state, kind);
-                    break;
-                }
+            if (PtInRect(&state->closeButton, point)) {
+                Invoke(state, ActionKind::Close);
             }
             return 0;
         }
@@ -3890,10 +4005,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             state->fontSmall = MakeFontRegular(state->dpi, 9);
 
             // Icons were rendered for the old scale; re-read them at the new
-            // one. The old ones keep being drawn until the scan lands, which
-            // looks better than a window of blanks.
+            // one. Only the icons - the disks are the same disks they were
+            // before the window was dragged onto another monitor, so there is
+            // nothing here worth rescanning.
             g_iconDpi = state->dpi;
-            Refresh(state);
+            RebuildDiskIcons(state->disks);
 
             if (auto* suggested = reinterpret_cast<const RECT*>(lParam)) {
                 SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
@@ -3943,6 +4059,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_DESTROY:
+            g_windowHwnd = nullptr;
             PostQuitMessage(0);
             return 0;
     }
@@ -3980,9 +4097,9 @@ bool EnsureClass() {
     return false;
 }
 
-// The live window, for Wh_ModUninit to close on unload.
+// The live window, for Wh_ModUninit and for settings changes to post to.
 HWND WindowHandle() {
-    return g_state ? g_state->hwnd : nullptr;
+    return g_windowHwnd.load();
 }
 
 // Shows the window and runs it to completion. This owns the process: mmc.exe
@@ -4012,6 +4129,7 @@ bool Run() {
         g_state = nullptr;
         return false;
     }
+    g_windowHwnd = state.hwnd;
 
     state.dpi = GetDpiForWindow(state.hwnd);
     state.fontCaption = MakeFontRegular(state.dpi, 10);
@@ -4127,7 +4245,12 @@ bool LaunchedForDiskManagement() {
         for (auto& ch : argument) {
             ch = towlower(ch);
         }
-        if (argument.find(L"diskmgmt.msc") != std::wstring::npos) {
+        // The file name, not the whole argument: a saved console living in a
+        // folder with diskmgmt.msc in its path is somebody else's console.
+        size_t slash = argument.find_last_of(L"\\/");
+        std::wstring name =
+            slash == std::wstring::npos ? argument : argument.substr(slash + 1);
+        if (name == L"diskmgmt.msc") {
             isDiskManagement = true;
             break;
         }
@@ -4187,34 +4310,13 @@ HANDLE g_uiFinished = nullptr;
 // with the code in it.
 HANDLE g_hookExited = nullptr;
 
-// Windhawk calls FreeLibrary on this image as soon as Wh_ModUninit returns, and
-// there is one stretch of code this mod cannot get out of the way in time: the
-// epilogue of the hook below. SetEvent is its last statement, but the stack
-// cleanup and the ret still execute out of this image afterwards, and the return
-// address sitting on MMC's stack points into it as well. No amount of signalling
-// from inside the function can cover the instructions that do the signalling.
-//
-// So the image is pinned instead. FreeLibrary can no longer unmap it, the
-// epilogue is guaranteed to be running mapped code, and the crash window closes
-// completely rather than getting narrower.
-//
-// The cost is real and worth stating: the DLL stays resident in this one mmc.exe
-// until the process exits, which on the unload path is until the user closes the
-// real console it falls back into. A mapped file cannot be replaced, so
-// recompiling the mod while a taken-over window is still open can fail to write
-// the DLL. That is a developer inconvenience; the alternative is a
-// nanosecond-wide crash on every unload, on a machine that unloads mods often.
-void PinModule() {
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
-                                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<PCWSTR>(&PinModule), &self)) {
-        // Nothing to fall back on: the epilogue stays as exposed as it was
-        // before. Worth a line in the log rather than silence.
-        Wh_Log(L"could not pin the module (%u); unload is racy",
-               GetLastError());
-    }
-}
+// MMC's own thread, duplicated when the takeover is decided. Wh_ModUninit needs
+// it because of what happens after the hook signals g_hookExited: the stack
+// cleanup and the ret still execute out of this image, and Windhawk calls
+// FreeLibrary on the image the moment Wh_ModUninit returns. The event cannot
+// cover the instructions that raise it, so the thread itself is watched instead
+// - see WaitForThreadToLeaveModule.
+HANDLE g_mmcThread = nullptr;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
@@ -4313,8 +4415,15 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
         return passThrough();
     }
 
-    // Pinned before parking, on the one thread that has the problem: MMC's.
-    PinModule();
+    // A handle to this thread, for the wait at the end of Wh_ModUninit. Taken
+    // here rather than there because GetCurrentThread returns a pseudo-handle
+    // that only means anything on this thread.
+    if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                         GetCurrentProcess(), &g_mmcThread, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS)) {
+        Wh_Log(L"could not duplicate MMC's thread handle (%u)", GetLastError());
+        g_mmcThread = nullptr;
+    }
 
     // Parked, but not deaf. A plain WaitForSingleObject here stops this thread
     // dispatching anything for as long as the window is open, and this is
@@ -4359,10 +4468,10 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
         SetLastError(ERROR_CANCELLED);
     }
 
-    // The last statement in this module that MMC's thread executes. Wh_ModUninit
-    // blocks on this before returning, which is what keeps the image mapped
-    // until now; the epilogue after it is covered by PinModule above rather than
-    // by this event, which cannot reach it.
+    // The last statement in this module that MMC's thread executes, and the
+    // point Wh_ModUninit is waiting for. What it cannot say is that the epilogue
+    // below it has run too, which is why Wh_ModUninit watches this thread's
+    // instruction pointer afterwards.
     SetEvent(g_hookExited);
     return result;
 }
@@ -4371,20 +4480,24 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
 // running before this mod was loaded. Windhawk runs the mod's callbacks on its
 // own engine thread in that case, and taking over then would show a second,
 // redundant window over a console the user already has open.
-BOOL CALLBACK HasOwnWindow(HWND hwnd, LPARAM param) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) {
-        *reinterpret_cast<bool*>(param) = true;
-        return FALSE;
-    }
-    return TRUE;
-}
-
+// True when this mod was loaded into an mmc.exe that was already running, as
+// opposed to injected as one started. Windhawk runs the mod's callbacks on the
+// process's initial thread in the second case and on an injected thread in the
+// first, and the TEB records which thread it is - so this is exact, where
+// looking for an existing window was a guess that happened to be right.
+//
+// Taking over a console the user already has open would replace what they are
+// looking at with a second window, so the mod stays out.
 bool ProcessAlreadyRunning() {
-    bool found = false;
-    EnumWindows(HasOwnWindow, reinterpret_cast<LPARAM>(&found));
-    return found;
+#ifdef _WIN64
+    constexpr size_t kSameTebFlagsOffset = 0x17EE;
+#else
+    constexpr size_t kSameTebFlagsOffset = 0x0FCA;
+#endif
+    constexpr USHORT kInitialThread = 0x0400;
+    USHORT flags = *reinterpret_cast<USHORT*>(
+        reinterpret_cast<BYTE*>(NtCurrentTeb()) + kSameTebFlagsOffset);
+    return (flags & kInitialThread) == 0;
 }
 
 BOOL Wh_ModInit() {
@@ -4447,11 +4560,72 @@ void Wh_ModSettingsChanged() {
     }
 }
 
+// The last thing standing between g_hookExited and a safe FreeLibrary: MMC's
+// thread has signalled, but it is still executing the tail of the hook, and that
+// code lives in the image Windhawk is about to unmap. Sampling the instruction
+// pointer answers the only question that matters - is that thread still inside
+// this module - and the answer is stable once it is no, because the hooks are
+// removed by then and nothing leads back in.
+//
+// Not airtight, and worth naming: the thread can be sampled inside kernel32's
+// SetEvent, with the return address into this module still on its stack. That
+// leaves a sliver that only a scan of the thread's stack would close. It is a
+// far smaller sliver than the whole epilogue, and it does not cost the engine
+// its ability to unload the module - which pinning the image would.
+void WaitForThreadToLeaveModule(HANDLE thread) {
+    if (!thread) {
+        return;
+    }
+
+    auto* base = reinterpret_cast<BYTE*>(ModuleInstance());
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return;
+    }
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return;
+    }
+    BYTE* end = base + nt->OptionalHeader.SizeOfImage;
+
+    for (;;) {
+        CONTEXT context{};
+        context.ContextFlags = CONTEXT_CONTROL;
+
+        // Suspended only long enough to read the register: a thread stopped for
+        // any longer than that, in a process this one is unloading from, is a
+        // deadlock looking for somewhere to happen.
+        if (SuspendThread(thread) == static_cast<DWORD>(-1)) {
+            return;
+        }
+        BOOL ok = GetThreadContext(thread, &context);
+        ResumeThread(thread);
+        if (!ok) {
+            return;
+        }
+
+#ifdef _WIN64
+        auto* ip = reinterpret_cast<BYTE*>(context.Rip);
+#else
+        auto* ip = reinterpret_cast<BYTE*>(context.Eip);
+#endif
+        if (ip < base || ip >= end) {
+            return;
+        }
+        Sleep(1);
+    }
+}
+
 // Closing only the main window is not enough. A message box, the Format dialog
 // and the properties window each run their own message loop on the UI thread,
 // and none of them would ever see a WM_CLOSE addressed to the main window - the
 // thread would sit in that nested loop until the user dismissed it by hand.
 BOOL CALLBACK CloseUiThreadWindow(HWND hwnd, LPARAM) {
+    // WM_CANCELMODE first, and not only for tidiness: an open context menu runs
+    // its own modal loop inside user32 and never sees a WM_CLOSE, so a user who
+    // right-clicks and then disables the mod would hang the unload until they
+    // dismissed the menu by hand. DefWindowProc ends menu mode on this message.
+    PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
     PostMessageW(hwnd, WM_CLOSE, 0, 0);
     return TRUE;
 }
@@ -4496,8 +4670,15 @@ void Wh_ModUninit() {
         g_uiThreadId = 0;
 
         // The UI thread is done, which releases MMC's thread inside the hook.
-        // Wait for that thread to finish with this module too.
+        // Wait for that thread to finish with this module too - the event for
+        // the body of the hook, the instruction pointer for its tail.
         WaitForSingleObject(g_hookExited, INFINITE);
+        WaitForThreadToLeaveModule(g_mmcThread);
+    }
+
+    if (g_mmcThread) {
+        CloseHandle(g_mmcThread);
+        g_mmcThread = nullptr;
     }
 
     if (g_uiFinished) {
