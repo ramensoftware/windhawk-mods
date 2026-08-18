@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.7
+// @version         1.1.8
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -934,7 +934,10 @@ static constexpr DWORD kTickMs = 16;
 static constexpr DWORD kIdleTickMs = 100;
 static HANDLE g_hDetectThread = nullptr;
 static DWORD g_dwDetectThreadId = 0;
-static HWND g_hDetectWnd = nullptr;
+// Written by the detection thread, read from Windhawk's thread and the tray
+// thread. Same reasoning as g_hDashWnd: without release/acquire, a reader can
+// still see nullptr just after startup and silently drop a rebuild request.
+static std::atomic<HWND> g_hDetectWnd{nullptr};
 static HANDLE g_hStopEvent = nullptr;
 
 // Prints the monitor list at load and on display changes, so a name can be
@@ -3154,7 +3157,7 @@ static DWORD WINAPI DetectThread(LPVOID)
     g_hDetectWnd = CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kClass,
                                   nullptr, WS_POPUP, 0, 0, 0, 0, nullptr,
                                   nullptr, hInst, nullptr);
-    if (!g_hDetectWnd)
+    if (!g_hDetectWnd.load())
     {
         Wh_Log(L"Failed to create detection window");
         UnregisterClass(kClass, hInst);
@@ -3196,7 +3199,7 @@ static DWORD WINAPI DetectThread(LPVOID)
     }
 
 done:
-    DestroyWindow(g_hDetectWnd);
+    DestroyWindow(g_hDetectWnd.load());
     g_hDetectWnd = nullptr;
     UnregisterClass(kClass, hInst);
     Wh_Log(L"Detection thread exiting");
@@ -3218,7 +3221,9 @@ done:
 
 static HANDLE g_hTrayThread = nullptr;
 static DWORD g_dwTrayThreadId = 0;
-static HWND g_hTrayWnd = nullptr;
+// Written by the tray thread, read from Windhawk's thread via
+// WhTool_ModSettingsChanged -> UpdateTrayIcon.
+static std::atomic<HWND> g_hTrayWnd{nullptr};
 static UINT g_taskbarCreatedMsg = 0;
 static constexpr UINT WM_APP_TRAY = WM_APP + 10;
 static constexpr UINT_PTR kTrayIconId = 1;
@@ -3380,7 +3385,7 @@ static HICON MakeTrayIcon(bool enabled)
 static void FillTrayIconData(NOTIFYICONDATAW &nid)
 {
     nid.cbSize = sizeof(nid);
-    nid.hWnd = g_hTrayWnd;
+    nid.hWnd = g_hTrayWnd.load();
     nid.uID = (UINT)kTrayIconId;
     if (g_trayUseGuid)
     {
@@ -3391,7 +3396,7 @@ static void FillTrayIconData(NOTIFYICONDATAW &nid)
 
 static void UpdateTrayIcon(bool add)
 {
-    if (!g_hTrayWnd)
+    if (!g_hTrayWnd.load())
         return;
 
     bool active = g_trayEnabled && GetTickCount64() >= g_suspendUntil.load();
@@ -3758,7 +3763,7 @@ static void ShowTrayMenu(POINT pt)
     // UpdateTrayIcon has fallen back to plain uID identity makes the lookup
     // fail, and the menu quietly stops anchoring - the one case this exists for.
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
-    nii.hWnd = g_hTrayWnd;
+    nii.hWnd = g_hTrayWnd.load();
     if (g_trayUseGuid)
         nii.guidItem = kTrayIconGuid;
     else
@@ -3799,9 +3804,10 @@ static void ShowTrayMenu(POINT pt)
     }
 
     // Required so the menu dismisses when the user clicks elsewhere.
-    SetForegroundWindow(g_hTrayWnd);
-    TrackPopupMenu(hMenu, align, pt.x, pt.y, 0, g_hTrayWnd, nullptr);
-    PostMessage(g_hTrayWnd, WM_NULL, 0, 0);
+    HWND hTray = g_hTrayWnd.load();
+    SetForegroundWindow(hTray);
+    TrackPopupMenu(hMenu, align, pt.x, pt.y, 0, hTray, nullptr);
+    PostMessage(hTray, WM_NULL, 0, 0);
 
     DestroyMenu(hMenu);
 }
@@ -3809,14 +3815,14 @@ static void ShowTrayMenu(POINT pt)
 // The zone snapshot carries drag/settle, so a change there needs a rebuild.
 static void RequestRebuild()
 {
-    if (g_hDetectWnd)
-        PostMessage(g_hDetectWnd, WM_APP_REBUILD, 0, 0);
+    if (HWND hDetect = g_hDetectWnd.load())
+        PostMessage(hDetect, WM_APP_REBUILD, 0, 0);
 }
 
 static void CancelSuspendTimer()
 {
-    if (g_hTrayWnd)
-        KillTimer(g_hTrayWnd, kSuspendTimerId);
+    if (HWND hTray = g_hTrayWnd.load())
+        KillTimer(hTray, kSuspendTimerId);
 }
 
 static void HandleTrayCommand(UINT id)
@@ -3850,8 +3856,8 @@ static void HandleTrayCommand(UINT id)
         // on their own - but nothing redrew the icon, which stayed dimmed and
         // still said "paused" for the rest of the session. Suspension is
         // exactly when the icon is the thing being looked at.
-        if (g_hTrayWnd)
-            SetTimer(g_hTrayWnd, kSuspendTimerId,
+        if (HWND hTray = g_hTrayWnd.load())
+            SetTimer(hTray, kSuspendTimerId,
                      (UINT)mins * 60 * 1000 + 1000, nullptr);
         Wh_Log(L"Tray: suspended for %d minutes", mins);
         break;
@@ -5388,6 +5394,18 @@ static DWORD WINAPI DashThread(LPVOID)
     }
 
     g_hDashWnd = hWnd;
+
+    // Uninit closes this window by posting WM_CLOSE to g_hDashWnd, which is
+    // only useful once the handle above is published. Opening the dashboard and
+    // unloading the mod in the same instant used to slip between the two: the
+    // post found nullptr, nothing else ever told this thread to stop, and the
+    // loop below parked in GetMessageW forever - so uninit timed out, took its
+    // "leak rather than free from under a live thread" path, and left the
+    // window on screen. The stop event is set before that post, so checking it
+    // here catches every interleaving.
+    if (g_hStopEvent && WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0)
+        PostMessage(hWnd, WM_CLOSE, 0, 0);
+
     ShowWindow(hWnd, SW_SHOW);
     SetForegroundWindow(hWnd);
     // Focus the window itself rather than the Close button, so the arrow keys
@@ -5512,7 +5530,7 @@ static DWORD WINAPI TrayThread(LPVOID)
 
     g_hTrayWnd = CreateWindowEx(WS_EX_TOOLWINDOW, kClass, nullptr, WS_POPUP, 0,
                                 0, 0, 0, nullptr, nullptr, hInst, nullptr);
-    if (!g_hTrayWnd)
+    if (!g_hTrayWnd.load())
     {
         Wh_Log(L"Tray: failed to create the icon's window");
         UnregisterClass(kClass, hInst);
@@ -5534,7 +5552,7 @@ static DWORD WINAPI TrayThread(LPVOID)
     Shell_NotifyIconW(NIM_DELETE, &nid);
 
     CancelSuspendTimer();
-    DestroyWindow(g_hTrayWnd);
+    DestroyWindow(g_hTrayWnd.load());
     g_hTrayWnd = nullptr;
     UnregisterClass(kClass, hInst);
     return 0;
@@ -5598,8 +5616,8 @@ void WhTool_ModSettingsChanged()
     // The zone rebuild has to happen on the detection thread, which owns the
     // DPI context and the monitor list. Post, never send — Windhawk's thread
     // must not block on ours.
-    if (g_hDetectWnd)
-        PostMessage(g_hDetectWnd, WM_APP_REBUILD, 0, 0);
+    if (HWND hDetect = g_hDetectWnd.load())
+        PostMessage(hDetect, WM_APP_REBUILD, 0, 0);
     // An open dashboard is showing the configuration that just changed.
     if (HWND hDash = g_hDashWnd.load())
         PostMessage(hDash, WM_APP_DASH_REFRESH, 0, 0);
@@ -5616,13 +5634,17 @@ void WhTool_ModUninit()
     // Only a clean exit counts. WAIT_FAILED means the wait itself broke, which
     // says nothing about whether the thread is finished, so treat it the same
     // as a timeout rather than as success.
+    // Returns whether the thread actually finished, so the caller can decide
+    // whether closing its handle is safe. Closing regardless would contradict
+    // the leak-rather-than-free policy below and throw away the only handle to
+    // a thread this code has just decided is still running.
     auto waitFor = [&allStopped](HANDLE h, const wchar_t *what)
     {
-        if (WaitForSingleObject(h, 3000) != WAIT_OBJECT_0)
-        {
-            Wh_Log(L"%s did not exit cleanly", what);
-            allStopped = false;
-        }
+        if (WaitForSingleObject(h, 3000) == WAIT_OBJECT_0)
+            return true;
+        Wh_Log(L"%s did not exit cleanly", what);
+        allStopped = false;
+        return false;
     };
 
     // Before anything is told to stop: a zone still holding a peek has to be
@@ -5632,10 +5654,10 @@ void WhTool_ModUninit()
     // A timeout rather than a plain SendMessage, because a wedged detection
     // thread must not turn unloading into a hang; it is already the case that
     // that thread never waits on anything Windhawk's thread holds.
-    if (g_hDetectWnd)
+    if (HWND hDetect = g_hDetectWnd.load())
     {
         DWORD_PTR unused = 0;
-        SendMessageTimeout(g_hDetectWnd, WM_APP_RELEASE_HOLD, 0, 0,
+        SendMessageTimeout(hDetect, WM_APP_RELEASE_HOLD, 0, 0,
                            SMTO_ABORTIFHUNG, 500, &unused);
     }
 
@@ -5647,9 +5669,11 @@ void WhTool_ModUninit()
 
     if (g_hTrayThread)
     {
-        waitFor(g_hTrayThread, L"Tray thread");
-        CloseHandle(g_hTrayThread);
-        g_hTrayThread = nullptr;
+        if (waitFor(g_hTrayThread, L"Tray thread"))
+        {
+            CloseHandle(g_hTrayThread);
+            g_hTrayThread = nullptr;
+        }
     }
 
     if (g_dwDetectThreadId)
@@ -5664,25 +5688,31 @@ void WhTool_ModUninit()
 
     if (g_hDashThread)
     {
-        waitFor(g_hDashThread, L"Dashboard thread");
-        CloseHandle(g_hDashThread);
-        g_hDashThread = nullptr;
+        if (waitFor(g_hDashThread, L"Dashboard thread"))
+        {
+            CloseHandle(g_hDashThread);
+            g_hDashThread = nullptr;
+        }
     }
 
     if (g_hDetectThread)
     {
-        waitFor(g_hDetectThread, L"Detection thread");
-        CloseHandle(g_hDetectThread);
-        g_hDetectThread = nullptr;
+        if (waitFor(g_hDetectThread, L"Detection thread"))
+        {
+            CloseHandle(g_hDetectThread);
+            g_hDetectThread = nullptr;
+        }
     }
 
     if (g_hWorkerThread)
     {
         // Can legitimately still be inside ShellExecuteEx (a UAC prompt keeps
         // it there indefinitely).
-        waitFor(g_hWorkerThread, L"Worker thread");
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = nullptr;
+        if (waitFor(g_hWorkerThread, L"Worker thread"))
+        {
+            CloseHandle(g_hWorkerThread);
+            g_hWorkerThread = nullptr;
+        }
     }
 
     // Freeing objects a live thread is still using is undefined behaviour
