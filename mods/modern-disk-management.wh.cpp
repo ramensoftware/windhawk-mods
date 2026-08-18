@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.10.0
+// @version         3.10.1
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -3382,6 +3382,16 @@ DWORD WINAPI ScanThread(LPVOID param) {
 }
 
 void Refresh(State* state) {
+    // A result that landed inside a nested message loop is still sitting in
+    // scanResult waiting to be taken. Starting another scan on top of it would
+    // put two threads in that vector at once, so it is taken first - safe here,
+    // because nothing calls Refresh from inside one of those loops, only after
+    // one has closed.
+    if (state->adoptDeferred) {
+        state->adoptDeferred = false;
+        AdoptScan(state);
+    }
+
     if (state->scanning) {
         // Whatever prompted this - F5 held down, a format that just finished, a
         // volume ejected - happened after the running scan started looking, so
@@ -3414,25 +3424,82 @@ void FinishScan(State* state) {
     }
 }
 
-// Properties for whatever is selected. The properties window runs its own
-// message loop, so a scan can land while it is on screen - and it is drawing
-// icons that belong to the list the adoption frees. Adoption waits for it.
-void ShowProperties(State* state) {
-    const VolumeInfo* selected = Selected(state);
-    if (!selected) {
+// Held by anything that runs a nested message loop on this thread: the context
+// menu, the Format dialog, the properties window, a message box. All of them
+// dispatch, so kMsgScanDone arrives inside them - and adopting a scan there
+// rebuilds state->disks and frees the icons hanging off it underneath whatever
+// opened the loop. The result waits until the loop has closed instead.
+//
+// The previous value is restored rather than cleared, because these nest: the
+// message box inside FormatVolume must not end the scope FormatVolume itself is
+// running under. Only the outermost scope takes the result.
+struct ModalScope {
+    State* state;
+    bool previous;
+
+    explicit ModalScope(State* owner)
+        : state(owner), previous(owner->modalOpen) {
+        state->modalOpen = true;
+    }
+
+    ~ModalScope() {
+        state->modalOpen = previous;
+        if (previous) {
+            return;
+        }
+        if (state->adoptDeferred) {
+            state->adoptDeferred = false;
+            FinishScan(state);
+        }
+        InvalidateRect(state->hwnd, nullptr, FALSE);
+    }
+
+    ModalScope(const ModalScope&) = delete;
+    ModalScope& operator=(const ModalScope&) = delete;
+};
+
+// Finds a volume by identity rather than by position. Indices into state->disks
+// are only good until the next adoption, and an action chosen from a menu is
+// resolved after a loop that adoption can happen in.
+bool FindVolumeByGuid(State* state, const std::wstring& guidPath, int* diskIndex,
+                      int* volumeIndex) {
+    if (guidPath.empty()) {
+        return false;
+    }
+    for (size_t d = 0; d < state->disks.size(); d++) {
+        const std::vector<VolumeInfo>& volumes = state->disks[d].volumes;
+        for (size_t v = 0; v < volumes.size(); v++) {
+            if (volumes[v].guidPath == guidPath) {
+                *diskIndex = static_cast<int>(d);
+                *volumeIndex = static_cast<int>(v);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Properties for one named volume. The properties window runs its own message
+// loop, so a scan can land while it is on screen - and it is reading a copy of a
+// list that adoption would rebuild. ModalScope makes adoption wait for it.
+void ShowPropertiesFor(State* state, int diskIndex, int volumeIndex) {
+    if (diskIndex < 0 || diskIndex >= static_cast<int>(state->disks.size())) {
+        return;
+    }
+    const std::vector<VolumeInfo>& volumes = state->disks[diskIndex].volumes;
+    if (volumeIndex < 0 || volumeIndex >= static_cast<int>(volumes.size())) {
         return;
     }
 
-    state->modalOpen = true;
-    props::Show(state->hwnd, ModuleInstance(), state->disks[state->selectedDisk],
-                *selected, state->cardColor, state->accentColor);
-    state->modalOpen = false;
+    ModalScope modal(state);
+    props::Show(state->hwnd, ModuleInstance(), state->disks[diskIndex],
+                volumes[volumeIndex], state->cardColor, state->accentColor);
+}
 
-    if (state->adoptDeferred) {
-        state->adoptDeferred = false;
-        FinishScan(state);
-    }
-    InvalidateRect(state->hwnd, nullptr, FALSE);
+// Properties for whatever is selected, for the paths that resolve the selection
+// and act on it in the same breath - a double-click, or Enter.
+void ShowProperties(State* state) {
+    ShowPropertiesFor(state, state->selectedDisk, state->selectedVolume);
 }
 
 // The four things this window will not do itself. Extending, shrinking and
@@ -3452,10 +3519,17 @@ void HandOffToConsole(State* state, PCWSTR what) {
     }
     std::wstring message = L"The Disk Management console could not be started, ";
     message += L"and this window does not do that itself.";
+    ModalScope modal(state);
     MessageBoxW(state->hwnd, message.c_str(), what, MB_OK | MB_ICONWARNING);
 }
 
-void Invoke(State* state, ActionKind kind) {
+// targetGuid names the volume the action was aimed at, captured when the menu
+// was built. It is deliberately not "whatever is selected now": the menu runs a
+// nested message loop, a scan can land inside it, and by the time an item is
+// clicked the indices that were selected can denote a different volume - or none
+// at all, if the disk it was on went away. Resolving the GUID path again gives
+// the volume the user actually pointed at, or nothing.
+void Invoke(State* state, ActionKind kind, const std::wstring& targetGuid) {
     // Format and Properties run their own message loop, and one that opens as
     // the mod is being unloaded has to be closed again by Wh_ModUninit's sweep
     // before it can return. Cheaper not to open it.
@@ -3490,15 +3564,33 @@ void Invoke(State* state, ActionKind kind) {
             break;
     }
 
-    const VolumeInfo* selected = Selected(state);
-    if (!selected) {
+    int diskIndex = -1;
+    int volumeIndex = -1;
+    if (!FindVolumeByGuid(state, targetGuid, &diskIndex, &volumeIndex)) {
         return;
     }
-    VolumeInfo volume = *selected;  // the list is rebuilt under some of these
+
+    // The selection follows the action rather than the other way round, so a
+    // refresh that landed while the menu was open cannot leave the two pointing
+    // at different volumes.
+    state->selectedDisk = diskIndex;
+    state->selectedVolume = volumeIndex;
+
+    VolumeInfo volume = state->disks[diskIndex].volumes[volumeIndex];
+
+    // The copy is a description, not something to draw from: the icon handles
+    // belong to the list and are deleted with it by ReleaseDiskIcons, so they do
+    // not travel. Nothing below draws an icon today, and this is what keeps that
+    // from becoming a use-after-free the day something does.
+    volume.image = nullptr;
+    volume.icon = nullptr;
+
+    // Everything below opens a dialog or a message box, all of which pump.
+    ModalScope modal(state);
 
     switch (kind) {
         case ActionKind::Properties:
-            ShowProperties(state);
+            ShowPropertiesFor(state, diskIndex, volumeIndex);
             break;
         case ActionKind::Format:
             FormatVolume(state->hwnd, volume);
@@ -3614,18 +3706,29 @@ void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
     POINT screenPoint = clientPoint;
     ClientToScreen(state->hwnd, &screenPoint);
 
+    // Which volume this menu is about, decided now rather than after the loop
+    // below. See Invoke.
+    std::wstring targetGuid = volume ? volume->guidPath : std::wstring();
+
     // TPM_RETURNCMD keeps the dispatch here rather than through WM_COMMAND,
     // which this window has no other use for.
-    UINT chosen = TrackPopupMenu(
-        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
-        screenPoint.x, screenPoint.y, 0, state->hwnd, nullptr);
+    UINT chosen = 0;
+    {
+        // The menu's loop dispatches, so a scan can land under it. Taking the
+        // result there would rebuild the list - and free the icons the window
+        // behind the menu is drawn from - while the menu is still up.
+        ModalScope modal(state);
+        chosen = TrackPopupMenu(
+            menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
+            screenPoint.x, screenPoint.y, 0, state->hwnd, nullptr);
+    }
     DestroyMenu(menu);
     DeleteObject(back);
 
     if (chosen >= 1 && chosen <= entries.size()) {
         const MenuEntry& entry = entries[chosen - 1];
         if (entry.enabled && !entry.separator) {
-            Invoke(state, entry.kind);
+            Invoke(state, entry.kind, targetGuid);
         }
     }
 }
@@ -3905,7 +4008,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_LBUTTONUP: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             if (PtInRect(&state->closeButton, point)) {
-                Invoke(state, ActionKind::Close);
+                Invoke(state, ActionKind::Close, std::wstring());
             }
             return 0;
         }
@@ -4562,16 +4665,26 @@ void Wh_ModSettingsChanged() {
 
 // The last thing standing between g_hookExited and a safe FreeLibrary: MMC's
 // thread has signalled, but it is still executing the tail of the hook, and that
-// code lives in the image Windhawk is about to unmap. Sampling the instruction
-// pointer answers the only question that matters - is that thread still inside
-// this module - and the answer is stable once it is no, because the hooks are
-// removed by then and nothing leads back in.
+// code lives in the image Windhawk is about to unmap.
 //
-// Not airtight, and worth naming: the thread can be sampled inside kernel32's
-// SetEvent, with the return address into this module still on its stack. That
-// leaves a sliver that only a scan of the thread's stack would close. It is a
-// far smaller sliver than the whole epilogue, and it does not cost the engine
-// its ability to unload the module - which pinning the image would.
+// The instruction pointer alone is not enough to answer that, and the reason is
+// the handshake itself. Both threads are woken by the same SetEvent, so the very
+// first sample is taken while MMC's thread is still inside SetEvent - down in
+// ntdll, with its return address into this module sitting on its stack. An IP
+// test would call that "outside the module" and let the unload proceed straight
+// into the thread's own return path. That is not a rare interleaving, it is the
+// expected one.
+//
+// So the stack is what gets read. Any pointer-sized slot in the thread's live
+// stack that falls inside this image is treated as a frame that still returns
+// here, and the wait continues until none is left. Slots below the stack pointer
+// are dead and not scanned; slots above it cover every frame that can still
+// return. The answer is stable once it is no: the hooks are removed by then and
+// nothing leads back in.
+//
+// A value that lands in the image range without being a return address would
+// stall this forever, so the loop is bounded. A slow unload is a bug worth
+// having; a hung one is not.
 void WaitForThreadToLeaveModule(HANDLE thread) {
     if (!thread) {
         return;
@@ -4588,32 +4701,74 @@ void WaitForThreadToLeaveModule(HANDLE thread) {
     }
     BYTE* end = base + nt->OptionalHeader.SizeOfImage;
 
-    for (;;) {
+    // Learned from the first sample and then reused: the top of a thread's stack
+    // does not move.
+    BYTE* stackTop = nullptr;
+
+    constexpr int kMaxAttempts = 2000;  // with the sleep below, about two seconds
+    for (int attempt = 0; attempt < kMaxAttempts; attempt++) {
         CONTEXT context{};
         context.ContextFlags = CONTEXT_CONTROL;
 
-        // Suspended only long enough to read the register: a thread stopped for
-        // any longer than that, in a process this one is unloading from, is a
-        // deadlock looking for somewhere to happen.
+        // Suspended only long enough to read the registers and walk the stack: a
+        // thread stopped for any longer than that, in a process this one is
+        // unloading from, is a deadlock looking for somewhere to happen.
         if (SuspendThread(thread) == static_cast<DWORD>(-1)) {
             return;
         }
         BOOL ok = GetThreadContext(thread, &context);
-        ResumeThread(thread);
-        if (!ok) {
-            return;
+
+        bool inside = false;
+        if (ok) {
+#if defined(__aarch64__) || defined(_M_ARM64)
+            auto* ip = reinterpret_cast<BYTE*>(context.Pc);
+            auto* sp = reinterpret_cast<BYTE*>(context.Sp);
+#elif defined(__x86_64__) || defined(_M_X64)
+            auto* ip = reinterpret_cast<BYTE*>(context.Rip);
+            auto* sp = reinterpret_cast<BYTE*>(context.Rsp);
+#else
+            auto* ip = reinterpret_cast<BYTE*>(context.Eip);
+            auto* sp = reinterpret_cast<BYTE*>(context.Esp);
+#endif
+            inside = ip >= base && ip < end;
+
+            if (!inside && sp && !stackTop) {
+                // The committed pages of a stack run from below the stack
+                // pointer up to the stack's base, so the region holding sp ends
+                // where the stack does.
+                MEMORY_BASIC_INFORMATION info{};
+                if (VirtualQuery(sp, &info, sizeof(info)) == sizeof(info) &&
+                    info.State == MEM_COMMIT) {
+                    stackTop = static_cast<BYTE*>(info.BaseAddress) +
+                               info.RegionSize;
+                }
+            }
+
+            if (!inside && sp && stackTop && sp < stackTop) {
+                // Rounded down so an unaligned stack pointer still reads whole
+                // slots; the few bytes below it are committed and dead.
+                auto** slot = reinterpret_cast<BYTE**>(
+                    reinterpret_cast<uintptr_t>(sp) & ~(sizeof(void*) - 1));
+                auto** last = reinterpret_cast<BYTE**>(stackTop);
+                for (; slot < last; slot++) {
+                    BYTE* value = *slot;
+                    if (value >= base && value < end) {
+                        inside = true;
+                        break;
+                    }
+                }
+            }
         }
 
-#ifdef _WIN64
-        auto* ip = reinterpret_cast<BYTE*>(context.Rip);
-#else
-        auto* ip = reinterpret_cast<BYTE*>(context.Eip);
-#endif
-        if (ip < base || ip >= end) {
+        ResumeThread(thread);
+        if (!ok || !inside) {
             return;
         }
         Sleep(1);
     }
+
+    Wh_Log(L"MMC's thread is still in this module after two seconds; unloading "
+           L"anyway");
 }
 
 // Closing only the main window is not enough. A message box, the Format dialog
