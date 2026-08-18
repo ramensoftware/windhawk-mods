@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.2.1
+// @version         1.3.0
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -19,7 +19,7 @@ macOS-style hot corners **and screen edges** for Windows 10 and 11, with full
 multi-monitor support. Throw the pointer into a corner or against an edge and
 something happens — which corner, which edge, and what happens are all yours.
 
-![Throwing the pointer into the top-left corner opens Task View](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/hot-corners.gif)
+![Throwing the pointer into the bottom-left corner opens the Start menu](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/hot-corners.gif)
 
 Inspired by [WinXCorners](https://github.com/vhanla/winxcorners), rebuilt as a
 Windhawk mod.
@@ -351,7 +351,7 @@ worse than one that never fires at all.
 | **Pass-through guard** | Ignores a zone you were merely travelling across. 80 ms by default. Raise this first if things fire while you are just moving around. |
 | **Cooldown** | Minimum gap between two firings of the same zone. A cooldown is a wait, not a refusal — park in the corner and it fires once the wait is over. |
 | **Skip while a window is fullscreen** | Suppresses zones on the display the fullscreen window is on, so games and presentations are left alone. |
-| **Skip while dragging** | Nothing fires while a mouse button is held, so dragging a window or selecting text into a corner is safe. |
+| **Skip while dragging** | A zone reached with a mouse button held does not fire, and stays inert until you leave and come back - so dragging a window or selecting text into a corner is safe, and letting go there does not set it off either. |
 
 **Excluded applications** takes a semicolon-separated list of process names,
 case-insensitive: `photoshop.exe;premiere.exe;blender.exe`. Every zone goes
@@ -440,8 +440,9 @@ If all you want is one specific behaviour, a smaller mod may suit you better:
 Please open an issue at
 [github.com/DhakadG/my-windhawk-mods](https://github.com/DhakadG/my-windhawk-mods/issues).
 If a zone is not firing, this mod's log (Windhawk → this mod → **Advanced** →
-**Mod log**) says which zone the pointer entered and why nothing happened, and
-pasting that in saves a round trip.
+**Mod log**) names the zone the pointer entered and the gate that held it back -
+a knock it is waiting on, a modifier that is not down, a cooldown that has not
+elapsed - and pasting that in saves a round trip.
 
 ## Support the mod
 
@@ -930,7 +931,7 @@ struct ModSettings
     int activationDelay = 0;
     int settleMs = 80;
     int knockWindowMs = 0;   // 0 = knock mode off
-    int requireModifier = 0; // 0 none, 1 Ctrl, 2 Alt, 3 Shift, 4 Win
+    int requireModifier = kModifierNone;  // one of the kModifier* values
     int centerZonePercent = 20;
     bool avoidTaskbar = false;
     int cooldownMs = 300;
@@ -1023,6 +1024,12 @@ static bool g_knockSatisfied = true;
 // "has this visit been spent", which stays true after a release so the zone
 // cannot re-fire without leaving first.
 static bool g_holdEngaged = false;
+
+// Which gate was reported for the current visit, so a refusal is logged once
+// per entry instead of once every 16 ms tick. The readme tells users to paste
+// this log when a corner does nothing, and every silent gate below was a
+// question it could not answer.
+static const wchar_t *g_gateLogged = nullptr;
 static std::vector<ULONGLONG> g_lastFireTick;
 // When each zone was last left, for knock detection.
 static std::vector<ULONGLONG> g_lastExitTick;
@@ -2376,6 +2383,55 @@ static bool SameZoneConfig(const ZoneConfig *a, const ZoneConfig *b)
 // configured one, and they used to disagree: the panel printed the number from
 // the settings under a column headed IN EFFECT while the zone actually fired at
 // the clamped size. One function, called from both.
+// The rectangle zones are laid out in. Normally that is rcWork, which already
+// excludes a docked taskbar and any appbars - but an auto-hidden taskbar
+// reserves nothing, so rcWork is the whole monitor and "Keep zones out of the
+// taskbar" silently did nothing in exactly the case it is most wanted: the
+// bottom edge and bottom corners land on the reveal strip, so hovering them
+// fires the zone *and* pops the taskbar over it.
+//
+// Verified on this machine that a docked taskbar does shrink rcWork (1728 ->
+// 1680), so the ordinary path is unchanged; the auto-hide branch below is the
+// only new behaviour and it only runs when the setting is on.
+static RECT ZoneBounds(const MonitorInfo &mon, bool avoidTaskbar)
+{
+    if (!avoidTaskbar)
+        return mon.rcMonitor;
+
+    RECT r = mon.rcWork;
+
+    APPBARDATA state = {};
+    state.cbSize = sizeof(state);
+    if (!(SHAppBarMessage(ABM_GETSTATE, &state) & ABS_AUTOHIDE))
+        return r;
+
+    APPBARDATA pos = {};
+    pos.cbSize = sizeof(pos);
+    if (!SHAppBarMessage(ABM_GETTASKBARPOS, &pos))
+        return r;
+
+    // Only the display the taskbar is actually on, and only the edge it is
+    // docked to - subtracting a rect that does not touch this monitor would
+    // shrink the wrong screen.
+    RECT hit;
+    if (!IntersectRect(&hit, &r, &pos.rc))
+        return r;
+
+    switch (pos.uEdge)
+    {
+    case ABE_BOTTOM: r.bottom = hit.top;    break;
+    case ABE_TOP:    r.top    = hit.bottom; break;
+    case ABE_LEFT:   r.left   = hit.right;  break;
+    case ABE_RIGHT:  r.right  = hit.left;   break;
+    default: break;
+    }
+
+    // Never hand back something degenerate; the zone maths assumes a real box.
+    if (r.right - r.left < 16 || r.bottom - r.top < 16)
+        return mon.rcWork;
+    return r;
+}
+
 static int ClampZoneSize(int requested, int span)
 {
     int v = requested < 1 ? 1 : requested;
@@ -2463,11 +2519,7 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
 
     for (const auto &mon : g_monitors)
     {
-        // rcWork is the monitor minus the taskbar and any docked appbars, so
-        // using it is a complete fix for zones colliding with the taskbar,
-        // including the taskbar's own "peek at desktop" strip.
-        const RECT &r =
-            g_settings.avoidTaskbar ? mon.rcWork : mon.rcMonitor;
+        const RECT r = ZoneBounds(mon, g_settings.avoidTaskbar);
         LONG centrePct = g_settings.centerZonePercent;
 
         int span = (r.right - r.left) < (r.bottom - r.top)
@@ -3017,7 +3069,7 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
 // Detection
 // =====================================================================
 
-// 0 none, 1 Ctrl, 2 Alt, 3 Shift, 4 Win
+// Takes one of the kModifier* values.
 static bool RequiredModifierHeld(int which)
 {
     switch (which)
@@ -3133,6 +3185,7 @@ static DWORD DetectTick()
         g_activeZone = idx;
         g_enterTick = now;
         g_firedThisEntry = false;
+        g_gateLogged = nullptr;
 
         // Knock mode: a single entry never fires. The zone only arms when it
         // is re-entered soon after being left.
@@ -3146,13 +3199,28 @@ static DWORD DetectTick()
     if (idx < 0 || g_firedThisEntry)
         return next;
 
+    // Reported once per visit, not once per tick.
+    auto gate = [&](const wchar_t *why)
+    {
+        if (g_gateLogged == why)
+            return;
+        g_gateLogged = why;
+        Wh_Log(L"HELD BACK (%s): %s", why, zones->zones[idx].label.c_str());
+    };
+
     if (!g_knockSatisfied)
+    {
+        gate(L"knock window - leave and re-enter to arm it");
         return next;
+    }
 
     // Checked every tick rather than on entry, so the zone becomes live the
     // moment the modifier goes down while the cursor is already parked.
     if (!RequiredModifierHeld(zones->zones[idx].modifier))
+    {
+        gate(L"required modifier not held");
         return next;
+    }
 
     // Suppress for the whole visit, not just this tick — otherwise releasing
     // a drag inside a corner would immediately trigger it.
@@ -3160,6 +3228,7 @@ static DWORD DetectTick()
 
     if (zones->disableDuringDrag && AnyMouseButtonDown())
     {
+        gate(L"a mouse button is held - skip while dragging");
         g_firedThisEntry = true;
         return next;
     }
@@ -3172,7 +3241,11 @@ static DWORD DetectTick()
     // the zone you actually stop in does.
     int dwell = hz.delay > hz.settle ? hz.delay : hz.settle;
     if (dwell > 0 && (now - g_enterTick) < (ULONGLONG)dwell)
+    {
+        gate(hz.delay > hz.settle ? L"waiting out the activation delay"
+                                  : L"waiting out the pass-through guard");
         return next;
+    }
 
     // Neither cooldown sets g_firedThisEntry: they are a wait, not a refusal.
     // Marking the visit spent meant that walking into a corner shortly after
@@ -3183,14 +3256,20 @@ static DWORD DetectTick()
     {
         ULONGLONG last = g_lastFireTick[idx];
         if (last != 0 && (now - last) < (ULONGLONG)hz.cooldown)
+        {
+            gate(L"this zone's cooldown has not elapsed");
             return next;
+        }
     }
 
     // Global floor across all zones. The per-zone cooldown alone does not stop
     // a sweep through several different zones from queueing a burst.
     if (g_lastAnyFireTick != 0 &&
         (now - g_lastAnyFireTick) < kMinFireIntervalMs)
+    {
+        gate(L"another zone fired a moment ago");
         return next;
+    }
 
     // The cooldowns are stamped here, before the fullscreen and excluded-app
     // gates run on the worker, so a suppressed trigger still consumes them.
@@ -4288,6 +4367,23 @@ static bool ZoneIsCorner(Zone z) { return z <= ZONE_BOTTOM_RIGHT; }
 // The three segments of the edge a zone belongs to, or false for a corner.
 // An edge is one strip, so its thickness is a property of the trio rather than
 // of whichever segment you happen to be looking at.
+// AdjustWindowRectEx computes the non-client size at *system* DPI, but these
+// threads are per-monitor-V2, so on a 150-200% display the frame came out a few
+// pixels short of what the fixed Lay:: layout assumes and the last detail row
+// sat against the bottom edge. AdjustWindowRectExForDpi takes the same
+// arguments plus the DPI already in hand; it is Win10 1607+, so it is resolved
+// the same way GetDpiForWindow is, and falls back to the old call when absent.
+static void AdjustWindowRectForDpi(RECT *r, DWORD style, UINT dpi)
+{
+    using Fn = BOOL(WINAPI *)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    static Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                      "AdjustWindowRectExForDpi");
+    if (fn && dpi)
+        fn(r, style, FALSE, 0, dpi);
+    else
+        AdjustWindowRectEx(r, style, FALSE, 0);
+}
+
 static bool EdgeTrio(Zone z, Zone out[3])
 {
     struct Run
@@ -4490,6 +4586,8 @@ static std::wstring FormatTuning(int i, int value)
         _snwprintf_s(buf, _countof(buf), _TRUNCATE, L"%d px", value);
     else if (i == 5)
     {
+        // Indexed by the kModifier* values, so this order is not free to
+        // change independently of them.
         static const wchar_t *kMods[] = {L"None", L"Ctrl", L"Alt", L"Shift",
                                          L"Win"};
         return (value >= 0 && value < 5) ? kMods[value] : L"None";
@@ -5556,7 +5654,7 @@ static DWORD WINAPI DashThread(LPVOID)
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
                   WS_CLIPCHILDREN;
     RECT need = {0, 0, Sc(Lay::ClientW, dpi), Sc(Lay::ClientH, dpi)};
-    AdjustWindowRectEx(&need, style, FALSE, 0);
+    AdjustWindowRectForDpi(&need, style, dpi);
     int w = need.right - need.left;
     int h = need.bottom - need.top;
     int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
@@ -5588,7 +5686,7 @@ static DWORD WINAPI DashThread(LPVOID)
         if (real != dpi)
         {
             RECT want = {0, 0, Sc(Lay::ClientW, real), Sc(Lay::ClientH, real)};
-            AdjustWindowRectEx(&want, style, FALSE, 0);
+            AdjustWindowRectForDpi(&want, style, real);
             SetWindowPos(hWnd, nullptr, 0, 0, want.right - want.left,
                          want.bottom - want.top,
                          SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE);
@@ -5707,6 +5805,14 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     // Explorer restarted and threw away every tray icon; put ours back.
     if (g_taskbarCreatedMsg && uMsg == g_taskbarCreatedMsg)
     {
+        // The GUID may have been abandoned for a reason that has just gone
+        // away. A tool-mod process can start before Explorer has a taskbar, and
+        // then *both* add attempts fail - which the fallback reads as "the GUID
+        // was refused" and latches off for the session. That costs the icon its
+        // stable identity, so the user's "always show this icon" choice stops
+        // sticking across reboots and it shares plain uID space with every
+        // other tray-owning mod in windhawk.exe.
+        g_trayUseGuid = true;
         UpdateTrayIcon(true);
         return 0;
     }
