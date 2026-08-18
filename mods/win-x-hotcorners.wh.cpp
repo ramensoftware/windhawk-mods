@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.6
+// @version         1.1.7
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -2482,7 +2482,21 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
             hz.args = zc->args;
             hz.releaseAction = zc->releaseAction;
             hz.releaseArgs = zc->releaseArgs;
-            hz.releaseExec = zc->releaseExecutor;
+            // "The same action again" means exactly that: the same executor,
+            // not another one built from the same settings. It matters for the
+            // Alternate actions, whose executor carries a flip flag - a second
+            // copy has its own, so the release would run its own sequence
+            // instead of continuing the entry's. The stored release executor is
+            // also built once per configuration rather than per monitor, so on
+            // two displays the entry flags advanced independently while the
+            // release flag advanced once per trigger anywhere, and the pair
+            // drifted apart after the first trigger on the second display.
+            //
+            // For every non-alternating action the two are equivalent, so this
+            // changes nothing for Show Desktop, Mute or Keep awake.
+            hz.releaseExec = zc->releaseAction == CornerAction::SameAsEntry
+                                 ? hz.exec
+                                 : zc->releaseExecutor;
             hz.label = mon.id + L" " + ZoneToString(z) + L" -> " +
                        ActionToString(zc->action);
             set->zones.push_back(std::move(hz));
@@ -3423,7 +3437,6 @@ static void UpdateTrayIcon(bool add)
         DestroyIcon(nid.hIcon);
 }
 
-// action worker and the tray menu.
 // =====================================================================
 // Windhawk settings page
 // =====================================================================
@@ -3437,9 +3450,11 @@ static void UpdateTrayIcon(bool add)
 // Precedence, decided once per reload:
 //
 //   1. Displays configured on the settings page win outright.
-//   2. Otherwise, a layout saved by an older version still runs, so upgrading
-//      never silently wipes a configuration that took effort to enter.
-//   3. Otherwise, settings supply the globals and no zones are active.
+//   2. Otherwise, settings supply the globals and no zones are active.
+//
+// There used to be a step between the two for a zone layout saved before the
+// settings page existed. That migration path was removed in 4.4.4 and the
+// value store now holds nothing but the enable flag.
 
 static int ParseZoneName(const std::wstring &s)
 {
@@ -3649,9 +3664,8 @@ static void ApplySettingsGlobals(ModSettings &s)
 // zones are active". Four of the six callers run on a thread other than the
 // one that starts the mod, so that window was reachable.
 //
-// The settings page owns every global. The value store is read only for the
-// enable flag and, on the upgrade path, for a zone layout saved before the
-// settings page came back - never for anything a page field also controls,
+// The settings page owns every global. The value store is read for the enable
+// flag and nothing else - never for anything a page field also controls,
 // because the two would then disagree with nothing on screen saying which won.
 static void ReloadConfig()
 {
@@ -3884,7 +3898,11 @@ static void HandleTrayCommand(UINT id)
 // what makes it look native.
 
 static HANDLE g_hDashThread = nullptr;
-static HWND g_hDashWnd = nullptr;
+// Written by the dashboard thread, read by Windhawk's thread
+// (WhTool_ModSettingsChanged, WhTool_ModUninit) and the tray thread
+// (OpenDashboard). g_trayEnabled, g_suspendUntil and g_trayUseGuid are all
+// atomic for the same reason; this one was missed.
+static std::atomic<HWND> g_hDashWnd{nullptr};
 
 // The dashboard followed the system theme in neither direction before: it was
 // hard-coded dark, so on a light desktop the text was near-invisible. The
@@ -5392,11 +5410,12 @@ static DWORD WINAPI DashThread(LPVOID)
 
 static void OpenDashboard()
 {
-    if (g_hDashWnd && IsWindow(g_hDashWnd))
+    HWND hDash = g_hDashWnd.load();
+    if (hDash && IsWindow(hDash))
     {
         // Already open — bring it forward rather than making a second one.
-        ShowWindow(g_hDashWnd, SW_RESTORE);
-        SetForegroundWindow(g_hDashWnd);
+        ShowWindow(hDash, SW_RESTORE);
+        SetForegroundWindow(hDash);
         return;
     }
     if (g_hDashThread)
@@ -5471,6 +5490,13 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 
 static DWORD WINAPI TrayThread(LPVOID)
 {
+    // The detection and dashboard threads both pin this; the tray one did not.
+    // UpdateTrayIcon -> MakeTrayIcon reads GetSystemMetrics(SM_CXSMICON), and
+    // it is called both from here and from Windhawk's thread, which can be in a
+    // different awareness context - so the icon could be built at the wrong
+    // size on a mixed-scaling setup depending on who asked for it.
+    PinThreadDpiPerMonitorV2();
+
     const wchar_t *kClass = L"WindhawkHotCornersTray";
     HINSTANCE hInst = GetModuleHandle(nullptr);
 
@@ -5575,8 +5601,8 @@ void WhTool_ModSettingsChanged()
     if (g_hDetectWnd)
         PostMessage(g_hDetectWnd, WM_APP_REBUILD, 0, 0);
     // An open dashboard is showing the configuration that just changed.
-    if (g_hDashWnd)
-        PostMessage(g_hDashWnd, WM_APP_DASH_REFRESH, 0, 0);
+    if (HWND hDash = g_hDashWnd.load())
+        PostMessage(hDash, WM_APP_DASH_REFRESH, 0, 0);
 }
 
 void WhTool_ModUninit()
@@ -5633,8 +5659,8 @@ void WhTool_ModUninit()
     // and it takes g_settingsLock and g_zonesLock. Nothing below may free
     // those while it is alive. Its loop only ends when its window does, so
     // close the window rather than signalling the stop event.
-    if (g_hDashWnd)
-        PostMessage(g_hDashWnd, WM_CLOSE, 0, 0);
+    if (HWND hDash = g_hDashWnd.load())
+        PostMessage(hDash, WM_CLOSE, 0, 0);
 
     if (g_hDashThread)
     {
