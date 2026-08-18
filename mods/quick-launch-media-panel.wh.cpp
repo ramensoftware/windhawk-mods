@@ -4,7 +4,7 @@
 // @name:fr-FR      Panneau de lancement rapide et multimédia
 // @description     A modern desktop panel with configurable app shortcuts, drag and drop, and Windows media controls.
 // @description:fr-FR Un panneau de bureau moderne avec raccourcis configurables, glisser-déposer et commandes multimédias Windows.
-// @version         2.1.4
+// @version         2.2.0
 // @author          Spartacus
 // @github          https://github.com/spartaaacus
 // @include         windhawk.exe
@@ -13,205 +13,11 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*
-# Quick Launch & Media Panel
-
-A modern, native Windows panel placed at the top-center of the selected monitor.
-
-![Quick Launch & Media Panel](https://i.imgur.com/rckHuTB.png)
-
-## Features
-
-- 1 to 8 configurable application or game shortcuts.
-- Drag an `.exe`, `.lnk`, document, folder, `.url`, or `.website` file onto a tile.
-- Dropped shortcuts are saved for the current Windows user.
-- Live title/artist and previous, play/pause, next controls through Windows Global System Media Transport Controls.
-- Works with Spotify and with YouTube Music when the browser exposes a Windows media session.
-- Runs in a dedicated Windhawk tool process instead of being injected into Explorer.
-- Attaches to the Windows desktop and automatically recovers after Explorer restarts.
-
-## How it differs from existing media mods
-
-Dynamic Island for Windows, Island Media Controls, Taskbar Fluent Media Player,
-and Taskbar Music Lounge focus on media presentation in an overlay or the
-taskbar. This mod is primarily a pageable desktop application launcher. Its
-compact media strip is part of the same stationary desktop dashboard, so users
-can launch their usual apps and resume or control music from one place without
-modifying the taskbar or displaying a persistent foreground overlay.
-
-## Usage
-
-- Left-click a populated tile to launch it.
-- Drag a file or shortcut onto a tile to assign it.
-- Right-click a populated tile to remove its saved assignment. On page 1, the corresponding Windhawk setting is used again.
-- Drag any empty area of the panel to move it. Its position is remembered.
-- Hold Ctrl and use the mouse wheel to resize the shortcut tiles.
-- Right-click an empty area for resize and recenter commands.
-- Right-click an empty area and choose the settings command to open Windhawk.
-- Choose a built-in theme below the language setting, or use Custom for your own colors.
-- Use multiple pages of shortcuts.
-- Right-click a tile to edit its target, label, arguments, icon, color, and elevation mode.
-- Drag one tile onto another to reorder them.
-- Album art, timeline, volume control, and media-session selection are supported.
-- Import or export the complete layout from the panel context menu.
-- Change layout, colors, position, and default shortcuts in the mod settings.
-
-The panel doesn't authenticate with Spotify or YouTube. It controls the media session
-already published by the playing application to Windows.
-*/
+/*...*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*
-- language: en-US
-  $name: Language
-  $name:fr-FR: Langue
-  $description: Language used by the panel and its context menu.
-  $description:fr-FR: Langue utilisée par le panneau et son menu contextuel.
-  $options:
-    - en-US: English (US)
-    - fr: French
-  $options:fr-FR:
-    - en-US: Anglais (US)
-    - fr: Français
-- theme: midnight
-  $name: Theme
-  $name:fr-FR: Thème
-  $description: Choose a color palette. Select Custom to use the background and accent colors below.
-  $description:fr-FR: Choisissez une palette. Sélectionnez Personnalisé pour utiliser les couleurs ci-dessous.
-  $options:
-    - midnight: Midnight violet
-    - graphite: Graphite
-    - ocean: Ocean blue
-    - emerald: Emerald
-    - rose: Rose
-    - automatic: Automatic
-    - custom: Custom
-  $options:fr-FR:
-    - midnight: Violet minuit
-    - graphite: Graphite
-    - ocean: Bleu océan
-    - emerald: Émeraude
-    - rose: Rose
-    - automatic: Automatique
-    - custom: Personnalisé
-- pageCount: 3
-  $name: Number of pages
-  $name:fr-FR: Nombre de pages
-  $description: Between 1 and 5 shortcut pages.
-  $description:fr-FR: Entre 1 et 5 pages de raccourcis.
-- lockPosition: false
-  $name: Lock position
-  $name:fr-FR: Verrouiller la position
-- tileShape: rounded
-  $name: Tile shape
-  $name:fr-FR: Forme des cases
-  $options:
-    - rounded: Rounded
-    - circle: Circle
-    - square: Square
-    - minimal: Minimal
-  $options:fr-FR:
-    - rounded: Arrondie
-    - circle: Cercle
-    - square: Carrée
-    - minimal: Minimale
-- animations: true
-  $name: Animations
-- autoThemeSource: system
-  $name: Automatic theme source
-  $name:fr-FR: Source du thème automatique
-  $options:
-    - system: Windows accent
-    - wallpaper: Wallpaper
-    - media: Album artwork
-  $options:fr-FR:
-    - system: Accent Windows
-    - wallpaper: Fond d'écran
-    - media: Pochette de l'album
-- shortcutCount: 4
-  $name: Number of shortcuts
-  $name:fr-FR: Nombre de raccourcis
-  $description: Number of visible shortcut tiles (1 to 8).
-  $description:fr-FR: Nombre de cases de raccourcis visibles (1 à 8).
-- columns: 4
-  $name: Columns
-  $name:fr-FR: Colonnes
-  $description: Number of tiles per row (1 to 8).
-  $description:fr-FR: Nombre de cases par ligne (1 à 8).
-- shortcut1: ""
-  $name: Shortcut 1
-  $name:fr-FR: Raccourci 1
-  $description: Full path, URL, or shell target. You can also drag a file onto the tile.
-  $description:fr-FR: Chemin complet, URL ou cible Shell. Vous pouvez aussi déposer un fichier sur la case.
-- shortcut2: ""
-  $name: Shortcut 2
-  $name:fr-FR: Raccourci 2
-- shortcut3: ""
-  $name: Shortcut 3
-  $name:fr-FR: Raccourci 3
-- shortcut4: ""
-  $name: Shortcut 4
-  $name:fr-FR: Raccourci 4
-- shortcut5: ""
-  $name: Shortcut 5
-  $name:fr-FR: Raccourci 5
-- shortcut6: ""
-  $name: Shortcut 6
-  $name:fr-FR: Raccourci 6
-- shortcut7: ""
-  $name: Shortcut 7
-  $name:fr-FR: Raccourci 7
-- shortcut8: ""
-  $name: Shortcut 8
-  $name:fr-FR: Raccourci 8
-- tileSize: 64
-  $name: Tile size
-  $name:fr-FR: Taille des cases
-  $description: Tile size in logical pixels (40 to 112). Ctrl+mouse wheel also changes it directly.
-  $description:fr-FR: Taille en pixels logiques (40 à 112). Ctrl+molette la modifie directement.
-- gap: 12
-  $name: Tile spacing
-  $name:fr-FR: Espacement des cases
-  $description: Gap between tiles in logical pixels (6 to 24).
-  $description:fr-FR: Espacement en pixels logiques (6 à 24).
-- offsetY: 18
-  $name: Vertical offset
-  $name:fr-FR: Décalage vertical
-  $description: Distance from the top edge of the selected monitor.
-  $description:fr-FR: Distance depuis le bord supérieur de l'écran choisi.
-- monitor: primary
-  $name: Monitor
-  $name:fr-FR: Écran
-  $options:
-    - primary: Primary monitor
-    - cursor: Monitor containing the mouse pointer
-  $options:fr-FR:
-    - primary: Écran principal
-    - cursor: Écran contenant le pointeur
-- perMonitorLayouts: false
-  $name: Separate layout per monitor
-  $name:fr-FR: Disposition distincte par écran
-  $description: Stores independent pages and shortcuts for each monitor.
-  $description:fr-FR: Enregistre des pages et raccourcis indépendants pour chaque écran.
-- showLabels: true
-  $name: Show shortcut labels
-  $name:fr-FR: Afficher le nom des raccourcis
-- backgroundColor: "#151821"
-  $name: Background color
-  $name:fr-FR: Couleur d'arrière-plan
-- accentColor: "#7C5CFC"
-  $name: Accent color
-  $name:fr-FR: Couleur d'accentuation
-- opacity: 92
-  $name: Panel opacity
-  $name:fr-FR: Opacité du panneau
-  $description: From 45 to 100 percent.
-  $description:fr-FR: De 45 à 100 pour cent.
-- cornerRadius: 22
-  $name: Corner radius
-  $name:fr-FR: Rayon des coins
-*/
+/*...*/
 // ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
@@ -261,15 +67,18 @@ constexpr UINT WM_APP_ACTIVE_STATE = WM_APP + 43;
 constexpr UINT_PTR kDesktopTimer = 1;
 constexpr int kMaxShortcuts = 8;
 constexpr int kMaxPages = 5;
+constexpr int kCapsuleHeight = 18;
+constexpr int kExpandedHeaderHeight = 64;
+constexpr int kMediaCardHeight = 84;
 
 enum class TileShape { Rounded, Circle, Square, Minimal };
 enum class AutoThemeSource { System, Wallpaper, Media };
 
 struct Settings {
     int count = 4, columns = 4, tile = 64, gap = 12, offsetY = 18;
-    int opacity = 92, radius = 22, pageCount = 3;
+    int opacity = 94, radius = 26, pageCount = 3, capsuleWidth = 176;
     bool labels = true, cursorMonitor = false, french = false, perMonitorLayouts = false;
-    bool lockPosition = false, animations = true;
+    bool lockPosition = false, animations = true, startCollapsed = true;
     TileShape tileShape = TileShape::Rounded;
     AutoThemeSource autoThemeSource = AutoThemeSource::System;
     std::wstring requestedTheme = L"midnight";
@@ -340,6 +149,8 @@ std::wstring g_currentPageName;
 int g_pressedTile = -1;
 POINT g_tilePressPoint{};
 bool g_reordering = false;
+bool g_panelExpanded = true;
+bool g_capsuleHover = false;
 float g_pageAnimation = 1.0f;
 uint64_t g_lastArtworkHash = 0;
 COLORREF g_cachedArtworkAccent = RGB(124, 92, 252);
@@ -367,14 +178,21 @@ void LoadAssignments();
 void PositionWindow();
 void LayoutMetrics();
 void EnsurePanelWindow();
+void DestroyRenderSurface();
 bool RefreshRunningWindows();
 std::wstring ResolveExecutable(const std::wstring& path);
 
 int Clamp(int value, int lo, int hi) { return std::max(lo, std::min(hi, value)); }
 
 int Scale(int value) { return MulDiv(value, static_cast<int>(g_dpi), 96); }
-int PixelWidth() { return Scale(g_width); }
-int PixelHeight() { return Scale(g_height); }
+int CurrentLogicalWidth() {
+    return g_panelExpanded ? g_width : g_settings.capsuleWidth;
+}
+int CurrentLogicalHeight() {
+    return g_panelExpanded ? g_height : kCapsuleHeight;
+}
+int PixelWidth() { return Scale(CurrentLogicalWidth()); }
+int PixelHeight() { return Scale(CurrentLogicalHeight()); }
 
 POINT ToLogicalPoint(POINT point) {
     point.x = MulDiv(point.x, 96, static_cast<int>(g_dpi));
@@ -424,9 +242,11 @@ void LoadSettings() {
     next.opacity = Clamp(Wh_GetIntSetting(L"opacity"), 45, 100);
     next.radius = Clamp(Wh_GetIntSetting(L"cornerRadius"), 8, 40);
     next.pageCount = Clamp(Wh_GetIntSetting(L"pageCount"), 1, kMaxPages);
+    next.capsuleWidth = Clamp(Wh_GetIntSetting(L"capsuleWidth"), 120, 320);
     next.labels = Wh_GetIntSetting(L"showLabels") != 0;
     next.lockPosition = Wh_GetIntSetting(L"lockPosition") != 0;
     next.animations = Wh_GetIntSetting(L"animations") != 0;
+    next.startCollapsed = Wh_GetIntSetting(L"startCollapsed") != 0;
     next.french = _wcsicmp(GetStringSetting(L"language").c_str(), L"fr") == 0;
     next.cursorMonitor = _wcsicmp(GetStringSetting(L"monitor").c_str(), L"cursor") == 0;
     next.perMonitorLayouts = Wh_GetIntSetting(L"perMonitorLayouts") != 0;
@@ -711,8 +531,12 @@ void LayoutMetrics() {
     int columns = std::min(g_settings.columns, g_settings.count);
     int rows = (g_settings.count + columns - 1) / columns;
     int labelExtra = g_settings.labels ? 20 : 0;
-    g_width = std::max(340, 40 + columns * g_settings.tile + (columns - 1) * g_settings.gap);
-    g_height = 48 + rows * (g_settings.tile + labelExtra) + (rows - 1) * g_settings.gap + 104;
+    int gridHeight = rows * (g_settings.tile + labelExtra) +
+                     (rows - 1) * g_settings.gap;
+    g_width = std::max(460, 52 + columns * g_settings.tile +
+                                (columns - 1) * g_settings.gap);
+    g_height = kExpandedHeaderHeight + gridHeight + 18 +
+               kMediaCardHeight + 22;
 }
 
 RECT TileRect(int index) {
@@ -722,7 +546,8 @@ RECT TileRect(int index) {
     int used = std::min(columns, g_settings.count - row * columns);
     int rowWidth = used * g_settings.tile + (used - 1) * g_settings.gap;
     int left = (g_width - rowWidth) / 2 + col * (g_settings.tile + g_settings.gap);
-    int top = 42 + row * (g_settings.tile + labelExtra + g_settings.gap);
+    int top = kExpandedHeaderHeight +
+              row * (g_settings.tile + labelExtra + g_settings.gap);
     return {left, top, left + g_settings.tile, top + g_settings.tile};
 }
 
@@ -774,11 +599,27 @@ public:
 int MediaTop() {
     int columns = std::min(g_settings.columns, g_settings.count);
     int rows = (g_settings.count + columns - 1) / columns;
-    return 42 + rows * (g_settings.tile + (g_settings.labels ? 20 : 0)) + (rows - 1) * g_settings.gap + 12;
+    return kExpandedHeaderHeight +
+           rows * (g_settings.tile + (g_settings.labels ? 20 : 0)) +
+           (rows - 1) * g_settings.gap + 18;
 }
 
-RECT PreviousPageRect() { return {18, 12, 48, 34}; }
-RECT NextPageRect() { return {g_width - 48, 12, g_width - 18, 34}; }
+RECT PreviousPageRect() { return {18, 27, 50, 55}; }
+RECT NextPageRect() { return {g_width - 50, 27, g_width - 18, 55}; }
+RECT CapsuleToggleRect() {
+    if (!g_panelExpanded) {
+        return {0, 0, g_settings.capsuleWidth, kCapsuleHeight};
+    }
+    return {g_width / 2 - 54, 4, g_width / 2 + 54, 20};
+}
+RECT MediaCardRect() {
+    const int top = MediaTop();
+    return {18, top, g_width - 18, top + kMediaCardHeight};
+}
+RECT MediaTimelineRect() {
+    const int top = MediaTop();
+    return {32, top + 68, g_width - 32, top + 81};
+}
 
 std::wstring CurrentPageName() {
     return g_currentPageName;
@@ -795,6 +636,15 @@ void SwitchPage(int delta) {
     Render();
 }
 
+void TogglePanelExpanded() {
+    g_panelExpanded = !g_panelExpanded;
+    g_capsuleHover = false;
+    g_hover = -1;
+    DestroyRenderSurface();
+    PositionWindow();
+    Render();
+}
+
 void PositionWindow() {
     HWND panel = g_hwnd.load();
     if (!panel) return;
@@ -807,7 +657,10 @@ void PositionWindow() {
     int x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - width) / 2;
     int y = mi.rcWork.top + Scale(g_settings.offsetY);
     if (g_savedX != INT_MIN && g_savedY != INT_MIN) {
-        x = g_savedX;
+        const int expandedWidth = Scale(g_width);
+        x = g_panelExpanded
+                ? g_savedX
+                : g_savedX + (expandedWidth - width) / 2;
         y = g_savedY;
         x = Clamp(x, mi.rcWork.left,
                   std::max(mi.rcWork.left, mi.rcWork.right - width));
@@ -856,6 +709,12 @@ void ResizeTiles(int delta) {
 }
 
 void RoundRectFill(Graphics& g, const RectF& r, float radius, const Color& color) {
+    radius = std::max(0.0f, std::min(radius, std::min(r.Width, r.Height) / 2.0f));
+    if (radius <= 0.0f) {
+        SolidBrush brush(color);
+        g.FillRectangle(&brush, r);
+        return;
+    }
     GraphicsPath path;
     float d = radius * 2;
     path.AddArc(r.X, r.Y, d, d, 180, 90); path.AddArc(r.GetRight()-d, r.Y, d, d, 270, 90);
@@ -864,8 +723,23 @@ void RoundRectFill(Graphics& g, const RectF& r, float radius, const Color& color
     SolidBrush brush(color); g.FillPath(&brush, &path);
 }
 
+void RoundRectGradient(Graphics& g, const RectF& r, float radius,
+                       const Color& top, const Color& bottom) {
+    radius = std::max(0.0f, std::min(radius, std::min(r.Width, r.Height) / 2.0f));
+    GraphicsPath path;
+    float d = radius * 2;
+    path.AddArc(r.X, r.Y, d, d, 180, 90);
+    path.AddArc(r.GetRight() - d, r.Y, d, d, 270, 90);
+    path.AddArc(r.GetRight() - d, r.GetBottom() - d, d, d, 0, 90);
+    path.AddArc(r.X, r.GetBottom() - d, d, d, 90, 90);
+    path.CloseFigure();
+    LinearGradientBrush brush(r, top, bottom, LinearGradientModeVertical);
+    g.FillPath(&brush, &path);
+}
+
 void RoundRectStroke(Graphics& g, const RectF& r, float radius,
                      const Color& color, float width) {
+    radius = std::max(0.0f, std::min(radius, std::min(r.Width, r.Height) / 2.0f));
     GraphicsPath path;
     float d = radius * 2;
     path.AddArc(r.X, r.Y, d, d, 180, 90);
@@ -1013,6 +887,25 @@ bool EnsureRenderSurface(int width, int height) {
     return true;
 }
 
+void PresentRenderSurface(int pixelWidth, int pixelHeight) {
+    HDC screen = GetDC(nullptr);
+    if (!screen) return;
+    POINT source{0, 0};
+    SIZE size{pixelWidth, pixelHeight};
+    const BYTE opacity =
+        static_cast<BYTE>(255 * g_settings.opacity / 100);
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, opacity, AC_SRC_ALPHA};
+    if (!UpdateLayeredWindow(g_hwnd, screen, nullptr, &size, g_renderDc,
+                             &source, 0, &blend, ULW_ALPHA)) {
+        static bool logged = false;
+        if (!logged) {
+            Wh_Log(L"UpdateLayeredWindow failed, error=%u", GetLastError());
+            logged = true;
+        }
+    }
+    ReleaseDC(nullptr, screen);
+}
+
 void Render() {
     if (!g_hwnd) return;
     const int pixelWidth = PixelWidth();
@@ -1027,13 +920,84 @@ void Render() {
     g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
     const REAL scale = static_cast<REAL>(g_dpi) / 96.0f;
     g.ScaleTransform(scale, scale);
-    RoundRectFill(g, RectF(0, 0, (REAL)g_width, (REAL)g_height), (REAL)g_settings.radius,
-                  Color(255, GetRValue(g_settings.background), GetGValue(g_settings.background), GetBValue(g_settings.background)));
-    RoundRectStroke(g, RectF(0.7f, 0.7f, (REAL)g_width-1.4f, (REAL)g_height-1.4f),
-                    (REAL)g_settings.radius-0.7f, Color(65,255,255,255), 1.2f);
-    DrawCentered(g, L"\u2039", RectF(18,10,30,24), 20, Color(205,235,238,245));
-    DrawCentered(g, CurrentPageName(), RectF(52,10,(REAL)g_width-104,24), 12, Color(225,240,242,248), true);
-    DrawCentered(g, L"\u203a", RectF((REAL)g_width-48,10,30,24), 20, Color(205,235,238,245));
+
+    const BYTE backgroundR = GetRValue(g_settings.background);
+    const BYTE backgroundG = GetGValue(g_settings.background);
+    const BYTE backgroundB = GetBValue(g_settings.background);
+    const BYTE accentR = GetRValue(g_settings.accent);
+    const BYTE accentG = GetGValue(g_settings.accent);
+    const BYTE accentB = GetBValue(g_settings.accent);
+
+    if (!g_panelExpanded) {
+        const REAL width = static_cast<REAL>(g_settings.capsuleWidth);
+        const REAL height = static_cast<REAL>(kCapsuleHeight);
+        RoundRectFill(g, RectF(1, 2, width - 2, height - 2),
+                      (height - 2) / 2.0f, Color(90, 0, 0, 0));
+        RoundRectGradient(
+            g, RectF(1, 0, width - 2, height - 3), (height - 3) / 2.0f,
+            g_capsuleHover
+                ? Color(255, std::min(255, backgroundR + 18),
+                        std::min(255, backgroundG + 18),
+                        std::min(255, backgroundB + 18))
+                : Color(255, std::min(255, backgroundR + 10),
+                        std::min(255, backgroundG + 10),
+                        std::min(255, backgroundB + 10)),
+            Color(255, backgroundR, backgroundG, backgroundB));
+        RoundRectStroke(g, RectF(1.5f, 0.5f, width - 3, height - 4),
+                        (height - 4) / 2.0f,
+                        g_capsuleHover
+                            ? Color(150, accentR, accentG, accentB)
+                            : Color(62, 255, 255, 255),
+                        1.0f);
+        const REAL indicatorWidth = g_capsuleHover ? 72.0f : 48.0f;
+        RoundRectFill(g,
+                      RectF((width - indicatorWidth) / 2.0f, 7,
+                            indicatorWidth, g_capsuleHover ? 3.5f : 3.0f),
+                      2.0f, Color(235, accentR, accentG, accentB));
+        PresentRenderSurface(pixelWidth, pixelHeight);
+        return;
+    }
+
+    RoundRectFill(g, RectF(2, 4, (REAL)g_width - 4,
+                           (REAL)g_height - 4),
+                  (REAL)g_settings.radius, Color(115, 0, 0, 0));
+    RoundRectGradient(
+        g, RectF(1, 0, (REAL)g_width - 2, (REAL)g_height - 4),
+        (REAL)g_settings.radius,
+        Color(255, std::min(255, backgroundR + 11),
+              std::min(255, backgroundG + 11),
+              std::min(255, backgroundB + 11)),
+        Color(255, std::max(0, backgroundR - 3),
+              std::max(0, backgroundG - 3),
+              std::max(0, backgroundB - 3)));
+    RoundRectStroke(g,
+                    RectF(1.5f, 0.5f, (REAL)g_width - 3,
+                          (REAL)g_height - 5),
+                    (REAL)g_settings.radius - 0.5f,
+                    Color(62, 255, 255, 255), 1.0f);
+
+    const REAL handleX = (REAL)g_width / 2.0f - 54.0f;
+    RoundRectFill(g, RectF(handleX, 4, 108, 16), 8,
+                  g_capsuleHover ? Color(45, accentR, accentG, accentB)
+                                 : Color(26, 255, 255, 255));
+    RoundRectStroke(g, RectF(handleX + 0.5f, 4.5f, 107, 15), 7.5f,
+                    g_capsuleHover ? Color(115, accentR, accentG, accentB)
+                                   : Color(28, 255, 255, 255),
+                    1.0f);
+    RoundRectFill(g, RectF((REAL)g_width / 2.0f - 23, 10, 46, 3),
+                  1.5f, Color(220, accentR, accentG, accentB));
+
+    RoundRectFill(g, RectF(14, 25, (REAL)g_width - 28, 32), 14,
+                  Color(20, 255, 255, 255));
+    RoundRectStroke(g, RectF(14.5f, 25.5f, (REAL)g_width - 29, 31),
+                    13.5f, Color(22, 255, 255, 255), 1.0f);
+    DrawCentered(g, L"\u2039", RectF(18, 28, 32, 26), 20,
+                 Color(220, 235, 238, 245));
+    DrawCentered(g, CurrentPageName(),
+                 RectF(54, 28, (REAL)g_width - 108, 26), 12,
+                 Color(238, 242, 244, 249), true);
+    DrawCentered(g, L"\u203a", RectF((REAL)g_width - 50, 28, 32, 26),
+                 20, Color(220, 235, 238, 245));
     for (int i = 0; i < g_settings.count; ++i) {
         RECT rr = TileRect(i); bool hover = i == g_hover;
         float radius = g_settings.tileShape==TileShape::Circle ? g_settings.tile/2.0f :
@@ -1041,14 +1005,15 @@ void Render() {
         BYTE animAlpha=static_cast<BYTE>(std::clamp(g_pageAnimation,0.0f,1.0f)*255);
         COLORREF tileAccent=g_shortcuts[i].customColor?g_shortcuts[i].color:g_settings.accent;
         if(g_settings.tileShape!=TileShape::Minimal){
-            RoundRectFill(g, RectF((REAL)rr.left, (REAL)rr.top+3, (REAL)g_settings.tile, (REAL)g_settings.tile), radius, Color(45*animAlpha/255,0,0,0));
-            Color tileColor = hover ? Color(90*animAlpha/255, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(45*animAlpha/255, 255,255,255);
-            RoundRectFill(g, RectF((REAL)rr.left, (REAL)rr.top, (REAL)g_settings.tile, (REAL)g_settings.tile), radius, tileColor);
+            RoundRectFill(g, RectF((REAL)rr.left, (REAL)rr.top+4, (REAL)g_settings.tile, (REAL)g_settings.tile), radius, Color(70*animAlpha/255,0,0,0));
+            Color tileTop = hover ? Color(92*animAlpha/255, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(42*animAlpha/255, 255,255,255);
+            Color tileBottom = hover ? Color(52*animAlpha/255, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(20*animAlpha/255, 255,255,255);
+            RoundRectGradient(g, RectF((REAL)rr.left, (REAL)rr.top, (REAL)g_settings.tile, (REAL)g_settings.tile), radius, tileTop, tileBottom);
             RoundRectStroke(g, RectF((REAL)rr.left+0.5f, (REAL)rr.top+0.5f, (REAL)g_settings.tile-1, (REAL)g_settings.tile-1), std::max(1.0f,radius-0.5f),
-                            hover ? Color(170, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(35,255,255,255), 1.0f);
+                            hover ? Color(190, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(42,255,255,255), 1.0f);
         }
         if (g_iconBitmaps[i]) {
-            int iconSize = Clamp(g_settings.tile - 24, 28, 52);
+            int iconSize = Clamp(g_settings.tile - (hover ? 20 : 24), 28, hover ? 56 : 52);
             int x = rr.left + (g_settings.tile - iconSize) / 2, y = rr.top + (g_settings.tile - iconSize) / 2;
             g.DrawImage(g_iconBitmaps[i].get(), x, y, iconSize, iconSize);
         } else {
@@ -1060,10 +1025,17 @@ void Render() {
         if (g_settings.labels) DrawCentered(g, DisplayName(g_paths[i], i), RectF((REAL)rr.left-5, (REAL)rr.bottom+1, (REAL)g_settings.tile+10, 18), 11, Color(205,235,238,245));
     }
     int mt = MediaTop();
-    RoundRectFill(g, RectF(18, (REAL)mt+3, (REAL)g_width-36, 76), 16, Color(38,0,0,0));
-    RoundRectFill(g, RectF(18, (REAL)mt, (REAL)g_width-36, 76), 16, Color(34,255,255,255));
-    RoundRectStroke(g, RectF(18.5f, (REAL)mt+0.5f, (REAL)g_width-37, 75), 15.5f, Color(28,255,255,255), 1.0f);
-    RoundRectFill(g, RectF(22, (REAL)mt+18, 3, 36), 1.5f,
+    RoundRectFill(g, RectF(18, (REAL)mt+4, (REAL)g_width-36,
+                           (REAL)kMediaCardHeight),
+                  18, Color(60,0,0,0));
+    RoundRectGradient(g, RectF(18, (REAL)mt, (REAL)g_width-36,
+                               (REAL)kMediaCardHeight),
+                      18, Color(42,255,255,255),
+                      Color(22,255,255,255));
+    RoundRectStroke(g, RectF(18.5f, (REAL)mt+0.5f, (REAL)g_width-37,
+                             (REAL)kMediaCardHeight-1),
+                    17.5f, Color(34,255,255,255), 1.0f);
+    RoundRectFill(g, RectF(22, (REAL)mt+18, 3, 42), 1.5f,
                   Color(220, GetRValue(g_settings.accent), GetGValue(g_settings.accent), GetBValue(g_settings.accent)));
     MediaState media; { std::lock_guard lock(g_mediaMutex); media = g_media; }
     std::wstring title = media.available
@@ -1075,35 +1047,24 @@ void Render() {
     FontFamily ff(L"Segoe UI"); Font titleFont(&ff, 13, FontStyleBold, UnitPixel), artistFont(&ff, 11, FontStyleRegular, UnitPixel);
     SolidBrush white(Color(235,245,246,250)), muted(Color(150,190,195,205));
     float textX=34;
-    if(DrawImageBytes(g,media.artwork,RectF(31,(REAL)mt+10,46,46))) textX=86;
-    g.DrawString(title.c_str(), -1, &titleFont, RectF(textX,(REAL)mt+8,(REAL)g_width-textX-150,22), &left, &white);
-    g.DrawString(artist.c_str(), -1, &artistFont, RectF(textX,(REAL)mt+31,(REAL)g_width-textX-150,18), &left, &muted);
+    if(DrawImageBytes(g,media.artwork,RectF(31,(REAL)mt+10,52,52))) textX=94;
+    g.DrawString(title.c_str(), -1, &titleFont, RectF(textX,(REAL)mt+12,(REAL)g_width-textX-154,22), &left, &white);
+    g.DrawString(artist.c_str(), -1, &artistFont, RectF(textX,(REAL)mt+35,(REAL)g_width-textX-154,18), &left, &muted);
     int cx = g_width - 102;
-    DrawCentered(g, L"|<", RectF((REAL)cx-54,(REAL)mt+14,32,36), 13, Color(235,245,246,250));
-    RoundRectFill(g, RectF((REAL)cx-16,(REAL)mt+12,40,40), 20, Color(220, GetRValue(g_settings.accent), GetGValue(g_settings.accent), GetBValue(g_settings.accent)));
-    DrawCentered(g, media.playing ? L"||" : L">", RectF((REAL)cx-16,(REAL)mt+12,40,40), 14, Color(255,255,255,255), true);
-    DrawCentered(g, L">|", RectF((REAL)cx+30,(REAL)mt+14,32,36), 13, Color(235,245,246,250));
+    DrawCentered(g, L"|<", RectF((REAL)cx-54,(REAL)mt+18,32,36), 13, Color(235,245,246,250));
+    RoundRectFill(g, RectF((REAL)cx-16,(REAL)mt+16,40,40), 20, Color(220, GetRValue(g_settings.accent), GetGValue(g_settings.accent), GetBValue(g_settings.accent)));
+    DrawCentered(g, media.playing ? L"||" : L">", RectF((REAL)cx-16,(REAL)mt+16,40,40), 14, Color(255,255,255,255), true);
+    DrawCentered(g, L">|", RectF((REAL)cx+30,(REAL)mt+18,32,36), 13, Color(235,245,246,250));
     const int64_t durationTicks = media.endTicks - media.startTicks;
     float progress=durationTicks>0?std::clamp(static_cast<float>(media.positionTicks-media.startTicks)/durationTicks,0.0f,1.0f):0.0f;
-    RoundRectFill(g,RectF(32,(REAL)mt+64,(REAL)g_width-64,3),1.5f,Color(45,255,255,255));
-    if(progress>0)RoundRectFill(g,RectF(32,(REAL)mt+64,((REAL)g_width-64)*progress,3),1.5f,
+    RoundRectFill(g,RectF(32,(REAL)mt+72,(REAL)g_width-64,3),1.5f,Color(48,255,255,255));
+    if(progress>0)RoundRectFill(g,RectF(32,(REAL)mt+72,((REAL)g_width-64)*progress,3),1.5f,
                                Color(220,GetRValue(g_settings.accent),GetGValue(g_settings.accent),GetBValue(g_settings.accent)));
     Font versionFont(&ff, 9, FontStyleRegular, UnitPixel);
     StringFormat versionFormat; versionFormat.SetAlignment(StringAlignmentFar); versionFormat.SetLineAlignment(StringAlignmentCenter);
     SolidBrush versionBrush(Color(210,255,255,255));
     g.DrawString(L"v" WH_MOD_VERSION, -1, &versionFont, RectF(0,(REAL)g_height-19,(REAL)g_width-12,14), &versionFormat, &versionBrush);
-    HDC screen = GetDC(nullptr);
-    POINT src{0,0}; SIZE size{pixelWidth,pixelHeight};
-    const BYTE opacity = static_cast<BYTE>(255 * g_settings.opacity / 100);
-    BLENDFUNCTION blend{AC_SRC_OVER,0,opacity,AC_SRC_ALPHA};
-    if (!UpdateLayeredWindow(g_hwnd,screen,nullptr,&size,g_renderDc,&src,0,&blend,ULW_ALPHA)) {
-        static bool logged = false;
-        if (!logged) {
-            Wh_Log(L"UpdateLayeredWindow failed, error=%u", GetLastError());
-            logged = true;
-        }
-    }
-    ReleaseDC(nullptr,screen);
+    PresentRenderSurface(pixelWidth, pixelHeight);
 }
 
 struct PromptData {
@@ -1448,12 +1409,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_LBUTTONDOWN: {
         g_ignoreNextButtonUp = false;
         POINT p=ToLogicalPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+        RECT capsule = CapsuleToggleRect();
+        if (PtInRect(&capsule, p)) {
+            TogglePanelExpanded();
+            return 0;
+        }
+        if (!g_panelExpanded) return 0;
         int mt = MediaTop(), cx = g_width - 102;
         int tile=HitTile(p);
         if(tile>=0){g_pressedTile=tile;g_tilePressPoint=p;g_reordering=false;SetCapture(hwnd);return 0;}
-        bool onMediaControl = p.y >= mt+6 && p.y <= mt+72 && p.x >= cx-58 && p.x <= cx+66;
-        bool onTimeline = p.y >= mt + 59 && p.y <= mt + 72 &&
-                          p.x >= 32 && p.x <= g_width - 32;
+        bool onMediaControl = p.y >= mt+10 && p.y <= mt+64 && p.x >= cx-58 && p.x <= cx+66;
+        RECT timeline = MediaTimelineRect();
+        bool onTimeline = PtInRect(&timeline, p);
         RECT previousPage=PreviousPageRect(),nextPage=NextPageRect();
         bool onPageControl=PtInRect(&previousPage,p)||PtInRect(&nextPage,p);
         if (!onMediaControl && !onTimeline && !onPageControl &&
@@ -1469,6 +1436,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
     case WM_MOUSEMOVE: {
+        POINT pointer = ToLogicalPoint(
+            {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+        RECT capsule = CapsuleToggleRect();
+        bool capsuleHover = PtInRect(&capsule, pointer) != FALSE;
+        if (capsuleHover != g_capsuleHover) {
+            g_capsuleHover = capsuleHover;
+            Render();
+        }
+        if (!g_panelExpanded) {
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&track);
+            return 0;
+        }
         if(g_pressedTile>=0){
             POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});
             if(abs(p.x-g_tilePressPoint.x)>7||abs(p.y-g_tilePressPoint.y)>7)g_reordering=true;
@@ -1503,7 +1483,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (hit != g_hover) { g_hover = hit; Render(); }
         TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,hwnd,0}; TrackMouseEvent(&t); return 0;
     }
-    case WM_MOUSELEAVE: g_hover = -1; Render(); return 0;
+    case WM_MOUSELEAVE:
+        g_hover = -1;
+        g_capsuleHover = false;
+        Render();
+        return 0;
     case WM_LBUTTONUP: {
         if(g_pressedTile>=0){
             int source=g_pressedTile;POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});int target=HitTile(p);
@@ -1517,13 +1501,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SaveWindowPosition();
             return 0;
         }
+        if (!g_panelExpanded) return 0;
         POINT p=ToLogicalPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}); int tile = HitTile(p);
         RECT prev=PreviousPageRect(),next=NextPageRect();
         if(PtInRect(&prev,p)){SwitchPage(-1);return 0;}if(PtInRect(&next,p)){SwitchPage(1);return 0;}
         if (tile >= 0) { LaunchSlot(tile); return 0; }
         int mt = MediaTop(), cx = g_width - 102;
-        if(p.y>=mt+59&&p.y<=mt+72&&p.x>=32&&p.x<=g_width-32){MediaSeek((p.x-32.0)/(g_width-64.0));return 0;}
-        if (p.y >= mt+6 && p.y <= mt+58) {
+        RECT timeline = MediaTimelineRect();
+        if(PtInRect(&timeline,p)){MediaSeek((p.x-32.0)/(g_width-64.0));return 0;}
+        if (p.y >= mt+10 && p.y <= mt+64) {
             if (p.x >= cx-58 && p.x < cx-20) MediaCommand(0);
             else if (p.x >= cx-20 && p.x < cx+28) MediaCommand(1);
             else if (p.x >= cx+28 && p.x <= cx+66) MediaCommand(2);
@@ -1534,8 +1520,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};ClientToScreen(hwnd,&screen);
         POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)}); int tile=HitTile(p);
         if(tile>=0){ShowTileContextMenu(tile,screen);return 0;}
-        int mt=MediaTop();
-        if(p.y>=mt&&p.y<=mt+76){
+        RECT mediaCard=MediaCardRect();
+        if(g_panelExpanded&&PtInRect(&mediaCard,p)){
             MediaState media;{std::lock_guard lock(g_mediaMutex);media=g_media;}
             HMENU sessions=CreatePopupMenu();AppendMenuW(sessions,MF_STRING,299,g_settings.french?L"Session automatique":L"Automatic session");
             for(size_t i=0;i<media.sessions.size()&&i<30;i++)AppendMenuW(sessions,MF_STRING,300+i,media.sessions[i].second.c_str());
@@ -1566,12 +1552,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
     case WM_MOUSEWHEEL:
+        if (!g_panelExpanded) return 0;
         if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
             ResizeTiles(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 4 : -4);
             return 0;
         }
-        {POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};POINT client=screen;ScreenToClient(hwnd,&client);client=ToLogicalPoint(client);int mt=MediaTop();
-        if(client.y>=mt&&client.y<=mt+76)ChangeMasterVolume(GET_WHEEL_DELTA_WPARAM(wParam)>0?0.05f:-0.05f);else SwitchPage(GET_WHEEL_DELTA_WPARAM(wParam)>0?-1:1);return 0;}
+        {POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};POINT client=screen;ScreenToClient(hwnd,&client);client=ToLogicalPoint(client);RECT mediaCard=MediaCardRect();
+        if(PtInRect(&mediaCard,client))ChangeMasterVolume(GET_WHEEL_DELTA_WPARAM(wParam)>0?0.05f:-0.05f);else SwitchPage(GET_WHEEL_DELTA_WPARAM(wParam)>0?-1:1);return 0;}
     case WM_TIMER:
         if(wParam==7){g_pageAnimation=std::min(1.0f,g_pageAnimation+0.12f);Render();if(g_pageAnimation>=1.0f)KillTimer(hwnd,7);}return 0;
     case WM_CAPTURECHANGED: g_dragging = false;g_pressedTile=-1;g_reordering=false; return 0;
@@ -2038,6 +2025,7 @@ BOOL WhTool_ModInit() {
     g_hInst = GetCurrentModuleHandle();
     InitializeStateFile();
     LoadSettings();
+    g_panelExpanded = !g_settings.startCollapsed;
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_mediaActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
