@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.9
+// @version         1.2.0
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -157,57 +157,57 @@ the window and the next one puts it back.
 | Action | Description |
 |--------|-------------|
 | Task View | Overview of all windows (Win+Tab) |
-| Switch to Last Window | Jump straight back to the previous window (Alt+Tab) |
-| Task Switcher | Persistent switcher you can click through (Ctrl+Alt+Tab) |
-| Virtual Desktop — Next / Previous / New | Move between or create desktops |
-| Close Virtual Desktop | Close the current desktop |
+| Switch to last window | Jump straight back to the previous window (Alt+Tab) |
+| Task switcher | Persistent switcher you can click through (Ctrl+Alt+Tab) |
+| Next / Previous / New virtual desktop | Move between or create desktops |
+| Close virtual desktop | Close the current desktop |
 
 **Windows**
 
 | Action | Description |
 |--------|-------------|
-| Show Desktop | Toggle desktop visibility |
-| Hide Other Windows | Minimize all except the active window (Win+Home) |
-| Minimize Active Window | Win+Down |
-| Maximize Active Window | Win+Up |
-| Snap Window Left / Right | Win+Left / Win+Right |
-| Close Active Window | Alt+F4 |
+| Show desktop | Toggle desktop visibility |
+| Hide other windows | Minimize all except the active window (Win+Home) |
+| Minimise window | Win+Down |
+| Maximise window | Win+Up |
+| Snap left / Snap right | Win+Left / Win+Right |
+| Close window | Alt+F4 |
 
 **System**
 
 | Action | Description |
 |--------|-------------|
-| Start Menu | Open the Start menu |
+| Start menu | Open the Start menu |
 | Search | Win+S |
 | Settings | Win+I |
 | File Explorer | Win+E |
 | Quick Settings | Win+A |
-| Notification Center | Win+N |
-| Clipboard History | Win+V |
-| Screenshot / Snip | Win+Shift+S |
-| Project / Second Screen | Win+P |
+| Notification Centre | Win+N |
+| Clipboard history | Win+V |
+| Screenshot | Win+Shift+S |
+| Project display | Win+P |
 | Task Manager | Open Task Manager |
-| Mute Volume | Toggle system mute |
+| Mute | Toggle system mute |
 
 **Power**
 
 | Action | Description |
 |--------|-------------|
-| Lock Computer | Lock the workstation instantly |
-| Lock and Turn Off Monitors | Lock, then blank the displays |
-| Keep Awake On / Off | Suspend or restore screensaver and sleep |
+| Lock | Lock the workstation instantly |
+| Lock and turn monitors off | Lock, then blank the displays |
+| Keep awake on / off | Suspend or restore screensaver and sleep |
 | Sleep | Put the computer to sleep |
-| Turn Off Monitors | Power off all displays |
-| Start Screen Saver | Activate the screen saver |
+| Turn monitors off | Power off all displays |
+| Start screensaver | Activate the screen saver |
 
 **Custom**
 
 | Action | Description |
 |--------|-------------|
-| Virtual Key Press | Send any key combination, or several in sequence |
-| Alternate Key Press | Two combinations, fired alternately (`Alt+S | Alt+H`) |
-| Alternate Command | Two commands, fired alternately |
-| Custom Command | Launch any executable, path, or URL |
+| Send key press | Send any key combination, or several in sequence |
+| Alternate key press | Two combinations, fired alternately (`Alt+S | Alt+H`) |
+| Alternate command | Two commands, fired alternately |
+| Custom command | Launch any executable, path, or URL |
 | Nothing | Disabled (default) |
 
 ### Arguments
@@ -742,7 +742,7 @@ enum class CornerAction
 // Zone IDs: 0-3 corners, then each edge as three independently configurable
 // segments running between the two corners it touches.
 //
-// Before 4.4 an edge was one zone plus an optional centre, so the two outer
+// An edge used to be one zone plus an optional centre, so the two outer
 // stretches always did the same thing. Splitting them into start/middle/end
 // makes every pattern expressible - ABC, AAB, ABB - and setting all three the
 // same gives one edge-wide zone, because BuildZoneSet coalesces neighbouring
@@ -777,6 +777,9 @@ enum Zone
 // Per-zone overrides. Every numeric field uses -1 for "inherit the global
 // value", so an untouched zone behaves exactly as it did before per-zone
 // settings existed and old configurations keep working unchanged.
+// Values for ZoneTuning::modifier and ModSettings::requireModifier.
+static constexpr int kModifierWin = 4;
+
 struct ZoneTuning
 {
     int size = -1;      // corner square / edge strip thickness, px
@@ -888,6 +891,10 @@ struct ZoneSet
     // them there; a second copy here would just be a second thing to keep
     // in step.
     bool disableDuringDrag = true;
+    // Carried only so RebuildZones can name them in the log it prints past its
+    // no-op check; detection never reads these.
+    int cornerSizeCfg = 0;
+    int edgeSizeCfg = 0;
 };
 
 // =====================================================================
@@ -1470,15 +1477,28 @@ static std::wstring ProcessNameOfWindow(HWND hwnd)
     if (!hProc)
         return L"";
 
-    WCHAR exePath[MAX_PATH];
-    DWORD pathLen = MAX_PATH;
-    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &pathLen);
+    // MAX_PATH is not the limit for a process image path, and the failure is
+    // silent in the worst way: QueryFullProcessImageNameW returns
+    // ERROR_INSUFFICIENT_BUFFER, this returns L"", and the Excluded
+    // applications list then never matches that process - while
+    // IsForegroundAppExcluded caches the empty answer until the foreground
+    // window changes.
+    std::wstring exePath(MAX_PATH, L'\0');
+    DWORD pathLen = (DWORD)exePath.size();
+    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath.data(), &pathLen);
+    if (!ok && GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+    {
+        exePath.assign(32768, L'\0');
+        pathLen = (DWORD)exePath.size();
+        ok = QueryFullProcessImageNameW(hProc, 0, exePath.data(), &pathLen);
+    }
     CloseHandle(hProc);
     if (!ok)
         return L"";
+    exePath.resize(pathLen);
 
-    const wchar_t *fileName = wcsrchr(exePath, L'\\');
-    return fileName ? fileName + 1 : exePath;
+    size_t slash = exePath.find_last_of(L'\\');
+    return slash == std::wstring::npos ? exePath : exePath.substr(slash + 1);
 }
 
 static bool IsShellUiWindow(HWND hwnd)
@@ -2097,42 +2117,42 @@ static const wchar_t *ActionToString(CornerAction a)
     case CornerAction::Nothing: return L"Nothing";
     case CornerAction::DisabledHere: return L"Disabled here";
     case CornerAction::SameAsEntry: return L"the same action again";
-    case CornerAction::ShowDesktop: return L"Show Desktop";
+    case CornerAction::ShowDesktop: return L"Show desktop";
     case CornerAction::TaskView: return L"Task View";
-    case CornerAction::ScreenSaver: return L"Screen Saver";
-    case CornerAction::MonitorsOff: return L"Turn Off Monitors";
+    case CornerAction::ScreenSaver: return L"Start screensaver";
+    case CornerAction::MonitorsOff: return L"Turn monitors off";
     case CornerAction::QuickSettings: return L"Quick Settings";
-    case CornerAction::NotificationCenter: return L"Notification Center";
-    case CornerAction::StartMenu: return L"Start Menu";
-    case CornerAction::HideOthers: return L"Hide Other Windows";
+    case CornerAction::NotificationCenter: return L"Notification Centre";
+    case CornerAction::StartMenu: return L"Start menu";
+    case CornerAction::HideOthers: return L"Hide other windows";
     case CornerAction::Mute: return L"Mute";
     case CornerAction::TaskManager: return L"Task Manager";
-    case CornerAction::Lock: return L"Lock Computer";
+    case CornerAction::Lock: return L"Lock";
     case CornerAction::Sleep: return L"Sleep";
-    case CornerAction::SwitchLastWindow: return L"Switch to Last Window";
-    case CornerAction::TaskSwitcher: return L"Task Switcher";
-    case CornerAction::MinimizeWindow: return L"Minimize Window";
-    case CornerAction::MaximizeWindow: return L"Maximize Window";
-    case CornerAction::SnapLeft: return L"Snap Left";
-    case CornerAction::SnapRight: return L"Snap Right";
-    case CornerAction::CloseWindow: return L"Close Window";
+    case CornerAction::SwitchLastWindow: return L"Switch to last window";
+    case CornerAction::TaskSwitcher: return L"Task switcher";
+    case CornerAction::MinimizeWindow: return L"Minimise window";
+    case CornerAction::MaximizeWindow: return L"Maximise window";
+    case CornerAction::SnapLeft: return L"Snap left";
+    case CornerAction::SnapRight: return L"Snap right";
+    case CornerAction::CloseWindow: return L"Close window";
     case CornerAction::FileExplorer: return L"File Explorer";
     case CornerAction::SettingsApp: return L"Settings";
     case CornerAction::Search: return L"Search";
-    case CornerAction::ClipboardHistory: return L"Clipboard History";
+    case CornerAction::ClipboardHistory: return L"Clipboard history";
     case CornerAction::Screenshot: return L"Screenshot";
-    case CornerAction::ProjectDisplay: return L"Project";
-    case CornerAction::VDesktopNext: return L"Virtual Desktop Next";
-    case CornerAction::VDesktopPrev: return L"Virtual Desktop Previous";
-    case CornerAction::VDesktopNew: return L"Virtual Desktop New";
-    case CornerAction::VDesktopClose: return L"Virtual Desktop Close";
-    case CornerAction::LockAndMonitorsOff: return L"Lock and Turn Off Monitors";
-    case CornerAction::KeepAwakeOn: return L"Keep Awake On";
-    case CornerAction::KeepAwakeOff: return L"Keep Awake Off";
-    case CornerAction::AlternateKeypress: return L"Alternate Key Press";
-    case CornerAction::AlternateCommand: return L"Alternate Command";
-    case CornerAction::SendKeypress: return L"Virtual Key Press";
-    case CornerAction::StartProcess: return L"Custom Command";
+    case CornerAction::ProjectDisplay: return L"Project display";
+    case CornerAction::VDesktopNext: return L"Next virtual desktop";
+    case CornerAction::VDesktopPrev: return L"Previous virtual desktop";
+    case CornerAction::VDesktopNew: return L"New virtual desktop";
+    case CornerAction::VDesktopClose: return L"Close virtual desktop";
+    case CornerAction::LockAndMonitorsOff: return L"Lock and turn monitors off";
+    case CornerAction::KeepAwakeOn: return L"Keep awake on";
+    case CornerAction::KeepAwakeOff: return L"Keep awake off";
+    case CornerAction::AlternateKeypress: return L"Alternate key press";
+    case CornerAction::AlternateCommand: return L"Alternate command";
+    case CornerAction::SendKeypress: return L"Send key press";
+    case CornerAction::StartProcess: return L"Custom command";
     }
     return L"Unknown";
 }
@@ -2324,6 +2344,37 @@ static bool SameZoneConfig(const ZoneConfig *a, const ZoneConfig *b)
            x.modifier == y.modifier;
 }
 
+// Both the zone builder and the dashboard need the *effective* size, not the
+// configured one, and they used to disagree: the panel printed the number from
+// the settings under a column headed IN EFFECT while the zone actually fired at
+// the clamped size. One function, called from both.
+static int ClampZoneSize(int requested, int span)
+{
+    int v = requested < 1 ? 1 : requested;
+    if (v > span / 2)
+        v = span / 2;
+    return v < 1 ? 1 : v;
+}
+
+// The two corners an edge runs between; its thickness can never exceed the
+// smaller of them, which is the rule that keeps all sixteen zones disjoint.
+static bool EdgeCorners(Zone z, Zone out[2])
+{
+    switch (z)
+    {
+    case ZONE_TOP_START: case ZONE_TOP_MIDDLE: case ZONE_TOP_END:
+        out[0] = ZONE_TOP_LEFT;    out[1] = ZONE_TOP_RIGHT;    return true;
+    case ZONE_BOTTOM_START: case ZONE_BOTTOM_MIDDLE: case ZONE_BOTTOM_END:
+        out[0] = ZONE_BOTTOM_LEFT; out[1] = ZONE_BOTTOM_RIGHT; return true;
+    case ZONE_LEFT_START: case ZONE_LEFT_MIDDLE: case ZONE_LEFT_END:
+        out[0] = ZONE_TOP_LEFT;    out[1] = ZONE_BOTTOM_LEFT;  return true;
+    case ZONE_RIGHT_START: case ZONE_RIGHT_MIDDLE: case ZONE_RIGHT_END:
+        out[0] = ZONE_TOP_RIGHT;   out[1] = ZONE_BOTTOM_RIGHT; return true;
+    default:
+        return false;
+    }
+}
+
 // Caller must hold g_settingsLock.
 static const ZoneConfig *ResolveZone(const MonitorInfo &mon, Zone zone)
 {
@@ -2402,13 +2453,7 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
         {
             const ZoneConfig *zc = zoneCfg(z);
             int v = (zc && zc->tuning.size > 0) ? zc->tuning.size : fallback;
-            if (v < 1)
-                v = 1;
-            if (v > span / 2)
-                v = span / 2;
-            if (v < 1)
-                v = 1;
-            return v;
+            return ClampZoneSize(v, span);
         };
 
         int csTL = sizeOf(ZONE_TOP_LEFT, csCfg);
@@ -2592,19 +2637,12 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
     }
     LeaveCriticalSection(&g_settingsLock);
 
-    if (set->zones.empty())
-    {
-        Wh_Log(L"No zones are active - every zone is set to \"Nothing\", or "
-               L"no configuration matches a connected monitor.");
-    }
-    else
-    {
-        Wh_Log(L"Active zones (%d)   corner %dpx, edge %dpx:",
-               (int)set->zones.size(), csCfg, esCfg);
-        for (const auto &z : set->zones)
-            Wh_Log(L"   %s", z.label.c_str());
-    }
-
+    // Deliberately not logged here. An SPI_SETWORKAREA burst calls this once
+    // per broadcast and the result is usually identical, so logging at build
+    // time repeated the whole zone list several times for a change nobody made.
+    // RebuildZones logs past its no-op check instead.
+    set->cornerSizeCfg = csCfg;
+    set->edgeSizeCfg = esCfg;
     return set;
 }
 
@@ -2673,6 +2711,20 @@ static void RebuildZones()
     LeaveCriticalSection(&g_zonesLock);
     if (SameZoneSet(current.get(), set.get()))
         return;
+
+    // Past the no-op check, so this describes a change that actually happened.
+    if (set->zones.empty())
+    {
+        Wh_Log(L"No zones are active - every zone is set to \"Nothing\", or "
+               L"no configuration matches a connected monitor.");
+    }
+    else
+    {
+        Wh_Log(L"Active zones (%d)   corner %dpx, edge %dpx:",
+               (int)set->zones.size(), set->cornerSizeCfg, set->edgeSizeCfg);
+        for (const auto &z : set->zones)
+            Wh_Log(L"   %s", z.label.c_str());
+    }
 
     // The state reset below forgets which zone was held, so let go first while
     // the old set is still the one those indices refer to.
@@ -2880,6 +2932,25 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             // Calling an empty std::function throws, and an exception escaping
             // this thread would kill it silently — every zone would stop
             // working with no indication why.
+            // The Start-menu mask in SendKeys only covers actions that go
+            // through it. Lock, Sleep, Task Manager, Custom command and the
+            // Keep awake pair never do, so on a Win-guarded zone the user's
+            // Win key-down stayed unmatched and letting go opened Start - the
+            // same behaviour SendKeys exists to suppress, on the other half of
+            // the action list. One tap here makes it uniform. Ctrl alone does
+            // nothing, and a second tap for a key-based action is harmless.
+            if (job.modifier == kModifierWin &&
+                ((GetAsyncKeyState(VK_LWIN) & 0x8000) ||
+                 (GetAsyncKeyState(VK_RWIN) & 0x8000)))
+            {
+                INPUT tap[2] = {};
+                tap[0].type = INPUT_KEYBOARD;
+                tap[0].ki.wVk = VK_CONTROL;
+                tap[1] = tap[0];
+                tap[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(2, tap, sizeof(INPUT));
+            }
+
             if (job.exec)
                 job.exec();
 
@@ -3247,6 +3318,13 @@ static DWORD g_dwTrayThreadId = 0;
 static std::atomic<HWND> g_hTrayWnd{nullptr};
 static UINT g_taskbarCreatedMsg = 0;
 static constexpr UINT WM_APP_TRAY = WM_APP + 10;
+
+// Posted so the icon is always rebuilt on the tray thread. MakeTrayIcon reads
+// GetSystemMetrics(SM_CXSMICON), which is DPI-context sensitive, and
+// WhTool_ModSettingsChanged runs on Windhawk's thread in whatever context that
+// happens to be - which is what pinning the tray thread was for. It also keeps
+// Shell_NotifyIcon, which round-trips to the shell, off that thread.
+static constexpr UINT WM_APP_TRAY_REFRESH = WM_APP + 11;
 static constexpr UINT_PTR kTrayIconId = 1;
 // Fires once when a suspension expires, purely so the icon stops saying
 // "paused". Detection needs no timer - it re-reads the deadline every tick.
@@ -3479,7 +3557,7 @@ static void UpdateTrayIcon(bool add)
 //   2. Otherwise, settings supply the globals and no zones are active.
 //
 // There used to be a step between the two for a zone layout saved before the
-// settings page existed. That migration path was removed in 4.4.4 and the
+// settings page existed. That migration path is gone and the
 // value store now holds nothing but the enable flag.
 
 static int ParseZoneName(const std::wstring &s)
@@ -3605,9 +3683,12 @@ static std::vector<MonitorZoneConfig> ReadSettingsZones()
                 GetSettingStr(L"displays[%d].zones[%d].releaseArgs", i, z);
             cfg.zones[zi].releaseAction = rel;
             cfg.zones[zi].releaseArgs = relArgs;
-            if (rel == CornerAction::SameAsEntry)
-                cfg.zones[zi].releaseExecutor = MakeExecutor(act, args);
-            else if (rel != CornerAction::Nothing)
+            // Nothing is built for SameAsEntry on purpose: BuildZoneSet
+            // substitutes the entry executor for that case, so a second one
+            // would never be read - and for an Alternate entry it would carry
+            // its own flip flag, which is the drift that substitution fixed.
+            if (rel != CornerAction::Nothing &&
+                rel != CornerAction::SameAsEntry)
                 cfg.zones[zi].releaseExecutor = MakeExecutor(rel, relArgs);
             cfg.zones[zi].tuning.size =
                 Wh_GetIntSetting(L"displays[%d].zones[%d].size", i, z);
@@ -4484,11 +4565,17 @@ static void DashBuildSnapshot(DashState *s)
     std::vector<MonitorZoneConfig> cfgs;
     {
         EnterCriticalSection(&g_settingsLock);
-        cfgs = g_settings.monitorConfigs;
+        // One deep copy, not two. Copying g_settings already duplicates every
+        // configuration - each with its std::function executors and strings -
+        // so take the copy and then steal that vector out of it, rather than
+        // copying monitorConfigs separately and clearing the duplicate
+        // afterwards. The detection thread can be waiting on this lock inside
+        // BuildZoneSet, and the second pass was paid for with its latency.
         s->globals = g_settings;
+        cfgs = std::move(s->globals.monitorConfigs);
         LeaveCriticalSection(&g_settingsLock);
     }
-    s->globals.monitorConfigs.clear();   // not needed, and it is not small
+    s->globals.monitorConfigs.clear();   // moved-from, but say so explicitly
 
     if (snap)
     {
@@ -4803,7 +4890,6 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
                 // Getting this backwards puts the whole label outside its own
                 // strip, where the clip rect shears it in half and it reads as
                 // two labels colliding. Rendered rather than reasoned about:
-                // scripts/probe-vtext.cpp draws all three candidates.
                 TextOutW(hdc, cx - ts.cy / 2, cy + ts.cx / 2, lab.c_str(),
                          (int)lab.size());
                 SelectClipRgn(hdc, nullptr);
@@ -5018,6 +5104,40 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
                 from = (owner == zone) ? L"this zone"
                                        : std::wstring(L"whole edge, set on ") +
                                              ZoneToString((Zone)owner);
+            }
+        }
+
+        // Report what the zone will actually use, not what was typed. Both
+        // clamps below are applied by BuildZoneSet before anything fires, so
+        // without them an edge thickness of 40 next to 6 px corners printed
+        // "40 px" under a column headed IN EFFECT - in the one place a user
+        // goes to ask why a zone is not the size they set.
+        if (i == 0 && dv.width > 0 && dv.height > 0)
+        {
+            int span = dv.width < dv.height ? dv.width : dv.height;
+            int effective = ClampZoneSize(value, span);
+
+            Zone corners[2];
+            if (EdgeCorners((Zone)zone, corners))
+            {
+                int cap = span;
+                for (Zone c : corners)
+                {
+                    int cs = dv.zones[c].tuning.size > 0
+                                 ? dv.zones[c].tuning.size
+                                 : s->globals.cornerSize;
+                    cs = ClampZoneSize(cs, span);
+                    if (cs < cap)
+                        cap = cs;
+                }
+                if (effective > cap)
+                    effective = cap;
+            }
+
+            if (effective != value)
+            {
+                from += L", clamped";
+                value = effective;
             }
         }
 
@@ -5511,6 +5631,11 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         HandleTrayCommand(LOWORD(wParam));
         return 0;
     }
+    if (uMsg == WM_APP_TRAY_REFRESH)
+    {
+        UpdateTrayIcon(wParam != 0);
+        return 0;
+    }
     // The suspension has run out; repaint the icon so it stops saying "paused".
     if (uMsg == WM_TIMER && wParam == kSuspendTimerId)
     {
@@ -5633,7 +5758,8 @@ BOOL WhTool_ModInit()
 void WhTool_ModSettingsChanged()
 {
     ReloadConfig();
-    UpdateTrayIcon(false);
+    if (HWND hTray = g_hTrayWnd.load())
+        PostMessage(hTray, WM_APP_TRAY_REFRESH, 0, 0);
     // The zone rebuild has to happen on the detection thread, which owns the
     // DPI context and the monitor list. Post, never send — Windhawk's thread
     // must not block on ours.
@@ -5677,9 +5803,20 @@ void WhTool_ModUninit()
     // that thread never waits on anything Windhawk's thread holds.
     if (HWND hDetect = g_hDetectWnd.load())
     {
+        // The detection thread only dispatches sent messages when it comes
+        // back round to PeekMessage - WaitForSingleObject does not pump them -
+        // so this budget has to cover a tick that happens to be inside
+        // RebuildZones (QueryDisplayConfig with up to three attempts, an
+        // EnumDisplayMonitors, a DisplayConfigGetDeviceInfo pair per path).
+        // 500 ms could expire in there, and losing this message strands exactly
+        // the peeked desktop it exists to restore. 2 s still fits inside the
+        // 3 s join budget below.
         DWORD_PTR unused = 0;
-        SendMessageTimeout(hDetect, WM_APP_RELEASE_HOLD, 0, 0,
-                           SMTO_ABORTIFHUNG, 500, &unused);
+        if (!SendMessageTimeout(hDetect, WM_APP_RELEASE_HOLD, 0, 0,
+                                SMTO_ABORTIFHUNG, 2000, &unused))
+        {
+            Wh_Log(L"Hold release timed out; a held zone may not be undone");
+        }
     }
 
     if (g_hStopEvent)
