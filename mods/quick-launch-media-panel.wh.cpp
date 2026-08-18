@@ -90,7 +90,7 @@ permet également de l'exporter ou de l'importer.
   $options:
     - en-US: English (US)
     - fr: Français
-- startCollapsed: true
+- startCollapsed: false
   $name: Start collapsed
   $name:fr-FR: Démarrer sous forme de capsule
   $description: The panel starts as a small capsule. Click it to open the panel.
@@ -301,7 +301,7 @@ struct Settings {
     int count = 4, columns = 4, tile = 64, gap = 12, offsetY = 18;
     int opacity = 94, radius = 26, pageCount = 3, capsuleWidth = 176;
     bool labels = true, cursorMonitor = false, french = false, perMonitorLayouts = false;
-    bool lockPosition = false, animations = true, startCollapsed = true;
+    bool lockPosition = false, animations = true, startCollapsed = false;
     TileShape tileShape = TileShape::Rounded;
     AutoThemeSource autoThemeSource = AutoThemeSource::System;
     std::wstring requestedTheme = L"midnight";
@@ -315,6 +315,7 @@ struct MediaState {
     std::wstring title, artist, sourceId;
     int64_t startTicks = 0, positionTicks = 0, endTicks = 0;
     std::vector<uint8_t> artwork;
+    uint64_t artworkHash = 0;
     std::vector<std::pair<std::wstring, std::wstring>> sessions;
 };
 
@@ -335,6 +336,8 @@ std::array<ShortcutData, kMaxShortcuts> g_shortcuts;
 std::array<HICON, kMaxShortcuts> g_icons{};
 [[clang::no_destroy]] std::array<std::unique_ptr<Bitmap>, kMaxShortcuts>
     g_iconBitmaps;
+[[clang::no_destroy]] std::unique_ptr<Bitmap> g_artworkBitmap;
+uint64_t g_artworkBitmapHash = 0;
 std::array<HWND, kMaxShortcuts> g_runningWindows{};
 std::array<wchar_t, 32768> g_processPathBuffer{};
 HINSTANCE g_hInst = nullptr;
@@ -404,6 +407,7 @@ void EnsurePanelWindow();
 void DestroyRenderSurface();
 bool RefreshRunningWindows();
 std::wstring ResolveExecutable(const std::wstring& path);
+uint64_t ByteHash(const std::vector<uint8_t>& bytes);
 
 int Clamp(int value, int lo, int hi) { return std::max(lo, std::min(hi, value)); }
 
@@ -981,14 +985,49 @@ void DrawCentered(Graphics& g, const std::wstring& text, RectF rect, float size,
     SolidBrush brush(color); g.DrawString(text.c_str(), -1, &font, rect, &format, &brush);
 }
 
-bool DrawImageBytes(Graphics& g, const std::vector<uint8_t>& bytes, const RectF& rect) {
-    if(bytes.empty()) return false;
-    HGLOBAL memory=GlobalAlloc(GMEM_MOVEABLE,bytes.size());if(!memory)return false;
-    void* target=GlobalLock(memory);memcpy(target,bytes.data(),bytes.size());GlobalUnlock(memory);
-    IStream* stream=nullptr;if(FAILED(CreateStreamOnHGlobal(memory,TRUE,&stream))){GlobalFree(memory);return false;}
-    bool ok=false;{
-        Bitmap bitmap(stream);if(bitmap.GetLastStatus()==Ok){g.DrawImage(&bitmap,rect);ok=true;}
-    }stream->Release();return ok;
+std::unique_ptr<Bitmap> DecodeArtworkBitmap(
+    const std::vector<uint8_t>& bytes) {
+    if (bytes.empty()) return nullptr;
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+    if (!memory) return nullptr;
+    void* target = GlobalLock(memory);
+    if (!target) {
+        GlobalFree(memory);
+        return nullptr;
+    }
+    memcpy(target, bytes.data(), bytes.size());
+    GlobalUnlock(memory);
+    IStream* stream = nullptr;
+    if (FAILED(CreateStreamOnHGlobal(memory, TRUE, &stream))) {
+        GlobalFree(memory);
+        return nullptr;
+    }
+    std::unique_ptr<Bitmap> decoded;
+    {
+        Bitmap source(stream);
+        if (source.GetLastStatus() == Ok && source.GetWidth() > 0 &&
+            source.GetHeight() > 0) {
+            decoded.reset(source.Clone(0, 0, source.GetWidth(),
+                                       source.GetHeight(),
+                                       PixelFormat32bppPARGB));
+            if (decoded && decoded->GetLastStatus() != Ok) decoded.reset();
+        }
+    }
+    stream->Release();
+    return decoded;
+}
+
+void RefreshArtworkBitmap() {
+    std::vector<uint8_t> bytes;
+    uint64_t hash = 0;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        hash = g_media.artworkHash;
+        if (hash == g_artworkBitmapHash) return;
+        bytes = g_media.artwork;
+    }
+    g_artworkBitmap = DecodeArtworkBitmap(bytes);
+    g_artworkBitmapHash = hash;
 }
 
 COLORREF AverageBitmap(Bitmap& bitmap, COLORREF fallback) {
@@ -1260,7 +1299,18 @@ void Render() {
                     17.5f, Color(34,255,255,255), 1.0f);
     RoundRectFill(g, RectF(22, (REAL)mt+18, 3, 42), 1.5f,
                   Color(220, GetRValue(g_settings.accent), GetGValue(g_settings.accent), GetBValue(g_settings.accent)));
-    MediaState media; { std::lock_guard lock(g_mediaMutex); media = g_media; }
+    MediaState media;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        media.available = g_media.available;
+        media.playing = g_media.playing;
+        media.title = g_media.title;
+        media.artist = g_media.artist;
+        media.sourceId = g_media.sourceId;
+        media.startTicks = g_media.startTicks;
+        media.positionTicks = g_media.positionTicks;
+        media.endTicks = g_media.endTicks;
+    }
     std::wstring title = media.available
         ? (media.title.empty() ? (g_settings.french ? L"Lecture en cours" : L"Now playing") : media.title)
         : (g_settings.french ? L"Aucun m\u00E9dia actif" : L"No active media");
@@ -1270,7 +1320,10 @@ void Render() {
     FontFamily ff(L"Segoe UI"); Font titleFont(&ff, 13, FontStyleBold, UnitPixel), artistFont(&ff, 11, FontStyleRegular, UnitPixel);
     SolidBrush white(Color(235,245,246,250)), muted(Color(150,190,195,205));
     float textX=34;
-    if(DrawImageBytes(g,media.artwork,RectF(31,(REAL)mt+10,52,52))) textX=94;
+    if (g_artworkBitmap && g_artworkBitmap->GetLastStatus() == Ok) {
+        g.DrawImage(g_artworkBitmap.get(), RectF(31, (REAL)mt + 10, 52, 52));
+        textX = 94;
+    }
     g.DrawString(title.c_str(), -1, &titleFont, RectF(textX,(REAL)mt+12,(REAL)g_width-textX-154,22), &left, &white);
     g.DrawString(artist.c_str(), -1, &artistFont, RectF(textX,(REAL)mt+35,(REAL)g_width-textX-154,18), &left, &muted);
     int cx = g_width - 102;
@@ -1745,11 +1798,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if(tile>=0){ShowTileContextMenu(tile,screen);return 0;}
         RECT mediaCard=MediaCardRect();
         if(g_panelExpanded&&PtInRect(&mediaCard,p)){
-            MediaState media;{std::lock_guard lock(g_mediaMutex);media=g_media;}
+            std::vector<std::pair<std::wstring, std::wstring>> sessionsList;
+            {std::lock_guard lock(g_mediaMutex);sessionsList=g_media.sessions;}
             HMENU sessions=CreatePopupMenu();AppendMenuW(sessions,MF_STRING,299,g_settings.french?L"Session automatique":L"Automatic session");
-            for(size_t i=0;i<media.sessions.size()&&i<30;i++)AppendMenuW(sessions,MF_STRING,300+i,media.sessions[i].second.c_str());
+            for(size_t i=0;i<sessionsList.size()&&i<30;i++)AppendMenuW(sessions,MF_STRING,300+i,sessionsList[i].second.c_str());
             int command=ShowPopupMenu(sessions,screen);DestroyMenu(sessions);
-            {std::lock_guard lock(g_mediaMutex);if(command==299)g_selectedMediaSession.clear();else if(command>=300&&static_cast<size_t>(command-300)<media.sessions.size())g_selectedMediaSession=media.sessions[command-300].first;}
+            {std::lock_guard lock(g_mediaMutex);if(command==299)g_selectedMediaSession.clear();else if(command>=300&&static_cast<size_t>(command-300)<sessionsList.size())g_selectedMediaSession=sessionsList[command-300].first;}
             return 0;
         }
         HMENU menu = CreatePopupMenu();
@@ -1786,6 +1840,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if(wParam==7){g_pageAnimation=std::min(1.0f,g_pageAnimation+0.12f);Render();if(g_pageAnimation>=1.0f)KillTimer(hwnd,7);}return 0;
     case WM_CAPTURECHANGED: g_dragging = false;g_pressedTile=-1;g_reordering=false; return 0;
     case WM_APP_MEDIA: {
+        RefreshArtworkBitmap();
         if(g_settings.autoThemeSource==AutoThemeSource::Media)ApplyAutomaticTheme();
         Render();return 0;
     }
@@ -1872,7 +1927,11 @@ void EnsurePanelWindow() {
 }
 
 void ReloadSettingsOnUiThread() {
+    const bool previousStartCollapsed = g_settings.startCollapsed;
     LoadSettings();
+    if (g_settings.startCollapsed != previousStartCollapsed) {
+        g_panelExpanded = !g_settings.startCollapsed;
+    }
     if (!StateFile().empty()) {
         WritePrivateProfileStringW(L"ui", L"tileSize", nullptr,
                                    StateFile().c_str());
@@ -2018,6 +2077,8 @@ DWORD WINAPI UiThreadProc(void*) {
         g_sinkWnd = nullptr;
     }
     DestroyIcons();
+    g_artworkBitmap.reset();
+    g_artworkBitmapHash = 0;
     DestroyRenderSurface();
     UnregisterClassW(kPromptClassName, g_hInst);
     UnregisterClassW(kSinkClassName, g_hInst);
@@ -2154,10 +2215,14 @@ MediaState ReadMediaState(const MediaManager& manager) {
         if (g_media.title == next.title && g_media.artist == next.artist &&
             g_media.sourceId == next.sourceId && !g_media.artwork.empty()) {
             next.artwork = g_media.artwork;
+            next.artworkHash = g_media.artworkHash;
             reuseArtwork = true;
         }
     }
-    if (!reuseArtwork) next.artwork = ReadArtwork(properties.Thumbnail());
+    if (!reuseArtwork) {
+        next.artwork = ReadArtwork(properties.Thumbnail());
+        next.artworkHash = ByteHash(next.artwork);
+    }
     return next;
 }
 
@@ -2184,11 +2249,10 @@ bool MediaVisualStateChanged(const MediaState& before,
         before.playing != after.playing || before.title != after.title ||
         before.artist != after.artist || before.sourceId != after.sourceId ||
         MediaProgressBucket(before) != MediaProgressBucket(after) ||
-        before.artwork.size() != after.artwork.size()) {
+        before.artworkHash != after.artworkHash) {
         return true;
     }
-    return !before.artwork.empty() &&
-           ByteHash(before.artwork) != ByteHash(after.artwork);
+    return false;
 }
 
 DWORD WINAPI MediaThreadProc(void*) {
