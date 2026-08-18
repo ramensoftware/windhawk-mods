@@ -7,6 +7,11 @@
 // @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
+// @exclude         systemsettings.exe
+// @exclude         applicationframehost.exe
+// @exclude         startmenuexperiencehost.exe
+// @exclude         searchhost.exe
+// @exclude         shellexperiencehost.exe
 // @compilerOptions -ldwmapi -luser32
 // ==/WindhawkMod==
 
@@ -39,8 +44,9 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
 
 ## Notes
-- UWP/WinUI windows (`ApplicationFrameWindow`, WinUI 3, XAML islands) are automatically detected and skipped to avoid conflicts
-- Windows whose caption colour is set by the application itself have that colour left untouched; only the dark/light mode is kept in sync
+- Custom colours are enabled by default in v1.2.0 (`#FFFFFF`/`#E6E6E6` for light mode, `#000000`/`#202020` for dark mode)
+- UWP/WinUI windows (`ApplicationFrameWindow`, WinUI 3, XAML islands) and core shell hosts are automatically skipped to avoid conflicts
+- Windows whose caption colour is set by the application itself while the mod is loaded have that colour left untouched; only the dark/light mode is kept in sync
 - Visual attributes apply seamlessly on window activation and theme changes
 */
 // ==/WindhawkModReadme==
