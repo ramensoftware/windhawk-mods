@@ -2,11 +2,10 @@
 // @id              win-vista-and-7-welcome-center
 // @name            Windows Vista/7 Welcome Center
 // @description     This mod restores the Windows Vista Welcome Center with an optional Windows 7 Getting Started skin on Windows 10 and 11
-// @version         1.0.1
+// @version         1.0.2
 // @author          Cips
 // @github          https://github.com/Cips35
 // @license         MIT
-// @include         explorer.exe
 // @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -lgdiplus -lcomctl32 -lshell32 -lpropsys -lole32 -loleaut32 -luuid -lshlwapi -ladvapi32 -lgdi32 -luser32 -lsecur32
@@ -21,31 +20,32 @@ and Windows 11 (including 25H2 and later). The default Vista appearance can be
 switched to a Windows 7 **Getting Started** skin in the mod settings. It does
 **not** replace, patch, or write any system files.
 
+![Windows 7 Getting Started](https://raw.githubusercontent.com/Cips35/windhawk-mods/main/screenshots/welcome-center-windows7.png)
+
+![Windows Vista Welcome Center](https://raw.githubusercontent.com/Cips35/windhawk-mods/main/screenshots/welcome-center-vista.png)
+
 ## How to open it
 
-The mod is **on-demand by default** (nothing pops up at logon). Its lightweight
-Explorer host still loads so the tray icon, hotkey, shortcuts, and Control Panel
-entry remain available; **Run at startup** controls only whether the main window
-opens automatically.
+The mod is a **tool mod**: it runs in a dedicated `windhawk.exe` process and
+does not inject into Explorer. It is **on-demand by default** (nothing pops up
+at logon). **Run at startup** controls only whether the main window opens
+automatically.
 
 - Left-click the tray icon
 - Press the hotkey (default `Ctrl+Alt+W`)
-- Start Menu: search **Welcome Center** (or **Getting Started** with the Windows 7 skin)
-- Control Panel → System and Security → **Welcome Center** / **Getting Started**
-  (also All Control Panel Items, or `control.exe /name Windhawk.VistaWelcomeCenter`)
 - Check **Run at startup** in the window footer if you want the classic
   every-logon behavior
 
 The window has its own taskbar button instead of grouping under File Explorer.
-Both appearances now use the authentic Vista `CP003` application icon for the
-window, taskbar, tray, shortcuts, and Control Panel. The former Windows 7 main
-monitor icon is used by **View computer details**. The window still opens at
-the original Welcome Center size. Hovering a task previews it in
-the header only while no task is selected. Clicking a task once selects and
-locks that preview, so later hover targets cannot replace it. Click empty space
-to clear the selection and restore hover previews and the default PC
-information. Use **View → Full screen** (`F11`) or the maximize button for a
-larger view. A scrollbar appears when the task tiles do not fit.
+Both appearances use the authentic Vista `CP003` application icon for the
+window, taskbar, and tray. The former Windows 7 main monitor icon is used by
+**View computer details**. The window still opens at the original Welcome Center
+size. Hovering a task previews it in the header only while no task is selected.
+Clicking a task once selects and locks that preview, so later hover targets
+cannot replace it. Click empty space to clear the selection and restore hover
+previews and the default PC information. Use **View → Full screen** (`F11`) or
+the maximize button for a larger view. A scrollbar appears when the task tiles
+do not fit.
 
 ## Languages
 
@@ -53,8 +53,7 @@ By default, the interface follows the Windows display language. A Windhawk
 setting can override it with English, French, Italian, German, Simplified or
 Traditional Chinese, Hindi, Japanese, Korean, Dutch, Russian, Turkish, Arabic,
 or Spanish. Arabic uses a mirrored right-to-left layout. Window content, task
-text, menus, dialogs, tray text, shortcuts, and the Control Panel item are
-localized. Descriptive task text uses natural, complete phrasing where space
+text, menus, dialogs, and tray text are localized. Descriptive task text uses natural, complete phrasing where space
 permits, while compact titles, menus, and buttons remain intentionally brief.
 Microsoft Support opens the matching locale-specific support URL; all web
 access remains blocked unless **Allow online offers** is enabled.
@@ -81,12 +80,13 @@ Thanks to **babamohammed2022** for inspiration, bug testing, and code suggestion
 
 ## Safety
 
-- UI is hosted in `explorer.exe` so the tray icon and Control Panel item
-  actually appear. Control Panel and shortcuts only signal that window (they
-  do not open Explorer, Windhawk, or a PowerShell console). A dedicated
-  `windhawk.exe` tool process is still used as a fallback. A single-instance
-  mutex prevents two windows.
-- Unloads cleanly; survives Explorer restarts via `TaskbarCreated`
+- Runs only as a Windhawk tool mod in a dedicated `windhawk.exe` process. It
+  does not inject into Explorer and does not ship or write any helper
+  executable.
+- Unloads cleanly after the UI thread exits; the tray icon is removed and
+  leftover files from earlier builds (Start Menu / desktop shortcuts, Control
+  Panel registration, `%LOCALAPPDATA%\\WelcomeCenter`) are deleted.
+- Survives Explorer restarts via `TaskbarCreated`
 - No elevation, no writes under `%SystemRoot%`, no network unless opted in
 - Refuses to start if the native `%SystemRoot%\\System32\\control.exe` is
   missing, unreadable, empty, or not a valid PE image
@@ -106,7 +106,6 @@ the names. You can also set **Custom resource folder**.
 | `user-frame.png` | Account-picture glass frame |
 | `app.png` / `app.ico` | Optional override for the window, tray, shortcut, and Control Panel icon in both skins |
 | `personalize.png`, `power.png`, `sound.png`, `ease.png`, `transfer.png`, `default-programs.png`, `surf.png`, `details.png`, `store.png` | Task tiles |
-| `WelcomeCenter.exe` / `launcher.exe` | Optional shortcut target (PE only; not overwritten) |
 
 Only image/ICO/PE files inside those folders are used as artwork. No artwork
 is loaded from `%SystemRoot%`, and nothing is written there. Startup only
@@ -171,16 +170,7 @@ verify that classic Control Panel exists.
   $description: "Combination that shows Welcome Center (Ctrl+Alt+W, Win+Alt+W, Ctrl+Shift+F1). Leave empty to disable."
 - runAtStartup: false
   $name: Open window at startup
-  $description: Show the Welcome Center window at logon. When off, the background host remains available for the tray icon, hotkey, shortcuts, and Control Panel, but the window stays closed. Saving this Windhawk setting takes precedence over an earlier in-window checkbox choice.
-- createStartMenuShortcut: true
-  $name: Create Start Menu shortcut
-  $description: Places Welcome Center.lnk or Getting Started.lnk in your personal Start Menu, matching the selected appearance.
-- createControlPanelItem: true
-  $name: Add to Control Panel
-  $description: Registers Welcome Center under System and Security for this user only (HKCU). Removed when the mod is disabled.
-- createDesktopShortcut: false
-  $name: Create desktop shortcut
-  $description: Off by default. When enabled, places a Welcome Center or Getting Started shortcut on your desktop, matching the selected appearance.
+  $description: Show the Welcome Center window at logon. When off, the background host remains available for the tray icon and hotkey, but the window stays closed. Saving this Windhawk setting takes precedence over an earlier in-window checkbox choice.
 - showOffers: true
   $name: Show Offers from Microsoft
   $description: Second section with remapped Microsoft links.
@@ -238,6 +228,7 @@ verify that classic Control Panel exists.
 #include <vector>
 #include <cstring>
 #include <exception>
+#include <optional>
 
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
@@ -2266,9 +2257,6 @@ struct Settings {
     WindowsVersionText windowsVersionText = WindowsVersionText::Detected;
     bool showTrayIcon = true;
     bool runAtStartup = false;
-    bool createStartMenuShortcut = true;
-    bool createControlPanelItem = true;
-    bool createDesktopShortcut = false;
     bool showOffers = true;
     bool allowOnlineOffers = false;
     bool preferClassicCpl = false;
@@ -2444,9 +2432,6 @@ static Settings LoadSettings() {
         }
     }
     s.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
-    s.createStartMenuShortcut = Wh_GetIntSetting(L"createStartMenuShortcut") != 0;
-    s.createControlPanelItem = Wh_GetIntSetting(L"createControlPanelItem") != 0;
-    s.createDesktopShortcut = Wh_GetIntSetting(L"createDesktopShortcut") != 0;
     s.showOffers = Wh_GetIntSetting(L"showOffers") != 0;
     s.allowOnlineOffers = Wh_GetIntSetting(L"allowOnlineOffers") != 0;
     s.preferClassicCpl = Wh_GetIntSetting(L"preferClassicCpl") != 0;
@@ -2519,7 +2504,7 @@ static bool LaunchShell(HWND owner, const wchar_t* file, const wchar_t* params) 
     }
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_FLAG_DDEWAIT | SEE_MASK_NOASYNC;
+    sei.fMask = SEE_MASK_FLAG_NO_UI;
     sei.hwnd = owner;
     sei.lpVerb = L"open";
     sei.lpFile = file;
@@ -13841,7 +13826,10 @@ struct App {
     Gdiplus::Bitmap* mediaPlayerIconBmp = nullptr;
 };
 
-static App g;
+[[clang::no_destroy]] static std::optional<App> g_app;
+#define g (*g_app)
+
+static HANDLE g_stopEvent = nullptr;
 
 static HICON GetAppHicon();
 
@@ -19046,7 +19034,18 @@ static constexpr DWORD kMaxAssetBytes = 8u * 1024u * 1024u;
 static constexpr DWORD kMaxLauncherBytes = 2u * 1024u * 1024u;
 
 static Gdiplus::Bitmap* LoadPngFromBase64(const char* b64);
-static bool GetWelcomeCenterDir(wchar_t* dir, size_t cch);
+static bool GetWelcomeCenterDir(wchar_t* dir, size_t cch) {
+    if (!dir || cch == 0) {
+        return false;
+    }
+    dir[0] = 0;
+    wchar_t base[MAX_PATH] = {};
+    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) {
+        return false;
+    }
+    return swprintf_s(dir, cch, L"%s\\WelcomeCenter", base) >= 0;
+}
 
 static bool IsUnderWindowsDir(const wchar_t* path) {
     if (!path || !*path) {
@@ -19227,7 +19226,6 @@ static const AssetNameList kAssetNames[] = {
     {L"surf", {L"surf.png", L"browser.png", nullptr}, false},
     {L"details", {L"details.png", L"more-details.png", nullptr}, false},
     {L"store", {L"store.png", L"marketplace.png", nullptr}, false},
-    {L"launcher", {L"WelcomeCenter.exe", L"launcher.exe", nullptr}, true},
 };
 
 static const AssetNameList* FindAssetList(const wchar_t* logical) {
@@ -19305,55 +19303,6 @@ static bool FileStartsWithMz(const wchar_t* path) {
         return false;
     }
     return magic[0] == 'M' && magic[1] == 'Z';
-}
-
-static void EnsureResourceGuide() {
-    wchar_t storage[MAX_PATH] = {};
-    if (!GetWhStorageDir(storage, MAX_PATH)) {
-        if (!GetWelcomeCenterDir(storage, MAX_PATH)) {
-            return;
-        }
-    }
-    wchar_t resDir[MAX_PATH] = {};
-    if (!JoinPath(resDir, MAX_PATH, storage, L"resources")) {
-        return;
-    }
-    CreateDirectoryW(resDir, nullptr);
-    wchar_t readme[MAX_PATH] = {};
-    if (!JoinPath(readme, MAX_PATH, resDir, L"README.txt")) {
-        return;
-    }
-    if (FileExistsW(readme)) {
-        return;
-    }
-    static const char kGuide[] =
-        "Windows Vista/7 Welcome Center - drop replacement artwork here.\r\n"
-        "User files override the built-in (embedded) images. No artwork is\r\n"
-        "read from and nothing is written to %SystemRoot%.\r\n"
-        "\r\n"
-        "aurora.png / aurora.jpg     Header backdrop\r\n"
-        "pc.png                      PC illustration\r\n"
-        "chevron.png                 More about this PC chevron\r\n"
-        "user-frame.png              Account picture frame\r\n"
-        "app.png / app.ico           CP003 main-icon override for both skins\r\n"
-        "personalize.png             Personalize tile\r\n"
-        "power.png                   Power Options tile\r\n"
-        "sound.png                   Sound & Audio Devices tile\r\n"
-        "ease.png                    Ease of Access tile\r\n"
-        "transfer.png                Transfer files tile\r\n"
-        "default-programs.png        Default programs tile\r\n"
-        "surf.png                    Surf the web tile\r\n"
-        "details.png                 View details (former Windows 7 main icon)\r\n"
-        "store.png                   Microsoft Store tile\r\n"
-        "WelcomeCenter.exe           Optional shortcut target (PE only)\r\n";
-    UniqueHandle f(CreateFileW(readme, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
-                               FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!f || f.get() == INVALID_HANDLE_VALUE) {
-        return;
-    }
-    DWORD written = 0;
-    WriteFile(f.get(), kGuide, static_cast<DWORD>(sizeof(kGuide) - 1),
-              &written, nullptr);
 }
 
 static Gdiplus::Bitmap* LoadModBitmap(Gdiplus::Bitmap*& slot,
@@ -23609,133 +23558,40 @@ static void UpdateHotkey() {
     }
 }
 
-// Writes %LOCALAPPDATA%\\WelcomeCenter\\WelcomeCenter.exe — a tiny
-// GUI-subsystem helper that only signals the existing host window.
-// Never start explorer.exe (opens This PC) or windhawk.exe (opens Windhawk).
-// Never launch powershell.exe (console flash; FindWindow often misses).
-static const char kShowExeB64[] =
-    "TVoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAgAAAAFRoaXMgcHJvZ3JhbSBjYW5ub3QgYmUgcnVuIGluIERPUyBtb2RlLg0NCiQAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAABQRQAAZIYCAAAAAAAAAAAAAAAAAPAAIgALAg4AAAQAAAACAAAAAAAAABAA"
-    "AAAQAAAAAABAAQAAAAAQAAAAAgAABgAAAAAAAAAGAAAAAAAAAAAwAAAABAAAAAAAAAIAYAEAABAA"
-    "AAAAAAAQAAAAAAAAAAAQAAAAAAAAEAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAIAAAPAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAhCAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAudGV4dAAA"
-    "AIYCAAAAEAAAAAQAAAAEAAAAAAAAAAAAAAAAAAAgAABgLmlkYXRhAABWAQAAACAAAAACAAAACAAA"
-    "AAAAAAAAAAAAAAAAQAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEiD"
-    "7Ci+FAAAAEiNDXQBAAAx0v8VbBAAAEiFwA+F0gAAAEiNDVwBAABIjRWXAQAA/xVPEAAASIXAD4W1"
-    "AAAASI0NqQEAADHS/xU3EAAASIXAD4UJAQAASI0NkQEAAEiNFcIBAAD/FRoQAABIhcAPhewAAAC5"
-    "ZAAAAP8VNhAAAP/OD4WD////SI0NtwEAAP8VERAAAInCuf//AABFMcBFMcn/FeYPAAC+HgAAAEiN"
-    "DTwBAAAx0v8Vyg8AAEiFwA+FnAAAAEiNDboAAAAx0v8Vsg8AAEiFwA+FGAAAALkyAAAA/xXODwAA"
-    "/84Phb3////phgAAAEiJw0iJ2boDgAAARTHARTHJ/xWCDwAASI0NMwEAAP8VjQ8AAInCuf//AABF"
-    "McBFMcn/FWIPAAC+KAAAAEiNDbgAAAAx0v8VRg8AAEiFwA+FGAAAALkyAAAA/xViDwAA/84PhdX/"
-    "///pGgAAAEiJw0iJ2boJAAAA/xUkDwAASInZ/xUjDwAAMcn/FTsPAADr/gBXAGkAbgBkAGgAYQB3"
-    "AGsALgBWAGkAcwB0AGEAVwBlAGwAYwBvAG0AZQBDAGUAbgB0AGUAcgAuAEgAbwBzAHQAAABXAGUA"
-    "bABjAG8AbQBlACAAQwBlAG4AdABlAHIAIABIAG8AcwB0AAAAVwBpAG4AZABoAGEAdwBrAC4AVgBp"
-    "AHMAdABhAFcAZQBsAGMAbwBtAGUAQwBlAG4AdABlAHIAAABXAGUAbABjAG8AbQBlACAAQwBlAG4A"
-    "dABlAHIAAABXAGkAbgBkAGgAYQB3AGsALgBWAGkAcwB0AGEAVwBlAGwAYwBvAG0AZQBDAGUAbgB0"
-    "AGUAcgAuAFMAaABvAHcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8IAAA"
-    "AAAAAAAAAADMIAAAhCAAAGwgAAAAAAAAAAAAADMhAAC0IAAAAAAAAAAAAAAAAAAAAAAAAAAAAADY"
-    "IAAAAAAAAOYgAAAAAAAA9iAAAAAAAAAEIQAAAAAAABohAAAAAAAAAAAAAAAAAABAIQAAAAAAAEgh"
-    "AAAAAAAAAAAAAAAAAADYIAAAAAAAAOYgAAAAAAAA9iAAAAAAAAAEIQAAAAAAABohAAAAAAAAAAAA"
-    "AAAAAABAIQAAAAAAAEghAAAAAAAAAAAAAAAAAAB1c2VyMzIuZGxsAAAAAEZpbmRXaW5kb3dXAAAA"
-    "UG9zdE1lc3NhZ2VXAAAAAFNob3dXaW5kb3cAAAAAU2V0Rm9yZWdyb3VuZFdpbmRvdwAAAFJlZ2lz"
-    "dGVyV2luZG93TWVzc2FnZVcAa2VybmVsMzIuZGxsAAAAU2xlZXAAAABFeGl0UHJvY2VzcwAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 
-static bool GetWelcomeCenterDir(wchar_t* dir, size_t cch) {
-    if (!dir || cch == 0) {
-        return false;
+static void DeleteFileIfExists(const wchar_t* path) {
+    if (!path || !*path) {
+        return;
     }
-    wchar_t base[MAX_PATH] = {};
-    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) {
-        return false;
+    if (!DeleteFileW(path) && GetLastError() != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"Failed to delete leftover file (%u): %s", GetLastError(), path);
     }
-    if (swprintf_s(dir, cch, L"%s\\WelcomeCenter", base) < 0) {
-        return false;
-    }
-    CreateDirectoryW(dir, nullptr);
-    return true;
 }
 
-static bool EnsureShowLauncher(wchar_t* exePath, size_t cch) {
-    if (!exePath || cch == 0) {
-        return false;
+static void RemoveDirectoryIfEmpty(const wchar_t* path) {
+    if (!path || !*path) {
+        return;
     }
-    exePath[0] = 0;
-
-    wchar_t userExe[MAX_PATH] = {};
-    if (FindUserAsset(L"launcher", userExe, MAX_PATH) &&
-        FileStartsWithMz(userExe) &&
-        !IsDangerousFileName(PathFindFileNameW(userExe))) {
-        CopyTrunc(exePath, cch, userExe);
-        Wh_Log(L"Using user launcher: %s", exePath);
-        return true;
+    if (!RemoveDirectoryW(path) && GetLastError() != ERROR_FILE_NOT_FOUND &&
+        GetLastError() != ERROR_DIR_NOT_EMPTY) {
+        Wh_Log(L"Failed to remove leftover folder (%u): %s", GetLastError(),
+               path);
     }
-
-    wchar_t dir[MAX_PATH] = {};
-    if (!GetWelcomeCenterDir(dir, MAX_PATH)) {
-        return false;
-    }
-
-    // Drop the old PowerShell helper if a previous build left it behind.
-    wchar_t oldPs[MAX_PATH] = {};
-    if (swprintf_s(oldPs, L"%s\\show.ps1", dir) >= 0) {
-        DeleteFileW(oldPs);
-    }
-
-    if (swprintf_s(exePath, cch, L"%s\\WelcomeCenter.exe", dir) < 0) {
-        return false;
-    }
-
-    std::vector<BYTE> bytes;
-    if (!DecodeBase64(kShowExeB64, &bytes) || bytes.size() < 64) {
-        Wh_Log(L"Show launcher base64 decode failed");
-        return false;
-    }
-
-    UniqueHandle f(CreateFileW(exePath, GENERIC_WRITE, 0, nullptr,
-                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!f || f.get() == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"CreateFile WelcomeCenter.exe failed (%u)", GetLastError());
-        return false;
-    }
-    DWORD written = 0;
-    if (!WriteFile(f.get(), bytes.data(), static_cast<DWORD>(bytes.size()),
-                   &written, nullptr) ||
-        written != bytes.size()) {
-        Wh_Log(L"WriteFile WelcomeCenter.exe failed (%u)", GetLastError());
-        return false;
-    }
-    return true;
 }
 
-static bool GetToolLaunch(wchar_t* exe, size_t exeCch, wchar_t* args,
-                          size_t argsCch) {
-    if (!exe || !args || exeCch == 0 || argsCch == 0) {
-        return false;
-    }
-    exe[0] = 0;
-    args[0] = 0;
-    return EnsureShowLauncher(exe, exeCch);
+// Per-user Control Panel item leftover from earlier builds (HKCU only).
+static const wchar_t kCplClsid[] = L"{8F3C2A91-6B47-4D1E-9C08-E5A7B2D14F60}";
+
+static void UnregisterControlPanelItem() {
+    wchar_t clsidPath[160];
+    wchar_t nsPath[220];
+    swprintf_s(clsidPath, L"Software\\Classes\\CLSID\\%s", kCplClsid);
+    swprintf_s(nsPath,
+               L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
+               L"ControlPanel\\NameSpace\\%s",
+               kCplClsid);
+    SHDeleteKeyW(HKEY_CURRENT_USER, clsidPath);
+    SHDeleteKeyW(HKEY_CURRENT_USER, nsPath);
 }
 
 static bool GetKnownLinkPathForName(REFKNOWNFOLDERID folder,
@@ -23753,11 +23609,6 @@ static bool GetKnownLinkPathForName(REFKNOWNFOLDERID folder,
         swprintf_s(path, cch, L"%s\\%s.lnk", dir, productName) >= 0;
     CoTaskMemFree(dir);
     return ok;
-}
-
-static bool GetKnownLinkPath(REFKNOWNFOLDERID folder, wchar_t* path,
-                             size_t cch) {
-    return GetKnownLinkPathForName(folder, UiProductName(), path, cch);
 }
 
 static bool ShortcutTargetsWelcomeLauncher(const wchar_t* linkPath) {
@@ -23795,28 +23646,23 @@ static bool ShortcutTargetsWelcomeLauncher(const wchar_t* linkPath) {
 
 static void DeleteOwnedWelcomeShortcut(const wchar_t* linkPath) {
     if (!linkPath || !*linkPath ||
-        GetFileAttributesW(linkPath) == INVALID_FILE_ATTRIBUTES ||
-        !ShortcutTargetsWelcomeLauncher(linkPath)) {
+        GetFileAttributesW(linkPath) == INVALID_FILE_ATTRIBUTES) {
         return;
     }
-    if (!DeleteFileW(linkPath) && GetLastError() != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"Failed to delete owned shortcut (%u): %s", GetLastError(),
-               linkPath);
+    if (!ShortcutTargetsWelcomeLauncher(linkPath)) {
+        return;
     }
+    DeleteFileIfExists(linkPath);
 }
 
-static void DeleteStaleKnownLinks(REFKNOWNFOLDERID folder,
-                                  const wchar_t* keepPath) {
+static void DeleteStaleKnownLinks(REFKNOWNFOLDERID folder) {
     for (size_t row = 0; row < kConcreteLanguageCount; ++row) {
-        const UiText names[] = {UiText::WelcomeCenter,
-                                UiText::GettingStarted};
+        const UiText names[] = {UiText::WelcomeCenter, UiText::GettingStarted};
         for (UiText name : names) {
             wchar_t candidate[MAX_PATH] = {};
-            if (!GetKnownLinkPathForName(folder,
-                                         kUiStrings[row][static_cast<size_t>(name)],
-                                         candidate, ARRAYSIZE(candidate)) ||
-                (keepPath && EqualsIgnoreCase(candidate, keepPath)) ||
-                GetFileAttributesW(candidate) == INVALID_FILE_ATTRIBUTES) {
+            if (!GetKnownLinkPathForName(
+                    folder, kUiStrings[row][static_cast<size_t>(name)],
+                    candidate, ARRAYSIZE(candidate))) {
                 continue;
             }
             DeleteOwnedWelcomeShortcut(candidate);
@@ -23824,197 +23670,43 @@ static void DeleteStaleKnownLinks(REFKNOWNFOLDERID folder,
     }
 }
 
-static bool GetStartMenuLinkPath(wchar_t* path, size_t cch) {
-    return GetKnownLinkPath(FOLDERID_Programs, path, cch);
-}
-
-static void WriteLinkFile(const wchar_t* linkPath);
-
-static void EnsureStartMenuShortcut() {
-    wchar_t linkPath[MAX_PATH] = {};
-    if (!GetStartMenuLinkPath(linkPath, MAX_PATH)) {
-        return;
-    }
-    DeleteStaleKnownLinks(FOLDERID_Programs, linkPath);
-
-    if (!g.settings.createStartMenuShortcut) {
-        DeleteOwnedWelcomeShortcut(linkPath);
-        return;
-    }
-    WriteLinkFile(linkPath);
-}
-
-static void WriteLinkFile(const wchar_t* linkPath) {
-    if (!linkPath || !*linkPath) {
-        return;
-    }
-    wchar_t exe[MAX_PATH] = {};
-    wchar_t args[400] = {};
-    if (!GetToolLaunch(exe, MAX_PATH, args, 400)) {
-        return;
-    }
-    IShellLinkW* sl = nullptr;
-    HRESULT hr =
-        CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                         IID_IShellLinkW, reinterpret_cast<void**>(&sl));
-    if (FAILED(hr) || !sl) {
-        Wh_Log(L"IShellLink failed: 0x%08X", hr);
-        return;
-    }
-    IPersistFile* pf = nullptr;
-    hr = sl->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&pf));
-    if (FAILED(hr) || !pf) {
-        sl->Release();
-        return;
-    }
-    if (GetFileAttributesW(linkPath) != INVALID_FILE_ATTRIBUTES) {
-        pf->Load(linkPath, STGM_READWRITE);
-    }
-    sl->SetPath(exe);
-    sl->SetArguments(args);
-    sl->SetDescription(
-        Ui(IsWindows7Style() ? UiText::ShortcutGetting
-                             : UiText::ShortcutWelcome));
-    wchar_t iconFile[MAX_PATH] = {};
-    if (EnsureAppIconFile(iconFile, MAX_PATH)) {
-        sl->SetIconLocation(iconFile, 0);
-    } else {
-        sl->SetIconLocation(L"%SystemRoot%\\System32\\imageres.dll", 109);
-    }
-    if (SUCCEEDED(pf->Save(linkPath, TRUE))) {
-        Wh_Log(L"Updated shortcut: %s", linkPath);
-    } else {
-        Wh_Log(L"Failed to save shortcut: %s", linkPath);
-    }
-    pf->Release();
-    sl->Release();
-}
-
-static void EnsureDesktopShortcut() {
-    wchar_t linkPath[MAX_PATH] = {};
-    if (!GetKnownLinkPath(FOLDERID_Desktop, linkPath, MAX_PATH)) {
-        return;
-    }
-    DeleteStaleKnownLinks(FOLDERID_Desktop, linkPath);
-    if (!g.settings.createDesktopShortcut) {
-        DeleteOwnedWelcomeShortcut(linkPath);
-        return;
-    }
-    WriteLinkFile(linkPath);
-}
-
-// Per-user Control Panel item. HKCU only — nothing under %SystemRoot%.
-// Category 5 = System and Security (Vista: System and Maintenance).
-static const wchar_t kCplClsid[] = L"{8F3C2A91-6B47-4D1E-9C08-E5A7B2D14F60}";
-
-static bool RegWriteSz(HKEY root, const wchar_t* sub, const wchar_t* name,
-                       const wchar_t* value) {
-    if (!sub || !value) {
-        return false;
-    }
-    HKEY key = nullptr;
-    LONG st = RegCreateKeyExW(root, sub, 0, nullptr, 0, KEY_SET_VALUE, nullptr,
-                              &key, nullptr);
-    if (st != ERROR_SUCCESS || !key) {
-        Wh_Log(L"RegCreateKeyEx failed (%ld) for %s", st, sub);
-        return false;
-    }
-    const DWORD bytes =
-        static_cast<DWORD>((wcslen(value) + 1) * sizeof(wchar_t));
-    st = RegSetValueExW(key, name, 0, REG_SZ,
-                        reinterpret_cast<const BYTE*>(value), bytes);
-    RegCloseKey(key);
-    if (st != ERROR_SUCCESS) {
-        Wh_Log(L"RegSetValueEx failed (%ld) for %s", st, sub);
-        return false;
-    }
-    return true;
-}
-
-static void UnregisterControlPanelItem() {
-    wchar_t clsidPath[160];
-    wchar_t nsPath[220];
-    swprintf_s(clsidPath, L"Software\\Classes\\CLSID\\%s", kCplClsid);
-    swprintf_s(nsPath,
-               L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-               L"ControlPanel\\NameSpace\\%s",
-               kCplClsid);
-    SHDeleteKeyW(HKEY_CURRENT_USER, clsidPath);
-    SHDeleteKeyW(HKEY_CURRENT_USER, nsPath);
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-}
-
-static void RegisterControlPanelItem() {
-    wchar_t exe[MAX_PATH] = {};
-    wchar_t args[400] = {};
-    if (!GetToolLaunch(exe, MAX_PATH, args, 400)) {
-        return;
-    }
-
-    wchar_t command[MAX_PATH + 420];
-    if (args[0]) {
-        if (swprintf_s(command, L"\"%s\" %s", exe, args) < 0) {
-            return;
-        }
-    } else if (swprintf_s(command, L"\"%s\"", exe) < 0) {
-        return;
-    }
-
-    wchar_t clsidRoot[160];
-    wchar_t iconKey[180];
-    wchar_t cmdKey[200];
-    wchar_t nsKey[220];
-    swprintf_s(clsidRoot, L"Software\\Classes\\CLSID\\%s", kCplClsid);
-    swprintf_s(iconKey, L"%s\\DefaultIcon", clsidRoot);
-    swprintf_s(cmdKey, L"%s\\Shell\\Open\\Command", clsidRoot);
-    swprintf_s(nsKey,
-               L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-               L"ControlPanel\\NameSpace\\%s",
-               kCplClsid);
-
-    bool ok = true;
-    ok = RegWriteSz(HKEY_CURRENT_USER, clsidRoot, nullptr, UiProductName()) && ok;
-    ok = RegWriteSz(HKEY_CURRENT_USER, clsidRoot, L"InfoTip",
-                    Ui(UiText::ControlPanelTip)) &&
-         ok;
-    ok = RegWriteSz(HKEY_CURRENT_USER, clsidRoot, L"System.ApplicationName",
-                    L"Windhawk.VistaWelcomeCenter") &&
-         ok;
-    ok = RegWriteSz(HKEY_CURRENT_USER, clsidRoot, L"System.ControlPanel.Category",
-                    L"5") &&
-         ok;
-    wchar_t iconFile[MAX_PATH] = {};
-    const wchar_t* iconValue = L"%SystemRoot%\\System32\\imageres.dll,-109";
-    if (EnsureAppIconFile(iconFile, MAX_PATH)) {
-        iconValue = iconFile;
-    }
-    ok = RegWriteSz(HKEY_CURRENT_USER, iconKey, nullptr, iconValue) && ok;
-    ok = RegWriteSz(HKEY_CURRENT_USER, cmdKey, nullptr, command) && ok;
-    ok = RegWriteSz(HKEY_CURRENT_USER, nsKey, nullptr, UiProductName()) && ok;
-
-    if (ok) {
-        Wh_Log(L"Registered Control Panel item %s", kCplClsid);
-    } else {
-        Wh_Log(L"Control Panel registration incomplete; leaving what was written");
-    }
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-}
-
-static void ApplyControlPanelSetting() {
-    if (g.settings.createControlPanelItem) {
-        RegisterControlPanelItem();
-    } else {
-        UnregisterControlPanelItem();
-    }
-}
-
-// Safe to call from the launcher process or the tool UI thread.
-static void PublishPresence() {
+static void CleanupLegacyPresence() {
     const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    EnsureResourceGuide();
-    EnsureStartMenuShortcut();
-    EnsureDesktopShortcut();
-    ApplyControlPanelSetting();
+    UnregisterControlPanelItem();
+    DeleteStaleKnownLinks(FOLDERID_Programs);
+    DeleteStaleKnownLinks(FOLDERID_Desktop);
+
+    wchar_t dir[MAX_PATH] = {};
+    if (GetWelcomeCenterDir(dir, MAX_PATH)) {
+        wchar_t path[MAX_PATH] = {};
+        if (swprintf_s(path, L"%s\\WelcomeCenter.exe", dir) >= 0) {
+            DeleteFileIfExists(path);
+        }
+        if (swprintf_s(path, L"%s\\app-vista.ico", dir) >= 0) {
+            DeleteFileIfExists(path);
+        }
+        if (swprintf_s(path, L"%s\\app-windows7.ico", dir) >= 0) {
+            DeleteFileIfExists(path);
+        }
+        if (swprintf_s(path, L"%s\\show.ps1", dir) >= 0) {
+            DeleteFileIfExists(path);
+        }
+        RemoveDirectoryIfEmpty(dir);
+    }
+
+    wchar_t storage[MAX_PATH] = {};
+    if (GetWhStorageDir(storage, MAX_PATH)) {
+        wchar_t readme[MAX_PATH] = {};
+        if (JoinPath(readme, MAX_PATH, storage, L"README.txt")) {
+            DeleteFileIfExists(readme);
+        }
+        wchar_t resDir[MAX_PATH] = {};
+        if (JoinPath(resDir, MAX_PATH, storage, L"resources")) {
+            if (JoinPath(readme, MAX_PATH, resDir, L"README.txt")) {
+                DeleteFileIfExists(readme);
+            }
+        }
+    }
     if (comHr == S_OK) {
         CoUninitialize();
     }
@@ -24071,7 +23763,6 @@ static void ApplySettingsOnUiThread() {
     ValidateSelectedItem();
     AddOrUpdateTray();
     UpdateHotkey();
-    PublishPresence();
     RefreshSkinLabels();
     if (g.main && IsWindow(g.main)) {
         PlaceCheckbox();
@@ -24224,12 +23915,6 @@ static LRESULT CALLBACK MainProcInner(HWND hwnd, UINT msg, WPARAM wParam,
                 g.selectedSection = h->section;
                 g.selectedIndex = h->index;
                 OpenSelected(hwnd);
-            } else if (h && h->kind == HitKind::ShowMore) {
-                if (PreviewItem()) {
-                    OpenSelected(hwnd);
-                } else {
-                    OpenShowMore(hwnd);
-                }
             }
             return 0;
         }
@@ -24673,30 +24358,50 @@ static LRESULT CALLBACK HostProcInner(HWND hwnd, UINT msg, WPARAM wParam,
 static bool WaitForDesktop(DWORD timeoutMs) {
     const DWORD start = GetTickCount();
     while (GetTickCount() - start < timeoutMs) {
+        if (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            return false;
+        }
         if (FindWindowW(L"Shell_TrayWnd", nullptr)) {
             return true;
         }
-        Sleep(150);
+        if (g_stopEvent) {
+            const DWORD wr = WaitForSingleObject(g_stopEvent, 150);
+            if (wr == WAIT_OBJECT_0) {
+                return false;
+            }
+        } else {
+            Sleep(150);
+        }
     }
     return FindWindowW(L"Shell_TrayWnd", nullptr) != nullptr;
 }
 
-static bool CommandLineHasShow() {
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) {
-        return false;
+static BOOL CALLBACK CloseThreadWindowProc(HWND hwnd, LPARAM) {
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (EqualsIgnoreCase(cls, L"#32770")) {
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        PostMessageW(hwnd, WM_COMMAND, IDCANCEL, 0);
     }
-    bool found = false;
-    for (int i = 1; i < argc; ++i) {
-        if (EqualsIgnoreCase(argv[i], L"-show") ||
-            EqualsIgnoreCase(argv[i], L"/show")) {
-            found = true;
-            break;
+    return TRUE;
+}
+
+static void RequestUiShutdown() {
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+    EndMenu();
+    if (g_app) {
+        if (g.uiThreadId) {
+            EnumThreadWindows(g.uiThreadId, CloseThreadWindowProc, 0);
+        }
+        if (g.main && IsWindow(g.main)) {
+            PostMessageW(g.main, WM_CLOSE, 0, 0);
+        }
+        if (g.host && IsWindow(g.host)) {
+            PostMessageW(g.host, WM_CLOSE, 0, 0);
         }
     }
-    LocalFree(argv);
-    return found;
 }
 
 static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam,
@@ -24713,28 +24418,10 @@ static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam,
 }
 
 static DWORD WINAPI UiThread(LPVOID) {
-    g.uiThreadId = GetCurrentThreadId();
-
-    UniqueHandle uiMutex(CreateMutexW(nullptr, TRUE, L"Windhawk.VistaWelcomeCenter.UI"));
-    if (uiMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        const bool explicitShow = CommandLineHasShow();
-        if (explicitShow) {
-            Wh_Log(L"UI already running; activating it for explicit -show");
-        } else {
-            Wh_Log(L"UI already running; duplicate host will exit silently");
-        }
-        if (explicitShow) {
-            HWND host = FindWindowW(kHostClass, nullptr);
-            HWND main = FindWindowW(kMainClass, nullptr);
-            if (host) {
-                PostMessageW(host, WM_SHOW_WELCOME, 0, 0);
-            } else if (main) {
-                ShowWindow(main, SW_SHOWNORMAL);
-                SetForegroundWindow(main);
-            }
-        }
-        return 0;
+    if (!g_app) {
+        return 1;
     }
+    g.uiThreadId = GetCurrentThreadId();
 
     try {
 
@@ -24822,16 +24509,16 @@ static DWORD WINAPI UiThread(LPVOID) {
 
     AddOrUpdateTray();
     UpdateHotkey();
-    PublishPresence();
     SetTimer(g.host, kTrayTimerId, 2000, nullptr);
 
-    // Never open merely because this is the first run or because a second host
-    // process started. The window appears at logon only for the explicit
-    // run-at-startup preference or an explicit -show command.
-    const bool explicitShow = CommandLineHasShow();
-    if (g.settings.runAtStartup || explicitShow) {
-        if (g.settings.runAtStartup && !explicitShow) {
-            WaitForDesktop(15000);
+    // Never open merely because this is the first run. The window appears at
+    // logon only for the explicit run-at-startup preference.
+    if (g.settings.runAtStartup) {
+        if (!WaitForDesktop(15000)) {
+            if (g_stopEvent &&
+                WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                return 0;
+            }
         }
         ShowWelcome(true);
     }
@@ -24860,76 +24547,6 @@ static DWORD WINAPI UiThread(LPVOID) {
 // Windhawk tool-mod callbacks
 // ---------------------------------------------------------------------------
 
-BOOL WhTool_ModInit() {
-    try {
-        Wh_Log(L"Windows Vista/7 Welcome Center init");
-        if (g.uiThread) {
-            Wh_Log(L"UI thread already exists");
-            return TRUE;
-        }
-        g.uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
-        if (!g.uiThread) {
-            Wh_Log(L"CreateThread failed (%u)", GetLastError());
-            return FALSE;
-        }
-        return TRUE;
-    } catch (...) {
-        Wh_Log(L"WhTool_ModInit threw");
-        return FALSE;
-    }
-}
-
-void WhTool_ModSettingsChanged() {
-    if (g.host && IsWindow(g.host)) {
-        PostMessageW(g.host, WM_APPLY_SETTINGS, 0, 0);
-    }
-}
-
-void WhTool_ModUninit() {
-    try {
-    Wh_Log(L"Windows Vista/7 Welcome Center uninit");
-    UnregisterControlPanelItem();
-    if (g.host && IsWindow(g.host)) {
-        PostMessageW(g.host, WM_CLOSE, 0, 0);
-    }
-    if (g.uiThread) {
-        const DWORD wr = WaitForSingleObject(g.uiThread, 4000);
-        if (wr == WAIT_TIMEOUT) {
-            Wh_Log(L"UI thread did not exit in time; continuing unload");
-        }
-        CloseHandle(g.uiThread);
-        g.uiThread = nullptr;
-    }
-    } catch (...) {
-        Wh_Log(L"WhTool_ModUninit threw; continuing unload");
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
-bool g_isToolModProcessLauncher;
-bool g_isExplorerHost;
-HANDLE g_toolModProcessMutex;
-
-static bool IsExplorerProcess() {
-    wchar_t path[MAX_PATH] = {};
-    if (!GetModuleFileNameW(nullptr, path, MAX_PATH)) {
-        return false;
-    }
-    return EqualsIgnoreCase(PathFindFileNameW(path), L"explorer.exe");
-}
 
 // Fail closed on stripped-down or atypical Windows environments where the
 // classic Control Panel executable is absent. Resolve the absolute native
@@ -25007,37 +24624,90 @@ static bool SystemControlPanelExists() {
     return true;
 }
 
+BOOL WhTool_ModInit() {
+    try {
+        Wh_Log(L"Windows Vista/7 Welcome Center init");
+        if (!SystemControlPanelExists()) {
+            Wh_Log(L"Classic Control Panel is unavailable; Windows Vista/7 "
+                   L"Welcome Center will not start in this environment");
+            return FALSE;
+        }
+        if (!g_app) {
+            g_app.emplace();
+        }
+        if (!g_stopEvent) {
+            g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        }
+        if (g.uiThread) {
+            Wh_Log(L"UI thread already exists");
+            return TRUE;
+        }
+        g.uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
+        if (!g.uiThread) {
+            Wh_Log(L"CreateThread failed (%u)", GetLastError());
+            return FALSE;
+        }
+        return TRUE;
+    } catch (...) {
+        Wh_Log(L"WhTool_ModInit threw");
+        return FALSE;
+    }
+}
+
+void WhTool_ModSettingsChanged() {
+    SyncRunAtStartupFromWindhawk();
+    if (g_app && g.host && IsWindow(g.host)) {
+        PostMessageW(g.host, WM_APPLY_SETTINGS, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    try {
+        Wh_Log(L"Windows Vista/7 Welcome Center uninit");
+        RequestUiShutdown();
+        if (g_app && g.uiThread) {
+            WaitForSingleObject(g.uiThread, INFINITE);
+            CloseHandle(g.uiThread);
+            g.uiThread = nullptr;
+        }
+        CleanupLegacyPresence();
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        g_app.reset();
+    } catch (...) {
+        Wh_Log(L"WhTool_ModUninit threw; continuing unload");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    try {
-    DWORD sessionId = 0;
+    DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
-    }
-    if (!SystemControlPanelExists()) {
-        Wh_Log(L"Classic Control Panel is unavailable; Windows Vista/7 "
-               L"Welcome Center will not start in this environment");
-        return FALSE;
-    }
-
-    // Host the UI inside Explorer so the tray icon and Control Panel item
-    // exist even if the dedicated windhawk.exe tool process never starts.
-    if (IsExplorerProcess()) {
-        g_isExplorerHost = true;
-        Wh_Log(L"Hosting Welcome Center in explorer.exe");
-        g.settings = LoadSettings();
-        g_activeLanguage = g.settings.language;
-        PublishPresence();
-        if (!WhTool_ModInit()) {
-            Wh_Log(L"Explorer host UI thread failed");
-            return FALSE;
-        }
-        return TRUE;
     }
 
     bool isExcluded = false;
@@ -25084,23 +24754,8 @@ BOOL Wh_ModInit() {
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            const bool explicitShow = CommandLineHasShow();
-            if (explicitShow) {
-                Wh_Log(L"Tool mod already running; forwarding explicit -show");
-            } else {
-                Wh_Log(L"Tool mod already running; duplicate process will exit");
-            }
-            if (explicitShow) {
-                HWND host = FindWindowW(kHostClass, nullptr);
-                HWND main = FindWindowW(kMainClass, nullptr);
-                if (host) {
-                    PostMessageW(host, WM_SHOW_WELCOME, 0, 0);
-                } else if (main) {
-                    ShowWindow(main, SW_SHOWNORMAL);
-                    SetForegroundWindow(main);
-                }
-            }
-            ExitProcess(0);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
@@ -25125,14 +24780,10 @@ BOOL Wh_ModInit() {
 
     g_isToolModProcessLauncher = true;
     return TRUE;
-    } catch (...) {
-        Wh_Log(L"Wh_ModInit threw");
-        return FALSE;
-    }
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorerHost || !g_isToolModProcessLauncher) {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
@@ -25145,7 +24796,8 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
+    WCHAR
+    commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
@@ -25170,51 +24822,29 @@ void Wh_ModAfterInit() {
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    BOOL spawned = FALSE;
-    if (pCreateProcessInternalW) {
-        spawned = pCreateProcessInternalW(
-            nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-            NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr);
-    }
-    if (!spawned) {
-        Wh_Log(L"CreateProcessInternalW failed (%u); trying CreateProcessW",
-               GetLastError());
-        spawned = CreateProcessW(currentProcessPath, commandLine, nullptr,
-                                 nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                                 nullptr, &si, &pi);
-    }
-    if (!spawned) {
-        Wh_Log(L"Failed to start tool process (%u)", GetLastError());
-    } else {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
     }
 
-    // Register CPL / shortcuts even if the tool process failed to start.
-    g.settings = LoadSettings();
-    g_activeLanguage = g.settings.language;
-    PublishPresence();
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    // A saved Windhawk setting is authoritative over any earlier checkbox or
-    // tray-menu override. This keeps both controls synchronized on the next
-    // UI-thread settings refresh.
-    SyncRunAtStartupFromWindhawk();
-
-    if (g_isExplorerHost) {
-        WhTool_ModSettingsChanged();
-        return;
-    }
     if (g_isToolModProcessLauncher) {
-        g.settings = LoadSettings();
-        g_activeLanguage = g.settings.language;
-        PublishPresence();
         return;
     }
 
@@ -25222,10 +24852,6 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isExplorerHost) {
-        WhTool_ModUninit();
-        return;
-    }
     if (g_isToolModProcessLauncher) {
         return;
     }
