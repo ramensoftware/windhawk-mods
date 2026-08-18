@@ -28,6 +28,7 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 - Real-time theme change detection (responds to `WM_SETTINGCHANGE` / `WM_DWMCOLORIZATIONCOLORCHANGED`)
 - New windows receive the correct style immediately via `CreateWindowEx` hooks
 - Dialog windows handled via `DefDlgProc` hooks
+- MDI frame windows (e.g. `mmc.exe`, Event Viewer, Device Manager) handled via `DefFrameProc` hooks
 - Live settings reload: colour changes apply instantly without restarting the process
 - **Exclude Mozilla Browsers** toggle (default: on) -- skips Firefox, Zen Browser, Floorp, etc.; disable to re-enable titlebar colouring for those browsers
 
@@ -145,7 +146,7 @@ static ModSettings g_settings;
 // Globals
 // -----------------------------------------------------------------------------
 
-typedef bool (WINAPI* pShouldSystemUseDarkMode)();
+typedef bool (WINAPI* pShouldAppsUseDarkMode)();
 static std::atomic<BOOL> g_isDarkMode = FALSE;
 
 // App-controlled window state tracking
@@ -191,9 +192,9 @@ static BOOL IsSystemDarkMode()
         RegCloseKey(hKey);
     }
 
-    static pShouldSystemUseDarkMode fn = []() -> pShouldSystemUseDarkMode {
+    static pShouldAppsUseDarkMode fn = []() -> pShouldAppsUseDarkMode {
         HMODULE hUxtheme = GetModuleHandleW(L"uxtheme.dll");
-        return hUxtheme ? (pShouldSystemUseDarkMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(138)) : nullptr;
+        return hUxtheme ? (pShouldAppsUseDarkMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(132)) : nullptr;
     }();
     if (fn)
         return fn() != 0;
@@ -235,7 +236,7 @@ static BOOL IsWindowEligible(HWND hWnd, BOOL allowCacheUpdate = TRUE)
             wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
             wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
             wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
-            wcscmp(className, L"WinUIDesktopWin32WindowClass") == 0) {
+            wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             return FALSE;
         }
         if (g_settings.excludeMozilla && wcsncmp(className, L"Mozilla", 7) == 0) {
@@ -588,31 +589,36 @@ static LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARA
 }
 
 // -----------------------------------------------------------------------------
+// Hook: DefFrameProcW / DefFrameProcA (MDI Frame windows, e.g. MMC)
+// -----------------------------------------------------------------------------
+
+using DefFrameProcW_t = decltype(&DefFrameProcW);
+static DefFrameProcW_t DefFrameProcW_orig;
+
+static LRESULT WINAPI DefFrameProcW_hook(HWND hWnd, HWND hWndMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    LRESULT result = DefFrameProcW_orig(hWnd, hWndMDIClient, Msg, wParam, lParam);
+    HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
+    return result;
+}
+
+using DefFrameProcA_t = decltype(&DefFrameProcA);
+static DefFrameProcA_t DefFrameProcA_orig;
+
+static LRESULT WINAPI DefFrameProcA_hook(HWND hWnd, HWND hWndMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    LRESULT result = DefFrameProcA_orig(hWnd, hWndMDIClient, Msg, wParam, lParam);
+    HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
+    return result;
+}
+
+// -----------------------------------------------------------------------------
 // Hook: CreateWindowExW / CreateWindowExA
 // -----------------------------------------------------------------------------
 
 static void HandleCreatedWindow(HWND hWnd)
 {
     if (!hWnd) return;
-
-    // Clear any stale entries for this HWND in case it was recycled and
-    // WM_NCDESTROY did not chain through DefWindowProc.
-    {
-        std::lock_guard<std::mutex> lock(g_eligibilityMutex);
-        g_eligibilityCache.erase(hWnd);
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_appControlledMutex);
-        g_appControlledWindows.erase(hWnd);
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
-        g_appDarkModeWindows.erase(hWnd);
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_appliedMutex);
-        g_appliedWindows.erase(hWnd);
-    }
 
     WCHAR className[256];
     if (GetClassNameW(hWnd, className, 256) &&
@@ -694,6 +700,8 @@ BOOL Wh_ModInit()
     success &= Hook(DefWindowProcA,  DefWindowProcA_hook,  &DefWindowProcA_orig,  L"DefWindowProcA");
     success &= Hook(DefDlgProcW,     DefDlgProcW_hook,     &DefDlgProcW_orig,     L"DefDlgProcW");
     success &= Hook(DefDlgProcA,     DefDlgProcA_hook,     &DefDlgProcA_orig,     L"DefDlgProcA");
+    success &= Hook(DefFrameProcW,   DefFrameProcW_hook,   &DefFrameProcW_orig,   L"DefFrameProcW");
+    success &= Hook(DefFrameProcA,   DefFrameProcA_hook,   &DefFrameProcA_orig,   L"DefFrameProcA");
     success &= Hook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_orig, L"CreateWindowExW");
     success &= Hook(CreateWindowExA, CreateWindowExA_hook, &CreateWindowExA_orig, L"CreateWindowExA");
     success &= Hook(DwmSetWindowAttribute, DwmSetWindowAttribute_hook, &DwmSetWindowAttribute_orig, L"DwmSetWindowAttribute");
