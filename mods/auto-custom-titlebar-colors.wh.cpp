@@ -48,9 +48,9 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 // ==WindhawkModSettings==
 /*
 - customColours:
-  - light: false
+  - light: true
     $name: "Light Mode"
-  - dark: false
+  - dark: true
     $name: "Dark Mode"
   $name: "Custom Colours"
 
@@ -85,6 +85,16 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
     $name: "Use Hex Input"
     $description: "When on, use RRGGBB hex strings. When off, use separate R/G/B fields."
   - activeColour:
+    - hex: "000000"
+      $name: "Hex (RRGGBB)"
+    - r: 0
+      $name: "R (0-255)"
+    - g: 0
+      $name: "G (0-255)"
+    - b: 0
+      $name: "B (0-255)"
+    $name: "Active Window"
+  - inactiveColour:
     - hex: "202020"
       $name: "Hex (RRGGBB)"
     - r: 32
@@ -92,16 +102,6 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
     - g: 32
       $name: "G (0-255)"
     - b: 32
-      $name: "B (0-255)"
-    $name: "Active Window"
-  - inactiveColour:
-    - hex: "323232"
-      $name: "Hex (RRGGBB)"
-    - r: 50
-      $name: "R (0-255)"
-    - g: 50
-      $name: "G (0-255)"
-    - b: 50
       $name: "B (0-255)"
     $name: "Inactive Window"
   $name: "Dark Mode Colours"
@@ -170,6 +170,9 @@ static std::mutex g_appDarkModeMutex;
 
 static std::unordered_set<HWND> g_appliedWindows;
 static std::mutex g_appliedMutex;
+
+static std::unordered_set<HWND> g_appliedCustomColorWindows;
+static std::mutex g_appliedCustomColorMutex;
 
 // -----------------------------------------------------------------------------
 // Dark mode detection
@@ -330,10 +333,10 @@ static void LoadSettings()
     BOOL useHexDark = (BOOL)Wh_GetIntSetting(L"darkMode.useHex");
     if (useHexDark) {
         WindhawkUtils::StringSetting hexActive = WindhawkUtils::StringSetting::make(L"darkMode.activeColour.hex");
-        if (!HexToColorref(hexActive.get(), &g_settings.activeDark)) g_settings.activeDark = RGB(32, 32, 32);
+        if (!HexToColorref(hexActive.get(), &g_settings.activeDark)) g_settings.activeDark = RGB(0, 0, 0);
 
         WindhawkUtils::StringSetting hexInactive = WindhawkUtils::StringSetting::make(L"darkMode.inactiveColour.hex");
-        if (!HexToColorref(hexInactive.get(), &g_settings.inactiveDark)) g_settings.inactiveDark = RGB(50, 50, 50);
+        if (!HexToColorref(hexInactive.get(), &g_settings.inactiveDark)) g_settings.inactiveDark = RGB(32, 32, 32);
     } else {
         g_settings.activeDark = RGB(
             (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.r"), 0, 255),
@@ -386,6 +389,12 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
         }
         if (!wasApplied) return;
 
+        bool hadCustomColor;
+        {
+            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
+            hadCustomColor = g_appliedCustomColorWindows.erase(hWnd) != 0;
+        }
+
         BOOL dark = FALSE;
         {
             std::lock_guard<std::mutex> lockDark(g_appDarkModeMutex);
@@ -401,7 +410,7 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
 
         InModGuard guard;
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        if (!appOwnsColour) {
+        if (!appOwnsColour && hadCustomColor) {
             const COLORREF def = DWMWA_COLOR_DEFAULT;
             DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
         }
@@ -433,23 +442,34 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
     COLORREF colour;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        useCustom = g_isDarkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
-        colour = g_isDarkMode 
+        useCustom = darkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
+        colour = darkMode 
             ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
             : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
     }
 
     if (useCustom) {
+        {
+            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
+            g_appliedCustomColorWindows.insert(hWnd);
+        }
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
             &colour, sizeof(colour));
         Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%02X%02X%02X",
-            hWnd, (BOOL)g_isDarkMode, isActive,
+            hWnd, darkMode, isActive,
             GetRValue(colour), GetGValue(colour), GetBValue(colour));
     } else {
-        const COLORREF def = DWMWA_COLOR_DEFAULT;
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
-        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
-            hWnd, (BOOL)g_isDarkMode, isActive);
+        bool hadCustomColor;
+        {
+            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
+            hadCustomColor = g_appliedCustomColorWindows.erase(hWnd) != 0;
+        }
+        if (hadCustomColor) {
+            const COLORREF def = DWMWA_COLOR_DEFAULT;
+            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
+                hWnd, darkMode, isActive);
+        }
     }
 }
 
@@ -497,6 +517,10 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
             {
                 std::lock_guard<std::mutex> lock(g_appliedMutex);
                 g_appliedWindows.erase(hWnd);
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
+                g_appliedCustomColorWindows.erase(hWnd);
             }
             break;
         }
@@ -737,12 +761,18 @@ VOID Wh_ModUninit()
 {
     Wh_Log(L"[PID %d] Uninit - restoring system defaults", GetCurrentProcessId());
 
-    // Swap out the applied set atomically, then iterate over the captured snapshot.
-    // This avoids holding g_appliedMutex across DWM calls (cross-process, potentially slow).
+    // Swap out the applied sets atomically, then iterate over the captured snapshot.
+    // This avoids holding mutexes across DWM calls (cross-process, potentially slow).
     std::unordered_set<HWND> applied;
     {
         std::lock_guard<std::mutex> lock(g_appliedMutex);
         applied.swap(g_appliedWindows);
+    }
+
+    std::unordered_set<HWND> appliedCustomColors;
+    {
+        std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
+        appliedCustomColors.swap(g_appliedCustomColorWindows);
     }
 
     for (HWND hWnd : applied) {
@@ -761,9 +791,11 @@ VOID Wh_ModUninit()
             appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
         }
 
+        bool hadCustomColor = appliedCustomColors.count(hWnd) != 0;
+
         InModGuard guard;
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        if (!appOwnsColour) {
+        if (!appOwnsColour && hadCustomColor) {
             const COLORREF def = DWMWA_COLOR_DEFAULT;
             DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
         }
