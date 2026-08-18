@@ -19,7 +19,13 @@
 A modern, native Windows desktop panel for launching applications, organizing
 multiple shortcut pages, and controlling Windows media sessions.
 
-![Quick Launch & Media Panel](https://i.imgur.com/rckHuTB.png)
+### Expanded panel
+
+![Quick Launch & Media Panel - expanded](https://raw.githubusercontent.com/spartaaacus/windhawk-mods/quick-launch-media-panel-assets/assets/quick-launch-media-panel-v2.2.0-expanded.png)
+
+### Collapsed capsule
+
+![Quick Launch & Media Panel - collapsed](https://raw.githubusercontent.com/spartaaacus/windhawk-mods/quick-launch-media-panel-assets/assets/quick-launch-media-panel-v2.2.0-collapsed.png)
 
 ## Features
 
