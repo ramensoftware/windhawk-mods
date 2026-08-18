@@ -78,8 +78,7 @@ If you would rather the mod stayed off the Explorer/Desktop menus, turn off
 **Explorer right-click menu** in the settings; with it off, Pin / Move / Copy
 disappear from that menu, leaving only **Manage folders...** — kept there on
 purpose, since it is the only remaining way to open the manager once nothing
-is pinned. The settings page also has an **Open the Taskbar Folders window**
-checkbox that opens it directly, since Windhawk settings have no button widget.
+is pinned.
 
 ### The Taskbar Folders window
 
@@ -176,16 +175,54 @@ AppUserModelID, and that shortcut is pinned with the shell's ordinary
 - They collapse into the overflow button when the taskbar fills up.
 - Every animation is Windows' own.
 
-**Disabling or uninstalling the mod unpins every button it created**, deletes
-their Start Menu shortcuts and their jump lists, and clears the folder list
-itself — nothing it wrote is left behind, and turning it back on starts from
-an empty list rather than silently recreating what was there before.
+## What this writes, and what happens when you disable it
 
-This cleanup runs from `Wh_ModUninit`, so it does not run on an unclean exit
+Because the buttons are genuine pinned items, the mod cannot keep its state
+entirely to itself. For each folder on the taskbar it writes:
+
+- a shortcut in `%AppData%\Microsoft\Windows\Start Menu\Programs\Taskbar
+  Folder Hover Tray`, carrying the folder's AppUserModelID and icon,
+- the taskbar pin itself, made with the shell's ordinary "pin to taskbar" verb —
+  which is the shell writing its own pinned-items folder and `Taskband` key, the
+  same as pinning any app by hand,
+- a jump list for that AppUserModelID, holding the **Manage folders...** task.
+
+The folder list — names, paths, icons, pinned or not — lives in the mod's own
+private Windhawk storage, and nowhere else.
+
+One visible side effect of the Start Menu shortcuts: Windows enumerates that
+folder for **Start → All apps** and for Start/taskbar search, so each folder
+button also shows up there under a **Taskbar Folder Hover Tray** group. That is
+the price of a real pin — the shell resolves a taskbar pin through its Start
+Menu shortcut — and it disappears with the shortcuts when the mod is disabled.
+
+**Disabling or uninstalling the mod unpins every button it created** and deletes
+their Start Menu shortcuts and their jump lists, so nothing it put on the taskbar
+or in your Start Menu is left behind.
+
+**The folder list survives.** Windhawk runs the same unload path for a real
+disable, for a mod update, for a settings-page save and for an engine restart,
+and cannot tell them apart, so wiping the list there would mean an update
+silently deleted your folders. Instead the entries are kept and re-pinned the
+next time the mod loads. Uninstalling drops them too — Windhawk deletes a mod's
+storage itself when the mod is removed — and **Remove all folder buttons...** in
+the Taskbar Folders window is the explicit, confirmed way to forget everything
+without uninstalling.
+
+While the mod is disabled, nothing of it runs, so nothing is left running or
+hooked; while it is *enabled*, the pins and shortcuts above are live. Note that
+the taskbar order is the taskbar's own, so the buttons come back at the end of
+the strip rather than where you dragged them.
+
+The unpin sweep runs from `Wh_ModUninit`, so it does not run on an unclean exit
 (Explorer crashing or being killed, or a hard reboot, while the mod is still
-enabled). If that happens, the leftovers are the shortcuts under
+enabled), and it cannot run at all if the mod was uninstalled while Explorer was
+not running. If that happens, the leftovers are the shortcuts under
 `%AppData%\Microsoft\Windows\Start Menu\Programs\Taskbar Folder Hover Tray` —
-delete that folder and unpin any of its buttons still on the taskbar by hand.
+delete that folder and unpin any of its buttons still on the taskbar by hand. As
+long as the mod is enabled it also sweeps on its own: every reconcile unpins any
+of its buttons that are no longer in the folder list, so leftovers from an
+unclean exit are cleaned up the next time it loads.
 
 Earlier versions drew an overlay instead, seated in a gap carved by widening a
 neighbouring icon's margin. It could never be exactly right: taskbar positions are
@@ -8181,13 +8218,20 @@ void RemoveSelected(HWND hWnd) {
 // Unpins every real taskbar button, deletes their Start Menu shortcuts and
 // their per-AppID jump lists — everything InvokeVerb's "taskbarpin" and
 // WriteJumpList put in place. Shared by the user-facing "Remove all folder
-// buttons" action and the automatic cleanup Wh_ModUninit runs on every
-// disable/uninstall, so nothing this mod wrote — on the taskbar, in the
-// Start Menu, or in its own folder list — outlives either path.
+// buttons" action and the automatic cleanup Wh_ModUninit runs on every unload,
+// so nothing this mod wrote outside its own storage outlives either path.
+//
+// clearStore separates the two callers. The user-facing action means "forget
+// everything" and empties the folder list. The unload path must not: Windhawk
+// routes a mod update, a settings-page save and an engine restart through the
+// same Wh_ModUninit as a real disable, and wiping the list there would delete
+// the user's configuration every time the mod is updated. Windhawk removes the
+// mod's storage itself when the mod is uninstalled, so the unload path only has
+// to undo what it put outside that storage.
 //
 // CoInitializeEx is refcounted per thread, so this is safe to call whether or
 // not the calling thread already has COM up (Wh_ModUninit's does not).
-void RemoveAllFolderButtonsCore() {
+void RemoveAllFolderButtonsCore(bool clearStore) {
     struct ComInit {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         ~ComInit() {
@@ -8236,7 +8280,27 @@ void RemoveAllFolderButtonsCore() {
     }
 
     std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
-    FolderStore::Write({});
+    if (clearStore) {
+        FolderStore::Write({});
+        return;
+    }
+
+    // Keep every entry, including its pinned flag, and only clear pinApplied.
+    // That flag is what Reconcile's reverse sync trusts: "we pinned this and it
+    // is gone now" is how a native Unpin from taskbar is detected. Leaving it
+    // set would make the next load read the sweep above as the user unpinning
+    // everything and demote every entry to a draft.
+    auto stored = FolderStore::Read();
+    bool changed = false;
+    for (auto& entry : stored) {
+        if (entry.pinApplied) {
+            entry.pinApplied = false;
+            changed = true;
+        }
+    }
+    if (changed) {
+        FolderStore::Write(stored);
+    }
 }
 
 void RemoveAllFolderButtons(HWND hWnd) {
@@ -8250,25 +8314,26 @@ void RemoveAllFolderButtons(HWND hWnd) {
         return;
     }
 
-    RemoveAllFolderButtonsCore();
+    RemoveAllFolderButtonsCore(/*clearStore=*/true);
     RefreshAfterStoreChange(hWnd);
 }
 
 // Windhawk's core principle is that disabling a mod puts the system back the
-// way it was. Called from Wh_ModUninit, which fires on every disable and
-// every uninstall alike (Windhawk does not distinguish the two, and neither
-// does it distinguish a real disable from the reload after a code-update
-// save) — so the real taskbar pins, their Start Menu shortcuts, their jump
-// lists and the folder list itself never outlive this pass. Nothing survives
-// a disable: a re-enable starts from the default, empty folder list rather
-// than silently recreating whatever was configured before.
+// way it was. Called from Wh_ModUninit, which fires on every unload alike — a
+// user disable, an uninstall, a mod update, a settings-page save and an engine
+// restart are indistinguishable from here — so everything this mod put outside
+// its own storage goes: the real taskbar pins, their Start Menu shortcuts and
+// their jump lists.
 //
-// This does mean a code-update / settings-page save (which Windhawk routes
-// through the same Wh_ModUninit -> Wh_ModInit path as a real disable, with no
-// way to tell the two apart from here) wipes the folder list too, not just
-// the code reload it looks like from the user's side.
+// The folder list itself stays. It is the user's configuration, it lives in the
+// mod's private Windhawk storage (which Windhawk deletes on its own when the mod
+// is uninstalled), and it is the one thing here that cannot be reconstructed.
+// Wiping it on every unload would mean publishing an update silently deleted
+// every user's folders. A re-enable therefore re-pins what was configured, and
+// "Remove all folder buttons..." in the manager stays the explicit, confirmed
+// way to forget everything.
 void UnpinAllForDisable() {
-    RemoveAllFolderButtonsCore();
+    RemoveAllFolderButtonsCore(/*clearStore=*/false);
 }
 
 // A single-select listbox never lets go of its selection on its own — a click
@@ -9873,12 +9938,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // Only the hover half needs these symbols, and they are the part a Windows
+    // update breaks. Everything else — the folder store, the pin reconcile, the
+    // Explorer menu, the jump-list verb — does not, so carry on without them
+    // rather than returning FALSE. Returning FALSE here would strand the pinned
+    // buttons from the last working session with no in-mod way to remove them:
+    // no manager entry, no jump-list handler, and no disable-time sweep either,
+    // since Wh_ModUninit only runs for a mod that loaded. Every symbol below is
+    // null-checked at its call sites, and the hooks that bind hover simply never
+    // install.
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(
-            L"Failed to hook taskbar.dll, the taskbar XamlRoot is unreachable");
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        return FALSE;
+        Wh_Log(L"Failed to hook taskbar.dll, the taskbar XamlRoot is "
+               L"unreachable; hover will not bind, the folder buttons and the "
+               L"manager still work");
     }
 
     Pins::Start();
