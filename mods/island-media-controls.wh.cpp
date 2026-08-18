@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.1
+// @version         0.10.2
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -75,6 +75,8 @@ play/pause, and next controls.
   browser/video artwork with generated abstract covers for a cleaner look.
 - **Useful playback controls:** Open the player to seek through the track, switch
   songs, and control playback without leaving the taskbar.
+
+> The island currently attaches to the primary taskbar.
 
 ## Material previews
 
@@ -287,6 +289,7 @@ extern "C" HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice(
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -629,18 +632,13 @@ HWND g_expandedPopup = nullptr;
 bool g_popupClassRegistered = false;
 HWND g_popupBackdropOverlay = nullptr;
 bool g_popupBackdropOverlayClassRegistered = false;
-std::chrono::steady_clock::time_point g_popupBackdropOverlayLastPaintTime{};
 int g_popupBackdropOverlayLastWidth = 0;
 int g_popupBackdropOverlayLastHeight = 0;
 int g_popupBackdropOverlayLastRadius = 0;
 std::atomic<int> g_popupBackdropOverlayFrameAlpha{255};
-bool g_popupBackdropOverlayNativeBlurActive = false;
 bool g_expandedPopupCaptureExcluded = false;
 bool g_popupXamlChildCaptureExcluded = false;
 bool g_popupBackdropOverlayCaptureExcluded = false;
-RECT g_popupLiquidGlassPanelRectPx{};
-int g_popupLiquidGlassPanelRadiusPx = 0;
-bool g_popupLiquidGlassPanelRectValid = false;
 bool g_popupOverlayWgcReadbackHadVisibleFrame = false;
 enum class PopupOverlayWgcDiagnosticState {
     NotStarted,
@@ -665,13 +663,29 @@ int g_popupOverlayWgcFramesToSkip = 0;
 RECT g_popupBackdropOverlayFallbackRect{};
 int g_popupBackdropOverlayFallbackWidth = 0;
 int g_popupBackdropOverlayFallbackHeight = 0;
+int g_popupBackdropOverlayFallbackRadius = 0;
 bool g_popupBackdropOverlayFallbackValid = false;
+[[clang::no_destroy]] std::vector<BYTE>
+    g_popupBackdropOverlayLowPixels;
+RECT g_popupBackdropOverlayLowPixelsRect{};
+int g_popupBackdropOverlayLowPixelsWidth = 0;
+int g_popupBackdropOverlayLowPixelsHeight = 0;
+std::chrono::steady_clock::time_point
+    g_popupBackdropOverlayLastCaptureTime{};
+bool g_popupBackdropOverlayLowPixelsValid = false;
 
 void ClearPopupBackdropOverlayHandoffCache() {
     g_popupBackdropOverlayFallbackRect = {};
     g_popupBackdropOverlayFallbackWidth = 0;
     g_popupBackdropOverlayFallbackHeight = 0;
+    g_popupBackdropOverlayFallbackRadius = 0;
     g_popupBackdropOverlayFallbackValid = false;
+    g_popupBackdropOverlayLowPixels.clear();
+    g_popupBackdropOverlayLowPixelsRect = {};
+    g_popupBackdropOverlayLowPixelsWidth = 0;
+    g_popupBackdropOverlayLowPixelsHeight = 0;
+    g_popupBackdropOverlayLastCaptureTime = {};
+    g_popupBackdropOverlayLowPixelsValid = false;
 }
 
 
@@ -978,17 +992,38 @@ DWORD FindAppleMusicProcessId() {
     return processId;
 }
 
+HWND FindAppleMusicWindow(DWORD processId) {
+    struct SearchContext {
+        DWORD processId;
+        HWND window;
+    } context{processId, nullptr};
+
+    EnumWindows(
+        [](HWND hwnd, LPARAM parameter) -> BOOL {
+            auto* context = reinterpret_cast<SearchContext*>(parameter);
+            DWORD windowProcessId = 0;
+            GetWindowThreadProcessId(hwnd, &windowProcessId);
+            if (windowProcessId == context->processId &&
+                IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == nullptr) {
+                context->window = hwnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+    return context.window;
+}
+
 bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     DWORD processId = FindAppleMusicProcessId();
-    if (!processId) {
+    HWND appleMusicWindow = processId ? FindAppleMusicWindow(processId) : nullptr;
+    if (!appleMusicWindow) {
         return false;
     }
 
     IUIAutomation* automation = nullptr;
-    IUIAutomationElement* root = nullptr;
-    IUIAutomationCondition* processCondition = nullptr;
+    IUIAutomationElement* windowRoot = nullptr;
     IUIAutomationCondition* idCondition = nullptr;
-    IUIAutomationCondition* combinedCondition = nullptr;
     IUIAutomationElement* scrubber = nullptr;
     IUnknown* unknown = nullptr;
     IUIAutomationRangeValuePattern* range = nullptr;
@@ -997,31 +1032,23 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     HRESULT result = CoCreateInstance(CLSID_CUIAutomation, nullptr,
                                       CLSCTX_INPROC_SERVER,
                                       IID_PPV_ARGS(&automation));
-    VARIANT processVariant{};
-    processVariant.vt = VT_I4;
-    processVariant.lVal = static_cast<LONG>(processId);
     VARIANT idVariant{};
     idVariant.vt = VT_BSTR;
     idVariant.bstrVal = SysAllocString(L"LCDScrubber");
+    if (!idVariant.bstrVal) {
+        result = E_OUTOFMEMORY;
+    }
 
     if (SUCCEEDED(result)) {
-        result = automation->GetRootElement(&root);
-    }
-    if (SUCCEEDED(result)) {
-        result = automation->CreatePropertyCondition(
-            UIA_ProcessIdPropertyId, processVariant, &processCondition);
+        result = automation->ElementFromHandle(appleMusicWindow, &windowRoot);
     }
     if (SUCCEEDED(result) && idVariant.bstrVal) {
         result = automation->CreatePropertyCondition(
             UIA_AutomationIdPropertyId, idVariant, &idCondition);
     }
     if (SUCCEEDED(result)) {
-        result = automation->CreateAndCondition(
-            processCondition, idCondition, &combinedCondition);
-    }
-    if (SUCCEEDED(result)) {
-        result = root->FindFirst(TreeScope_Subtree, combinedCondition,
-                                 &scrubber);
+        result = windowRoot->FindFirst(TreeScope_Descendants, idCondition,
+                                       &scrubber);
         if (SUCCEEDED(result) && !scrubber) {
             result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
         }
@@ -1052,10 +1079,8 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     if (range) range->Release();
     if (unknown) unknown->Release();
     if (scrubber) scrubber->Release();
-    if (combinedCondition) combinedCondition->Release();
     if (idCondition) idCondition->Release();
-    if (processCondition) processCondition->Release();
-    if (root) root->Release();
+    if (windowRoot) windowRoot->Release();
     if (automation) automation->Release();
 
     Wh_Log(L"Island: Apple Music UI Automation seek result=%d hr=0x%08X",
@@ -1835,17 +1860,36 @@ bool LooksLikeBrowserMediaSource(std::wstring const& source) {
         return false;
     }
 
+    auto containsIdentifier = [&](std::wstring_view identifier) {
+        size_t position = 0;
+        while ((position = lower.find(identifier, position)) !=
+               std::wstring::npos) {
+            bool leftBoundary =
+                position == 0 || !std::iswalnum(lower[position - 1]);
+            size_t end = position + identifier.size();
+            bool rightBoundary =
+                end == lower.size() || !std::iswalnum(lower[end]);
+            if (leftBoundary && rightBoundary) {
+                return true;
+            }
+            position = end;
+        }
+        return false;
+    };
+
     return lower.find(L"chrome") != std::wstring::npos ||
            lower.find(L"chromium") != std::wstring::npos ||
            lower.find(L"msedge") != std::wstring::npos ||
            lower.find(L"microsoftedge") != std::wstring::npos ||
            lower.find(L"firefox") != std::wstring::npos ||
            lower.find(L"brave") != std::wstring::npos ||
-           lower.find(L"opera") != std::wstring::npos ||
+           lower.find(L"operasoftware") != std::wstring::npos ||
+           containsIdentifier(L"opera") ||
            lower.find(L"vivaldi") != std::wstring::npos ||
-           lower.find(L"arc") != std::wstring::npos ||
+           lower.find(L"thebrowser") != std::wstring::npos ||
+           containsIdentifier(L"arc") ||
            lower.find(L"browser") != std::wstring::npos ||
-           lower.find(L"zen") != std::wstring::npos ||
+           containsIdentifier(L"zen") ||
            lower.find(L"floorp") != std::wstring::npos ||
            lower.find(L"librewolf") != std::wstring::npos ||
            lower.find(L"yandex") != std::wstring::npos ||
@@ -2229,6 +2273,41 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
     return bitmap;
 }
 
+bool ReadCommittedHGlobalStreamBytes(
+    IStream* stream,
+    std::vector<uint8_t>& output) {
+    if (!stream) {
+        return false;
+    }
+
+    STATSTG statistics{};
+    HRESULT result = stream->Stat(&statistics, STATFLAG_NONAME);
+    if (FAILED(result) || statistics.cbSize.QuadPart == 0 ||
+        statistics.cbSize.QuadPart > static_cast<ULONGLONG>(SIZE_MAX)) {
+        return false;
+    }
+
+    HGLOBAL memory = nullptr;
+    result = GetHGlobalFromStream(stream, &memory);
+    if (FAILED(result) || !memory) {
+        return false;
+    }
+
+    SIZE_T size = static_cast<SIZE_T>(statistics.cbSize.QuadPart);
+    if (size > GlobalSize(memory)) {
+        return false;
+    }
+
+    void* data = GlobalLock(memory);
+    if (!data) {
+        return false;
+    }
+    auto first = static_cast<uint8_t const*>(data);
+    output.assign(first, first + size);
+    GlobalUnlock(memory);
+    return true;
+}
+
 std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& bytes,
                                                      bool edgeFadeToMiddle = false,
                                                      bool fadeFromTop = false,
@@ -2454,20 +2533,8 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
     if (SUCCEEDED(hr)) {
         hr = encoder->Commit();
     }
-    if (SUCCEEDED(hr)) {
-        HGLOBAL memory = nullptr;
-        hr = GetHGlobalFromStream(outStream, &memory);
-        if (SUCCEEDED(hr) && memory) {
-            SIZE_T size = GlobalSize(memory);
-            void* data = GlobalLock(memory);
-            if (data && size > 0) {
-                auto first = static_cast<uint8_t*>(data);
-                output.assign(first, first + size);
-            }
-            if (data) {
-                GlobalUnlock(memory);
-            }
-        }
+    if (SUCCEEDED(hr) && !ReadCommittedHGlobalStreamBytes(outStream, output)) {
+        output.clear();
     }
 
     if (propertyBag) propertyBag->Release();
@@ -2534,20 +2601,8 @@ std::vector<uint8_t> EncodePbgraPngBytes(UINT width, UINT height, std::vector<BY
     if (SUCCEEDED(hr)) {
         hr = encoder->Commit();
     }
-    if (SUCCEEDED(hr)) {
-        HGLOBAL memory = nullptr;
-        hr = GetHGlobalFromStream(outStream, &memory);
-        if (SUCCEEDED(hr) && memory) {
-            SIZE_T size = GlobalSize(memory);
-            void* data = GlobalLock(memory);
-            if (data && size > 0) {
-                auto first = static_cast<uint8_t*>(data);
-                output.assign(first, first + size);
-            }
-            if (data) {
-                GlobalUnlock(memory);
-            }
-        }
+    if (SUCCEEDED(hr) && !ReadCommittedHGlobalStreamBytes(outStream, output)) {
+        output.clear();
     }
 
     if (propertyBag) propertyBag->Release();
@@ -4229,17 +4284,17 @@ BYTE PopupBackdropOverlayMaxAlpha() {
 }
 
 bool PopupBackdropCoverEffectEnabled() {
-    if (g_settings.popupBackdropCoverEffect == L"on") {
-        return true;
-    }
-    if (IsLiquidGlassMaterial() && !IsDarkModeApprox()) {
-        return true;
-    }
     if (g_settings.popupBackdropCoverEffect == L"off") {
         return false;
     }
-    // Default: keep the album color wash in dark mode. Liquid Glass also keeps
-    // it in light mode so the glass surface remains readable.
+    if (g_settings.popupBackdropCoverEffect == L"on") {
+        return true;
+    }
+    // Dark-only remains literal for other materials. Liquid Glass keeps the
+    // wash in light mode unless the user explicitly selects Off.
+    if (IsLiquidGlassMaterial() && !IsDarkModeApprox()) {
+        return true;
+    }
     return IsDarkModeApprox();
 }
 
@@ -10934,54 +10989,78 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
                                            RECT const& screenRect,
                                            int width,
                                            int height,
-                                           int cornerRadiusPx,
-                                           bool force) {
+                                           int cornerRadiusPx) {
     if (!hwnd || width <= 2 || height <= 2) {
         return false;
     }
 
     auto now = std::chrono::steady_clock::now();
-    bool sizeChanged =
-        width != g_popupBackdropOverlayLastWidth ||
-        height != g_popupBackdropOverlayLastHeight ||
-        cornerRadiusPx != g_popupBackdropOverlayLastRadius;
-    if (!force && !sizeChanged &&
-        g_popupBackdropOverlayLastPaintTime.time_since_epoch().count() != 0) {
-        auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
-                       now - g_popupBackdropOverlayLastPaintTime)
-                       .count();
-        if (age < kPopupBackdropOverlayRefreshMs) {
-            return true;
+    bool outputGeometryChanged =
+        !g_popupBackdropOverlayFallbackValid ||
+        width != g_popupBackdropOverlayFallbackWidth ||
+        height != g_popupBackdropOverlayFallbackHeight ||
+        cornerRadiusPx != g_popupBackdropOverlayFallbackRadius ||
+        !EqualRect(&g_popupBackdropOverlayFallbackRect, &screenRect);
+    bool captureGeometryChanged =
+        !g_popupBackdropOverlayLowPixelsValid ||
+        !EqualRect(&g_popupBackdropOverlayLowPixelsRect, &screenRect);
+    auto captureAge = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          now - g_popupBackdropOverlayLastCaptureTime)
+                          .count();
+    bool needCapture =
+        !g_popupBackdropOverlayLowPixelsValid ||
+        (captureGeometryChanged &&
+         captureAge >= kPopupBackdropOverlayRefreshMs);
+
+    if (!outputGeometryChanged && !needCapture) {
+        return true;
+    }
+
+    if (needCapture) {
+        int captureScale = PopupBackdropFallbackCaptureScale();
+        int lowWidth = Clamp(width / captureScale,
+                             40, kPopupBackdropOverlayMaxCaptureSize);
+        int lowHeight = Clamp(height / captureScale,
+                              40, kPopupBackdropOverlayMaxCaptureSize);
+        std::vector<BYTE> capturedPixels;
+        bool popupCaptureAffinityChanged = false;
+        if (g_settings.allowScreenCapture) {
+            popupCaptureAffinityChanged =
+                SetExpandedPopupCaptureExclusion(true);
+            if (popupCaptureAffinityChanged) {
+                DwmFlush();
+            }
+        }
+        bool captured = CaptureLowResScreenPixels(
+            screenRect, lowWidth, lowHeight, capturedPixels, hwnd);
+        // Throttle failed attempts too; otherwise a transient capture
+        // failure would put DwmFlush back on the per-frame path.
+        g_popupBackdropOverlayLastCaptureTime = now;
+        if (g_settings.allowScreenCapture) {
+            SetExpandedPopupCaptureExclusion(false);
+        }
+        if (captured) {
+            int blurPasses = PopupBackdropFallbackBlurPasses();
+            if (g_settings.allowScreenCapture && IsLiquidGlassMaterial()) {
+                blurPasses = std::max(blurPasses, 3);
+            }
+            BoxBlurPbgraPixels(capturedPixels, lowWidth, lowHeight, blurPasses);
+            g_popupBackdropOverlayLowPixels = std::move(capturedPixels);
+            g_popupBackdropOverlayLowPixelsRect = screenRect;
+            g_popupBackdropOverlayLowPixelsWidth = lowWidth;
+            g_popupBackdropOverlayLowPixelsHeight = lowHeight;
+            g_popupBackdropOverlayLowPixelsValid = true;
+        } else if (!g_popupBackdropOverlayLowPixelsValid) {
+            return false;
         }
     }
 
-    int captureScale = PopupBackdropFallbackCaptureScale();
-    int lowWidth = Clamp(width / captureScale,
-                         40, kPopupBackdropOverlayMaxCaptureSize);
-    int lowHeight = Clamp(height / captureScale,
-                          40, kPopupBackdropOverlayMaxCaptureSize);
-    std::vector<BYTE> lowPixels;
-    bool popupCaptureAffinityChanged = false;
-    if (g_settings.allowScreenCapture) {
-        popupCaptureAffinityChanged = SetExpandedPopupCaptureExclusion(true);
-        if (popupCaptureAffinityChanged) {
-            DwmFlush();
-        }
-    }
-    bool captured = CaptureLowResScreenPixels(
-        screenRect, lowWidth, lowHeight, lowPixels, hwnd);
-    if (g_settings.allowScreenCapture) {
-        SetExpandedPopupCaptureExclusion(false);
-    }
-    if (!captured) {
+    auto const& lowPixels = g_popupBackdropOverlayLowPixels;
+    int lowWidth = g_popupBackdropOverlayLowPixelsWidth;
+    int lowHeight = g_popupBackdropOverlayLowPixelsHeight;
+    if (lowPixels.empty() || lowWidth <= 0 || lowHeight <= 0) {
         return false;
     }
-
-    int blurPasses = PopupBackdropFallbackBlurPasses();
-    if (g_settings.allowScreenCapture && IsLiquidGlassMaterial()) {
-        blurPasses = std::max(blurPasses, 3);
-    }
-    BoxBlurPbgraPixels(lowPixels, lowWidth, lowHeight, blurPasses);
 
     std::vector<BYTE> out(static_cast<size_t>(width) * height * 4);
     bool dark = IsDarkModeApprox();
@@ -10991,22 +11070,28 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     BYTE maxAlpha = PopupBackdropOverlayMaxAlpha();
 
     for (int y = 0; y < height; ++y) {
-        double sampleY = ((static_cast<double>(y) + 0.5) * lowHeight / height) - 0.5;
+        double sampleY =
+            ((static_cast<double>(y) + 0.5) * lowHeight / height) - 0.5;
         for (int x = 0; x < width; ++x) {
-            double sampleX = ((static_cast<double>(x) + 0.5) * lowWidth / width) - 0.5;
-            BYTE edgeAlpha = PopupRoundedRectAlpha(x, y, width, height, cornerRadiusPx);
-            BYTE a = static_cast<BYTE>((static_cast<int>(edgeAlpha) * maxAlpha) / 255);
+            double sampleX =
+                ((static_cast<double>(x) + 0.5) * lowWidth / width) - 0.5;
+            BYTE edgeAlpha = PopupRoundedRectAlpha(
+                x, y, width, height, cornerRadiusPx);
+            BYTE a = static_cast<BYTE>(
+                (static_cast<int>(edgeAlpha) * maxAlpha) / 255);
 
             int sb = 0;
             int sg = 0;
             int sr = 0;
-            SampleBilinearPbgra(lowPixels, lowWidth, lowHeight, sampleX, sampleY, sb, sg, sr);
+            SampleBilinearPbgra(
+                lowPixels, lowWidth, lowHeight, sampleX, sampleY, sb, sg, sr);
 
             int b = Clamp(static_cast<int>(std::lround(sb * dim)), 0, 255);
             int g = Clamp(static_cast<int>(std::lround(sg * dim)), 0, 255);
             int r = Clamp(static_cast<int>(std::lround(sr * dim)), 0, 255);
 
-            BYTE* dst = out.data() + (static_cast<size_t>(y) * width + x) * 4;
+            BYTE* dst = out.data() +
+                        (static_cast<size_t>(y) * width + x) * 4;
             // UpdateLayeredWindow expects premultiplied BGRA for AC_SRC_ALPHA.
             dst[0] = static_cast<BYTE>((b * a) / 255);
             dst[1] = static_cast<BYTE>((g * a) / 255);
@@ -11014,10 +11099,6 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
             dst[3] = a;
         }
     }
-    g_popupBackdropOverlayFallbackRect = screenRect;
-    g_popupBackdropOverlayFallbackWidth = width;
-    g_popupBackdropOverlayFallbackHeight = height;
-    g_popupBackdropOverlayFallbackValid = true;
 
     HDC screenDc = GetDC(nullptr);
     if (!screenDc) {
@@ -11038,7 +11119,8 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     info.bmiHeader.biCompression = BI_RGB;
 
     void* bits = nullptr;
-    HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HBITMAP bitmap = CreateDIBSection(
+        screenDc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
     if (!bitmap || !bits) {
         if (bitmap) DeleteObject(bitmap);
         DeleteDC(memDc);
@@ -11062,10 +11144,14 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     ReleaseDC(nullptr, screenDc);
 
     if (ok) {
-        g_popupBackdropOverlayLastPaintTime = now;
         g_popupBackdropOverlayLastWidth = width;
         g_popupBackdropOverlayLastHeight = height;
         g_popupBackdropOverlayLastRadius = cornerRadiusPx;
+        g_popupBackdropOverlayFallbackRect = screenRect;
+        g_popupBackdropOverlayFallbackWidth = width;
+        g_popupBackdropOverlayFallbackHeight = height;
+        g_popupBackdropOverlayFallbackRadius = cornerRadiusPx;
+        g_popupBackdropOverlayFallbackValid = true;
     }
     return !!ok;
 }
@@ -11162,14 +11248,9 @@ void HidePopupBackdropOverlayWindowVisualOnly() {
         SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, false);
         SetWindowRgn(g_popupBackdropOverlay, nullptr, FALSE);
         ParkPopupWindow(g_popupBackdropOverlay);
-        g_popupBackdropOverlayLastPaintTime = {};
         g_popupBackdropOverlayLastWidth = 0;
         g_popupBackdropOverlayLastHeight = 0;
         g_popupBackdropOverlayLastRadius = 0;
-        g_popupLiquidGlassPanelRectPx = {};
-        g_popupLiquidGlassPanelRadiusPx = 0;
-        g_popupLiquidGlassPanelRectValid = false;
-        g_popupBackdropOverlayNativeBlurActive = false;
         ClearPopupBackdropOverlayHandoffCache();
         if (g_expandedPopup) {
             SetExpandedPopupCaptureExclusion(false);
@@ -11184,13 +11265,9 @@ void HidePopupBackdropOverlayWindow() {
         ClearPopupBackdropOverlayLayeredSurface(g_popupBackdropOverlay);
         SetWindowRgn(g_popupBackdropOverlay, nullptr, FALSE);
         ParkPopupWindow(g_popupBackdropOverlay);
-        g_popupBackdropOverlayLastPaintTime = {};
         g_popupBackdropOverlayLastWidth = 0;
         g_popupBackdropOverlayLastHeight = 0;
         g_popupBackdropOverlayLastRadius = 0;
-        g_popupLiquidGlassPanelRectPx = {};
-        g_popupLiquidGlassPanelRadiusPx = 0;
-        g_popupLiquidGlassPanelRectValid = false;
         g_popupOverlayWgcFallbackPainted = false;
         ClearPopupBackdropOverlayHandoffCache();
         if (g_expandedPopup) {
@@ -11329,42 +11406,6 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
         radiusDip * seekBackdropScale * dpiScale));
     cornerRadiusPx = Clamp(desiredRadius, 1, std::max(1, std::min(width, height) / 2));
 
-    RECT currentCardDip{
-        LerpInt(sourceRect.left, targetCard.left, progress),
-        LerpInt(sourceRect.top, targetCard.top, progress),
-        LerpInt(sourceRect.right, targetCard.right, progress),
-        LerpInt(sourceRect.bottom, targetCard.bottom, progress),
-    };
-    double cardSeekCenterY =
-        (static_cast<double>(currentCardDip.top) + currentCardDip.bottom) * 0.5;
-    currentCardDip = ScalePopupSeekRect(
-        currentCardDip,
-        PopupSeekLayerScale(PopupSeekLayer::Controls,
-                                kPopupSeekComponentShrink),
-        seekCenterX,
-        cardSeekCenterY);
-    RECT panelRect{
-        static_cast<LONG>(std::lround(currentCardDip.left * dpiScale)) -
-            static_cast<LONG>(std::lround(currentDip.left * dpiScale)),
-        static_cast<LONG>(std::lround(currentCardDip.top * dpiScale)) -
-            static_cast<LONG>(std::lround(currentDip.top * dpiScale)),
-        static_cast<LONG>(std::lround(currentCardDip.right * dpiScale)) -
-            static_cast<LONG>(std::lround(currentDip.left * dpiScale)),
-        static_cast<LONG>(std::lround(currentCardDip.bottom * dpiScale)) -
-            static_cast<LONG>(std::lround(currentDip.top * dpiScale)),
-    };
-    panelRect.left = Clamp<LONG>(panelRect.left, 0L, static_cast<LONG>(width));
-    panelRect.top = Clamp<LONG>(panelRect.top, 0L, static_cast<LONG>(height));
-    panelRect.right = Clamp<LONG>(panelRect.right, 0L, static_cast<LONG>(width));
-    panelRect.bottom = Clamp<LONG>(panelRect.bottom, 0L, static_cast<LONG>(height));
-    int panelWidth = static_cast<int>(panelRect.right - panelRect.left);
-    int panelHeight = static_cast<int>(panelRect.bottom - panelRect.top);
-    g_popupLiquidGlassPanelRectPx = panelRect;
-    g_popupLiquidGlassPanelRadiusPx = Clamp(
-        desiredRadius,
-        1,
-        std::max(1, std::min(panelWidth, panelHeight) / 2));
-    g_popupLiquidGlassPanelRectValid = panelWidth > 4 && panelHeight > 4;
     return true;
 }
 
@@ -11552,17 +11593,11 @@ void UpdatePopupBackdropOverlayWindow() {
                               GWL_EXSTYLE,
                               fallbackDesiredStyle);
         }
-        bool forceSnapshot =
-            !g_popupBackdropOverlayFallbackValid ||
-            g_popupBackdropOverlayFallbackWidth != width ||
-            g_popupBackdropOverlayFallbackHeight != height ||
-            !EqualRect(&g_popupBackdropOverlayFallbackRect, &overlayRect);
         if (UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
                                                   overlayRect,
                                                   width,
                                                   height,
-                                                  cornerRadiusPx,
-                                                  forceSnapshot)) {
+                                                  cornerRadiusPx)) {
             g_popupOverlayWgcFallbackPainted = true;
         }
         return;
