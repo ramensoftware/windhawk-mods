@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.2.0
+// @version         1.2.1
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -121,6 +121,14 @@ action again**:
 
 The two halves are independent, so a release does not have to undo the entry —
 open Quick Settings on arrival and mute on departure if that is useful to you.
+
+One caveat on Show desktop specifically. It sends Win+D, which *toggles*
+minimise-all against whatever the current state is — the old shell button was a
+true peek with no state of its own, and Windows exposes no API for that any
+more. Rest in the corner and leave, and it behaves as a peek. But activate a
+window while the desktop is showing and you have changed what the second Win+D
+does, so the release can minimise rather than restore. Every other toggle
+— Mute, Keep awake — is unaffected.
 
 A hold only ever releases what it actually engaged, so a pointer that clips the
 corner without staying long enough to fire leaves nothing behind. Disabling the
@@ -774,12 +782,18 @@ enum Zone
     ZONE_COUNT = 16,
 };
 
+// Values for ZoneTuning::modifier and ModSettings::requireModifier. Named
+// together rather than one of them, so the set reads as an enumeration rather
+// than as one arbitrary special case.
+static constexpr int kModifierNone = 0;
+static constexpr int kModifierCtrl = 1;
+static constexpr int kModifierAlt = 2;
+static constexpr int kModifierShift = 3;
+static constexpr int kModifierWin = 4;
+
 // Per-zone overrides. Every numeric field uses -1 for "inherit the global
 // value", so an untouched zone behaves exactly as it did before per-zone
 // settings existed and old configurations keep working unchanged.
-// Values for ZoneTuning::modifier and ModSettings::requireModifier.
-static constexpr int kModifierWin = 4;
-
 struct ZoneTuning
 {
     int size = -1;      // corner square / edge strip thickness, px
@@ -787,7 +801,7 @@ struct ZoneTuning
     int settle = -1;    // pass-through guard, ms
     int knock = -1;     // knock window, ms
     int cooldown = -1;  // per-zone cooldown, ms
-    int modifier = -1;  // 0 none, 1 Ctrl, 2 Alt, 3 Shift, 4 Win
+    int modifier = -1;  // kModifier* above, or -1 to inherit
 };
 
 struct ZoneConfig
@@ -883,6 +897,12 @@ struct ZoneSet
         std::wstring id;
         int width = 0;
         int height = 0;
+        // BuildZoneSet clamps against the work area when "Keep zones out of
+        // the taskbar" is on, so the dashboard needs both to report the size a
+        // zone will really use rather than one measured against a rect the
+        // builder did not use.
+        int workWidth = 0;
+        int workHeight = 0;
         bool primary = false;
     };
     std::vector<MonitorSummary> monitors;
@@ -1438,6 +1458,14 @@ static void RefreshMonitors()
             m.id += L" #" + std::to_wstring(n);
     }
 
+}
+
+// Split out of RefreshMonitors so it can be called past RebuildZones' no-op
+// check. An SPI_SETWORKAREA burst dispatches one rebuild per broadcast and the
+// result is usually identical, so printing from RefreshMonitors put five-plus
+// lines in the log per broadcast for a change nobody made.
+static void LogMonitors()
+{
     if (!g_showMonitorNames)
         return;
 
@@ -2427,6 +2455,8 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
         ms.id = mon.id;
         ms.width = mon.rcMonitor.right - mon.rcMonitor.left;
         ms.height = mon.rcMonitor.bottom - mon.rcMonitor.top;
+        ms.workWidth = mon.rcWork.right - mon.rcWork.left;
+        ms.workHeight = mon.rcWork.bottom - mon.rcWork.top;
         ms.primary = mon.isPrimary;
         set->monitors.push_back(std::move(ms));
     }
@@ -2713,6 +2743,7 @@ static void RebuildZones()
         return;
 
     // Past the no-op check, so this describes a change that actually happened.
+    LogMonitors();
     if (set->zones.empty())
     {
         Wh_Log(L"No zones are active - every zone is set to \"Nothing\", or "
@@ -2810,6 +2841,14 @@ static bool EnqueueAction(const HitZone &hz)
         g_queue.push_back(hz);
     LeaveCriticalSection(&g_queueLock);
     SetEvent(g_hWorkEvent);
+    if (!queued)
+    {
+        // The caller has already spent the visit and stamped both cooldowns by
+        // the time it learns this, so the zone stays dead until the pointer
+        // leaves and comes back. Users are asked to paste this log when a zone
+        // misbehaves, and silence here is exactly the case it cannot answer.
+        Wh_Log(L"DROPPED (action queue full): %s", hz.label.c_str());
+    }
     return queued;
 }
 
@@ -2983,11 +3022,11 @@ static bool RequiredModifierHeld(int which)
 {
     switch (which)
     {
-    case 1: return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    case 2: return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    case 3: return (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    case 4: return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
-                   (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+    case kModifierCtrl:  return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    case kModifierAlt:   return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    case kModifierShift: return (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    case kModifierWin:   return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+                                (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
     default: return true;  // no modifier required
     }
 }
@@ -3596,15 +3635,15 @@ static int ParseZoneName(const std::wstring &s)
 static int ParseModifierName(const std::wstring &s)
 {
     if (s == L"NONE")
-        return 0;
+        return kModifierNone;
     if (s == L"CTRL")
-        return 1;
+        return kModifierCtrl;
     if (s == L"ALT")
-        return 2;
+        return kModifierAlt;
     if (s == L"SHIFT")
-        return 3;
+        return kModifierShift;
     if (s == L"WIN")
-        return 4;
+        return kModifierWin;
     return -1;   // INHERIT, empty, or anything unrecognised
 }
 
@@ -4091,6 +4130,11 @@ struct DisplayView
     std::wstring id;
     int width = 0;
     int height = 0;
+    // The working area, so the detail panel can clamp against the same rect
+    // BuildZoneSet used - which is this one when "Keep zones out of the
+    // taskbar" is on, and the full monitor otherwise.
+    int workWidth = 0;
+    int workHeight = 0;
     bool primary = false;
     bool present = true;        // attached right now
     bool wildcard = false;      // the "*" configuration
@@ -4585,6 +4629,8 @@ static void DashBuildSnapshot(DashState *s)
             dv.id = m.id;
             dv.width = m.width;
             dv.height = m.height;
+            dv.workWidth = m.workWidth;
+            dv.workHeight = m.workHeight;
             dv.primary = m.primary;
             dv.present = true;
             DashFillZones(dv, cfgs);
@@ -5028,11 +5074,17 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
     else if (zv.releaseAction != CornerAction::Nothing)
     {
         wchar_t hold[256];
-        _snwprintf_s(hold, _countof(hold), _TRUNCATE,
-                     L"Held: runs %s again when the pointer leaves",
-                     zv.releaseAction == CornerAction::SameAsEntry
-                         ? ActionToString(zv.action)
-                         : ActionToString(zv.releaseAction));
+        // "again" is only true when the release repeats the entry. With a
+        // different release action it read as though that action was the
+        // entry - "runs Mute again" on a zone that opens Quick Settings.
+        if (zv.releaseAction == CornerAction::SameAsEntry)
+            _snwprintf_s(hold, _countof(hold), _TRUNCATE,
+                         L"Held: runs %s again when the pointer leaves",
+                         ActionToString(zv.action));
+        else
+            _snwprintf_s(hold, _countof(hold), _TRUNCATE,
+                         L"Held: runs %s when the pointer leaves",
+                         ActionToString(zv.releaseAction));
         r = {left, y, right, y + Sc(16, d)};
         DrawTextW(hdc, hold, -1, &r,
                   DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -5114,7 +5166,16 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
         // goes to ask why a zone is not the size they set.
         if (i == 0 && dv.width > 0 && dv.height > 0)
         {
-            int span = dv.width < dv.height ? dv.width : dv.height;
+            // Same rect BuildZoneSet measures against, or the panel reports a
+            // size the zone does not use.
+            int mw = dv.width, mh = dv.height;
+            if (s->globals.avoidTaskbar && dv.workWidth > 0 &&
+                dv.workHeight > 0)
+            {
+                mw = dv.workWidth;
+                mh = dv.workHeight;
+            }
+            int span = mw < mh ? mw : mh;
             int effective = ClampZoneSize(value, span);
 
             Zone corners[2];
