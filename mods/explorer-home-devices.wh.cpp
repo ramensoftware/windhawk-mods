@@ -290,6 +290,12 @@ thread_local bool g_driveCardDragInProgress = false;
 struct DriveCardEventState {
     winrt::weak_ref<muxc::GridViewItem> item;
     muxc::TextBlock title{nullptr};
+    // type/space/progress: only present when the drive has a type name /
+    // space info, respectively. Tracked so a theme change can re-apply
+    // their brushes in place instead of rebuilding the whole card.
+    muxc::TextBlock type{nullptr};
+    muxc::TextBlock space{nullptr};
+    muxc::ProgressBar progress{nullptr};
     muxc::TextBox renameBox{nullptr};
     mux::UIElement driveIcon{nullptr};
     muxc::CheckBox selectionCheckBox{nullptr};
@@ -841,8 +847,12 @@ DriveSnapshot EnumerateDrives(IWICImagingFactory* imagingFactory) {
                               : GetDriveTypeW(drive.fileSystemPath.c_str());
 
         winrt::com_ptr<IShellItem> shellItem;
-        SHCreateItemFromParsingName(drive.rootPath.c_str(), nullptr,
-                                    IID_PPV_ARGS(shellItem.put()));
+        HRESULT shellItemResult = SHCreateItemFromParsingName(
+            drive.rootPath.c_str(), nullptr, IID_PPV_ARGS(shellItem.put()));
+        if (FAILED(shellItemResult)) {
+            Wh_Log(L"Couldn't resolve the Shell item for %s: %08X",
+                   drive.rootPath.c_str(), shellItemResult);
+        }
         winrt::com_ptr<IShellItem2> shellItem2;
         if (shellItem) {
             shellItem->QueryInterface(IID_PPV_ARGS(shellItem2.put()));
@@ -944,6 +954,25 @@ UINT GetApplyDriveSnapshotMessage() {
     static const UINT message = RegisterWindowMessageW(
         L"Windhawk_ApplyDriveSnapshot_" WH_MOD_ID);
     return message;
+}
+
+// g_openContextMenuCount/g_pendingShellUiCalls (part of what
+// RefreshDevicesGridPreservingState defers on) are process-wide, not
+// thread_local, so an interaction in one Explorer window can defer a
+// refresh in every other window too. Posting the catch-up to every
+// registered window, not just the one that was interacting, is what
+// actually catches all of them up.
+void BroadcastApplyDriveSnapshot() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard lock(g_registeredWindowsMutex);
+        windows = g_registeredWindows;
+    }
+    for (HWND window : windows) {
+        if (IsWindow(window)) {
+            PostMessageW(window, GetApplyDriveSnapshotMessage(), 0, 0);
+        }
+    }
 }
 
 UINT GetFocusDriveRenameMessage() {
@@ -1223,7 +1252,6 @@ void RememberNavigationControllerForCurrentThread(void* implementation) {
     if (previous) {
         previous->Release();
     }
-
 }
 
 IFileExplorerNavigationControllerAbi*
@@ -1523,7 +1551,8 @@ bool ShowDriveContextMenu(HWND owner,
 
         {
             // Scoped tightly around the tracked popup: this is the phase
-            // DismissOpenContextMenus's WM_CANCELMODE can actually dismiss.
+            // DrainPendingShellInteractions's WM_CANCELMODE can actually
+            // dismiss.
             OpenContextMenuScope openMenuScope;
             command = TrackPopupMenuEx(
                 menu.get(),
@@ -1584,9 +1613,7 @@ bool ShowDriveContextMenu(HWND owner,
             // g_openContextMenuCount there) -- otherwise it stays lost,
             // since the window message that would have applied it was
             // already dispatched and handled while deferring.
-            if (owner) {
-                PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
-            }
+            BroadcastApplyDriveSnapshot();
             return true;
         }
 
@@ -1619,9 +1646,7 @@ bool ShowDriveContextMenu(HWND owner,
 
     // Same catch-up as the rename-requested return above, for the
     // interactive-popup and other-command-invoked paths.
-    if (owner) {
-        PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
-    }
+    BroadcastApplyDriveSnapshot();
     return true;
 }
 
@@ -1783,45 +1808,65 @@ void UpdateDriveSelectionCheckBox(DriveCardEventState& state) {
 void DriveCard_PointerEntered(
     winrt::Windows::Foundation::IInspectable const& sender,
     muxi::PointerRoutedEventArgs const&) {
-    if (auto state =
-            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
-        state->pointerOver = true;
-        UpdateDriveSelectionCheckBox(*state);
+    try {
+        if (auto state =
+                FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+            state->pointerOver = true;
+            UpdateDriveSelectionCheckBox(*state);
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't handle drive card pointer enter: %08X",
+               winrt::to_hresult().value);
     }
 }
 
 void DriveCard_PointerExited(
     winrt::Windows::Foundation::IInspectable const& sender,
     muxi::PointerRoutedEventArgs const&) {
-    if (auto state =
-            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
-        state->pointerOver = false;
-        UpdateDriveSelectionCheckBox(*state);
+    try {
+        if (auto state =
+                FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+            state->pointerOver = false;
+            UpdateDriveSelectionCheckBox(*state);
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't handle drive card pointer exit: %08X",
+               winrt::to_hresult().value);
     }
 }
 
 void DriveCard_IsSelectedChanged(mux::DependencyObject const& sender,
                                  mux::DependencyProperty const&) {
-    if (auto state =
-            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
-        UpdateDriveSelectionCheckBox(*state);
+    try {
+        if (auto state =
+                FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+            UpdateDriveSelectionCheckBox(*state);
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't handle drive card selection change: %08X",
+               winrt::to_hresult().value);
     }
 }
 
 void DriveSelectionCheckBox_Click(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::RoutedEventArgs const&) {
-    auto checkBox = sender.as<muxc::CheckBox>();
-    for (auto& state : *g_driveCardEventStates) {
-        if (state.selectionCheckBox != checkBox) {
-            continue;
-        }
+    try {
+        auto checkBox = sender.as<muxc::CheckBox>();
+        for (auto& state : *g_driveCardEventStates) {
+            if (state.selectionCheckBox != checkBox) {
+                continue;
+            }
 
-        if (auto item = state.item.get()) {
-            auto isChecked = checkBox.IsChecked();
-            item.IsSelected(isChecked && isChecked.Value());
+            if (auto item = state.item.get()) {
+                auto isChecked = checkBox.IsChecked();
+                item.IsSelected(isChecked && isChecked.Value());
+            }
+            return;
         }
-        return;
+    } catch (...) {
+        Wh_Log(L"Couldn't handle drive selection checkbox click: %08X",
+               winrt::to_hresult().value);
     }
 }
 
@@ -1931,9 +1976,7 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
     // A grid refresh arriving while this card was renaming was deferred (see
     // RefreshDevicesGridPreservingState) so it wouldn't destroy the editor.
     // Catch it up now that renaming is over, whether committed or cancelled.
-    if (owner) {
-        PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
-    }
+    BroadcastApplyDriveSnapshot();
 }
 
 void CompleteOtherDriveRenames(muxc::GridViewItem const& activeItem) {
@@ -2070,7 +2113,12 @@ void DriveCard_DoubleTapped(
     winrt::Windows::Foundation::IInspectable const& sender,
     muxi::DoubleTappedRoutedEventArgs const& args) {
     args.Handled(true);
-    OpenDriveCard(sender.as<muxc::GridViewItem>());
+    try {
+        OpenDriveCard(sender.as<muxc::GridViewItem>());
+    } catch (...) {
+        Wh_Log(L"Couldn't handle drive card double-tap: %08X",
+               winrt::to_hresult().value);
+    }
 }
 
 void DriveCard_KeyDown(
@@ -2078,6 +2126,14 @@ void DriveCard_KeyDown(
     muxi::KeyRoutedEventArgs const& args) {
     try {
         auto item = sender.as<muxc::GridViewItem>();
+        // Registered with handledEventsToo=true (GridViewItem's own class
+        // handling marks Enter/Space handled), so this also sees keys that
+        // bubbled up from the inline rename editor (a descendant of item)
+        // and were already handled there -- e.g. Enter committing a rename
+        // would otherwise also fall through to OpenDriveCard below.
+        if (args.OriginalSource().try_as<mux::DependencyObject>() != item) {
+            return;
+        }
         if (args.Key() == winrt::Windows::System::VirtualKey::F2) {
             args.Handled(true);
             BeginDriveRename(item);
@@ -2318,6 +2374,9 @@ void DriveCard_DropCompleted(
     winrt::Windows::Foundation::IInspectable const&,
     mux::DropCompletedEventArgs const&) {
     g_driveCardDragInProgress = false;
+    // Catches up a refresh that RefreshDevicesGridPreservingState deferred
+    // while the drag was in flight.
+    BroadcastApplyDriveSnapshot();
 }
 
 winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
@@ -2328,7 +2387,15 @@ GetDriveDropOperation(
 
     bool controlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    if (shiftDown && !controlDown) {
+    // Matches Explorer's own convention: Shift = move, Ctrl = copy,
+    // Ctrl+Shift = create a shortcut (Link). TransferStorageItemsToDrive
+    // declines Link items rather than creating a shortcut -- IFileOperation
+    // has no method for that -- but declining is still correct where
+    // silently copying instead isn't.
+    if (shiftDown && controlDown) {
+        return DataPackageOperation::Link;
+    }
+    if (shiftDown) {
         return DataPackageOperation::Move;
     }
     if (controlDown) {
@@ -2348,6 +2415,16 @@ HRESULT TransferStorageItemsToDrive(
     std::wstring const& targetRoot,
     winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
         operation) {
+    if (operation == winrt::Windows::ApplicationModel::DataTransfer::
+                          DataPackageOperation::Link) {
+        // IFileOperation has no shortcut-creation method, so this declines
+        // rather than falling through to CopyItem below and silently
+        // copying when the user's gesture (Ctrl+Shift, matching Explorer's
+        // own convention) meant "create a shortcut" instead.
+        Wh_Log(L"Declining a Ctrl+Shift (shortcut) drop: not implemented");
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+
     winrt::com_ptr<IShellItem> targetFolder;
     HRESULT result = SHCreateItemFromParsingName(
         targetRoot.c_str(), nullptr, IID_PPV_ARGS(targetFolder.put()));
@@ -2800,8 +2877,14 @@ muxc::GridViewItem CreateDriveCard(
     titleHost.Children().Append(renameBox);
     details.Children().Append(titleHost);
 
+    // Hoisted out of the ifs below so they can be captured into
+    // DriveCardEventState for re-theming in place later.
+    muxc::TextBlock type{nullptr};
+    muxc::TextBlock space{nullptr};
+    muxc::ProgressBar progress{nullptr};
+
     if (!drive.typeName.empty()) {
-        muxc::TextBlock type;
+        type = muxc::TextBlock{};
         type.Text(drive.typeName);
         ApplyCaptionTextStyle(type);
         type.Margin(mux::Thickness{0, 2, 0, 0});
@@ -2811,7 +2894,7 @@ muxc::GridViewItem CreateDriveCard(
     }
 
     if (drive.hasSpaceInformation) {
-        muxc::ProgressBar progress;
+        progress = muxc::ProgressBar{};
         progress.Minimum(0);
         progress.Maximum(100);
         progress.Value(drive.percentUsed);
@@ -2822,7 +2905,7 @@ muxc::GridViewItem CreateDriveCard(
         }
         details.Children().Append(progress);
 
-        muxc::TextBlock space;
+        space = muxc::TextBlock{};
         space.Text(drive.spaceDescription);
         ApplyCaptionTextStyle(space);
         space.TextTrimming(mux::TextTrimming::CharacterEllipsis);
@@ -2866,6 +2949,9 @@ muxc::GridViewItem CreateDriveCard(
     g_driveCardEventStates->push_back({
         .item = winrt::make_weak(card),
         .title = title,
+        .type = type,
+        .space = space,
+        .progress = progress,
         .renameBox = renameBox,
         .driveIcon = driveIcon,
         .selectionCheckBox = selectionCheckBox,
@@ -2961,13 +3047,17 @@ void RefreshDevicesGridPreservingState(
     muxc::GridView const& grid,
     DriveSnapshot const& drives,
     IFileExplorerNavigationControllerAbi* navigationController) {
-    // Also defers while a drive context menu is open or a Shell UI call
-    // (rename, InvokeCommand) is in flight: TrackPopupMenuEx and those
-    // calls all pump, so a refresh landing mid-interaction would otherwise
-    // tear down and recreate every GridViewItem underneath the open menu --
-    // ShowDriveContextMenu posts GetApplyDriveSnapshotMessage() on its way
-    // out, so the deferred refresh isn't lost, just delayed.
-    if (IsDriveCardRenamingInGrid(grid) || g_openContextMenuCount.load() > 0 ||
+    // Also defers while a drive context menu is open, a Shell UI call
+    // (rename, InvokeCommand) is in flight, or a card-originated drag is in
+    // progress: TrackPopupMenuEx, those calls, and a WinUI drag all pump,
+    // so a refresh landing mid-interaction would otherwise tear down and
+    // recreate every GridViewItem underneath it -- including the source
+    // card's DropCompleted handler, which is what clears
+    // g_driveCardDragInProgress once the drag ends. ShowDriveContextMenu
+    // and DriveCard_DropCompleted post GetApplyDriveSnapshotMessage() on
+    // their way out, so a deferred refresh isn't lost, just delayed.
+    if (IsDriveCardRenamingInGrid(grid) || g_driveCardDragInProgress ||
+        g_openContextMenuCount.load() > 0 ||
         g_pendingShellUiCalls.load() > 0) {
         return;
     }
@@ -3058,55 +3148,64 @@ void ApplyDevicesExpandedState(bool expanded) {
 void DevicesHeader_Click(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::RoutedEventArgs const&) {
-    auto button = sender.as<muxc::Button>();
+    try {
+        auto button = sender.as<muxc::Button>();
 
-    bool newExpanded = true;
-    bool found = false;
-    for (auto const& state : g_devicesHeaderEventStates) {
-        if (state.button.get() == button) {
-            newExpanded = !state.expanded;
-            found = true;
-            break;
+        bool newExpanded = true;
+        bool found = false;
+        for (auto const& state : g_devicesHeaderEventStates) {
+            if (state.button.get() == button) {
+                newExpanded = !state.expanded;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return;
+        }
+
+        Wh_SetIntValue(kDevicesExpandedValueName, newExpanded ? 1 : 0);
+        ApplyDevicesExpandedState(newExpanded);
+
+        std::vector<HWND> windows;
+        {
+            std::lock_guard lock(g_registeredWindowsMutex);
+            windows = g_registeredWindows;
+        }
+        for (HWND window : windows) {
+            if (IsWindow(window)) {
+                PostMessageW(window, GetToggleDevicesExpandedMessage(),
+                            newExpanded ? 1 : 0, 0);
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't handle devices header click: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void ClearDevicesHeaderEventHandlers(DevicesHeaderEventState const& state) {
+    if (auto button = state.button.get()) {
+        try {
+            button.Click(state.clickToken);
+        } catch (...) {
+            Wh_Log(L"Devices header event cleanup failed: %08X",
+                   winrt::to_hresult().value);
         }
     }
-    if (!found) {
-        return;
-    }
-
-    Wh_SetIntValue(kDevicesExpandedValueName, newExpanded ? 1 : 0);
-    ApplyDevicesExpandedState(newExpanded);
-
-    std::vector<HWND> windows;
-    {
-        std::lock_guard lock(g_registeredWindowsMutex);
-        windows = g_registeredWindows;
-    }
-    for (HWND window : windows) {
-        if (IsWindow(window)) {
-            PostMessageW(window, GetToggleDevicesExpandedMessage(),
-                        newExpanded ? 1 : 0, 0);
+    if (auto grid = state.grid.get()) {
+        try {
+            grid.ActualThemeChanged(state.themeChangedToken);
+        } catch (...) {
+            Wh_Log(L"Devices header event cleanup failed: %08X",
+                   winrt::to_hresult().value);
         }
     }
 }
 
 void ClearDevicesHeaderEventHandlersForCurrentThread() {
     for (auto const& state : g_devicesHeaderEventStates) {
-        if (auto button = state.button.get()) {
-            try {
-                button.Click(state.clickToken);
-            } catch (...) {
-                Wh_Log(L"Devices header event cleanup failed: %08X",
-                       winrt::to_hresult().value);
-            }
-        }
-        if (auto grid = state.grid.get()) {
-            try {
-                grid.ActualThemeChanged(state.themeChangedToken);
-            } catch (...) {
-                Wh_Log(L"Devices header event cleanup failed: %08X",
-                       winrt::to_hresult().value);
-            }
-        }
+        ClearDevicesHeaderEventHandlers(state);
     }
     g_devicesHeaderEventStates.clear();
 }
@@ -3135,7 +3234,7 @@ bool IsSourceWithinElement(mux::DependencyObject source,
         }
         source = muxm::VisualTreeHelper::GetParent(source);
     }
-    return source == element;
+    return false;
 }
 
 void CompleteDriveRenamesOutsideSource(mux::DependencyObject const& source,
@@ -3477,17 +3576,44 @@ void RefreshThemedVisualsForCurrentThread() {
         }
     }
 
-    // Rebuilds from the already-cached snapshot (icon pixels included), no
-    // worker round-trip or disk/Shell I/O, so this is as fast as the native
-    // tiles updating.
-    RefreshDevicesSectionsForCurrentThread();
+    // In place, not a grid rebuild: this runs from inside XAML's own
+    // theme-propagation walk (see DevicesGrid_ActualThemeChanged), and
+    // tearing down and recreating the very GridViewItems that walk is
+    // iterating is exactly the kind of re-entrancy that shows up as an
+    // intermittent explorer.exe crash rather than a reproducible one.
+    // Setting a Foreground/brush property doesn't touch tree structure, so
+    // it's safe here; a rebuild wouldn't be.
+    for (auto& state : *g_driveCardEventStates) {
+        if (state.title) {
+            ApplyBrushIfAvailable(state.title, L"TextFillColorPrimaryBrush");
+        }
+        if (state.type) {
+            ApplyBrushIfAvailable(state.type, L"TextFillColorSecondaryBrush");
+        }
+        if (state.space) {
+            ApplyBrushIfAvailable(state.space,
+                                  L"TextFillColorSecondaryBrush");
+        }
+        if (auto fallbackIcon = state.driveIcon.try_as<muxc::FontIcon>()) {
+            ApplyBrushIfAvailable(fallbackIcon, L"TextFillColorPrimaryBrush");
+        }
+        if (state.progress && state.progress.Value() >= 90) {
+            ApplyBrushIfAvailable(state.progress,
+                                  L"SystemFillColorCriticalBrush");
+        }
+    }
 }
 
 void DevicesGrid_ActualThemeChanged(
     mux::FrameworkElement const&,
     winrt::Windows::Foundation::IInspectable const&) {
-    if (!g_unloading.load()) {
-        RefreshThemedVisualsForCurrentThread();
+    try {
+        if (!g_unloading.load()) {
+            RefreshThemedVisualsForCurrentThread();
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't refresh themed visuals: %08X",
+               winrt::to_hresult().value);
     }
 }
 
@@ -3495,6 +3621,10 @@ muxc::StackPanel CreateDevicesSection() {
     for (auto it = g_devicesHeaderEventStates.begin();
          it != g_devicesHeaderEventStates.end();) {
         if (!it->button.get()) {
+            // The grid can outlive the button; clear its handlers too so
+            // XAML doesn't keep a delegate pointing into the mod image
+            // past unload.
+            ClearDevicesHeaderEventHandlers(*it);
             it = g_devicesHeaderEventStates.erase(it);
         } else {
             ++it;
@@ -4488,7 +4618,7 @@ void RemoveShellNotificationsForCurrentThread() {
     RemoveDriveKeyboardMessageHookForCurrentThread();
 }
 
-void DismissOpenContextMenus() {
+void DrainPendingShellInteractions() {
     unsigned waitIterations = 0;
     while (g_openContextMenuCount.load() > 0) {
         std::vector<HWND> windows;
@@ -4551,7 +4681,7 @@ void WINAPI RemoveDevicesSectionsForCurrentThreadProc(void*) {
 // calling it from both is a harmless safety net rather than a real repeat.
 void DrainModStateForUnload() {
     g_unloading.store(true);
-    DismissOpenContextMenus();
+    DrainPendingShellInteractions();
     WaitForDriveDragPreparations();
     WaitForDriveDropOperations();
     StopDriveRefreshWorker();
