@@ -2,7 +2,7 @@
 // @id              lock-keys-notifier
 // @name            Lock Keys Notifier
 // @description     Shows a customizable toast when a lock key (Caps/Num/Scroll/Insert) is toggled
-// @version         1.1.0
+// @version         1.2.0
 // @author          Havrlisan
 // @github          https://github.com/havrlisan
 // @homepage        https://github.com/havrlisan/lock-keys-notifier
@@ -36,7 +36,9 @@ Insert can show a single fixed label in a neutral color instead of ON/OFF:
 - Three layouts (Pill, Tile, Minimal), themeable colors, opacity, corner radius,
   padding, font, soft drop shadow, and an optional per-key accent state. Follows
   the system light/dark theme and accent by default.
-- Optional fade animation and optional sound (system default or custom WAV).
+- Optional fade animation and optional sound (system default or custom WAV),
+  restrictable to ON-only or OFF-only, with separate ON/OFF WAVs. Insert has its
+  own sound toggle and plays on every press.
 - Editable ON/OFF labels and per-key display names; optional key icon glyph.
 - Insert can show a single fixed label (e.g. "pressed") in neutral color instead
   of ON/OFF.
@@ -124,9 +126,30 @@ Insert can show a single fixed label in a neutral color instead of ON/OFF:
   - none: No sound
   - systemDefault: System default sound
   - custom: Custom WAV file
+- soundWhen: always
+  $name: Play sound when
+  $description: >-
+    Applies to Caps/Num/Scroll only. Insert is controlled by the option below.
+  $options:
+  - always: Any toggle
+  - turnOn: Only when turning ON
+  - turnOff: Only when turning OFF
+- soundInsert: true
+  $name: Play sound for Insert
+  $description: >-
+    Separate because Insert has no reliable state to key off: the toggle bit says
+    nothing about any app's actual overtype mode, and it can't be read at all while
+    an elevated app has focus. So the sound plays on every Insert press, ignoring
+    the "Play sound when" option above. Only applies when "Notify on Insert" is on.
 - soundFile: ""
   $name: Custom sound file
   $description: Path to a .wav file, used when Sound is set to Custom.
+- soundFileOn: ""
+  $name: Custom sound file (ON)
+  $description: Optional. Played instead of the file above when a key turns ON.
+- soundFileOff: ""
+  $name: Custom sound file (OFF)
+  $description: Optional. Played instead of the file above when a key turns OFF.
 - autoSize: true
   $name: Auto-size to text
 - width: 124
@@ -373,6 +396,7 @@ static bool IsFullscreenActive() {
 
 enum class MonitorTarget { Active, Primary, All };
 enum class SoundMode { None, SystemDefault, Custom };
+enum class SoundWhen { Always, On, Off };
 
 struct Settings {
     bool notifyCaps, notifyNum, notifyScroll, notifyInsert;
@@ -385,7 +409,9 @@ struct Settings {
     bool fadeEnabled;
     int fadeDurationMs;
     SoundMode soundMode;
-    std::wstring soundFile;
+    SoundWhen soundWhen;
+    bool soundInsert;
+    std::wstring soundFile, soundFileOn, soundFileOff;
     bool autoSize;
     int width, height, padding, cornerRadius;
     bool shadowEnabled;
@@ -442,6 +468,12 @@ static SoundMode ParseSound(const std::wstring& s) {
     return SoundMode::None;
 }
 
+static SoundWhen ParseSoundWhen(const std::wstring& s) {
+    if (s == L"turnOn") return SoundWhen::On;
+    if (s == L"turnOff") return SoundWhen::Off;
+    return SoundWhen::Always;
+}
+
 bool SystemUsesLightTheme() {
     DWORD value = 1, size = sizeof(value);
     if (RegGetValueW(HKEY_CURRENT_USER,
@@ -476,7 +508,11 @@ void LoadSettings() {
     s.fadeEnabled  = Wh_GetIntSetting(L"fadeEnabled");
     s.fadeDurationMs = Wh_GetIntSetting(L"fadeDurationMs");
     s.soundMode    = ParseSound(GetStr(L"soundMode"));
+    s.soundWhen    = ParseSoundWhen(GetStr(L"soundWhen"));
+    s.soundInsert  = Wh_GetIntSetting(L"soundInsert");
     s.soundFile    = GetStr(L"soundFile");
+    s.soundFileOn  = GetStr(L"soundFileOn");
+    s.soundFileOff = GetStr(L"soundFileOff");
     s.autoSize     = Wh_GetIntSetting(L"autoSize");
     s.width        = Wh_GetIntSetting(L"width");
     s.height       = Wh_GetIntSetting(L"height");
@@ -1122,11 +1158,20 @@ static void DoShow(int keyIndex, bool isOn) {
         }
     }
 
-    // Play sound once per toast event.
+    // Play sound once per toast event. Insert has its own opt-out and always plays,
+    // since its toggle bit reflects no app state and is unreadable under an elevated
+    // app; the other keys honor the ON/OFF trigger.
+    const bool isInsert = (keyIndex == KI_Insert);
+    if (isInsert ? !s.soundInsert
+                 : s.soundWhen == (isOn ? SoundWhen::Off : SoundWhen::On)) return;
     if (s.soundMode == SoundMode::SystemDefault) {
         PlaySoundW((LPCWSTR)SND_ALIAS_SYSTEMDEFAULT, nullptr, SND_ALIAS_ID | SND_ASYNC);
-    } else if (s.soundMode == SoundMode::Custom && !s.soundFile.empty()) {
-        PlaySoundW(s.soundFile.c_str(), nullptr, SND_FILENAME | SND_ASYNC);
+    } else if (s.soundMode == SoundMode::Custom) {
+        // Insert prefers the base file (no state to pick by), the rest their per-state one.
+        const std::wstring& preferred = isInsert ? s.soundFile : (isOn ? s.soundFileOn : s.soundFileOff);
+        const std::wstring& fallback  = isInsert ? s.soundFileOn : s.soundFile;
+        const std::wstring& file = preferred.empty() ? fallback : preferred;
+        if (!file.empty()) PlaySoundW(file.c_str(), nullptr, SND_FILENAME | SND_ASYNC);
     }
 }
 
