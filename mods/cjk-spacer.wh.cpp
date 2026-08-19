@@ -2577,7 +2577,13 @@ void RetryXamlDiagnosticsAfterCooldown() {
     for (XamlDiagnosticsConnectionState* state : {
              &g_windowsUiXamlDiagnostics,
              &g_microsoftUiXamlDiagnostics}) {
-        if (!CanAttemptXamlDiagnosticsConnection(*state, currentTick) ||
+        // Only a flavor that exhausted its empty-walk budget scheduled this
+        // timeout; one that hasn't is still waiting for its first host or
+        // module trigger, and probing it here would spend its walk budget on
+        // a connection nothing asked for.
+        if (state->emptyWalkCount.load(std::memory_order_acquire) <
+                kXamlDiagnosticsMaxEmptyWalks ||
+            !CanAttemptXamlDiagnosticsConnection(*state, currentTick) ||
             state->cooldownRetryCount.load(std::memory_order_acquire) >=
                 kXamlDiagnosticsMaxCooldownRetries) {
             continue;
