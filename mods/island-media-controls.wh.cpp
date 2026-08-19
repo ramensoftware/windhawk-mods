@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.6
+// @version         0.10.7
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -36,10 +36,12 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Two transparent materials:** Transparent lets the taskbar's existing blur
-  show through a subtle outline; Transparent borderless leaves the compact
-  island fully clear and uses untinted blur only when expanded. Neither mode
-  adds a gray fallback surface or simulated elevation shadow.
+- **Two transparent materials:** Transparent keeps a subtle outline, while
+  Transparent borderless stays outline-free. Both now pick up a light artwork
+  tint (including the placeholder cover), and their first expansion after a
+  restart uses a safe rounded blur frame instead of exposing a startup black
+  frame. Neither mode adds a gray fallback surface or simulated elevation
+  shadow.
 - **One corner-radius control:** Set the expanded player's corners once and keep
   the XAML surface, artwork, controls, highlights, and independent blur layer in
   sync.
@@ -673,6 +675,8 @@ std::chrono::steady_clock::time_point g_popupOverlayWgcLastStartAttemptTime{};
 HRESULT g_popupOverlayWgcCreateItemHr = S_OK;
 bool g_popupOverlayWgcCreateItemFailed = false;
 bool g_popupOverlayWgcFallbackPainted = false;
+bool g_popupBackdropStartupFallbackPending = true;
+bool g_popupBackdropUseStartupFallback = false;
 int g_popupOverlayWgcFramesToSkip = 0;
 RECT g_popupBackdropOverlayFallbackRect{};
 int g_popupBackdropOverlayFallbackWidth = 0;
@@ -1267,18 +1271,22 @@ winrt::Windows::UI::Color IslandBackgroundColor() {
 
 mediax::Brush IslandBackgroundBrush() {
     if (IsTransparentMaterial()) {
-        // HostBackdrop Acrylic can emit a black composition surface while the
-        // taskbar changes focus or holds pointer capture. The compact island
-        // already sits over the taskbar's blurred material, so a transparent
-        // fill preserves that blur without introducing another fallback layer.
-        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+        // Reuse the taskbar's own material instead of adding a HostBackdrop
+        // Acrylic surface, then apply only a light artwork tint. This avoids
+        // the black fallback frame while keeping the island visible on bright
+        // taskbars.
+        auto accent = g_dynamicTransportAccentColorValid
+                          ? g_dynamicTransportAccentColor
+                          : Color(0xFF, 0x4F, 0x7D, 0xE8);
+        accent.A = IsDarkModeApprox() ? 0x2C : 0x24;
+        return Brush(accent);
     }
     return Brush(IslandBackgroundColor());
 }
 
 mediax::Brush DynamicMainOcclusionBrush() {
     if (IsTransparentMaterial()) {
-        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+        return IslandBackgroundBrush();
     }
 
     auto color = IslandBackgroundColor();
@@ -4451,7 +4459,9 @@ int PopupCompactFinalHeight() {
 
 winrt::Windows::UI::Color PopupControlCardColor() {
     if (IsTransparentMaterial()) {
-        return Color(0x00, 0x00, 0x00, 0x00);
+        auto accent = PopupAccentColor();
+        accent.A = IsDarkModeApprox() ? 0x30 : 0x26;
+        return accent;
     }
 
     bool dark = IsDarkModeApprox();
@@ -4657,7 +4667,9 @@ void SetPopupTextEdgeFadeOpacity(double opacity) {
 
 mediax::Brush PopupBackdropCardTintBrush() {
     if (IsTransparentMaterial()) {
-        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+        auto accent = PopupAccentColor();
+        accent.A = IsDarkModeApprox() ? 0x26 : 0x1E;
+        return Brush(accent);
     }
 
     bool dark = IsDarkModeApprox();
@@ -5717,6 +5729,36 @@ void ApplyPopupDynamicAccentVisuals() {
     bool dark = IsDarkModeApprox();
     if (g_popupXamlArtFrame) {
         g_popupXamlArtFrame.BorderBrush(PopupAlbumArtStrokeBrush());
+    }
+    if (IsTransparentMaterial()) {
+        if (g_popupXamlBackdropTint) {
+            g_popupXamlBackdropTint.Background(PopupBackdropCardTintBrush());
+        }
+        if (g_popupXamlPanel) {
+            g_popupXamlPanel.Background(PopupControlCardBrush());
+        }
+        Border leftFades[] = {
+            g_popupXamlTitleLeftFade,
+            g_popupXamlArtistLeftFade,
+            g_popupXamlOutgoingTitleLeftFade,
+            g_popupXamlOutgoingArtistLeftFade,
+        };
+        Border rightFades[] = {
+            g_popupXamlTitleRightFade,
+            g_popupXamlArtistRightFade,
+            g_popupXamlOutgoingTitleRightFade,
+            g_popupXamlOutgoingArtistRightFade,
+        };
+        for (auto const& fade : leftFades) {
+            if (fade) {
+                fade.Background(PopupTextEdgeFadeBrush(true));
+            }
+        }
+        for (auto const& fade : rightFades) {
+            if (fade) {
+                fade.Background(PopupTextEdgeFadeBrush(false));
+            }
+        }
     }
     if (g_popupXamlProgress) {
         g_popupXamlProgress.Foreground(accentBrush);
@@ -8815,6 +8857,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
         KillTimer(hwnd, kPopupTimerId);
     }
     HidePopupBackdropOverlayWindowVisualOnly();
+    g_popupBackdropUseStartupFallback = false;
     g_popupAnimationProgress = 0.0;
     g_popupAnimationTarget = 0.0;
     g_popupAnimationVelocity = 0.0;
@@ -11734,11 +11777,15 @@ void UpdatePopupBackdropOverlayWindow() {
                                                    cornerRadiusPx,
                                                    morphing);
         if (g_popupOverlayWgcFallbackPainted) {
+            if (g_popupBackdropUseStartupFallback) {
+                g_popupBackdropStartupFallbackPending = false;
+            }
             ShowPopupBackdropOverlayWhenReady(g_popupBackdropOverlay);
         }
     };
 
-    if (g_settings.allowScreenCapture) {
+    if (g_settings.allowScreenCapture ||
+        g_popupBackdropUseStartupFallback) {
         if (g_popupOverlayWgcRunning) {
             StopPopupOverlayWgcBackdrop();
         }
@@ -11866,6 +11913,8 @@ void ShowExpandedPopup() {
         return;
     }
 
+    g_popupBackdropUseStartupFallback =
+        IsTransparentMaterial() && g_popupBackdropStartupFallbackPending;
     g_expanded = true;
     g_popupClosing = false;
     SetPopupWindowClickThrough(g_expandedPopup, false);
@@ -11914,6 +11963,7 @@ void DestroyExpandedPopup() {
     StopPopupXamlRenderLoop();
     UnsubclassPopupXamlChildWindow();
     DestroyPopupBackdropOverlayWindow();
+    g_popupBackdropUseStartupFallback = false;
     SetCompactIslandSuppressed(false);
     if (g_popupXamlSource) {
         try {
@@ -14543,7 +14593,7 @@ void UpdatePlayerContents() {
     std::vector<uint8_t> popupBlurSourceBytes =
         useGeneratedBlurCover ? displayThumbnailBytes : visualThumbnailBytes;
 
-    if (IsDynamicCompactMode()) {
+    if (IsDynamicCompactMode() || IsTransparentMaterial()) {
         uint64_t compactAccentHash = ThumbnailHash(displayThumbnailBytes);
         if (compactAccentHash != g_dynamicTransportAccentThumbnailHash) {
             g_dynamicTransportAccentThumbnailHash = compactAccentHash;
