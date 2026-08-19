@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-19T16:40:35.000Z</updated>
+    <updated>2026-08-19T16:47:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.2.0]]></title>
+        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#8ca7c059ad7d5e8d10a9f0ce54cdd6cff1725d9a</id>
+        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
+        <updated>2026-08-19T16:47:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new method to detect and ignore UWP apps by default</li>
+<li>Added classes to ignore browser windows (conflict with Zen Browser which is a special case)</li>
+<li>Added a toggle setting to exclude Zen related browser windows</li>
+</ul>
+<p><strong>Note:</strong> Custom colours are now enabled by default in v1.2.0 with default dark mode colors updated to <code>#000000</code> (active) and <code>#202020</code> (inactive). Make sure to update your colors if not using default colors</p>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Simple Window Switcher 2.1]]></title>
         <id>https://windhawk.net/mods/simple-window-switcher#524f3dd8faa26727a0e788c82ed797a7eb2daa44</id>
@@ -554,25 +570,6 @@ Safe Mode (Windhawk does not inject there) or start Windhawk with
         <author>
             <name>millerpb</name>
             <uri>https://github.com/millerpb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows XP Sorted Columns 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win-xp-sorted-columns#9158b3e75c9d87e40294f43fe9ae70bc5555e9a4</id>
-        <link href="https://windhawk.net/mods/win-xp-sorted-columns"/>
-        <updated>2026-08-09T16:33:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsxpsortedcolumns">Windows XP Sorted Columns</h1>
-<p>In Windows XP, list views in the Details view could show the sorted column in
-a different color. This mod restores that behavior.</p>
-<p><strong><em>NOTE: In order for these changes to be seen in Explorer, you must be using the legacy
-   SysListView32. The default DirectUI ItemsView will not be affected.</em></strong></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win-xp-sorted-columns/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win-xp-sorted-columns/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,11 @@
+## 1.2.0 ([Aug 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8ca7c059ad7d5e8d10a9f0ce54cdd6cff1725d9a/mods/auto-custom-titlebar-colors.wh.cpp))
+
+- Added a new method to detect and ignore UWP apps by default
+- Added classes to ignore browser windows (conflict with Zen Browser which is a special case)
+- Added a toggle setting to exclude Zen related browser windows
+
+**Note:** Custom colours are now enabled by default in v1.2.0 with default dark mode colors updated to `#000000` (active) and `#202020` (inactive). Make sure to update your colors if not using default colors
+
 ## 1.1.2 ([Apr 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/69a1563ab829620af049efd27a911655aee6195d/mods/auto-custom-titlebar-colors.wh.cpp))
 
 - Remove Flow Launcher from exclusion list as it doesn't cause the issue anymore with the previous fixes
