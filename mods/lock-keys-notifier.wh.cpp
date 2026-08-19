@@ -38,7 +38,7 @@ Insert can show a single fixed label in a neutral color instead of ON/OFF:
   the system light/dark theme and accent by default.
 - Optional fade animation and optional sound (system default or custom WAV),
   restrictable to ON-only or OFF-only, with separate ON/OFF WAVs. Insert has its
-  own sound toggle and plays on every press.
+  own sound toggle, plays on every press, and always uses the base WAV.
 - Editable ON/OFF labels and per-key display names; optional key icon glyph.
 - Insert can show a single fixed label (e.g. "pressed") in neutral color instead
   of ON/OFF.
@@ -76,8 +76,8 @@ Insert can show a single fixed label in a neutral color instead of ON/OFF:
 - suppressFullscreen: false
   $name: Don't show when a fullscreen app is active
   $description: >-
-    Skips the toast while a fullscreen application is in the foreground —
-    games (DirectX or borderless), fullscreen video, and presentation mode.
+    Skips the toast — and its sound — while a fullscreen application is in the
+    foreground: games (DirectX or borderless), fullscreen video, presentation mode.
     Focus Assist / Do Not Disturb is not affected.
 - pollElevated: true
   $name: Detect toggles under elevated apps
@@ -137,13 +137,14 @@ Insert can show a single fixed label in a neutral color instead of ON/OFF:
 - soundInsert: true
   $name: Play sound for Insert
   $description: >-
-    Separate because Insert has no reliable state to key off: the toggle bit says
-    nothing about any app's actual overtype mode, and it can't be read at all while
-    an elevated app has focus. So the sound plays on every Insert press, ignoring
-    the "Play sound when" option above. Only applies when "Notify on Insert" is on.
+    Insert has no meaningful ON/OFF state, so its sound plays on every press,
+    ignores the option above, and always uses the base file below. Only applies
+    when "Notify on Insert" is on.
 - soundFile: ""
   $name: Custom sound file
-  $description: Path to a .wav file, used when Sound is set to Custom.
+  $description: >-
+    Path to a .wav file, used when Sound is set to Custom. Insert always uses this
+    one. A path that doesn't exist or isn't a valid WAV plays nothing.
 - soundFileOn: ""
   $name: Custom sound file (ON)
   $description: Optional. Played instead of the file above when a key turns ON.
@@ -589,14 +590,17 @@ struct ToastWindow {
 
 static std::vector<ToastWindow> g_toasts;   // index 0 for active/primary; one per monitor for "all"
 // The primary toast HWND, cached once at worker init before the pump starts.
-// StopWorker (which runs on the arbitrary Wh_ModUninit thread) reads this instead
-// of g_toasts[0].hwnd, so it never races the worker's hotplug pool-grow in DoShow
-// (a std::vector reallocation). The worker writes it before signaling ready, and
-// StopWorker reads it after that handshake, so a plain HWND needs no atomics.
+// Everything off the worker thread (StopWorker on the arbitrary Wh_ModUninit
+// thread, RequestToast on the hook thread) reads this instead of g_toasts[0].hwnd,
+// so it never races the worker's hotplug pool-grow in DoShow (a std::vector
+// reallocation). The worker writes it before signaling ready and its readers only
+// run after that handshake, so a plain HWND needs no atomics.
 static HWND   g_primaryToastHwnd = nullptr;
 static DWORD  g_workerThreadId = 0;
 static HANDLE g_workerThread = nullptr;
-static HANDLE g_workerReady = nullptr;
+static DWORD  g_hookThreadId = 0;
+static HANDLE g_hookThread = nullptr;
+static HANDLE g_threadReady = nullptr;
 static bool   g_hookInstalled = false;
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -1162,16 +1166,22 @@ static void DoShow(int keyIndex, bool isOn) {
     // since its toggle bit reflects no app state and is unreadable under an elevated
     // app; the other keys honor the ON/OFF trigger.
     const bool isInsert = (keyIndex == KI_Insert);
-    if (isInsert ? !s.soundInsert
-                 : s.soundWhen == (isOn ? SoundWhen::Off : SoundWhen::On)) return;
+    if (isInsert) {
+        if (!s.soundInsert) return;
+    } else if ((s.soundWhen == SoundWhen::On && !isOn) ||
+               (s.soundWhen == SoundWhen::Off && isOn)) {
+        return;
+    }
     if (s.soundMode == SoundMode::SystemDefault) {
         PlaySoundW((LPCWSTR)SND_ALIAS_SYSTEMDEFAULT, nullptr, SND_ALIAS_ID | SND_ASYNC);
     } else if (s.soundMode == SoundMode::Custom) {
-        // Insert prefers the base file (no state to pick by), the rest their per-state one.
-        const std::wstring& preferred = isInsert ? s.soundFile : (isOn ? s.soundFileOn : s.soundFileOff);
-        const std::wstring& fallback  = isInsert ? s.soundFileOn : s.soundFile;
-        const std::wstring& file = preferred.empty() ? fallback : preferred;
-        if (!file.empty()) PlaySoundW(file.c_str(), nullptr, SND_FILENAME | SND_ASYNC);
+        // Insert takes the base file only — it has no state to pick a per-state one by.
+        const std::wstring& perState = isOn ? s.soundFileOn : s.soundFileOff;
+        const std::wstring& file = (isInsert || perState.empty()) ? s.soundFile : perState;
+        // SND_NODEFAULT: a bad path stays silent instead of playing the Windows
+        // default sound, which would masquerade as the custom file working.
+        if (!file.empty())
+            PlaySoundW(file.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
     }
 }
 
@@ -1271,10 +1281,11 @@ static HWND CreateToastWindow() {
 }
 
 void RequestToast(int keyIndex, bool isOn) {
-    // Marshal to the worker thread; the worker window proc does the work.
-    if (!g_toasts.empty() && g_toasts[0].hwnd) {
-        PostMessageW(g_toasts[0].hwnd, WM_APP_SHOWTOAST, (WPARAM)keyIndex, (LPARAM)isOn);
-    }
+    // Marshal to the worker thread; the worker window proc does the work. Called
+    // from the hook thread, so it must not touch g_toasts (the worker can realloc
+    // that vector on hotplug) — hence the cached HWND.
+    if (g_primaryToastHwnd)
+        PostMessageW(g_primaryToastHwnd, WM_APP_SHOWTOAST, (WPARAM)keyIndex, (LPARAM)isOn);
 }
 
 static bool ShouldNotify(int ki, bool curOn) {
@@ -1313,9 +1324,9 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lPa
                 bool enabled = KeyEnabled(g_settings, i);
                 LeaveCriticalSection(&g_settingsCs);
                 // Only marshal here — an LL hook blocks *all* system input until
-                // it returns, so keep it cheap. The fullscreen-suppress check
-                // (shell + window/monitor queries) runs in DoShow on the worker
-                // thread, after this callback has returned.
+                // it returns, so keep it cheap. Everything expensive (the
+                // fullscreen-suppress check, render, present, sound) runs in
+                // DoShow on the worker thread; see HookThreadProc.
                 if (enabled && ShouldNotify(i, isOn)) RequestToast(i, isOn);
                 break;
             }
@@ -1324,16 +1335,46 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lPa
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+// Owns the WH_KEYBOARD_LL hook and nothing else. An LL hook callback is delivered
+// to the thread that installed it and is only serviced while that thread is
+// retrieving messages; if it doesn't respond within LowLevelHooksTimeout (300 ms by
+// default) the OS skips it, and on Windows 7+ can drop the hook entirely — leaving
+// the mod deaf to keys until it's reloaded. So this pump stays empty: every
+// expensive step (shell/DWM queries, GDI+ render, UpdateLayeredWindow, PlaySound)
+// happens on the worker thread, reached by the callback's PostMessage. Started only
+// after the worker signaled ready, so g_primaryToastHwnd and the seeded toggle
+// state are both live before the first callback can fire.
+static DWORD WINAPI HookThreadProc(LPVOID) {
+    g_realHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetThisModule(), 0);
+    // Invariant: the hook installs here, before the pump, so its callback (which
+    // reads live key state via GetKeyState) only ever runs on this thread.
+    g_hookInstalled = (g_realHook != nullptr);
+    if (!g_realHook) Wh_Log(L"keyboard hook install failed");
+
+    // Force the message queue into existence before signaling ready, so StopWorker's
+    // PostThreadMessageW can't be dropped by a teardown that beats the first
+    // GetMessageW here (which would hang the join and leave the hook installed).
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_threadReady) SetEvent(g_threadReady);
+
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_realHook) { UnhookWindowsHookEx(g_realHook); g_realHook = nullptr; }
+    return 0;
+}
+
 // Pre-warm the GDI+ text/font pipeline on a throwaway thread. The first
 // RenderToast pays a one-time lazy cost — font enumeration, loading the
 // configured family, spinning up the GDI+ text subsystem and pulling in its
 // DLLs — which on a cold boot (cold disk) can be several seconds. GDI+ is
 // initialized per-process and the caches it warms are process-wide, so warming
-// on any thread benefits the worker's first real RenderToast. Crucially this
-// runs OFF the worker thread: that thread owns the WH_KEYBOARD_LL hook and must
-// keep pumping messages, or every system-wide keystroke stalls on the
-// LowLevelHooksTimeout until the hook returns. Renders into a scratch DIB and
-// discards it; nothing is presented.
+// on any thread benefits the worker's first real RenderToast. Runs OFF the worker
+// thread so a cold font load can't delay the first toast behind it. Renders into a
+// scratch DIB and discards it; nothing is presented.
 static DWORD WINAPI WarmupThreadProc(LPVOID) {
     Settings s;
     EnterCriticalSection(&g_settingsCs);
@@ -1346,6 +1387,17 @@ static DWORD WINAPI WarmupThreadProc(LPVOID) {
 }
 
 static DWORD WINAPI WorkerThreadProc(LPVOID) {
+    // Position in physical pixels per monitor, so say so: without this the process
+    // may be system-DPI-aware, GetDpiForMonitor reports the system DPI everywhere
+    // and UpdateLayeredWindow coordinates get virtualized (bitmap-scaled toasts on
+    // mixed-scale setups). No-op when the process is already per-monitor aware.
+    // Resolved at runtime — a static import would make the mod fail to load on
+    // anything older than Windows 10 1607, where the rest of it still works.
+    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT (WINAPI*)(DPI_AWARENESS_CONTEXT);
+    if (auto pSetDpiCtx = (SetThreadDpiAwarenessContext_t)GetProcAddress(
+            GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"))
+        pSetDpiCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     GdiplusStartupInput gsi;
     GdiplusStartup(&g_gdiplusToken, &gsi, nullptr);
 
@@ -1365,23 +1417,16 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
     g_primaryToastHwnd = g_toasts.empty() ? nullptr : g_toasts[0].hwnd;
 
-    g_realHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInst, 0);
-
-    // Invariant: the hook installs here, before the pump, so its callback (which
-    // reads live key state via GetKeyState) only ever runs on this thread.
-    g_hookInstalled = (g_realHook != nullptr);
-    if (!g_realHook) Wh_Log(L"keyboard hook install failed");
-
     // Seed last-known toggle state unconditionally — the hook's dedup path needs it
     // even when the poll is off. Arming the poll fallback (only if pollElevated is
     // set) re-seeds, so the first tick never fires spuriously.
     SeedToggleState();
     UpdatePollTimer();
 
-    if (g_workerReady) SetEvent(g_workerReady);
+    if (g_threadReady) SetEvent(g_threadReady);
 
     // Warm the GDI+ text pipeline on a throwaway thread (see WarmupThreadProc),
-    // off this hook-owning thread so the pump stays responsive immediately. Skip
+    // off this thread so its pump is free to render the first real toast. Skip
     // it entirely when no key notifies — nothing will ever render. Joined before
     // GdiplusShutdown below so it can't touch GDI+ after teardown.
     HANDLE warmThread = nullptr;
@@ -1400,8 +1445,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (g_realHook) { UnhookWindowsHookEx(g_realHook); g_realHook = nullptr; }
-
     for (auto& tw : g_toasts) {
         if (tw.hwnd) DestroyWindow(tw.hwnd);
         if (tw.dib) DeleteObject(tw.dib);
@@ -1415,19 +1458,39 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     return 0;
 }
 
+// Start the two threads in order: the worker (windows, timers, rendering) first,
+// then the hook thread once the worker signaled ready — so the callback can never
+// fire before g_primaryToastHwnd and the seeded toggle state exist. Both signal the
+// same manual-reset event, which is reset between the waits.
 bool StartWorker() {
     g_hookInstalled = false;
-    g_workerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_threadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_threadReady) return false;
+
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
-    if (!g_workerThread) {
-        if (g_workerReady) { CloseHandle(g_workerReady); g_workerReady = nullptr; }
-        return false;
-    }
-    if (g_workerReady) WaitForSingleObject(g_workerReady, 5000);
+    if (!g_workerThread) return false;
+    WaitForSingleObject(g_threadReady, 5000);
+
+    ResetEvent(g_threadReady);
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) return false;
+    WaitForSingleObject(g_threadReady, 5000);
+
     return g_hookInstalled;
 }
 
 void StopWorker() {
+    // Hook thread first: no new toasts can be requested once it's gone. Its pump
+    // only ever handles posted messages, so a thread-message WM_QUIT is enough.
+    if (g_hookThreadId) PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookThread, 5000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
+    }
+    // The worker owns windows, so quit it through one (a thread message would be
+    // eaten by a modal/DispatchMessage loop); fall back if it never got that far.
     if (g_primaryToastHwnd)
         PostMessageW(g_primaryToastHwnd, WM_APP_QUIT, 0, 0);
     else if (g_workerThreadId)
@@ -1438,7 +1501,7 @@ void StopWorker() {
         g_workerThread = nullptr;
         g_workerThreadId = 0;
     }
-    if (g_workerReady) { CloseHandle(g_workerReady); g_workerReady = nullptr; }
+    if (g_threadReady) { CloseHandle(g_threadReady); g_threadReady = nullptr; }
 }
 
 BOOL WhTool_ModInit() {
