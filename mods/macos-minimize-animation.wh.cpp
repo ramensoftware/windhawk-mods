@@ -1348,29 +1348,31 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     const float origCenterX = (float)origLeft + W * 0.5f;
 
     // Where the genie funnels to: the learned taskbar icon X. The dock Y is taken
-    // from the real taskbar edge via the shell, so a taskbar pinned to the top of
-    // the screen is honored too (previously the classic style always assumed the
-    // taskbar was at the bottom of the monitor). Windows keeps secondary taskbars
-    // on the same edge as the primary, so the single ABM_GETTASKBARPOS query is
-    // valid for every monitor.
+    // from the real per-monitor taskbar window (the same signal the modern engine
+    // uses), so a taskbar pinned to the top of the screen is honored too -
+    // previously the classic style always assumed the taskbar was at the bottom of
+    // the monitor. A single global shell query would get the wrong edge on setups
+    // where each monitor's taskbar can be on a different edge.
     int dockX = data->targetDockX;
     if (dockX < mon.left) dockX = mon.left;
     if (dockX > mon.right) dockX = mon.right;
     const float dockXf = (float)dockX;
-    bool taskbarOnTop = false;
-    {
-        APPBARDATA abd = { sizeof(APPBARDATA) };
-        abd.hWnd = FindTaskbarForMonitor(data->hMon);
-        if (abd.hWnd && SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
-            // ABE_LEFT / ABE_RIGHT keep the previous bottom-edge behavior.
-            taskbarOnTop = (abd.uEdge == ABE_TOP);
+    float dockY = (float)mon.bottom;
+    if (HWND hTray = FindTaskbarForMonitor(data->hMon)) {
+        RECT tr;
+        if (GetWindowRect(hTray, &tr) && tr.bottom > tr.top &&
+            (tr.top + tr.bottom) < (mon.top + mon.bottom)) {   // taskbar in the upper half
+            dockY = (float)mon.top;
         }
     }
-    const float dockY = taskbarOnTop ? (float)mon.top : (float)mon.bottom;
-    // Rows nearest the dock lead the morph. The dock can be above the window even
-    // for a bottom taskbar when the taskbar monitor is above the window's monitor,
-    // so this is derived from the actual funnel direction, not the taskbar edge.
-    const bool dockAbove = dockY < (float)origTop;
+    // Which end leads the morph. Taken from the window's mid-line so a dock that
+    // lands exactly on the window edge still picks a sane direction, and kept
+    // outside the window's own vertical span so the yb[] map below stays
+    // monotonic (a hard requirement of the scanline walk).
+    const float origBottomF = (float)(origTop + H);
+    const bool dockAbove = dockY < ((float)origTop + origBottomF) * 0.5f;
+    if (dockAbove) { if (dockY > (float)origTop) dockY = (float)origTop; }
+    else           { if (dockY < origBottomF)    dockY = origBottomF; }
     float neckW = W * 0.03f;
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
