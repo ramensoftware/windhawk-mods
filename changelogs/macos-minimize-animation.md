@@ -1,3 +1,14 @@
+## 3.1.4 ([Aug 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/02968945ed250989ea59e62463c5d91fa40a7e96/mods/macos-minimize-animation.wh.cpp))
+
+The classic genie style always funneled to the bottom of the monitor (\dockY = mon.bottom\), so with a taskbar pinned to the top the animation still appeared from the bottom. The modern (Direct2D) engine already handles a top taskbar by reading the taskbar window rect.
+
+This change makes the classic engine do the same:
+- Detect the taskbar position via \FindTaskbarForMonitor\ + \GetWindowRect\ and set the dock Y to the top edge when the taskbar hugs the top of the screen.
+- Span the animation canvas from the dock edge up/down to the window so a dock above the window isn't clipped.
+- Flip the morph spread so the rows nearest the dock lead (top-first for a top taskbar).
+
+Bottom-taskbar behavior is unchanged.
+
 ## 3.1.3 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4717dc4f00f7a7b85a397e94d1d49ff26c941a11/mods/macos-minimize-animation.wh.cpp))
 
 - Modern engine now computes its canvas from `MonitorFromRect` (window) and `data->hMon` (dock), clamped to both monitors, instead of `GetSystemMetrics(SM_*VIRTUALSCREEN)`.
