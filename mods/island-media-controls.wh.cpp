@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.4
+// @version         0.10.5
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -36,9 +36,10 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Two transparent materials:** Transparent keeps the Acrylic-style blur and
-  subtle outline in compact and expanded layouts; Transparent borderless keeps
-  the same clean blur while removing the outline.
+- **Two transparent materials:** Transparent keeps an Acrylic-style blur and
+  subtle outline; Transparent borderless leaves the compact island fully clear
+  and uses untinted blur only when expanded. Neither mode adds a gray fallback
+  surface or simulated elevation shadow.
 - **One corner-radius control:** Set the expanded player's corners once and keep
   the XAML surface, artwork, controls, highlights, and independent blur layer in
   sync.
@@ -1265,31 +1266,38 @@ winrt::Windows::UI::Color IslandBackgroundColor() {
 }
 
 mediax::Brush TransparentCompactAcrylicBrush() {
-    bool dark = IsDarkModeApprox();
     try {
         mediax::AcrylicBrush brush;
         brush.BackgroundSource(mediax::AcrylicBackgroundSource::HostBackdrop);
         brush.TintColor(Color(0x00, 0x00, 0x00, 0x00));
         brush.TintOpacity(0.0);
         brush.TintLuminosityOpacity(0.0);
-        brush.FallbackColor(dark ? Color(0xB8, 0x20, 0x20, 0x24)
-                                 : Color(0xC8, 0xF8, 0xF8, 0xFA));
+        // Taskbar Acrylic can temporarily enter fallback while a pointer is
+        // captured or focus moves to the expanded host. A colored fallback
+        // turns the compact island gray and can flash black during that
+        // transition, so fall back to the taskbar surface underneath instead.
+        brush.FallbackColor(Color(0x00, 0x00, 0x00, 0x00));
         return brush;
     } catch (...) {
-        return Brush(dark ? Color(0xB8, 0x20, 0x20, 0x24)
-                          : Color(0xC8, 0xF8, 0xF8, 0xFA));
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 }
 
 mediax::Brush IslandBackgroundBrush() {
-    if (IsTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+    if (IsTransparentBorderedMaterial()) {
         return TransparentCompactAcrylicBrush();
     }
     return Brush(IslandBackgroundColor());
 }
 
 mediax::Brush DynamicMainOcclusionBrush() {
-    if (IsTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+    if (IsTransparentBorderedMaterial()) {
         return TransparentCompactAcrylicBrush();
     }
 
@@ -5920,6 +5928,15 @@ void InitializePopupCompositionShadow() {
     }
 
     try {
+        // Transparent surfaces should read as part of the backdrop, not as an
+        // elevated opaque card. Remove both ThemeShadow and its simulated Z
+        // thickness for the bordered and borderless transparent variants.
+        if (IsTransparentMaterial()) {
+            g_popupXamlBackdrop.Shadow(mediax::Shadow{nullptr});
+            g_popupXamlBackdrop.Translation(
+                winrt::Windows::Foundation::Numerics::float3{0.0f, 0.0f, 0.0f});
+            return;
+        }
         int depth = static_cast<int>(std::lround(
             PopupShadowDepth() * (0.25 + 1.75 * PopupShadowOpacityPercent() / 100.0)));
         if (PopupShadowDepth() <= 0 || PopupShadowOpacityPercent() <= 0 || depth <= 0) {
@@ -7061,7 +7078,8 @@ void UpdatePopupXamlVisuals() {
         try {
             int shadowDepth = static_cast<int>(std::lround(
                 PopupShadowDepth() * (0.25 + 1.75 * PopupShadowOpacityPercent() / 100.0)));
-            float shadowZ = PopupShadowDepth() <= 0 || PopupShadowOpacityPercent() <= 0
+            float shadowZ = IsTransparentMaterial() || PopupShadowDepth() <= 0 ||
+                                    PopupShadowOpacityPercent() <= 0
                                 ? 0.0f
                                 : static_cast<float>(shadowDepth * PopupShadowMorphOpacity(morphProgress));
             g_popupXamlBackdrop.Translation(
@@ -13433,9 +13451,9 @@ void ApplyDynamicMainIslandShadow() {
         return;
     }
 
-    // Borderless keeps the clean outline-free treatment; Transparent keeps the normal shadow.
-    // Light mode also stays clean: the main island must not cast onto the side island.
-    if (IsTransparentBorderlessMaterial() || !IsDarkModeApprox() ||
+    // Transparent materials stay visually flush with the taskbar. Light mode
+    // also stays clean: the main island must not cast onto the side island.
+    if (IsTransparentMaterial() || !IsDarkModeApprox() ||
         !g_dynamicTransportIsland) {
         background.Shadow(mediax::Shadow{nullptr});
         background.Translation({0.0f, 0.0f, 0.0f});
