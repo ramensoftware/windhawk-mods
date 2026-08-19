@@ -435,9 +435,17 @@ std::atomic<int> g_invalidateSkippedReentrant;
 std::atomic<int> g_invalidateExceptions;
 
 // Only ever touched from the dedicated WinEventHook thread (see
-// StartWinEventHook) - both WinEventProc and DragFollowTrailingTimerProc
-// run there exclusively, so this needs no synchronization.
+// StartWinEventHook) - WinEventProc, DragFollowTrailingTimerProc and
+// ButtonHwndResolveTimerProc all run there exclusively, so none of this
+// needs synchronization.
 UINT_PTR g_dragFollowTrailingTimerId;
+
+// The HWND-resolve timer's own id - lives on this same dedicated thread
+// (see ButtonHwndResolveTimerProc) rather than on a window the mod
+// doesn't own, so teardown is covered by the same thread join that
+// already tears down the WinEvent hook, with no separate marshal that
+// could fail during unload.
+UINT_PTR g_buttonHwndResolveTimerId;
 
 // Same thread-ownership as g_dragFollowTrailingTimerId above. Hoisted out
 // of WinEventProc's own function-local static so DragFollowTrailingTimerProc
@@ -613,6 +621,14 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         ~DecrefGuard() { std__Ref_count_base__Decref_Original(ptr); }
     } decrefGuard{taskbarHostSharedPtr[1]};
 
+    // The top-level null check above only rules out *both* slots being
+    // null - slot 0 can still be null while slot 1 isn't, and it's
+    // dereferenced below. Bail out here (after the guard above is
+    // already constructed, so [1] still gets released).
+    if (!taskbarHostSharedPtr[0]) {
+        return nullptr;
+    }
+
     // The offset of the XAML element pointer inside TaskbarHost isn't
     // exposed by any symbol, so it's read out of the prologue of a
     // neighboring function that's known to access it at a fixed offset.
@@ -656,6 +672,9 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
                       taskbarElementIUnknownOffset);
+    if (!taskbarElementIUnknown) {
+        return nullptr;
+    }
 
     FrameworkElement taskbarElement = nullptr;
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -1056,9 +1075,14 @@ HWND GetButtonHwnd(FrameworkElement element) {
 // ResolvePendingButtonHwnds (which actually walks TaskListButtons and
 // calls ResolveAndCacheButtonHwnd above) is defined later, right after
 // FindTaskbarFrameRepeater and IsTaskListButton - it depends on both.
-// Forward-declared here so StartButtonHwndResolveTimer (Mod lifecycle
-// section) can reference it before that point.
+// Forward-declared here so WinEventHookThreadProc (Mod lifecycle section)
+// can reference it before that point.
 void ResolvePendingButtonHwnds();
+
+// Defined later (Mod lifecycle section) alongside NextResolveDelayMs,
+// which shares this same backoff formula - forward-declared here so
+// ResolvePendingButtonHwnds' own needsResolve check (below) can use it.
+ULONGLONG ResolveBackoffMs(int consecutiveFailures);
 
 // ============================================================================
 // Screen-position math
@@ -1533,17 +1557,20 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
         std::sort(left.begin(), left.end(), byOrderKey);
         std::sort(right.begin(), right.end(), byOrderKey);
     } else {
-        // Preserve taskbar order, read left-to-right the same way the
-        // native taskbar does: the earliest entry in taskbar order on a
-        // side sits at that side's outer edge, and later entries sit
-        // progressively closer to Start - i.e. innermost-last. `left`/
-        // `right` are already in taskbar order (entries was built that
-        // way); the right side's innermost-last order already matches
-        // the walk order used below (accumulating outward from Start),
-        // but the left side needs reversing to innermost-first - walking
-        // it in original taskbar order here would put the *earliest*
-        // entry innermost instead, mirroring the group relative to
-        // native order.
+        // Preserve taskbar order, read left-to-right across the whole
+        // split layout the way native taskbar order reads: on the left
+        // side, the earliest entry sits at the outer (leftmost) edge and
+        // later entries sit progressively closer to Start; on the right
+        // side it's the opposite - the earliest entry sits innermost
+        // (right next to Start) and later entries sit progressively
+        // farther out. Together these reproduce native left-to-right
+        // order across the whole taskbar once Start is inserted in the
+        // middle. `left`/`right` are already in taskbar order (entries
+        // was built that way); the right side's walk below (accumulating
+        // outward from Start) already puts its earliest entry innermost,
+        // but the left side needs reversing first - walking it in
+        // original taskbar order would put the *latest* entry innermost
+        // instead, backwards from what preserves reading order there.
         std::reverse(left.begin(), left.end());
     }
 
@@ -1628,13 +1655,10 @@ void InvalidateTaskbarLayout();
 // Defined later (Mod lifecycle section); forward-declared here so
 // EnsureTaskbarWnd (below) can start the drag-follow WinEventHook as soon
 // as the taskbar window resolves, whether that happens at normal startup
-// or late (see EnsureTaskbarWnd's comment).
+// or late (see EnsureTaskbarWnd's comment). This also starts the
+// HWND-resolve timer now that it lives on the same dedicated thread - see
+// WinEventHookThreadProc.
 void StartWinEventHook();
-
-// Defined later (Mod lifecycle section); forward-declared here for the
-// same reason as StartWinEventHook above - starts the timer that drives
-// ResolvePendingButtonHwnds.
-void StartButtonHwndResolveTimer();
 
 // Defined later (Mod lifecycle section); forward-declared here so the
 // ArrangeOverride hook below can request an immediate HWND-resolve attempt
@@ -1673,10 +1697,9 @@ HWND EnsureTaskbarWnd() {
         // Guards against Wh_ModBeforeUninit's own InvalidateTaskbarLayout
         // call (or a naturally-timed pass) landing while the mod's hooks
         // are still installed but g_hTaskbarWnd was somehow never set -
-        // without this, resolving it here would call
-        // StartWinEventHook()/StartButtonHwndResolveTimer() and create a
-        // thread/timer with no later Wh_ModUninit call left to tear it
-        // down (Wh_ModBeforeUninit already ran).
+        // without this, resolving it here would call StartWinEventHook()
+        // and create a thread with no later teardown call left to stop it
+        // (Wh_ModBeforeUninit already ran).
         return nullptr;
     }
 
@@ -1684,7 +1707,6 @@ HWND EnsureTaskbarWnd() {
     if (g_hTaskbarWnd) {
         Wh_Log(L"Resolved taskbar window: %p", g_hTaskbarWnd);
         StartWinEventHook();
-        StartButtonHwndResolveTimer();
     }
 
     return g_hTaskbarWnd;
@@ -1703,16 +1725,23 @@ FrameworkElement FindTaskbarFrameRepeater(FrameworkElement anyDescendant) {
 // Walks the primary taskbar's current TaskListButtons and (re)resolves any
 // whose cache entry is missing, stale (window closed), or past the
 // negative-cache TTL - see ResolveAndCacheButtonHwnd's comment for the
-// full story on why this runs on a timer (StartButtonHwndResolveTimer,
-// Mod lifecycle section) instead of inline during Arrange.
+// full story on why this runs on a timer instead of inline during Arrange.
 //
-// Guarded against running while nested inside an active Arrange pass on
-// this thread - defense in depth, not the primary protection. Windows
-// generally doesn't deliver WM_TIMER re-entrantly mid-callback on the
-// same thread, but there's no hard guarantee of that documented, and the
-// check is nearly free.
+// g_unloading gates this before anything else: the click-sentinel probe
+// only stays safe while CTaskListWnd_HandleClick_Hook is installed to
+// intercept it, and that hook (like all of this mod's hooks) can be gone
+// before Wh_ModUninit actually stops the timer that calls this - without
+// this gate, a probe landing in that window reaches the taskbar's real
+// HandleClick with a garbage LauncherOptions pointer (the sentinel
+// string reinterpreted as a vtable), an access violation plus a
+// genuinely dispatched click. g_unloading is set at the top of
+// Wh_ModBeforeUninit, before the hooks are removed, so this closes the
+// window regardless of exactly when the timer's next tick lands.
+//
+// Also guarded against running while nested inside an active Arrange
+// pass on this thread - defense in depth, not the primary protection.
 void ResolvePendingButtonHwnds() {
-    if (g_inTaskbarArrangeOverride || !g_hTaskbarWnd) {
+    if (g_unloading || g_inTaskbarArrangeOverride || !g_hTaskbarWnd) {
         return;
     }
 
@@ -1762,9 +1791,8 @@ void ResolvePendingButtonHwnds() {
                 needsResolve = !IsWindow(it->second.hwnd) ||
                                identity != it->second.identity;
             } else {
-                int shift = std::min(it->second.consecutiveFailures, 4);
-                ULONGLONG backoffMs = 2000ULL << shift;  // 2s..32s
-                needsResolve = now - it->second.lastAttempt >= backoffMs;
+                needsResolve = now - it->second.lastAttempt >=
+                               ResolveBackoffMs(it->second.consecutiveFailures);
             }
         }
 
@@ -2589,6 +2617,25 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 // global WinEventHook) keeps all of that off the shell's thread entirely -
 // InvalidateTaskbarLayout already marshals onto the taskbar thread for the
 // one thing that actually needs to run there.
+// kArmResolveNowMsg (like WM_APP below) is a private signal on this
+// thread's own message queue, not routed through any window - posted by
+// ArmButtonHwndResolveTimer to request an immediate HWND-resolve
+// attempt. Needed because the resolve timer itself now lives on this
+// thread (see g_buttonHwndResolveTimerId) but callers of
+// ArmButtonHwndResolveTimer run on the taskbar thread, and a per-thread
+// SetTimer/KillTimer registered with hWnd=nullptr can only be armed from
+// the thread that owns it - PostThreadMessage is how a different thread
+// asks this one to do that on its behalf.
+constexpr UINT kArmResolveNowMsg = WM_APP + 1;
+
+// Defined later in this section, alongside NextResolveDelayMs -
+// forward-declared here so WinEventHookThreadProc (right below) can
+// start/re-arm it directly on its own thread.
+void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
+                                         UINT uMsg,
+                                         UINT_PTR idEvent,
+                                         DWORD dwTime);
+
 DWORD WINAPI WinEventHookThreadProc(LPVOID) {
     // Forces this thread's message queue into existence before
     // SetWinEventHook runs, so WINEVENT_OUTOFCONTEXT has somewhere to
@@ -2612,12 +2659,26 @@ DWORD WINAPI WinEventHookThreadProc(LPVOID) {
                L"will");
     }
 
+    // Kicks off the first HWND-resolve attempt shortly after this thread
+    // (and so the taskbar window) is up, so buttons already present at
+    // mod startup get picked up - after that, NextResolveDelayMs and
+    // ArmButtonHwndResolveTimer keep it armed only for as long as
+    // there's actually something to do.
+    g_buttonHwndResolveTimerId =
+        SetTimer(nullptr, 0, 100, ButtonHwndResolveTimerProc);
+
     // WM_APP (posted by StopWinEventHook) is this thread's shutdown
     // signal - it has no window to route to, so it's read directly out of
     // the queue rather than via a window procedure.
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (msg.message == WM_APP) {
             break;
+        }
+        if (msg.message == kArmResolveNowMsg) {
+            KillTimer(nullptr, g_buttonHwndResolveTimerId);
+            g_buttonHwndResolveTimerId =
+                SetTimer(nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
+            continue;
         }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -2627,6 +2688,14 @@ DWORD WINAPI WinEventHookThreadProc(LPVOID) {
         UnhookWinEvent(g_locationChangeHook);
         g_locationChangeHook = nullptr;
     }
+    if (g_buttonHwndResolveTimerId) {
+        KillTimer(nullptr, g_buttonHwndResolveTimerId);
+        g_buttonHwndResolveTimerId = 0;
+    }
+    if (g_dragFollowTrailingTimerId) {
+        KillTimer(nullptr, g_dragFollowTrailingTimerId);
+        g_dragFollowTrailingTimerId = 0;
+    }
 
     return 0;
 }
@@ -2635,7 +2704,15 @@ HANDLE g_winEventThread;
 DWORD g_winEventThreadId;
 
 void StartWinEventHook() {
-    if (g_winEventThread) {
+    // Guards against EnsureTaskbarWnd running concurrently on two
+    // threads - Wh_ModAfterInit's own thread and, once hooks are live,
+    // Explorer's UI thread via the ArrangeOverride hook both call this
+    // once g_hTaskbarWnd first resolves. A plain check-then-act on
+    // g_winEventThread let both create a thread, orphaning one that's
+    // never joined - a deferred crash when Windhawk unmaps the module
+    // while that thread is still parked in GetMessage.
+    static std::atomic<bool> started;
+    if (started.exchange(true)) {
         return;
     }
 
@@ -2646,41 +2723,11 @@ void StartWinEventHook() {
     }
 }
 
-// RunFromWindowThread can only fail two ways: the taskbar's thread is
-// already gone (GetWindowThreadProcessId returns 0 - in which case the
-// OS already tore down any timer that thread owned, so there's nothing
-// left to clean up), or its own internal SetWindowsHookEx call failed
-// (rare, e.g. transient resource exhaustion) while the thread is still
-// very much alive. That second case is the dangerous one: nothing under
-// mod control runs on the taskbar thread to unregister the real
-// HWND-resolve timer, Wh_ModUninit returns anyway, Windhawk unmaps this
-// module's code, and the still-alive thread's next tick calls into
-// unmapped memory. A few retries gives that transient failure a chance to
-// clear without risking an unbounded stall if the thread really is gone.
-// (The WinEventHook itself no longer goes through this - see
-// StopWinEventHook, which owns its thread outright instead.)
-bool RunFromWindowThreadWithRetry(HWND hWnd, RunFromWindowThreadProc_t proc) {
-    // Unbounded, not capped at a few attempts: giving up early and letting
-    // the caller log-and-continue would leave a WM_TIMER registration
-    // pointing at this module's code after Wh_ModUninit returns and
-    // Windhawk unmaps it - a deferred crash, not a mitigated one. Only
-    // stop retrying once the target thread is confirmed gone, since at
-    // that point the OS has already torn down anything it owned.
-    while (!RunFromWindowThread(hWnd, proc)) {
-        if (GetWindowThreadProcessId(hWnd, nullptr) == 0) {
-            return false;
-        }
-        Sleep(20);
-    }
-    return true;
-}
-
-// Unlike the RunFromWindowThread-based teardowns below (which depend on
-// g_hTaskbarWnd's thread still being alive and responsive), this thread is
-// entirely mod-owned: PostThreadMessage can't silently fail the way a
-// marshaled call onto someone else's thread can, and waiting for the
-// thread to actually exit guarantees UnhookWinEvent has already run
-// before Windhawk unmaps this module's code.
+// This thread is entirely mod-owned: PostThreadMessage can't silently
+// fail the way a marshaled call onto someone else's thread can, and
+// waiting for the thread to actually exit guarantees UnhookWinEvent (and
+// the resolve timer's own KillTimer, now that it lives here too) has
+// already run before Windhawk unmaps this module's code.
 void StopWinEventHook() {
     if (!g_winEventThread) {
         return;
@@ -2708,14 +2755,6 @@ void StopWinEventHook() {
     g_winEventThreadId = 0;
 }
 
-// Not 1: this is a window (Shell_TrayWnd) the mod doesn't own, shared with
-// Explorer's own timers and any other mod that also sets timers on it -
-// SetTimer with an already-used ID silently replaces that timer, so a
-// small/common value like 1 is a real collision risk. Arbitrary otherwise,
-// same pattern other mods use for shell-window timers (e.g.
-// classic-taskbar-properties.wh.cpp's kTimerIdMasterLayout).
-constexpr UINT_PTR kButtonHwndResolveTimerId = 0x8C3F;
-
 // Idle re-check cadence once every cached button is already resolved -
 // see NextResolveDelayMs' comment for what this specifically exists to
 // catch (a drag-reorder rebind, which isn't latency-sensitive). Kept
@@ -2725,12 +2764,29 @@ constexpr UINT_PTR kButtonHwndResolveTimerId = 0x8C3F;
 // runs indefinitely for the life of the session.
 constexpr DWORD kIdleResolveTickMs = 30000;
 
+// Capped exponential backoff for the click-sentinel probe: 2s, 4s, 8s,
+// ... up to a 30-minute ceiling, shared by ResolvePendingButtonHwnds
+// (deciding whether an entry needsResolve) and NextResolveDelayMs
+// (scheduling the next tick). A pinned-but-not-running app's button
+// never resolves until it's actually launched, and ItemsRepeater
+// recycles the same element/cache entry rather than creating a new one -
+// so this runs for the life of the session for that one button, with no
+// cheaper existing signal (identity change, button count change) to
+// re-arm on instead, since launching a pinned app changes neither. The
+// ceiling exists to bound how often a synthetic click fires against the
+// taskbar's real click handler while still eventually catching a later
+// launch - previously capped at 32s (shift<=4), which was flagged as a
+// permanent background click loop.
+constexpr ULONGLONG kResolveBackoffCeilingMs = 30ULL * 60 * 1000;
+ULONGLONG ResolveBackoffMs(int consecutiveFailures) {
+    int shift = std::min(consecutiveFailures, 16);  // keep the shift itself from overflowing
+    return std::min(2000ULL << shift, kResolveBackoffCeilingMs);
+}
+
 // How long until the next resolve attempt could possibly do anything
 // useful, based only on g_buttonHwndCache's already-recorded state - no
 // XAML/tree access, just a scan of an in-memory map, so this is cheap
-// enough to call after every timer tick. Mirrors the same backoff formula
-// ResolvePendingButtonHwnds uses to decide needsResolve for an existing
-// entry.
+// enough to call after every timer tick.
 DWORD NextResolveDelayMs() {
     ULONGLONG now = GetTickCount64();
     bool anyPending = false;
@@ -2743,8 +2799,8 @@ DWORD NextResolveDelayMs() {
             anyResolved = true;
             continue;
         }
-        int shift = std::min(entry.consecutiveFailures, 4);
-        ULONGLONG dueAt = entry.lastAttempt + (2000ULL << shift);
+        ULONGLONG dueAt =
+            entry.lastAttempt + ResolveBackoffMs(entry.consecutiveFailures);
         if (!anyPending || dueAt < earliestDue) {
             earliestDue = dueAt;
             anyPending = true;
@@ -2773,80 +2829,65 @@ DWORD NextResolveDelayMs() {
         return INFINITE;
     }
 
-    return earliestDue > now ? (DWORD)(earliestDue - now) : 0;
+    DWORD pendingDelay = earliestDue > now ? (DWORD)(earliestDue - now) : 0;
+    if (anyResolved) {
+        // Mixed cache: some buttons resolved (need the same periodic
+        // rebind re-check as the anyPending==false branch above), others
+        // still pending on their own backoff schedule - which, since
+        // that ceiling was extended to 30 minutes to cut down on
+        // synthetic clicks against pinned-not-running apps, could
+        // otherwise silently starve rebind detection for everyone else
+        // for just as long. Capping at kIdleResolveTickMs here doesn't
+        // resolve the pending entry any earlier (ResolvePendingButtonHwnds
+        // still checks its own backoff before actually retrying it), it
+        // only ensures the already-resolved entries keep getting their
+        // identity re-checked on the normal idle cadence.
+        return std::min(pendingDelay, kIdleResolveTickMs);
+    }
+    return pendingDelay;
 }
 
 void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
                                          UINT uMsg,
                                          UINT_PTR idEvent,
                                          DWORD dwTime) {
-    // Self-managing one-shot rather than a recurring interval: stop first,
-    // do the actual work, then only re-arm if there's a concrete reason
-    // to. Without this, the timer would fire at a fixed cadence forever -
-    // running the full resolve pass (XamlRoot lookup, a visual-tree walk,
-    // a click-sentinel probe per due button) even while everything is
-    // already resolved and nothing has changed, which was flagged as a
-    // real objection on submissions here.
-    KillTimer(hwnd, kButtonHwndResolveTimerId);
+    // Self-managing one-shot rather than a recurring interval: stop
+    // first, do the actual work, then only re-arm if there's a concrete
+    // reason to - otherwise this would run the full resolve pass forever
+    // even once everything is already resolved and nothing has changed.
+    // Runs on this thread directly now (a per-thread SetTimer with
+    // hWnd=nullptr), so no cross-thread marshal is needed to arm/disarm
+    // it - only the actual XAML work inside ResolvePendingButtonHwnds
+    // needs marshaling onto the taskbar thread, which it does itself via
+    // RunFromWindowThread.
+    KillTimer(nullptr, idEvent);
+    g_buttonHwndResolveTimerId = 0;
 
-    ResolvePendingButtonHwnds();
+    if (g_unloading) {
+        return;
+    }
+
+    RunFromWindowThread(g_hTaskbarWnd, ResolvePendingButtonHwnds);
 
     DWORD delay = NextResolveDelayMs();
-    if (delay != INFINITE) {
-        SetTimer(hwnd, kButtonHwndResolveTimerId, delay,
-                 ButtonHwndResolveTimerProc);
+    if (!g_unloading && delay != INFINITE) {
+        g_buttonHwndResolveTimerId =
+            SetTimer(nullptr, 0, delay, ButtonHwndResolveTimerProc);
     }
 }
 
-// SetTimer's callback fires on whichever thread registered it, so this is
-// marshaled onto g_hTaskbarWnd's own thread - both KillTimer and (for
-// reliability) SetTimer itself are documented to need to run on the
-// thread that owns the timer.
+// The resolve timer lives on the dedicated WinEventHook thread (see
+// g_buttonHwndResolveTimerId), not on a window this mod doesn't own, so
+// arming it from the taskbar thread (where every caller of this function
+// runs) needs to ask that thread to do it on its own message queue -
+// PostThreadMessage can't silently fail the way a window-based marshal
+// can, and there's nothing left to leak if it does (the thread just
+// doesn't get the nudge, and its own next scheduled tick catches up).
 void ArmButtonHwndResolveTimer(DWORD delayMs) {
-    if (!g_hTaskbarWnd || g_unloading) {
-        // See EnsureTaskbarWnd's g_unloading check - same reasoning: once
-        // Wh_ModBeforeUninit sets g_unloading, don't create a new
-        // SetTimer registration (whose TimerProc is in this module's own
-        // code) even though the Arrange hook that could still trigger
-        // this (the count-change branch) stays installed until
-        // Wh_ModBeforeUninit returns - StopButtonHwndResolveTimer doesn't
-        // run until the later Wh_ModUninit call, by which point the hook
-        // is gone and nothing could reach here to recreate it anyway.
+    if (!g_winEventThreadId || g_unloading) {
         return;
     }
-
-    if (!RunFromWindowThread(g_hTaskbarWnd, [delayMs] {
-            SetTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId, delayMs,
-                     ButtonHwndResolveTimerProc);
-        })) {
-        Wh_Log(L"ArmButtonHwndResolveTimer: RunFromWindowThread failed, "
-               L"HWND resolution will not run");
-    }
-}
-
-// Kicks off an initial resolve attempt shortly after the taskbar window
-// resolves, so buttons already present at mod startup get picked up -
-// after that, NextResolveDelayMs and the ArrangeOverride hook's
-// button-count-change check keep the timer armed only for as long as
-// there's actually something to do.
-void StartButtonHwndResolveTimer() {
-    ArmButtonHwndResolveTimer(100);
-}
-
-void StopButtonHwndResolveTimer() {
-    if (!g_hTaskbarWnd) {
-        return;
-    }
-
-    // See RunFromWindowThreadWithRetry's own comment for why this retries
-    // until success or a confirmed-dead thread, rather than an inline
-    // KillTimer from the wrong thread here.
-    if (!RunFromWindowThreadWithRetry(g_hTaskbarWnd, [] {
-            KillTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId);
-        })) {
-        Wh_Log(L"StopButtonHwndResolveTimer: RunFromWindowThread failed, "
-               L"timer left running");
-    }
+    PostThreadMessage(g_winEventThreadId, kArmResolveNowMsg, 0, delayMs);
 }
 
 BOOL Wh_ModInit() {
@@ -2910,16 +2951,19 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    // Deliberately NOT tearing down the WinEventHook thread/timer here:
-    // this mod's hooks stay installed until this function returns, and
+    // Deliberately NOT tearing down the WinEventHook thread here: this
+    // mod's hooks stay installed until this function returns, and
     // ArrangeOverride isn't gated on g_unloading - a pass landing in that
-    // window could still call StartWinEventHook/StartButtonHwndResolveTimer
-    // (via EnsureTaskbarWnd) or ArmButtonHwndResolveTimer(0) (the
-    // count-change branch), creating a thread/timer nobody would tear
-    // down since Wh_ModUninit runs after this. This call still needs the
-    // Arrange hook alive to restore native positioning, so it has to run
-    // while the hooks are installed - actual teardown waits for
-    // Wh_ModUninit, after Windhawk has removed them.
+    // window could still call StartWinEventHook via EnsureTaskbarWnd,
+    // creating a thread nobody would tear down since Wh_ModUninit runs
+    // after this (StartWinEventHook's own atomic guard prevents a second
+    // thread if one already exists, but not a first one if none does
+    // yet). This call still needs the Arrange hook alive to restore
+    // native positioning, so it has to run while the hooks are
+    // installed - actual teardown waits for Wh_ModUninit, after Windhawk
+    // has removed them. g_unloading being set here (before that) is what
+    // keeps ResolvePendingButtonHwnds' click-sentinel probe from running
+    // once the hooks it depends on are gone - see its own comment.
     InvalidateTaskbarLayout();
 }
 
@@ -2928,9 +2972,10 @@ void Wh_ModUninit() {
 
     // See Wh_ModBeforeUninit's comment for why this doesn't run there -
     // the mod's own hooks are gone by the time Wh_ModUninit runs, so
-    // nothing can reawaken the thread/timer being torn down here.
+    // nothing can reawaken the thread being torn down here. This one
+    // join now also covers the HWND-resolve timer, which lives on the
+    // same thread.
     StopWinEventHook();
-    StopButtonHwndResolveTimer();
 }
 
 void Wh_ModSettingsChanged() {
