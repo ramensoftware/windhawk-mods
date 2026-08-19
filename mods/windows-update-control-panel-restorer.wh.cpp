@@ -564,6 +564,15 @@ static std::atomic<HMODULE> g_resourceModule{nullptr};
 // frees them once every page and worker is gone, so the files they map can be
 // deleted instead of counted as locked. Guarded by g_resourceMutex.
 static std::vector<HMODULE> g_supersededResourceModules;
+// Set once any object whose vtable/code lives in the private wucltux.dll payload
+// (or a generated .mres resource module) has been handed to the shell - a Control
+// Panel page that can outlive this mod and is never closed by teardown. Once set
+// it never clears: while a page can still read those objects, Wh_ModUninit must
+// NOT FreeLibrary the payload/resource modules or free the published navigation
+// lists behind the shell's back. Skipping that reclaim leaks the DLL(s) for the
+// rest of the Explorer session, which is far cheaper than a use-after-free in the
+// shell. Written from the COM/handoff hooks, read in Wh_ModUninit.
+static std::atomic<bool> g_payloadHandedToShell{false};
 [[clang::no_destroy]] static std::optional<std::thread> g_setupThread;
 
 static std::mutex g_rebuildMutex;
@@ -6188,6 +6197,10 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
             // instead of at unload - never a reason to fail the publication.
             Wh_Log(L"WUR: could not record the published navigation list for teardown");
         }
+        // The shell now holds a fabricated nav list whose vtable lives in the
+        // payload; an open page keeps reading it after unload. Record that so
+        // Wh_ModUninit does not free it (or the payload) behind the shell's back.
+        g_payloadHandedToShell.store(true, std::memory_order_release);
         Wh_Log(L"WUR: complete native ControlPanelNavLinks list published");
     } else {
         DestroyUnpublishedNativeNavLinks(links);
@@ -8745,47 +8758,72 @@ static void RunRealWindowsUpdateSearch() {
                         if (callbackFired) {
                             Wh_Log(L"Windows Update Restorer: the search completed through the callback");
                         }
-                        (void)pollObservedCompletion;
                         {
                             std::lock_guard<std::mutex> lock(g_searchJobMutex);
                             g_activeSearchJob = nullptr;
                         }
+                        // Track whether we actually observed the search finish.
+                        // IUpdateSearcher::EndSearch below blocks until the job is
+                        // complete, so it must only be called once completion is
+                        // certain. On the exits that never observe completion
+                        // (unload, the absolute ceiling, a failed wait) EndSearch
+                        // would park this thread for the rest of the scan - and
+                        // since Wh_ModUninit joins this thread, that would hang
+                        // the shell on disable/update/uninstall exactly when the
+                        // Windows Update service is wedged or stopped.
+                        bool observedCompletion = callbackFired || pollObservedCompletion;
                         if (waitCount == 2 && waitResult == WAIT_OBJECT_0 + 1) {
                             // Unload requested: ask the job to stop (this does
-                            // not itself block) and wait for the completed
-                            // event WUA still signals once it has actually
-                            // unwound, rather than tearing down COM state out
-                            // from under it.
-                            // Bounded on purpose. Wh_ModUninit joins this
-                            // thread while holding g_wuSearchThreadMutex, so
-                            // an unbounded wait here would turn a wedged or
-                            // stopped Windows Update service into a shell
-                            // hang on disable/update/uninstall. If WUA has
-                            // not delivered the completion notification by
-                            // then, continue with the cleanup below anyway -
-                            // EndSearch/CleanUp on an aborted job is safe and
-                            // the thread always reaches its exit, so join()
-                            // always returns.
+                            // not itself block) and wait for the completed event
+                            // WUA still signals once it has actually unwound,
+                            // rather than tearing down COM state out from under
+                            // it. Bounded on purpose; Wh_ModUninit joins this
+                            // thread while holding g_wuSearchThreadMutex, so an
+                            // unbounded wait here would turn a wedged or stopped
+                            // Windows Update service into a shell hang.
                             aborted = true;
                             job->RequestAbort();
                             const DWORD abortWait =
                                 WaitForSingleObject(completedEvent, kWuSearchAbortWaitMs);
-                            if (abortWait != WAIT_OBJECT_0) {
+                            if (abortWait == WAIT_OBJECT_0) {
+                                observedCompletion = true;
+                            } else {
                                 Wh_Log(L"Windows Update Restorer: the update search did not "
                                        L"acknowledge the abort within %ums (wait=%u); "
-                                       L"continuing teardown",
+                                       L"leaving the job with WUA",
                                        static_cast<unsigned>(kWuSearchAbortWaitMs),
                                        static_cast<unsigned>(abortWait));
                             }
+                        } else if (!observedCompletion) {
+                            // Reached without the callback or the poll reporting
+                            // completion and without the abort event: the worker
+                            // noticed g_stopping on a poll, hit the absolute
+                            // ceiling, or a wait failed. Ask the job to stop so
+                            // WUA unwinds on its own, then skip EndSearch below -
+                            // calling it on a still-running job would block this
+                            // thread for the rest of the scan and hang the shell.
+                            aborted = true;
+                            job->RequestAbort();
+                            Wh_Log(L"Windows Update Restorer: leaving the update search with WUA "
+                                   L"without EndSearch (completion was not observed)");
                         }
-                        HRESULT endHr = searcher->EndSearch(job, &result);
-                        job->CleanUp();
-                        if (aborted) {
-                            hr = E_ABORT;
-                        } else if (FAILED(endHr)) {
-                            hr = endHr;
+                        if (observedCompletion) {
+                            HRESULT endHr = searcher->EndSearch(job, &result);
+                            job->CleanUp();
+                            if (aborted) {
+                                hr = E_ABORT;
+                            } else if (FAILED(endHr)) {
+                                hr = endHr;
+                            } else {
+                                hr = S_OK;
+                            }
                         } else {
-                            hr = S_OK;
+                            // No EndSearch/CleanUp: EndSearch would block until a
+                            // job that never reported completion finishes. Just
+                            // release the interfaces below; leaking the search job
+                            // inside WUA is cheaper than hanging the shell. result
+                            // stays null, so the result-processing block is skipped.
+                            hr = E_ABORT;
                         }
                     }
                 }
@@ -9190,17 +9228,16 @@ static std::wstring ReadWuaResultString(const wchar_t* subkey, const wchar_t* va
     return out;
 }
 
-// Returns Windows Update's recorded scan time, falling back to the render time
-// only when modern Windows has no compatible timestamp value.
+// Returns Windows Update's recorded scan time. When modern Windows has no
+// compatible timestamp value (common on Windows 10/11), this returns an empty
+// string and the caller renders the label without a value (the same honest
+// treatment the "Updates were installed" row gives via N/A). Deliberately NOT
+// falling back to the current time: showing "checked right now" would present
+// the moment the page was opened as a real update scan.
 static std::wstring LastCheckForUpdatesText() {
     std::lock_guard<std::mutex> lock(g_lastQueryTimeMutex);
     if (g_lastQueryTimeText.empty()) {
         g_lastQueryTimeText = ReadWuaResultString(L"Detect", L"LastSuccessTime");
-        if (g_lastQueryTimeText.empty()) {
-            SYSTEMTIME st{};
-            GetLocalTime(&st);
-            g_lastQueryTimeText = FormatWindowsRegionalDateTime(st);
-        }
     }
     return g_lastQueryTimeText;
 }
@@ -9470,7 +9507,9 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
             infoBlock += L"</element>";
         };
         if (!lastCheck.empty() && lastCheck.back() != L'.') lastCheck += L".";
-        addInfoLine(EmbeddedMuiString(1144), lastCheck); // "Most recent check for updates:"
+        // "Most recent check for updates:" row. Like the install row below,
+        // show N/A when no recorded timestamp exists rather than inventing one.
+        addInfoLine(EmbeddedMuiString(1144), lastCheck.empty() ? L"N/A" : lastCheck);
         // "Updates were installed:" row, always shown, with a history link.
         // The private handler keeps the classic CLSID on supported Windows 10
         // systems and opens Settings on Windows 11 or whenever that CLSID is absent.
@@ -9766,8 +9805,14 @@ static HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceN
                                            void** provider) {
     HINSTANCE resourceInstance = instance;
     if (IsWucltuxInstance(instance)) {
-        if (HMODULE embedded = EmbeddedMuiResourceModule())
+        if (HMODULE embedded = EmbeddedMuiResourceModule()) {
             resourceInstance = reinterpret_cast<HINSTANCE>(embedded);
+            // The provider reads strings/icons out of the generated .mres module,
+            // which lives on after unload if a page is open. Record that so
+            // Wh_ModUninit does not FreeLibrary it (and then delete the file)
+            // while a live provider is still reading it.
+            g_payloadHandedToShell.store(true, std::memory_order_release);
+        }
     }
     return XResourceProviderCreateOriginal(resourceInstance, resourceName, resourceType,
                                            stylesheetName, provider);
@@ -9980,18 +10025,27 @@ static bool EndsWith(const std::wstring& value, const std::wstring& suffix) {
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 static bool IsRootKey(HKEY key) {
-    const uintptr_t value = reinterpret_cast<uintptr_t>(key);
-    return value >= 0x80000000 && value <= 0x80000004;
+    // The predefined HKEY_* values are sign-extended on 64-bit: HKEY_CLASSES_ROOT
+    // is (HKEY)(ULONG_PTR)((LONG)0x80000000) = 0xFFFFFFFF80000000, not 0x80000000.
+    // Comparing against the raw 32-bit literals above was always false on x64, so
+    // the range check was dead. Compare against the macro constants instead, which
+    // carry the correct pointer width. (0x80000004 is HKEY_PERFORMANCE_DATA, not
+    // HKEY_CURRENT_CONFIG; both are root keys and fall inside the range.)
+    const ULONG_PTR value = reinterpret_cast<ULONG_PTR>(key);
+    return value >= reinterpret_cast<ULONG_PTR>(HKEY_CLASSES_ROOT) &&
+           value <= reinterpret_cast<ULONG_PTR>(HKEY_DYN_DATA);
 }
 static const wchar_t* RootPathLiteral(HKEY key) {
-    switch (reinterpret_cast<uintptr_t>(key)) {
-        case 0x80000000: return L"HKEY_CLASSES_ROOT";
-        case 0x80000001: return L"HKEY_CURRENT_USER";
-        case 0x80000002: return L"HKEY_LOCAL_MACHINE";
-        case 0x80000003: return L"HKEY_USERS";
-        case 0x80000004: return L"HKEY_CURRENT_CONFIG";
-        default: return nullptr;
-    }
+    // switch-case labels must be constant expressions, and reinterpret_cast is
+    // not one - so use an if-chain instead of a switch here.
+    const ULONG_PTR value = reinterpret_cast<ULONG_PTR>(key);
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_CLASSES_ROOT)) return L"HKEY_CLASSES_ROOT";
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_CURRENT_USER)) return L"HKEY_CURRENT_USER";
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_LOCAL_MACHINE)) return L"HKEY_LOCAL_MACHINE";
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_USERS)) return L"HKEY_USERS";
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_PERFORMANCE_DATA)) return L"HKEY_PERFORMANCE_DATA";
+    if (value == reinterpret_cast<ULONG_PTR>(HKEY_CURRENT_CONFIG)) return L"HKEY_CURRENT_CONFIG";
+    return nullptr;
 }
 
 // Allocation-free text gate for the process-wide registry hooks.
@@ -10681,28 +10735,49 @@ static LSTATUS OpenVirtual(HKEY key, LPCWSTR subKey, DWORD options,
 // kernel is free to recycle the numeric HKEY value for an unrelated key right
 // after, and a stale "known not the NameSpace parent" entry would then be a
 // false positive for that new key, not just a harmless miss.
-static std::mutex g_nonNamespaceCacheMutex;
-static std::unordered_set<HKEY> g_nonNamespaceKeys;
+//
+// The cache is sharded: RegCloseKey runs on every shell thread and the hook
+// evicts on every close, so a single cache mutex would funnel the whole process
+// through one lock. Sharding by handle value means each call only takes its own
+// shard's mutex; the HKEY is treated as opaque, so every key always lands in the
+// same shard. Total capacity is still bounded (per-shard cap, cleared wholesale).
+static constexpr size_t kNonNamespaceShards = 8;
 static constexpr size_t kNonNamespaceCacheMax = 512;
+static std::mutex g_nonNamespaceCacheMutex[kNonNamespaceShards];
+static std::unordered_set<HKEY> g_nonNamespaceKeys[kNonNamespaceShards];
+
+// Mix the handle value so neighbouring (near-sequential) handles spread across
+// shards instead of clustering in shard 0.
+static size_t NonNamespaceShard(HKEY key) {
+    uintptr_t v = reinterpret_cast<uintptr_t>(key);
+    v ^= v >> 16;
+    v *= 0x45d9f3bU;
+    v ^= v >> 16;
+    return v & (kNonNamespaceShards - 1);
+}
 
 static bool IsKnownNonNamespaceKey(HKEY key) {
     if (!key) return false;
-    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
-    return g_nonNamespaceKeys.count(key) != 0;
+    const size_t shard = NonNamespaceShard(key);
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex[shard]);
+    return g_nonNamespaceKeys[shard].count(key) != 0;
 }
 
 static void RememberNonNamespaceKey(HKEY key) {
     if (!key) return;
-    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
-    if (g_nonNamespaceKeys.size() >= kNonNamespaceCacheMax)
-        g_nonNamespaceKeys.clear();
-    g_nonNamespaceKeys.insert(key);
+    const size_t shard = NonNamespaceShard(key);
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex[shard]);
+    auto& set = g_nonNamespaceKeys[shard];
+    if (set.size() >= kNonNamespaceCacheMax / kNonNamespaceShards)
+        set.clear();
+    set.insert(key);
 }
 
 static void ForgetNonNamespaceKey(HKEY key) {
     if (!key) return;
-    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
-    g_nonNamespaceKeys.erase(key);
+    const size_t shard = NonNamespaceShard(key);
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex[shard]);
+    g_nonNamespaceKeys[shard].erase(key);
 }
 
 static LSTATUS WINAPI RegOpenKeyExWHook(HKEY key, LPCWSTR subKey, DWORD options,
@@ -11291,6 +11366,12 @@ static HRESULT HandleCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD con
     }
     hr = factory->CreateInstance(outer, iid, result);
     factory->Release();
+    // A successfully activated WUAppElementProvider (or the applet folder) hands
+    // the shell an object whose code/vtable lives in the private payload, so an
+    // open page can keep using it after unload. Record that for Wh_ModUninit so
+    // it does not unmap the module out from under a live page.
+    if (SUCCEEDED(hr))
+        g_payloadHandedToShell.store(true, std::memory_order_release);
     return hr;
 }
 
@@ -11371,6 +11452,10 @@ static HRESULT HandleCoGetClassObject(REFCLSID clsid, DWORD context, LPVOID rese
     const HRESULT hr = getClassObject(effective, iid, result);
     Wh_Log(L"Windows Update Restorer: served class factory (hr=0x%08X)",
            static_cast<unsigned>(hr));
+    // Serving the factory is how the shell activates the page; a live instance
+    // holds references into the payload, so note it for Wh_ModUninit.
+    if (SUCCEEDED(hr))
+        g_payloadHandedToShell.store(true, std::memory_order_release);
     return hr;
 }
 
@@ -11944,43 +12029,58 @@ void Wh_ModUninit() {
     if (g_wuSearchAbortEvent) { CloseHandle(g_wuSearchAbortEvent); g_wuSearchAbortEvent = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
-    // Release the fabricated navigation lists. Safe here and not earlier: every
-    // window of the mod's has been closed and every worker joined above, so
-    // nothing can still be rendering one of them.
-    DestroyPublishedNativeNavigationLinks();
-
     delete g_dllPath.exchange(nullptr);
 
-    // Drop the module references this mod took, so a disabled mod does not
-    // leave a Windows 8.1 UI DLL (and a full copy of it per language rebuild)
-    // mapped in explorer.exe for the rest of the session. Every enable/disable
-    // cycle used to add one more LoadLibraryExW reference that was never
-    // dropped, and because the generated .mres files stayed mapped the cleanup
-    // pass below could not delete them either - which is exactly what made the
-    // teardown irreversible.
-    //
-    // This runs after CloseAllWu*Dialogs and all the joins above: at this point
-    // no page, worker or window procedure of the mod's can still be using them.
-    // The private wucltux.dll is unloaded last, because the generated modules
-    // are copies of it and the navigation lists released just above borrowed
-    // their vtable from it.
-    {
-        std::lock_guard<std::mutex> lock(g_resourceMutex);
-        if (HMODULE resourceModule = g_resourceModule.exchange(nullptr)) {
-            FreeLibrary(resourceModule);
+    // The fabricated navigation lists, the generated .mres module(s) and the
+    // private wucltux.dll payload may only be reclaimed when nothing was ever
+    // handed to the shell: a Control Panel page built from the payload can
+    // outlive this mod (the shell owns that window and the mod never closes it),
+    // and it keeps holding the WUAppElementProvider / DirectUI element tree, the
+    // fabricated navigation lists and the XResourceProvider, whose vtable and
+    // code live in those modules. Unmapping them behind a live page is a
+    // use-after-free in explorer.exe.
+    if (!g_payloadHandedToShell.load(std::memory_order_acquire)) {
+        // Nothing was ever handed out, so no page exists and every object the
+        // mod owns can be reclaimed. The mod's own windows are closed and every
+        // worker joined above.
+        //
+        // Drop the module references this mod took, so a disabled mod does not
+        // leave a Windows 8.1 UI DLL (and a full copy of it per language rebuild)
+        // mapped in explorer.exe for the rest of the session. Every enable/disable
+        // cycle used to add one more LoadLibraryExW reference that was never
+        // dropped, and because the generated .mres files stayed mapped the cleanup
+        // pass below could not delete them either - which is exactly what made the
+        // teardown irreversible. The private wucltux.dll is unloaded last, because
+        // the generated modules are copies of it and the navigation lists released
+        // just below borrowed their vtable from it.
+        DestroyPublishedNativeNavigationLinks();
+        {
+            std::lock_guard<std::mutex> lock(g_resourceMutex);
+            if (HMODULE resourceModule = g_resourceModule.exchange(nullptr)) {
+                FreeLibrary(resourceModule);
+            }
+            for (HMODULE superseded : g_supersededResourceModules) FreeLibrary(superseded);
+            g_supersededResourceModules.clear();
+            g_resourceModuleHasPageTitles.store(false, std::memory_order_release);
+            g_resourcePath.clear();
+            // Now that nothing keeps them mapped, the generated files can be
+            // deleted. Anything a *different* process still holds is skipped and
+            // retried on a later load or unload, exactly as before.
+            CleanupGeneratedResourceModuleFiles(true);
         }
-        for (HMODULE superseded : g_supersededResourceModules) FreeLibrary(superseded);
-        g_supersededResourceModules.clear();
-        g_resourceModuleHasPageTitles.store(false, std::memory_order_release);
-        g_resourcePath.clear();
-        // Now that nothing of the mod's keeps them mapped, the generated files
-        // can actually be deleted rather than counted as locked. Anything a
-        // *different* process still holds is skipped and retried on a later
-        // load or unload, exactly as before.
-        CleanupGeneratedResourceModuleFiles(true);
-    }
-    if (HMODULE payloadModule = g_module.exchange(nullptr)) {
-        FreeLibrary(payloadModule);
+        if (HMODULE payloadModule = g_module.exchange(nullptr)) {
+            FreeLibrary(payloadModule);
+        }
+    } else {
+        // A Control Panel page was created from the payload at some point and can
+        // still be open, so leave the payload, the generated resource modules and
+        // the published navigation lists mapped for the session. A session-long
+        // leak is far cheaper than crashing the shell; the generated files stay on
+        // disk and are retried by the cleanup pass on a later load/unload once the
+        // page is gone.
+        Wh_Log(L"WUR: a Control Panel page was created from the payload; "
+               L"leaving the modules and navigation lists mapped so the "
+               L"shell's objects stay valid");
     }
     CleanupAppletLogoIconFiles();
     CleanupControlPanelTasksXmlFile();
