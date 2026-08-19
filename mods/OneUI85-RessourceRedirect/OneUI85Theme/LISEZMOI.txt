@@ -1,0 +1,25 @@
+Dossier de thème « One UI 8.5 » — modèle
+
+Sur ton PC Windows, copie le contenu de ton thème dans :
+
+    %LOCALAPPDATA%\Windhawk\OneUI85Theme
+
+(exemple : C:\Users\TonNom\AppData\Local\Windhawk\OneUI85Theme)
+
+Comment :
+1. Télécharge le pack d'icônes « BANAANA OneUI » :
+   https://github.com/niivu/resource-redirect-icon-themes#themes
+2. Décompresse le ZIP.
+3. Copie le CONTENU du dossier extrait (theme.ini, fichiers .dll, .exe, .ico…)
+   ici, directement dans OneUI85Theme\.
+4. Redémarre Explorer et vide le cache d'icônes (voir README.md).
+
+Structure attendue (exemples) :
+    OneUI85Theme\theme.ini
+    OneUI85Theme\System32\imageres.dll
+    OneUI85Theme\imageres.dll
+    OneUI85Theme\shell32.dll
+    ...
+
+Le mod détecte automatiquement les fichiers du thème (mode miroir) : un
+fichier du même nom qu'un fichier système suffit.
