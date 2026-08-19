@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-19T16:22:24.000Z</updated>
+    <updated>2026-08-19T16:40:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Simple Window Switcher 2.1]]></title>
+        <id>https://windhawk.net/mods/simple-window-switcher#524f3dd8faa26727a0e788c82ed797a7eb2daa44</id>
+        <link href="https://windhawk.net/mods/simple-window-switcher"/>
+        <updated>2026-08-19T16:40:35.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="fixes">Fixes</h3>
+<ul>
+<li>Fixed an issue where the alt-tab interface flashed at the top-left of the screen on launch for single-monitor setups by utilizing absolute negative off-screen coordinates</li>
+<li>Fixed an issue where child popup windows or dialogs overshadowed their root parent windows in the switcher by correctly prioritizing <code>GW_OWNER</code></li>
+<li>Fixed the "Scroll Pages" layout engine wrapping issue to ensure strictly computed page boundaries and alignments without incorrectly pulling from the start of the list</li>
+<li>Fixed the layout and spacing of overflow indicators so they no longer stick flush against the absolute screen edges</li>
+<li>Fixed corner scaling to properly support custom, rounded, or default corner preferences in the switcher background (Credits to @bropines)</li>
+<li>Fixed mirror switcher cleanup to prevent resource leaks and overlap bugs on multi-monitor setups (Credits to @bropines)</li>
+<li>Fixed an issue where only File Explorer tabs would close instead of the entire window by safely utilizing native <code>SC_CLOSE</code> commands (Credits to @bropines)</li>
+</ul>
+<h3 id="updates">Updates</h3>
+<ul>
+<li>Updated the title fetching logic to prioritize native <code>GetWindowTextW</code> fallback for better title extraction and consistency</li>
+<li>Updated the static <code>...</code> overflow indicator into dynamic directional chevrons (<code>▲</code>, <code>▼</code>, <code>◀</code>, <code>▶</code>) depending on the layout orientation</li>
+<li>Updated keyboard shortcut handling to natively support <code>Ctrl+W</code> and <code>Del</code> for closing the selected window</li>
+<li>Updated default value for <code>Virutal Desktop Behavior</code> to show windows from all virtual displays</li>
+</ul>
+<h3 id="additions">Additions</h3>
+<ul>
+<li>Added a new setting <code>sortMinimizedWindowsToEnd</code> to prevent game windows that minimize on focus loss from being incorrectly sorted to the end of the list (Credits to @bropines)</li>
+<li>Added <code>Alt+Backtick</code> shortcut support with a configurable setting to cycle backwards or filter exclusively to windows of the same active application</li>
+<li>Added a "Show close button" (<code>showCloseButton</code>) setting toggle under Appearance -&gt; Thumbnails to easily hide the X button</li>
+<li>Added advanced scroll wheel customization options (Scroll Wheel Action &amp; Secondary Modifiers) to allow seamless toggle between selection scrolling and full-page scrolling</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 2.0.0]]></title>
         <id>https://windhawk.net/mods/win7-legacy-applet-restorer#09aae2e001dcb5b3af2ef87e2b7ff58bc848d1a5</id>
@@ -539,21 +573,6 @@ a different color. This mod restores that behavior.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Blob Shape 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-blob-shape#53c9298760a1b89b1fbf686d7240d29dc65bc566</id>
-        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
-        <updated>2026-08-09T11:35:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Extends the blob beyond task list buttons, each group behind its own toggle (all default off): Start/Search/Task view, Widgets, date and time, and the other checkable system tray buttons (control center, language, overflow chevron), shown while their flyout is open — on every monitor's instance, matching the native active highlight.</li>
-<li>System buttons are event-driven (ToggleButton Checked/Unchecked, with a CurrentStateChanged fallback) on top of the existing entry/geometry/expression/lifecycle machinery, discovered by sweeping each taskbar's repeater (re-swept on grid SizeChanged) and an optional hook on TaskbarResources::OnExperienceToggleButtonVisualStateChanged for islands without task-button activity. The tray is reached via XamlRoot().Content(), hosts blobs at the bottom of SystemTrayFrameGrid's z-order, and re-discovers elements on the tray grid's SizeChanged. Notification-area app icons and MainStack status indicators are deliberately excluded (no open-state exists for them: Shell_NotifyIcon is a one-way protocol, and the indicators only track hover states).</li>
-<li>Fixes the CustomColor setting description being truncated in the UI (space-before-# triggered YAML's comment rule) and documents the Light | Dark color syntax with concrete examples.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
