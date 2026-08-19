@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.5
+// @version         0.10.6
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -36,10 +36,10 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Two transparent materials:** Transparent keeps an Acrylic-style blur and
-  subtle outline; Transparent borderless leaves the compact island fully clear
-  and uses untinted blur only when expanded. Neither mode adds a gray fallback
-  surface or simulated elevation shadow.
+- **Two transparent materials:** Transparent lets the taskbar's existing blur
+  show through a subtle outline; Transparent borderless leaves the compact
+  island fully clear and uses untinted blur only when expanded. Neither mode
+  adds a gray fallback surface or simulated elevation shadow.
 - **One corner-radius control:** Set the expanded player's corners once and keep
   the XAML surface, artwork, controls, highlights, and independent blur layer in
   sync.
@@ -1265,40 +1265,20 @@ winrt::Windows::UI::Color IslandBackgroundColor() {
                 : Color(0xE8, 0xF4, 0xF4, 0xF6);
 }
 
-mediax::Brush TransparentCompactAcrylicBrush() {
-    try {
-        mediax::AcrylicBrush brush;
-        brush.BackgroundSource(mediax::AcrylicBackgroundSource::HostBackdrop);
-        brush.TintColor(Color(0x00, 0x00, 0x00, 0x00));
-        brush.TintOpacity(0.0);
-        brush.TintLuminosityOpacity(0.0);
-        // Taskbar Acrylic can temporarily enter fallback while a pointer is
-        // captured or focus moves to the expanded host. A colored fallback
-        // turns the compact island gray and can flash black during that
-        // transition, so fall back to the taskbar surface underneath instead.
-        brush.FallbackColor(Color(0x00, 0x00, 0x00, 0x00));
-        return brush;
-    } catch (...) {
-        return Brush(Color(0x00, 0x00, 0x00, 0x00));
-    }
-}
-
 mediax::Brush IslandBackgroundBrush() {
-    if (IsTransparentBorderlessMaterial()) {
+    if (IsTransparentMaterial()) {
+        // HostBackdrop Acrylic can emit a black composition surface while the
+        // taskbar changes focus or holds pointer capture. The compact island
+        // already sits over the taskbar's blurred material, so a transparent
+        // fill preserves that blur without introducing another fallback layer.
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
-    }
-    if (IsTransparentBorderedMaterial()) {
-        return TransparentCompactAcrylicBrush();
     }
     return Brush(IslandBackgroundColor());
 }
 
 mediax::Brush DynamicMainOcclusionBrush() {
-    if (IsTransparentBorderlessMaterial()) {
+    if (IsTransparentMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
-    }
-    if (IsTransparentBorderedMaterial()) {
-        return TransparentCompactAcrylicBrush();
     }
 
     auto color = IslandBackgroundColor();
@@ -4038,6 +4018,7 @@ constexpr wchar_t kPopupClassName[] = L"WindhawkIslandMediaPopup";
 constexpr wchar_t kPopupBackdropOverlayClassName[] = L"WindhawkIslandMediaBackdropOverlay";
 constexpr UINT_PTR kPopupTimerId = 0x494D;
 constexpr UINT_PTR kTaskbarLayoutMonitorTimerId = 0x494D4C54;
+constexpr UINT kPopupBackdropOverlayFrameReadyMessage = WM_APP + 0x494;
 constexpr UINT kTaskbarLayoutMonitorIntervalMs = 600;
 constexpr int kPopupBackdropOverlayRefreshMs = 90;
 constexpr int kPopupBackdropOverlayMaxCaptureSize = 320;
@@ -10380,6 +10361,10 @@ void RenderPopupOverlayWgcFrameLocked(
         g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::VisibleFrame;
         g_popupOverlayWgcReadbackHadVisibleFrame = true;
         g_popupOverlayWgcFallbackPainted = false;
+        if (g_popupBackdropOverlay) {
+            PostMessageW(g_popupBackdropOverlay,
+                         kPopupBackdropOverlayFrameReadyMessage, 0, 0);
+        }
     } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcLastHr = error.code().value;
         g_popupOverlayWgcDiagnosticHr = error.code().value;
@@ -11309,6 +11294,17 @@ void PaintPopupBackdropOverlay(HWND hwnd) {
     }
 }
 
+void ShowPopupBackdropOverlayWhenReady(HWND hwnd) {
+    if (!hwnd || hwnd != g_popupBackdropOverlay || !g_expanded ||
+        !g_expandedPopup || !IsWindowVisible(g_expandedPopup)) {
+        return;
+    }
+    SetWindowPos(hwnd, g_expandedPopup, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_NOCOPYBITS | SWP_NOOWNERZORDER |
+                     SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
+}
+
 LRESULT CALLBACK PopupBackdropOverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     try {
         switch (message) {
@@ -11318,6 +11314,9 @@ LRESULT CALLBACK PopupBackdropOverlayWndProc(HWND hwnd, UINT message, WPARAM wPa
                 return HTTRANSPARENT;
             case WM_PAINT:
                 PaintPopupBackdropOverlay(hwnd);
+                return 0;
+            case kPopupBackdropOverlayFrameReadyMessage:
+                ShowPopupBackdropOverlayWhenReady(hwnd);
                 return 0;
             case WM_DESTROY:
                 SetPopupWindowCaptureExclusion(hwnd, false);
@@ -11704,12 +11703,8 @@ void UpdatePopupBackdropOverlayWindow() {
         SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, true);
     }
 
-    bool overlayWasVisible = IsWindowVisible(g_popupBackdropOverlay) != FALSE;
     UINT overlayPosFlags = SWP_NOACTIVATE | SWP_NOCOPYBITS |
                            SWP_NOOWNERZORDER | SWP_NOSENDCHANGING;
-    if (!overlayWasVisible) {
-        overlayPosFlags |= SWP_SHOWWINDOW;
-    }
     SetWindowPos(g_popupBackdropOverlay, g_expandedPopup,
                  overlayRect.left, overlayRect.top, width, height,
                  overlayPosFlags);
@@ -11718,9 +11713,6 @@ void UpdatePopupBackdropOverlayWindow() {
     g_popupBackdropOverlayLastWidth = width;
     g_popupBackdropOverlayLastHeight = height;
     g_popupBackdropOverlayLastRadius = cornerRadiusPx;
-    if (!overlayWasVisible) {
-        ShowWindow(g_popupBackdropOverlay, SW_SHOWNOACTIVATE);
-    }
 
     auto paintLayeredBlurFallback = [&]() {
         LONG_PTR fallbackStyle =
@@ -11741,6 +11733,9 @@ void UpdatePopupBackdropOverlayWindow() {
                                                    height,
                                                    cornerRadiusPx,
                                                    morphing);
+        if (g_popupOverlayWgcFallbackPainted) {
+            ShowPopupBackdropOverlayWhenReady(g_popupBackdropOverlay);
+        }
     };
 
     if (g_settings.allowScreenCapture) {
