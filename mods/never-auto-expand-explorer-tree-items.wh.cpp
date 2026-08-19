@@ -6,7 +6,7 @@
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
-// @compilerOptions -lcomctl32 -luser32
+// @compilerOptions -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -91,7 +91,8 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
     // Verify keyboard interactions
     HWND hFocusWnd = GetFocus();
     if ((hFocusWnd == hTreeView || IsChild(hTreeView, hFocusWnd)) &&
-        ((GetAsyncKeyState(VK_RIGHT) & 0x8000) ||
+        ((GetAsyncKeyState(VK_LEFT) & 0x8000) ||
+            (GetAsyncKeyState(VK_RIGHT) & 0x8000) ||
             (GetAsyncKeyState(VK_ADD) & 0x8000) ||
             (GetAsyncKeyState(VK_MULTIPLY) & 0x8000)))
     {
