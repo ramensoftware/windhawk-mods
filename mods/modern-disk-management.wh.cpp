@@ -2,11 +2,12 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.12.0
+// @version         4.0.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
 // @include         mmc.exe
+// @include         windhawk.exe
 // @compilerOptions -lcfgmgr32 -lcomctl32 -ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -lsetupapi -lshell32 -lshlwapi -luser32 -luxtheme
 // ==/WindhawkMod==
 
@@ -41,6 +42,7 @@ handed to Windows rather than reimplemented:
 | Eject | lock, dismount, then eject the media or remove the device |
 | Change Drive Letter and Paths | the Disk Management console |
 | Extend, Shrink, Delete Volume | the Disk Management console |
+| Initialize Disk, New Simple Volume | the Disk Management console |
 
 Eject locks the volume, dismounts it and ejects the media - the sequence that
 makes the drive safe to unplug. On a USB disk it then also asks PnP to remove
@@ -51,12 +53,13 @@ refusal is only reported when nothing worked at all.
 
 There is deliberately no partition editing here. Writing a partition editor is
 how data gets lost, and the dialogs that do it properly already exist in the
-console this replaces. So Extend, Shrink and Delete hand over to it, and so does
-Change Drive Letter and Paths - that one does not touch the partition table at
-all, but the console's dialog does mount points and folder paths as well as
-letters, and half of that dialog is worse than none of it. All four say
-`Console` in the menu's right-hand column, and choosing one starts the original
-console rather than pretending to do the work here. Turning off **Replace the
+console this replaces. So Extend, Shrink and Delete hand over to it, as do
+Initialize Disk and New Simple Volume, and so does Change Drive Letter and
+Paths - that one does not touch the partition table at all, but the console's
+dialog does mount points and folder paths as well as letters, and half of that
+dialog is worse than none of it. All six say `Console` in the menu's right-hand
+column, and choosing one starts the original console rather than pretending to
+do the work here. Turning off **Replace the
 Disk Management console** in the mod's settings gets it back for good.
 
 Everything is on the right-click menu, and nowhere else: no toolbar, no button
@@ -66,6 +69,15 @@ background offers only Refresh and the console, because a menu that offers to
 delete a volume the user did not click on is offering to act on a selection
 they cannot see. Double-click, or press Enter, for properties; the arrow keys
 move the selection, F5 re-reads the disks and Esc closes the window.
+
+Empty space is a selection too. Unallocated space on the map, and a disk with
+nothing on it at all, both select and both get their own two-item menu:
+Initialize Disk on a disk with no partition table, New Simple Volume on one that
+has room. A disk that has just been plugged in is the commonest reason anyone
+opens Disk Management, so it also gets a row of its own in the table rather than
+existing only on the map - a window that shows the problem and offers nothing to
+do about it would be worse than no window, and one that offers it only to a
+mouse would be worse than that.
 
 This window is drawn rather than built from controls, so it has no accessibility
 tree: screen readers and other UI Automation clients see one blank window where
@@ -88,10 +100,31 @@ for.
 
 ## How it works
 
-`diskmgmt.msc` is hosted by `mmc.exe`, so the mod loads there, checks the
-command line, and shows its own window instead of letting the console load.
-Any other snap-in - `services.msc`, `eventvwr.msc`, a custom console - runs
-untouched.
+`diskmgmt.msc` is hosted by `mmc.exe`, so the mod loads there and checks the
+command line. If it is Disk Management, the mod starts its own process, fails
+the console's frame window and returns - `mmc.exe` then has nothing left to
+display and exits by itself. Any other snap-in - `services.msc`, `eventvwr.msc`,
+a custom console - runs untouched.
+
+The window does **not** run inside `mmc.exe`. It runs in a dedicated
+`windhawk.exe -tool-mod` process, which is Windhawk's
+[tool-mod pattern](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process).
+An earlier version did run in-process, and the cost of that was steep: a whole
+application - message loop, modal dialogs, a COM apartment - inside a process
+this mod does not own, with `mmc.exe`'s own main thread held still inside a hook
+for as long as the window was open. Unloading the mod then had to get that
+foreign thread out of the module first, which no amount of care makes reliable.
+None of that exists now, and a fault in this code no longer takes `mmc.exe`
+with it.
+
+One thing is done differently from the published pattern, and deliberately.
+The pattern starts the tool process from `windhawk.exe` as soon as Windhawk
+loads; this one is started by the hook in `mmc.exe` instead. That is what gets
+it the elevated token - `windhawk.exe` does not have one, `mmc.exe` running
+`diskmgmt.msc` always does, and a child process inherits it - and it also means
+the process starts when someone opens Disk Management rather than at boot.
+Opening Disk Management again while the window is up brings that window to the
+front rather than starting a second one.
 
 That check is on the command line, so it only catches Disk Management opened
 as itself: `diskmgmt.msc`, the Win+X menu, Search, `Run`. Disk Management
@@ -103,8 +136,9 @@ would be wrong anyway.
 Disk and volume data comes from ordinary Win32: `FindFirstVolume` for the
 volumes, `IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS` to place each one on a physical
 disk, and `IOCTL_STORAGE_QUERY_PROPERTY` for the disk's model name. The console
-requires administrator rights, so the window inherits them and every query
-succeeds; nothing here needs rights the original did not.
+requires administrator rights, and the window's process inherits them from the
+`mmc.exe` that started it, so every query succeeds; nothing here needs rights
+the original did not.
 
 Those queries reach the hardware, and a sleeping drive can take seconds to
 answer, so they run on their own thread - the window opens reading and fills
@@ -2378,6 +2412,8 @@ enum class ActionKind {
     Extend,
     Shrink,
     Delete,
+    Initialize,
+    NewVolume,
     Refresh,
     Classic,
     Close
@@ -2753,6 +2789,57 @@ void DrawMenuEntry(State* state, const MenuEntry& entry,
 // table has. The Volume column absorbs whatever is left over.
 // What a cell says. Drawn from here, and reported from here to LVN_GETDISPINFO,
 // so what a screen reader is told and what is on screen cannot drift apart.
+// Free space on a disk, which is what New Simple Volume would have to work
+// with. A disk that has never been initialised has no segments at all, and all
+// of it is free.
+ULONGLONG UnallocatedBytes(const DiskInfo& disk) {
+    ULONGLONG total = 0;
+    for (const auto& segment : disk.segments) {
+        if (segment.unallocated) {
+            total += segment.length;
+        }
+    }
+    return total ? total : disk.size;
+}
+
+// Whether a disk needs a row standing for the disk itself. One that contributes
+// no volume rows would otherwise not be in the table at all - and a disk with
+// nothing on it is the commonest reason anyone opens Disk Management. Leaving
+// it out of the table would leave it reachable only by clicking the map, which
+// is exactly the reachability the table exists to provide.
+bool DiskNeedsOwnRow(const DiskInfo& disk) {
+    for (const auto& volume : disk.volumes) {
+        if (g_settings.showEmptyVolumes || !volume.letter.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// That row's cells. Same eight columns, so a screen reader reads it exactly as
+// it reads any other row - but almost nothing a volume has is true of it, and
+// inventing a file system or a status for empty space would be worse than the
+// dash that says there is none.
+std::wstring DiskCellText(const DiskInfo& disk, int column) {
+    PCWSTR what = disk.style.empty() ? L"Not initialized" : L"Unallocated";
+    switch (column) {
+        case 0:
+            return what;
+        case 2:
+            return disk.dynamic ? L"Dynamic" : L"Basic";
+        case 4:
+            return what;
+        case 5:
+            return ui::FormatSize(UnallocatedBytes(disk));
+        case 1:
+        case 3:
+        case 6:
+        case 7:
+            return L"\x2014";
+    }
+    return std::wstring();
+}
+
 std::wstring CellText(const DiskInfo& disk, const VolumeInfo& volume,
                       int column) {
     switch (column) {
@@ -2855,6 +2942,10 @@ void BuildRowMap(State* state) {
                 state->rows.emplace_back(static_cast<int>(d),
                                          static_cast<int>(v));
             }
+        }
+        // A volume index of -1 is the disk itself. See DiskNeedsOwnRow.
+        if (DiskNeedsOwnRow(state->disks[d])) {
+            state->rows.emplace_back(static_cast<int>(d), -1);
         }
     }
     if (state->hotRow >= static_cast<int>(state->rows.size())) {
@@ -3035,11 +3126,16 @@ void DrawTableRow(State* state, HDC dc, int index) {
         return;
     }
     const DiskInfo& disk = state->disks[diskIndex];
-    if (volumeIndex < 0 ||
-        volumeIndex >= static_cast<int>(disk.volumes.size())) {
-        return;
+
+    // Null on a disk row, which has no volume to describe. Every column below
+    // asks the disk instead.
+    const VolumeInfo* volume = nullptr;
+    if (volumeIndex >= 0) {
+        if (volumeIndex >= static_cast<int>(disk.volumes.size())) {
+            return;
+        }
+        volume = &disk.volumes[volumeIndex];
     }
-    const VolumeInfo& volume = disk.volumes[volumeIndex];
 
     bool selected = state->selectedDisk == diskIndex &&
                     state->selectedVolume == volumeIndex;
@@ -3077,16 +3173,20 @@ void DrawTableRow(State* state, HDC dc, int index) {
         }
         RECT cell{x, row.top, x + state->tableWidths[i], row.bottom};
         cell.right -= ui::Scale(10, state->dpi);
-        std::wstring text = CellText(disk, volume, i);
+        std::wstring text =
+            volume ? CellText(disk, *volume, i) : DiskCellText(disk, i);
 
         if (i == 0) {
-            // The name column carries the volume's own icon.
+            // The name column carries the volume's own icon, or on a disk row
+            // the physical disk's.
+            HBITMAP image = volume ? volume->image : disk.image;
+            HICON fallback = volume ? volume->icon : disk.icon;
             int icon = ui::Scale(32, state->dpi);
             int iconTop = row.top + ((row.bottom - row.top) - icon) / 2;
-            if (volume.image) {
-                DrawShellImage(dc, volume.image, cell.left, iconTop, icon);
-            } else if (volume.icon) {
-                DrawIconEx(dc, cell.left, iconTop, volume.icon, icon, icon, 0,
+            if (image) {
+                DrawShellImage(dc, image, cell.left, iconTop, icon);
+            } else if (fallback) {
+                DrawIconEx(dc, cell.left, iconTop, fallback, icon, icon, 0,
                            nullptr, DI_NORMAL);
             }
             cell.left += icon + ui::Scale(10, state->dpi);
@@ -3236,13 +3336,14 @@ void PaintSegment(State* state, HDC dc, const DiskInfo& disk, int diskIndex,
         DeleteObject(pen);
     }
 
-    if (hasVolume) {
-        Target target;
-        target.rect = box;
-        target.diskIndex = diskIndex;
-        target.volumeIndex = segment.volumeIndex;
-        state->targets.push_back(target);
-    }
+    // Every segment, not only the ones carrying a volume. Unallocated space is
+    // clickable, and selects the disk it is on - which is what Initialize Disk
+    // and New Simple Volume act on.
+    Target target;
+    target.rect = box;
+    target.diskIndex = diskIndex;
+    target.volumeIndex = segment.volumeIndex;
+    state->targets.push_back(target);
 
     // Below a certain width there is no honest way to fit text; the stripe and
     // the tooltip-free legend carry the meaning instead.
@@ -3589,6 +3690,25 @@ void Paint(State* state, HDC dc, const RECT& client) {
 
 // Takes the result the scan produced - however it was produced - and makes it
 // the state the window paints from.
+// Whether the selection still names something that is in the list. Not
+// Selected() alone: a disk row selects a disk and no volume, so Selected()
+// answers null for one and the fallback below would move the selection off it
+// on the next scan - which is every refresh, and every disk arriving or
+// leaving.
+bool SelectionValid(State* state) {
+    if (state->selectedDisk < 0 ||
+        state->selectedDisk >= static_cast<int>(state->disks.size())) {
+        return false;
+    }
+    if (state->selectedVolume < 0) {
+        // Still a row only for as long as the disk still has nothing on it.
+        // Once it has been initialised and given a volume, the row is gone and
+        // the fallback is right to take over.
+        return DiskNeedsOwnRow(state->disks[state->selectedDisk]);
+    }
+    return Selected(state) != nullptr;
+}
+
 void AdoptScan(State* state) {
     ReleaseDiskIcons(state->disks);
     state->disks = std::move(state->scanResult);
@@ -3602,7 +3722,7 @@ void AdoptScan(State* state) {
         RebuildDiskIcons(state->disks);
     }
 
-    if (!Selected(state)) {
+    if (!SelectionValid(state)) {
         state->selectedDisk = -1;
         state->selectedVolume = -1;
 
@@ -3844,6 +3964,12 @@ void Invoke(State* state, ActionKind kind, const std::wstring& targetGuid) {
         case ActionKind::Delete:
             HandOffToConsole(state, L"Delete Volume");
             return;
+        case ActionKind::Initialize:
+            HandOffToConsole(state, L"Initialize Disk");
+            return;
+        case ActionKind::NewVolume:
+            HandOffToConsole(state, L"New Simple Volume");
+            return;
         default:
             break;
     }
@@ -3904,8 +4030,16 @@ void Invoke(State* state, ActionKind kind, const std::wstring& targetGuid) {
 // is only the two things that are not about a volume at all: offering to change
 // the drive letter of something the user did not click on is offering to act on
 // a selection they cannot see.
-void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
-    const VolumeInfo* volume = onVolume ? Selected(state) : nullptr;
+void ShowContextMenu(State* state, POINT clientPoint, bool onTarget) {
+    const VolumeInfo* volume = onTarget ? Selected(state) : nullptr;
+
+    // Something is selected, but it is not a volume: unallocated space, or a
+    // disk with nothing on it at all. Selected() answers null for both, so
+    // without this they would get the background menu - two items, neither of
+    // which is about the disk that was clicked.
+    bool onDisk = onTarget && !volume && state->selectedDisk >= 0 &&
+                  state->selectedDisk < static_cast<int>(state->disks.size());
+
     bool hasLetter = volume && !volume->letter.empty();
     bool boot = volume && volume->isBoot;
     bool removable =
@@ -3945,6 +4079,23 @@ void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
         add(L"Extend Volume\x2026", ActionKind::Extend, true, L"Console");
         add(L"Shrink Volume\x2026", ActionKind::Shrink, true, L"Console");
         add(L"Delete Volume\x2026", ActionKind::Delete, !boot, L"Console");
+        separator();
+    }
+
+    if (onDisk) {
+        // Both write to the partition table, which is the line this window does
+        // not cross - so both hand off, the same way Extend and Delete do, and
+        // say so in the same right-hand column.
+        //
+        // Which one applies is exclusive, and the console gates them the same
+        // way: a disk with no partition table cannot hold a volume until it has
+        // one, and a disk that already has one is not initialised again.
+        const DiskInfo& disk = state->disks[state->selectedDisk];
+        bool initialized = !disk.style.empty();
+        add(L"New Simple Volume\x2026", ActionKind::NewVolume, initialized,
+            L"Console");
+        add(L"Initialize Disk\x2026", ActionKind::Initialize, !initialized,
+            L"Console");
         separator();
     }
 
@@ -4055,21 +4206,18 @@ void ShowContextMenuForSelection(State* state) {
         }
     }
 
-    ShowContextMenu(state, point, Selected(state) != nullptr);
+    // Not Selected(): a disk row selects with no volume, and the menu it needs
+    // is the disk one rather than the background one.
+    ShowContextMenu(state, point, state->selectedDisk >= 0);
 }
 
 // Moves the selection up or down the volume list, so the whole window can be
 // driven from the keyboard.
 void MoveSelection(State* state, int delta) {
-    std::vector<std::pair<int, int>> order;
-    for (size_t d = 0; d < state->disks.size(); d++) {
-        for (size_t v = 0; v < state->disks[d].volumes.size(); v++) {
-            if (g_settings.showEmptyVolumes ||
-                !state->disks[d].volumes[v].letter.empty()) {
-                order.emplace_back(static_cast<int>(d), static_cast<int>(v));
-            }
-        }
-    }
+    // The table's own row list rather than a second one built the same way:
+    // two orders that could disagree is how a disk row ends up reachable with
+    // the mouse and not with the keyboard.
+    const std::vector<std::pair<int, int>>& order = state->rows;
     if (order.empty()) {
         return;
     }
@@ -4318,13 +4466,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         break;
                     }
                     const DiskInfo& disk = state->disks[diskIndex];
-                    if (volumeIndex < 0 ||
-                        volumeIndex >=
-                            static_cast<int>(disk.volumes.size())) {
+                    if (volumeIndex >=
+                        static_cast<int>(disk.volumes.size())) {
                         break;
                     }
-                    std::wstring text = CellText(disk, disk.volumes[volumeIndex],
-                                                 info->item.iSubItem);
+                    // Through the same two functions the drawing uses, so what
+                    // is read out and what is on screen cannot drift apart.
+                    std::wstring text =
+                        volumeIndex < 0
+                            ? DiskCellText(disk, info->item.iSubItem)
+                            : CellText(disk, disk.volumes[volumeIndex],
+                                       info->item.iSubItem);
                     wcsncpy_s(info->item.pszText, info->item.cchTextMax,
                               text.c_str(), _TRUNCATE);
                     break;
@@ -5028,214 +5180,144 @@ void LoadSettings() {
 }
 
 // -----------------------------------------------------------------------------
-// Taking over the console
+// Where the window runs
 //
-// MMC is intercepted where it creates its frame window, on its own main thread.
-// An earlier version suspended that thread from a worker instead, which is a
-// deadlock waiting to happen: the thread is stopped at whatever point it has
-// reached, quite possibly holding the loader lock or a CRT lock, and this mod
-// then calls CoInitializeEx, GDI+ and the shell for icons. Hooking
-// CreateWindowExW is deterministic and needs no suspension at all.
+// Not in mmc.exe. The window is a whole application - a message loop, modal
+// dialogs, a COM apartment, shell icons - and running it inside the process it
+// replaces meant mmc.exe's own main thread had to be held still inside a hook
+// for as long as the window was open. Everything that cost went with it: no
+// foreign thread parked in this module, no unload barrier watching that
+// thread's instruction pointer to decide when the image is safe to unmap, no
+// format dialog able to block Windhawk's engine, and a fault in this code no
+// longer takes mmc.exe with it.
 //
-// "MMCMainFrame" is MMC's frame window class, confirmed by enumerating the
-// windows of a running mmc.exe.
+// The mod is included for windhawk.exe as well, and the hook in mmc.exe starts
+// a dedicated windhawk.exe -tool-mod process and then fails the frame window.
+// MMC has nothing left to display, so it unwinds and exits on its own. This is
+// Windhawk's tool-mod pattern:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// One deliberate deviation, and it is the whole reason the hook still exists.
+// The stock pattern starts the tool process from windhawk.exe itself, in
+// Wh_ModAfterInit, and starts it as soon as Windhawk loads. Neither suits this
+// mod. It must start when someone opens Disk Management rather than at boot,
+// and every disk this window reads needs a handle no unelevated process can
+// open - windhawk.exe is not elevated, and mmc.exe running diskmgmt.msc always
+// is. Launching from the hook solves both at once: the child inherits the token
+// mmc.exe was already given, at exactly the moment the takeover used to be
+// decided. So there is no launcher branch here and no Wh_ModAfterInit.
 // -----------------------------------------------------------------------------
 
 constexpr PCWSTR kMmcFrameClass = L"MMCMainFrame";
+constexpr PCWSTR kToolModArgument = L"-tool-mod";
 
-// Set once the takeover has happened, so a second frame window - or a reentrant
-// call - does not try to show a second copy of the window.
+// Set once, so a second frame window - or a reentrant call - does not start a
+// second process.
 std::atomic<bool> g_tookOver = false;
 
-// Set by Wh_ModUninit. The UI runs on its own thread while MMC's main thread
-// waits inside the hook below, so unloading has to get that thread back out of
-// this module before returning.
+// Read by Invoke, which will not open a dialog that Wh_ModUninit would then
+// have to close again.
 std::atomic<bool> g_modUnloading = false;
-
-// Signalled by the UI thread once its window has closed and it is finished with
-// this module.
-HANDLE g_uiFinished = nullptr;
-
-// Signalled by the hook as its very last statement. Wh_ModUninit waits on this
-// before returning, so the image stays mapped until MMC's thread has finished
-// with the code in it.
-HANDLE g_hookExited = nullptr;
-
-// MMC's own thread, duplicated when the takeover is decided. Wh_ModUninit needs
-// it because of what happens after the hook signals g_hookExited: the stack
-// cleanup and the ret still execute out of this image, and Windhawk calls
-// FreeLibrary on the image the moment Wh_ModUninit returns. The event cannot
-// cover the instructions that raise it, so the thread itself is watched instead
-// - see WaitForThreadToLeaveModule.
-HANDLE g_mmcThread = nullptr;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 
-// user32's own CreateWindowExW, resolved once at init. Windhawk removes the
-// hooks in Wh_ModBeforeUninit, which runs before Wh_ModUninit, so by the time
-// the unload path below needs to call through, the trampoline no longer exists.
-CreateWindowExW_t g_realCreateWindowExW = nullptr;
-
-// The UI thread, kept so Wh_ModUninit can join it before the module is
-// unmapped. Its id is needed too: on unload every window on that thread has to
-// be closed, not only the main one.
-HANDLE g_uiThread = nullptr;
-DWORD g_uiThreadId = 0;
-std::atomic<bool> g_windowShown = false;
-
-// Guards the handoff: the decision to take over, and the teardown that has to
-// know whether one happened. Atomics alone are not enough - MMC's thread can
-// read g_modUnloading as false and then be descheduled before it publishes
-// g_uiThread, and in that window the whole of Wh_ModUninit can run and return,
-// leaving that thread about to start a thread on an entry point in an image
-// that has just been unmapped.
-std::mutex g_takeoverMutex;
-
-// Runs the window on its own thread, with its own COM apartment, and signals
-// MMC's waiting thread when it is finished.
-DWORD WINAPI WindowThread(LPVOID) {
-    HRESULT comInit =
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-
-    g_windowShown = diskui::Run();
-
-    if (SUCCEEDED(comInit)) {
-        CoUninitialize();
+// windhawk.exe's own path. The stock pattern reads it from
+// GetModuleFileNameW(nullptr) because it runs inside windhawk.exe; this launch
+// happens in mmc.exe, so it has to be looked up instead. The installer is
+// 32-bit, which puts the value in the WOW6432 view of the registry on a 64-bit
+// machine - RRF_SUBKEY_WOW6432KEY reads it from a process of either bitness,
+// and the native view is tried afterwards for an install that did not redirect.
+bool WindhawkExecutablePath(std::wstring* path) {
+    WCHAR buffer[MAX_PATH]{};
+    DWORD size = sizeof(buffer);
+    LSTATUS status =
+        RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Windhawk", L"install_dir",
+                     RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, nullptr, buffer,
+                     &size);
+    if (status != ERROR_SUCCESS) {
+        size = sizeof(buffer);
+        status = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Windhawk",
+                              L"install_dir", RRF_RT_REG_SZ, nullptr, buffer,
+                              &size);
+    }
+    if (status != ERROR_SUCCESS || !buffer[0]) {
+        return false;
     }
 
-    // Released last: MMC's thread resumes as soon as this is set, and this
-    // thread must be done touching the module by then.
-    SetEvent(g_uiFinished);
-    return 0;
+    *path = buffer;
+    if (path->back() != L'\\') {
+        path->push_back(L'\\');
+    }
+    *path += L"windhawk.exe";
+    return true;
 }
 
+// Starts the process the window runs in. Inherits this one's token by saying
+// nothing about it, which is the point of launching from here.
+//
+// False means the user gets the original console rather than nothing at all,
+// so every failure below is logged and returns rather than trying harder.
+bool LaunchWindowProcess() {
+    std::wstring executable;
+    if (!WindhawkExecutablePath(&executable)) {
+        Wh_Log(L"could not find windhawk.exe; falling back to the console");
+        return false;
+    }
+
+    // CreateProcessW writes to its command line argument, so it cannot be a
+    // literal.
+    std::wstring commandLine = L"\"" + executable + L"\" " + kToolModArgument +
+                               L" \"" WH_MOD_ID L"\"";
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(executable.c_str(), commandLine.data(), nullptr,
+                        nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr,
+                        &startup, &process)) {
+        Wh_Log(L"could not start the window process (%u); falling back to the "
+               L"console",
+               GetLastError());
+        return false;
+    }
+
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+}
+
+// MMC is intercepted where it creates its frame window. "MMCMainFrame" is that
+// class, confirmed by enumerating the windows of a running mmc.exe.
+//
+// What this does now is start a process and return. Nothing waits, nothing is
+// parked, and this thread leaves the module on the next instruction - which is
+// what makes the whole unload barrier the previous versions carried
+// unnecessary rather than merely well tested.
 HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
                                  PCWSTR windowName, DWORD style, int x, int y,
-                                 int width, int height, HWND parent,
-                                 HMENU menu, HINSTANCE instance,
-                                 LPVOID param) {
-    auto passThrough = [&] {
-        return CreateWindowExW_Original(exStyle, className, windowName, style, x,
-                                        y, width, height, parent, menu,
-                                        instance, param);
-    };
-
-    // Deciding to take over and publishing the thread that does it are one step
-    // as far as unloading is concerned, so they happen under the lock.
-    //
-    // Nothing else does, and in particular not the call into user32 below. Every
-    // window in this process is created through this hook, and creating a window
-    // runs WM_NCCREATE and WM_CREATE handlers before CreateWindowExW returns - a
-    // handler that creates a child window, which is what dialogs and common
-    // controls do, re-enters this function on this thread. Holding a
-    // non-recursive mutex across that is a deadlock, and it deadlocks with
-    // mmc.exe's window creation halfway down the stack.
-    bool tookOver = false;
-
-    // Class names can be atoms rather than pointers; ignore those.
+                                 int width, int height, HWND parent, HMENU menu,
+                                 HINSTANCE instance, LPVOID param) {
+    // Class names can be atoms rather than pointers; ignore those. The exchange
+    // is what makes the decision once: if the launch then fails, this stays
+    // taken and the pass-through below gives MMC its own console.
     if (!IS_INTRESOURCE(className) &&
-        _wcsicmp(className, kMmcFrameClass) == 0) {
-        std::lock_guard<std::mutex> guard(g_takeoverMutex);
-        if (!g_tookOver && !g_modUnloading) {
-            g_tookOver = true;
-
-            // The window runs on its own thread, not here. Building windows and
-            // pumping messages inside user32's own CreateWindowExW - with MMC's
-            // window creation still on the stack - is reentrancy user32 does not
-            // expect, and it crashes.
-            //
-            // MMC's thread simply waits here instead. That is the same "stop the
-            // console loading" effect as suspending it, but at a point this mod
-            // chose, with no locks held, rather than wherever SuspendThread
-            // happened to catch it.
-            g_uiThread = CreateThread(nullptr, 0, WindowThread, nullptr, 0,
-                                      &g_uiThreadId);
-            if (g_uiThread) {
-                tookOver = true;
-            } else {
-                Wh_Log(
-                    L"could not start the window thread; falling back to the "
-                    L"console");
-                g_tookOver = false;
-            }
-        }
-    }
-
-    if (!tookOver) {
-        return passThrough();
-    }
-
-    // A handle to this thread, for the wait at the end of Wh_ModUninit. Taken
-    // here rather than there because GetCurrentThread returns a pseudo-handle
-    // that only means anything on this thread.
-    if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
-                         GetCurrentProcess(), &g_mmcThread, 0, FALSE,
-                         DUPLICATE_SAME_ACCESS)) {
-        Wh_Log(L"could not duplicate MMC's thread handle (%u)", GetLastError());
-        g_mmcThread = nullptr;
-    }
-
-    // Parked, but not deaf. A plain WaitForSingleObject here stops this thread
-    // dispatching anything for as long as the window is open, and this is
-    // mmc.exe's main thread: an initialised STA that owns the process's hidden
-    // OLE windows. Every SendMessage(HWND_BROADCAST, ...) in the session - a
-    // theme change, a settings change - would then stall on this process until
-    // the hung-app timeout, and cross-apartment COM calls into it would block
-    // outright. CoWaitForMultipleHandles blocks on the handle while keeping the
-    // apartment serviced, which is exactly what a parked STA thread needs.
-    //
-    // It dispatches COM calls and sent messages, not queued input, so it does
-    // not resume MMC's own console loading - that is still stopped dead by this
-    // wait.
-    DWORD signalled = 0;
-    if (FAILED(CoWaitForMultipleHandles(COWAIT_DEFAULT, INFINITE, 1,
-                                        &g_uiFinished, &signalled))) {
-        WaitForSingleObject(g_uiFinished, INFINITE);
-    }
-
-    HWND result = nullptr;
-    if (g_modUnloading) {
-        // Unloading rather than a user close: let the real console load instead
-        // of leaving the user with nothing. Not through the trampoline - the
-        // hooks are already gone by now - but through user32 itself.
-        if (g_realCreateWindowExW) {
-            result = g_realCreateWindowExW(exStyle, className, windowName, style,
-                                           x, y, width, height, parent, menu,
-                                           instance, param);
-        }
-        if (!result) {
-            SetLastError(ERROR_CANCELLED);
-        }
-    } else if (!g_windowShown) {
-        // Nothing was displayed, so let MMC build its own console rather than
-        // leaving the user with no Disk Management at all.
-        Wh_Log(L"could not create the window; falling back to the console");
-        g_tookOver = false;
-        result = passThrough();
-    } else {
-        // Fail the frame window. MMC has nothing left to display, so it unwinds
-        // and exits on its own - no ExitProcess needed from inside a hook.
+        _wcsicmp(className, kMmcFrameClass) == 0 &&
+        !g_tookOver.exchange(true) && LaunchWindowProcess()) {
         SetLastError(ERROR_CANCELLED);
+        return nullptr;
     }
 
-    // The last statement in this module that MMC's thread executes, and the
-    // point Wh_ModUninit is waiting for. What it cannot say is that the epilogue
-    // below it has run too, which is why Wh_ModUninit watches this thread's
-    // instruction pointer afterwards.
-    SetEvent(g_hookExited);
-    return result;
+    return CreateWindowExW_Original(exStyle, className, windowName, style, x, y,
+                                    width, height, parent, menu, instance,
+                                    param);
 }
 
-// True when the process already owns a top-level window, which means it was
-// running before this mod was loaded. Windhawk runs the mod's callbacks on its
-// own engine thread in that case, and taking over then would show a second,
-// redundant window over a console the user already has open.
 // True when this mod was loaded into an mmc.exe that was already running, as
 // opposed to injected as one started. Windhawk runs the mod's callbacks on the
 // process's initial thread in the second case and on an injected thread in the
-// first, and the TEB records which thread it is - so this is exact, where
-// looking for an existing window was a guess that happened to be right.
+// first, and the TEB records which thread it is.
 //
 // Taking over a console the user already has open would replace what they are
 // looking at with a second window, so the mod stays out.
@@ -5251,199 +5333,16 @@ bool ProcessAlreadyRunning() {
     return (flags & kInitialThread) == 0;
 }
 
-BOOL Wh_ModInit() {
-    LoadSettings();
+// -----------------------------------------------------------------------------
+// The window's own process
+// -----------------------------------------------------------------------------
 
-    if (!LaunchedForDiskManagement()) {
-        // Not this snap-in. Returning FALSE unloads the mod from processes it
-        // has nothing to do in; Windhawk reloads it after a settings change,
-        // so this is not permanent.
-        return FALSE;
-    }
-
-    if (ProcessAlreadyRunning()) {
-        Wh_Log(L"mmc.exe was already running; leaving it alone");
-        return FALSE;
-    }
-
-    // Both are load-bearing: without them the hook would wait on a null handle,
-    // return immediately, and let MMC build its console underneath this mod's
-    // window.
-    g_uiFinished = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hookExited = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_uiFinished || !g_hookExited) {
-        Wh_Log(L"could not create the handoff events");
-        if (g_uiFinished) {
-            CloseHandle(g_uiFinished);
-            g_uiFinished = nullptr;
-        }
-        if (g_hookExited) {
-            CloseHandle(g_hookExited);
-            g_hookExited = nullptr;
-        }
-        return FALSE;
-    }
-
-    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        g_realCreateWindowExW = reinterpret_cast<CreateWindowExW_t>(
-            GetProcAddress(user32, "CreateWindowExW"));
-    }
-
-    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                        &CreateWindowExW_Original)) {
-        Wh_Log(L"could not hook CreateWindowExW");
-        CloseHandle(g_uiFinished);
-        g_uiFinished = nullptr;
-        CloseHandle(g_hookExited);
-        g_hookExited = nullptr;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-void Wh_ModSettingsChanged() {
-    LoadSettings();
-
-    // Async on purpose: this runs on Windhawk's thread, and a SendMessage into
-    // a UI thread that is itself waiting on something would deadlock.
-    if (HWND hwnd = diskui::WindowHandle()) {
-        PostMessageW(hwnd, diskui::kMsgSettingsChanged, 0, 0);
-    }
-}
-
-// The last thing standing between g_hookExited and a safe FreeLibrary: MMC's
-// thread has signalled, but it is still executing the tail of the hook, and that
-// code lives in the image Windhawk is about to unmap.
-//
-// The instruction pointer alone is not enough to answer that, and the reason is
-// the handshake itself. Both threads are woken by the same SetEvent, so the very
-// first sample is taken while MMC's thread is still inside SetEvent - down in
-// ntdll, with its return address into this module sitting on its stack. An IP
-// test would call that "outside the module" and let the unload proceed straight
-// into the thread's own return path. That is not a rare interleaving, it is the
-// expected one.
-//
-// So the stack is what gets read. Any pointer-sized slot in the thread's live
-// stack that falls inside this image is treated as a frame that still returns
-// here, and the wait continues until none is left. Slots below the stack pointer
-// are dead and not scanned; slots above it cover every frame that can still
-// return. The answer is stable once it is no: the hooks are removed by then and
-// nothing leads back in.
-//
-// Two things keep the cost of that honest. Only the module's code range counts,
-// not the whole image - a spilled pointer to a string literal or a global in this
-// DLL is not a frame that returns here, and treating it as one was the most
-// likely way to stall on nothing. And the sampling backs off rather than running
-// flat out, because each sample suspends MMC's main STA thread: a stall now costs
-// tens of samples across its budget instead of two thousand.
-//
-// It is still a conservative scan, so a stale value in a live frame's padding can
-// hold it. That costs the budget below and nothing else - the wait then ends the
-// same way an unverified one would have, which is why the budget is the backstop
-// rather than the mechanism.
-void WaitForThreadToLeaveModule(HANDLE thread) {
-    if (!thread) {
-        return;
-    }
-
-    auto* base = reinterpret_cast<BYTE*>(ModuleInstance());
-    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
-        return;
-    }
-    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) {
-        return;
-    }
-    BYTE* end = base + nt->OptionalHeader.SizeOfImage;
-
-    // Narrower than the image, and deliberately: a return address into this
-    // module is in its code.
-    BYTE* codeBegin = base + nt->OptionalHeader.BaseOfCode;
-    BYTE* codeEnd = codeBegin + nt->OptionalHeader.SizeOfCode;
-    if (codeBegin < base || codeEnd > end || codeEnd < codeBegin) {
-        codeBegin = base;  // nothing sensible in the header; fall back
-        codeEnd = end;
-    }
-
-    // Learned from the first sample and then reused: the top of a thread's stack
-    // does not move.
-    BYTE* stackTop = nullptr;
-
-    constexpr ULONGLONG kBudgetMs = 2000;
-    ULONGLONG deadline = GetTickCount64() + kBudgetMs;
-    DWORD backoff = 1;
-    for (;;) {
-        CONTEXT context{};
-        context.ContextFlags = CONTEXT_CONTROL;
-
-        // Suspended only long enough to read the registers and walk the stack: a
-        // thread stopped for any longer than that, in a process this one is
-        // unloading from, is a deadlock looking for somewhere to happen.
-        if (SuspendThread(thread) == static_cast<DWORD>(-1)) {
-            return;
-        }
-        BOOL ok = GetThreadContext(thread, &context);
-
-        bool inside = false;
-        if (ok) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-            auto* ip = reinterpret_cast<BYTE*>(context.Pc);
-            auto* sp = reinterpret_cast<BYTE*>(context.Sp);
-#elif defined(__x86_64__) || defined(_M_X64)
-            auto* ip = reinterpret_cast<BYTE*>(context.Rip);
-            auto* sp = reinterpret_cast<BYTE*>(context.Rsp);
-#else
-            auto* ip = reinterpret_cast<BYTE*>(context.Eip);
-            auto* sp = reinterpret_cast<BYTE*>(context.Esp);
-#endif
-            inside = ip >= base && ip < end;
-
-            if (!inside && sp && !stackTop) {
-                // The committed pages of a stack run from below the stack
-                // pointer up to the stack's base, so the region holding sp ends
-                // where the stack does.
-                MEMORY_BASIC_INFORMATION info{};
-                if (VirtualQuery(sp, &info, sizeof(info)) == sizeof(info) &&
-                    info.State == MEM_COMMIT) {
-                    stackTop = static_cast<BYTE*>(info.BaseAddress) +
-                               info.RegionSize;
-                }
-            }
-
-            if (!inside && sp && stackTop && sp < stackTop) {
-                // Rounded down so an unaligned stack pointer still reads whole
-                // slots; the few bytes below it are committed and dead.
-                auto** slot = reinterpret_cast<BYTE**>(
-                    reinterpret_cast<uintptr_t>(sp) & ~(sizeof(void*) - 1));
-                auto** last = reinterpret_cast<BYTE**>(stackTop);
-                for (; slot < last; slot++) {
-                    BYTE* value = *slot;
-                    if (value >= codeBegin && value < codeEnd) {
-                        inside = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        ResumeThread(thread);
-        if (!ok || !inside) {
-            return;
-        }
-        if (GetTickCount64() >= deadline) {
-            break;
-        }
-
-        Sleep(backoff);
-        if (backoff < 64) {
-            backoff *= 2;
-        }
-    }
-
-    Wh_Log(L"MMC's thread is still in this module after two seconds; unloading "
-           L"anyway");
-}
+// The UI thread, and its id so every window on it can be closed rather than
+// only the main one. Both are this mod's own, in a process that exists for
+// them, which is what lets the wait in WhTool_ModUninit be unbounded without
+// any of the machinery the in-process version needed to justify it.
+HANDLE g_uiThread = nullptr;
+DWORD g_uiThreadId = 0;
 
 // Closing only the main window is not enough. A message box, the Format dialog
 // and the properties window each run their own message loop on the UI thread,
@@ -5459,66 +5358,231 @@ BOOL CALLBACK CloseUiThreadWindow(HWND hwnd, LPARAM) {
     return TRUE;
 }
 
-// Windhawk unmaps the module as soon as this returns, so no thread may still be
-// running mod code by then. Two threads are in this module while the window is
-// up: the UI thread, and MMC's main thread parked inside the hook above.
-void Wh_ModUninit() {
-    // Under the lock, so this either happens before MMC's thread decides to
-    // take over - in which case it sees g_modUnloading and passes through - or
-    // after it has published g_uiThread, in which case the join below is
-    // waiting on the right thing. There is no interleaving where the takeover
-    // is in flight and invisible here.
-    HANDLE uiThread = nullptr;
-    DWORD uiThreadId = 0;
-    {
-        std::lock_guard<std::mutex> guard(g_takeoverMutex);
-        g_modUnloading = true;
-        uiThread = g_uiThread;
-        uiThreadId = g_uiThreadId;
+// The window, on the only thread in this process that does anything - the
+// process's own main thread never runs, having been sent straight to ExitThread
+// by the entry point hook below.
+DWORD WINAPI WindowThread(LPVOID) {
+    HRESULT comInit = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    diskui::Run();
+
+    if (SUCCEEDED(comInit)) {
+        CoUninitialize();
     }
 
-    if (uiThread) {
+    // The user closed the window. There is nothing else in this process to go
+    // back to, and an empty one left running until Windhawk next unloads the
+    // mod would be a process in Task Manager doing nothing.
+    ExitProcess(0);
+    return 0;
+}
+
+BOOL WhTool_ModInit() {
+    LoadSettings();
+
+    g_uiThread =
+        CreateThread(nullptr, 0, WindowThread, nullptr, 0, &g_uiThreadId);
+    if (!g_uiThread) {
+        Wh_Log(L"could not start the window thread (%u)", GetLastError());
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+
+    // Async on purpose: this runs on Windhawk's thread, and a SendMessage into
+    // a UI thread that is itself inside a modal loop would block this one.
+    if (HWND hwnd = diskui::WindowHandle()) {
+        PostMessageW(hwnd, diskui::kMsgSettingsChanged, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    g_modUnloading = true;
+
+    if (g_uiThread) {
         // Swept repeatedly, not once. A single pass misses any window that
         // appears after it, and misses one that refuses to close when asked:
         // SHFormatDrive's dialog disables closing while a format is running, so
-        // one WM_CLOSE at the wrong moment is simply dropped and this wait
-        // would never end.
+        // one WM_CLOSE at the wrong moment is simply dropped.
         //
-        // INFINITE rather than a timeout, though. A timeout that expires would
-        // unmap the image with the UI thread still running code in it, and
-        // leave a registered window class whose lpfnWndProc points into freed
-        // memory - a certain crash, where waiting is at worst a wait.
+        // The wait is unbounded, and now that is simply correct rather than a
+        // trade. This is a thread this mod created, running this mod's code, in
+        // a process whose only purpose is to run it. Nothing here is a foreign
+        // thread whose stack has to be guessed at.
         do {
-            if (uiThreadId) {
-                EnumThreadWindows(uiThreadId, CloseUiThreadWindow, 0);
+            if (g_uiThreadId) {
+                EnumThreadWindows(g_uiThreadId, CloseUiThreadWindow, 0);
             }
-        } while (WaitForSingleObject(uiThread, 500) == WAIT_TIMEOUT);
+        } while (WaitForSingleObject(g_uiThread, 500) == WAIT_TIMEOUT);
 
-        CloseHandle(uiThread);
+        CloseHandle(g_uiThread);
         g_uiThread = nullptr;
         g_uiThreadId = 0;
-
-        // The UI thread is done, which releases MMC's thread inside the hook.
-        // Wait for that thread to finish with this module too - the event for
-        // the body of the hook, the instruction pointer for its tail.
-        WaitForSingleObject(g_hookExited, INFINITE);
-        WaitForThreadToLeaveModule(g_mmcThread);
-    }
-
-    if (g_mmcThread) {
-        CloseHandle(g_mmcThread);
-        g_mmcThread = nullptr;
-    }
-
-    if (g_uiFinished) {
-        CloseHandle(g_uiFinished);
-        g_uiFinished = nullptr;
-    }
-    if (g_hookExited) {
-        CloseHandle(g_hookExited);
-        g_hookExited = nullptr;
     }
 
     diskui::UnregisterWindowClassIfNeeded();
     props::UnregisterWindowClassIfNeeded(ModuleInstance());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation, from
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// Kept as close to the published snippet as this mod allows. Two differences,
+// both explained above: there is no launcher branch and no Wh_ModAfterInit,
+// because the tool process is started by the hook in mmc.exe so that it
+// inherits an elevated token; and Wh_ModInit falls through to that hook instead
+// of returning FALSE when this is not a tool process.
+
+HANDLE g_toolModProcessMutex;
+
+// Brings the window that is already open to the front.
+//
+// Without this, opening Disk Management a second time would do nothing at all
+// that the user could see: the mutex below stops the second process, and the
+// mmc.exe that started it has already been told it has no frame window to
+// display. One window is right; one window and no response is not.
+//
+// EnumWindows rather than FindWindowW, because the class is registered by this
+// module inside a process rather than globally, and the name lookup does not
+// reliably resolve across processes for one of those.
+BOOL CALLBACK FindExistingWindow(HWND hwnd, LPARAM param) {
+    WCHAR name[64]{};
+    if (GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
+        wcscmp(name, diskui::kClassName) == 0) {
+        *reinterpret_cast<HWND*>(param) = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void ActivateExistingWindow() {
+    HWND existing = nullptr;
+    EnumWindows(FindExistingWindow, reinterpret_cast<LPARAM>(&existing));
+
+    if (!existing) {
+        return;
+    }
+
+    if (IsIconic(existing)) {
+        ShowWindow(existing, SW_RESTORE);
+    }
+    SetForegroundWindow(existing);
+}
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    LoadSettings();
+
+    // Session 0 has no desktop to put a window on.
+    DWORD sessionId = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc - 1; i++) {
+            if (wcscmp(argv[i], kToolModArgument) == 0) {
+                isToolModProcess = true;
+                if (wcscmp(argv[i + 1], L"" WH_MOD_ID) == 0) {
+                    isCurrentToolModProcess = true;
+                }
+                break;
+            }
+        }
+        LocalFree(argv);
+    }
+
+    if (isCurrentToolModProcess) {
+        // One window, however many times Disk Management is opened. The second
+        // process exits here and the first one's window is what the user gets.
+        g_toolModProcessMutex =
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"already running (%S)", WH_MOD_ID);
+            ActivateExistingWindow();
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        // windhawk.exe's own main is never allowed to run: this process is a
+        // host for the window and nothing else.
+        auto* dosHeader =
+            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
+        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
+            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) +
+                           ntHeaders->OptionalHeader.AddressOfEntryPoint;
+
+        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
+                           nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        // Some other mod's tool process.
+        return FALSE;
+    }
+
+    // Everything below is the mmc.exe side. A plain windhawk.exe reaches it too
+    // and leaves at the first check, which has no diskmgmt.msc on its command
+    // line to find.
+    if (!LaunchedForDiskManagement()) {
+        // Not this snap-in. Returning FALSE unloads the mod from processes it
+        // has nothing to do in; Windhawk reloads it after a settings change,
+        // so this is not permanent.
+        return FALSE;
+    }
+
+    if (ProcessAlreadyRunning()) {
+        Wh_Log(L"mmc.exe was already running; leaving it alone");
+        return FALSE;
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        Wh_Log(L"could not hook CreateWindowExW");
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    if (!g_uiThread) {
+        // The mmc.exe side has no settings to apply at runtime: by the time one
+        // could change, this process has already handed over and exited.
+        LoadSettings();
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (!g_uiThread) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
