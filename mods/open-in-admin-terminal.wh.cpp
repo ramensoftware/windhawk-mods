@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              open-in-admin-terminal
 // @name            Open in Admin Terminal
-// @description     Adds an Explorer classic context menu entry to open an elevated terminal in the current or selected folder.
-// @version         1.16
+// @description     Adds Explorer classic context menu entries to open a terminal (elevated or not) in the current or selected folder, and to run script files.
+// @version         1.17.1
 // @author          aimagist
 // @github          https://github.com/aimagist
 // @include         explorer.exe
@@ -21,10 +21,13 @@
 - Right-click a folder background and open an admin terminal in that location
 - Right-click a folder item and open an admin terminal inside it
 - Right-click a drive and open an admin terminal at its root
+- Optionally add a second terminal entry that opens without administrator privileges
+- Optionally run `.ps1`, `.bat`, `.cmd`, `.vbs`, and `.js` script files normally, as administrator, or both
 - Optionally show the entry when right-clicking filesystem folders and drives in the navigation pane and Quick access
 - Choose your preferred terminal: Auto, Windows Terminal, PowerShell 7, Windows PowerShell, Command Prompt, WSL, Git Bash, WezTerm, Alacritty, ConEmu, or a custom command
 - Customize the context menu label, or let the mod use a smart default based on your terminal choice
 - Optionally append the terminal name to a custom label (e.g. "Open elevated (Windows Terminal)")
+- Choose whether script entries include the terminal name or use shorter labels
 
 ## Preview
 
@@ -46,9 +49,12 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
 - The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.
 - The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.
 - Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.
+- Script actions use the selected terminal only when it can safely host the required interpreter. Batch scripts and keep-open Windows Script Host scripts launch through Command Prompt; menu labels show Command Prompt or Windows Script Host. WSL, Git Bash, and custom commands fall back to a compatible Windows interpreter.
 - Diagnostics use Windhawk's built-in logging controls.
 
 ## Version log
+- 1.17.1: Fix navigation pane menu not appearing: the entry was missing when right-clicking folders or drives in File Explorer’s left sidebar and Quick access. Now it works :)
+- 1.17: Added optional non-elevated terminal entries, configurable normal/elevated script actions (.ps1/.bat/.cmd/.vbs/.js), and shorter script labels. The two extra entry features are opt-in and disabled by default; terminal names remain shown in script entries by default for compatibility.
 - 1.16: Added native UAC shield overlay composition on the terminal menu icon using `SHGetStockIconInfo(SIID_SHIELD)`.
 - 1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.
 - 1.14: Added support for Desktop context menu targets.
@@ -106,6 +112,34 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
 - appendTerminalName: false
   $name: Append terminal name
   $description: When Menu text is set, append the selected terminal name in parentheses.
+- showNonElevatedEntry: false
+  $name: Show non-elevated entry
+  $description: Add a second context menu entry to open a terminal without admin privileges.
+- nonElevatedMenuText: ""
+  $name: Non-elevated menu text
+  $description: Leave empty for auto label based on terminal name.
+- showOnScriptFiles: false
+  $name: Show on script files
+  $description: Add context menu entries when right-clicking supported script files.
+- scriptMenuEntries: admin
+  $name: Script menu entries
+  $description: Choose which actions to show for script files.
+  $options:
+    - admin: Run as administrator
+    - normal: Run normally
+    - both: Show both
+- appendScriptTerminalName: true
+  $name: Append terminal name to script entries
+  $description: Add the selected terminal name to script actions. Disable for shorter labels.
+- scriptExtensions: ".ps1;.bat;.cmd;.vbs;.js"
+  $name: Script extensions
+  $description: "Semicolon-separated filter for supported script extensions: .ps1, .bat, .cmd, .vbs, and .js."
+- keepOpenAfterScript: true
+  $name: Keep terminal open after script
+  $description: Terminal stays open after script finishes.
+- scriptExecutionPolicyBypass: false
+  $name: Bypass execution policy for .ps1
+  $description: Adds -ExecutionPolicy Bypass for PowerShell scripts. Disabled by default.
 */
 // ==/WindhawkModSettings==
 
@@ -134,6 +168,14 @@ struct Settings {
     bool showOnDriveItem;
     bool showOnNavigationPane;
     std::wstring position;
+    bool showNonElevatedEntry;
+    std::wstring nonElevatedMenuText;
+    bool showOnScriptFiles;
+    std::wstring scriptMenuEntries;
+    bool appendScriptTerminalName;
+    std::wstring scriptExtensions;
+    bool keepOpenAfterScript;
+    bool scriptExecutionPolicyBypass;
 };
 
 enum class TargetKind {
@@ -141,11 +183,17 @@ enum class TargetKind {
     FolderBackground,
     FolderItem,
     DriveItem,
+    ScriptItem,
 };
 
 struct MenuTarget {
     TargetKind kind = TargetKind::None;
     std::wstring path;
+};
+
+struct MenuCommandIds {
+    UINT admin = 0;
+    UINT nonElevated = 0;
 };
 
 struct LaunchSpec {
@@ -154,10 +202,19 @@ struct LaunchSpec {
     std::wstring workingDirectory;
 };
 
+static Settings GetSettingsSnapshot();
+static void LaunchTerminalNonElevated(const MenuTarget&);
+static LaunchSpec BuildScriptLaunchSpec(const Settings&, const std::wstring&);
+static bool IsScriptExtension(const std::wstring&, const Settings&);
+static HWND FindShellViewWindow(HWND hwnd);
+static HWND FindShellTabWindow(HWND hwnd);
+static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut);
+
 static Settings g_settings;
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
-static const UINT kMenuCommandId = 0xBF31;
+static const UINT kPreferredAdminMenuCommandId = 0xC7E1;
+static const UINT kPreferredNonElevatedMenuCommandId = 0xC7E2;
 
 #ifndef IO_REPARSE_TAG_APPEXECLINK
 #define IO_REPARSE_TAG_APPEXECLINK (0x8000001BL)
@@ -166,10 +223,6 @@ static const UINT kMenuCommandId = 0xBF31;
 #ifndef MAXIMUM_REPARSE_DATA_BUFFER_SIZE
 #define MAXIMUM_REPARSE_DATA_BUFFER_SIZE (16 * 1024)
 #endif
-
-static thread_local HWND g_currentMenuHwnd = nullptr;
-static thread_local bool g_currentMenuEligible = false;
-static thread_local MenuTarget g_currentTarget;
 
 struct MenuBitmapCacheEntry {
     std::wstring key;
@@ -182,9 +235,6 @@ static std::vector<MenuBitmapCacheEntry> g_menuBitmapCache;
 
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, LPTPMPARAMS);
 static TrackPopupMenuEx_t TrackPopupMenuEx_Orig;
-
-using PostMessageW_t = BOOL(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
-static PostMessageW_t PostMessageW_Orig;
 
 static std::wstring GetSettingString(PCWSTR name, const wchar_t* fallback) {
     std::wstring value = fallback;
@@ -428,7 +478,7 @@ static void ResolveSettingsTerminal(Settings& s) {
     }
 
     s.terminalEffectiveChoice = L"cmd";
-    s.terminalDisplayCommand = L"cmd.exe";
+    ResolveSystemExecutablePath(L"cmd.exe", s.terminalDisplayCommand);
 }
 
 static std::wstring GetTerminalDisplayNameForChoice(const std::wstring& choice) {
@@ -486,6 +536,14 @@ static Settings LoadSettings() {
     s.showOnDriveItem = GetSettingBool(L"showOnDriveItem");
     s.showOnNavigationPane = GetSettingBool(L"showOnNavigationPane");
     s.position = GetSettingString(L"position", L"Top");
+    s.showNonElevatedEntry = GetSettingBool(L"showNonElevatedEntry");
+    s.nonElevatedMenuText = GetSettingString(L"nonElevatedMenuText", L"");
+    s.showOnScriptFiles = GetSettingBool(L"showOnScriptFiles");
+    s.scriptMenuEntries = GetSettingString(L"scriptMenuEntries", L"admin");
+    s.appendScriptTerminalName = GetSettingBool(L"appendScriptTerminalName");
+    s.scriptExtensions = GetSettingString(L"scriptExtensions", L".ps1;.bat;.cmd;.vbs;.js");
+    s.keepOpenAfterScript = GetSettingBool(L"keepOpenAfterScript");
+    s.scriptExecutionPolicyBypass = GetSettingBool(L"scriptExecutionPolicyBypass");
 
     ResolveSettingsTerminal(s);
 
@@ -508,7 +566,30 @@ static bool IsTargetEnabled(const Settings& s, TargetKind kind) {
     if (kind == TargetKind::DriveItem) {
         return s.showOnDriveItem;
     }
+    if (kind == TargetKind::ScriptItem) {
+        return s.showOnScriptFiles;
+    }
     return false;
+}
+
+static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut) {
+    pathOut.clear();
+
+    WCHAR systemDirectory[MAX_PATH] = {};
+    UINT length = GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
+    if (!length || length >= ARRAYSIZE(systemDirectory)) {
+        return false;
+    }
+
+    pathOut.assign(systemDirectory, length);
+    pathOut += L'\\';
+    pathOut += exe;
+    if (!IsFilePath(pathOut)) {
+        pathOut.clear();
+        return false;
+    }
+
+    return true;
 }
 
 static PCWSTR TargetKindName(TargetKind kind) {
@@ -521,12 +602,42 @@ static PCWSTR TargetKindName(TargetKind kind) {
     if (kind == TargetKind::DriveItem) {
         return L"drive-item";
     }
+    if (kind == TargetKind::ScriptItem) {
+        return L"script-item";
+    }
     return L"none";
 }
 
 static bool IsDirectoryPath(const std::wstring& path) {
     DWORD attrs = GetFileAttributesW(path.c_str());
     return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static bool IsScriptExtension(const std::wstring& path, const Settings& s) {
+    PCWSTR ext = PathFindExtensionW(path.c_str());
+    if (!ext || !*ext) {
+        return false;
+    }
+
+    if (_wcsicmp(ext, L".ps1") != 0 && _wcsicmp(ext, L".bat") != 0 &&
+        _wcsicmp(ext, L".cmd") != 0 && _wcsicmp(ext, L".vbs") != 0 &&
+        _wcsicmp(ext, L".js") != 0) {
+        return false;
+    }
+
+    size_t start = 0;
+    while (start <= s.scriptExtensions.size()) {
+        size_t end = s.scriptExtensions.find(L';', start);
+        std::wstring token = TrimString(s.scriptExtensions.substr(start, end - start));
+        if (_wcsicmp(token.c_str(), ext) == 0) {
+            return true;
+        }
+        if (end == std::wstring::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return false;
 }
 
 static bool IsDriveRootPath(const std::wstring& path) {
@@ -572,6 +683,17 @@ static std::wstring QuoteCommandLineArgument(const std::wstring& arg) {
     }
     result += L'"';
     return result;
+}
+
+static std::wstring QuoteCmdPath(const std::wstring& path) {
+    return L'"' + path + L'"';
+}
+
+static std::wstring BuildCmdCommandLine(bool keepOpen,
+                                        const std::wstring& command) {
+    // /s makes cmd strip the outer pair, preserving quotes inside the command.
+    return std::wstring(keepOpen ? L"/s /k \"" : L"/s /c \"") + command +
+           L'"';
 }
 
 static std::wstring JoinCommandLineArguments(
@@ -637,21 +759,30 @@ static bool SplitCustomCommand(const std::wstring& command,
     return !executable.empty();
 }
 
-static void ReplaceAll(std::wstring& value,
-                       const std::wstring& placeholder,
-                       const std::wstring& replacement) {
-    size_t pos = 0;
-    while ((pos = value.find(placeholder, pos)) != std::wstring::npos) {
-        value.replace(pos, placeholder.size(), replacement);
-        pos += replacement.size();
-    }
-}
-
 static std::wstring ExpandCustomParameters(const std::wstring& parameters,
                                            const std::wstring& target) {
     std::wstring result = parameters;
-    ReplaceAll(result, L"%V", target);
-    ReplaceAll(result, L"%1", target);
+    std::wstring replacement = QuoteCommandLineArgument(target);
+    size_t searchFrom = 0;
+    while ((searchFrom = result.find(L'%', searchFrom)) != std::wstring::npos) {
+        if (searchFrom + 1 >= result.size() ||
+            (result[searchFrom + 1] != L'V' &&
+             result[searchFrom + 1] != L'1')) {
+            searchFrom++;
+            continue;
+        }
+
+        size_t replaceFrom = searchFrom;
+        size_t replaceLength = 2;
+        if (searchFrom > 0 && searchFrom + 2 < result.size() &&
+            result[searchFrom - 1] == L'"' && result[searchFrom + 2] == L'"') {
+            replaceFrom--;
+            replaceLength += 2;
+        }
+
+        result.replace(replaceFrom, replaceLength, replacement);
+        searchFrom = replaceFrom + replacement.size();
+    }
     return result;
 }
 
@@ -660,15 +791,25 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
                                      ? s.terminalChoice
                                      : s.terminalEffectiveChoice;
     LaunchSpec spec;
-    spec.executable =
-        s.terminalDisplayCommand.empty() ? L"cmd.exe" : s.terminalDisplayCommand;
+    if (s.terminalDisplayCommand.empty()) {
+        ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
+    } else {
+        spec.executable = s.terminalDisplayCommand;
+    }
     spec.workingDirectory = target;
 
     if (choice == L"custom") {
         std::wstring executable;
         std::wstring parameters;
         if (SplitCustomCommand(s.customTerminalCommand, executable, parameters)) {
-            spec.executable = executable;
+            if (PathIsRelativeW(executable.c_str())) {
+                std::wstring resolved;
+                if (!SearchExecutablePath(executable.c_str(), resolved)) {
+                    return {};
+                }
+                executable = std::move(resolved);
+            }
+            spec.executable = std::move(executable);
             spec.parameters = ExpandCustomParameters(parameters, target);
         }
         return spec;
@@ -689,7 +830,8 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
         return spec;
     }
     if (choice == L"cmd") {
-        spec.parameters = L"/k cd /d " + QuoteCommandLineArgument(target);
+        spec.parameters =
+            BuildCmdCommandLine(true, L"cd /d " + QuoteCmdPath(target));
         return spec;
     }
     if (choice == L"wsl") {
@@ -716,7 +858,137 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
     return spec;
 }
 
-static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
+static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
+                                             const std::wstring& scriptPath) {
+    LaunchSpec spec;
+    PCWSTR ext = PathFindExtensionW(scriptPath.c_str());
+    size_t separator = scriptPath.find_last_of(L"\\/");
+    spec.workingDirectory = scriptPath.substr(
+        0, separator == 2 && scriptPath.size() > 2 && scriptPath[1] == L':'
+               ? separator + 1
+               : separator);
+
+    if (_wcsicmp(ext, L".ps1") == 0) {
+        if (s.terminalEffectiveChoice == L"pwsh" ||
+            s.terminalEffectiveChoice == L"powershell") {
+            spec.executable = s.terminalDisplayCommand;
+        } else if (!ResolveTerminalChoiceExecutable(L"pwsh", spec.executable)) {
+            ResolveTerminalChoiceExecutable(L"powershell", spec.executable);
+        }
+        std::vector<std::wstring> args;
+        if (s.keepOpenAfterScript) {
+            args.push_back(L"-NoExit");
+        }
+        if (s.scriptExecutionPolicyBypass) {
+            args.push_back(L"-ExecutionPolicy");
+            args.push_back(L"Bypass");
+        }
+        args.push_back(L"-File");
+        args.push_back(scriptPath);
+        spec.parameters = JoinCommandLineArguments(args);
+    } else if (_wcsicmp(ext, L".bat") == 0 ||
+               _wcsicmp(ext, L".cmd") == 0) {
+        ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
+        spec.parameters = BuildCmdCommandLine(s.keepOpenAfterScript,
+                                              QuoteCmdPath(scriptPath));
+    } else if (_wcsicmp(ext, L".vbs") == 0 ||
+               _wcsicmp(ext, L".js") == 0) {
+        std::wstring cscriptPath;
+        if (!ResolveSystemExecutablePath(L"cscript.exe", cscriptPath)) {
+            return spec;
+        }
+        if (s.keepOpenAfterScript) {
+            if (!ResolveSystemExecutablePath(L"cmd.exe", spec.executable)) {
+                return {};
+            }
+            spec.parameters = BuildCmdCommandLine(
+                true, QuoteCmdPath(cscriptPath) + L" //nologo " +
+                          QuoteCmdPath(scriptPath));
+        } else {
+            spec.executable = std::move(cscriptPath);
+            spec.parameters = L"//nologo " + QuoteCommandLineArgument(scriptPath);
+        }
+    }
+    return spec;
+}
+
+static bool IsScriptHostChoice(const std::wstring& choice) {
+    return choice == L"wt" || choice == L"wezterm" ||
+           choice == L"alacritty" || choice == L"conemu";
+}
+
+static bool UsesCmdWrapper(const Settings& s, PCWSTR extension) {
+    return _wcsicmp(extension, L".bat") == 0 ||
+           _wcsicmp(extension, L".cmd") == 0 ||
+           (s.keepOpenAfterScript &&
+            (_wcsicmp(extension, L".vbs") == 0 ||
+             _wcsicmp(extension, L".js") == 0));
+}
+
+static bool UsesSelectedTerminalHost(const Settings& s,
+                                     const std::wstring& scriptPath) {
+    return IsScriptHostChoice(s.terminalEffectiveChoice) &&
+           !UsesCmdWrapper(s, PathFindExtensionW(scriptPath.c_str()));
+}
+
+static LaunchSpec BuildScriptLaunchSpec(const Settings& s,
+                                        const std::wstring& scriptPath) {
+    LaunchSpec interpreter = BuildScriptInterpreterSpec(s, scriptPath);
+    if (!UsesSelectedTerminalHost(s, scriptPath)) {
+        return interpreter;
+    }
+
+    LaunchSpec spec;
+    spec.executable = s.terminalDisplayCommand;
+    spec.workingDirectory = interpreter.workingDirectory;
+    std::vector<std::wstring> args;
+
+    if (s.terminalEffectiveChoice == L"wt") {
+        args = {L"new-tab", L"-d", interpreter.workingDirectory,
+                interpreter.executable};
+    } else if (s.terminalEffectiveChoice == L"wezterm") {
+        args = {L"start", L"--cwd", interpreter.workingDirectory, L"--",
+                interpreter.executable};
+    } else if (s.terminalEffectiveChoice == L"alacritty") {
+        args = {L"--working-directory", interpreter.workingDirectory, L"-e",
+                interpreter.executable};
+    } else {
+        args = {L"-Dir", interpreter.workingDirectory, L"-run",
+                interpreter.executable};
+    }
+
+    spec.parameters = JoinCommandLineArguments(args);
+    if (!interpreter.parameters.empty()) {
+        spec.parameters += L" " + interpreter.parameters;
+    }
+    return spec;
+}
+
+static bool IsExplorerContextMatch(HWND expectedShellView,
+                                   HWND expectedShellTab,
+                                   HWND candidateShellView,
+                                   HWND candidateShellTab) {
+    if (expectedShellView) {
+        return candidateShellView == expectedShellView;
+    }
+    if (expectedShellTab) {
+        return candidateShellTab == expectedShellTab;
+    }
+    return true;
+}
+
+static bool ShouldInjectForMenuFlags(UINT flags) {
+    return (flags & TPM_RETURNCMD) != 0;
+}
+
+static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND hwnd) {
+    HWND topLevel = GetAncestor(hwnd, GA_ROOT);
+    if (!topLevel) {
+        topLevel = hwnd;
+    }
+    HWND expectedShellView = FindShellViewWindow(hwnd);
+    HWND expectedShellTab = FindShellTabWindow(hwnd);
+
     IShellWindows* shellWindows = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                   IID_IShellWindows,
@@ -746,8 +1018,40 @@ static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
             HWND browserHwnd = nullptr;
             browser->get_HWND(reinterpret_cast<SHANDLE_PTR*>(&browserHwnd));
             if (browserHwnd == topLevel) {
+                IServiceProvider* candidate = nullptr;
                 browser->QueryInterface(IID_IServiceProvider,
-                                        reinterpret_cast<void**>(&result));
+                                        reinterpret_cast<void**>(&candidate));
+                if (candidate) {
+                    HWND candidateShellView = nullptr;
+                    HWND candidateShellTab = nullptr;
+                    IShellBrowser* shellBrowser = nullptr;
+                    if (expectedShellView || expectedShellTab) {
+                        candidate->QueryService(
+                            SID_STopLevelBrowser, IID_IShellBrowser,
+                            reinterpret_cast<void**>(&shellBrowser));
+                    }
+                    if (shellBrowser) {
+                        IShellView* shellView = nullptr;
+                        if (SUCCEEDED(shellBrowser->QueryActiveShellView(
+                                &shellView)) && shellView) {
+                            shellView->GetWindow(&candidateShellView);
+                            candidateShellTab =
+                                FindShellTabWindow(candidateShellView);
+                            shellView->Release();
+                        }
+                    }
+                    if (shellBrowser) {
+                        shellBrowser->Release();
+                    }
+
+                    if (IsExplorerContextMatch(
+                            expectedShellView, expectedShellTab,
+                            candidateShellView, candidateShellTab)) {
+                        result = candidate;
+                    } else {
+                        candidate->Release();
+                    }
+                }
             }
             browser->Release();
         }
@@ -758,8 +1062,8 @@ static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
     return result;
 }
 
-static IShellBrowser* GetShellBrowserForHwnd(HWND topLevel) {
-    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(topLevel);
+static IShellBrowser* GetShellBrowserForHwnd(HWND hwnd) {
+    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(hwnd);
     if (!serviceProvider) {
         return nullptr;
     }
@@ -771,8 +1075,8 @@ static IShellBrowser* GetShellBrowserForHwnd(HWND topLevel) {
     return result;
 }
 
-static IShellView* GetActiveShellViewForHwnd(HWND topLevel) {
-    IShellBrowser* shellBrowser = GetShellBrowserForHwnd(topLevel);
+static IShellView* GetActiveShellViewForHwnd(HWND hwnd) {
+    IShellBrowser* shellBrowser = GetShellBrowserForHwnd(hwnd);
     if (!shellBrowser) {
         return nullptr;
     }
@@ -972,34 +1276,22 @@ static UINT GetSelectedPaths(IShellView* shellView,
     return selectedCount;
 }
 
-static bool GetSingleFilesystemPathFromShellItemArray(IShellItemArray* items,
-                                                       std::wstring& pathOut) {
+static bool GetFilesystemPathFromShellItem(IShellItem* item,
+                                           std::wstring& pathOut) {
     pathOut.clear();
-    if (!items) {
-        return false;
-    }
-
-    DWORD count = 0;
-    if (FAILED(items->GetCount(&count)) || count != 1) {
-        return false;
-    }
-
-    IShellItem* item = nullptr;
-    if (FAILED(items->GetItemAt(0, &item)) || !item) {
+    if (!item) {
         return false;
     }
 
     PWSTR path = nullptr;
-    bool ok = SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path &&
-              path[0];
+    bool ok = SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) &&
+              path && path[0];
     if (ok) {
         pathOut = path;
     }
     if (path) {
         CoTaskMemFree(path);
     }
-
-    item->Release();
     return ok;
 }
 
@@ -1028,15 +1320,69 @@ static bool IsNavigationPaneWindow(HWND hwnd) {
     return false;
 }
 
-static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
-    targetOut = {};
+static bool IsKeyboardContextMenuPoint(const POINT& invocationPoint) {
+    return invocationPoint.x == -1 && invocationPoint.y == -1;
+}
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (!root) {
-        root = hwnd;
+static HWND SelectNavigationPaneWindow(HWND controlWindow,
+                                       HWND fallbackWindow) {
+    return controlWindow ? controlWindow : fallbackWindow;
+}
+
+static bool ShouldUseFocusedNavigationPaneFallback(
+    bool invocationPointIsNavigationPane,
+    bool focusedWindowIsNavigationPane,
+    bool ownerIsShellView,
+    bool invocationPointIsSameExplorerFrame) {
+    return !invocationPointIsNavigationPane &&
+           !invocationPointIsSameExplorerFrame &&
+           focusedWindowIsNavigationPane && !ownerIsShellView;
+}
+
+static bool IsNavigationPaneContextWindow(HWND hwnd,
+                                          const POINT& invocationPoint,
+                                          bool& useSelectionFallback) {
+    useSelectionFallback = false;
+    bool invocationPointIsNavigationPane = false;
+    bool invocationPointIsSameExplorerFrame = false;
+    if (!IsKeyboardContextMenuPoint(invocationPoint)) {
+        HWND invocationWindow = WindowFromPoint(invocationPoint);
+        invocationPointIsNavigationPane =
+            invocationWindow && IsNavigationPaneWindow(invocationWindow);
+        if (invocationPointIsNavigationPane) {
+            return true;
+        }
+
+        HWND invocationRoot =
+            invocationWindow ? GetAncestor(invocationWindow, GA_ROOT) : nullptr;
+        HWND ownerRoot = GetAncestor(hwnd, GA_ROOT);
+        invocationPointIsSameExplorerFrame =
+            invocationRoot && ownerRoot && invocationRoot == ownerRoot;
     }
 
-    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(root);
+    HWND focusedWindow = GetFocus();
+    useSelectionFallback = ShouldUseFocusedNavigationPaneFallback(
+        invocationPointIsNavigationPane,
+        focusedWindow && IsNavigationPaneWindow(focusedWindow),
+        FindShellViewWindow(hwnd) != nullptr,
+        invocationPointIsSameExplorerFrame);
+    return useSelectionFallback;
+}
+
+static bool ResolveNavigationPaneMenuTarget(const POINT& invocationPoint,
+                                            bool useSelectionFallback,
+                                            MenuTarget& targetOut) {
+    targetOut = {};
+
+    HWND navigationWindow = useSelectionFallback
+                                ? GetFocus()
+                                : WindowFromPoint(invocationPoint);
+    if (!navigationWindow || !IsNavigationPaneWindow(navigationWindow)) {
+        return false;
+    }
+
+    IServiceProvider* serviceProvider =
+        GetExplorerServiceProviderForHwnd(navigationWindow);
     if (!serviceProvider) {
         return false;
     }
@@ -1047,20 +1393,69 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
             SID_SNavigationPane, IID_INameSpaceTreeControl,
             reinterpret_cast<void**>(&navigationPane))) &&
         navigationPane) {
-        IShellItemArray* selectedItems = nullptr;
-        if (SUCCEEDED(navigationPane->GetSelectedItems(&selectedItems)) &&
-            selectedItems) {
-            std::wstring path;
-            if (GetSingleFilesystemPathFromShellItemArray(selectedItems, path) &&
-                IsDirectoryPath(path)) {
-                targetOut.path = std::move(path);
-                targetOut.kind = IsDriveRootPath(targetOut.path)
-                                     ? TargetKind::DriveItem
-                                     : TargetKind::FolderItem;
-                ok = true;
-            }
-            selectedItems->Release();
+        HWND treeWindow = nullptr;
+        IOleWindow* oleWindow = nullptr;
+        if (SUCCEEDED(navigationPane->QueryInterface(
+                IID_IOleWindow, reinterpret_cast<void**>(&oleWindow))) &&
+            oleWindow) {
+            oleWindow->GetWindow(&treeWindow);
+            oleWindow->Release();
         }
+        if (!treeWindow) {
+            IShellBrowser* shellBrowser = nullptr;
+            HWND fallbackWindow = nullptr;
+            if (SUCCEEDED(serviceProvider->QueryService(
+                    SID_STopLevelBrowser, IID_IShellBrowser,
+                    reinterpret_cast<void**>(&shellBrowser))) &&
+                shellBrowser) {
+                shellBrowser->GetControlWindow(FCW_TREE, &fallbackWindow);
+                shellBrowser->Release();
+            }
+            treeWindow = SelectNavigationPaneWindow(treeWindow, fallbackWindow);
+        }
+
+        POINT clientPoint = invocationPoint;
+        if (!IsKeyboardContextMenuPoint(invocationPoint) && treeWindow &&
+            ScreenToClient(treeWindow, &clientPoint)) {
+            IShellItem* hitItem = nullptr;
+            if (SUCCEEDED(navigationPane->HitTest(&clientPoint, &hitItem)) &&
+                hitItem) {
+                std::wstring path;
+                if (GetFilesystemPathFromShellItem(hitItem, path) &&
+                    IsDirectoryPath(path)) {
+                    targetOut.path = std::move(path);
+                    targetOut.kind = IsDriveRootPath(targetOut.path)
+                                         ? TargetKind::DriveItem
+                                         : TargetKind::FolderItem;
+                    ok = true;
+                }
+                hitItem->Release();
+            }
+        }
+
+        if (!ok && useSelectionFallback) {
+            IShellItemArray* selectedItems = nullptr;
+            if (SUCCEEDED(navigationPane->GetSelectedItems(&selectedItems)) &&
+                selectedItems) {
+                DWORD count = 0;
+                IShellItem* item = nullptr;
+                if (SUCCEEDED(selectedItems->GetCount(&count)) && count == 1 &&
+                    SUCCEEDED(selectedItems->GetItemAt(0, &item)) && item) {
+                    std::wstring path;
+                    if (GetFilesystemPathFromShellItem(item, path) &&
+                        IsDirectoryPath(path)) {
+                        targetOut.path = std::move(path);
+                        targetOut.kind = IsDriveRootPath(targetOut.path)
+                                             ? TargetKind::DriveItem
+                                             : TargetKind::FolderItem;
+                        ok = true;
+                    }
+                    item->Release();
+                }
+                selectedItems->Release();
+            }
+        }
+
         navigationPane->Release();
     }
 
@@ -1068,26 +1463,35 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
     return ok;
 }
 
+static bool ShouldUseDesktopFolderFallback(bool targetResolved,
+                                           bool sawSelection,
+                                           bool isDesktopShellView) {
+    return !targetResolved && !sawSelection && isDesktopShellView;
+}
+
 static bool ResolveMenuTarget(HWND hwnd,
-                              bool allowNavigationPane,
+                              const Settings& settings,
+                              const POINT& invocationPoint,
                               MenuTarget& targetOut) {
     targetOut = {};
 
-    bool isNavigationPane = IsNavigationPaneWindow(hwnd);
+    bool useNavigationPaneSelectionFallback = false;
+    bool isNavigationPane = IsNavigationPaneContextWindow(
+        hwnd, invocationPoint, useNavigationPaneSelectionFallback);
     if (isNavigationPane) {
-        if (!allowNavigationPane) {
+        if (!settings.showOnNavigationPane) {
             return false;
         }
-        return ResolveNavigationPaneMenuTarget(hwnd, targetOut);
+        return ResolveNavigationPaneMenuTarget(
+            invocationPoint, useNavigationPaneSelectionFallback, targetOut);
     }
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (!root) {
-        root = hwnd;
+    if (!FindShellViewWindow(hwnd)) {
+        return false;
     }
 
     bool isDesktopShellView = IsDesktopShellViewWindow(hwnd);
-    IShellView* shellView = GetActiveShellViewForHwnd(root);
+    IShellView* shellView = GetActiveShellViewForHwnd(hwnd);
     if (!shellView && isDesktopShellView) {
         shellView = GetDesktopShellView();
     }
@@ -1096,6 +1500,7 @@ static bool ResolveMenuTarget(HWND hwnd,
     }
 
     bool ok = false;
+    bool sawSelection = false;
     IFolderView* folderView = nullptr;
     if (SUCCEEDED(shellView->QueryInterface(IID_IFolderView,
                                             reinterpret_cast<void**>(&folderView))) &&
@@ -1103,6 +1508,9 @@ static bool ResolveMenuTarget(HWND hwnd,
         int selectedCount = 0;
         bool hasSelectedCount =
             SUCCEEDED(folderView->ItemCount(SVGIO_SELECTION, &selectedCount));
+        if (hasSelectedCount && selectedCount > 0) {
+            sawSelection = true;
+        }
 
         if (hasSelectedCount && selectedCount > 1) {
             ok = false;
@@ -1117,6 +1525,12 @@ static bool ResolveMenuTarget(HWND hwnd,
         } else {
             std::vector<std::wstring> selectedPaths;
             UINT shellSelectedCount = GetSelectedPaths(shellView, selectedPaths, 2);
+            if (shellSelectedCount > 0) {
+                sawSelection = true;
+            }
+            if (!selectedPaths.empty()) {
+                sawSelection = true;
+            }
 
             if (selectedPaths.empty()) {
                 if (!hasSelectedCount && shellSelectedCount == 0) {
@@ -1136,13 +1550,22 @@ static bool ResolveMenuTarget(HWND hwnd,
                 targetOut.kind = IsDriveRootPath(targetOut.path) ? TargetKind::DriveItem
                                                                  : TargetKind::FolderItem;
                 ok = true;
+            } else if (selectedPaths.size() == 1 &&
+                       IsFilePath(selectedPaths[0])) {
+                if (settings.showOnScriptFiles &&
+                    IsScriptExtension(selectedPaths[0], settings)) {
+                    targetOut.path = selectedPaths[0];
+                    targetOut.kind = TargetKind::ScriptItem;
+                    ok = true;
+                }
             }
         }
 
         folderView->Release();
     }
 
-    if (!ok && isDesktopShellView) {
+    if (ShouldUseDesktopFolderFallback(ok, sawSelection,
+                                       isDesktopShellView)) {
         std::wstring folderPath;
         if (GetDesktopFolderPath(folderPath) && IsDirectoryPath(folderPath)) {
             targetOut.kind = TargetKind::FolderBackground;
@@ -1155,13 +1578,13 @@ static bool ResolveMenuTarget(HWND hwnd,
     return ok;
 }
 
-static bool IsShellViewWindow(HWND hwnd) {
+static HWND FindShellViewWindow(HWND hwnd) {
     HWND w = hwnd;
     while (w) {
         WCHAR className[64] = {};
         GetClassNameW(w, className, ARRAYSIZE(className));
         if (_wcsicmp(className, L"SHELLDLL_DefView") == 0) {
-            return true;
+            return w;
         }
 
         HWND parent = GetParent(w);
@@ -1170,7 +1593,25 @@ static bool IsShellViewWindow(HWND hwnd) {
         }
         w = parent;
     }
-    return false;
+    return nullptr;
+}
+
+static HWND FindShellTabWindow(HWND hwnd) {
+    HWND w = hwnd;
+    while (w) {
+        WCHAR className[64] = {};
+        GetClassNameW(w, className, ARRAYSIZE(className));
+        if (_wcsicmp(className, L"ShellTabWindowClass") == 0) {
+            return w;
+        }
+
+        HWND parent = GetParent(w);
+        if (!parent) {
+            parent = GetWindow(w, GW_OWNER);
+        }
+        w = parent;
+    }
+    return nullptr;
 }
 
 static Settings GetSettingsSnapshot() {
@@ -1408,6 +1849,51 @@ static HBITMAP GetCachedMenuBitmapForTerminal(const Settings& settings) {
     return bitmap;
 }
 
+static HBITMAP GetCachedMenuBitmapNoShield(const Settings& settings) {
+    std::wstring key = GetMenuBitmapCacheKey(settings) + L"\nno-shield";
+
+    AcquireSRWLockShared(&g_menuBitmapLock);
+    for (const auto& entry : g_menuBitmapCache) {
+        if (entry.key == key) {
+            HBITMAP bitmap = entry.bitmap;
+            ReleaseSRWLockShared(&g_menuBitmapLock);
+            return bitmap;
+        }
+    }
+    ReleaseSRWLockShared(&g_menuBitmapLock);
+
+    std::wstring exePath;
+    HBITMAP bitmap = nullptr;
+    if (ResolveExecutablePathForIcon(settings, exePath)) {
+        SHFILEINFOW shfi = {};
+        if (SHGetFileInfoW(exePath.c_str(), FILE_ATTRIBUTE_NORMAL, &shfi,
+                           sizeof(shfi),
+                           SHGFI_ICON | SHGFI_SMALLICON |
+                               SHGFI_USEFILEATTRIBUTES)) {
+            bitmap = CreateMenuBitmapFromIcon(shfi.hIcon, nullptr);
+            if (shfi.hIcon) {
+                DestroyIcon(shfi.hIcon);
+            }
+        }
+    }
+
+    AcquireSRWLockExclusive(&g_menuBitmapLock);
+    for (const auto& entry : g_menuBitmapCache) {
+        if (entry.key == key) {
+            if (bitmap) {
+                DeleteObject(bitmap);
+            }
+            bitmap = entry.bitmap;
+            ReleaseSRWLockExclusive(&g_menuBitmapLock);
+            return bitmap;
+        }
+    }
+    g_menuBitmapCache.push_back({std::move(key), bitmap});
+    ReleaseSRWLockExclusive(&g_menuBitmapLock);
+
+    return bitmap;
+}
+
 static void ClearMenuBitmapCache() {
     AcquireSRWLockExclusive(&g_menuBitmapLock);
     for (const auto& entry : g_menuBitmapCache) {
@@ -1419,13 +1905,53 @@ static void ClearMenuBitmapCache() {
     ReleaseSRWLockExclusive(&g_menuBitmapLock);
 }
 
-static void ClearCurrentMenuState() {
-    g_currentMenuEligible = false;
-    g_currentTarget = {};
-    g_currentMenuHwnd = nullptr;
+static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
+                                                 const std::wstring& scriptPath) {
+    if (UsesSelectedTerminalHost(settings, scriptPath)) {
+        return GetTerminalDisplayName(settings);
+    }
+
+    PCWSTR extension = PathFindExtensionW(scriptPath.c_str());
+    if (_wcsicmp(extension, L".bat") == 0 ||
+        _wcsicmp(extension, L".cmd") == 0) {
+        return L"Command Prompt";
+    }
+    if (_wcsicmp(extension, L".vbs") == 0 ||
+        _wcsicmp(extension, L".js") == 0) {
+        return L"Windows Script Host";
+    }
+
+    LaunchSpec interpreter = BuildScriptInterpreterSpec(settings, scriptPath);
+    PCWSTR executableName = PathFindFileNameW(interpreter.executable.c_str());
+    return _wcsicmp(executableName, L"pwsh.exe") == 0 ? L"PowerShell 7"
+                                                       : L"Windows PowerShell";
 }
 
-static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings) {
+static Settings GetScriptIconSettings(const Settings& settings,
+                                      const std::wstring& scriptPath) {
+    if (UsesSelectedTerminalHost(settings, scriptPath)) {
+        return settings;
+    }
+
+    Settings iconSettings = settings;
+    LaunchSpec interpreter = BuildScriptInterpreterSpec(settings, scriptPath);
+    iconSettings.terminalEffectiveChoice.clear();
+    iconSettings.terminalDisplayCommand = interpreter.executable;
+    return iconSettings;
+}
+
+static UINT ReserveMenuCommandId(HMENU menu, UINT preferred,
+                                 UINT excluded = 0) {
+    for (UINT id = preferred; id < preferred + 0x20; id++) {
+        if (id != excluded && GetMenuState(menu, id, MF_BYCOMMAND) == UINT(-1)) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+static MenuCommandIds InsertAdminTerminalMenuItem(
+    HMENU menu, const Settings& settings, const MenuTarget& target) {
     int itemCount = GetMenuItemCount(menu);
     int insertPos = 0;
     bool separatorAbove = false;
@@ -1457,40 +1983,169 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings) {
         insertPos = 0;
     }
 
-    if (separatorAbove) {
-        InsertMenuW(menu, insertPos, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-        InsertMenuW(menu, insertPos + 1, MF_BYPOSITION | MF_STRING, kMenuCommandId,
-                    settings.menuText.c_str());
-    } else {
-        InsertMenuW(menu, insertPos, MF_BYPOSITION | MF_STRING, kMenuCommandId,
-                    settings.menuText.c_str());
-        InsertMenuW(menu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    bool isScript = target.kind == TargetKind::ScriptItem;
+    bool showAdmin = !isScript || settings.scriptMenuEntries != L"normal";
+    bool showNormal = isScript
+                          ? settings.scriptMenuEntries == L"normal" ||
+                                settings.scriptMenuEntries == L"both"
+                          : settings.showNonElevatedEntry;
+    MenuCommandIds commandIds;
+    if (showAdmin) {
+        commandIds.admin =
+            ReserveMenuCommandId(menu, kPreferredAdminMenuCommandId);
+        if (!commandIds.admin) {
+            return {};
+        }
     }
-
-    HBITMAP menuBitmap = GetCachedMenuBitmapForTerminal(settings);
-    if (menuBitmap) {
-        MENUITEMINFOW itemInfo = {};
-        itemInfo.cbSize = sizeof(itemInfo);
-        itemInfo.fMask = MIIM_BITMAP;
-        itemInfo.hbmpItem = menuBitmap;
-        if (!SetMenuItemInfoW(menu, kMenuCommandId, FALSE, &itemInfo)) {
-            Wh_Log(L"Menu icon assignment failed");
-        } else {
-            Wh_Log(L"Menu icon assigned");
+    if (showNormal) {
+        commandIds.nonElevated = ReserveMenuCommandId(
+            menu, kPreferredNonElevatedMenuCommandId, commandIds.admin);
+        if (!commandIds.nonElevated) {
+            return {};
+        }
+    }
+    Settings iconSettings = isScript
+                                ? GetScriptIconSettings(settings, target.path)
+                                : settings;
+    std::wstring displayName = isScript
+                                   ? GetScriptTerminalDisplayName(settings, target.path)
+                                   : GetTerminalDisplayName(settings);
+    std::wstring adminLabel;
+    if (isScript) {
+        adminLabel = L"Run script";
+        if (settings.appendScriptTerminalName) {
+            adminLabel += L" in " + displayName;
+        }
+        adminLabel += L" as administrator";
+    } else {
+        adminLabel = settings.menuText;
+    }
+    std::wstring normalLabel;
+    if (isScript) {
+        normalLabel = L"Run script";
+        if (settings.appendScriptTerminalName) {
+            normalLabel += L" in " + displayName;
         }
     } else {
-        Wh_Log(L"Menu icon unavailable");
+        normalLabel = settings.nonElevatedMenuText;
+        if (normalLabel.empty()) {
+            normalLabel = L"Open " + displayName + L" here";
+        }
     }
+
+    int actionPos = insertPos;
+    if (separatorAbove) {
+        InsertMenuW(menu, insertPos, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+        actionPos++;
+    }
+
+    if (showAdmin) {
+        InsertMenuW(menu, actionPos++, MF_BYPOSITION | MF_STRING,
+                    commandIds.admin,
+                    adminLabel.c_str());
+    }
+    if (showNormal) {
+        InsertMenuW(menu, actionPos++, MF_BYPOSITION | MF_STRING,
+                    commandIds.nonElevated, normalLabel.c_str());
+    }
+    if (!separatorAbove) {
+        InsertMenuW(menu, actionPos, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    }
+
+    if (showAdmin) {
+        HBITMAP menuBitmap = GetCachedMenuBitmapForTerminal(iconSettings);
+        if (menuBitmap) {
+            MENUITEMINFOW itemInfo = {};
+            itemInfo.cbSize = sizeof(itemInfo);
+            itemInfo.fMask = MIIM_BITMAP;
+            itemInfo.hbmpItem = menuBitmap;
+            if (!SetMenuItemInfoW(menu, commandIds.admin, FALSE, &itemInfo)) {
+                Wh_Log(L"Menu icon assignment failed");
+            } else {
+                Wh_Log(L"Menu icon assigned");
+            }
+        } else {
+            Wh_Log(L"Menu icon unavailable");
+        }
+    }
+
+    if (showNormal) {
+        HBITMAP menuBitmapNoShield = GetCachedMenuBitmapNoShield(iconSettings);
+        if (menuBitmapNoShield) {
+            MENUITEMINFOW itemInfo = {};
+            itemInfo.cbSize = sizeof(itemInfo);
+            itemInfo.fMask = MIIM_BITMAP;
+            itemInfo.hbmpItem = menuBitmapNoShield;
+            if (!SetMenuItemInfoW(menu, commandIds.nonElevated, FALSE,
+                                  &itemInfo)) {
+                Wh_Log(L"Non-elevated menu icon assignment failed");
+            } else {
+                Wh_Log(L"Non-elevated menu icon assigned");
+            }
+        } else {
+            Wh_Log(L"Non-elevated menu icon unavailable");
+        }
+    }
+    return commandIds;
 }
 
 static void LaunchAdminTerminal(const MenuTarget& target) {
     Settings settings = GetSettingsSnapshot();
-    LaunchSpec launch = BuildLaunchSpec(settings, target.path);
+    LaunchSpec launch = (target.kind == TargetKind::ScriptItem)
+                            ? BuildScriptLaunchSpec(settings, target.path)
+                            : BuildLaunchSpec(settings, target.path);
+    if (launch.executable.empty()) {
+        Wh_Log(L"Launch failed: no executable resolved target=%ls",
+               target.path.c_str());
+        return;
+    }
 
     SHELLEXECUTEINFOW executeInfo = {};
     executeInfo.cbSize = sizeof(executeInfo);
     executeInfo.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     executeInfo.lpVerb = L"runas";
+    executeInfo.lpFile = launch.executable.c_str();
+    executeInfo.lpParameters =
+        launch.parameters.empty() ? nullptr : launch.parameters.c_str();
+    executeInfo.lpDirectory =
+        launch.workingDirectory.empty() ? nullptr : launch.workingDirectory.c_str();
+    executeInfo.nShow = SW_SHOWNORMAL;
+
+    POINT cursorPos;
+    if (GetCursorPos(&cursorPos)) {
+        executeInfo.fMask |= SEE_MASK_HMONITOR;
+        executeInfo.hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+    }
+
+    if (ShellExecuteExW(&executeInfo)) {
+        Wh_Log(L"Launch succeeded: target=%ls executable=%ls parameters=%ls",
+               target.path.c_str(), launch.executable.c_str(),
+               launch.parameters.c_str());
+    } else {
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) {
+            Wh_Log(L"Launch failed: error=%lu target=%ls executable=%ls parameters=%ls",
+                   error, target.path.c_str(), launch.executable.c_str(),
+                   launch.parameters.c_str());
+        }
+    }
+}
+
+static void LaunchTerminalNonElevated(const MenuTarget& target) {
+    Settings settings = GetSettingsSnapshot();
+    LaunchSpec launch = (target.kind == TargetKind::ScriptItem)
+                            ? BuildScriptLaunchSpec(settings, target.path)
+                            : BuildLaunchSpec(settings, target.path);
+    if (launch.executable.empty()) {
+        Wh_Log(L"Launch failed: no executable resolved target=%ls",
+               target.path.c_str());
+        return;
+    }
+
+    SHELLEXECUTEINFOW executeInfo = {};
+    executeInfo.cbSize = sizeof(executeInfo);
+    executeInfo.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    executeInfo.lpVerb = L"open";
     executeInfo.lpFile = launch.executable.c_str();
     executeInfo.lpParameters =
         launch.parameters.empty() ? nullptr : launch.parameters.c_str();
@@ -1525,13 +2180,23 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
                                   HWND hwnd,
                                   LPTPMPARAMS params) {
     bool injected = false;
-    ClearCurrentMenuState();
+    MenuTarget target;
+    MenuCommandIds commandIds;
 
-    if (menu && hwnd &&
-        (IsShellViewWindow(hwnd) || IsNavigationPaneWindow(hwnd))) {
-        MenuTarget target;
+    HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+    WCHAR rootClass[64] = {};
+    if (root) {
+        GetClassNameW(root, rootClass, ARRAYSIZE(rootClass));
+    }
+    bool eligibleWindow = hwnd &&
+                          (FindShellViewWindow(hwnd) ||
+                           _wcsicmp(rootClass, L"CabinetWClass") == 0 ||
+                           _wcsicmp(rootClass, L"ExploreWClass") == 0);
+
+    if (menu && eligibleWindow && ShouldInjectForMenuFlags(flags)) {
         Settings settings = GetSettingsSnapshot();
-        if (!ResolveMenuTarget(hwnd, settings.showOnNavigationPane, target)) {
+        POINT invocationPoint = {x, y};
+        if (!ResolveMenuTarget(hwnd, settings, invocationPoint, target)) {
             Wh_Log(L"Injection skipped: no eligible filesystem directory target");
         } else if (!IsTargetEnabled(settings, target.kind)) {
             Wh_Log(L"Injection skipped: target kind disabled kind=%ls path=%ls",
@@ -1545,45 +2210,37 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
             }
             Wh_Log(L"Injection target: kind=%ls path=%ls",
                    TargetKindName(target.kind), target.path.c_str());
-            InsertAdminTerminalMenuItem(menu, settings);
-            Wh_Log(L"Injection inserted: position=%ls text=%ls",
-                   settings.position.c_str(), settings.menuText.c_str());
-            injected = true;
-            g_currentMenuHwnd = hwnd;
-            g_currentMenuEligible = true;
-            g_currentTarget = std::move(target);
+            commandIds = InsertAdminTerminalMenuItem(menu, settings, target);
+            injected = commandIds.admin || commandIds.nonElevated;
+            if (injected) {
+                Wh_Log(L"Injection inserted: position=%ls kind=%ls",
+                       settings.position.c_str(), TargetKindName(target.kind));
+            } else {
+                Wh_Log(L"Injection skipped: no free menu command IDs");
+            }
         }
     }
 
     BOOL result = TrackPopupMenuEx_Orig(menu, flags, x, y, hwnd, params);
 
     if (injected && (flags & TPM_RETURNCMD) &&
-        static_cast<UINT>(result) == kMenuCommandId) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
+        commandIds.admin && static_cast<UINT>(result) == commandIds.admin) {
         LaunchAdminTerminal(target);
+        return 0;
+    }
+
+    if (injected && (flags & TPM_RETURNCMD) &&
+        commandIds.nonElevated &&
+        static_cast<UINT>(result) == commandIds.nonElevated) {
+        LaunchTerminalNonElevated(target);
         return 0;
     }
 
     return result;
 }
 
-BOOL WINAPI PostMessageW_Hook(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    if (message == WM_COMMAND &&
-        LOWORD(wParam) == kMenuCommandId &&
-        g_currentMenuEligible &&
-        hwnd == g_currentMenuHwnd) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
-        LaunchAdminTerminal(target);
-        return TRUE;
-    }
-
-    return PostMessageW_Orig(hwnd, message, wParam, lParam);
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init v1.16-classic");
+    Wh_Log(L"Init");
 
     g_shellIdListClipboardFormat = RegisterClipboardFormatW(L"Shell IDList Array");
 
@@ -1605,13 +2262,6 @@ BOOL Wh_ModInit() {
                             reinterpret_cast<void*>(TrackPopupMenuEx_Hook),
                             reinterpret_cast<void**>(&TrackPopupMenuEx_Orig))) {
         Wh_Log(L"Failed to hook TrackPopupMenuEx");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(PostMessageW),
-                            reinterpret_cast<void*>(PostMessageW_Hook),
-                            reinterpret_cast<void**>(&PostMessageW_Orig))) {
-        Wh_Log(L"Failed to hook PostMessageW");
         return FALSE;
     }
 

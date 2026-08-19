@@ -2,7 +2,7 @@
 // @id              custom-menu-height
 // @name            Custom Menu Height
 // @description     Control the height of Win32 context menu items and menu bars
-// @version         1.0
+// @version         1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -56,7 +56,10 @@ mod by **aubymori**.
   $description: >-
     The height of context menu items in pixels
 
-    Set to 0 to use the default system value.
+    Set to 0 to use the default system value and keep immersive menus.
+
+    Set to -1 to use the default system value and eradicate immersive menus
+    system-wide.
 - menuBarHeight: 32
   $name: Menu bar height
   $description: >-
@@ -214,24 +217,23 @@ void AdjustUahMenuItemMetrics(HWND hWnd, LPARAM lParam)
         ? settings.popupMenuItemHeight
         : settings.menuBarHeight;
 
-    // Leave the menu height at the system default if set to 0
-    if (cyBaseHeight == 0)
+    // Leave the menu height at the system default if set to 0 (or -1 for popup
+    // menu items)
+    if (cyBaseHeight <= 0)
     {
         return;
     }
 
     // Ignore separator items inside popup menus
-    if (isPopupMenu)
+    MENUITEMINFOW menuItemInfo{ sizeof(menuItemInfo) };
+    menuItemInfo.fMask = MIIM_FTYPE;
+    if (isPopupMenu &&
+        GetMenuItemInfoW(uahMeasureMenuItem->uahMenu.hMenu,
+            uahMeasureMenuItem->uahMenuItem.iPosition, TRUE,
+            &menuItemInfo) &&
+        (menuItemInfo.fType & MFT_SEPARATOR))
     {
-        MENUITEMINFOW menuItemInfo{ sizeof(menuItemInfo) };
-        menuItemInfo.fMask = MIIM_FTYPE;
-        if (GetMenuItemInfoW(uahMeasureMenuItem->uahMenu.hMenu,
-                uahMeasureMenuItem->uahMenuItem.iPosition, TRUE,
-                &menuItemInfo) &&
-            (menuItemInfo.fType & MFT_SEPARATOR))
-        {
-            return;
-        }
+        return;
     }
 
     UINT uDpi = GetWindowDpi(hWnd);
@@ -307,21 +309,22 @@ bool UpdateMenuBarHeight(HWND hWnd, UINT uMsg)
 // their menu bars
 BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam)
 {
-    DWORD dwProcessId;
-    GetWindowThreadProcessId(hWnd, &dwProcessId);
-    if (dwProcessId == GetCurrentProcessId())
+    DWORD dwProcessId = 0;
+    if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+        dwProcessId != GetCurrentProcessId())
     {
-        PostMessageW(hWnd, g_updateMenuBarHeightMsg, 0, 0);
+        return TRUE;
     }
+    PostMessageW(hWnd, g_updateMenuBarHeightMsg, 0, 0);
     return TRUE;
 }
 
 // Enumeration callback: Revert the custom menu bar height and window dimensions
 BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam)
 {
-    DWORD dwProcessId;
-    GetWindowThreadProcessId(hWnd, &dwProcessId);
-    if (dwProcessId != GetCurrentProcessId())
+    DWORD dwProcessId = 0;
+    if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+        dwProcessId != GetCurrentProcessId())
     {
         return TRUE;
     }
@@ -594,41 +597,48 @@ int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT uDpi)
 
 // Hook for ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu
 using DrawImmersiveMenu_t = bool(__fastcall*)(HMENU, HWND);
+#define GENERATE_IMMERSIVE_MENU_HOOK(hookPrefix) \
+    DrawImmersiveMenu_t hookPrefix##_Original = nullptr; \
+    bool __fastcall hookPrefix##_Hook( \
+        HMENU hPopupMenu, \
+        HWND hWnd \
+    ) \
+    { \
+        if (settings.popupMenuItemHeight == 0 && hookPrefix##_Original) \
+        { \
+            return hookPrefix##_Original(hPopupMenu, hWnd); \
+        } \
+        return false; \
+    }
 
 // Global shell
-DrawImmersiveMenu_t ExplorerFrame_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t shell32_DrawImmersiveMenu_Original = nullptr;
+GENERATE_IMMERSIVE_MENU_HOOK(ExplorerFrame_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(shell32_DrawImmersiveMenu)
 
 // Core shell
-DrawImmersiveMenu_t explorer_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t twinui_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t twinui_pcshell_DrawImmersiveMenu_Original = nullptr;
+GENERATE_IMMERSIVE_MENU_HOOK(explorer_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(twinui_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(twinui_pcshell_DrawImmersiveMenu)
 
 // Standalone applications
-DrawImmersiveMenu_t Narrator_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t Taskmgr_DrawImmersiveMenu_Original = nullptr;
+GENERATE_IMMERSIVE_MENU_HOOK(Narrator_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(Taskmgr_DrawImmersiveMenu)
 
 // System tray icons
-DrawImmersiveMenu_t MoNotificationUx_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t museuxdocked_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t pnidui_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t SecurityHealthSSO_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t SecurityHealthSsoUdk_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t SecurityHealthSystray_DrawImmersiveMenu_Original = nullptr;
-DrawImmersiveMenu_t SndVolSSO_DrawImmersiveMenu_Original = nullptr;
-
-bool __fastcall DrawImmersiveMenu_Hook(
-    HMENU hPopupMenu,
-    HWND hWnd
-)
-{
-    return false;
-}
+GENERATE_IMMERSIVE_MENU_HOOK(MoNotificationUx_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(museuxdocked_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(MusNotifyIcon_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(pnidui_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(SecurityHealthSSO_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(SecurityHealthSsoUdk_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(SecurityHealthSystray_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(SndVolSSO_DrawImmersiveMenu)
+GENERATE_IMMERSIVE_MENU_HOOK(usoapi_DrawImmersiveMenu)
 
 // Helper: Hook ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu in a
 // specified module to eradicate immersive menus system-wide
 inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
-    DrawImmersiveMenu_t* ppfnOriginal)
+    DrawImmersiveMenu_t* ppfnOriginal, void* pfnHook)
 {
     HMODULE hModule;
 
@@ -652,13 +662,13 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
         return false;
     }
 
-    // explorer.exe, ExplorerFrame.dll, MoNotificationUx.exe, museuxdocked.dll, Narrator.exe, pnidui.dll, SecurityHealthSSO.dll, SecurityHealthSsoUdk.dll, SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe, twinui.dll, twinui.pcshell.dll
+    // explorer.exe, ExplorerFrame.dll, MoNotificationUx.exe, museuxdocked.dll, MusNotifyIcon.exe, Narrator.exe, pnidui.dll, SecurityHealthSSO.dll, SecurityHealthSsoUdk.dll, SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe, twinui.dll, twinui.pcshell.dll, usoapi.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] =
     {
         {
             { DRAW_IMMERSIVE_MENU },
-            ppfnOriginal,
-            DrawImmersiveMenu_Hook,
+            reinterpret_cast<void**>(ppfnOriginal),
+            pfnHook,
             true
         }
     };
@@ -679,33 +689,32 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
 // Required to eradicate immersive menus system-wide on Windows 10 and later.
 bool IsWindows10OrGreater()
 {
-    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
-    static auto pfnRtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
-        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
-    if (pfnRtlGetVersion)
-    {
-        OSVERSIONINFOW osVersionInfo;
-        osVersionInfo.dwOSVersionInfoSize = sizeof(osVersionInfo);
-        return (pfnRtlGetVersion(&osVersionInfo) == 0 &&
-            osVersionInfo.dwMajorVersion >= 10);
-    }
-    return false;
+    auto ulNtMajorVersion = *reinterpret_cast<volatile ULONG*>(0x7FFE026C);
+    return ulNtMajorVersion >= 10;
 }
 
 // Load settings
 void LoadSettings()
 {
     settings.popupMenuItemHeight = Wh_GetIntSetting(L"popupMenuItemHeight");
-    if (settings.popupMenuItemHeight != 0)
+    if (settings.popupMenuItemHeight > 0)
     {
         settings.popupMenuItemHeight =
             std::max(settings.popupMenuItemHeight, 22);
     }
+    else if (settings.popupMenuItemHeight < -1)
+    {
+        settings.popupMenuItemHeight = -1;
+    }
 
     settings.menuBarHeight = Wh_GetIntSetting(L"menuBarHeight");
-    if (settings.menuBarHeight != 0)
+    if (settings.menuBarHeight > 0)
     {
         settings.menuBarHeight = std::max(settings.menuBarHeight, 19);
+    }
+    else if (settings.menuBarHeight < 0)
+    {
+        settings.menuBarHeight = 0;
     }
 
     // Exclude Visual Studio from menu bar height modifications
@@ -770,19 +779,17 @@ BOOL Wh_ModInit()
     );
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32)
+    auto pfnGetSystemMetricsForDpi = hUser32
+        ? reinterpret_cast<GetSystemMetricsForDpi_t>(
+            GetProcAddress(hUser32, "GetSystemMetricsForDpi"))
+        : nullptr;
+    if (pfnGetSystemMetricsForDpi)
     {
-        auto pfnGetSystemMetricsForDpi =
-            reinterpret_cast<GetSystemMetricsForDpi_t>(
-                GetProcAddress(hUser32, "GetSystemMetricsForDpi"));
-        if (pfnGetSystemMetricsForDpi)
-        {
-            WindhawkUtils::SetFunctionHook(
-                pfnGetSystemMetricsForDpi,
-                GetSystemMetricsForDpi_Hook,
-                &GetSystemMetricsForDpi_Original
-            );
-        }
+        WindhawkUtils::SetFunctionHook(
+            pfnGetSystemMetricsForDpi,
+            GetSystemMetricsForDpi_Hook,
+            &GetSystemMetricsForDpi_Original
+        );
     }
 
     // Initialize hooks to eradicate immersive menus system-wide
@@ -795,12 +802,12 @@ BOOL Wh_ModInit()
     // Exclude the current process from immersive menus hooks
     LPCWSTR pszProcessName = GetCurrentProcessName();
     bool shouldExcludeProcess =
-        _wcsicmp(pszProcessName, L"windhawk.exe") == 0 ||
         _wcsicmp(pszProcessName, L"consent.exe") == 0 ||
         _wcsicmp(pszProcessName, L"dwm.exe") == 0 ||
         _wcsicmp(pszProcessName, L"SearchIndexer.exe") == 0 ||
         _wcsicmp(pszProcessName, L"ShellExperienceHost.exe") == 0 ||
         _wcsicmp(pszProcessName, L"svchost.exe") == 0 ||
+        _wcsicmp(pszProcessName, L"windhawk.exe") == 0 ||
         _wcsicmp(pszProcessName, L"wlanext.exe") == 0;
     if (shouldExcludeProcess)
     {
@@ -808,18 +815,21 @@ BOOL Wh_ModInit()
     }
 
     // Exclude isolated system tray processes from global shell hooks
-    if (_wcsicmp(pszProcessName, L"SecurityHealthSystray.exe") != 0 &&
-        _wcsicmp(pszProcessName, L"MoNotificationUx.exe") != 0)
+    if (_wcsicmp(pszProcessName, L"MoNotificationUx.exe") != 0 &&
+        _wcsicmp(pszProcessName, L"MusNotifyIcon.exe") != 0 &&
+        _wcsicmp(pszProcessName, L"SecurityHealthSystray.exe") != 0)
     {
         // Global shell hooks
         ApplyImmersiveMenuHook(
             L"ExplorerFrame.dll",
-            &ExplorerFrame_DrawImmersiveMenu_Original
+            &ExplorerFrame_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(ExplorerFrame_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"shell32.dll",
-            &shell32_DrawImmersiveMenu_Original
+            &shell32_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(shell32_DrawImmersiveMenu_Hook)
         );
     }
 
@@ -828,80 +838,108 @@ BOOL Wh_ModInit()
     {
         ApplyImmersiveMenuHook(
             nullptr,
-            &explorer_DrawImmersiveMenu_Original
+            &explorer_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(explorer_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"pnidui.dll",
-            &pnidui_DrawImmersiveMenu_Original
+            &pnidui_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(pnidui_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"SndVolSSO.dll",
-            &SndVolSSO_DrawImmersiveMenu_Original
+            &SndVolSSO_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(SndVolSSO_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"twinui.dll",
-            &twinui_DrawImmersiveMenu_Original
+            &twinui_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(twinui_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"twinui.pcshell.dll",
-            &twinui_pcshell_DrawImmersiveMenu_Original
+            &twinui_pcshell_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(twinui_pcshell_DrawImmersiveMenu_Hook)
         );
     }
     else if (_wcsicmp(pszProcessName, L"MoNotificationUx.exe") == 0)
     {
         ApplyImmersiveMenuHook(
             nullptr,
-            &MoNotificationUx_DrawImmersiveMenu_Original
+            &MoNotificationUx_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(MoNotificationUx_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"museuxdocked.dll",
-            &museuxdocked_DrawImmersiveMenu_Original
+            &museuxdocked_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(museuxdocked_DrawImmersiveMenu_Hook)
+        );
+    }
+    else if (_wcsicmp(pszProcessName, L"MusNotifyIcon.exe") == 0)
+    {
+        ApplyImmersiveMenuHook(
+            nullptr,
+            &MusNotifyIcon_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(MusNotifyIcon_DrawImmersiveMenu_Hook)
+        );
+
+        ApplyImmersiveMenuHook(
+            L"usoapi.dll",
+            &usoapi_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(usoapi_DrawImmersiveMenu_Hook)
         );
     }
     else if (_wcsicmp(pszProcessName, L"Narrator.exe") == 0)
     {
         ApplyImmersiveMenuHook(
             nullptr,
-            &Narrator_DrawImmersiveMenu_Original
+            &Narrator_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(Narrator_DrawImmersiveMenu_Hook)
         );
     }
     else if (_wcsicmp(pszProcessName, L"SecurityHealthSystray.exe") == 0)
     {
         ApplyImmersiveMenuHook(
             nullptr,
-            &SecurityHealthSystray_DrawImmersiveMenu_Original
+            &SecurityHealthSystray_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(SecurityHealthSystray_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"SecurityHealthSSO.dll",
-            &SecurityHealthSSO_DrawImmersiveMenu_Original
+            &SecurityHealthSSO_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(SecurityHealthSSO_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"SecurityHealthSsoUdk.dll",
-            &SecurityHealthSsoUdk_DrawImmersiveMenu_Original
+            &SecurityHealthSsoUdk_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(SecurityHealthSsoUdk_DrawImmersiveMenu_Hook)
         );
     }
     else if (_wcsicmp(pszProcessName, L"Taskmgr.exe") == 0)
     {
         ApplyImmersiveMenuHook(
             nullptr,
-            &Taskmgr_DrawImmersiveMenu_Original
+            &Taskmgr_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(Taskmgr_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"twinui.dll",
-            &twinui_DrawImmersiveMenu_Original
+            &twinui_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(twinui_DrawImmersiveMenu_Hook)
         );
 
         ApplyImmersiveMenuHook(
             L"twinui.pcshell.dll",
-            &twinui_pcshell_DrawImmersiveMenu_Original
+            &twinui_pcshell_DrawImmersiveMenu_Original,
+            reinterpret_cast<void*>(twinui_pcshell_DrawImmersiveMenu_Hook)
         );
     }
 

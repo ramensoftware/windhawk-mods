@@ -2,10 +2,11 @@
 // @id              net-toggle
 // @name            Net-Toggle
 // @description     Internet kill switch with primary/secondary DNS monitoring in your system tray
-// @version         2.1.0
+// @version         2.1.1
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
+// @license         MIT
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32 -DWIN32_LEAN_AND_MEAN
 // ==/WindhawkMod==
@@ -38,6 +39,7 @@
   - tcp: TCP connect (port 53)
   - dot: DNS-over-TLS endpoint (TCP 853)
   - doh: DNS-over-HTTPS endpoint (TCP 443)
+  $description: Check method for the secondary DNS server
 
 - pingInterval: 10
   $name: Check interval (seconds)
@@ -106,27 +108,32 @@ One click drops your connection. Click it again, and you're back online.
 
 ## Changelog
 
-### v2.1.0
-- New: **Secondary DNS server** — monitor a primary + fallback pair (Google, Cloudflare, NextDNS all publish two IPs). New **Orange** icon state when only the fallback is answering.
-- New: **Check method per server** — real DNS query (default), TCP 53, or DNS-over-TLS (853) / DNS-over-HTTPS (443) endpoint reachability for providers like NextDNS.
-- Improved: the default check now sends a **real DNS query** instead of a bare TCP connect — fixes false "DNS unreachable" results on networks that filter TCP port 53.
-- Improved: tray tooltip shows per-server ✓ / ✗ status.
-- Improved: right after the network comes back up, the icon shows green ("checking") instead of flashing grey until the first check completes.
-- Fixed: a rare timing issue that could briefly show outdated DNS status right after changing settings.
-- Fixed: a possible freeze when disabling the mod or restarting Explorer while a network toggle was in progress.
+# 2.1.1
+- **Fixed:** Mod no longer crashes on reload.
+- **Fixed:** Unstable state on rapid clicks resolved.
+- **Added:** Description for the secondary DNS server check method setting.
 
-### v2.0.0
-- **Complete rebuild.** Mod renamed to Net-Toggle.
-- New: **DNS Monitoring** — The icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).
-- New: **WiFi-style tray icon** with 5 color states (Red / Yellow / Blue / Green / Grey).
-- New: Middle-click → **Full Network Reset** — disables all adapters, flushes DNS, re-enables them. Cuts all active connections.
-- New: Right-click context menu — toggle network, open Network Settings, open Windhawk.
-- New: Donate button on the mod page.
-- Improved: Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.
-- Improved: Tray icon persists reliably across Explorer restarts.
-- Improved: Icon stays in sync even if you disable your adapter directly in Windows Settings.
+# 2.1.0
+- **New:** Secondary DNS server — monitor a primary and fallback pair (Google, Cloudflare, NextDNS all publish two IPs). New orange icon state when only the fallback is answering.
+- **New:** Per-server check method — real DNS query (default), TCP 53, or DNS-over-TLS / DNS-over-HTTPS endpoint reachability for providers like NextDNS.
+- **Improved:** Default check now sends a real DNS query instead of a bare TCP connect — fixes false "DNS unreachable" results on networks that filter TCP port 53.
+- **Improved:** Tray tooltip shows per-server ✓ / ✗ status.
+- **Improved:** Icon shows green ("checking") immediately after the network comes back up instead of flashing grey until the first check completes.
+- **Fixed:** Rare timing issue that could briefly show outdated DNS status after changing settings.
+- **Fixed:** Possible freeze when disabling the mod or restarting Explorer while a network toggle was in progress.
 
-### v1.0
+# 2.0.0
+- **New:** Complete rebuild with DNS monitoring, WiFi-style tray icon, and network reset.
+- **New:** DNS monitoring — the icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).
+- **New:** WiFi-style tray icon with 5 color states (Red, Yellow, Blue, Green, Grey).
+- **New:** Middle-click → full network reset — disables all adapters, flushes DNS, re-enables them.
+- **New:** Right-click context menu — toggle network, open Network Settings, open Windhawk.
+- **New:** Donate button on the mod page.
+- **Improved:** Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.
+- **Improved:** Tray icon persists reliably across Explorer restarts.
+- **Improved:** Icon stays in sync even if you disable your adapter directly in Windows Settings.
+
+# 1.0.0
 - Initial release.
 */
 // ==/WindhawkModReadme==
@@ -174,9 +181,9 @@ static const int   DNS_UDP_ATTEMPTS       = 2;       // query + 1 retransmit
 static const int   DNS_UDP_WAIT_SEC       = 1;       // per-attempt reply wait…
 static const int   DNS_UDP_WAIT_USEC      = 250000;  // …1.25s each, 2.5s worst case
 
-static volatile LONG g_isProcessingClick = 0;
-static volatile LONG g_trayIconInstalled = 0;
-static volatile LONG g_networkIsUp = 1;
+static LONG g_isProcessingClick = 0;
+static LONG g_trayIconInstalled = 0;
+static LONG g_networkIsUp = 1;
 static HANDLE g_trayThread = nullptr;
 static volatile HWND g_trayHwnd = nullptr;
 static HINSTANCE g_hInstance = nullptr;
@@ -672,7 +679,7 @@ static void AppendDnsTipLine(WCHAR* tip, size_t cap, int slot, LPCWSTR label) {
 
 void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
     DnsOverall dns = GetDnsOverall();
-    BOOL pending = (g_isProcessingClick != 0);
+    BOOL pending = (InterlockedOr(&g_isProcessingClick, 0) != 0);
 
     HICON hNewIcon = CreateColoredDotIcon(enabled, dns, pending);
     if (!hNewIcon) {
@@ -680,11 +687,10 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         return;
     }
 
-    // Destroy old icon to prevent handle leak
-    if (g_currentIcon) {
-        DestroyIcon(g_currentIcon);
-        g_currentIcon = nullptr;
-    }
+    // Defer old-icon destruction until after the NIM_MODIFY succeeds
+    // so the tray never holds a dangling handle if the update fails.
+    HICON hOldIcon = g_currentIcon;
+    g_currentIcon = nullptr;
 
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd = hWnd;
@@ -692,9 +698,9 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
     nid.uFlags = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_ICON;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
-    if (g_isProcessingClick == 1) {
+    if (InterlockedOr(&g_isProcessingClick, 0) == 1) {
         wsprintfW(nid.szTip, L"Net-Toggle: toggling\u2026");
-    } else if (g_isProcessingClick == 2) {
+    } else if (InterlockedOr(&g_isProcessingClick, 0) == 2) {
         wsprintfW(nid.szTip, L"Net-Toggle: refreshing\u2026");
     } else if (!enabled) {
         wsprintfW(nid.szTip, L"Net-Toggle: OFF (click to enable)");
@@ -721,6 +727,7 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
             LogLastError(L"Shell_NotifyIcon NIM_ADD");
             DestroyIcon(hNewIcon);
+            g_currentIcon = hOldIcon;
             return;
         }
         InterlockedExchange(&g_trayIconInstalled, 1);
@@ -731,12 +738,15 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         nidVer.guidItem = NETTOGGLE_TRAY_GUID;
         nidVer.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+        if (hOldIcon) DestroyIcon(hOldIcon);
     } else {
         if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
             LogLastError(L"Shell_NotifyIcon NIM_MODIFY");
             DestroyIcon(hNewIcon);
+            g_currentIcon = hOldIcon;
             return;
         }
+        if (hOldIcon) DestroyIcon(hOldIcon);
     }
 
     g_currentIcon = hNewIcon;
@@ -771,16 +781,16 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 
     InterlockedExchange(&g_isProcessingClick, 0);
 
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
+    if (IsWindow(g_trayHwnd)) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(InterlockedOr(&g_networkIsUp, 0) == 1), 0);
         // After a successful enable the NetWatch poll fallback may miss the state
         // change (g_networkIsUp was already pre-set to 1 by RunPowerShellCommand).
         // Trigger a recovery ping explicitly so DNS state updates promptly.
-        if (success && enable && g_networkIsUp) {
+        if (success && enable && InterlockedOr(&g_networkIsUp, 0)) {
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
         }
     }
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -818,20 +828,21 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
         }
         Wh_Log(L"Network reset completed");
         resetOk = TRUE;
+        InterlockedExchange(&g_networkIsUp, 1);
     } else {
         Wh_Log(L"Network reset failed to start or was cancelled");
     }
 
     InterlockedExchange(&g_isProcessingClick, 0);
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
-        if (resetOk && g_networkIsUp) {
+    if (IsWindow(g_trayHwnd)) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(InterlockedOr(&g_networkIsUp, 0) == 1), 0);
+        if (resetOk && InterlockedOr(&g_networkIsUp, 0)) {
             // Use 15s settle (wParam=1) to give DHCP/routing time to stabilise
             // after the release/renew before we attempt the DNS ping.
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
     }
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -848,13 +859,13 @@ void ProcessNetworkReset() {
         InterlockedExchange(&g_isProcessingClick, 0);
         return;
     }
-    g_lastClickTime = now;
+    InterlockedExchange(&g_lastClickTime, now);
 
     Wh_Log(L"Processing network reset (Middle Click)");
 
     // Show yellow immediately
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+    if (IsWindow(g_trayHwnd)) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)InterlockedOr(&g_networkIsUp, 0), 0);
     }
 
     DWORD threadId;
@@ -881,14 +892,14 @@ void ProcessTrayClick() {
         InterlockedExchange(&g_isProcessingClick, 0);
         return;
     }
-    g_lastClickTime = now;
+    InterlockedExchange(&g_lastClickTime, now);
 
     BOOL targetState = (InterlockedOr(&g_networkIsUp, 0) == 0);
     Wh_Log(L"Processing network toggle click. Target state: %s", targetState ? L"ON" : L"OFF");
 
     // Show yellow immediately
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+    if (IsWindow(g_trayHwnd)) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)InterlockedOr(&g_networkIsUp, 0), 0);
     }
 
     DWORD threadId;
@@ -918,15 +929,15 @@ DWORD WINAPI DnsPingWorkerProc(LPVOID) {
         }
         // Bail out if the network dropped or the mod is unloading mid-pass.
         if (InterlockedOr(&g_networkIsUp, 0) == 0) break;
-        if (g_shutdownEvent && WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0) break;
+        HANDLE hShutdown = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+        if (hShutdown && WaitForSingleObject(hShutdown, 0) == WAIT_OBJECT_0) break;
 
         BOOL up = ProbeDnsServer((DWORD)ip, InterlockedOr(&g_dnsProbe[i], 0));
         InterlockedExchange(&g_dnsUp[i], up ? 1 : 0);
     }
 
-    HWND hwnd = g_trayHwnd;
-    if (hwnd) {
-        PostMessageW(hwnd, WM_UPDATE_TRAY_STATE,
+    if (IsWindow(g_trayHwnd)) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE,
                      (WPARAM)(InterlockedOr(&g_networkIsUp, 0) == 1), 0);
     }
     InterlockedExchange(&g_dnsWorkerRunning, 0);
@@ -1036,7 +1047,7 @@ static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
 
 void ShowContextMenu(HWND hWnd) {
     HMENU hMenu = CreatePopupMenu();
-    BOOL netUp = (g_networkIsUp == 1);
+    BOOL netUp = (InterlockedOr(&g_networkIsUp, 0) == 1);
     AppendMenuW(hMenu, MF_STRING, MENU_TOGGLE_NET,
                 netUp ? L"Disable Network" : L"Enable Network");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -1137,7 +1148,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return 0;
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         Wh_Log(L"Explorer restarted — re-adding tray icon");
-        AddOrUpdateTrayIcon(hWnd, (BOOL)(g_networkIsUp == 1), TRUE);
+        AddOrUpdateTrayIcon(hWnd, (BOOL)(InterlockedOr(&g_networkIsUp, 0) == 1), TRUE);
         if (AnyDnsConfigured()) OnDnsPingTimer(hWnd);  // verify state asynchronously
         return 0;
     }
@@ -1170,13 +1181,14 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
             // Skip polls while a toggle/reset is in flight to avoid Yellow→Red flicker.
             bool shutdown = false;
             for (DWORD i = 0; i < NETWATCH_POLL_RETRIES; i++) {
-                DWORD r = WaitForSingleObject(g_shutdownEvent, NETWATCH_POLL_INTERVAL);
+                HANDLE hShutdown = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+                DWORD r = hShutdown ? WaitForSingleObject(hShutdown, NETWATCH_POLL_INTERVAL) : WAIT_TIMEOUT;
                 if (r == WAIT_OBJECT_0) { shutdown = true; break; }
-                if (g_isProcessingClick != 0) continue;
+                if (InterlockedOr(&g_isProcessingClick, 0) != 0) continue;
                 BOOL newState = CheckActualNetworkState();
-                LONG oldState = g_networkIsUp;
+                LONG oldState = InterlockedOr(&g_networkIsUp, 0);
                 InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
-                if (newState != (oldState == 1) && g_trayHwnd) {
+                if (newState != (oldState == 1) && IsWindow(g_trayHwnd)) {
                     PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
                     if (newState) PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
                 }
@@ -1189,7 +1201,8 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
             continue;
         }
 
-        HANDLE waits[2] = { hEvent, g_shutdownEvent };
+        HANDLE hSd = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+        HANDLE waits[2] = { hEvent, hSd };
         DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
 
         if (r == WAIT_OBJECT_0) {
@@ -1197,10 +1210,10 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
             // Skip while a toggle/reset is in flight — the worker owns g_networkIsUp
             // during that window and will post the definitive state when done.
             CloseHandle(notifyHandle);
-            if (g_isProcessingClick == 0) {
+            if (InterlockedOr(&g_isProcessingClick, 0) == 0) {
                 BOOL newState = CheckActualNetworkState();
                 InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
-                if (g_trayHwnd) {
+                if (IsWindow(g_trayHwnd)) {
                     PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
                     if (newState) {
                         PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
@@ -1247,7 +1260,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     if (!RegisterClassW(&wc)) {
         LogLastError(L"RegisterClassW");
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -1263,11 +1276,11 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (!hWnd) {
         LogLastError(L"CreateWindowExW");
         UnregisterClassW(wc.lpszClassName, g_hInstance);
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
-    g_trayHwnd = hWnd;
+    InterlockedExchangePointer((PVOID*)&g_trayHwnd, hWnd);
 
     // Unique AUMID so the OS doesn't group this icon with Windhawk's main window.
     IPropertyStore* pps = nullptr;
@@ -1310,8 +1323,8 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     UnregisterClassW(wc.lpszClassName, g_hInstance);
     InterlockedExchange(&g_trayIconInstalled, 0);
-    g_trayHwnd = nullptr;
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    InterlockedExchangePointer((PVOID*)&g_trayHwnd, nullptr);
+    if (SUCCEEDED(hrCo)) CoUninitialize();
 
     return 0;
 }
@@ -1351,7 +1364,12 @@ BOOL WhTool_ModInit() {
     }
 
     // Windhawk executable path (for "Open Windhawk" menu item)
-    GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
+    switch (GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+        case 0:
+        case ARRAYSIZE(g_windhawkPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return FALSE;
+    }
 
     // Load Windhawk icon from ddores.dll for the context menu
     UINT sysLen = GetSystemDirectoryW(g_ddoresDllPath, MAX_PATH);
@@ -1405,7 +1423,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    if (g_trayHwnd) {
+    if (IsWindow(g_trayHwnd)) {
         PostMessageW(g_trayHwnd, WM_SETTINGS_CHANGED, 0, 0);
     }
 }
@@ -1419,7 +1437,7 @@ void WhTool_ModUninit() {
     }
 
     // Step 2: close tray window (triggers PostQuitMessage)
-    if (g_trayHwnd) {
+    if (IsWindow(g_trayHwnd)) {
         PostMessageW(g_trayHwnd, WM_CLOSE, 0, 0);
     }
 

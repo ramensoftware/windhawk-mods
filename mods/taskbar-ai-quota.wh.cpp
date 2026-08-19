@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.10.2
+// @version         0.10.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -194,6 +194,7 @@ Have a suggestion or found a bug?
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -296,9 +297,13 @@ struct AppliedState {
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
 };
 
-struct TapHandler {
+struct PointerHandlers {
     UIElement element{nullptr};
-    winrt::event_token token{};
+    winrt::event_token tappedToken{};
+    winrt::event_token pointerMovedToken{};
+    winrt::event_token pointerExitedToken{};
+    winrt::event_token pointerCaptureLostToken{};
+    winrt::event_token pointerCanceledToken{};
 };
 
 struct MenuItemClickHandler {
@@ -308,9 +313,17 @@ struct MenuItemClickHandler {
 
 struct AccountUiRefs {
     StackPanel column{nullptr};
+    ToolTip toolTip{nullptr};
+    winrt::event_token toolTipOpenedToken{};
+    DispatcherTimer manualToolTipTimer{nullptr};
+    winrt::event_token manualToolTipTimerToken{};
     std::array<Border, 2> fills{Border{nullptr}, Border{nullptr}};
     TextBlock percent{nullptr};
     TextBlock label{nullptr};
+    POINT toolTipOpenCursor{};
+    bool hasToolTipOpenCursor = false;
+    bool reopenToolTipOnMove = false;
+    bool manualToolTipOpen = false;
 };
 
 struct QuotaUiInstance {
@@ -319,7 +332,7 @@ struct QuotaUiInstance {
     Grid injectionParent{nullptr};
     int quotaColumn = -1;
     bool insertedColumn = false;
-    std::vector<TapHandler> tapHandlers;
+    std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
@@ -538,10 +551,8 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
     return {255, 0x43, 0xA0, 0x47};
 }
 
-static ToolTip BuildQuotaToolTip(std::wstring const& tip, bool hasError) {
+static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
     constexpr double maxWidth = 460;
-    auto background = SolidColorBrush(winrt::Windows::UI::Color{0xF7, 0x1F, 0x1F, 0x1F});
-    auto foreground = SolidColorBrush(winrt::Windows::UI::Color{255, 0xF3, 0xF3, 0xF3});
     auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
     auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
     auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xA8, 0xD8, 0xFF});
@@ -704,17 +715,8 @@ static ToolTip BuildQuotaToolTip(std::wstring const& tip, bool hasError) {
         }
     }
 
-    ToolTip toolTip;
-    toolTip.Placement(wuxcp::PlacementMode::Top);
-    toolTip.VerticalOffset(20);
-    toolTip.Padding(Thickness{10, 8, 10, 8});
-    toolTip.Background(background);
-    toolTip.Foreground(foreground);
     toolTip.BorderBrush(border);
-    toolTip.BorderThickness(Thickness{1, 1, 1, 1});
-    toolTip.IsHitTestVisible(false);
     toolTip.Content(content);
-    return toolTip;
 }
 
 static void OpenUrl(PCWSTR url) {
@@ -2661,16 +2663,40 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
-    for (auto& handler : state.tapHandlers) {
+    for (auto& refs : state.accountRefs) {
+        refs.hasToolTipOpenCursor = false;
+        refs.reopenToolTipOnMove = false;
+        refs.manualToolTipOpen = false;
+        try {
+            if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
+        } catch (...) {}
+        try {
+            if (refs.manualToolTipTimer) {
+                refs.manualToolTipTimer.Tick(refs.manualToolTipTimerToken);
+            }
+        } catch (...) {}
+        try {
+            if (refs.toolTip) refs.toolTip.Opened(refs.toolTipOpenedToken);
+        } catch (...) {}
+        try {
+            if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
+        } catch (...) {}
+    }
+
+    for (auto& handler : state.pointerHandlers) {
         if (!handler.element) continue;
 
-        try { handler.element.Tapped(handler.token); } catch (...) {}
+        try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
+        try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
+        try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
+        try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
+        try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
         try { handler.element.ContextFlyout(nullptr); } catch (...) {}
         try {
             ToolTipService::SetToolTip(handler.element, winrt::Windows::Foundation::IInspectable{nullptr});
         } catch (...) {}
     }
-    state.tapHandlers.clear();
+    state.pointerHandlers.clear();
 
     for (auto& handler : state.menuItemClickHandlers) {
         if (!handler.item) continue;
@@ -2708,6 +2734,24 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         if (accounts.empty()) return nullptr;
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+        UINT toolTipDurationSeconds = 5;
+        if (!SystemParametersInfoW(SPI_GETMESSAGEDURATION, 0, &toolTipDurationSeconds, 0)) {
+            toolTipDurationSeconds = 5;
+        }
+        auto manualToolTipShowDuration =
+            std::chrono::seconds(std::clamp(toolTipDurationSeconds, 1u, 60u));
+        UINT toolTipHoverDelayMs = 400;
+        if (!SystemParametersInfoW(SPI_GETMOUSEHOVERTIME, 0, &toolTipHoverDelayMs, 0)) {
+            toolTipHoverDelayMs = 400;
+        }
+        auto manualToolTipHoverDelay =
+            std::chrono::milliseconds(std::clamp(toolTipHoverDelayMs, 100u, 2000u));
+        UINT toolTipMoveThresholdX = 4;
+        UINT toolTipMoveThresholdY = 4;
+        SystemParametersInfoW(SPI_GETMOUSEHOVERWIDTH, 0, &toolTipMoveThresholdX, 0);
+        SystemParametersInfoW(SPI_GETMOUSEHOVERHEIGHT, 0, &toolTipMoveThresholdY, 0);
+        toolTipMoveThresholdX = std::clamp(toolTipMoveThresholdX, 2u, 32u);
+        toolTipMoveThresholdY = std::clamp(toolTipMoveThresholdY, 2u, 32u);
 
         Grid root;
         root.Name(kRootName);
@@ -2802,14 +2846,75 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Children().Append(bars);
             }
 
-            ToolTipService::SetToolTip(col, BuildQuotaToolTip(L"loading...", false));
+            ToolTip toolTip;
+            toolTip.Placement(wuxcp::PlacementMode::Top);
+            toolTip.VerticalOffset(20);
+            toolTip.Padding(Thickness{10, 8, 10, 8});
+            toolTip.Background(SolidColorBrush(winrt::Windows::UI::Color{0xF7, 0x1F, 0x1F, 0x1F}));
+            toolTip.Foreground(SolidColorBrush(winrt::Windows::UI::Color{255, 0xF3, 0xF3, 0xF3}));
+            toolTip.BorderThickness(Thickness{1, 1, 1, 1});
+            toolTip.IsHitTestVisible(false);
+            UpdateQuotaToolTip(toolTip, L"loading...", false);
+            ToolTipService::SetToolTip(col, toolTip);
+            refs.toolTip = toolTip;
             ToolTipService::SetPlacement(col, wuxcp::PlacementMode::Top);
             UIElement tappedElement = col.as<UIElement>();
             QuotaUiInstance* statePtr = &state;
             int accountIndex = (int)i;
+            refs.toolTipOpenedToken = toolTip.Opened(
+                [hWnd = state.hWnd, accountIndex](winrt::Windows::Foundation::IInspectable const&,
+                                                  RoutedEventArgs const&) {
+                    if (g_unloading) return;
+
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState || accountIndex >= (int)uiState->accountRefs.size()) return;
+
+                        auto& refs = uiState->accountRefs[accountIndex];
+                        refs.hasToolTipOpenCursor = GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
+                    } catch (...) {}
+                });
+            DispatcherTimer manualToolTipTimer;
+            manualToolTipTimer.Interval(manualToolTipHoverDelay);
+            auto manualToolTipTimerToken = manualToolTipTimer.Tick(
+                [hWnd = state.hWnd, accountIndex, manualToolTipShowDuration](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    winrt::Windows::Foundation::IInspectable const&) {
+                    try {
+                        if (auto timer = sender.try_as<DispatcherTimer>()) timer.Stop();
+                        if (g_unloading) return;
+
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState || !uiState->quotaGrid ||
+                            accountIndex >= (int)uiState->accountRefs.size()) return;
+
+                        auto& refs = uiState->accountRefs[accountIndex];
+                        if (!refs.toolTip) return;
+                        if (refs.manualToolTipOpen) {
+                            refs.manualToolTipOpen = false;
+                            refs.reopenToolTipOnMove = true;
+                            refs.toolTip.IsOpen(false);
+                            return;
+                        }
+                        if (!refs.reopenToolTipOnMove) return;
+
+                        refs.hasToolTipOpenCursor =
+                            GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
+                        refs.toolTip.IsOpen(true);
+                        refs.reopenToolTipOnMove = false;
+                        refs.manualToolTipOpen = true;
+                        if (refs.manualToolTipTimer) {
+                            refs.manualToolTipTimer.Interval(manualToolTipShowDuration);
+                            refs.manualToolTipTimer.Start();
+                        }
+                    } catch (...) {}
+                });
+            refs.manualToolTipTimer = manualToolTipTimer;
+            refs.manualToolTipTimerToken = manualToolTipTimerToken;
             auto tappedToken = tappedElement.Tapped(
-                [statePtr, accountIndex, clickAction](winrt::Windows::Foundation::IInspectable const&,
-                                                     wuxi::TappedRoutedEventArgs const& e) {
+                [statePtr, accountIndex, clickAction, manualToolTipHoverDelay](
+                    winrt::Windows::Foundation::IInspectable const&,
+                    wuxi::TappedRoutedEventArgs const& e) {
                     if (g_unloading || !statePtr->quotaGrid) {
                         e.Handled(true);
                         return;
@@ -2822,10 +2927,102 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     }
                     if (needsLogin) StartLogin(accountIndex);
                     else if (clickAction == ClickAction::OpenDashboard) OpenDashboardForAccount(accountIndex);
-                    else RefreshQuota(accountIndex);
+                    else {
+                        RefreshQuota(accountIndex);
+                        try {
+                            if (e.PointerDeviceType() ==
+                                    winrt::Windows::Devices::Input::PointerDeviceType::Mouse &&
+                                accountIndex < (int)statePtr->accountRefs.size()) {
+                                auto& refs = statePtr->accountRefs[accountIndex];
+                                if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
+                                if (refs.manualToolTipOpen) {
+                                    refs.manualToolTipOpen = false;
+                                    if (refs.toolTip) refs.toolTip.IsOpen(false);
+                                }
+                                refs.hasToolTipOpenCursor =
+                                    GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
+                                refs.reopenToolTipOnMove = true;
+                                if (refs.manualToolTipTimer) {
+                                    refs.manualToolTipTimer.Interval(manualToolTipHoverDelay);
+                                    refs.manualToolTipTimer.Start();
+                                }
+                            }
+                        } catch (...) {}
+                    }
                     e.Handled(true);
                 });
-            state.tapHandlers.push_back({tappedElement, tappedToken});
+
+            // System XAML suppresses the automatic tooltip after a click until pointer re-entry.
+            // A short stationary hover reopens it; further movement dismisses it.
+            auto pointerMovedToken = tappedElement.PointerMoved(
+                [statePtr, accountIndex, manualToolTipHoverDelay,
+                 toolTipMoveThresholdX, toolTipMoveThresholdY](
+                    winrt::Windows::Foundation::IInspectable const&,
+                    wuxi::PointerRoutedEventArgs const& e) {
+                    if (g_unloading || !statePtr->quotaGrid ||
+                        accountIndex >= (int)statePtr->accountRefs.size()) return;
+
+                    try {
+                        if (e.Pointer().PointerDeviceType() !=
+                            winrt::Windows::Devices::Input::PointerDeviceType::Mouse) return;
+
+                        auto& refs = statePtr->accountRefs[accountIndex];
+                        if (!refs.toolTip) return;
+
+                        bool wasOpen = refs.toolTip.IsOpen();
+                        POINT cursor{};
+                        bool haveCursor = GetCursorPos(&cursor) != FALSE;
+                        bool trackingHover = wasOpen || refs.reopenToolTipOnMove ||
+                                             refs.manualToolTipOpen;
+                        if (trackingHover && refs.hasToolTipOpenCursor && haveCursor &&
+                            std::abs(cursor.x - refs.toolTipOpenCursor.x) < toolTipMoveThresholdX &&
+                            std::abs(cursor.y - refs.toolTipOpenCursor.y) < toolTipMoveThresholdY) {
+                            return;
+                        }
+                        if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
+                        bool rearmAfterMove = wasOpen || refs.reopenToolTipOnMove ||
+                                              refs.manualToolTipOpen;
+                        refs.manualToolTipOpen = false;
+                        refs.hasToolTipOpenCursor = false;
+                        if (wasOpen) {
+                            // Automatic and manual tooltips both dismiss on local pointer movement.
+                            refs.toolTip.IsOpen(false);
+                        }
+                        if (!rearmAfterMove) return;
+
+                        refs.reopenToolTipOnMove = true;
+                        refs.hasToolTipOpenCursor = haveCursor;
+                        if (haveCursor) refs.toolTipOpenCursor = cursor;
+                        if (refs.manualToolTipTimer) {
+                            refs.manualToolTipTimer.Interval(manualToolTipHoverDelay);
+                            refs.manualToolTipTimer.Start();
+                        }
+                    } catch (...) {}
+                });
+
+            auto closeToolTip =
+                [statePtr, accountIndex](winrt::Windows::Foundation::IInspectable const&,
+                                         wuxi::PointerRoutedEventArgs const&) {
+                    if (g_unloading || accountIndex >= (int)statePtr->accountRefs.size()) return;
+
+                    auto& refs = statePtr->accountRefs[accountIndex];
+                    refs.hasToolTipOpenCursor = false;
+                    refs.reopenToolTipOnMove = false;
+                    try {
+                        if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
+                    } catch (...) {}
+
+                    refs.manualToolTipOpen = false;
+                    try {
+                        if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
+                    } catch (...) {}
+                };
+            auto pointerExitedToken = tappedElement.PointerExited(closeToolTip);
+            auto pointerCaptureLostToken = tappedElement.PointerCaptureLost(closeToolTip);
+            auto pointerCanceledToken = tappedElement.PointerCanceled(closeToolTip);
+            state.pointerHandlers.push_back({tappedElement, tappedToken, pointerMovedToken,
+                                             pointerExitedToken, pointerCaptureLostToken,
+                                             pointerCanceledToken});
 
             MenuFlyout menu;
             MenuFlyoutItem refreshAllItem;
@@ -3071,9 +3268,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
 
             if (tip != ap.tip) {
-                if (ui.column) {
-                    ToolTipService::SetToolTip(ui.column, BuildQuotaToolTip(tip, !d.error.empty()));
-                }
+                // Keep the attached ToolTip object alive so an in-place refresh doesn't reset
+                // ToolTipService's pointer-over state and require a leave/re-enter cycle.
+                if (ui.toolTip) UpdateQuotaToolTip(ui.toolTip, tip, !d.error.empty());
                 ap.tip = tip;
             }
 
@@ -3274,7 +3471,7 @@ static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
     for (auto& state : g_uiInstances) {
         if (state->hWnd && IsWindow(state->hWnd)) continue;
 
-        state->tapHandlers.clear();
+        state->pointerHandlers.clear();
         state->quotaGrid = nullptr;
         state->injectionParent = nullptr;
         state->quotaColumn = -1;

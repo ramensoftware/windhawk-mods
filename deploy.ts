@@ -577,6 +577,7 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
+        versionPreRelease: enrichment.app.versionPreRelease,
     };
 
     const mods: Record<string, any> = {};
