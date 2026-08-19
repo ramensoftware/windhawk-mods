@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.1.3
+// @version         1.1.4
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -128,9 +128,10 @@ enum class Position {
 };
 
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
-// confirmator's UI thread, so the members are atomic. There is nothing to tear
-// so it costs nothing here, and it keeps a settings change from being read
-// half-applied.
+// confirmator's UI thread, so the members are atomic. Each field is still read
+// separately, so a settings change landing mid-placement can put one indicator
+// on screen with a mix of old and new values. That was true before the atomics
+// too, and one misplaced indicator is the whole cost.
 struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
@@ -151,7 +152,7 @@ struct WinrtRect {
 // `rect` comes back from the original function holding the size Windows chose
 // and the position it picked from the built-in setting; only the position is
 // replaced.
-void PlaceInArea(const WinrtRect& area, UINT dpiX, UINT dpiY, WinrtRect* rect) {
+void PlaceInArea(const WinrtRect& area, int offsetX, int offsetY, WinrtRect* rect) {
     float centerX = (area.Width - rect->Width) / 2;
     float right = area.Width - rect->Width;
 
@@ -200,11 +201,8 @@ void PlaceInArea(const WinrtRect& area, UINT dpiX, UINT dpiY, WinrtRect* rect) {
             break;
     }
 
-    // The rect is in the target monitor's physical pixels, so a raw offset
-    // would cover less ground the more the monitor is scaled up. Scaling by the
-    // monitor's DPI keeps the setting meaning the same distance everywhere.
-    rect->X += MulDiv(g_settings.offsetX.load(), dpiX, 96);
-    rect->Y += MulDiv(g_settings.offsetY.load(), dpiY, 96);
+    rect->X += offsetX;
+    rect->Y += offsetY;
 
     // An offset large enough to push the indicator out of the area would just
     // make it invisible with no way to tell why, so keep it inside.
@@ -231,22 +229,30 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              const WinrtRect* rect) {
     Wh_Log(L">");
 
-    // Resolve the scaling of the monitor this rect belongs to, before the
-    // origin is shifted away.
-    UINT dpiX = 96;
-    UINT dpiY = 96;
-    RECT areaRect{
-        .left = (LONG)rect->X,
-        .top = (LONG)rect->Y,
-        .right = (LONG)(rect->X + rect->Width),
-        .bottom = (LONG)(rect->Y + rect->Height),
-    };
-    if (HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST)) {
-        UINT x = 96;
-        UINT y = 96;
-        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &x, &y)) && x && y) {
-            dpiX = x;
-            dpiY = y;
+    // Read the offsets once so the placement below uses one consistent pair.
+    int offsetSettingX = g_settings.offsetX.load();
+    int offsetSettingY = g_settings.offsetY.load();
+
+    // The rect is in the target monitor's physical pixels, so a raw offset would
+    // cover less ground the more that monitor is scaled up. Scaling by its DPI
+    // keeps the setting meaning the same distance everywhere. Both offsets are
+    // zero by default, and then there is nothing to scale and no reason to look
+    // the monitor up on every showing. Resolve it before the origin is shifted
+    // away.
+    if (offsetSettingX || offsetSettingY) {
+        RECT areaRect{
+            .left = (LONG)rect->X,
+            .top = (LONG)rect->Y,
+            .right = (LONG)(rect->X + rect->Width),
+            .bottom = (LONG)(rect->Y + rect->Height),
+        };
+        HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST);
+        UINT dpiX = 96;
+        UINT dpiY = 96;
+        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY)) &&
+            dpiX && dpiY) {
+            offsetSettingX = MulDiv(offsetSettingX, dpiX, 96);
+            offsetSettingY = MulDiv(offsetSettingY, dpiY, 96);
         }
     }
 
@@ -261,7 +267,7 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
         pThis, retval, &shiftedRect);
 
     if (result) {
-        PlaceInArea(shiftedRect, dpiX, dpiY, result);
+        PlaceInArea(shiftedRect, offsetSettingX, offsetSettingY, result);
 
         // Shift the result back.
         result->X += offsetX;
