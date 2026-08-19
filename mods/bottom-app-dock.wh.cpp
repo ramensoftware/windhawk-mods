@@ -2,19 +2,19 @@
 // @id              bottom-app-dock
 // @name            Bottom App Dock
 // @description     Dock premium inferior, multi-monitor, com apps fixados, auto-hide e integração visual ao Windows
-// @version         0.9
+// @version         0.12.4
 // @author          Keygreen3D
 // @github          https://github.com/keygreen3d
 // @include         explorer.exe
-// @compilerOptions -lshell32 -ldwmapi -lgdi32 -ladvapi32
+// @compilerOptions -lshell32 -ldwmapi -lgdi32 -ladvapi32 -lole32 -lgdiplus
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Bottom App Dock v0.9 Premium
+# Bottom App Dock v0.12.4 Premium
 
-Mantém toda a lógica estável da v0.8.2 e adiciona acabamento visual.
+Mantém a base visual estável e adiciona previews estilo GNOME, ícones estáveis e reconciliação dinâmica de monitores.
 
 ## Visual
 - System Backdrop do Windows 11.
@@ -86,7 +86,7 @@ O menu abre acima da dock e fecha ao clicar fora.
   $name: Tempo para esconder
   $description: Tempo em milissegundos
 
-- hoverScale: 118
+- hoverScale: 100
   $name: Ampliação no hover
   $description: Percentual do tamanho do ícone apontado
 
@@ -102,7 +102,9 @@ O menu abre acima da dock e fecha ao clicar fora.
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <dwmapi.h>
+#include <gdiplus.h>
 
 #include <vector>
 #include <string>
@@ -119,6 +121,8 @@ constexpr DWORD DWM_ATTR_DARK_MODE = 20;
 constexpr DWORD DWM_ATTR_CORNER_PREFERENCE = 33;
 constexpr DWORD DWM_ATTR_BORDER_COLOR = 34;
 constexpr DWORD DWM_ATTR_SYSTEM_BACKDROP = 38;
+constexpr DWORD DWM_ATTR_NCRENDERING_POLICY = 2;
+constexpr int DWM_NCRP_DISABLED = 1;
 
 constexpr int DWM_CORNER_ROUND = 2;
 
@@ -148,7 +152,7 @@ struct Settings {
     int activationZone = 3;
     int hideDelay = 650;
 
-    int hoverScale = 118;
+    int hoverScale = 100;
 
     bool premiumBackdrop = true;
     bool hoverHighlight = true;
@@ -182,6 +186,38 @@ struct EnumeratedWindow {
     HICON icon = nullptr;
 };
 
+struct DockInstance {
+    HWND hwnd = nullptr;
+    HMONITOR monitor = nullptr;
+
+    bool visible = false;
+    bool trackingMouse = false;
+
+    int hoveredIndex = -1;
+    ULONGLONG hoverSince = 0;
+
+    ULONGLONG outsideSince = 0;
+};
+
+struct PreviewItem {
+    HWND target = nullptr;
+    HTHUMBNAIL thumbnail = nullptr;
+    RECT rect = {};
+    RECT closeRect = {};
+    std::wstring title;
+};
+
+struct PreviewState {
+    HWND hwnd = nullptr;
+    HWND ownerDock = nullptr;
+    std::wstring appPath;
+    std::vector<PreviewItem> items;
+    int hoveredItem = -1;
+    int hoveredClose = -1;
+    ULONGLONG hideDeadline = 0;
+    bool visible = false;
+};
+
 
 // ============================================================
 // GLOBAIS
@@ -189,7 +225,6 @@ struct EnumeratedWindow {
 
 static Settings g_settings;
 
-static HWND g_dockWindow = nullptr;
 static HANDLE g_thread = nullptr;
 
 static std::vector<AppGroup> g_apps;
@@ -197,26 +232,54 @@ static std::vector<std::wstring> g_pinnedPaths;
 static std::vector<std::wstring> g_dynamicOrder;
 static std::vector<EnumeratedWindow> g_enumWindows;
 
-static HMONITOR g_currentMonitor = nullptr;
+struct RestoreWindowState {
+    HWND hwnd = nullptr;
+    bool wasMaximized = false;
+};
 
-static bool g_visible = false;
+static std::vector<RestoreWindowState>
+    g_restoreWindowStates;
+
+
+static std::vector<DockInstance> g_dockInstances;
+static PreviewState g_preview;
+
+static HINSTANCE g_moduleInstance = nullptr;
+static ULONG_PTR g_gdiplusToken = 0;
+static const wchar_t* g_dockClassName = L"WindhawkBottomAppDockV010";
+static const wchar_t* g_previewClassName = L"WindhawkBottomAppPreviewV010";
+
 static bool g_lightTheme = false;
 static bool g_contextMenuOpen = false;
 
-static bool g_trackingMouse = false;
-static int g_hoveredIndex = -1;
-
-static ULONGLONG g_outsideSince = 0;
 static ULONGLONG g_lastRefresh = 0;
 static ULONGLONG g_keepVisibleUntil = 0;
 
 static COLORREF g_accentColor =
     RGB(0, 120, 215);
 
+// Lixeira fixa estilo macOS
+static RECT g_recycleRect = {};
+static int g_recycleSeparatorX = -1;
+static HICON g_recycleIcon = nullptr;
+static bool g_recycleFull = false;
+static ULONGLONG g_lastRecycleRefresh = 0;
+
+constexpr int HIT_RECYCLE_BIN = -2;
 constexpr UINT_PTR MAIN_TIMER = 1;
 
 constexpr UINT WM_DOCK_SETTINGS_CHANGED =
     WM_APP + 1;
+
+constexpr ULONGLONG PREVIEW_HOVER_DELAY = 320;
+constexpr ULONGLONG PREVIEW_HIDE_DELAY = 260;
+
+static void EnsureDockInstancesForCurrentMonitors();
+static void HidePreview();
+static void SwitchWindowStrong(HWND hwnd);
+static COLORREF BlendColor(COLORREF a, COLORREF b, int percentB);
+static void DrawRoundedFill(HDC hdc, const RECT& rect, int radius, COLORREF color);
+static void ApplyPreviewRegion();
 
 static const wchar_t* REG_PATH =
     L"Software\\Windhawk\\BottomAppDock";
@@ -260,6 +323,68 @@ static std::wstring GetFileName(
         return path;
 
     return path.substr(pos + 1);
+}
+
+
+static bool IsExcludedAppPath(
+    const std::wstring& path) {
+
+    std::wstring fileName =
+        GetFileName(path);
+
+    // Raycast
+    if (_wcsicmp(
+            fileName.c_str(),
+            L"Raycast.exe") == 0) {
+        return true;
+    }
+
+    // Ferramenta de Captura do Windows
+    if (_wcsicmp(
+            fileName.c_str(),
+            L"SnippingTool.exe") == 0) {
+        return true;
+    }
+
+    if (_wcsicmp(
+            fileName.c_str(),
+            L"ScreenClippingHost.exe") == 0) {
+        return true;
+    }
+
+    // Painel de notificações e superfícies temporárias do shell do Windows.
+    if (_wcsicmp(
+            fileName.c_str(),
+            L"ShellExperienceHost.exe") == 0) {
+        return true;
+    }
+
+    if (_wcsicmp(
+            fileName.c_str(),
+            L"ShellHost.exe") == 0) {
+        return true;
+    }
+
+    return false;
+}
+
+static DockInstance* FindDockInstance(
+    HWND hwnd) {
+
+    for (auto& dock : g_dockInstances) {
+        if (dock.hwnd == hwnd)
+            return &dock;
+    }
+
+    return nullptr;
+}
+
+
+static bool IsDockWindow(
+    HWND hwnd) {
+
+    return FindDockInstance(hwnd) != nullptr ||
+           (g_preview.hwnd && hwnd == g_preview.hwnd);
 }
 
 
@@ -425,8 +550,14 @@ static void ApplyPremiumDwm(
         sizeof(dark));
 
 
+    bool previewWindow =
+        g_preview.hwnd &&
+        hwnd == g_preview.hwnd;
+
     int corner =
-        DWM_CORNER_ROUND;
+        previewWindow
+            ? 1   // DWMWCP_DONOTROUND
+            : DWM_CORNER_ROUND;
 
     DwmSetWindowAttribute(
         hwnd,
@@ -447,8 +578,15 @@ static void ApplyPremiumDwm(
         sizeof(borderColor));
 
 
+    bool isPreview =
+        g_preview.hwnd &&
+        hwnd == g_preview.hwnd;
+
+    // O preview usa SetWindowRgn para definir exatamente o que aparece.
+    // Portanto o DWM não deve desenhar backdrop nem sombra/moldura própria
+    // ao redor da área transparente.
     int backdrop =
-        g_settings.premiumBackdrop
+        (g_settings.premiumBackdrop && !isPreview)
             ? DWM_BACKDROP_TRANSIENT
             : 1;
 
@@ -458,6 +596,30 @@ static void ApplyPremiumDwm(
             DWM_ATTR_SYSTEM_BACKDROP),
         &backdrop,
         sizeof(backdrop));
+
+    if (isPreview) {
+
+        int ncPolicy =
+            DWM_NCRP_DISABLED;
+
+        DwmSetWindowAttribute(
+            hwnd,
+            static_cast<DWMWINDOWATTRIBUTE>(
+                DWM_ATTR_NCRENDERING_POLICY),
+            &ncPolicy,
+            sizeof(ncPolicy));
+    }
+
+    // Força o DWM a recalcular a moldura sem efeitos antigos presos.
+    SetWindowPos(
+        hwnd,
+        nullptr,
+        0, 0, 0, 0,
+        SWP_NOMOVE |
+        SWP_NOSIZE |
+        SWP_NOZORDER |
+        SWP_NOACTIVATE |
+        SWP_FRAMECHANGED);
 }
 
 
@@ -693,7 +855,6 @@ static HICON GetIconFromPath(
 
     SHFILEINFOW sfi = {};
 
-
     if (SHGetFileInfoW(
             path.c_str(),
             FILE_ATTRIBUTE_NORMAL,
@@ -705,12 +866,10 @@ static HICON GetIconFromPath(
         return sfi.hIcon;
     }
 
-
     HICON fallback =
         LoadIconW(
             nullptr,
             IDI_APPLICATION);
-
 
     return fallback
         ? CopyIcon(fallback)
@@ -772,7 +931,7 @@ static bool IsWindowEligible(
         return false;
 
 
-    if (hwnd == g_dockWindow)
+    if (IsDockWindow(hwnd))
         return false;
 
 
@@ -814,11 +973,57 @@ static bool IsWindowEligible(
 
         _wcsicmp(
             cls,
-            L"WorkerW") == 0) {
+            L"WorkerW") == 0 ||
+
+        // Windows 10/11 shell flyouts: notificações, calendário,
+        // quick settings e superfícies XAML temporárias.
+        _wcsicmp(
+            cls,
+            L"Windows.UI.Core.CoreWindow") == 0 ||
+
+        _wcsicmp(
+            cls,
+            L"XamlExplorerHostIslandWindow") == 0 ||
+
+        _wcsicmp(
+            cls,
+            L"ControlCenterWindow") == 0 ||
+
+        _wcsicmp(
+            cls,
+            L"NotificationCenterWindow") == 0) {
 
         return false;
     }
 
+wchar_t windowTitle[512] = {};
+
+GetWindowTextW(
+    hwnd,
+    windowTitle,
+    ARRAYSIZE(windowTitle));
+
+if (_wcsicmp(
+        windowTitle,
+        L"Nova notificação") == 0 ||
+    _wcsicmp(
+        windowTitle,
+        L"New notification") == 0 ||
+    _wcsicmp(
+        windowTitle,
+        L"Notificações") == 0 ||
+    _wcsicmp(
+        windowTitle,
+        L"Notifications") == 0 ||
+    _wcsicmp(
+        windowTitle,
+        L"Central de Ações") == 0 ||
+    _wcsicmp(
+        windowTitle,
+        L"Action Center") == 0) {
+
+    return false;
+}
 
     BOOL cloaked = FALSE;
 
@@ -872,6 +1077,9 @@ static BOOL CALLBACK EnumWindowsProc(
 
 
     if (path.empty())
+        return TRUE;
+
+    if (IsExcludedAppPath(path))
         return TRUE;
 
 
@@ -952,6 +1160,24 @@ static void BuildDockApps() {
     ClearApps();
     ClearEnumeratedWindows();
 
+    g_pinnedPaths.erase(
+        std::remove_if(
+            g_pinnedPaths.begin(),
+            g_pinnedPaths.end(),
+            [](const std::wstring& path) {
+                return IsExcludedAppPath(path);
+            }),
+        g_pinnedPaths.end());
+
+    g_dynamicOrder.erase(
+        std::remove_if(
+            g_dynamicOrder.begin(),
+            g_dynamicOrder.end(),
+            [](const std::wstring& path) {
+                return IsExcludedAppPath(path);
+            }),
+        g_dynamicOrder.end());
+
 
     EnumWindows(
         EnumWindowsProc,
@@ -1013,6 +1239,9 @@ static void BuildDockApps() {
         [&](const std::wstring& path,
             bool pinned) {
 
+        if (IsExcludedAppPath(path))
+            return;
+
 
         AppGroup app;
 
@@ -1055,15 +1284,11 @@ static void BuildDockApps() {
             app.running = true;
 
 
-            if (!app.icon &&
-                item.icon) {
-
-                app.icon =
-                    CopyIcon(item.icon);
-
-
-                app.title =
-                    item.title;
+            // O ícone da dock representa o aplicativo, não a pasta/documento
+            // atualmente exibido pela janela. O título continua específico
+            // para uso nos previews.
+            if (app.title == GetFileName(path)) {
+                app.title = item.title;
             }
         }
 
@@ -1100,12 +1325,215 @@ static void BuildDockApps() {
 
     ClearEnumeratedWindows();
 
+}
 
-    if (g_hoveredIndex >=
-        static_cast<int>(
-            g_apps.size())) {
 
-        g_hoveredIndex = -1;
+// ============================================================
+// LIXEIRA FIXA
+// ============================================================
+
+static bool RefreshRecycleBinIcon() {
+
+    SHQUERYRBINFO rbInfo = {};
+    rbInfo.cbSize = sizeof(rbInfo);
+
+    HRESULT hr =
+        SHQueryRecycleBinW(
+            nullptr,
+            &rbInfo);
+
+    if (FAILED(hr))
+        return false;
+
+    bool full =
+        rbInfo.i64NumItems > 0;
+
+    if (g_recycleIcon &&
+        full == g_recycleFull) {
+        return false;
+    }
+
+    // Obtém o ícone real da Lixeira diretamente do namespace do Shell.
+    // Assim não dependemos de IDs numéricos de SHSTOCKICONID.
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HICON newIcon = nullptr;
+
+    if (SUCCEEDED(
+            SHParseDisplayName(
+                L"shell:RecycleBinFolder",
+                nullptr,
+                &pidl,
+                0,
+                nullptr)) &&
+        pidl) {
+
+        SHFILEINFOW sfi = {};
+
+        if (SHGetFileInfoW(
+                reinterpret_cast<LPCWSTR>(pidl),
+                0,
+                &sfi,
+                sizeof(sfi),
+                SHGFI_PIDL |
+                SHGFI_ICON |
+                SHGFI_LARGEICON)) {
+
+            newIcon = sfi.hIcon;
+        }
+
+        CoTaskMemFree(pidl);
+    }
+
+    if (!newIcon)
+        return false;
+
+    HICON oldIcon =
+        g_recycleIcon;
+
+    g_recycleIcon =
+        newIcon;
+
+    g_recycleFull =
+        full;
+
+    if (oldIcon)
+        DestroyIcon(oldIcon);
+
+    return true;
+}
+
+static void OpenRecycleBin() {
+
+    ShellExecuteW(
+        nullptr,
+        L"open",
+        L"shell:RecycleBinFolder",
+        nullptr,
+        nullptr,
+        SW_SHOWNORMAL);
+}
+
+
+static void EmptyRecycleBin(
+    HWND owner) {
+
+    SHEmptyRecycleBinW(
+        owner,
+        nullptr,
+        0);
+
+    RefreshRecycleBinIcon();
+
+    for (const auto& dock :
+         g_dockInstances) {
+
+        if (dock.hwnd) {
+            InvalidateRect(
+                dock.hwnd,
+                nullptr,
+                TRUE);
+        }
+    }
+}
+
+
+static void ShowRecycleContextMenu(
+    HWND hwnd,
+    POINT screenPoint) {
+
+    HidePreview();
+
+    HMENU menu =
+        CreatePopupMenu();
+
+    if (!menu)
+        return;
+
+    AppendMenuW(
+        menu,
+        MF_STRING,
+        1,
+        L"Abrir Lixeira");
+
+    AppendMenuW(
+        menu,
+        MF_SEPARATOR,
+        0,
+        nullptr);
+
+    AppendMenuW(
+        menu,
+        MF_STRING,
+        2,
+        L"Esvaziar Lixeira");
+
+    LONG_PTR oldExStyle =
+        GetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE);
+
+    g_contextMenuOpen = true;
+    g_keepVisibleUntil =
+        GetTickCount64() + 5000;
+
+    SetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE,
+        oldExStyle &
+            ~WS_EX_NOACTIVATE);
+
+    SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE |
+        SWP_NOSIZE |
+        SWP_FRAMECHANGED);
+
+    SetForegroundWindow(hwnd);
+    SetActiveWindow(hwnd);
+    BringWindowToTop(hwnd);
+
+    UINT command =
+        TrackPopupMenu(
+            menu,
+            TPM_RETURNCMD |
+            TPM_RIGHTBUTTON |
+            TPM_BOTTOMALIGN,
+            screenPoint.x,
+            screenPoint.y,
+            0,
+            hwnd,
+            nullptr);
+
+    PostMessageW(
+        hwnd,
+        WM_NULL,
+        0,
+        0);
+
+    DestroyMenu(menu);
+
+    SetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE,
+        oldExStyle);
+
+    SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE |
+        SWP_NOSIZE |
+        SWP_NOACTIVATE |
+        SWP_FRAMECHANGED);
+
+    g_contextMenuOpen = false;
+
+    if (command == 1) {
+        OpenRecycleBin();
+    } else if (command == 2) {
+        EmptyRecycleBin(hwnd);
     }
 }
 
@@ -1115,69 +1543,65 @@ static void BuildDockApps() {
 // ============================================================
 
 static void PositionDock(
-    HMONITOR monitor) {
+    DockInstance& dock) {
 
-    if (!g_dockWindow ||
-        !monitor)
+    if (!dock.hwnd ||
+        !dock.monitor)
         return;
 
-
     MONITORINFO mi = {};
-
-    mi.cbSize =
-        sizeof(mi);
-
+    mi.cbSize = sizeof(mi);
 
     if (!GetMonitorInfoW(
-            monitor,
+            dock.monitor,
             &mi))
         return;
 
-
-    int count =
+    const int count =
         static_cast<int>(
             g_apps.size());
 
+    const int recycleGap = 14;
+    const int separatorWidth = 1;
 
-    int width =
-        g_settings.sidePadding * 2;
-
+    int appsWidth = 0;
 
     if (count > 0) {
-
-        width +=
+        appsWidth =
             count *
             g_settings.iconSize;
 
-        width +=
+        appsWidth +=
             (count - 1) *
             g_settings.iconSpacing;
-
-    } else {
-
-        width = 56;
     }
 
+    int width =
+        g_settings.sidePadding * 2 +
+        appsWidth +
+        g_settings.iconSize;
+
+    if (count > 0) {
+        width +=
+            recycleGap * 2 +
+            separatorWidth;
+    }
 
     int screenWidth =
         mi.rcMonitor.right -
         mi.rcMonitor.left;
 
-
     int x =
         mi.rcMonitor.left +
-        (screenWidth - width) /
-            2;
-
+        (screenWidth - width) / 2;
 
     int y =
         mi.rcMonitor.bottom -
         g_settings.dockHeight -
         g_settings.bottomMargin;
 
-
     SetWindowPos(
-        g_dockWindow,
+        dock.hwnd,
         HWND_TOPMOST,
         x,
         y,
@@ -1186,39 +1610,65 @@ static void PositionDock(
         SWP_NOACTIVATE |
         SWP_NOOWNERZORDER);
 
-
     int left =
         g_settings.sidePadding;
 
+    const int top =
+        (g_settings.dockHeight -
+         g_settings.iconSize) /
+        2 - 2;
 
     for (auto& app :
          g_apps) {
 
-        int top =
-            (g_settings.dockHeight -
-             g_settings.iconSize) /
-            2 - 2;
-
-
         app.rect = {
-
             left,
             top,
-
-            left +
-                g_settings.iconSize,
-
-            top +
-                g_settings.iconSize
+            left + g_settings.iconSize,
+            top + g_settings.iconSize
         };
-
 
         left +=
             g_settings.iconSize +
             g_settings.iconSpacing;
     }
-}
 
+    if (count > 0) {
+
+        // Remove o último spacing virtual para obter o fim real dos apps.
+        int appsRight =
+            g_settings.sidePadding +
+            appsWidth;
+
+        g_recycleSeparatorX =
+            appsRight +
+            recycleGap;
+
+        int recycleLeft =
+            g_recycleSeparatorX +
+            separatorWidth +
+            recycleGap;
+
+        g_recycleRect = {
+            recycleLeft,
+            top,
+            recycleLeft + g_settings.iconSize,
+            top + g_settings.iconSize
+        };
+
+    } else {
+
+        g_recycleSeparatorX = -1;
+
+        g_recycleRect = {
+            g_settings.sidePadding,
+            top,
+            g_settings.sidePadding +
+                g_settings.iconSize,
+            top + g_settings.iconSize
+        };
+    }
+}
 
 // ============================================================
 // REFRESH
@@ -1226,33 +1676,39 @@ static void PositionDock(
 
 static void RefreshDock() {
 
+    g_restoreWindowStates.erase(
+        std::remove_if(
+            g_restoreWindowStates.begin(),
+            g_restoreWindowStates.end(),
+            [](const RestoreWindowState& state) {
+                return
+                    !state.hwnd ||
+                    !IsWindow(state.hwnd);
+            }),
+        g_restoreWindowStates.end());
+
     BuildDockApps();
 
+    for (auto& dock :
+         g_dockInstances) {
 
-    if (!g_currentMonitor) {
+        if (!dock.hwnd)
+            continue;
 
-        POINT cursor = {};
+        if (dock.hoveredIndex >=
+            static_cast<int>(
+                g_apps.size())) {
 
+            dock.hoveredIndex = -1;
+        }
 
-        GetCursorPos(
-            &cursor);
+        PositionDock(dock);
 
-
-        g_currentMonitor =
-            MonitorFromPoint(
-                cursor,
-                MONITOR_DEFAULTTOPRIMARY);
+        InvalidateRect(
+            dock.hwnd,
+            nullptr,
+            TRUE);
     }
-
-
-    PositionDock(
-        g_currentMonitor);
-
-
-    InvalidateRect(
-        g_dockWindow,
-        nullptr,
-        TRUE);
 }
 
 
@@ -1347,6 +1803,56 @@ static bool HasMaximizedWindowOnMonitor(
 }
 
 
+static void RememberWindowRestoreState(
+    HWND hwnd,
+    bool wasMaximized) {
+
+    for (auto& state :
+         g_restoreWindowStates) {
+
+        if (state.hwnd == hwnd) {
+            state.wasMaximized =
+                wasMaximized;
+            return;
+        }
+    }
+
+    RestoreWindowState state;
+    state.hwnd = hwnd;
+    state.wasMaximized =
+        wasMaximized;
+
+    g_restoreWindowStates.push_back(
+        state);
+}
+
+
+static bool TakeWindowRestoreState(
+    HWND hwnd,
+    bool& wasMaximized) {
+
+    for (auto it =
+             g_restoreWindowStates.begin();
+         it !=
+             g_restoreWindowStates.end();
+         ++it) {
+
+        if (it->hwnd == hwnd) {
+
+            wasMaximized =
+                it->wasMaximized;
+
+            g_restoreWindowStates.erase(
+                it);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 // ============================================================
 // ATIVAÇÃO
 // ============================================================
@@ -1357,50 +1863,82 @@ typedef VOID (WINAPI*
         BOOL);
 
 
-static void RestoreWindowPreservingState(
+static void MinimizeWindowPreservingState(
     HWND hwnd) {
 
     if (!hwnd ||
         !IsWindow(hwnd))
         return;
 
+    bool wasMaximized =
+        IsZoomed(hwnd) != FALSE;
 
     WINDOWPLACEMENT placement = {};
-
-
     placement.length =
         sizeof(placement);
 
-
-    if (!GetWindowPlacement(
+    if (GetWindowPlacement(
             hwnd,
             &placement)) {
 
-        ShowWindowAsync(
-            hwnd,
-            SW_RESTORE);
+        if (placement.showCmd ==
+            SW_SHOWMAXIMIZED) {
 
-        return;
+            wasMaximized = true;
+        }
     }
 
+    RememberWindowRestoreState(
+        hwnd,
+        wasMaximized);
+
+    ShowWindowAsync(
+        hwnd,
+        SW_MINIMIZE);
+}
+
+
+static bool RestoreWindowForActivation(
+    HWND hwnd) {
+
+    if (!hwnd ||
+        !IsWindow(hwnd))
+        return false;
 
     if (!IsIconic(hwnd))
-        return;
+        return false;
 
+    bool restoreMaximized = false;
 
-    if (placement.flags &
-        WPF_RESTORETOMAXIMIZED) {
-
-        ShowWindowAsync(
+    bool foundState =
+        TakeWindowRestoreState(
             hwnd,
-            SW_MAXIMIZE);
+            restoreMaximized);
 
-    } else {
+    if (!foundState) {
 
-        ShowWindowAsync(
-            hwnd,
-            SW_RESTORE);
+        WINDOWPLACEMENT placement = {};
+        placement.length =
+            sizeof(placement);
+
+        if (GetWindowPlacement(
+                hwnd,
+                &placement)) {
+
+            restoreMaximized =
+                (placement.flags &
+                 WPF_RESTORETOMAXIMIZED) != 0;
+        }
     }
+
+    // Primeiro tira a janela do estado minimizado.
+    // A maximização final será aplicada DEPOIS de trazê-la ao foreground,
+    // evitando que SwitchToThisWindow/SetForegroundWindow reverta o estado.
+    ShowWindow(
+        hwnd,
+        SW_RESTORE);
+
+    return restoreMaximized;
 }
 
 
@@ -1411,17 +1949,24 @@ static void SwitchWindowStrong(
         !IsWindow(hwnd))
         return;
 
+    bool wasIconic =
+        IsIconic(hwnd) != FALSE;
 
-    RestoreWindowPreservingState(
-        hwnd);
+    bool restoreMaximized =
+        false;
 
+    if (wasIconic) {
+
+        restoreMaximized =
+            RestoreWindowForActivation(
+                hwnd);
+    }
 
     keybd_event(
         VK_MENU,
         0,
         0,
         0);
-
 
     keybd_event(
         VK_MENU,
@@ -1429,11 +1974,9 @@ static void SwitchWindowStrong(
         KEYEVENTF_KEYUP,
         0);
 
-
     HMODULE user32 =
         GetModuleHandleW(
             L"user32.dll");
-
 
     if (user32) {
 
@@ -1445,7 +1988,6 @@ static void SwitchWindowStrong(
                     user32,
                     "SwitchToThisWindow"));
 
-
         if (switchFn) {
 
             switchFn(
@@ -1454,12 +1996,31 @@ static void SwitchWindowStrong(
         }
     }
 
+    BringWindowToTop(
+        hwnd);
 
-    BringWindowToTop(hwnd);
+    SetForegroundWindow(
+        hwnd);
 
-    SetForegroundWindow(hwnd);
+    // IMPORTANTE:
+    // maximiza por último. Nas versões anteriores a janela era
+    // maximizada antes de SwitchToThisWindow, e essa chamada podia
+    // restaurá-la novamente para o tamanho normal.
+    if (wasIconic &&
+        restoreMaximized &&
+        IsWindow(hwnd)) {
+
+        ShowWindow(
+            hwnd,
+            SW_MAXIMIZE);
+
+        BringWindowToTop(
+            hwnd);
+
+        SetForegroundWindow(
+            hwnd);
+    }
 }
-
 
 // ============================================================
 // AÇÕES
@@ -1473,7 +2034,7 @@ static void LaunchNewInstance(
 
 
     ShellExecuteW(
-        g_dockWindow,
+        nullptr,
         L"open",
         app.path.c_str(),
         nullptr,
@@ -1565,9 +2126,8 @@ static void ActivateGroup(
 
         if (foreground == hwnd) {
 
-            ShowWindowAsync(
-                hwnd,
-                SW_MINIMIZE);
+            MinimizeWindowPreservingState(
+                hwnd);
 
             return;
         }
@@ -1585,9 +2145,8 @@ static void ActivateGroup(
         if (foreground ==
             window.hwnd) {
 
-            ShowWindowAsync(
-                window.hwnd,
-                SW_MINIMIZE);
+            MinimizeWindowPreservingState(
+                window.hwnd);
 
             return;
         }
@@ -1616,96 +2175,899 @@ static void ActivateGroup(
 
 
 // ============================================================
+// PREVIEW DE JANELAS (ESTILO GNOME)
+// ============================================================
+
+static void ClearPreviewItems() {
+
+    for (auto& item : g_preview.items) {
+        if (item.thumbnail) {
+            DwmUnregisterThumbnail(item.thumbnail);
+            item.thumbnail = nullptr;
+        }
+    }
+
+    g_preview.items.clear();
+    g_preview.hoveredItem = -1;
+    g_preview.hoveredClose = -1;
+}
+
+
+static void HidePreview() {
+
+    ClearPreviewItems();
+
+    if (g_preview.hwnd) {
+
+        // Remove recorte anterior; o próximo preview cria uma nova região.
+        SetWindowRgn(
+            g_preview.hwnd,
+            nullptr,
+            FALSE);
+
+        ShowWindow(
+            g_preview.hwnd,
+            SW_HIDE);
+    }
+
+    g_preview.ownerDock = nullptr;
+    g_preview.appPath.clear();
+    g_preview.hideDeadline = 0;
+    g_preview.visible = false;
+}
+
+
+static int HitTestPreviewItem(POINT point) {
+
+    for (int i = 0;
+         i < static_cast<int>(g_preview.items.size());
+         ++i) {
+
+        if (PtInRect(&g_preview.items[i].rect, point))
+            return i;
+    }
+
+    return -1;
+}
+
+
+static int HitTestPreviewClose(POINT point) {
+
+    for (int i = 0;
+         i < static_cast<int>(g_preview.items.size());
+         ++i) {
+
+        if (PtInRect(&g_preview.items[i].closeRect, point))
+            return i;
+    }
+
+    return -1;
+}
+
+
+
+static void ApplyPreviewRegion() {
+
+    if (!g_preview.hwnd)
+        return;
+
+    HRGN combined =
+        CreateRectRgn(
+            0, 0, 0, 0);
+
+    if (!combined)
+        return;
+
+    for (const auto& item :
+         g_preview.items) {
+
+        // Cartão principal arredondado.
+        HRGN card =
+            CreateRoundRectRgn(
+                item.rect.left,
+                item.rect.top,
+                item.rect.right + 1,
+                item.rect.bottom + 1,
+                18,
+                18);
+
+        if (card) {
+
+            CombineRgn(
+                combined,
+                combined,
+                card,
+                RGN_OR);
+
+            DeleteObject(card);
+        }
+
+        // Botão vermelho pode ficar parcialmente fora do cartão.
+        HRGN closeCircle =
+            CreateEllipticRgn(
+                item.closeRect.left,
+                item.closeRect.top,
+                item.closeRect.right + 1,
+                item.closeRect.bottom + 1);
+
+        if (closeCircle) {
+
+            CombineRgn(
+                combined,
+                combined,
+                closeCircle,
+                RGN_OR);
+
+            DeleteObject(
+                closeCircle);
+        }
+    }
+
+    // Depois de SetWindowRgn, o sistema passa a ser dono da região.
+    SetWindowRgn(
+        g_preview.hwnd,
+        combined,
+        TRUE);
+}
+
+
+static void PaintPreview(HWND hwnd, HDC hdc) {
+
+    RECT client = {};
+    GetClientRect(hwnd, &client);
+
+    COLORREF base =
+        g_lightTheme
+            ? RGB(245, 245, 245)
+            : RGB(31, 31, 34);
+
+    // GDI+ é usado somente para as formas do preview.
+    // O thumbnail continua sendo fornecido pelo DWM.
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+    auto makeColor =
+        [](COLORREF c, BYTE alpha = 255) {
+            return Gdiplus::Color(
+                alpha,
+                GetRValue(c),
+                GetGValue(c),
+                GetBValue(c));
+        };
+
+    auto addRoundedRect =
+        [](Gdiplus::GraphicsPath& path,
+           float x,
+           float y,
+           float width,
+           float height,
+           float radius) {
+
+            float d = radius * 2.0f;
+
+            if (d > width)
+                d = width;
+
+            if (d > height)
+                d = height;
+
+            path.AddArc(x, y, d, d, 180.0f, 90.0f);
+            path.AddArc(x + width - d, y, d, d, 270.0f, 90.0f);
+            path.AddArc(x + width - d, y + height - d, d, d, 0.0f, 90.0f);
+            path.AddArc(x, y + height - d, d, d, 90.0f, 90.0f);
+            path.CloseFigure();
+        };
+
+    // Cartões com antialiasing real.
+    for (const auto& item : g_preview.items) {
+
+        Gdiplus::GraphicsPath cardPath;
+
+        addRoundedRect(
+            cardPath,
+            static_cast<float>(item.rect.left),
+            static_cast<float>(item.rect.top),
+            static_cast<float>(item.rect.right - item.rect.left),
+            static_cast<float>(item.rect.bottom - item.rect.top),
+            9.0f);
+
+        Gdiplus::SolidBrush cardBrush(
+            makeColor(base));
+
+        graphics.FillPath(
+            &cardBrush,
+            &cardPath);
+    }
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(
+        hdc,
+        g_lightTheme
+            ? RGB(28, 28, 30)
+            : RGB(238, 238, 240));
+
+    HFONT font =
+        static_cast<HFONT>(
+            GetStockObject(DEFAULT_GUI_FONT));
+
+    HGDIOBJ oldFont =
+        SelectObject(
+            hdc,
+            font);
+
+    for (int i = 0;
+         i < static_cast<int>(g_preview.items.size());
+         ++i) {
+
+        const auto& item =
+            g_preview.items[i];
+
+        if (i == g_preview.hoveredItem) {
+
+            RECT highlight = item.rect;
+            InflateRect(&highlight, 5, 5);
+
+            COLORREF hoverColor =
+                g_lightTheme
+                    ? BlendColor(base, g_accentColor, 10)
+                    : BlendColor(base, g_accentColor, 16);
+
+            DrawRoundedFill(
+                hdc,
+                highlight,
+                14,
+                hoverColor);
+        }
+
+        RECT titleRect = item.rect;
+        titleRect.top =
+            titleRect.bottom - 26;
+        titleRect.left += 7;
+        titleRect.right -= 7;
+
+        std::wstring title =
+            item.title;
+
+        if (title.size() > 72)
+            title.resize(72);
+
+        DrawTextW(
+            hdc,
+            title.c_str(),
+            -1,
+            &titleRect,
+            DT_SINGLELINE |
+            DT_VCENTER |
+            DT_END_ELLIPSIS |
+            DT_NOPREFIX);
+
+        RECT closeRect =
+            item.closeRect;
+
+        bool closeHovered =
+            i == g_preview.hoveredClose;
+
+        const float left =
+            static_cast<float>(
+                closeRect.left);
+
+        const float top =
+            static_cast<float>(
+                closeRect.top);
+
+        const float width =
+            static_cast<float>(
+                closeRect.right -
+                closeRect.left);
+
+        const float height =
+            static_cast<float>(
+                closeRect.bottom -
+                closeRect.top);
+
+        // Normal: cinza. Hover: vermelho padrão de fechar.
+        Gdiplus::SolidBrush closeBrush(
+            closeHovered
+                ? Gdiplus::Color(255, 232, 17, 35)
+                : Gdiplus::Color(255, 225, 225, 225));
+
+        graphics.FillEllipse(
+            &closeBrush,
+            Gdiplus::RectF(
+                left,
+                top,
+                width,
+                height));
+
+        // X sempre visível e também antialiasado.
+        Gdiplus::Pen closePen(
+            closeHovered
+                ? Gdiplus::Color(255, 255, 255, 255)
+                : Gdiplus::Color(255, 45, 45, 45),
+            1.25f);
+
+        closePen.SetStartCap(
+            Gdiplus::LineCapRound);
+
+        closePen.SetEndCap(
+            Gdiplus::LineCapRound);
+
+        float cx =
+            left + width / 2.0f;
+
+        float cy =
+            top + height / 2.0f;
+
+        float arm =
+            std::max(
+                2.0f,
+                std::min(width, height) * 0.22f);
+
+        graphics.DrawLine(
+            &closePen,
+            cx - arm,
+            cy - arm,
+            cx + arm,
+            cy + arm);
+
+        graphics.DrawLine(
+            &closePen,
+            cx + arm,
+            cy - arm,
+            cx - arm,
+            cy + arm);
+    }
+
+    SelectObject(
+        hdc,
+        oldFont);
+}
+
+static void UpdatePreviewThumbnails() {
+
+    if (!g_preview.hwnd || !g_preview.visible)
+        return;
+
+    for (auto& item : g_preview.items) {
+
+        if (!item.thumbnail)
+            continue;
+
+        SIZE source = {};
+        if (FAILED(DwmQueryThumbnailSourceSize(
+                item.thumbnail,
+                &source))) {
+            continue;
+        }
+
+        RECT area = item.rect;
+        area.left += 7;
+        area.right -= 7;
+        area.top += 7;
+        area.bottom -= 33;
+
+        int areaW = area.right - area.left;
+        int areaH = area.bottom - area.top;
+
+        if (areaW <= 0 || areaH <= 0 ||
+            source.cx <= 0 || source.cy <= 0) {
+            continue;
+        }
+
+        double scaleX =
+            static_cast<double>(areaW) /
+            static_cast<double>(source.cx);
+
+        double scaleY =
+            static_cast<double>(areaH) /
+            static_cast<double>(source.cy);
+
+        double scale = std::min(scaleX, scaleY);
+
+        int drawW =
+            static_cast<int>(source.cx * scale);
+
+        int drawH =
+            static_cast<int>(source.cy * scale);
+
+        int x = area.left + (areaW - drawW) / 2;
+        int y = area.top + (areaH - drawH) / 2;
+
+        DWM_THUMBNAIL_PROPERTIES props = {};
+        props.dwFlags =
+            DWM_TNP_RECTDESTINATION |
+            DWM_TNP_VISIBLE |
+            DWM_TNP_OPACITY |
+            DWM_TNP_SOURCECLIENTAREAONLY;
+
+        props.rcDestination = {
+            x,
+            y,
+            x + drawW,
+            y + drawH
+        };
+
+        props.opacity = 255;
+        props.fVisible = TRUE;
+        props.fSourceClientAreaOnly = FALSE;
+
+        DwmUpdateThumbnailProperties(
+            item.thumbnail,
+            &props);
+    }
+}
+
+
+static bool EnsurePreviewWindow() {
+
+    if (g_preview.hwnd && IsWindow(g_preview.hwnd))
+        return true;
+
+    if (!g_moduleInstance)
+        return false;
+
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW |
+        WS_EX_TOPMOST |
+        WS_EX_NOACTIVATE,
+        g_previewClassName,
+        L"Bottom App Dock Preview",
+        WS_POPUP,
+        0,
+        0,
+        300,
+        190,
+        nullptr,
+        nullptr,
+        g_moduleInstance,
+        nullptr);
+
+    if (!hwnd)
+        return false;
+
+    g_preview.hwnd = hwnd;
+    ApplyPremiumDwm(hwnd);
+    return true;
+}
+
+
+static void ShowPreviewForApp(
+    DockInstance& dock,
+    int index) {
+
+    if (index < 0 ||
+        index >= static_cast<int>(g_apps.size())) {
+        return;
+    }
+
+    AppGroup& app = g_apps[index];
+
+    if (!app.running || app.windows.empty()) {
+        HidePreview();
+        return;
+    }
+
+    if (g_preview.visible &&
+        g_preview.ownerDock == dock.hwnd &&
+        PathEquals(g_preview.appPath, app.path)) {
+
+        g_preview.hideDeadline = 0;
+        return;
+    }
+
+    if (!EnsurePreviewWindow())
+        return;
+
+    ClearPreviewItems();
+
+    g_preview.ownerDock = dock.hwnd;
+    g_preview.appPath = app.path;
+    g_preview.hideDeadline = 0;
+
+    for (const auto& window : app.windows) {
+
+        if (!window.hwnd || !IsWindow(window.hwnd))
+            continue;
+
+        PreviewItem item;
+        item.target = window.hwnd;
+        item.title = window.title.empty()
+            ? app.title
+            : window.title;
+
+        if (FAILED(DwmRegisterThumbnail(
+                g_preview.hwnd,
+                window.hwnd,
+                &item.thumbnail))) {
+
+            item.thumbnail = nullptr;
+        }
+
+        g_preview.items.push_back(std::move(item));
+    }
+
+    if (g_preview.items.empty()) {
+        HidePreview();
+        return;
+    }
+
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+
+    if (!GetMonitorInfoW(dock.monitor, &mi)) {
+        HidePreview();
+        return;
+    }
+
+    RECT dockRect = {};
+    GetWindowRect(dock.hwnd, &dockRect);
+
+    RECT iconRect = app.rect;
+    OffsetRect(&iconRect, dockRect.left, dockRect.top);
+
+    const int count =
+        static_cast<int>(g_preview.items.size());
+
+    // Margem física invisível ao redor do cartão.
+    // Ela permite que o botão de fechar fique parcialmente para fora.
+    const int outerTop = 8;
+    const int outerSide = 8;
+
+    const int padding = 10;
+    const int gap = 8;
+    const int itemHeight = 160;
+
+    int maxPopupWidth =
+        (mi.rcWork.right - mi.rcWork.left) - 24;
+
+    int itemWidth = 220;
+
+    int desiredWidth =
+        outerSide * 2 +
+        padding * 2 +
+        count * itemWidth +
+        (count - 1) * gap;
+
+    if (desiredWidth > maxPopupWidth) {
+        itemWidth =
+            (maxPopupWidth -
+             outerSide * 2 -
+             padding * 2 -
+             (count - 1) * gap) /
+            count;
+
+        if (itemWidth < 118)
+            itemWidth = 118;
+    }
+
+    int popupWidth =
+        outerSide * 2 +
+        padding * 2 +
+        count * itemWidth +
+        (count - 1) * gap;
+
+    if (popupWidth > maxPopupWidth)
+        popupWidth = maxPopupWidth;
+
+    int popupHeight =
+        outerTop +
+        padding * 2 +
+        itemHeight;
+
+    int centerX =
+        (iconRect.left + iconRect.right) / 2;
+
+    int x = centerX - popupWidth / 2;
+    int y = dockRect.top - popupHeight - 10;
+
+    if (x < mi.rcWork.left + 8)
+        x = mi.rcWork.left + 8;
+
+    if (x + popupWidth > mi.rcWork.right - 8)
+        x = mi.rcWork.right - 8 - popupWidth;
+
+    if (y < mi.rcWork.top + 8)
+        y = mi.rcWork.top + 8;
+
+    int left =
+        outerSide + padding;
+
+    for (auto& item :
+         g_preview.items) {
+
+        item.rect = {
+            left,
+            outerTop + padding,
+            left + itemWidth,
+            outerTop + padding + itemHeight
+        };
+
+        // 12x12 com o centro exatamente na quina:
+        // 6 px dentro e 6 px fora do cartão.
+        item.closeRect = {
+            item.rect.right - 8,
+            item.rect.top - 8,
+            item.rect.right + 8,
+            item.rect.top + 8
+        };
+
+        left +=
+            itemWidth + gap;
+    }
+
+    SetWindowPos(
+        g_preview.hwnd,
+        HWND_TOPMOST,
+        x,
+        y,
+        popupWidth,
+        popupHeight,
+        SWP_NOACTIVATE |
+        SWP_NOOWNERZORDER);
+
+    // Recorta a janela para deixar invisível toda a margem externa.
+    ApplyPreviewRegion();
+
+    g_preview.visible = true;
+    g_keepVisibleUntil = GetTickCount64() + 500;
+
+    ShowWindow(
+        g_preview.hwnd,
+        SW_SHOWNOACTIVATE);
+
+    ApplyPremiumDwm(g_preview.hwnd);
+    UpdatePreviewThumbnails();
+
+    InvalidateRect(
+        g_preview.hwnd,
+        nullptr,
+        TRUE);
+}
+
+
+static void UpdatePreviewKeepAlive() {
+
+    if (!g_preview.visible ||
+        !g_preview.hwnd ||
+        !g_preview.ownerDock) {
+        return;
+    }
+
+    DockInstance* dock =
+        FindDockInstance(g_preview.ownerDock);
+
+    if (!dock) {
+        HidePreview();
+        return;
+    }
+
+    POINT cursor = {};
+    if (!GetCursorPos(&cursor))
+        return;
+
+    RECT previewRect = {};
+    GetWindowRect(g_preview.hwnd, &previewRect);
+    InflateRect(&previewRect, 6, 8);
+
+    bool insidePreview =
+        PtInRect(&previewRect, cursor);
+
+    bool insideOwnerIcon = false;
+
+    if (dock->hoveredIndex >= 0 &&
+        dock->hoveredIndex <
+            static_cast<int>(g_apps.size()) &&
+        PathEquals(
+            g_apps[dock->hoveredIndex].path,
+            g_preview.appPath)) {
+
+        RECT dockRect = {};
+        GetWindowRect(dock->hwnd, &dockRect);
+
+        RECT iconRect =
+            g_apps[dock->hoveredIndex].rect;
+
+        OffsetRect(
+            &iconRect,
+            dockRect.left,
+            dockRect.top);
+
+        InflateRect(&iconRect, 8, 12);
+        insideOwnerIcon = PtInRect(&iconRect, cursor);
+    }
+
+    if (insidePreview || insideOwnerIcon) {
+        g_preview.hideDeadline = 0;
+        g_keepVisibleUntil = GetTickCount64() + 450;
+        return;
+    }
+
+    ULONGLONG now = GetTickCount64();
+
+    if (!g_preview.hideDeadline) {
+        g_preview.hideDeadline =
+            now + PREVIEW_HIDE_DELAY;
+        return;
+    }
+
+    if (now >= g_preview.hideDeadline)
+        HidePreview();
+}
+
+
+static LRESULT CALLBACK PreviewWndProc(
+    HWND hwnd,
+    UINT msg,
+    WPARAM wParam,
+    LPARAM lParam) {
+
+    switch (msg) {
+
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+
+        case WM_MOUSEMOVE: {
+
+            POINT point = {
+                GET_X_LPARAM(lParam),
+                GET_Y_LPARAM(lParam)
+            };
+
+            int hovered =
+                HitTestPreviewItem(point);
+
+            int hoveredClose =
+                HitTestPreviewClose(point);
+
+            if (hovered != g_preview.hoveredItem ||
+                hoveredClose != g_preview.hoveredClose) {
+
+                g_preview.hoveredItem =
+                    hovered;
+
+                g_preview.hoveredClose =
+                    hoveredClose;
+
+                InvalidateRect(
+                    hwnd,
+                    nullptr,
+                    FALSE);
+            }
+
+            g_preview.hideDeadline = 0;
+            return 0;
+        }
+
+        case WM_LBUTTONUP: {
+
+            POINT point = {
+                GET_X_LPARAM(lParam),
+                GET_Y_LPARAM(lParam)
+            };
+
+            int closeIndex =
+                HitTestPreviewClose(point);
+
+            if (closeIndex >= 0 &&
+                closeIndex <
+                    static_cast<int>(
+                        g_preview.items.size())) {
+
+                HWND target =
+                    g_preview.items[
+                        closeIndex].target;
+
+                HidePreview();
+                CloseWindowSafe(target);
+
+                return 0;
+            }
+
+            int index =
+                HitTestPreviewItem(point);
+
+            if (index >= 0 &&
+                index < static_cast<int>(
+                    g_preview.items.size())) {
+
+                HWND target =
+                    g_preview.items[index].target;
+
+                HidePreview();
+                SwitchWindowStrong(target);
+            }
+
+            return 0;
+        }
+
+        case WM_PAINT: {
+
+            PAINTSTRUCT ps = {};
+            HDC hdc = BeginPaint(hwnd, &ps);
+            PaintPreview(hwnd, hdc);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_DESTROY:
+            ClearPreviewItems();
+            g_preview.hwnd = nullptr;
+            g_preview.visible = false;
+            return 0;
+    }
+
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+
+// ============================================================
 // AUTO-HIDE
 // ============================================================
 
-static void UpdateAutoHide() {
+static void UpdateAutoHide(
+    DockInstance& dock) {
 
-    if (!g_dockWindow)
+    if (!dock.hwnd ||
+        !dock.monitor)
         return;
-
 
     if (g_contextMenuOpen)
         return;
 
 
-    POINT cursor = {};
-
-
-    if (!GetCursorPos(
-            &cursor))
-        return;
-
-
-    HMONITOR cursorMonitor =
-        MonitorFromPoint(
-            cursor,
-            MONITOR_DEFAULTTONEAREST);
-
-
-    if (cursorMonitor !=
-        g_currentMonitor) {
-
-        g_currentMonitor =
-            cursorMonitor;
-
-        g_hoveredIndex = -1;
-
-        RefreshDock();
-    }
-
-
     MONITORINFO mi = {};
-
-    mi.cbSize =
-        sizeof(mi);
-
+    mi.cbSize = sizeof(mi);
 
     if (!GetMonitorInfoW(
-            cursorMonitor,
+            dock.monitor,
             &mi))
         return;
 
 
     bool maximized =
         HasMaximizedWindowOnMonitor(
-            cursorMonitor);
+            dock.monitor);
 
 
+    // Sem janela maximizada neste monitor:
+    // a dock fica sempre visível.
     if (!maximized) {
 
-        PositionDock(
-            cursorMonitor);
+        PositionDock(dock);
 
-
-        if (!g_visible) {
+        if (!dock.visible) {
 
             ShowWindow(
-                g_dockWindow,
+                dock.hwnd,
                 SW_SHOWNOACTIVATE);
 
-
             SetWindowPos(
-                g_dockWindow,
+                dock.hwnd,
                 HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-
+                0, 0, 0, 0,
                 SWP_NOMOVE |
                 SWP_NOSIZE |
                 SWP_NOACTIVATE);
 
-
-            g_visible = true;
+            dock.visible = true;
         }
 
-
-        g_outsideSince = 0;
-
+        dock.outsideSince = 0;
         return;
     }
+
+
+    // Com janela maximizada:
+    // auto-hide independente neste monitor.
+    POINT cursor = {};
+
+    if (!GetCursorPos(
+            &cursor))
+        return;
 
 
     ULONGLONG now =
@@ -1713,73 +3075,50 @@ static void UpdateAutoHide() {
 
 
     bool edge =
-
-        cursor.x >=
-            mi.rcMonitor.left &&
-
-        cursor.x <
-            mi.rcMonitor.right &&
-
+        cursor.x >= mi.rcMonitor.left &&
+        cursor.x < mi.rcMonitor.right &&
         cursor.y >=
             mi.rcMonitor.bottom -
             g_settings.activationZone &&
-
-        cursor.y <
-            mi.rcMonitor.bottom;
+        cursor.y < mi.rcMonitor.bottom;
 
 
-    if (!g_visible) {
+    if (!dock.visible) {
 
         if (edge) {
 
-            g_currentMonitor =
-                cursorMonitor;
-
-
-            RefreshDock();
-
+            PositionDock(dock);
 
             ShowWindow(
-                g_dockWindow,
+                dock.hwnd,
                 SW_SHOWNOACTIVATE);
 
-
             SetWindowPos(
-                g_dockWindow,
+                dock.hwnd,
                 HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-
+                0, 0, 0, 0,
                 SWP_NOMOVE |
                 SWP_NOSIZE |
                 SWP_NOACTIVATE);
 
-
-            g_visible = true;
-            g_outsideSince = 0;
+            dock.visible = true;
+            dock.outsideSince = 0;
         }
-
 
         return;
     }
 
 
     if (now <
-        g_keepVisibleUntil) {
-
+        g_keepVisibleUntil)
         return;
-    }
 
 
     RECT rect = {};
 
-
     GetWindowRect(
-        g_dockWindow,
+        dock.hwnd,
         &rect);
-
 
     InflateRect(
         &rect,
@@ -1796,37 +3135,31 @@ static void UpdateAutoHide() {
     if (inside ||
         edge) {
 
-        g_outsideSince = 0;
-
+        dock.outsideSince = 0;
         return;
     }
 
 
-    if (!g_outsideSince) {
+    if (!dock.outsideSince) {
 
-        g_outsideSince =
-            now;
-
+        dock.outsideSince = now;
         return;
     }
 
 
     if (now -
-            g_outsideSince >=
+            dock.outsideSince >=
         static_cast<ULONGLONG>(
             g_settings.hideDelay)) {
 
-
-        g_hoveredIndex = -1;
-
+        dock.hoveredIndex = -1;
 
         ShowWindow(
-            g_dockWindow,
+            dock.hwnd,
             SW_HIDE);
 
-
-        g_visible = false;
-        g_outsideSince = 0;
+        dock.visible = false;
+        dock.outsideSince = 0;
     }
 }
 
@@ -1839,6 +3172,8 @@ static void ShowContextMenu(
     HWND hwnd,
     int index,
     POINT screenPoint) {
+
+    HidePreview();
 
     if (index < 0 ||
         index >=
@@ -1965,7 +3300,7 @@ static void ShowContextMenu(
 
 
     GetWindowRect(
-        g_dockWindow,
+        hwnd,
         &dockRect);
 
 
@@ -2129,9 +3464,8 @@ static void ShowContextMenu(
     if (command == 31 &&
         !app.windows.empty()) {
 
-        ShowWindowAsync(
-            app.windows[0].hwnd,
-            SW_MINIMIZE);
+        MinimizeWindowPreservingState(
+            app.windows[0].hwnd);
 
         return;
     }
@@ -2310,9 +3644,13 @@ static void PaintDock(
             g_apps[i];
 
 
+        DockInstance* dock =
+            FindDockInstance(hwnd);
+
         bool hovered =
+            dock &&
             i ==
-            g_hoveredIndex;
+            dock->hoveredIndex;
 
 
         // ====================================================
@@ -2334,18 +3672,9 @@ static void PaintDock(
 
 
             COLORREF hoverColor =
-
-                g_lightTheme
-
-                    ? BlendColor(
-                          RGB(245, 245, 245),
-                          g_accentColor,
-                          10)
-
-                    : BlendColor(
-                          RGB(31, 31, 34),
-                          g_accentColor,
-                          17);
+              g_lightTheme
+                ? RGB(225, 225, 225)
+                : RGB(45, 45, 48);
 
 
             DrawRoundedFill(
@@ -2367,14 +3696,7 @@ static void PaintDock(
                 g_settings.iconSize;
 
 
-            if (hovered) {
-
-                drawSize =
-                    g_settings.iconSize *
-                    g_settings.hoverScale /
-                    100;
-            }
-
+        
 
             // Limite para o ícone não escapar demais
             // da própria dock.
@@ -2409,8 +3731,8 @@ static void PaintDock(
 
 
             // Ícone em hover sobe discretamente.
-            if (hovered)
-                drawY -= 2;
+           // if (hovered)
+             //   drawY -= 2;
 
 
             DrawIconEx(
@@ -2510,6 +3832,84 @@ static void PaintDock(
                 g_accentColor);
         }
     }
+
+    // ========================================================
+    // LIXEIRA FIXA
+    // ========================================================
+
+    DockInstance* dock =
+        FindDockInstance(hwnd);
+
+    bool recycleHovered =
+        dock &&
+        dock->hoveredIndex ==
+            HIT_RECYCLE_BIN;
+
+    if (!g_apps.empty() &&
+        g_recycleSeparatorX >= 0) {
+
+        RECT separator = {
+            g_recycleSeparatorX,
+            9,
+            g_recycleSeparatorX + 1,
+            g_settings.dockHeight - 9
+        };
+
+        COLORREF separatorColor =
+            g_lightTheme
+                ? RGB(205, 205, 205)
+                : RGB(70, 70, 74);
+
+        HBRUSH separatorBrush =
+            CreateSolidBrush(
+                separatorColor);
+
+        FillRect(
+            hdc,
+            &separator,
+            separatorBrush);
+
+        DeleteObject(
+            separatorBrush);
+    }
+
+    if (recycleHovered &&
+        g_settings.hoverHighlight) {
+
+        RECT hoverRect =
+            g_recycleRect;
+
+        InflateRect(
+            &hoverRect,
+            5,
+            5);
+
+        COLORREF hoverColor =
+            g_lightTheme
+                ? RGB(225, 225, 225)
+                : RGB(45, 45, 48);
+
+        DrawRoundedFill(
+            hdc,
+            hoverRect,
+            14,
+            hoverColor);
+    }
+
+    if (g_recycleIcon) {
+
+        DrawIconEx(
+            hdc,
+            g_recycleRect.left,
+            g_recycleRect.top,
+            g_recycleIcon,
+            g_settings.iconSize,
+            g_settings.iconSize,
+            0,
+            nullptr,
+            DI_NORMAL);
+    }
+
 }
 
 
@@ -2529,13 +3929,6 @@ static int HitTestApp(
         RECT hitRect =
             g_apps[i].rect;
 
-
-        InflateRect(
-            &hitRect,
-            4,
-            4);
-
-
         if (PtInRect(
                 &hitRect,
                 point)) {
@@ -2544,48 +3937,53 @@ static int HitTestApp(
         }
     }
 
+    RECT recycleHit =
+        g_recycleRect;
+
+    InflateRect(
+        &recycleHit,
+        3,
+        3);
+
+    if (PtInRect(
+            &recycleHit,
+            point)) {
+
+        return HIT_RECYCLE_BIN;
+    }
 
     return -1;
 }
-
 
 static void UpdateHover(
     HWND hwnd,
     LPARAM lParam) {
 
-    if (!g_trackingMouse) {
+    DockInstance* dock =
+        FindDockInstance(hwnd);
 
+    if (!dock)
+        return;
+
+
+    if (!dock->trackingMouse) {
 
         TRACKMOUSEEVENT tracking = {};
-
-
-        tracking.cbSize =
-            sizeof(tracking);
-
-
-        tracking.dwFlags =
-            TME_LEAVE;
-
-
-        tracking.hwndTrack =
-            hwnd;
-
+        tracking.cbSize = sizeof(tracking);
+        tracking.dwFlags = TME_LEAVE;
+        tracking.hwndTrack = hwnd;
 
         if (TrackMouseEvent(
                 &tracking)) {
 
-            g_trackingMouse = true;
+            dock->trackingMouse = true;
         }
     }
 
 
     POINT point = {
-
-        GET_X_LPARAM(
-            lParam),
-
-        GET_Y_LPARAM(
-            lParam)
+        GET_X_LPARAM(lParam),
+        GET_Y_LPARAM(lParam)
     };
 
 
@@ -2594,11 +3992,29 @@ static void UpdateHover(
 
 
     if (newHovered !=
-        g_hoveredIndex) {
+        dock->hoveredIndex) {
 
-        g_hoveredIndex =
+        dock->hoveredIndex =
             newHovered;
 
+        dock->hoverSince =
+            newHovered >= 0
+                ? GetTickCount64()
+                : 0;
+
+        if (newHovered == HIT_RECYCLE_BIN &&
+            g_preview.visible) {
+
+            HidePreview();
+
+        } else if (newHovered >= 0 &&
+                   g_preview.visible &&
+                   !PathEquals(
+                       g_preview.appPath,
+                       g_apps[newHovered].path)) {
+
+            HidePreview();
+        }
 
         InvalidateRect(
             hwnd,
@@ -2659,22 +4075,33 @@ static LRESULT CALLBACK DockWndProc(
 
         case WM_MOUSELEAVE: {
 
-            g_trackingMouse =
-                false;
+            DockInstance* dock =
+                FindDockInstance(hwnd);
 
+            if (dock) {
 
-            if (g_hoveredIndex != -1) {
+                dock->trackingMouse = false;
 
-                g_hoveredIndex =
-                    -1;
+                if (dock->hoveredIndex != -1) {
 
+                    dock->hoveredIndex = -1;
+                    dock->hoverSince = 0;
 
-                InvalidateRect(
-                    hwnd,
-                    nullptr,
-                    FALSE);
+                    if (g_preview.visible &&
+                        g_preview.ownerDock == hwnd &&
+                        !g_preview.hideDeadline) {
+
+                        g_preview.hideDeadline =
+                            GetTickCount64() +
+                            PREVIEW_HIDE_DELAY;
+                    }
+
+                    InvalidateRect(
+                        hwnd,
+                        nullptr,
+                        FALSE);
+                }
             }
-
 
             return 0;
         }
@@ -2686,11 +4113,57 @@ static LRESULT CALLBACK DockWndProc(
                 MAIN_TIMER) {
 
 
-                UpdateAutoHide();
+                DockInstance* dock =
+                    FindDockInstance(hwnd);
+
+                if (dock) {
+                    UpdateAutoHide(
+                        *dock);
+
+                    if (dock->hoveredIndex >= 0 &&
+                        dock->hoveredIndex <
+                            static_cast<int>(g_apps.size()) &&
+                        dock->hoverSince &&
+                        GetTickCount64() - dock->hoverSince >=
+                            PREVIEW_HOVER_DELAY) {
+
+                        ShowPreviewForApp(
+                            *dock,
+                            dock->hoveredIndex);
+                    }
+                }
+
+                UpdatePreviewKeepAlive();
 
 
                 ULONGLONG now =
                     GetTickCount64();
+
+
+                // Atualiza o estado da Lixeira fora do WM_PAINT.
+                // Consulta no máximo uma vez por segundo e redesenha
+                // somente se o estado vazio/cheio realmente mudou.
+                if (now -
+                        g_lastRecycleRefresh >=
+                    1000) {
+
+                    g_lastRecycleRefresh =
+                        now;
+
+                    if (RefreshRecycleBinIcon()) {
+
+                        for (const auto& dockItem :
+                             g_dockInstances) {
+
+                            if (dockItem.hwnd) {
+                                InvalidateRect(
+                                    dockItem.hwnd,
+                                    &g_recycleRect,
+                                    FALSE);
+                            }
+                        }
+                    }
+                }
 
 
                 if (now -
@@ -2702,11 +4175,18 @@ static LRESULT CALLBACK DockWndProc(
                         now;
 
 
+                    EnsureDockInstancesForCurrentMonitors();
                     LoadWindowsTheme();
 
 
-                    ApplyPremiumDwm(
-                        hwnd);
+                    for (auto& dockItem :
+                         g_dockInstances) {
+
+                        if (dockItem.hwnd) {
+                            ApplyPremiumDwm(
+                                dockItem.hwnd);
+                        }
+                    }
 
 
                     RefreshDock();
@@ -2714,6 +4194,15 @@ static LRESULT CALLBACK DockWndProc(
             }
 
 
+            return 0;
+        }
+
+
+        case WM_DISPLAYCHANGE: {
+
+            HidePreview();
+            EnsureDockInstancesForCurrentMonitors();
+            RefreshDock();
             return 0;
         }
 
@@ -2747,14 +4236,7 @@ static LRESULT CALLBACK DockWndProc(
             LoadWindowsTheme();
 
 
-            SetLayeredWindowAttributes(
-                hwnd,
-                0,
-                static_cast<BYTE>(
-                    g_settings.opacity),
-                LWA_ALPHA);
-
-
+            // Sem alpha global: mantém ícones 100% opacos.
             ApplyPremiumDwm(
                 hwnd);
 
@@ -2783,7 +4265,12 @@ static LRESULT CALLBACK DockWndProc(
                 HitTestApp(point);
 
 
-            if (index >= 0) {
+            if (index == HIT_RECYCLE_BIN) {
+
+                HidePreview();
+                OpenRecycleBin();
+
+            } else if (index >= 0) {
 
                 ActivateGroup(
                     g_apps[index]);
@@ -2839,7 +4326,20 @@ static LRESULT CALLBACK DockWndProc(
                 HitTestApp(point);
 
 
-            if (index >= 0) {
+            if (index == HIT_RECYCLE_BIN) {
+
+                POINT screen =
+                    point;
+
+                ClientToScreen(
+                    hwnd,
+                    &screen);
+
+                ShowRecycleContextMenu(
+                    hwnd,
+                    screen);
+
+            } else if (index >= 0) {
 
 
                 POINT screen =
@@ -2894,23 +4394,36 @@ static LRESULT CALLBACK DockWndProc(
 
         case WM_DESTROY: {
 
-
             KillTimer(
                 hwnd,
                 MAIN_TIMER);
 
+            DockInstance* dock =
+                FindDockInstance(hwnd);
 
-            ClearApps();
+            if (dock) {
+                dock->hwnd = nullptr;
+                dock->visible = false;
+                dock->hoveredIndex = -1;
+            }
 
-            ClearEnumeratedWindows();
+            bool anyWindow = false;
 
+            for (const auto& dockItem :
+                 g_dockInstances) {
 
-            g_dockWindow =
-                nullptr;
+                if (dockItem.hwnd) {
+                    anyWindow = true;
+                    break;
+                }
+            }
 
+            if (!anyWindow) {
 
-            PostQuitMessage(0);
-
+                ClearApps();
+                ClearEnumeratedWindows();
+                PostQuitMessage(0);
+            }
 
             return 0;
         }
@@ -2929,122 +4442,210 @@ static LRESULT CALLBACK DockWndProc(
 // THREAD
 // ============================================================
 
+static BOOL CALLBACK EnumMonitorsProc(
+    HMONITOR monitor,
+    HDC,
+    LPRECT,
+    LPARAM lParam) {
+
+    auto* monitors =
+        reinterpret_cast<
+            std::vector<HMONITOR>*>(
+                lParam);
+
+    monitors->push_back(monitor);
+    return TRUE;
+}
+
+
+static std::vector<HMONITOR> GetCurrentMonitors() {
+
+    std::vector<HMONITOR> monitors;
+
+    EnumDisplayMonitors(
+        nullptr,
+        nullptr,
+        EnumMonitorsProc,
+        reinterpret_cast<LPARAM>(&monitors));
+
+    if (monitors.empty()) {
+
+        HMONITOR primary =
+            MonitorFromPoint(
+                POINT{0, 0},
+                MONITOR_DEFAULTTOPRIMARY);
+
+        if (primary)
+            monitors.push_back(primary);
+    }
+
+    return monitors;
+}
+
+
+static bool MonitorStillExists(
+    HMONITOR monitor,
+    const std::vector<HMONITOR>& current) {
+
+    return std::find(
+        current.begin(),
+        current.end(),
+        monitor) != current.end();
+}
+
+
+static HWND CreateDockWindowForMonitor(
+    HMONITOR monitor) {
+
+    if (!g_moduleInstance || !monitor)
+        return nullptr;
+
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW |
+        WS_EX_TOPMOST |
+        WS_EX_NOACTIVATE,
+        g_dockClassName,
+        L"Bottom App Dock",
+        WS_POPUP,
+        0,
+        0,
+        100,
+        g_settings.dockHeight,
+        nullptr,
+        nullptr,
+        g_moduleInstance,
+        nullptr);
+
+    if (!hwnd)
+        return nullptr;
+
+    DockInstance dock;
+    dock.hwnd = hwnd;
+    dock.monitor = monitor;
+
+    g_dockInstances.push_back(dock);
+
+    // Não usamos alpha global na janela da dock, porque isso deixa
+    // os próprios ícones transparentes. A transparência visual fica
+    // por conta do material DWM.
+    ApplyPremiumDwm(hwnd);
+
+    // Posiciona imediatamente no monitor de destino.
+    PositionDock(
+        g_dockInstances.back());
+
+    ShowWindow(hwnd, SW_HIDE);
+
+    return hwnd;
+}
+
+
+static void EnsureDockInstancesForCurrentMonitors() {
+
+    const auto monitors = GetCurrentMonitors();
+
+    // Primeiro cria docks faltantes. Assim nunca ficamos sem nenhuma
+    // janela durante uma troca completa de topologia/handles de monitor.
+    for (HMONITOR monitor : monitors) {
+
+        bool exists = false;
+
+        for (const auto& dock : g_dockInstances) {
+            if (dock.hwnd && dock.monitor == monitor) {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists)
+            CreateDockWindowForMonitor(monitor);
+    }
+
+    std::vector<HWND> staleWindows;
+
+    for (const auto& dock : g_dockInstances) {
+
+        if (dock.hwnd &&
+            !MonitorStillExists(dock.monitor, monitors)) {
+
+            staleWindows.push_back(dock.hwnd);
+        }
+    }
+
+    for (HWND hwnd : staleWindows) {
+
+        if (g_preview.visible &&
+            g_preview.ownerDock == hwnd) {
+            HidePreview();
+        }
+
+        if (IsWindow(hwnd))
+            DestroyWindow(hwnd);
+    }
+
+    g_dockInstances.erase(
+        std::remove_if(
+            g_dockInstances.begin(),
+            g_dockInstances.end(),
+            [](const DockInstance& dock) {
+                return !dock.hwnd || !IsWindow(dock.hwnd);
+            }),
+        g_dockInstances.end());
+
+    // Não reassociar pelo MonitorFromWindow aqui.
+    // Uma dock recém-criada ainda está em (0,0), então o Windows a
+    // classificaria como pertencente ao monitor principal antes de
+    // PositionDock posicioná-la no monitor correto. O HMONITOR salvo
+    // na criação já é a fonte de verdade.
+}
+
+
 static DWORD WINAPI DockThreadProc(
     LPVOID) {
 
-
-    const wchar_t* className =
-        L"WindhawkBottomAppDockV09";
-
-
-    HINSTANCE instance =
-        GetModuleHandleW(
-            nullptr);
-
+    g_moduleInstance =
+        GetModuleHandleW(nullptr);
 
     WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = DockWndProc;
+    wc.hInstance = g_moduleInstance;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = g_dockClassName;
+    wc.hbrBackground = nullptr;
 
+    if (!RegisterClassExW(&wc))
+        return 0;
 
-    wc.cbSize =
-        sizeof(wc);
+    WNDCLASSEXW previewClass = {};
+    previewClass.cbSize = sizeof(previewClass);
+    previewClass.lpfnWndProc = PreviewWndProc;
+    previewClass.hInstance = g_moduleInstance;
+    previewClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    previewClass.lpszClassName = g_previewClassName;
+    previewClass.hbrBackground = nullptr;
 
-
-    wc.lpfnWndProc =
-        DockWndProc;
-
-
-    wc.hInstance =
-        instance;
-
-
-    wc.hCursor =
-        LoadCursorW(
-            nullptr,
-            IDC_ARROW);
-
-
-    wc.lpszClassName =
-        className;
-
-
-    // Sem background brush:
-    // o conteúdo é pintado por nós e o DWM fica livre
-    // para aplicar seu backdrop.
-    wc.hbrBackground =
-        nullptr;
-
-
-    if (!RegisterClassExW(
-            &wc)) {
-
+    if (!RegisterClassExW(&previewClass)) {
+        UnregisterClassW(g_dockClassName, g_moduleInstance);
         return 0;
     }
 
-
-    HWND hwnd =
-        CreateWindowExW(
-
-            WS_EX_TOOLWINDOW |
-            WS_EX_TOPMOST |
-            WS_EX_LAYERED |
-            WS_EX_NOACTIVATE,
-
-            className,
-
-            L"Bottom App Dock",
-
-            WS_POPUP,
-
-            0,
-            0,
-            100,
-            g_settings.dockHeight,
-
-            nullptr,
-            nullptr,
-            instance,
-            nullptr);
-
-
-    if (!hwnd)
-        return 0;
-
-
-    g_dockWindow =
-        hwnd;
-
-
-    SetLayeredWindowAttributes(
-        hwnd,
-        0,
-        static_cast<BYTE>(
-            g_settings.opacity),
-        LWA_ALPHA);
-
-
     LoadPinnedApps();
-
     LoadWindowsTheme();
 
+    g_dockInstances.clear();
+    EnsureDockInstancesForCurrentMonitors();
 
-    ApplyPremiumDwm(
-        hwnd);
-
+    if (g_dockInstances.empty()) {
+        UnregisterClassW(g_previewClassName, g_moduleInstance);
+        UnregisterClassW(g_dockClassName, g_moduleInstance);
+        return 0;
+    }
 
     RefreshDock();
-
-
-    ShowWindow(
-        hwnd,
-        SW_HIDE);
-
-
-    g_visible =
-        false;
-
+    g_lastRefresh = GetTickCount64();
 
     MSG msg = {};
-
 
     while (GetMessageW(
                &msg,
@@ -3052,21 +4653,24 @@ static DWORD WINAPI DockThreadProc(
                0,
                0) > 0) {
 
-
-        TranslateMessage(
-            &msg);
-
-
-        DispatchMessageW(
-            &msg);
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
+    HidePreview();
 
-    UnregisterClassW(
-        className,
-        instance);
+    if (g_preview.hwnd && IsWindow(g_preview.hwnd))
+        DestroyWindow(g_preview.hwnd);
 
+    UnregisterClassW(g_previewClassName, g_moduleInstance);
+    UnregisterClassW(g_dockClassName, g_moduleInstance);
 
+    if (g_recycleIcon) {
+        DestroyIcon(g_recycleIcon);
+        g_recycleIcon = nullptr;
+    }
+
+    g_moduleInstance = nullptr;
     return 0;
 }
 
@@ -3076,6 +4680,17 @@ static DWORD WINAPI DockThreadProc(
 // ============================================================
 
 BOOL Wh_ModInit() {
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+
+    if (Gdiplus::GdiplusStartup(
+            &g_gdiplusToken,
+            &gdiplusStartupInput,
+            nullptr) != Gdiplus::Ok) {
+
+        g_gdiplusToken = 0;
+    }
+
 
 
     LoadSettings();
@@ -3100,14 +4715,25 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
 
-
-    if (g_dockWindow) {
-
+    if (g_preview.hwnd) {
         PostMessageW(
-            g_dockWindow,
+            g_preview.hwnd,
             WM_CLOSE,
             0,
             0);
+    }
+
+    for (const auto& dock :
+         g_dockInstances) {
+
+        if (dock.hwnd) {
+
+            PostMessageW(
+                dock.hwnd,
+                WM_CLOSE,
+                0,
+                0);
+        }
     }
 
 
@@ -3117,29 +4743,36 @@ void Wh_ModUninit() {
             g_thread,
             3000);
 
-
         CloseHandle(
             g_thread);
 
-
-        g_thread =
-            nullptr;
+        g_thread = nullptr;
     }
+
+    if (g_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(
+            g_gdiplusToken);
+
+        g_gdiplusToken = 0;
+    }
+
 }
 
 
 void Wh_ModSettingsChanged() {
 
-
     LoadSettings();
 
+    for (const auto& dock :
+         g_dockInstances) {
 
-    if (g_dockWindow) {
+        if (dock.hwnd) {
 
-        PostMessageW(
-            g_dockWindow,
-            WM_DOCK_SETTINGS_CHANGED,
-            0,
-            0);
+            PostMessageW(
+                dock.hwnd,
+                WM_DOCK_SETTINGS_CHANGED,
+                0,
+                0);
+        }
     }
 }
