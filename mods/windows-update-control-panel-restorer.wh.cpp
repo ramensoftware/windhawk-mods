@@ -5556,27 +5556,6 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
     return it->second;
 }
 
-// Replaces the non-functional "Important updates" combobox on the classic
-// Change settings dialog. The selector does not write back to Windows Update
-// policy yet, so point the user at the native Settings app instead.
-static const wchar_t* SelectSettingsComboboxReplacementText() {
-    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
-        { L"en", L"This option is still being improved. Please use the native Windows Settings app to change how updates are installed." },
-        { L"it", L"Questa opzione è ancora in miglioramento. Usa le Impostazioni di Windows per scegliere come installare gli aggiornamenti." },
-        { L"es", L"Esta opción se está mejorando. Usa Configuración de Windows para elegir cómo se instalan las actualizaciones." },
-        { L"fr", L"Cette option est encore en cours d'amélioration. Utilisez les Paramètres Windows pour choisir comment installer les mises à jour." },
-        { L"tr", L"Bu seçenek hâlâ geliştiriliyor. Güncellemelerin nasıl yükleneceğini değiştirmek için Windows Ayarları'nı kullanın." },
-        { L"ru", L"Этот параметр ещё дорабатывается. Измените способ установки обновлений в Параметрах Windows." },
-        { L"pt", L"Esta opção ainda está a ser melhorada. Use as Configurações do Windows para escolher como as atualizações são instaladas." },
-        { L"zh", L"此选项仍在改进中。请使用 Windows 设置来更改更新的安装方式。" },
-        { L"pl", L"Ta opcja jest jeszcze ulepszana. Użyj Ustawień systemu Windows, aby zmienić sposób instalacji aktualizacji." },
-        { L"nl", L"Deze optie wordt nog verbeterd. Gebruik Windows-instellingen om te kiezen hoe updates worden geïnstalleerd." },
-    };
-    auto it = kTexts.find(CurrentLanguage());
-    if (it == kTexts.end()) it = kTexts.find(L"en");
-    return it->second;
-}
-
 // Private command protocol used only by this applet's navigation links. Known
 // commands are consumed and return 33 (ShellExecute success is any value > 32);
 // unknown commands report failure with hInstApp set.
@@ -6574,13 +6553,27 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             CheckDlgButton(hwnd, kWuCtlRecommended, state->recommended ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlMsProducts, state->msProducts ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlAllUsers, state->allUsers ? BST_CHECKED : BST_UNCHECKED);
-            // The "Important updates" selector is not functional yet (it does
-            // not write back to Windows Update policy), so it is a static
-            // notice rather than a combobox. The checkboxes stay disabled
-            // for the same reason.
+            // Populate the "Important updates" combobox conservatively: list
+            // the four classic modes in the original page's order (automatic
+            // first) and select the one matching the current AUOptions value,
+            // but keep the control disabled. The selector does not write back
+            // to Windows Update policy (modern Windows Settings owns that), so
+            // it is a read-only snapshot rather than an editable choice.
+            if (HWND combo = GetDlgItem(hwnd, kWuCtlCombo)) {
+                const DWORD kModes[] = { 4, 3, 2, 1 }; // in dropdown order
+                int selection = 0;
+                for (int i = 0; i < static_cast<int>(ARRAYSIZE(kModes)); ++i) {
+                    const int idx = ComboBox_AddString(combo, WuOptionText(kModes[i]));
+                    if (kModes[i] == state->auOptions) selection = idx;
+                }
+                ComboBox_SetCurSel(combo, selection);
+            }
+            // The selector and the checkboxes are all read-only; the checkboxes
+            // stay disabled for the same reason.
             EnableWindow(GetDlgItem(hwnd, kWuCtlRecommended), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlMsProducts), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlAllUsers), FALSE);
+            EnableWindow(GetDlgItem(hwnd, kWuCtlCombo), FALSE);
             ApplyWuSettingsDialogDarkMode(hwnd, nullptr, state);
             return TRUE;
         }
@@ -6678,7 +6671,7 @@ static void ShowWuSettingsDialog(HWND parent) {
     state->auOptions = ReadAuOptionsValue();
     ReadAuxAuValues(state->recommended, state->msProducts, state->allUsers);
 
-    const int kControls = 10; // group, desc, label, notice, 3 checkboxes, note, OK, Cancel
+    const int kControls = 10; // group, desc, label, combobox, 3 checkboxes, note, OK, Cancel
     BYTE* buf = new (std::nothrow) BYTE[4096];
     if (!buf) {
         ReleaseWuSettingsDialogReservation();
@@ -6757,13 +6750,14 @@ static void ShowWuSettingsDialog(HWND parent) {
     }
 
     // --- Windows 7-style layout ---
-    // "Choose how to install updates" group box with description + a notice
-    // in place of the non-functional Important-updates combobox.
-    const wchar_t* comboReplacement = SelectSettingsComboboxReplacementText();
+    // "Choose how to install updates" group box with description + a real
+    // (read-only) Important-updates combobox, populated in WM_INITDIALOG.
     addCtrl(BS_GROUPBOX | WS_TABSTOP, 0, 8, 6, 352, 122, 0x7F00, L"Button", grp.c_str());
     addCtrl(SS_LEFT, 0, 18, 18, 332, 38, 0x7F01, L"Static", descText);              // description (wraps)
     addCtrl(SS_LEFT, 0, 18, 62, 240, 12, 0x7F02, L"Static", importantLabel.c_str()); // "Important updates:"
-    addCtrl(SS_LEFT, 0, 18, 76, 332, 40, kWuCtlCombo, L"Static", comboReplacement);
+    // Drop-down list of the four classic modes; disabled (read-only) at runtime.
+    // The template height covers the collapsed field plus the 4-item dropdown.
+    addCtrl(CBS_DROPDOWNLIST | WS_TABSTOP, 0, 18, 74, 332, 64, kWuCtlCombo, L"ComboBox", L"");
     // Options below the group box (classic checkboxes)
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 138, 344, 14, kWuCtlRecommended, L"Button", SelectRecommendedUpdatesLabel());
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 156, 344, 14, kWuCtlMsProducts, L"Button",
