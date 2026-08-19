@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.2
+// @version         0.10.3
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -36,6 +36,11 @@ play/pause, and next controls.
 
 ## What's new
 
+- **Full transparent material:** Keep the compact island background-free, then
+  open an expanded player made from clean, untinted transparent blur.
+- **One corner-radius control:** Set the expanded player's corners once and keep
+  the XAML surface, artwork, controls, highlights, and independent blur layer in
+  sync.
 - **New layout:** Adds a compact expanded player layout that keeps the cover,
   track information, progress, and transport controls in a tighter card.
 - **Unified display modes:** Fullsize, compact expanded layout, and side
@@ -47,8 +52,9 @@ play/pause, and next controls.
   when a press is interrupted, and no longer leave hover highlights behind.
 - **Smoother Liquid Glass:** The Liquid Glass backdrop avoids redundant clipping
   work and stays better synchronized with the expanded player animation.
-- **More reliable updates:** Media refresh and shutdown handling are more stable,
-  with fewer chances for stale track info or slow mod disable/apply behavior.
+- **More reliable updates:** Media refresh, backdrop fallback, final blur
+  sampling, and worker-thread restarts are safer, with fewer chances for stale
+  visuals, a see-through player, or slow mod disable/apply behavior.
 - **Old Compact users:** If the previous Compact option is detected, the island
   keeps that layout until you save settings here; select Display mode -> Compact
   before saving to keep it.
@@ -68,9 +74,9 @@ play/pause, and next controls.
 - **Smooth, playful animations:** Hover, click, expand, collapse, play/pause,
   and failed actions all respond with soft motion so the island feels alive
   instead of static.
-- **Polished visual styles:** Choose from Mica-like, Solid, Acrylic, and Liquid
-  Glass materials, with album-color highlights and refined dark/light mode
-  treatment.
+- **Polished visual styles:** Choose from Mica-like, Solid, Acrylic, Liquid
+  Glass, and Full transparent materials, with album-color highlights and refined
+  dark/light mode treatment.
 - **Artwork that fits the moment:** Keep original thumbnails or replace rough
   browser/video artwork with generated abstract covers for a cleaner look.
 - **Useful playback controls:** Open the player to seek through the track, switch
@@ -99,6 +105,7 @@ play/pause, and next controls.
     - "solid": "Solid"
     - "acrylic": "Acrylic glass"
     - "liquid_glass": "Liquid Glass"
+    - "full_transparent": "Full transparent"
   - DisplayMode: "fullsize"
     $name: Display mode
     $description: Choose how the island opens. Expanded player settings only apply to Fullsize and Compact; Side expansion mode uses the taskbar-side controls instead. If the previous Compact option is detected, the island keeps that layout until you save settings here - select Compact to keep it.
@@ -145,7 +152,7 @@ play/pause, and next controls.
     $description: Enables elastic overshoot and rebound during fullsize expand/collapse. Compact click feedback always remains enabled.
   - AllowScreenCapture: false
     $name: Expanded player capturable blurred backdrop
-    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic and Liquid Glass use a capturable static blurred backdrop without self-capture feedback.
+    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, and Full transparent use a capturable static blurred backdrop without self-capture feedback.
   - CompactWidth: 169
     $name: Island width
   - Height: 40
@@ -159,6 +166,9 @@ play/pause, and next controls.
   - ExpandedHeight: 500
     $name: Expanded player maximum height
     $description: In Fullsize mode, the smaller width or height limit determines the final player size.
+  - ExpandedCornerRadius: 24
+    $name: Expanded player corner radius
+    $description: Sets one corner radius for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
   - PopupSpacing: 20
     $name: Expanded player outer spacing
   - PopupCardGap: 8
@@ -347,6 +357,7 @@ struct Settings {
     bool autoSizeToTaskbar = true;
     int expandedWidth = 360;
     int expandedHeight = 500;
+    int expandedCornerRadius = 24;
     bool compact = false;
     int popupSpacing = 20;
     int popupCardGap = 8;
@@ -665,8 +676,7 @@ int g_popupBackdropOverlayFallbackWidth = 0;
 int g_popupBackdropOverlayFallbackHeight = 0;
 int g_popupBackdropOverlayFallbackRadius = 0;
 bool g_popupBackdropOverlayFallbackValid = false;
-[[clang::no_destroy]] std::vector<BYTE>
-    g_popupBackdropOverlayLowPixels;
+std::vector<BYTE> g_popupBackdropOverlayLowPixels;
 RECT g_popupBackdropOverlayLowPixelsRect{};
 int g_popupBackdropOverlayLowPixelsWidth = 0;
 int g_popupBackdropOverlayLowPixelsHeight = 0;
@@ -680,7 +690,7 @@ void ClearPopupBackdropOverlayHandoffCache() {
     g_popupBackdropOverlayFallbackHeight = 0;
     g_popupBackdropOverlayFallbackRadius = 0;
     g_popupBackdropOverlayFallbackValid = false;
-    g_popupBackdropOverlayLowPixels.clear();
+    std::vector<BYTE>().swap(g_popupBackdropOverlayLowPixels);
     g_popupBackdropOverlayLowPixelsRect = {};
     g_popupBackdropOverlayLowPixelsWidth = 0;
     g_popupBackdropOverlayLowPixelsHeight = 0;
@@ -1205,12 +1215,21 @@ bool IsLiquidGlassMaterial() {
     return g_settings.material == L"liquid_glass";
 }
 
+bool IsFullTransparentMaterial() {
+    return g_settings.material == L"full_transparent";
+}
+
 bool IsBlurredGlassMaterial() {
-    return g_settings.material == L"acrylic" || IsLiquidGlassMaterial();
+    return g_settings.material == L"acrylic" || IsLiquidGlassMaterial() ||
+           IsFullTransparentMaterial();
 }
 
 winrt::Windows::UI::Color IslandBackgroundColor() {
     bool dark = IsDarkModeApprox();
+    if (IsFullTransparentMaterial()) {
+        return Color(0x00, 0x00, 0x00, 0x00);
+    }
+
     if (g_settings.material == L"mica_like") {
         return dark ? Color(0xC8, 0x2A, 0x2A, 0x2F)
                     : Color(0xD4, 0xF3, 0xF3, 0xF6);
@@ -1240,7 +1259,9 @@ mediax::Brush IslandBackgroundBrush() {
 
 mediax::Brush DynamicMainOcclusionBrush() {
     auto color = IslandBackgroundColor();
-    color.A = 0xFF;
+    if (!IsFullTransparentMaterial()) {
+        color.A = 0xFF;
+    }
     return Brush(color);
 }
 
@@ -1301,6 +1322,10 @@ mediax::Brush LiquidGlassSurfaceHighlightBrush() {
 }
 
 mediax::Brush IslandBorderBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     bool dark = IsDarkModeApprox();
     // Keep the compact island outline identical in Mica and Liquid Glass.
     return Brush(dark ? Color(0x36, 0xFF, 0xFF, 0xFF)
@@ -1314,6 +1339,10 @@ winrt::Windows::UI::Color DynamicTransportAccentColor() {
 }
 
 mediax::Brush DynamicTransportBorderBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     bool dark = IsDarkModeApprox();
     auto accent = DynamicTransportAccentColor();
     mediax::LinearGradientBrush brush;
@@ -1339,6 +1368,10 @@ mediax::Brush DynamicTransportBorderBrush() {
 }
 
 mediax::Brush DynamicMainEdgeGlowBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     bool dark = IsDarkModeApprox();
     auto accent = DynamicTransportAccentColor();
     mediax::LinearGradientBrush brush;
@@ -1362,10 +1395,17 @@ mediax::Brush DynamicMainEdgeGlowBrush() {
 }
 
 double DynamicMainWashOpacity() {
+    if (IsFullTransparentMaterial()) {
+        return 0.0;
+    }
     return IsDarkModeApprox() ? 0.64 : 0.0;
 }
 
 mediax::Brush DynamicTransportWashTintBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     bool dark = IsDarkModeApprox();
     if (IsLiquidGlassMaterial()) {
         return Brush(dark ? Color(0x64, 0x1B, 0x1D, 0x24)
@@ -1377,6 +1417,9 @@ mediax::Brush DynamicTransportWashTintBrush() {
 }
 
 double DynamicTransportWashOpacity() {
+    if (IsFullTransparentMaterial()) {
+        return 0.0;
+    }
     return IsDarkModeApprox() ? 0.78 : 0.60;
 }
 
@@ -1537,6 +1580,8 @@ Settings ReadSettings() {
     settings.autoSizeToTaskbar = Wh_GetIntSetting(L"Main.AutoSizeToTaskbar") != 0;
     settings.expandedWidth = Clamp(Wh_GetIntSetting(L"Main.ExpandedWidth"), 240, 640);
     settings.expandedHeight = Clamp(Wh_GetIntSetting(L"Main.ExpandedHeight"), 430, 760);
+    settings.expandedCornerRadius =
+        Clamp(Wh_GetIntSetting(L"Main.ExpandedCornerRadius"), 1, 80);
     settings.popupSpacing = Clamp(Wh_GetIntSetting(L"Main.PopupSpacing"), 2, 40);
     settings.popupCardGap = Clamp(Wh_GetIntSetting(L"Main.PopupCardGap"), 0, 40);
     settings.popupShadowDepth = Clamp(Wh_GetIntSetting(L"Main.PopupShadowDepth"), 0, 128);
@@ -1544,7 +1589,7 @@ Settings ReadSettings() {
     settings.popupButtonStyle = GetStringSetting(L"Main.PopupButtonStyle", L"fluent_bold");
     if (settings.popupButtonStyle != L"minimal_transport" &&
         settings.popupButtonStyle != L"fluent_bold") {
-        settings.popupButtonStyle = L"minimal_transport";
+        settings.popupButtonStyle = L"fluent_bold";
     }
     settings.popupBackdropCoverEffect =
         GetStringSetting(L"Main.PopupBackdropCoverEffect", L"dark_only");
@@ -1580,7 +1625,8 @@ Settings ReadSettings() {
     if (settings.material != L"mica_like" &&
         settings.material != L"solid" &&
         settings.material != L"acrylic" &&
-        settings.material != L"liquid_glass") {
+        settings.material != L"liquid_glass" &&
+        settings.material != L"full_transparent") {
         settings.material = L"liquid_glass";
     }
     ApplySettingsMigrations(&settings);
@@ -3475,14 +3521,15 @@ std::vector<uint8_t> CreateEnergyFlameAlbumCoverBytes(std::vector<uint8_t> const
 
 std::vector<uint8_t> CreateDisplayAlbumCoverBytes(
     std::vector<uint8_t> const& bytes,
-    std::wstring const& sourceAppUserModelId) {
+    std::wstring const& sourceAppUserModelId,
+    bool shouldUseAbstractArtwork) {
     if (bytes.empty()) {
         return {};
     }
 
     bool browserSource = LooksLikeBrowserMediaSource(sourceAppUserModelId);
     if (!browserSource ||
-        !ShouldUseAbstractArtworkForDisplay(bytes) ||
+        !shouldUseAbstractArtwork ||
         g_settings.artworkAbstractMode == L"browser_original" ||
         g_settings.artworkAbstractMode == L"off") {
         return bytes;
@@ -4248,12 +4295,14 @@ constexpr int kPopupTimeTextHeight = 16;
 // G2-style popup radius family. Windhawk's UWP XAML surface does not expose
 // a true squircle clip here, so keep the visual language consistent by routing
 // every expanded popup corner through these shared radii.
-constexpr double kPopupUnifiedCornerRadius = 24.0;
+double PopupExpandedCornerRadius() {
+    return static_cast<double>(Clamp(g_settings.expandedCornerRadius, 1, 80));
+}
 constexpr double kPopupG2ButtonCornerRadius = 14.0;
 constexpr double kPopupG2ProgressCornerRadius = 3.0;
 
-double PopupG2CornerRadius(double width, double height) {
-    return std::max(1.0, std::min(width, height) * 0.118);
+double PopupG2CornerRadius(double, double) {
+    return PopupExpandedCornerRadius();
 }
 
 // Transparent host margin used only so the rounded XAML shadow can fit without
@@ -4274,7 +4323,7 @@ bool UseOverlayPopupBackdropMaterial() {
 }
 
 double PopupBackdropOverlayOpacity() {
-    return 1.0;
+    return IsFullTransparentMaterial() ? 0.84 : 1.0;
 }
 
 BYTE PopupBackdropOverlayMaxAlpha() {
@@ -4284,6 +4333,9 @@ BYTE PopupBackdropOverlayMaxAlpha() {
 }
 
 bool PopupBackdropCoverEffectEnabled() {
+    if (IsFullTransparentMaterial()) {
+        return false;
+    }
     if (g_settings.popupBackdropCoverEffect == L"off") {
         return false;
     }
@@ -4299,6 +4351,9 @@ bool PopupBackdropCoverEffectEnabled() {
 }
 
 bool PopupPanelCoverEffectEnabled() {
+    if (IsFullTransparentMaterial()) {
+        return false;
+    }
     if (IsLiquidGlassMaterial()) {
         return PopupBackdropCoverEffectEnabled();
     }
@@ -4351,6 +4406,10 @@ int PopupCompactFinalHeight() {
 }
 
 winrt::Windows::UI::Color PopupControlCardColor() {
+    if (IsFullTransparentMaterial()) {
+        return Color(0x00, 0x00, 0x00, 0x00);
+    }
+
     bool dark = IsDarkModeApprox();
     if (IsLiquidGlassMaterial()) {
         return dark ? Color(0x3A, 0x12, 0x14, 0x1A)
@@ -4553,6 +4612,10 @@ void SetPopupTextEdgeFadeOpacity(double opacity) {
 }
 
 mediax::Brush PopupBackdropCardTintBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     bool dark = IsDarkModeApprox();
     bool preserveCompactWash =
         g_settings.compact && PopupBackdropCoverEffectEnabled();
@@ -4631,6 +4694,10 @@ mediax::Brush PopupSurfaceBrush() {
 }
 
 mediax::Brush PopupSurfaceStrokeBrush() {
+    if (IsFullTransparentMaterial()) {
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+
     if (UseOverlayPopupBackdropMaterial()) {
         if (IsLiquidGlassMaterial()) {
             return LiquidGlassRimHighlightBrush();
@@ -5027,7 +5094,7 @@ void PaintExpandedPopup(HWND hwnd, HDC dc) {
     };
     int artSize = std::max(1, static_cast<int>(artRect.right - artRect.left));
 
-    int artRadius = static_cast<int>(kPopupUnifiedCornerRadius);
+    int artRadius = static_cast<int>(PopupExpandedCornerRadius());
     HRGN artClip = CreateRoundRectRgn(artRect.left, artRect.top,
                                       artRect.right + 1, artRect.bottom + 1,
                                       artRadius * 2, artRadius * 2);
@@ -5934,8 +6001,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border shadow{nullptr};
 
         Border backdrop;
-        backdrop.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
-                               kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius});
+        backdrop.CornerRadius({PopupExpandedCornerRadius(), PopupExpandedCornerRadius(),
+                               PopupExpandedCornerRadius(), PopupExpandedCornerRadius()});
         backdrop.BorderThickness({0, 0, 0, 0});
         backdrop.Opacity(kPopupBackdropOpacity);
         Grid backdropCoverHost;
@@ -5951,19 +6018,19 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border backdropTint;
         backdropTint.Background(PopupBackdropCardTintBrush());
         backdropTint.BorderThickness({0, 0, 0, 0});
-        backdropTint.CornerRadius({kPopupUnifiedCornerRadius,
-                                   kPopupUnifiedCornerRadius,
-                                   kPopupUnifiedCornerRadius,
-                                   kPopupUnifiedCornerRadius});
+        backdropTint.CornerRadius({PopupExpandedCornerRadius(),
+                                   PopupExpandedCornerRadius(),
+                                   PopupExpandedCornerRadius(),
+                                   PopupExpandedCornerRadius()});
         backdropTint.IsHitTestVisible(false);
         backdropCoverHost.Children().Append(backdropTint);
         Border backdropSurfaceHighlight;
         backdropSurfaceHighlight.Background(LiquidGlassSurfaceHighlightBrush());
         backdropSurfaceHighlight.BorderThickness({0, 0, 0, 0});
-        backdropSurfaceHighlight.CornerRadius({kPopupUnifiedCornerRadius,
-                                               kPopupUnifiedCornerRadius,
-                                               kPopupUnifiedCornerRadius,
-                                               kPopupUnifiedCornerRadius});
+        backdropSurfaceHighlight.CornerRadius({PopupExpandedCornerRadius(),
+                                               PopupExpandedCornerRadius(),
+                                               PopupExpandedCornerRadius(),
+                                               PopupExpandedCornerRadius()});
         backdropSurfaceHighlight.IsHitTestVisible(false);
         backdropSurfaceHighlight.Opacity(0.0);
         backdropCoverHost.Children().Append(backdropSurfaceHighlight);
@@ -5971,10 +6038,10 @@ bool InitializePopupXamlHost(HWND hwnd) {
         backdropRimHighlight.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         backdropRimHighlight.BorderBrush(LiquidGlassRimHighlightBrush());
         backdropRimHighlight.BorderThickness({1.0, 1.0, 1.0, 1.0});
-        backdropRimHighlight.CornerRadius({kPopupUnifiedCornerRadius,
-                                           kPopupUnifiedCornerRadius,
-                                           kPopupUnifiedCornerRadius,
-                                           kPopupUnifiedCornerRadius});
+        backdropRimHighlight.CornerRadius({PopupExpandedCornerRadius(),
+                                           PopupExpandedCornerRadius(),
+                                           PopupExpandedCornerRadius(),
+                                           PopupExpandedCornerRadius()});
         backdropRimHighlight.IsHitTestVisible(false);
         backdropRimHighlight.Opacity(0.0);
         backdropCoverHost.Children().Append(backdropRimHighlight);
@@ -5996,8 +6063,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         canvas.Children().Append(playbackContent);
 
         Border panelCoverFrame;
-        panelCoverFrame.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
-                                      kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius});
+        panelCoverFrame.CornerRadius({PopupExpandedCornerRadius(), PopupExpandedCornerRadius(),
+                                      PopupExpandedCornerRadius(), PopupExpandedCornerRadius()});
         panelCoverFrame.BorderThickness({0, 0, 0, 0});
         panelCoverFrame.Opacity(0.0);
         AttachGpuFriendlyTransform(panelCoverFrame, g_popupXamlPanelCoverScale, g_popupXamlPanelCoverTranslate);
@@ -6015,8 +6082,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         playbackContent.Children().Append(panelCoverFrame);
 
         Border panel;
-        panel.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
-                            kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius});
+        panel.CornerRadius({PopupExpandedCornerRadius(), PopupExpandedCornerRadius(),
+                            PopupExpandedCornerRadius(), PopupExpandedCornerRadius()});
         panel.BorderThickness({1, 1, 1, 1});
         panel.BorderBrush(PopupSurfaceStrokeBrush());
         panel.Opacity(0.0);
@@ -6025,8 +6092,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         playbackContent.Children().Append(panel);
 
         Border artFrame;
-        artFrame.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
-                               kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius});
+        artFrame.CornerRadius({PopupExpandedCornerRadius(), PopupExpandedCornerRadius(),
+                               PopupExpandedCornerRadius(), PopupExpandedCornerRadius()});
         artFrame.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         artFrame.BorderThickness(IsLiquidGlassMaterial()
                                      ? Thickness{1.35, 1.35, 1.35, 1.35}
@@ -6942,7 +7009,7 @@ void UpdatePopupXamlVisuals() {
         double targetShellRadius =
             g_settings.compact
                 ? PopupG2CornerRadius(backdropWidth, backdropHeight)
-                : kPopupUnifiedCornerRadius;
+                : PopupExpandedCornerRadius();
         double shellVisualRadius = LerpDouble(sourceShellRadius,
                                               targetShellRadius,
                                               morphProgress);
@@ -7110,7 +7177,7 @@ void UpdatePopupXamlVisuals() {
         g_settings.compact
             ? PopupG2CornerRadius(targetCard.right - targetCard.left,
                                   targetCard.bottom - targetCard.top)
-            : kPopupUnifiedCornerRadius;
+            : PopupExpandedCornerRadius();
     double panelVisualRadius = LerpDouble(sourceShellRadius,
                                           panelTargetRadius,
                                           morphProgress);
@@ -10989,7 +11056,8 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
                                            RECT const& screenRect,
                                            int width,
                                            int height,
-                                           int cornerRadiusPx) {
+                                           int cornerRadiusPx,
+                                           bool morphing) {
     if (!hwnd || width <= 2 || height <= 2) {
         return false;
     }
@@ -11010,7 +11078,7 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     bool needCapture =
         !g_popupBackdropOverlayLowPixelsValid ||
         (captureGeometryChanged &&
-         captureAge >= kPopupBackdropOverlayRefreshMs);
+         (!morphing || captureAge >= kPopupBackdropOverlayRefreshMs));
 
     if (!outputGeometryChanged && !needCapture) {
         return true;
@@ -11066,7 +11134,9 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     bool dark = IsDarkModeApprox();
     constexpr double kDarkDim = 0.94;
     constexpr double kLightDim = 1.00;
-    double dim = dark ? kDarkDim : kLightDim;
+    double dim = IsFullTransparentMaterial()
+                     ? 1.0
+                     : (dark ? kDarkDim : kLightDim);
     BYTE maxAlpha = PopupBackdropOverlayMaxAlpha();
 
     for (int y = 0; y < height; ++y) {
@@ -11395,7 +11465,7 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
             ? PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
                                   targetBackdrop.bottom - targetBackdrop.top)
             : std::max(1.0,
-                       kPopupUnifiedCornerRadius + kPopupOverlayRadiusAdjustDip);
+                       PopupExpandedCornerRadius() + kPopupOverlayRadiusAdjustDip);
     double sourceRadiusDip = SourceScaledRadius(g_layout.cornerRadius,
                                                 g_layout.compactHeight,
                                                 sourceRect);
@@ -11451,7 +11521,7 @@ bool CalculatePopupBackdropOverlayTargetSize(int& targetWidthPx,
             ? PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
                                   targetBackdrop.bottom - targetBackdrop.top)
             : std::max(1.0,
-                       kPopupUnifiedCornerRadius + kPopupOverlayRadiusAdjustDip);
+                       PopupExpandedCornerRadius() + kPopupOverlayRadiusAdjustDip);
     targetRadiusPx = Clamp(
         static_cast<int>(std::lround(targetRadiusDip * dpiScale)),
         1,
@@ -11579,11 +11649,9 @@ void UpdatePopupBackdropOverlayWindow() {
         ShowWindow(g_popupBackdropOverlay, SW_SHOWNOACTIVATE);
     }
 
-    if (g_settings.allowScreenCapture) {
-        if (g_popupOverlayWgcRunning) {
-            StopPopupOverlayWgcBackdrop();
-        }
-        LONG_PTR fallbackStyle = GetWindowLongPtrW(g_popupBackdropOverlay, GWL_EXSTYLE);
+    auto paintLayeredBlurFallback = [&]() {
+        LONG_PTR fallbackStyle =
+            GetWindowLongPtrW(g_popupBackdropOverlay, GWL_EXSTYLE);
         LONG_PTR fallbackDesiredStyle =
             (fallbackStyle & ~WS_EX_NOREDIRECTIONBITMAP) |
             WS_EX_LAYERED | WS_EX_TRANSPARENT |
@@ -11593,20 +11661,23 @@ void UpdatePopupBackdropOverlayWindow() {
                               GWL_EXSTYLE,
                               fallbackDesiredStyle);
         }
-        if (UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
-                                                  overlayRect,
-                                                  width,
-                                                  height,
-                                                  cornerRadiusPx)) {
-            g_popupOverlayWgcFallbackPainted = true;
+        g_popupOverlayWgcFallbackPainted =
+            UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                                   overlayRect,
+                                                   width,
+                                                   height,
+                                                   cornerRadiusPx,
+                                                   morphing);
+    };
+
+    if (g_settings.allowScreenCapture) {
+        if (g_popupOverlayWgcRunning) {
+            StopPopupOverlayWgcBackdrop();
         }
+        paintLayeredBlurFallback();
         return;
     }
 
-    if (!g_popupOverlayWgcRunning && g_popupOverlayWgcFallbackPainted) {
-        ClearPopupBackdropOverlayLayeredSurface(g_popupBackdropOverlay);
-        g_popupOverlayWgcFallbackPainted = false;
-    }
     LONG_PTR dcompStyle = GetWindowLongPtrW(g_popupBackdropOverlay, GWL_EXSTYLE);
     LONG_PTR dcompDesiredStyle =
         (dcompStyle & ~WS_EX_LAYERED) | WS_EX_TRANSPARENT |
@@ -11617,11 +11688,21 @@ void UpdatePopupBackdropOverlayWindow() {
                           GWL_EXSTYLE,
                           dcompDesiredStyle);
     }
-    StartPopupOverlayWgcBackdrop(overlayRect,
-                                 renderWidth,
-                                 renderHeight,
-                                 renderParameters);
-    UpdatePopupOverlayDcompVisualTransform(width, height);
+    bool wgcStarted =
+        StartPopupOverlayWgcBackdrop(overlayRect,
+                                     renderWidth,
+                                     renderHeight,
+                                     renderParameters);
+    if (wgcStarted || g_popupOverlayWgcRunning) {
+        g_popupOverlayWgcFallbackPainted = false;
+        UpdatePopupOverlayDcompVisualTransform(width, height);
+        return;
+    }
+
+    // Borderless capture access, CreateForMonitor, or WGC support can fail on
+    // otherwise supported Windows builds. Keep the expanded material usable
+    // by immediately degrading to the same rounded GDI blur path.
+    paintLayeredBlurFallback();
 }
 
 bool RegisterPopupWindowClass() {
@@ -13044,6 +13125,12 @@ void StartMediaThread() {
     if (g_mediaThreadRunning.exchange(true)) {
         return;
     }
+    if (g_mediaThread) {
+        if (g_mediaThread->joinable()) {
+            g_mediaThread->join();
+        }
+        g_mediaThread.reset();
+    }
     try {
         g_mediaThread.emplace(MediaThreadProc);
     } catch (...) {
@@ -13291,8 +13378,10 @@ void ApplyDynamicMainIslandShadow() {
         return;
     }
 
-    // Light mode stays clean: the main island must not cast onto the side island.
-    if (!IsDarkModeApprox() || !g_dynamicTransportIsland) {
+    // A fully transparent compact island must not leave a floating surface shadow.
+    // Light mode also stays clean: the main island must not cast onto the side island.
+    if (IsFullTransparentMaterial() || !IsDarkModeApprox() ||
+        !g_dynamicTransportIsland) {
         background.Shadow(mediax::Shadow{nullptr});
         background.Translation({0.0f, 0.0f, 0.0f});
         return;
@@ -14344,12 +14433,44 @@ void UpdatePlayerContents() {
         visualThumbnailBytes.clear();
     }
 
-    std::vector<uint8_t> displayThumbnailBytes =
-        CreateDisplayAlbumCoverBytes(visualThumbnailBytes,
-                                     state.sourceAppUserModelId);
+    uint64_t visualThumbnailHash = ThumbnailHash(visualThumbnailBytes);
+    bool browserArtworkSource =
+        LooksLikeBrowserMediaSource(state.sourceAppUserModelId);
+    static uint64_t s_artworkAnalysisHash = UINT64_MAX;
+    static bool s_artworkAnalysisBrowserSource = false;
+    static bool s_shouldUseAbstractArtwork = false;
+    if (visualThumbnailHash != s_artworkAnalysisHash ||
+        browserArtworkSource != s_artworkAnalysisBrowserSource) {
+        s_artworkAnalysisHash = visualThumbnailHash;
+        s_artworkAnalysisBrowserSource = browserArtworkSource;
+        s_shouldUseAbstractArtwork =
+            browserArtworkSource &&
+            ShouldUseAbstractArtworkForDisplay(visualThumbnailBytes);
+    }
+
+    static uint64_t s_displayArtworkHash = UINT64_MAX;
+    static bool s_displayArtworkBrowserSource = false;
+    static bool s_displayArtworkAbstract = false;
+    static std::wstring s_displayArtworkMode;
+    static std::vector<uint8_t> s_displayArtworkBytes;
+    if (visualThumbnailHash != s_displayArtworkHash ||
+        browserArtworkSource != s_displayArtworkBrowserSource ||
+        s_shouldUseAbstractArtwork != s_displayArtworkAbstract ||
+        g_settings.artworkAbstractMode != s_displayArtworkMode) {
+        s_displayArtworkHash = visualThumbnailHash;
+        s_displayArtworkBrowserSource = browserArtworkSource;
+        s_displayArtworkAbstract = s_shouldUseAbstractArtwork;
+        s_displayArtworkMode = g_settings.artworkAbstractMode;
+        s_displayArtworkBytes =
+            CreateDisplayAlbumCoverBytes(visualThumbnailBytes,
+                                         state.sourceAppUserModelId,
+                                         s_shouldUseAbstractArtwork);
+    }
+    std::vector<uint8_t> const& displayThumbnailBytes =
+        s_displayArtworkBytes;
     bool useGeneratedBlurCover =
-        LooksLikeBrowserMediaSource(state.sourceAppUserModelId) &&
-        ShouldUseAbstractArtworkForDisplay(visualThumbnailBytes) &&
+        browserArtworkSource && s_shouldUseAbstractArtwork &&
+        g_settings.artworkAbstractMode != L"browser_original" &&
         !displayThumbnailBytes.empty();
     std::vector<uint8_t> popupBlurSourceBytes =
         useGeneratedBlurCover ? displayThumbnailBytes : visualThumbnailBytes;
@@ -14584,10 +14705,11 @@ void UpdatePlayerContents() {
                                               : displayThumbnailBytes;
             uint64_t accentHash = ThumbnailHash(accentSourceBytes);
             bool accentChanged = accentHash != g_popupAccentThumbnailHash;
-            winrt::Windows::UI::Color nextAccent = accentSourceBytes.empty()
-                                                     ? DefaultPopupAccentColor()
-                                                     : ExtractAlbumAccentColor(accentSourceBytes);
             if (accentChanged) {
+                winrt::Windows::UI::Color nextAccent =
+                    accentSourceBytes.empty()
+                        ? DefaultPopupAccentColor()
+                        : ExtractAlbumAccentColor(accentSourceBytes);
                 winrt::Windows::UI::Color currentAccent = PopupAccentColor();
                 bool canAnimateAccent = g_popupAccentThumbnailHash != UINT64_MAX &&
                                         g_popupXamlRoot &&
