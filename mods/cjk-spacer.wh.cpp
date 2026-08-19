@@ -1866,8 +1866,10 @@ enum class XamlDiagnosticsFlavor {
 };
 
 // DXamlCore allocates dense low connection indices. A larger walk only
-// multiplies probes while no diagnostics endpoint is registered.
-constexpr int kXamlDiagnosticsConnectionLimit = 64;
+// multiplies probes while no diagnostics endpoint is registered, and with
+// Taskbar Styler or File Explorer Styler in alert mode each probe can raise
+// a modal dialog, so the bound stays small.
+constexpr int kXamlDiagnosticsConnectionLimit = 8;
 constexpr unsigned int kXamlDiagnosticsMaxAttempts = 3;
 // Pause after five empty walks in one startup burst. A later host or module
 // event, or the cooldown expiring, can resume probing.
@@ -1891,7 +1893,7 @@ struct XamlDiagnosticsConnectionState {
 
 bool HasXamlDiagnosticsEmptyWalkBudget(
     const XamlDiagnosticsConnectionState& state,
-    uint64_t currentTick = GetTickCount64()) {
+    uint64_t currentTick) {
     if (state.emptyWalkCount.load(std::memory_order_acquire) <
         kXamlDiagnosticsMaxEmptyWalks) {
         return true;
@@ -1906,7 +1908,7 @@ bool HasXamlDiagnosticsEmptyWalkBudget(
 
 bool CanAttemptXamlDiagnosticsConnection(
     const XamlDiagnosticsConnectionState& state,
-    uint64_t currentTick = GetTickCount64()) {
+    uint64_t currentTick) {
     return !state.connected.load(std::memory_order_acquire) &&
            !state.blocked.load(std::memory_order_acquire) &&
            state.failureCount.load(std::memory_order_acquire) <
@@ -1916,7 +1918,7 @@ bool CanAttemptXamlDiagnosticsConnection(
 
 bool IsXamlDiagnosticsFlavorCoolingDown(
     const XamlDiagnosticsConnectionState& state,
-    uint64_t currentTick = GetTickCount64()) {
+    uint64_t currentTick) {
     return state.emptyWalkCount.load(std::memory_order_acquire) >=
                kXamlDiagnosticsMaxEmptyWalks &&
            !HasXamlDiagnosticsEmptyWalkBudget(state, currentTick);
@@ -1941,7 +1943,7 @@ bool RefreshXamlDiagnosticsEmptyWalkBudget(
     return true;
 }
 
-bool RequestModernXamlDiagnosticsInitialization(
+void RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor flavor);
 void RearmXamlDiagnosticsConnection(
     XamlDiagnosticsFlavor flavor);
@@ -2451,7 +2453,7 @@ void EnsureXamlDiagnosticsConnection(
     LPCWSTR displayName,
     XamlDiagnosticsFlavor flavor) {
     if (g_stoppingModernUi.load(std::memory_order_acquire) ||
-        !CanAttemptXamlDiagnosticsConnection(state)) {
+        !CanAttemptXamlDiagnosticsConnection(state, GetTickCount64())) {
         return;
     }
 
@@ -2716,44 +2718,38 @@ void RearmXamlDiagnosticsConnection(
     state->connected.store(false, std::memory_order_release);
 }
 
-bool RequestModernXamlDiagnosticsInitialization(
+void RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor flavor) {
     if (g_stoppingModernUi.load(std::memory_order_acquire)) {
-        return false;
+        return;
     }
 
     XamlDiagnosticsConnectionState* state =
         GetXamlDiagnosticsConnectionState(flavor);
     if (!state) {
-        return false;
+        return;
     }
 
-    if (!CanAttemptXamlDiagnosticsConnection(*state)) {
-        return false;
+    const uint64_t currentTick = GetTickCount64();
+    if (!CanAttemptXamlDiagnosticsConnection(*state, currentTick)) {
+        return;
     }
 
     std::lock_guard<std::mutex> guard(
         g_xamlDiagnosticsWorkerMutex);
-    const uint64_t currentTick = GetTickCount64();
     if (g_stoppingModernUi.load(std::memory_order_acquire) ||
         !g_xamlDiagnosticsWorkerWakeEvent ||
         !RefreshXamlDiagnosticsEmptyWalkBudget(*state, currentTick) ||
         !CanAttemptXamlDiagnosticsConnection(*state, currentTick)) {
-        return false;
+        return;
     }
 
-    const unsigned int previousGeneration =
-        state->requestGeneration.fetch_add(
-            1, std::memory_order_acq_rel);
-    const bool firstPendingRequest =
-        previousGeneration ==
-        state->processedGeneration.load(std::memory_order_acquire);
+    state->requestGeneration.fetch_add(
+        1, std::memory_order_acq_rel);
     if (!SetEvent(g_xamlDiagnosticsWorkerWakeEvent)) {
         Wh_Log(L"Couldn't signal the XAML diagnostics worker: %u",
                GetLastError());
-        return false;
     }
-    return firstPendingRequest;
 }
 
 void StopModernXamlDiagnosticsWorker() {
@@ -2850,8 +2846,11 @@ XamlDiagnosticsFlavor GetModernXamlHostFlavor(
 }
 
 bool NeedsAnyXamlDiagnosticsHostNotification() {
-    return CanAttemptXamlDiagnosticsConnection(g_windowsUiXamlDiagnostics) ||
-           CanAttemptXamlDiagnosticsConnection(g_microsoftUiXamlDiagnostics);
+    const uint64_t currentTick = GetTickCount64();
+    return CanAttemptXamlDiagnosticsConnection(
+               g_windowsUiXamlDiagnostics, currentTick) ||
+           CanAttemptXamlDiagnosticsConnection(
+               g_microsoftUiXamlDiagnostics, currentTick);
 }
 
 void NotifyModernXamlHost(HWND window, LPCWSTR className = nullptr) {
@@ -2877,11 +2876,8 @@ void NotifyModernXamlHost(HWND window, LPCWSTR className = nullptr) {
 
     // Only signal the worker here. XAML Diagnostics and COM initialization
     // must not run inside a window-creation hook.
-    const bool queuedFirstRequest =
-        RequestModernXamlDiagnosticsInitialization(flavor);
-    if (queuedFirstRequest) {
-        Wh_Log(L"Found XAML host window: %s", className);
-    }
+    RequestModernXamlDiagnosticsInitialization(flavor);
+    Wh_Log(L"Found XAML host window: %s", className);
 }
 
 BOOL CALLBACK EnumExistingModernXamlHostWindow(HWND window, LPARAM) {
@@ -2967,12 +2963,9 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
         g_modernUiActive.load(std::memory_order_acquire)) {
         // Only wake the worker here. Diagnostics initialization must not run
         // from a library-loading call stack.
-        const bool queuedFirstRequest =
-            RequestModernXamlDiagnosticsInitialization(flavor);
-        if (queuedFirstRequest) {
-            Wh_Log(L"Loaded XAML diagnostics module: %s",
-                   GetModuleFileNamePart(fileName));
-        }
+        RequestModernXamlDiagnosticsInitialization(flavor);
+        Wh_Log(L"Loaded XAML diagnostics module: %s",
+               GetModuleFileNamePart(fileName));
     }
     return module;
 }
@@ -3303,25 +3296,26 @@ bool HookModernXamlHostCreation() {
     }
 
     HMODULE user32Module = GetModuleHandleW(L"user32.dll");
+    if (user32Module) {
+        const auto createWindowInBand =
+            reinterpret_cast<CreateWindowInBand_t>(
+                GetProcAddress(user32Module, "CreateWindowInBand"));
+        if (createWindowInBand) {
+            InstallHook(
+                createWindowInBand, CreateWindowInBandHook,
+                &g_originalCreateWindowInBand,
+                L"CreateWindowInBand");
+        }
 
-    const auto createWindowInBand =
-        reinterpret_cast<CreateWindowInBand_t>(
-            GetProcAddress(user32Module, "CreateWindowInBand"));
-    if (createWindowInBand) {
-        InstallHook(
-            createWindowInBand, CreateWindowInBandHook,
-            &g_originalCreateWindowInBand,
-            L"CreateWindowInBand");
-    }
-
-    const auto createWindowInBandEx =
-        reinterpret_cast<CreateWindowInBandEx_t>(
-            GetProcAddress(user32Module, "CreateWindowInBandEx"));
-    if (createWindowInBandEx) {
-        InstallHook(
-            createWindowInBandEx, CreateWindowInBandExHook,
-            &g_originalCreateWindowInBandEx,
-            L"CreateWindowInBandEx");
+        const auto createWindowInBandEx =
+            reinterpret_cast<CreateWindowInBandEx_t>(
+                GetProcAddress(user32Module, "CreateWindowInBandEx"));
+        if (createWindowInBandEx) {
+            InstallHook(
+                createWindowInBandEx, CreateWindowInBandExHook,
+                &g_originalCreateWindowInBandEx,
+                L"CreateWindowInBandEx");
+        }
     }
     return true;
 }
