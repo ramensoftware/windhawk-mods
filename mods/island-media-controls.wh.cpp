@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.3
+// @version         0.10.4
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -36,8 +36,9 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Full transparent material:** Keep the compact island background-free, then
-  open an expanded player made from clean, untinted transparent blur.
+- **Two transparent materials:** Transparent keeps the Acrylic-style blur and
+  subtle outline in compact and expanded layouts; Transparent borderless keeps
+  the same clean blur while removing the outline.
 - **One corner-radius control:** Set the expanded player's corners once and keep
   the XAML surface, artwork, controls, highlights, and independent blur layer in
   sync.
@@ -75,8 +76,8 @@ play/pause, and next controls.
   and failed actions all respond with soft motion so the island feels alive
   instead of static.
 - **Polished visual styles:** Choose from Mica-like, Solid, Acrylic, Liquid
-  Glass, and Full transparent materials, with album-color highlights and refined
-  dark/light mode treatment.
+  Glass, Transparent, and Transparent borderless materials, with album-color
+  highlights and refined dark/light mode treatment.
 - **Artwork that fits the moment:** Keep original thumbnails or replace rough
   browser/video artwork with generated abstract covers for a cleaner look.
 - **Useful playback controls:** Open the player to seek through the track, switch
@@ -105,7 +106,8 @@ play/pause, and next controls.
     - "solid": "Solid"
     - "acrylic": "Acrylic glass"
     - "liquid_glass": "Liquid Glass"
-    - "full_transparent": "Full transparent"
+    - "transparent": "Transparent"
+    - "transparent_borderless": "Transparent borderless"
   - DisplayMode: "fullsize"
     $name: Display mode
     $description: Choose how the island opens. Expanded player settings only apply to Fullsize and Compact; Side expansion mode uses the taskbar-side controls instead. If the previous Compact option is detected, the island keeps that layout until you save settings here - select Compact to keep it.
@@ -152,7 +154,7 @@ play/pause, and next controls.
     $description: Enables elastic overshoot and rebound during fullsize expand/collapse. Compact click feedback always remains enabled.
   - AllowScreenCapture: false
     $name: Expanded player capturable blurred backdrop
-    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, and Full transparent use a capturable static blurred backdrop without self-capture feedback.
+    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, Transparent, and Transparent borderless use a capturable static blurred backdrop without self-capture feedback.
   - CompactWidth: 169
     $name: Island width
   - Height: 40
@@ -168,7 +170,7 @@ play/pause, and next controls.
     $description: In Fullsize mode, the smaller width or height limit determines the final player size.
   - ExpandedCornerRadius: 24
     $name: Expanded player corner radius
-    $description: Sets one corner radius for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
+    $description: Scales the shared G2 continuous corner profile for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
   - PopupSpacing: 20
     $name: Expanded player outer spacing
   - PopupCardGap: 8
@@ -1215,18 +1217,27 @@ bool IsLiquidGlassMaterial() {
     return g_settings.material == L"liquid_glass";
 }
 
-bool IsFullTransparentMaterial() {
-    return g_settings.material == L"full_transparent";
+bool IsTransparentBorderlessMaterial() {
+    return g_settings.material == L"transparent_borderless";
+}
+
+bool IsTransparentBorderedMaterial() {
+    return g_settings.material == L"transparent";
+}
+
+bool IsTransparentMaterial() {
+    return IsTransparentBorderedMaterial() ||
+           IsTransparentBorderlessMaterial();
 }
 
 bool IsBlurredGlassMaterial() {
     return g_settings.material == L"acrylic" || IsLiquidGlassMaterial() ||
-           IsFullTransparentMaterial();
+           IsTransparentMaterial();
 }
 
 winrt::Windows::UI::Color IslandBackgroundColor() {
     bool dark = IsDarkModeApprox();
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return Color(0x00, 0x00, 0x00, 0x00);
     }
 
@@ -1253,15 +1264,37 @@ winrt::Windows::UI::Color IslandBackgroundColor() {
                 : Color(0xE8, 0xF4, 0xF4, 0xF6);
 }
 
+mediax::Brush TransparentCompactAcrylicBrush() {
+    bool dark = IsDarkModeApprox();
+    try {
+        mediax::AcrylicBrush brush;
+        brush.BackgroundSource(mediax::AcrylicBackgroundSource::HostBackdrop);
+        brush.TintColor(Color(0x00, 0x00, 0x00, 0x00));
+        brush.TintOpacity(0.0);
+        brush.TintLuminosityOpacity(0.0);
+        brush.FallbackColor(dark ? Color(0xB8, 0x20, 0x20, 0x24)
+                                 : Color(0xC8, 0xF8, 0xF8, 0xFA));
+        return brush;
+    } catch (...) {
+        return Brush(dark ? Color(0xB8, 0x20, 0x20, 0x24)
+                          : Color(0xC8, 0xF8, 0xF8, 0xFA));
+    }
+}
+
 mediax::Brush IslandBackgroundBrush() {
+    if (IsTransparentMaterial()) {
+        return TransparentCompactAcrylicBrush();
+    }
     return Brush(IslandBackgroundColor());
 }
 
 mediax::Brush DynamicMainOcclusionBrush() {
-    auto color = IslandBackgroundColor();
-    if (!IsFullTransparentMaterial()) {
-        color.A = 0xFF;
+    if (IsTransparentMaterial()) {
+        return TransparentCompactAcrylicBrush();
     }
+
+    auto color = IslandBackgroundColor();
+    color.A = 0xFF;
     return Brush(color);
 }
 
@@ -1322,7 +1355,7 @@ mediax::Brush LiquidGlassSurfaceHighlightBrush() {
 }
 
 mediax::Brush IslandBorderBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 
@@ -1339,7 +1372,7 @@ winrt::Windows::UI::Color DynamicTransportAccentColor() {
 }
 
 mediax::Brush DynamicTransportBorderBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 
@@ -1368,7 +1401,7 @@ mediax::Brush DynamicTransportBorderBrush() {
 }
 
 mediax::Brush DynamicMainEdgeGlowBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 
@@ -1395,14 +1428,14 @@ mediax::Brush DynamicMainEdgeGlowBrush() {
 }
 
 double DynamicMainWashOpacity() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return 0.0;
     }
     return IsDarkModeApprox() ? 0.64 : 0.0;
 }
 
 mediax::Brush DynamicTransportWashTintBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 
@@ -1417,7 +1450,7 @@ mediax::Brush DynamicTransportWashTintBrush() {
 }
 
 double DynamicTransportWashOpacity() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return 0.0;
     }
     return IsDarkModeApprox() ? 0.78 : 0.60;
@@ -1622,11 +1655,16 @@ Settings ReadSettings() {
         Wh_GetIntSetting(L"Main.ClassicMorphScaleAnimation") != 0;
 
     settings.material = GetStringSetting(L"Main.Material", L"liquid_glass");
+    // Keep users of the short-lived 0.10.3 value on the same borderless look.
+    if (settings.material == L"full_transparent") {
+        settings.material = L"transparent_borderless";
+    }
     if (settings.material != L"mica_like" &&
         settings.material != L"solid" &&
         settings.material != L"acrylic" &&
         settings.material != L"liquid_glass" &&
-        settings.material != L"full_transparent") {
+        settings.material != L"transparent" &&
+        settings.material != L"transparent_borderless") {
         settings.material = L"liquid_glass";
     }
     ApplySettingsMigrations(&settings);
@@ -2717,7 +2755,14 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels, UINT size) {
     }
 
     constexpr double kPopupCoverG2RadiusRatio = 0.118;
-    const double radius = std::max(1.0, static_cast<double>(size) * kPopupCoverG2RadiusRatio);
+    constexpr double kPopupG2DefaultSettingRadius = 24.0;
+    double radiusScale =
+        static_cast<double>(Clamp(g_settings.expandedCornerRadius, 1, 80)) /
+        kPopupG2DefaultSettingRadius;
+    const double radius = Clamp(
+        static_cast<double>(size) * kPopupCoverG2RadiusRatio * radiusScale,
+        1.0,
+        static_cast<double>(size) * 0.5);
     for (UINT y = 0; y < size; ++y) {
         for (UINT x = 0; x < size; ++x) {
             double alphaScale = PopupCoverG2MaskScale(x, y, size, radius);
@@ -4295,14 +4340,22 @@ constexpr int kPopupTimeTextHeight = 16;
 // G2-style popup radius family. Windhawk's UWP XAML surface does not expose
 // a true squircle clip here, so keep the visual language consistent by routing
 // every expanded popup corner through these shared radii.
+constexpr double kPopupG2DefaultSettingRadius = 24.0;
+constexpr double kPopupG2RadiusRatio = 0.118;
+
 double PopupExpandedCornerRadius() {
     return static_cast<double>(Clamp(g_settings.expandedCornerRadius, 1, 80));
 }
 constexpr double kPopupG2ButtonCornerRadius = 14.0;
 constexpr double kPopupG2ProgressCornerRadius = 3.0;
 
-double PopupG2CornerRadius(double, double) {
-    return PopupExpandedCornerRadius();
+double PopupG2CornerRadius(double width, double height) {
+    double minSize = std::max(1.0, std::min(width, height));
+    double radiusScale =
+        PopupExpandedCornerRadius() / kPopupG2DefaultSettingRadius;
+    return Clamp(minSize * kPopupG2RadiusRatio * radiusScale,
+                 1.0,
+                 minSize * 0.5);
 }
 
 // Transparent host margin used only so the rounded XAML shadow can fit without
@@ -4323,7 +4376,9 @@ bool UseOverlayPopupBackdropMaterial() {
 }
 
 double PopupBackdropOverlayOpacity() {
-    return IsFullTransparentMaterial() ? 0.84 : 1.0;
+    // Transparent modes use the same native blur opacity as Acrylic. Their
+    // distinction is tint and outline, not a weaker backdrop sample.
+    return 1.0;
 }
 
 BYTE PopupBackdropOverlayMaxAlpha() {
@@ -4333,7 +4388,7 @@ BYTE PopupBackdropOverlayMaxAlpha() {
 }
 
 bool PopupBackdropCoverEffectEnabled() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return false;
     }
     if (g_settings.popupBackdropCoverEffect == L"off") {
@@ -4351,7 +4406,7 @@ bool PopupBackdropCoverEffectEnabled() {
 }
 
 bool PopupPanelCoverEffectEnabled() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return false;
     }
     if (IsLiquidGlassMaterial()) {
@@ -4406,7 +4461,7 @@ int PopupCompactFinalHeight() {
 }
 
 winrt::Windows::UI::Color PopupControlCardColor() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return Color(0x00, 0x00, 0x00, 0x00);
     }
 
@@ -4612,7 +4667,7 @@ void SetPopupTextEdgeFadeOpacity(double opacity) {
 }
 
 mediax::Brush PopupBackdropCardTintBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
     }
 
@@ -4694,8 +4749,11 @@ mediax::Brush PopupSurfaceBrush() {
 }
 
 mediax::Brush PopupSurfaceStrokeBrush() {
-    if (IsFullTransparentMaterial()) {
+    if (IsTransparentBorderlessMaterial()) {
         return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
+    if (IsTransparentBorderedMaterial()) {
+        return IslandBorderBrush();
     }
 
     if (UseOverlayPopupBackdropMaterial()) {
@@ -5094,7 +5152,8 @@ void PaintExpandedPopup(HWND hwnd, HDC dc) {
     };
     int artSize = std::max(1, static_cast<int>(artRect.right - artRect.left));
 
-    int artRadius = static_cast<int>(PopupExpandedCornerRadius());
+    int artRadius = static_cast<int>(std::lround(
+        PopupG2CornerRadius(artSize, artSize)));
     HRGN artClip = CreateRoundRectRgn(artRect.left, artRect.top,
                                       artRect.right + 1, artRect.bottom + 1,
                                       artRadius * 2, artRadius * 2);
@@ -5556,7 +5615,8 @@ void ApplyPopupXamlTheme(bool force = false) {
     }
     if (g_popupXamlBackdrop) {
         g_popupXamlBackdrop.Background(PopupSurfaceBrush());
-        bool useNativeHighlightStroke = !IsLiquidGlassMaterial();
+        bool useNativeHighlightStroke =
+            !IsLiquidGlassMaterial() && !IsTransparentBorderlessMaterial();
         g_popupXamlBackdrop.BorderThickness(
             useNativeHighlightStroke
                 ? (g_settings.compact
@@ -5564,8 +5624,10 @@ void ApplyPopupXamlTheme(bool force = false) {
                        : Thickness{1.0, 1.0, 1.0, 1.0})
                 : Thickness{0.0, 0.0, 0.0, 0.0});
         g_popupXamlBackdrop.BorderBrush(
-            useNativeHighlightStroke ? PopupAlbumArtStrokeBrush()
-                                     : PopupSurfaceStrokeBrush());
+            IsTransparentBorderedMaterial()
+                ? IslandBorderBrush()
+                : (useNativeHighlightStroke ? PopupAlbumArtStrokeBrush()
+                                            : PopupSurfaceStrokeBrush()));
         InitializePopupCompositionShadow();
     }
     if (g_popupXamlBackdropTint) {
@@ -7007,9 +7069,7 @@ void UpdatePopupXamlVisuals() {
         } catch (...) {
         }
         double targetShellRadius =
-            g_settings.compact
-                ? PopupG2CornerRadius(backdropWidth, backdropHeight)
-                : PopupExpandedCornerRadius();
+            PopupG2CornerRadius(backdropWidth, backdropHeight);
         double shellVisualRadius = LerpDouble(sourceShellRadius,
                                               targetShellRadius,
                                               morphProgress);
@@ -7174,10 +7234,8 @@ void UpdatePopupXamlVisuals() {
         g_popupXamlPlaybackContentScale.ScaleY(controlsSeekScale);
     }
     double panelTargetRadius =
-        g_settings.compact
-            ? PopupG2CornerRadius(targetCard.right - targetCard.left,
-                                  targetCard.bottom - targetCard.top)
-            : PopupExpandedCornerRadius();
+        PopupG2CornerRadius(targetCard.right - targetCard.left,
+                            targetCard.bottom - targetCard.top);
     double panelVisualRadius = LerpDouble(sourceShellRadius,
                                           panelTargetRadius,
                                           morphProgress);
@@ -11134,9 +11192,8 @@ bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
     bool dark = IsDarkModeApprox();
     constexpr double kDarkDim = 0.94;
     constexpr double kLightDim = 1.00;
-    double dim = IsFullTransparentMaterial()
-                     ? 1.0
-                     : (dark ? kDarkDim : kLightDim);
+    // Match Acrylic's neutral fallback treatment in both transparent modes.
+    double dim = dark ? kDarkDim : kLightDim;
     BYTE maxAlpha = PopupBackdropOverlayMaxAlpha();
 
     for (int y = 0; y < height; ++y) {
@@ -11460,12 +11517,11 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
         return false;
     }
 
-    double targetRadiusDip =
-        g_settings.compact
-            ? PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
-                                  targetBackdrop.bottom - targetBackdrop.top)
-            : std::max(1.0,
-                       PopupExpandedCornerRadius() + kPopupOverlayRadiusAdjustDip);
+    double targetRadiusDip = std::max(
+        1.0,
+        PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
+                            targetBackdrop.bottom - targetBackdrop.top) +
+            kPopupOverlayRadiusAdjustDip);
     double sourceRadiusDip = SourceScaledRadius(g_layout.cornerRadius,
                                                 g_layout.compactHeight,
                                                 sourceRect);
@@ -11516,12 +11572,11 @@ bool CalculatePopupBackdropOverlayTargetSize(int& targetWidthPx,
     targetWidthPx = std::max(1, static_cast<int>(std::lround(targetWidthDip * dpiScale)));
     targetHeightPx = std::max(1, static_cast<int>(std::lround(targetHeightDip * dpiScale)));
 
-    double targetRadiusDip =
-        g_settings.compact
-            ? PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
-                                  targetBackdrop.bottom - targetBackdrop.top)
-            : std::max(1.0,
-                       PopupExpandedCornerRadius() + kPopupOverlayRadiusAdjustDip);
+    double targetRadiusDip = std::max(
+        1.0,
+        PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
+                            targetBackdrop.bottom - targetBackdrop.top) +
+            kPopupOverlayRadiusAdjustDip);
     targetRadiusPx = Clamp(
         static_cast<int>(std::lround(targetRadiusDip * dpiScale)),
         1,
@@ -13378,9 +13433,9 @@ void ApplyDynamicMainIslandShadow() {
         return;
     }
 
-    // A fully transparent compact island must not leave a floating surface shadow.
+    // Borderless keeps the clean outline-free treatment; Transparent keeps the normal shadow.
     // Light mode also stays clean: the main island must not cast onto the side island.
-    if (IsFullTransparentMaterial() || !IsDarkModeApprox() ||
+    if (IsTransparentBorderlessMaterial() || !IsDarkModeApprox() ||
         !g_dynamicTransportIsland) {
         background.Shadow(mediax::Shadow{nullptr});
         background.Translation({0.0f, 0.0f, 0.0f});
