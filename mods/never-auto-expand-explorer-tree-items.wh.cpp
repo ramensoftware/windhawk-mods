@@ -6,7 +6,6 @@
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
-// @compilerOptions -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -65,23 +64,17 @@ bool IsExplorerNavigationPane(HWND hTreeView)
     }
 
     WCHAR szClassName[32];
-    if (GetClassNameW(hParentWnd, szClassName, ARRAYSIZE(szClassName)) &&
-        _wcsicmp(szClassName, L"NamespaceTreeControl") == 0)
-    {
-        // Retrieve the root window to confirm it's a File Explorer window or
-        // file picker dialog
-        HWND hRootWnd = GetAncestor(hTreeView, GA_ROOT);
-        if (!hRootWnd)
-        {
-            return false;
-        }
 
-        return (GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)) &&
-            (_wcsicmp(szClassName, L"CabinetWClass") == 0 ||
-                _wcsicmp(szClassName, L"#32770") == 0));
-    }
+    // Retrieve the root window to confirm it's a File Explorer window or
+    // file picker dialog
+    HWND hRootWnd = GetAncestor(hTreeView, GA_ROOT);
 
-    return false;
+    return (hRootWnd &&
+        GetClassNameW(hParentWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        _wcsicmp(szClassName, L"NamespaceTreeControl") == 0 &&
+        GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        (_wcsicmp(szClassName, L"CabinetWClass") == 0 ||
+            _wcsicmp(szClassName, L"#32770") == 0));
 }
 
 // Helper: Verify if the tree view is receiving keyboard or mouse input
@@ -100,16 +93,14 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
     }
 
     // Verify mouse interactions
-    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
-        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ||
-        (GetAsyncKeyState(VK_MBUTTON) & 0x8000))
+    POINT cursorPos;
+    if (((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
+            (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ||
+            (GetAsyncKeyState(VK_MBUTTON) & 0x8000)) &&
+        GetCursorPos(&cursorPos))
     {
-        POINT cursorPos;
-        if (GetCursorPos(&cursorPos))
-        {
-            HWND hHoverWnd = WindowFromPoint(cursorPos);
-            return (hHoverWnd == hTreeView || IsChild(hTreeView, hHoverWnd));
-        }
+        HWND hHoverWnd = WindowFromPoint(cursorPos);
+        return (hHoverWnd == hTreeView || IsChild(hTreeView, hHoverWnd));
     }
 
     return false;
@@ -146,44 +137,39 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
         return SendMessageW_Original(hWnd, uMsg, wParam, lParam);
     }
 
-    if (uMsg == TVM_EXPAND && (wParam & TVE_EXPAND))
+    if (uMsg == TVM_EXPAND && (wParam & 0x0003) == TVE_EXPAND)
     {
         WCHAR szClassName[16];
+        auto hTreeItem = reinterpret_cast<HTREEITEM>(lParam);
         if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
-            _wcsicmp(szClassName, L"SysTreeView32") == 0)
+            _wcsicmp(szClassName, L"SysTreeView32") == 0 &&
+            IsExplorerNavigationPane(hWnd) &&
+            !IsUserInteractingWithTreeView(hWnd) &&
+            !IsSingleRootItem(hWnd, hTreeItem) &&
+            !(settings.allowTopLevelItemAutoExpansion &&
+                IsTopLevelItem(hWnd, hTreeItem)))
         {
-            auto hTreeItem = reinterpret_cast<HTREEITEM>(lParam);
-            if (IsExplorerNavigationPane(hWnd) &&
-                !IsUserInteractingWithTreeView(hWnd) &&
-                !IsSingleRootItem(hWnd, hTreeItem) &&
-                !(settings.allowTopLevelItemAutoExpansion &&
-                    IsTopLevelItem(hWnd, hTreeItem)))
-            {
-                return 0;
-            }
+            return 0;
         }
     }
     else if (uMsg == WM_NOTIFY)
     {
-        auto* pNotifyHeader = reinterpret_cast<LPNMHDR>(lParam);
-        if (pNotifyHeader != nullptr &&
-            !IsBadReadPtr(pNotifyHeader, sizeof(NMHDR)) &&
-            pNotifyHeader->code == TVN_ITEMEXPANDINGW)
+        WCHAR szClassName[32];
+        auto* pTreeViewNotify = reinterpret_cast<LPNMTREEVIEWW>(lParam);
+        if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+            _wcsicmp(szClassName, L"NamespaceTreeControl") == 0 &&
+            pTreeViewNotify->hdr.code == TVN_ITEMEXPANDINGW &&
+            pTreeViewNotify->action == TVE_EXPAND)
         {
-            auto* pTreeViewNotify = reinterpret_cast<LPNMTREEVIEWW>(lParam);
-            if (!IsBadReadPtr(pTreeViewNotify, sizeof(NMTREEVIEWW)) &&
-                pTreeViewNotify->action == TVE_EXPAND)
+            auto hTreeView = pTreeViewNotify->hdr.hwndFrom;
+            auto hTreeItem = pTreeViewNotify->itemNew.hItem;
+            if (IsExplorerNavigationPane(hTreeView) &&
+                !IsUserInteractingWithTreeView(hTreeView) &&
+                !IsSingleRootItem(hTreeView, hTreeItem) &&
+                !(settings.allowTopLevelItemAutoExpansion &&
+                    IsTopLevelItem(hTreeView, hTreeItem)))
             {
-                auto hTreeView = pNotifyHeader->hwndFrom;
-                auto hTreeItem = pTreeViewNotify->itemNew.hItem;
-                if (IsExplorerNavigationPane(hTreeView) &&
-                    !IsUserInteractingWithTreeView(hTreeView) &&
-                    !IsSingleRootItem(hTreeView, hTreeItem) &&
-                    !(settings.allowTopLevelItemAutoExpansion &&
-                        IsTopLevelItem(hTreeView, hTreeItem)))
-                {
-                    return TRUE;
-                }
+                return TRUE;
             }
         }
     }
