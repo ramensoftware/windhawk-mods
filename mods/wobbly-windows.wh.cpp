@@ -118,6 +118,12 @@ std::atomic<bool> g_isUnloading{false};
 HINSTANCE g_hInstance = NULL;
 static bool g_classRegistered = false;
 
+std::atomic<int> g_hookRefCount{0};
+struct HookRefCountScope {
+    HookRefCountScope() { g_hookRefCount.fetch_add(1, std::memory_order_acq_rel); }
+    ~HookRefCountScope() { g_hookRefCount.fetch_sub(1, std::memory_order_acq_rel); }
+};
+
 std::mutex g_subclassedSetMutex;
 std::unordered_set<HWND> g_subclassedWindows;
 
@@ -247,7 +253,17 @@ static bool GetCornerRoundingForWindow(HWND hwnd, float* outRadiusPx) {
     return true;
 }
 
+static void EnsureD2DFactory() {
+    if (g_d2dFactory) return;
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, __uuidof(ID2D1Factory), reinterpret_cast<void**>(&g_d2dFactory));
+    if (FAILED(hr)) {
+        g_d2dFactory = nullptr;
+        Wh_Log(L"D2D1CreateFactory failed, error %d", hr);
+    }
+}
+
 static void CaptureWindowForWobbly(HWND hwnd) {
+    EnsureD2DFactory();
     RECT rcWin, rcExt;
     GetWindowRect(hwnd, &rcWin);
     if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)) != S_OK) {
@@ -735,6 +751,13 @@ static void FinishWobblyTrackingLocalPart(HWND* mainHwndOut, LONG_PTR* oldExStyl
         ShowWindow(g_overlayHwnd, SW_HIDE);
     }
     CleanupWobblyD2D();
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+        if (g_wobblyRT) { g_wobblyRT->Release(); g_wobblyRT = nullptr; }
+        if (g_wobblyMemDC) { DeleteDC(g_wobblyMemDC); g_wobblyMemDC = NULL; }
+        if (g_wobblyTargetBmp) { DeleteObject(g_wobblyTargetBmp); g_wobblyTargetBmp = NULL; }
+        if (g_capturedBmp) { free(g_capturedBmp); g_capturedBmp = nullptr; g_capturedBmpCap = 0; }
+    }
     ReleaseTimerPeriodIfRaised();
     *mainHwndOut = g_mainHwnd;
     *oldExStyleOut = g_oldExStyle;
@@ -758,6 +781,7 @@ static void FinishWobblyTracking() {
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    HookRefCountScope hookScope;
     if (msg == g_wmDetach) {
         KillTimer(hwnd, 1);
         DestroyWindow(hwnd);
@@ -868,19 +892,20 @@ static void OnEnterSizeMove(HWND hwnd) {
 
     if (IsZoomed(hwnd) || IsIconic(hwnd)) return;
 
-    if (g_overlayHwnd && GetWindowThreadProcessId(g_overlayHwnd, nullptr) != GetCurrentThreadId()) {
-        HWND staleOverlay = g_overlayHwnd;
-        for (int attempt = 0; attempt < 5 && IsWindow(staleOverlay); attempt++) {
-            SendMessageTimeoutW(staleOverlay, g_wmDetach, 0, 0, SMTO_NORMAL | SMTO_NOTIMEOUTIFNOTHUNG, 100, NULL);
-        }
-        if (IsWindow(staleOverlay)) return;
-        std::lock_guard<std::recursive_mutex> lockStale(g_wobblyMutex);
-        if (g_overlayHwnd == staleOverlay) {
+    std::unique_lock<std::recursive_mutex> lock(g_wobblyMutex);
+
+    for (int guardAttempt = 0; guardAttempt < 5; guardAttempt++) {
+        HWND currentOverlay = g_overlayHwnd;
+        if (!currentOverlay || GetWindowThreadProcessId(currentOverlay, nullptr) == GetCurrentThreadId()) break;
+        lock.unlock();
+        SendMessageTimeoutW(currentOverlay, g_wmDetach, 0, 0, SMTO_NORMAL | SMTO_NOTIMEOUTIFNOTHUNG, 100, NULL);
+        lock.lock();
+        if (g_overlayHwnd == currentOverlay) {
             g_overlayHwnd = NULL;
         }
     }
 
-    std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+    if (g_overlayHwnd && GetWindowThreadProcessId(g_overlayHwnd, nullptr) != GetCurrentThreadId()) return;
 
     if ((g_isMoving || g_isSettling) && g_mainHwnd != NULL && g_mainHwnd != hwnd) return;
 
@@ -1010,6 +1035,7 @@ static void UntrackSubclassedWindow(HWND hwnd) {
 }
 
 LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    HookRefCountScope hookScope;
     if (msg == g_wmDetach) {
 
         bool needsRestore = false;
@@ -1064,6 +1090,7 @@ static bool IsInternalModClass(HWND hwnd) {
 }
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    HookRefCountScope hookScope;
     HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) {
         if (SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0)) TrackSubclassedWindow(hwnd);
@@ -1072,6 +1099,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    HookRefCountScope hookScope;
     HWND hwnd = CreateWindowExA_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) {
         if (SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0)) TrackSubclassedWindow(hwnd);
@@ -1080,6 +1108,7 @@ HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpW
 }
 
 static LRESULT CALLBACK CrossThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    HookRefCountScope hookScope;
     if (nCode == HC_ACTION) {
         CWPSTRUCT* pCwp = (CWPSTRUCT*)lParam;
         if (pCwp->message == g_wmAttach) {
@@ -1157,22 +1186,6 @@ BOOL Wh_ModInit() {
     g_capturedBmpW = 0;
     g_capturedBmpH = 0;
     
-    WCHAR exePath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, exePath, MAX_PATH)) {
-        _wcslwr_s(exePath);
-        if (wcsstr(exePath, L"dwm.exe") || wcsstr(exePath, L"csrss.exe") || 
-            wcsstr(exePath, L"lsass.exe") || wcsstr(exePath, L"winlogon.exe")) {
-            return FALSE;
-        }
-    }
-
-    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, __uuidof(ID2D1Factory), reinterpret_cast<void**>(&g_d2dFactory));
-    if (FAILED(hr)) {
-        g_d2dFactory = nullptr;
-        Wh_Log(L"D2D1CreateFactory failed, error %d", hr);
-        return FALSE;
-    }
-
     WNDCLASSA oc = {};
     oc.lpfnWndProc = OverlayProc;
     oc.hInstance = g_hInstance;
@@ -1214,7 +1227,10 @@ void Wh_ModUninit() {
     }
     for (HWND hwnd : subclassedSnapshot) {
         if (IsWindow(hwnd)) {
-            SendMessageW(hwnd, g_wmDetach, 0, 0);
+            DWORD_PTR result = 0;
+            if (!SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, &result) && IsWindow(hwnd)) {
+                Wh_Log(L"Subclassed window did not respond to detach during unload");
+            }
         }
     }
     {
@@ -1224,10 +1240,21 @@ void Wh_ModUninit() {
 
     if (g_overlayHwnd) {
         HWND overlayToClose = g_overlayHwnd;
-        while (IsWindow(overlayToClose)) {
-            SendMessageW(overlayToClose, WM_CLOSE, 0, 0);
+        for (int attempt = 0; attempt < 20 && IsWindow(overlayToClose); attempt++) {
+            SendMessageTimeoutW(overlayToClose, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 250, NULL);
         }
-        g_overlayHwnd = NULL;
+        if (IsWindow(overlayToClose)) {
+            Wh_Log(L"Overlay window did not close during unload");
+        } else {
+            g_overlayHwnd = NULL;
+        }
+    }
+
+    for (int waited = 0; g_hookRefCount.load(std::memory_order_acquire) > 0 && waited < 50; waited++) {
+        Sleep(100);
+    }
+    if (g_hookRefCount.load(std::memory_order_acquire) > 0) {
+        Wh_Log(L"Mod callbacks still active after waiting during unload");
     }
 
     {
