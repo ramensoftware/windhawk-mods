@@ -1060,6 +1060,18 @@ struct ButtonHwndCacheEntry {
 };
 std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 
+// The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end
+// of every successful ResolvePendingButtonHwnds pass (taskbar thread) and
+// read by WinEventProc (the dedicated WinEventHook thread) to filter drag
+// -follow's EVENT_OBJECT_LOCATIONCHANGE events - a window that never
+// resolved to a taskbar button can't change this mod's layout, so there's
+// no reason to pay for a relayout on its account. Needs its own mutex
+// (not covered by the arrange-hook thread confinement the rest of this
+// cache enjoys) since it's the one piece of resolve state genuinely read
+// cross-thread outside a marshal.
+std::mutex g_resolvedHwndsMutex;
+std::unordered_set<HWND> g_resolvedHwnds;
+
 // Actually runs the resolution chain and updates the cache. Returns
 // whether the cached HWND changed - used by the caller to decide whether
 // a relayout is worth triggering.
@@ -1686,6 +1698,20 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
 // already nested inside XAML-internal layout activity.
 void InvalidateTaskbarLayout();
 
+// Idle re-check cadence once every cached button is already resolved -
+// see NextResolveDelayMs' comment (Mod lifecycle section) for what this
+// specifically exists to catch (a drag-reorder rebind, which isn't
+// latency-sensitive). Kept well above the 2s..32s backoff used for
+// buttons that still need resolving: even at idle, each tick still
+// resolves the taskbar's XamlRoot and walks its visual tree on Explorer's
+// UI thread, and this runs indefinitely for the life of the session. Also
+// used by ResolvePendingButtonHwnds (below) as a "something's not right
+// yet, check back soon" fallback delay for passes that bail out before
+// confirming the live button set - moved up here (out of the Mod
+// lifecycle section it's otherwise grouped with) so it's declared before
+// that use.
+constexpr DWORD kIdleResolveTickMs = 30000;
+
 // Defined later (Mod lifecycle section); forward-declared here so
 // EnsureTaskbarWnd (below) can start the drag-follow WinEventHook as soon
 // as the taskbar window resolves, whether that happens at normal startup
@@ -1882,9 +1908,23 @@ void ResolvePendingButtonHwnds() {
     // use-after-free, not just stale data. Moving the computation here
     // closes that regardless of which path (post or the RunFromWindowThread
     // fallback) invoked this pass.
+    //
+    // NextResolveDelayMs' INFINITE answer is only trustworthy once a pass
+    // has actually confirmed the live button set - an empty
+    // g_buttonHwndCache from a pass that bailed out before enumerating
+    // anything (every early-return guard below, or no repeater yet) looks
+    // identical to a genuinely empty taskbar otherwise, and the timer
+    // would then never be armed again except by incidental luck (some
+    // unrelated EVENT_OBJECT_SHOW or count-change nudging
+    // ArmButtonHwndResolveTimer). `enumerated` tracks whether the walk
+    // below actually ran to completion; the destructor falls back to
+    // kIdleResolveTickMs instead of trusting INFINITE when it didn't.
+    bool enumerated = false;
     struct ScheduleNextResolveTick {
+        bool* enumerated;
         ~ScheduleNextResolveTick() {
-            DWORD delay = NextResolveDelayMs();
+            DWORD delay =
+                *enumerated ? NextResolveDelayMs() : kIdleResolveTickMs;
             if (delay != INFINITE) {
                 // Posts to the WinEventHook thread's own queue - safe to
                 // call unconditionally, including during unload
@@ -1892,7 +1932,7 @@ void ResolvePendingButtonHwnds() {
                 ArmButtonHwndResolveTimer(delay);
             }
         }
-    } scheduleNextTick;
+    } scheduleNextTick{&enumerated};
 
     if (g_unloading || g_inTaskbarArrangeOverride || !g_hTaskbarWnd) {
         return;
@@ -1956,6 +1996,7 @@ void ResolvePendingButtonHwnds() {
                 anyChanged = true;
             }
         }
+        enumerated = true;
 
         // Prune g_buttonHwndCache entries for buttons that no longer exist.
         // XAML routinely destroys and recreates TaskListButtons (unpin, app
@@ -1989,6 +2030,22 @@ void ResolvePendingButtonHwnds() {
              it != g_lastKnownWindowClassification.end();) {
             it = IsWindow(it->first) ? std::next(it)
                                       : g_lastKnownWindowClassification.erase(it);
+        }
+
+        // Rebuild the published resolved-HWND set from g_buttonHwndCache's
+        // just-finished state, for WinEventProc's drag-follow filter (see
+        // g_resolvedHwnds' own comment) - unconditionally, not just when
+        // anyChanged, since it's cheap and needs to reflect this pass's
+        // pruning even when nothing else about the plan changed.
+        {
+            std::unordered_set<HWND> resolvedNow;
+            for (auto& kv : g_buttonHwndCache) {
+                if (kv.second.hwnd) {
+                    resolvedNow.insert(kv.second.hwnd);
+                }
+            }
+            std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
+            g_resolvedHwnds = std::move(resolvedNow);
         }
 
         if (anyChanged) {
@@ -2675,6 +2732,23 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     }
 
     // event == EVENT_OBJECT_LOCATIONCHANGE from here on - drag-follow.
+    // Only a window this mod has actually resolved to a taskbar button
+    // can change the layout; every other moving window on the system
+    // (there are a lot of them - see this function's own comment on raw
+    // event volume) would trigger a full RecomputeLayoutPlan pass for
+    // nothing. Checked before the throttle below, not after, so an
+    // untracked window's events don't even arm the trailing timer or
+    // touch g_lastDragFollowInvalidate. Lock released before
+    // InvalidateTaskbarLayout() is ever reached - its fallback path
+    // blocks in SendMessage on the taskbar thread, which must never run
+    // while this thread is holding g_resolvedHwndsMutex.
+    {
+        std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
+        if (!g_resolvedHwnds.count(hwnd)) {
+            return;
+        }
+    }
+
     ULONGLONG now = GetTickCount64();
     if (now - g_lastDragFollowInvalidate < 150) {
         // The throttle above is leading-edge only, so the final
@@ -3080,15 +3154,6 @@ void StopWinEventHook() {
     CloseHandle(thread);
 }
 
-// Idle re-check cadence once every cached button is already resolved -
-// see NextResolveDelayMs' comment for what this specifically exists to
-// catch (a drag-reorder rebind, which isn't latency-sensitive). Kept
-// well above the 2s..32s backoff used for buttons that still need
-// resolving: even at idle, each tick still resolves the taskbar's
-// XamlRoot and walks its visual tree on Explorer's UI thread, and this
-// runs indefinitely for the life of the session.
-constexpr DWORD kIdleResolveTickMs = 30000;
-
 // Capped exponential backoff for the click-sentinel probe, shared by
 // ResolvePendingButtonHwnds and NextResolveDelayMs: a fallback safety net
 // for a pinned-but-not-running app's button, in case its launch is ever
@@ -3202,8 +3267,14 @@ void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
                    L"error=%lu", GetLastError());
             ArmButtonHwndResolveTimer(kIdleResolveTickMs);
         }
-    } else {
-        RunFromWindowThread(g_hTaskbarWnd, ResolvePendingButtonHwnds);
+    } else if (!RunFromWindowThread(g_hTaskbarWnd, ResolvePendingButtonHwnds)) {
+        // Same "nothing will call back" concern as the PostMessage failure
+        // above - a marshal failure here (SetWindowsHookEx failing, or
+        // g_hTaskbarWnd going stale/null mid-taskbar-recreate) means
+        // ResolvePendingButtonHwnds never ran at all, so its own
+        // ScheduleNextResolveTick guard never gets a chance to re-arm.
+        Wh_Log(L"ButtonHwndResolveTimerProc: RunFromWindowThread failed");
+        ArmButtonHwndResolveTimer(kIdleResolveTickMs);
     }
 }
 
