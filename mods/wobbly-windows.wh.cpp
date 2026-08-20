@@ -318,7 +318,6 @@ static void CaptureWindowForWobbly(HWND hwnd) {
         BYTE* row = pRaw + (size_t)y * rawW * 4;
         for (int x = 0; x < rawW; x++) {
             BYTE a = row[x * 4 + 3];
-            row[x * 4 + 3] = a;
             if (row[x * 4 + 0] > a) row[x * 4 + 0] = a;
             if (row[x * 4 + 1] > a) row[x * 4 + 1] = a;
             if (row[x * 4 + 2] > a) row[x * 4 + 2] = a;
@@ -381,7 +380,7 @@ static void CaptureWindowForWobbly(HWND hwnd) {
         g_yTiles = tileCountSetting;
     }
 
-    int margin = (int)(g_capW * 0.06f + g_capH * 0.06f) + 32;
+    int margin = (int)(g_capW * 0.18f + g_capH * 0.18f) + 96;
     int neededW = g_capW + margin * 2;
     int neededH = g_capH + margin * 2;
     if (neededW > g_screenW) neededW = g_screenW;
@@ -547,8 +546,11 @@ static void StepPhysics(float time) {
 }
 
 static Pair ComputeBezierPoint(float tx, float ty) {
-    float px[4] = { (1 - tx)*(1 - tx)*(1 - tx), 3*(1 - tx)*(1 - tx)*tx, 3*(1 - tx)*tx*tx, tx*tx*tx };
-    float py[4] = { (1 - ty)*(1 - ty)*(1 - ty), 3*(1 - ty)*(1 - ty)*ty, 3*(1 - ty)*ty*ty, ty*ty*ty };
+    float ux = 1.0f - tx, uy = 1.0f - ty;
+    float ux2 = ux * ux, tx2 = tx * tx;
+    float uy2 = uy * uy, ty2 = ty * ty;
+    float px[4] = { ux2 * ux, 3.0f * ux2 * tx, 3.0f * ux * tx2, tx2 * tx };
+    float py[4] = { uy2 * uy, 3.0f * uy2 * ty, 3.0f * uy * ty2, ty2 * ty };
     Pair res = { 0.0f, 0.0f };
     for (int j = 0; j < 4; ++j) {
         for (int i = 0; i < 4; ++i) {
@@ -582,8 +584,10 @@ static void DrawOverlayFrameD2D() {
     if (wantH < 1) wantH = 1;
 
     if (wantW > g_wobblyBmpW || wantH > g_wobblyBmpH) {
-        int newW = wantW > g_wobblyBmpW ? wantW : g_wobblyBmpW;
-        int newH = wantH > g_wobblyBmpH ? wantH : g_wobblyBmpH;
+        int growW = wantW + wantW / 4 + 64;
+        int growH = wantH + wantH / 4 + 64;
+        int newW = growW > g_wobblyBmpW ? growW : g_wobblyBmpW;
+        int newH = growH > g_wobblyBmpH ? growH : g_wobblyBmpH;
         if (newW > g_screenW) newW = g_screenW;
         if (newH > g_screenH) newH = g_screenH;
 
@@ -632,6 +636,16 @@ static void DrawOverlayFrameD2D() {
     float vLeft = (float)g_overlayX;
     float vTop = (float)g_overlayY;
 
+    static Pair gridPts[(X_TILES_MAX + 1) * (Y_TILES_MAX + 1)];
+    int gridStride = g_xTiles + 1;
+    for (int gy = 0; gy <= g_yTiles; gy++) {
+        for (int gx = 0; gx <= g_xTiles; gx++) {
+            Pair p = ComputeBezierPoint((float)gx / g_xTiles, (float)gy / g_yTiles);
+            p.x -= vLeft; p.y -= vTop;
+            gridPts[gy * gridStride + gx] = p;
+        }
+    }
+
     RECT bindRect = { 0, 0, g_overlayW, g_overlayH };
     g_wobblyRT->BindDC(g_wobblyMemDC, &bindRect);
     g_wobblyRT->BeginDraw();
@@ -649,23 +663,23 @@ static void DrawOverlayFrameD2D() {
         }
     }
     if (outlineGeo && sink) {
-        Pair startP = ComputeBezierPoint(0.0f, 0.0f);
-        sink->BeginFigure(D2D1::Point2F(startP.x - vLeft, startP.y - vTop), D2D1_FIGURE_BEGIN_FILLED);
+        Pair startP = gridPts[0];
+        sink->BeginFigure(D2D1::Point2F(startP.x, startP.y), D2D1_FIGURE_BEGIN_FILLED);
         for (int x = 1; x <= g_xTiles; x++) {
-            Pair p = ComputeBezierPoint((float)x / g_xTiles, 0.0f);
-            sink->AddLine(D2D1::Point2F(p.x - vLeft, p.y - vTop));
+            Pair p = gridPts[x];
+            sink->AddLine(D2D1::Point2F(p.x, p.y));
         }
         for (int y = 1; y <= g_yTiles; y++) {
-            Pair p = ComputeBezierPoint(1.0f, (float)y / g_yTiles);
-            sink->AddLine(D2D1::Point2F(p.x - vLeft, p.y - vTop));
+            Pair p = gridPts[y * gridStride + g_xTiles];
+            sink->AddLine(D2D1::Point2F(p.x, p.y));
         }
         for (int x = g_xTiles - 1; x >= 0; x--) {
-            Pair p = ComputeBezierPoint((float)x / g_xTiles, 1.0f);
-            sink->AddLine(D2D1::Point2F(p.x - vLeft, p.y - vTop));
+            Pair p = gridPts[g_yTiles * gridStride + x];
+            sink->AddLine(D2D1::Point2F(p.x, p.y));
         }
         for (int y = g_yTiles - 1; y >= 0; y--) {
-            Pair p = ComputeBezierPoint(0.0f, (float)y / g_yTiles);
-            sink->AddLine(D2D1::Point2F(p.x - vLeft, p.y - vTop));
+            Pair p = gridPts[y * gridStride];
+            sink->AddLine(D2D1::Point2F(p.x, p.y));
         }
         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
         sink->Close();
@@ -681,17 +695,16 @@ static void DrawOverlayFrameD2D() {
         for (int y = 0; y < g_yTiles; y++) {
             for (int x = 0; x < g_xTiles; x++) {
                 float tx1 = (float)x / g_xTiles, ty1 = (float)y / g_yTiles;
-                float tx2 = (float)(x + 1) / g_xTiles, ty2 = (float)(y + 1) / g_yTiles;
-                
-                Pair bp1 = ComputeBezierPoint(tx1, ty1);
-                Pair bp2 = ComputeBezierPoint(tx2, ty1);
-                Pair bp3 = ComputeBezierPoint(tx1, ty2);
-                Pair bp4 = ComputeBezierPoint(tx2, ty2);
 
-                D2D1_POINT_2F p1 = D2D1::Point2F(bp1.x - vLeft, bp1.y - vTop);
-                D2D1_POINT_2F p2 = D2D1::Point2F(bp2.x - vLeft, bp2.y - vTop);
-                D2D1_POINT_2F p3 = D2D1::Point2F(bp3.x - vLeft, bp3.y - vTop);
-                D2D1_POINT_2F p4 = D2D1::Point2F(bp4.x - vLeft, bp4.y - vTop);
+                Pair bp1 = gridPts[y * gridStride + x];
+                Pair bp2 = gridPts[y * gridStride + x + 1];
+                Pair bp3 = gridPts[(y + 1) * gridStride + x];
+                Pair bp4 = gridPts[(y + 1) * gridStride + x + 1];
+
+                D2D1_POINT_2F p1 = D2D1::Point2F(bp1.x, bp1.y);
+                D2D1_POINT_2F p2 = D2D1::Point2F(bp2.x, bp2.y);
+                D2D1_POINT_2F p3 = D2D1::Point2F(bp3.x, bp3.y);
+                D2D1_POINT_2F p4 = D2D1::Point2F(bp4.x, bp4.y);
 
                 D2D1_POINT_2F c = D2D1::Point2F((p1.x+p2.x+p3.x+p4.x)/4.0f, (p1.y+p2.y+p3.y+p4.y)/4.0f);
                 ID2D1PathGeometry* quadGeo = CreateQuadGeo(g_d2dFactory,
