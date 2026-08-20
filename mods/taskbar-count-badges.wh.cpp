@@ -2037,6 +2037,8 @@ HWND FindWindowOnThread(DWORD threadId)
 // Deferred count refresh
 // -----------------------------------------------------------------------------
 
+void StopDeferredCountRefreshSubclass();
+
 LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd,
                                            UINT message,
                                            WPARAM wParam,
