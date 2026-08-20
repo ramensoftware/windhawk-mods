@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-14T12:14:39.000Z</updated>
+    <updated>2026-08-20T17:08:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Proportional cursor between monitors 1.0.0]]></title>
+        <id>https://windhawk.net/mods/proportional-monitor-cursor#47d6b37d08ed96f27b3be31913d8cb4ee1b9d994</id>
+        <link href="https://windhawk.net/mods/proportional-monitor-cursor"/>
+        <updated>2026-08-20T17:08:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="proportionalcursorbetweenmonitors">Proportional cursor between monitors</h1>
+<p>Windows moves the mouse cursor between monitors using <em>absolute</em> virtual-desktop
+pixels. With monitors of different resolutions (for example 2560x1440 next to
+1920x1080) this means that leaving the bottom of the small monitor puts the
+cursor somewhere in the middle of the big one - the pointer visually "jumps".</p>
+<p>This mod makes the transition <strong>proportional</strong>: the position along the shared
+edge is converted to a normalized 0-1 value on the monitor you leave, and
+applied to the monitor you enter. The bottom of the small monitor now maps to
+the bottom of the big one, the top to the top, the middle to the middle.</p>
+<pre><code>      leaving 1920x1080 at y = 1000        entering 2560x1440
+      (1000 / 1079 = 0.93 of the height)   (0.93 * 1439 = y 1334)
+
+      +--------------------+ 0.00          +--------------------+ 0.00
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |   without the mod  |
+      |                    |               | -&gt;  y stays 1000   | 0.69
+      |                    |               |                    |
+      | -&gt;  y = 1000       | 0.93          | -&gt;  y = 1334       | 0.93
+      +--------------------+ 1.00          |                    |
+                                           +--------------------+ 1.00
+</code></pre>
+<p>It works for left/right transitions (the Y coordinate is normalized) and for
+top/bottom transitions (the X coordinate is normalized).</p>
+<p><strong>Bonus:</strong> with <em>Cross gaps between monitors</em> enabled you can also leave the
+monitor through a part of the edge that has no neighbour at all (for example the
+lower 360 px of a 1440p monitor when the 1080p monitor is aligned to the top).
+Windows normally blocks the cursor there; the mod teleports it to the
+proportional spot on the monitor in that direction.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod needs neither injection nor function hooks, so it runs as a tool mod
+in a dedicated <code>windhawk.exe</code> process. Its low-level mouse hook therefore
+can't stall the shell, and Windhawk guarantees a single instance.</li>
+<li>Cursor movement reported as injected (<code>LLMHF_INJECTED</code>) is left untouched -
+it can't be told apart from the mod's own <code>SetCursorPos</code>. Some setups report
+regular movement that way, RDP sessions, VM guest tools and a few tablets and
+precision touchpads among them; on those the mod stays inactive.</li>
+<li>While an application confines the cursor with <code>ClipCursor</code> (most full-screen
+games do) the mod stays out of the way.</li>
+<li>When a window of an elevated process is in the foreground, low-level hooks
+from a non-elevated process don't receive input. That's a UIPI restriction,
+not something the mod can work around.</li>
+</ul>
+<p>Contact with me: vicitacal11@ya.ru</p>]]></content>
+        <author>
+            <name>Vitaliy</name>
+            <uri>https://github.com/vicitacal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[GNOME-like dynamic virtual desktops 1.4]]></title>
         <id>https://windhawk.net/mods/gnome-dynamic-desktops#c1f498cfa9d567959de6f1e662cb8156108212fc</id>
@@ -923,20 +979,6 @@ I haven't given a look at the iterator memory to see if it's more than just the 
         <author>
             <name>ilovethisgame</name>
             <uri>https://github.com/bozohi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Charging Sound 1.5]]></title>
-        <id>https://windhawk.net/mods/charging-sound#78fb5dc5fd24bfe4201b4587944badc87f6efc92</id>
-        <link href="https://windhawk.net/mods/charging-sound"/>
-        <updated>2026-07-31T20:42:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chargingsound">Charging Sound</h1>
-<p>Plays a custom <code>.wav</code> sound whenever you connect your laptop to a charger (AC
-power) or unplug it. By default it plays the Windows Notify Messaging sound.</p>
-<p>Please note that this mod only works on devices with a battery (e.g. laptops).</p>]]></content>
-        <author>
-            <name>khonloi</name>
-            <uri>https://github.com/khonloi</uri>
         </author>
     </entry>
 </feed>

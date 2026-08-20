@@ -10007,6 +10007,34 @@
         "version": "2.2.0"
       }
     },
+    "proportional-monitor-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787245726000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787245726000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Vitaliy",
+        "description": "Keeps the relative (0-1) cursor position when it moves between monitors of different resolutions, so the bottom of a small monitor matches the bottom of a big one",
+        "github": "https://github.com/vicitacal",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Proportional cursor between monitors",
+        "version": "1.0.0"
+      }
+    },
     "quick-launch-media-panel": {
       "details": {
         "defaultSorting": 324,

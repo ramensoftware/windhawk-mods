@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-20T17:02:16.000Z</updated>
+    <updated>2026-08-20T17:08:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Proportional cursor between monitors 1.0.0]]></title>
+        <id>https://windhawk.net/mods/proportional-monitor-cursor#47d6b37d08ed96f27b3be31913d8cb4ee1b9d994</id>
+        <link href="https://windhawk.net/mods/proportional-monitor-cursor"/>
+        <updated>2026-08-20T17:08:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="proportionalcursorbetweenmonitors">Proportional cursor between monitors</h1>
+<p>Windows moves the mouse cursor between monitors using <em>absolute</em> virtual-desktop
+pixels. With monitors of different resolutions (for example 2560x1440 next to
+1920x1080) this means that leaving the bottom of the small monitor puts the
+cursor somewhere in the middle of the big one - the pointer visually "jumps".</p>
+<p>This mod makes the transition <strong>proportional</strong>: the position along the shared
+edge is converted to a normalized 0-1 value on the monitor you leave, and
+applied to the monitor you enter. The bottom of the small monitor now maps to
+the bottom of the big one, the top to the top, the middle to the middle.</p>
+<pre><code>      leaving 1920x1080 at y = 1000        entering 2560x1440
+      (1000 / 1079 = 0.93 of the height)   (0.93 * 1439 = y 1334)
+
+      +--------------------+ 0.00          +--------------------+ 0.00
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |   without the mod  |
+      |                    |               | -&gt;  y stays 1000   | 0.69
+      |                    |               |                    |
+      | -&gt;  y = 1000       | 0.93          | -&gt;  y = 1334       | 0.93
+      +--------------------+ 1.00          |                    |
+                                           +--------------------+ 1.00
+</code></pre>
+<p>It works for left/right transitions (the Y coordinate is normalized) and for
+top/bottom transitions (the X coordinate is normalized).</p>
+<p><strong>Bonus:</strong> with <em>Cross gaps between monitors</em> enabled you can also leave the
+monitor through a part of the edge that has no neighbour at all (for example the
+lower 360 px of a 1440p monitor when the 1080p monitor is aligned to the top).
+Windows normally blocks the cursor there; the mod teleports it to the
+proportional spot on the monitor in that direction.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod needs neither injection nor function hooks, so it runs as a tool mod
+in a dedicated <code>windhawk.exe</code> process. Its low-level mouse hook therefore
+can't stall the shell, and Windhawk guarantees a single instance.</li>
+<li>Cursor movement reported as injected (<code>LLMHF_INJECTED</code>) is left untouched -
+it can't be told apart from the mod's own <code>SetCursorPos</code>. Some setups report
+regular movement that way, RDP sessions, VM guest tools and a few tablets and
+precision touchpads among them; on those the mod stays inactive.</li>
+<li>While an application confines the cursor with <code>ClipCursor</code> (most full-screen
+games do) the mod stays out of the way.</li>
+<li>When a window of an elevated process is in the foreground, low-level hooks
+from a non-elevated process don't receive input. That's a UIPI restriction,
+not something the mod can work around.</li>
+</ul>
+<p>Contact with me: vicitacal11@ya.ru</p>]]></content>
+        <author>
+            <name>Vitaliy</name>
+            <uri>https://github.com/vicitacal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Launch & Media Panel 2.2.0]]></title>
         <id>https://windhawk.net/mods/quick-launch-media-panel#b5a50ad39a19c398dadf70e3f35640cf22bd53e9</id>
@@ -415,21 +471,6 @@ example - are outside the reach of an in-process hook and keep the system colors
         <content type="html"><![CDATA[<ul>
 <li>Added an option for rounder corners for maximized and snapped windows. Based on the submission of <a href="https://github.com/leshaalexey">Alexey
 Lavrinenko</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.3.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#f54228f470bf21b8c0d7d291a80fc4d7d802084c</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2026-08-11T21:35:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to position the search menu in all cases. By default, the search menu is only repositioned when it's opened from the Start menu, not when it's opened in other ways, such as with the Win+S shortcut or the taskbar search icon.</li>
-<li>Fixed an issue with the Start button moving to the right in some cases.</li>
-<li>Improved compatibility with older Windows 11 versions.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
