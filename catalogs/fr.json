@@ -10019,7 +10019,7 @@
           4
         ],
         "ratingUsers": 6,
-        "updated": 1786218799000,
+        "updated": 1787245336000,
         "users": 36
       },
       "metadata": {
@@ -10032,7 +10032,7 @@
         ],
         "license": "MIT",
         "name": "Panneau de lancement rapide et multimédia",
-        "version": "2.1.4"
+        "version": "2.2.0"
       },
       "metadataEnglish": {
         "description": "A modern desktop panel with configurable app shortcuts, drag and drop, and Windows media controls.",

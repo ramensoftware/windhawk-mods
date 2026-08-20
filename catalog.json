@@ -10012,7 +10012,7 @@
           4
         ],
         "ratingUsers": 6,
-        "updated": 1786218799000,
+        "updated": 1787245336000,
         "users": 36
       },
       "metadata": {
@@ -10025,7 +10025,7 @@
         ],
         "license": "MIT",
         "name": "Quick Launch & Media Panel",
-        "version": "2.1.4"
+        "version": "2.2.0"
       }
     },
     "quicklaunch-3dbuttons": {
