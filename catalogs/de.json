@@ -9977,6 +9977,37 @@
         "version": "1.0.2"
       }
     },
+    "prevent-virtual-desktop-stealing": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787248518000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787248518000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "meteoni",
+        "compilerOptions": "-lole32",
+        "description": "Redirect cross-desktop window activation to the current desktop.",
+        "github": "https://github.com/Meteony",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Prevent Window Activation from Stealing Virtual Desktop",
+        "version": "0.3.14"
+      }
+    },
     "prevista-explorer-statusbar": {
       "details": {
         "defaultSorting": 1230,

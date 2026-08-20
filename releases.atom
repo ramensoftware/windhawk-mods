@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-20T17:26:56.000Z</updated>
+    <updated>2026-08-20T17:55:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Prevent Window Activation from Stealing Virtual Desktop 0.3.14]]></title>
+        <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#bbaa6505ffc05ac4f3add9b22f0787565ec7ebfd</id>
+        <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
+        <updated>2026-08-20T17:55:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="preventwindowactivationfromstealingvirtualdesktop">Prevent Window Activation from Stealing Virtual Desktop</h1>
+<p>Take back control over your virtual desktops!</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif" alt="Screenshot" />
+<em>Effect of redirecting window activation</em></p>
+<p>Windows can switch you to another virtual desktop just because a window that was left open on that
+desktop is activated.</p>
+<p>Clicking a flashing taskbar button, following a notification, opening an app through its tray icon,
+or launching something that insists on reusing an existing window can all unexpectedly pull you away
+from your current desktop. This mod keeps you where you are and brings the activated window to you instead.</p>
+<p>If you don't know what "virtual desktop stealing" is, try this small experiment:</p>
+<ul>
+<li>Open Windhawk on your first virtual desktop.</li>
+<li>Switch to another virtual desktop.</li>
+<li>Click the Windhawk tray icon.</li>
+</ul>
+<p>Normally, Windows jumps back to the first desktop - not anymore with this mod.</p>
+<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right and
+Task View. The mod also remains compatible with <strong>Disable Virtual Desktop
+Transition Animation</strong>.</p>
+<h3 id="notes">Notes</h3>
+<p>Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
+shell interfaces, including the private IApplicationView layout, so future
+Windows updates may require adjustments.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Run command on window focus 0.1]]></title>
         <id>https://windhawk.net/mods/command-on-window-focus#bff5e642356ced63e4d751cfc83003137f812c16</id>
@@ -938,40 +971,6 @@ Credits to m417z for the code review and enhancing the mod.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Blob Shape 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-blob-shape#e5d8d9d8d4380fd4f18e08737e3925bc0c48665d</id>
-        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
-        <updated>2026-08-03T20:11:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarblobshape">Taskbar Blob Shape</h1>
-<p>Adds a blob shape behind active taskbar buttons.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo.gif" alt="Taskbar Blob Shape" /></p>
-<p>Based on <strong>Taskbar Elastic WinUI Pill</strong> and the unreleased <strong>Taskbar Elastic
-Border</strong> by <strong>Lockframe</strong>.</p>
-<p>Every taskbar button gets its own blob shape, shown or hidden as the
-button's running indicator state changes. The shapes are hosted in the
-taskbar's RootGrid (above the task list's clipping region, so the flares
-render fully) and each one is glued to its button with a composition
-expression, so it follows the button through reordering, reflow, and
-animations on the render thread.</p>
-<p>The blob shape is a rounded rectangle whose top extends upward and flares
-outward with concave (outside) corner radii, ending in a flat top edge:</p>
-<ul>
-<li><strong>Width / Height</strong>: the main area of the blob shape ('auto' matches the
-button's background element). Horizontally the shape is centered on the
-button; vertically its flat top edge is anchored to the top of the
-taskbar, with the body hanging downward.</li>
-<li><strong>Top corner radius</strong>: the radius of the concave top flares. The flares
-are circular quarter arcs, so this also sets how far the blob shape
-extends upward and outward. Total size is
-(Width + 2*TopRadius) x (Height + TopRadius).</li>
-<li><strong>Bottom corner radius</strong>: the convex bottom corners of the blob shape.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
