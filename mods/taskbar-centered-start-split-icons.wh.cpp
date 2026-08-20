@@ -1702,6 +1702,14 @@ void StartWinEventHook();
 // brand-new button coming on its own.
 void ArmButtonHwndResolveTimer(DWORD delayMs);
 
+// Defined later (Mod lifecycle section, right before ButtonHwndResolveTimerProc);
+// forward-declared here so ResolvePendingButtonHwnds (below) can compute
+// and arm its own next tick at the end of a pass, on whichever thread that
+// pass actually ran on - see ResolvePendingButtonHwnds' own
+// ScheduleNextResolveTick comment for why it can't be computed by the
+// timer callback itself anymore.
+DWORD NextResolveDelayMs();
+
 // Defined later (Live drag-follow section, alongside InvalidateTaskbarLayout
 // itself); forward-declared here so EnsureTaskbarWnd (below) can install it
 // on g_hTaskbarWnd as soon as the window resolves - see
@@ -1802,12 +1810,14 @@ FrameworkElement FindTaskbarFrameRepeater(FrameworkElement anyDescendant) {
 // to run independently in RecomputeLayoutPlan, InvalidateTaskbarLayout, and
 // ResolvePendingButtonHwnds on every single call.
 //
-// A weak_ref is enough to know when to re-resolve: XAML's own visual tree
-// holds the only strong reference to the repeater, so once the taskbar's
-// tree is torn down and rebuilt (Explorer restart, a DPI/monitor change),
-// the old instance is destructed and the weak_ref naturally comes back
-// empty - exactly the signal to redo the real resolution. No separate
-// "is this still attached" check is needed on top of that.
+// A weak_ref alone isn't a reliable "still live" signal: the repeater's
+// own layout, ItemsSourceView and the animation machinery can each hold a
+// reference of their own, so if any of those outlives the taskbar's tree
+// even briefly (a taskbar recreate, a DPI/monitor change), the weak_ref
+// still resolves to a now-detached element - one with a null XamlRoot,
+// since that's only ever non-null while actually attached to a tree.
+// GetCachedTaskbarRepeater checks that explicitly below rather than
+// trusting the weak_ref by itself.
 //
 // MUST only run when confirmed to be on g_hTaskbarWnd's own thread - same
 // constraint as GetTaskbarXamlRoot itself, which this wraps.
@@ -1815,7 +1825,15 @@ winrt::weak_ref<FrameworkElement> g_cachedTaskbarRepeaterWeak;
 
 FrameworkElement GetCachedTaskbarRepeater() {
     if (FrameworkElement cached = g_cachedTaskbarRepeaterWeak.get()) {
-        return cached;
+        if (cached.XamlRoot()) {
+            return cached;
+        }
+        // Detached - see g_cachedTaskbarRepeaterWeak's comment. Every
+        // caller of this function eventually dereferences XamlRoot() (or
+        // relies on the repeater actually being the live one), so
+        // returning it anyway would be a null deref down the line rather
+        // than here. Clear it and fall through to a fresh resolution.
+        g_cachedTaskbarRepeaterWeak = nullptr;
     }
 
     XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
@@ -1850,6 +1868,32 @@ FrameworkElement GetCachedTaskbarRepeater() {
 // Also guarded against running while nested inside an active Arrange
 // pass on this thread - defense in depth, not the primary protection.
 void ResolvePendingButtonHwnds() {
+    // Computes and arms this function's own next tick on destruction -
+    // i.e. whenever this function returns, by any path (the early-return
+    // guards below included, not just a full successful pass), always on
+    // this same thread right after this pass's own cache reads/writes are
+    // actually done. ButtonHwndResolveTimerProc used to do this itself
+    // immediately after kicking off the resolve call, which was safe only
+    // because that call used to be a blocking RunFromWindowThread marshal
+    // - now that the common path is an async PostMessage to the taskbar's
+    // subclass (see ButtonHwndResolveTimerProc), computing the delay right
+    // after posting would read g_buttonHwndCache concurrently with this
+    // function's own insert/erase calls on the taskbar thread - a real
+    // use-after-free, not just stale data. Moving the computation here
+    // closes that regardless of which path (post or the RunFromWindowThread
+    // fallback) invoked this pass.
+    struct ScheduleNextResolveTick {
+        ~ScheduleNextResolveTick() {
+            DWORD delay = NextResolveDelayMs();
+            if (delay != INFINITE) {
+                // Posts to the WinEventHook thread's own queue - safe to
+                // call unconditionally, including during unload
+                // (ArmButtonHwndResolveTimer itself no-ops on g_unloading).
+                ArmButtonHwndResolveTimer(delay);
+            }
+        }
+    } scheduleNextTick;
+
     if (g_unloading || g_inTaskbarArrangeOverride || !g_hTaskbarWnd) {
         return;
     }
@@ -2114,8 +2158,15 @@ void RecomputeLayoutPlan() {
         try {
             if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
                 for (auto& child : GetRepeaterChildElements(repeater)) {
-                    if (IsTaskListButton(child) &&
-                        !g_lastArrangedX.count(winrt::get_abi(child))) {
+                    // Map lookup first: every element the plan covers is
+                    // already a key in g_lastArrangedX, so this is a plain
+                    // hash lookup for the common case. IsTaskListButton
+                    // (winrt::get_class_name - a GetRuntimeClassName round
+                    // trip plus an HSTRING allocation) then only runs for
+                    // the rare child that isn't in the plan yet, which is
+                    // exactly the case this check exists to catch.
+                    if (!g_lastArrangedX.count(winrt::get_abi(child)) &&
+                        IsTaskListButton(child)) {
                         planCoversLiveTaskListButtons = false;
                         break;
                     }
@@ -2434,23 +2485,36 @@ void PerformTaskbarLayoutInvalidate() {
 // Private message InvalidateTaskbarLayout posts to run
 // PerformTaskbarLayoutInvalidate on the taskbar's own thread without
 // blocking the caller - see InvalidateTaskbarLayout's own comment for why
-// that matters on this specific call path.
-const UINT g_invalidateTaskbarLayoutMsg =
-    RegisterWindowMessage(L"Windhawk_InvalidateTaskbarLayout_" WH_MOD_ID);
+// that matters on this specific call path. Function-local static (like
+// RunFromWindowThread's own registered message) rather than a
+// namespace-scope variable, so RegisterWindowMessage runs lazily on first
+// real use instead of from a dynamic initializer under DllMain's loader
+// lock.
+UINT InvalidateTaskbarLayoutMsg() {
+    static const UINT msg =
+        RegisterWindowMessage(L"Windhawk_InvalidateTaskbarLayout_" WH_MOD_ID);
+    return msg;
+}
 
-// Same idea as g_invalidateTaskbarLayoutMsg, for ButtonHwndResolveTimerProc
+// Same idea as InvalidateTaskbarLayoutMsg, for ButtonHwndResolveTimerProc
 // - lets it post instead of going through RunFromWindowThread on every
 // tick (up to ~7/sec while EVENT_OBJECT_SHOW events are bursting).
-const UINT g_resolveButtonHwndsMsg =
-    RegisterWindowMessage(L"Windhawk_ResolveButtonHwnds_" WH_MOD_ID);
+UINT ResolveButtonHwndsMsg() {
+    static const UINT msg =
+        RegisterWindowMessage(L"Windhawk_ResolveButtonHwnds_" WH_MOD_ID);
+    return msg;
+}
 
 // Same idea again, for a settings change. Unlike the two above this one
 // carries a payload: lParam is a heap-allocated ModSettings* that the
 // dispatch case below takes ownership of and deletes - PostMessage is
 // asynchronous, so the settings can't just live on the posting call's own
 // stack the way a plain signal can. See ApplyLoadedSettings.
-const UINT g_settingsChangedMsg =
-    RegisterWindowMessage(L"Windhawk_SettingsChanged_" WH_MOD_ID);
+UINT SettingsChangedMsg() {
+    static const UINT msg =
+        RegisterWindowMessage(L"Windhawk_SettingsChanged_" WH_MOD_ID);
+    return msg;
+}
 
 // Installed on g_hTaskbarWnd by EnsureTaskbarWnd via
 // SetWindowSubclassFromAnyThread. A subclass proc only ever runs on the
@@ -2470,15 +2534,15 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
                                         WPARAM wParam,
                                         LPARAM lParam,
                                         DWORD_PTR dwRefData) {
-    if (uMsg == g_invalidateTaskbarLayoutMsg) {
+    if (uMsg == InvalidateTaskbarLayoutMsg()) {
         PerformTaskbarLayoutInvalidate();
         return 0;
     }
-    if (uMsg == g_resolveButtonHwndsMsg) {
+    if (uMsg == ResolveButtonHwndsMsg()) {
         ResolvePendingButtonHwnds();
         return 0;
     }
-    if (uMsg == g_settingsChangedMsg) {
+    if (uMsg == SettingsChangedMsg()) {
         auto* heapSettings = reinterpret_cast<ModSettings*>(lParam);
         g_settings = std::move(*heapSettings);
         delete heapSettings;
@@ -2516,7 +2580,7 @@ void InvalidateTaskbarLayout() {
         // below, which installs a WH_CALLWNDPROC hook and blocks in
         // SendMessage until that thread processes it - a real cost at
         // this frequency, even though it's fine for a one-shot call.
-        if (!PostMessage(g_hTaskbarWnd, g_invalidateTaskbarLayoutMsg, 0, 0)) {
+        if (!PostMessage(g_hTaskbarWnd, InvalidateTaskbarLayoutMsg(), 0, 0)) {
             Wh_Log(L"InvalidateTaskbarLayout: PostMessage failed, error=%lu",
                    GetLastError());
         }
@@ -3101,14 +3165,13 @@ void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
                                          UINT uMsg,
                                          UINT_PTR idEvent,
                                          DWORD dwTime) {
-    // Self-managing one-shot rather than a recurring interval: stop
-    // first, do the actual work, then only re-arm if there's a concrete
-    // reason to - otherwise this would run the full resolve pass forever
-    // even once everything is already resolved and nothing has changed.
-    // Runs on this thread directly now (a per-thread SetTimer with
-    // hWnd=nullptr), so no cross-thread marshal is needed to arm/disarm
-    // it - only the actual XAML work inside ResolvePendingButtonHwnds
-    // needs marshaling onto the taskbar thread.
+    // Self-managing one-shot rather than a recurring interval - stop
+    // first, kick off the resolve pass, and let that pass decide for
+    // itself whether (and when) to re-arm (see
+    // ResolvePendingButtonHwnds' ScheduleNextResolveTick), rather than
+    // running forever even once everything is resolved and nothing has
+    // changed. Runs on this thread directly (a per-thread SetTimer with
+    // hWnd=nullptr), so KillTimer here needs no cross-thread marshal.
     KillTimer(nullptr, idEvent);
     g_buttonHwndResolveTimerId = 0;
 
@@ -3117,29 +3180,30 @@ void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
     }
 
     // Prefer the subclass's non-blocking PostMessage (see
-    // g_resolveButtonHwndsMsg) - this can fire several times a second
+    // ResolveButtonHwndsMsg) - this can fire several times a second
     // during an EVENT_OBJECT_SHOW burst, the same hot-path cost
     // InvalidateTaskbarLayout avoids via PostMessage instead of
     // RunFromWindowThread's per-call hook install. Only fall back to the
     // blocking marshal in the (should stay rare) case the subclass was
-    // never successfully installed - a missed PostMessage here just means
-    // this tick's resolve is skipped, and the next scheduled tick (or the
-    // ArrangeOverride count-change path via ArmButtonHwndResolveTimer)
-    // will retry, so no fallback is needed for a PostMessage failure
-    // specifically.
+    // never successfully installed.
+    //
+    // Neither branch computes/arms the next delay here anymore -
+    // ResolvePendingButtonHwnds does that itself now, at the very end of
+    // whichever pass this triggers (see its own ScheduleNextResolveTick
+    // comment for why: computing it here, right after an async
+    // PostMessage, would read g_buttonHwndCache concurrently with that
+    // pass's own writes to it). The one case that still needs handling
+    // here is a PostMessage failure - nothing will ever call back to
+    // re-arm if the message never arrives, so retry after a fixed
+    // fallback delay rather than leaving the timer silently dead.
     if (g_taskbarWndSubclassed) {
-        if (!PostMessage(g_hTaskbarWnd, g_resolveButtonHwndsMsg, 0, 0)) {
+        if (!PostMessage(g_hTaskbarWnd, ResolveButtonHwndsMsg(), 0, 0)) {
             Wh_Log(L"ButtonHwndResolveTimerProc: PostMessage failed, "
                    L"error=%lu", GetLastError());
+            ArmButtonHwndResolveTimer(kIdleResolveTickMs);
         }
     } else {
         RunFromWindowThread(g_hTaskbarWnd, ResolvePendingButtonHwnds);
-    }
-
-    DWORD delay = NextResolveDelayMs();
-    if (!g_unloading && delay != INFINITE) {
-        g_buttonHwndResolveTimerId =
-            SetTimer(nullptr, 0, delay, ButtonHwndResolveTimerProc);
     }
 }
 
@@ -3281,10 +3345,10 @@ void ApplyLoadedSettings(ModSettings settings) {
     if (g_taskbarWndSubclassed) {
         // PostMessage is async, so the settings can't live on this
         // function's own stack - ownership transfers to the heap pointer,
-        // and TaskbarWndSubclassProc's g_settingsChangedMsg case deletes
+        // and TaskbarWndSubclassProc's SettingsChangedMsg case deletes
         // it after moving out of it.
         auto* heapSettings = new ModSettings(std::move(settings));
-        if (PostMessage(g_hTaskbarWnd, g_settingsChangedMsg, 0,
+        if (PostMessage(g_hTaskbarWnd, SettingsChangedMsg(), 0,
                         (LPARAM)heapSettings)) {
             return;
         }
