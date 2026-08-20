@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.8
+// @version         0.10.35
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -22,9 +22,9 @@ play/pause, and next controls.
 
 ## Preview
 
-| Dark mode | Light mode |
+| Transparent borderless | Transparent |
 | :---: | :---: |
-| ![Island Media Controls in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif) | ![Island Media Controls in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif) |
+| ![Island Media Controls with the Transparent borderless material](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/transcompbl.gif) | ![Island Media Controls with the Transparent material](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/transcomp.gif) |
 
 ## Layout previews
 
@@ -32,35 +32,27 @@ play/pause, and next controls.
 | :--- | :---: | :---: |
 | **Fullsize** | ![Island Media Controls fullsize mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkfull.gif) | ![Island Media Controls fullsize mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightfull.gif) |
 | **Compact** | ![Island Media Controls compact mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkcomp.gif) | ![Island Media Controls compact mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightcomp.gif) |
-| **Side expansion** | ![Island Media Controls side expansion mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark.gif) | ![Island Media Controls side expansion mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light.gif) |
+| **Side expansion** | ![Island Media Controls side expansion mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif) | ![Island Media Controls side expansion mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif) |
 
 ## What's new
 
-- **Two transparent materials:** Transparent keeps a subtle outline, while
-  Transparent borderless stays outline-free. Both use a contrast-aware artwork
-  tint (including the placeholder cover), and live blur stays hidden until two
-  consecutive final frames pass content validation. Neither mode adds a gray
-  fallback surface or simulated elevation shadow.
-- **One corner-radius control:** Set the expanded player's corners once and keep
-  the XAML surface, artwork, controls, highlights, and independent blur layer in
-  sync.
-- **New layout:** Adds a compact expanded player layout that keeps the cover,
-  track information, progress, and transport controls in a tighter card.
-- **Unified display modes:** Fullsize, compact expanded layout, and side
-  expansion are now selected from one clearer display-mode setting.
-- **New feedback animations:** Buttons now react with quicker press, release,
-  bounce, and rejection animations, including clearer no-media and failed-skip
-  feedback.
-- **Side expansion polish:** Side controls feel more responsive, recover cleanly
-  when a press is interrupted, and no longer leave hover highlights behind.
-- **Smoother Liquid Glass:** The Liquid Glass backdrop avoids redundant clipping
-  work and stays better synchronized with the expanded player animation.
-- **More reliable updates:** Media refresh, backdrop fallback, final blur
-  sampling, and worker-thread restarts are safer, with fewer chances for stale
-  visuals, a see-through player, or slow mod disable/apply behavior.
-- **Old Compact users:** If the previous Compact option is detected, the island
-  keeps that layout until you save settings here; select Display mode -> Compact
-  before saving to keep it.
+- **Three layouts for different taskbars:** Choose Fullsize for a roomy player,
+  Compact for a tighter layout, or Side expansion to keep playback controls
+  beside the current track.
+- **Better options for transparent taskbars:** Transparent and Transparent
+  borderless materials keep the taskbar visible through the island while adding
+  blur, adaptive text contrast, and an optional album-color tint. Compact tint
+  is off by default and can be enabled whenever more color is preferred.
+- **More expressive, connected motion:** Opening, closing, pressing, seeking,
+  and using playback controls now respond with faster elastic and jelly-like
+  feedback. Titles, colors, and covers transition smoothly when the track changes.
+- **Lighter everyday performance:** Blur capture, theme detection, rendering,
+  and album-color updates now avoid repeated work, especially in light mode and
+  the transparent materials.
+- **Settings that are easier to understand:** The choices people use most are
+  placed first, while switches and detailed size or animation controls are
+  grouped clearly. One corner-radius setting keeps the expanded player and its
+  blurred background visually consistent.
 
 ## Features
 
@@ -151,6 +143,9 @@ play/pause, and next controls.
     $description: Automatically size the island to fit themed or non-standard taskbars.
   - HideWhenNoMedia: false
     $name: Hide when no media
+  - CompactIslandTint: false
+    $name: Compact island tint
+    $description: Add an album-color tint and side-reveal highlight to the compact main island. Transparent keeps the side tint for readability; Transparent borderless follows this switch for both islands.
   - ClassicMorphScaleAnimation: true
     $name: Elastic animation effect
     $description: Enables elastic overshoot and rebound during fullsize expand/collapse. Compact click feedback always remains enabled.
@@ -224,6 +219,7 @@ play/pause, and next controls.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Metadata.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
+#include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Graphics.DirectX.h>
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
@@ -374,6 +370,7 @@ struct Settings {
     int marginLeft = 4;
     int marginRight = 4;
     bool hideWhenNoMedia = false;
+    bool compactIslandTint = false;
     double hoverScale = 1.06;
     double hoverLerpSpeed = 28.0;
     double animationSpeed = 1.0;
@@ -411,6 +408,8 @@ struct MediaState {
     bool hasSession = false;
     bool isPlaying = false;
     bool canSeek = false;
+    bool canSkipPrevious = false;
+    bool canSkipNext = false;
     int64_t timelineStartTicks = 0;
     int64_t positionTicks = 0;
     int64_t durationTicks = 0;
@@ -538,16 +537,34 @@ bool g_compactPressReleasePending = false;
 bool g_compactPressActivatePending = false;
 bool g_compactPressStarted = false;
 [[clang::no_destroy]] FrameworkElement g_dynamicMainIsland = nullptr;
+[[clang::no_destroy]] Border g_compactMainTintLayer = nullptr;
+[[clang::no_destroy]] Border g_dynamicTransportTintLayer = nullptr;
+[[clang::no_destroy]] SolidColorBrush g_compactMainTintBrush = nullptr;
+[[clang::no_destroy]] SolidColorBrush g_dynamicTransportTintBrush = nullptr;
+double g_compactMainTintOpacity = 1.0;
+double g_compactMainTintTargetOpacity = 1.0;
+double g_dynamicTransportTintOpacity = 1.0;
+double g_dynamicTransportTintTargetOpacity = 1.0;
+winrt::Windows::UI::Color g_compactTintColorCurrent{};
+winrt::Windows::UI::Color g_compactTintColorTarget{};
+bool g_compactTintColorValid = false;
+winrt::Windows::UI::Color g_compactAccentColorCurrent{};
+winrt::Windows::UI::Color g_compactAccentColorTarget{};
+bool g_compactAccentColorValid = false;
+winrt::event_token g_compactTintRenderingToken{};
+bool g_compactTintRenderingHooked = false;
+std::chrono::steady_clock::time_point g_lastCompactTintFrameTime{};
 [[clang::no_destroy]] Border g_dynamicMainOcclusion = nullptr;
 [[clang::no_destroy]] Border g_dynamicMainWashHost = nullptr;
 [[clang::no_destroy]] Image g_dynamicMainWash = nullptr;
 [[clang::no_destroy]] Border g_dynamicMainEdgeGlow = nullptr;
 [[clang::no_destroy]] FrameworkElement g_dynamicTransportIsland = nullptr;
+[[clang::no_destroy]] Grid g_dynamicTransportOcclusionHost = nullptr;
 [[clang::no_destroy]] FrameworkElement g_dynamicTransportSurface = nullptr;
 [[clang::no_destroy]] ScaleTransform g_dynamicTransportSurfaceScale = nullptr;
 [[clang::no_destroy]] FrameworkElement g_dynamicTransportControls = nullptr;
 struct DynamicTransportButtonMotion {
-    Border element{nullptr};
+    FrameworkElement element{nullptr};
     ScaleTransform scale{nullptr};
     TranslateTransform translate{nullptr};
     double scaleValue = 1.0;
@@ -558,6 +575,7 @@ struct DynamicTransportButtonMotion {
     double translateVelocity = 0.0;
     int direction = 0;
     bool pressStarted = false;
+    bool rejectionPressActive = false;
     double seekScaleMultiplier = 1.0;
     bool releasePending = false;
     int failurePhasesRemaining = 0;
@@ -575,6 +593,7 @@ void ResetDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion) {
     motion.translateVelocity = 0.0;
     motion.direction = 0;
     motion.pressStarted = false;
+    motion.rejectionPressActive = false;
     motion.seekScaleMultiplier = 1.0;
     motion.releasePending = false;
     motion.failurePhasesRemaining = 0;
@@ -608,6 +627,11 @@ void NeutralizeDynamicTransportButtonMotion(
 [[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPrevMotion;
 [[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPlayMotion;
 [[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportNextMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_compactPrevMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_compactNextMotion;
+winrt::event_token g_compactNavigationRenderingToken{};
+bool g_compactNavigationRenderingHooked = false;
+std::chrono::steady_clock::time_point g_lastCompactNavigationFrameTime{};
 [[clang::no_destroy]] DynamicTransportButtonMotion g_popupPrevMotion;
 [[clang::no_destroy]] DynamicTransportButtonMotion g_popupPlayMotion;
 [[clang::no_destroy]] DynamicTransportButtonMotion g_popupNextMotion;
@@ -633,15 +657,27 @@ std::chrono::steady_clock::time_point g_lastHoverFrameTime{};
 bool g_lastDarkMode = false;
 std::atomic<int> g_cachedDarkMode{-1};
 bool g_themeVisualsValid = false;
+bool g_lastCompactLightForeground = false;
+bool g_transparentCompactLightForeground = false;
+bool g_transparentCompactForegroundValid = false;
+bool g_transparentCompactBackdropLumaValid = false;
+double g_transparentCompactBackdropLuma = 0.0;
+std::chrono::steady_clock::time_point
+    g_transparentCompactBackdropLastSampleTime{};
+std::chrono::steady_clock::time_point g_lastSystemThemeProbeTime{};
+bool g_transparentPopupLightForeground = false;
+bool g_transparentPopupForegroundValid = false;
+std::atomic<int> g_popupOverlayWgcBackdropLuma{-1};
 bool g_popupXamlThemeValid = false;
 bool g_popupXamlThemeDark = false;
+bool g_popupXamlThemeLightForeground = false;
 std::wstring g_popupXamlThemeMaterial;
 std::wstring g_popupXamlThemeButtonStyle;
 int g_popupXamlThemeShadowDepth = -1;
 int g_popupXamlThemeShadowOpacity = -1;
 bool g_popupTextForegroundValid = false;
 bool g_popupTextForegroundEdgeFade = false;
-bool g_popupTextForegroundDark = false;
+bool g_popupTextForegroundLight = false;
 double g_popupTextForegroundEdgeFadeAmount = -1.0;
 HWND g_expandedPopup = nullptr;
 bool g_popupClassRegistered = false;
@@ -843,6 +879,10 @@ bool g_popupTextTransitionActive = false;
 int g_popupTextTransitionDirection = 1;
 int g_pendingMediaNavigationDirection = 0;
 std::chrono::steady_clock::time_point g_pendingMediaNavigationTime{};
+std::mutex g_mediaNavigationMutex;
+int g_pendingNavigationValidationDirection = 0;
+std::wstring g_pendingNavigationOriginKey;
+std::chrono::steady_clock::time_point g_pendingNavigationValidationTime{};
 [[clang::no_destroy]] TextBlock g_popupXamlElapsed = nullptr;
 [[clang::no_destroy]] TextBlock g_popupXamlDuration = nullptr;
 [[clang::no_destroy]] ProgressBar g_popupXamlProgress = nullptr;
@@ -1271,10 +1311,36 @@ winrt::Windows::UI::Color IslandBackgroundColor() {
                 : Color(0xE8, 0xF4, 0xF4, 0xF6);
 }
 
+winrt::Windows::UI::Color LimitColorSaturation(
+    winrt::Windows::UI::Color color,
+    double maximumSaturation) {
+    maximumSaturation = Clamp(maximumSaturation, 0.0, 1.0);
+    double red = color.R;
+    double green = color.G;
+    double blue = color.B;
+    double maximum = std::max({red, green, blue});
+    double minimum = std::min({red, green, blue});
+    double saturation = maximum > 1.0
+                            ? (maximum - minimum) / maximum
+                            : 0.0;
+    if (saturation > maximumSaturation) {
+        double luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        double chromaScale = maximumSaturation / saturation;
+        red = luma + (red - luma) * chromaScale;
+        green = luma + (green - luma) * chromaScale;
+        blue = luma + (blue - luma) * chromaScale;
+    }
+    color.R = static_cast<BYTE>(std::lround(Clamp(red, 0.0, 255.0)));
+    color.G = static_cast<BYTE>(std::lround(Clamp(green, 0.0, 255.0)));
+    color.B = static_cast<BYTE>(std::lround(Clamp(blue, 0.0, 255.0)));
+    return color;
+}
+
 winrt::Windows::UI::Color TransparentMaterialTintColor(
     winrt::Windows::UI::Color accent,
     BYTE alpha) {
     bool dark = IsDarkModeApprox();
+    accent = LimitColorSaturation(accent, dark ? 0.46 : 0.36);
     double luma =
         0.2126 * accent.R + 0.7152 * accent.G + 0.0722 * accent.B;
     double targetLuma = dark ? 48.0 : 118.0;
@@ -1287,23 +1353,110 @@ winrt::Windows::UI::Color TransparentMaterialTintColor(
     return accent;
 }
 
+double PerceivedLuma(winrt::Windows::UI::Color const& color) {
+    return 0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B;
+}
+
+double CompositeLuma(double backdropLuma,
+                     winrt::Windows::UI::Color const& tint) {
+    double tintOpacity = static_cast<double>(tint.A) / 255.0;
+    return backdropLuma * (1.0 - tintOpacity) +
+           PerceivedLuma(tint) * tintOpacity;
+}
+
+bool ResolveAdaptiveLightForeground(double surfaceLuma,
+                                    bool currentLightForeground,
+                                    bool currentValid) {
+    // A gap between the two thresholds prevents foreground flicker when a
+    // moving wallpaper or blur hovers around the contrast crossover.
+    if (!currentValid) {
+        return surfaceLuma < 132.0;
+    }
+    return currentLightForeground ? surfaceLuma < 150.0
+                                  : surfaceLuma < 116.0;
+}
+
+bool CompactUsesLightForeground() {
+    if (IsDarkModeApprox()) {
+        return true;
+    }
+    return IsTransparentMaterial() &&
+           g_transparentCompactForegroundValid &&
+           g_transparentCompactLightForeground;
+}
+
+bool PopupUsesLightForeground() {
+    if (IsDarkModeApprox()) {
+        return true;
+    }
+    if (!IsTransparentMaterial()) {
+        return false;
+    }
+    if (g_transparentPopupForegroundValid) {
+        return g_transparentPopupLightForeground;
+    }
+    return g_transparentCompactForegroundValid &&
+           g_transparentCompactLightForeground;
+}
+
+winrt::Windows::UI::Color TransparentMaterialAccent() {
+    return g_dynamicTransportAccentColorValid
+               ? g_dynamicTransportAccentColor
+               : Color(0xFF, 0x4F, 0x7D, 0xE8);
+}
+
+mediax::Brush TransparentMaterialTintBrush(BYTE alpha) {
+    return Brush(TransparentMaterialTintColor(
+        TransparentMaterialAccent(), alpha));
+}
+
 mediax::Brush IslandBackgroundBrush() {
     if (IsTransparentMaterial()) {
         // Reuse the taskbar's own material instead of adding a HostBackdrop
-        // Acrylic surface. A theme-aware tonal cap keeps light artwork from
-        // disappearing on white taskbars without losing its accent hue.
-        auto accent = g_dynamicTransportAccentColorValid
-                          ? g_dynamicTransportAccentColor
-                          : Color(0xFF, 0x4F, 0x7D, 0xE8);
-        return Brush(TransparentMaterialTintColor(
-            accent, IsDarkModeApprox() ? 0x98 : 0x44));
+        // Acrylic surface. The compact-main tint can be disabled independently
+        // without weakening the always-tinted side controls.
+        if (!g_settings.compactIslandTint) {
+            return Brush(Color(0x00, 0x00, 0x00, 0x00));
+        }
+        return TransparentMaterialTintBrush(
+            IsDarkModeApprox() ? 0x98 : 0x44);
     }
     return Brush(IslandBackgroundColor());
 }
 
+mediax::Brush DynamicTransportBackgroundBrush() {
+    if (IsTransparentMaterial()) {
+        return TransparentMaterialTintBrush(
+            IsDarkModeApprox() ? 0x98 : 0x44);
+    }
+    return IslandBackgroundBrush();
+}
+
 mediax::Brush DynamicMainOcclusionBrush() {
     if (IsTransparentMaterial()) {
-        return IslandBackgroundBrush();
+        if (IsDarkModeApprox()) {
+            // Dark mode should feel as if the album color becomes denser, not
+            // as if a white lamp is placed above the island. Preserve hue,
+            // boost chroma around perceptual luma, then pull the result into a
+            // deliberately deep range before compositing it over the tint.
+            auto accent = g_compactAccentColorValid
+                              ? g_compactAccentColorCurrent
+                              : TransparentMaterialAccent();
+            double luma = 0.2126 * accent.R + 0.7152 * accent.G +
+                          0.0722 * accent.B;
+            constexpr double chromaBoost = 1.42;
+            double r = luma + (static_cast<double>(accent.R) - luma) * chromaBoost;
+            double g = luma + (static_cast<double>(accent.G) - luma) * chromaBoost;
+            double b = luma + (static_cast<double>(accent.B) - luma) * chromaBoost;
+            double targetLuma = Clamp(luma * 0.54, 18.0, 50.0);
+            double scale = luma > 0.001 ? targetLuma / luma : 1.0;
+            return Brush(Color(
+                0x70,
+                static_cast<BYTE>(std::lround(Clamp(r * scale, 0.0, 255.0))),
+                static_cast<BYTE>(std::lround(Clamp(g * scale, 0.0, 255.0))),
+                static_cast<BYTE>(std::lround(Clamp(b * scale, 0.0, 255.0)))));
+        }
+        return Brush(Color(0x12, 0xFF, 0xFF, 0xFF));
     }
 
     auto color = IslandBackgroundColor();
@@ -1379,6 +1532,12 @@ mediax::Brush IslandBorderBrush() {
 }
 
 winrt::Windows::UI::Color DynamicTransportAccentColor() {
+    if (IsTransparentMaterial() && g_compactAccentColorValid) {
+        return Color(0xFF,
+                     g_compactAccentColorCurrent.R,
+                     g_compactAccentColorCurrent.G,
+                     g_compactAccentColorCurrent.B);
+    }
     return g_dynamicTransportAccentColorValid
                ? g_dynamicTransportAccentColor
                : Color(0xFF, 0x4F, 0x7D, 0xE8);
@@ -1658,6 +1817,8 @@ Settings ReadSettings() {
     settings.marginLeft = Clamp(Wh_GetIntSetting(L"Main.MarginLeft"), 0, 48);
     settings.marginRight = Clamp(Wh_GetIntSetting(L"Main.MarginRight"), 0, 48);
     settings.hideWhenNoMedia = Wh_GetIntSetting(L"Main.HideWhenNoMedia") != 0;
+    settings.compactIslandTint =
+        Wh_GetIntSetting(L"Main.CompactIslandTint") != 0;
     settings.hoverScale =
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.HoverScale"), 100, 125)) / 100.0;
     settings.hoverLerpSpeed =
@@ -2006,6 +2167,17 @@ MediaState SnapshotMedia() {
     return g_media;
 }
 
+bool IsMediaNavigationKnownUnavailable(int direction) {
+    if (direction == 0) {
+        return false;
+    }
+    MediaState state = SnapshotMedia();
+    if (!state.hasSession) {
+        return true;
+    }
+    return direction < 0 ? !state.canSkipPrevious : !state.canSkipNext;
+}
+
 MediaState SnapshotMediaWithTimestamp(std::chrono::steady_clock::time_point& timestamp) {
     std::lock_guard lock(g_mediaMutex);
     timestamp = g_mediaStateTimestamp;
@@ -2190,9 +2362,16 @@ void RefreshMediaState(
             state.isPlaying =
                 playback.PlaybackStatus() ==
                 gsm::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+            // A player can explicitly expose unavailable navigation before a
+            // command is sent. Use that signal for immediate rejection; if a
+            // provider can't expose controls, keep the asynchronous fallback.
+            state.canSkipPrevious = true;
+            state.canSkipNext = true;
             try {
                 auto controls = playback.Controls();
                 state.canSeek = controls.IsPlaybackPositionEnabled();
+                state.canSkipPrevious = controls.IsPreviousEnabled();
+                state.canSkipNext = controls.IsNextEnabled();
             } catch (...) {
                 state.canSeek = false;
             }
@@ -2220,7 +2399,10 @@ void RefreshMediaState(
 
         }
     } catch (...) {
-        state = {};
+        // A transient GSMTC/property failure during a track change must not
+        // publish an artificial no-media frame. Keep the last valid snapshot;
+        // a successful refresh will still clear it when the session is gone.
+        state = SnapshotMedia();
     }
     SetMedia(std::move(state));
 }
@@ -3816,6 +3998,84 @@ winrt::Windows::UI::Color ExtractAlbumAccentColor(std::vector<uint8_t> const& by
                  static_cast<BYTE>(Clamp(static_cast<int>(std::lround(b)), 0, 255)));
 }
 
+std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
+    std::vector<uint8_t> const& bytes,
+    bool edgeFadeToMiddle = false,
+    bool fadeFromTop = false,
+    bool fadeFromRight = false,
+    int blurPasses = 3,
+    bool albumMicaGrade = false,
+    bool fadeFromLeft = false) {
+    auto output = CreateLowDetailAlbumCoverBytes(
+        bytes, edgeFadeToMiddle, fadeFromTop, fadeFromRight,
+        blurPasses, albumMicaGrade, fadeFromLeft);
+    if (!output.empty() || bytes.empty()) {
+        return output;
+    }
+
+    // Some providers expose formats which BitmapImage can display but the WIC
+    // scaler cannot process. Never fall back to the raw cover for a background:
+    // synthesize a tiny, calm color wash so it remains visibly low-detail.
+    constexpr UINT kSize = 20;
+    bool dark = IsDarkModeApprox();
+    auto accent = LimitColorSaturation(
+        ExtractAlbumAccentColor(bytes), dark ? 0.42 : 0.32);
+    double neutral = dark ? 38.0 : 222.0;
+    double accentWeight = dark ? 0.64 : 0.38;
+    double baseRed = neutral * (1.0 - accentWeight) + accent.R * accentWeight;
+    double baseGreen = neutral * (1.0 - accentWeight) + accent.G * accentWeight;
+    double baseBlue = neutral * (1.0 - accentWeight) + accent.B * accentWeight;
+    if (albumMicaGrade && !dark) {
+        baseRed = std::max(baseRed, 205.0);
+        baseGreen = std::max(baseGreen, 205.0);
+        baseBlue = std::max(baseBlue, 205.0);
+    }
+
+    std::vector<BYTE> pixels(static_cast<size_t>(kSize) * kSize * 4);
+    double middle = (static_cast<double>(kSize) - 1.0) * 0.5;
+    double edge = static_cast<double>(kSize) - 1.0;
+    for (UINT y = 0; y < kSize; ++y) {
+        for (UINT x = 0; x < kSize; ++x) {
+            double nx = (static_cast<double>(x) - middle) /
+                        std::max(1.0, middle);
+            double ny = (static_cast<double>(y) - middle) /
+                        std::max(1.0, middle);
+            double radial = Clamp(std::sqrt(nx * nx + ny * ny), 0.0, 1.0);
+            double shade = 1.04 - radial * 0.10;
+            double alphaScale = 1.0;
+            if (edgeFadeToMiddle) {
+                double edgePosition =
+                    fadeFromLeft
+                        ? edge - static_cast<double>(x)
+                        : (fadeFromRight
+                               ? static_cast<double>(x)
+                               : (fadeFromTop ? edge - static_cast<double>(y)
+                                              : static_cast<double>(y)));
+                alphaScale = 0.0;
+                if (edgePosition > middle && edge > middle) {
+                    alphaScale = Clamp(
+                        (edgePosition - middle) / (edge - middle), 0.0, 1.0);
+                    alphaScale = alphaScale * alphaScale *
+                                 (3.0 - 2.0 * alphaScale);
+                    alphaScale *= dark ? 0.72 : 0.88;
+                }
+            }
+            BYTE alpha = static_cast<BYTE>(std::lround(255.0 * alphaScale));
+            double premultiply = alpha / 255.0;
+            BYTE* pixel = pixels.data() +
+                (static_cast<size_t>(y) * kSize + x) * 4;
+            pixel[0] = static_cast<BYTE>(std::lround(
+                Clamp(baseBlue * shade, 0.0, 255.0) * premultiply));
+            pixel[1] = static_cast<BYTE>(std::lround(
+                Clamp(baseGreen * shade, 0.0, 255.0) * premultiply));
+            pixel[2] = static_cast<BYTE>(std::lround(
+                Clamp(baseRed * shade, 0.0, 255.0) * premultiply));
+            pixel[3] = alpha;
+        }
+    }
+    return EncodePbgraPngBytes(kSize, kSize, pixels);
+}
+
 winrt::Windows::UI::Color LerpColor(winrt::Windows::UI::Color const& from,
                                   winrt::Windows::UI::Color const& to,
                                   double progress) {
@@ -4499,24 +4759,61 @@ mediax::Brush PopupControlCardBrush() {
     return Brush(PopupControlCardColor());
 }
 
+bool RefreshTransparentPopupForegroundContrast() {
+    bool oldLightForeground = PopupUsesLightForeground();
+    if (!IsTransparentMaterial() || IsDarkModeApprox()) {
+        g_transparentPopupForegroundValid = false;
+        g_transparentPopupLightForeground = false;
+        return PopupUsesLightForeground() != oldLightForeground;
+    }
+
+    int backdropLuma = g_popupOverlayWgcBackdropLuma.load(
+        std::memory_order_acquire);
+    if (backdropLuma < 0) {
+        return false;
+    }
+
+    double surfaceLuma = CompositeLuma(
+        static_cast<double>(backdropLuma), PopupControlCardColor());
+    bool lightForeground = ResolveAdaptiveLightForeground(
+        surfaceLuma,
+        g_transparentPopupLightForeground,
+        g_transparentPopupForegroundValid);
+    bool changed = !g_transparentPopupForegroundValid ||
+                   lightForeground != g_transparentPopupLightForeground;
+    g_transparentPopupLightForeground = lightForeground;
+    g_transparentPopupForegroundValid = true;
+    return changed || PopupUsesLightForeground() != oldLightForeground;
+}
+
 winrt::Windows::UI::Color PopupPrimaryTextColor() {
-    bool dark = IsDarkModeApprox();
-    return dark ? Color(0xFF, 0xFF, 0xFF, 0xFF)
-                : Color(0xFF, 0x00, 0x00, 0x00);
+    return PopupUsesLightForeground()
+               ? Color(0xFF, 0xFF, 0xFF, 0xFF)
+               : Color(0xFF, 0x00, 0x00, 0x00);
 }
 
 winrt::Windows::UI::Color PopupSecondaryTextColor() {
-    bool dark = IsDarkModeApprox();
-    return dark ? Color(0xC8, 0xFF, 0xFF, 0xFF)
-                : Color(0xC8, 0x00, 0x00, 0x00);
+    return PopupUsesLightForeground()
+               ? Color(0xC8, 0xFF, 0xFF, 0xFF)
+               : Color(0xC8, 0x00, 0x00, 0x00);
 }
 
+void DispatchNavigationFailureFeedback(int direction);
+
 void NoteMediaNavigationDirection(int direction) {
-    g_pendingMediaNavigationDirection = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
-    g_pendingMediaNavigationTime = std::chrono::steady_clock::now();
+    direction = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
+    auto now = std::chrono::steady_clock::now();
+    std::wstring originKey = MediaIdentityKey(SnapshotMedia());
+    std::lock_guard lock(g_mediaNavigationMutex);
+    g_pendingMediaNavigationDirection = direction;
+    g_pendingMediaNavigationTime = now;
+    g_pendingNavigationValidationDirection = direction;
+    g_pendingNavigationOriginKey = std::move(originKey);
+    g_pendingNavigationValidationTime = now;
 }
 
 int ConsumeRecentMediaNavigationDirection() {
+    std::lock_guard lock(g_mediaNavigationMutex);
     int direction = g_pendingMediaNavigationDirection;
     if (direction == 0) {
         return 0;
@@ -4528,6 +4825,63 @@ int ConsumeRecentMediaNavigationDirection() {
                      .count();
     g_pendingMediaNavigationDirection = 0;
     return ageMs <= 4000 ? direction : 0;
+}
+
+void CancelPendingNavigationValidation() {
+    std::lock_guard lock(g_mediaNavigationMutex);
+    g_pendingNavigationValidationDirection = 0;
+    g_pendingNavigationOriginKey.clear();
+    g_pendingNavigationValidationTime = {};
+    g_pendingMediaNavigationDirection = 0;
+    g_pendingMediaNavigationTime = {};
+}
+
+constexpr auto kNavigationValidationDelay = std::chrono::milliseconds(750);
+
+int ConsumeTimedOutNavigationFailure() {
+    MediaState state = SnapshotMedia();
+    std::wstring currentKey = MediaIdentityKey(state);
+    auto now = std::chrono::steady_clock::now();
+    std::lock_guard lock(g_mediaNavigationMutex);
+    if (g_pendingNavigationValidationDirection == 0) {
+        return 0;
+    }
+
+    if (!currentKey.empty() &&
+        currentKey != g_pendingNavigationOriginKey) {
+        g_pendingNavigationValidationDirection = 0;
+        g_pendingNavigationOriginKey.clear();
+        g_pendingNavigationValidationTime = {};
+        return 0;
+    }
+
+    auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   now - g_pendingNavigationValidationTime)
+                   .count();
+    if (age < kNavigationValidationDelay.count()) {
+        return 0;
+    }
+
+    int direction = g_pendingNavigationValidationDirection;
+    g_pendingNavigationValidationDirection = 0;
+    g_pendingNavigationOriginKey.clear();
+    g_pendingNavigationValidationTime = {};
+    g_pendingMediaNavigationDirection = 0;
+    return direction;
+}
+
+std::chrono::milliseconds PendingNavigationValidationWait() {
+    std::lock_guard lock(g_mediaNavigationMutex);
+    if (g_pendingNavigationValidationDirection == 0) {
+        return std::chrono::seconds(30);
+    }
+    auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() -
+        g_pendingNavigationValidationTime);
+    if (age >= kNavigationValidationDelay) {
+        return std::chrono::milliseconds(1);
+    }
+    return kNavigationValidationDelay - age;
 }
 
 mediax::Brush PopupTextForegroundBrush(winrt::Windows::UI::Color color,
@@ -4558,17 +4912,17 @@ mediax::Brush PopupTextForegroundBrush(winrt::Windows::UI::Color color,
 
 void ApplyPopupTextForegroundFade(double edgeFadeAmount, bool force = false) {
     edgeFadeAmount = Clamp(edgeFadeAmount, 0.0, 1.0);
-    bool dark = IsDarkModeApprox();
+    bool lightForeground = PopupUsesLightForeground();
     if (!force && g_popupTextForegroundValid &&
         std::abs(g_popupTextForegroundEdgeFadeAmount - edgeFadeAmount) < 0.003 &&
-        g_popupTextForegroundDark == dark) {
+        g_popupTextForegroundLight == lightForeground) {
         return;
     }
 
     g_popupTextForegroundValid = true;
     g_popupTextForegroundEdgeFade = edgeFadeAmount > 0.001;
     g_popupTextForegroundEdgeFadeAmount = edgeFadeAmount;
-    g_popupTextForegroundDark = dark;
+    g_popupTextForegroundLight = lightForeground;
 
     auto primary = PopupTextForegroundBrush(PopupPrimaryTextColor(), edgeFadeAmount);
     auto secondary = PopupTextForegroundBrush(PopupSecondaryTextColor(), edgeFadeAmount);
@@ -5343,8 +5697,7 @@ mediax::Brush PopupButtonHoverBrush(bool dark) {
 void ApplyPopupButtonVisual(Border const& surface, bool hovered = false) {
     bool dark = IsDarkModeApprox();
     bool primary = IsPopupPrimaryButton(surface);
-    auto primaryText = dark ? Color(0xFF, 0xFF, 0xFF, 0xFF)
-                            : Color(0xFF, 0x00, 0x00, 0x00);
+    auto primaryText = PopupPrimaryTextColor();
 
     double width = PopupButtonWidth();
     double height = PopupButtonHeight();
@@ -5443,16 +5796,34 @@ void EndPopupButtonPress(DynamicTransportButtonMotion* motion,
     StartPopupXamlRenderLoop();
 }
 
+void PrimeTransportNavigationFailureFrame(
+    DynamicTransportButtonMotion* motion) {
+    if (!motion || !motion->scale || !motion->translate ||
+        motion->direction == 0) {
+        return;
+    }
+    // Updating only the spring state doesn't schedule a composition frame.
+    // Apply a tiny first nudge so a rejection that originates from the timer
+    // begins immediately, without waiting for a later pointer interaction.
+    motion->translateValue = Clamp(
+        motion->translateValue + motion->direction * 0.24, -8.0, 8.0);
+    double visualScale = motion->scaleValue * motion->seekScaleMultiplier;
+    motion->scale.ScaleX(visualScale);
+    motion->scale.ScaleY(visualScale);
+    motion->translate.X(motion->translateValue);
+}
+
 void TriggerPopupTransportNavigationFailure(
     DynamicTransportButtonMotion* motion) {
     if (!motion || motion->direction == 0) return;
     motion->releasePending = false;
     motion->failurePhasesRemaining = 3;
     motion->scaleTarget = 1.0;
-    motion->scaleVelocity += 0.4;
-    motion->translateTarget = motion->direction * 2.2;
-    motion->translateVelocity = 0.0;
+    motion->scaleVelocity += 0.25;
+    motion->translateTarget = motion->direction * 1.8;
+    motion->translateVelocity = motion->direction * 28.0;
     StartPopupXamlRenderLoop();
+    PrimeTransportNavigationFailureFrame(motion);
 }
 
 void TriggerPopupNoMediaPlayBounce(DynamicTransportButtonMotion* motion) {
@@ -5520,7 +5891,7 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
             ApplyPopupButtonVisual(border, false);
         }
     });
-    surface.PointerPressed([motion](auto const& sender, input::PointerRoutedEventArgs const& args) {
+    surface.PointerPressed([motion, motionDirection](auto const& sender, input::PointerRoutedEventArgs const& args) {
         auto border = sender.template try_as<Border>();
         auto point = args.GetCurrentPoint(border);
         if (!point.Properties().IsLeftButtonPressed()) {
@@ -5529,13 +5900,32 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         if (border) {
             border.CapturePointer(args.Pointer());
         }
+        if (motion && motionDirection != 0 &&
+            IsMediaNavigationKnownUnavailable(motionDirection)) {
+            motion->pressStarted = false;
+            motion->rejectionPressActive = true;
+            TriggerPopupTransportNavigationFailure(motion);
+            args.Handled(true);
+            return;
+        }
         if (motion) {
             motion->pressStarted = true;
+            motion->rejectionPressActive = false;
         }
         BeginPopupButtonPress(motion);
         args.Handled(true);
     });
     surface.PointerReleased([onClick, primary, motion, motionDirection](auto const& sender, input::PointerRoutedEventArgs const& args) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            if (auto border = sender.template try_as<Border>()) {
+                border.ReleasePointerCapture(args.Pointer());
+                border.Opacity(1.0);
+                ApplyPopupButtonVisual(border, false);
+            }
+            args.Handled(true);
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -5576,6 +5966,10 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         args.Handled(true);
     });
     surface.PointerCanceled([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -5587,6 +5981,10 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         EndPopupButtonPress(motion, false);
     });
     surface.PointerCaptureLost([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -5611,8 +6009,10 @@ void ApplyPopupXamlTheme(bool force = false) {
     }
 
     bool dark = IsDarkModeApprox();
+    bool lightForeground = PopupUsesLightForeground();
     if (!force && g_popupXamlThemeValid &&
         g_popupXamlThemeDark == dark &&
+        g_popupXamlThemeLightForeground == lightForeground &&
         g_popupXamlThemeMaterial == g_settings.material &&
         g_popupXamlThemeButtonStyle == g_settings.popupButtonStyle &&
         g_popupXamlThemeShadowDepth == PopupShadowDepth() &&
@@ -5621,6 +6021,7 @@ void ApplyPopupXamlTheme(bool force = false) {
     }
     g_popupXamlThemeValid = true;
     g_popupXamlThemeDark = dark;
+    g_popupXamlThemeLightForeground = lightForeground;
     g_popupXamlThemeMaterial = g_settings.material;
     g_popupXamlThemeButtonStyle = g_settings.popupButtonStyle;
     g_popupXamlThemeShadowDepth = PopupShadowDepth();
@@ -6047,8 +6448,10 @@ void ResetPopupXamlElementState() {
     g_popupXamlOutgoingArtistRightFade = nullptr;
     g_popupTextForegroundValid = false;
     g_popupTextForegroundEdgeFade = false;
-    g_popupTextForegroundDark = false;
+    g_popupTextForegroundLight = false;
     g_popupTextForegroundEdgeFadeAmount = -1.0;
+    g_transparentPopupForegroundValid = false;
+    g_transparentPopupLightForeground = false;
 
     g_popupXamlTitle = nullptr;
     g_popupXamlArtist = nullptr;
@@ -6426,8 +6829,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
                     } catch (...) {
                     }
                     if (!changed) {
-                        g_dynamicTransportNavigationFailureDirection.store(-1);
-                        RequestMediaRefresh();
+                        DispatchNavigationFailureFeedback(-1);
                     }
                 });
             });
@@ -6451,8 +6853,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
                     } catch (...) {
                     }
                     if (!changed) {
-                        g_dynamicTransportNavigationFailureDirection.store(1);
-                        RequestMediaRefresh();
+                        DispatchNavigationFailureFeedback(1);
                     }
                 });
             });
@@ -7841,6 +8242,112 @@ bool GetElementScreenRect(FrameworkElement const& element, RECT& result) {
     }
 }
 
+bool SampleCompactBackdropLuma(double& luma) {
+    RECT islandRect{};
+    RECT taskbarRect{};
+    if (!GetElementScreenRect(g_playerGrid, islandRect) ||
+        !g_taskbarWnd ||
+        !GetWindowRect(g_taskbarWnd, &taskbarRect)) {
+        return false;
+    }
+
+    double samples[24]{};
+    size_t sampleCount = 0;
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+
+    auto samplePoint = [&](int x, int y) {
+        if (sampleCount >= sizeof(samples) / sizeof(samples[0]) ||
+            x < taskbarRect.left || x >= taskbarRect.right ||
+            y < taskbarRect.top || y >= taskbarRect.bottom) {
+            return;
+        }
+        POINT point{x, y};
+        if (PtInRect(&islandRect, point)) {
+            return;
+        }
+        COLORREF color = GetPixel(screenDc, x, y);
+        if (color == CLR_INVALID) {
+            return;
+        }
+        samples[sampleCount++] =
+            0.2126 * GetRValue(color) +
+            0.7152 * GetGValue(color) +
+            0.0722 * GetBValue(color);
+    };
+
+    int islandWidth = islandRect.right - islandRect.left;
+    for (int i = 1; i <= 5; ++i) {
+        int x = islandRect.left + islandWidth * i / 6;
+        samplePoint(x, islandRect.top - 2);
+        samplePoint(x, islandRect.bottom + 1);
+    }
+    int centerY = (islandRect.top + islandRect.bottom) / 2;
+    static constexpr int kSideOffsets[] = {2, 6, 10};
+    for (int offset : kSideOffsets) {
+        samplePoint(islandRect.left - offset, centerY);
+        samplePoint(islandRect.right + offset - 1, centerY);
+    }
+
+    ReleaseDC(nullptr, screenDc);
+    if (sampleCount < 2) {
+        return false;
+    }
+
+    std::sort(samples, samples + sampleCount);
+    size_t middle = sampleCount / 2;
+    luma = sampleCount % 2 != 0
+               ? samples[middle]
+               : (samples[middle - 1] + samples[middle]) * 0.5;
+    return true;
+}
+
+bool RefreshTransparentCompactForegroundContrast() {
+    bool oldLightForeground = CompactUsesLightForeground();
+    if (!IsTransparentMaterial() || IsDarkModeApprox()) {
+        g_transparentCompactForegroundValid = false;
+        g_transparentCompactLightForeground = false;
+        return CompactUsesLightForeground() != oldLightForeground;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    bool sampleDue =
+        g_transparentCompactBackdropLastSampleTime.time_since_epoch().count() == 0 ||
+        now - g_transparentCompactBackdropLastSampleTime >=
+            std::chrono::seconds(3);
+    if (sampleDue) {
+        // Throttle failed reads too. Otherwise an unavailable screen DC would
+        // retry on every 600 ms layout tick and recreate the original cost spike.
+        g_transparentCompactBackdropLastSampleTime = now;
+        double sampledLuma = 0.0;
+        if (SampleCompactBackdropLuma(sampledLuma)) {
+            g_transparentCompactBackdropLuma = sampledLuma;
+            g_transparentCompactBackdropLumaValid = true;
+        }
+    }
+    if (!g_transparentCompactBackdropLumaValid) {
+        return false;
+    }
+
+    auto accent = g_dynamicTransportAccentColorValid
+                      ? g_dynamicTransportAccentColor
+                      : Color(0xFF, 0x4F, 0x7D, 0xE8);
+    auto tint = TransparentMaterialTintColor(
+        accent, g_settings.compactIslandTint ? 0x44 : 0x00);
+    double surfaceLuma = CompositeLuma(g_transparentCompactBackdropLuma, tint);
+    bool lightForeground = ResolveAdaptiveLightForeground(
+        surfaceLuma,
+        g_transparentCompactLightForeground,
+        g_transparentCompactForegroundValid);
+    bool changed = !g_transparentCompactForegroundValid ||
+                   lightForeground != g_transparentCompactLightForeground;
+    g_transparentCompactLightForeground = lightForeground;
+    g_transparentCompactForegroundValid = true;
+    return changed || CompactUsesLightForeground() != oldLightForeground;
+}
+
 double PopupDpiScale(HWND hwnd) {
     HWND source = hwnd ? hwnd : (g_expandedPopup ? g_expandedPopup : g_taskbarWnd);
     UINT dpi = source ? GetDpiForWindow(source) : 96;
@@ -8914,6 +9421,11 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
     }
     g_lastPopupFrameTime = now;
     dt = Clamp(dt, 0.0, 0.05);
+    if (RefreshTransparentPopupForegroundContrast()) {
+        g_popupXamlThemeValid = false;
+        g_popupTextForegroundValid = false;
+        ApplyPopupXamlTheme(true);
+    }
     TickPopupMediaTransition(dt);
     bool popupSeekFeedbackSettled = StepPopupSeekFeedback(dt);
     double popupButtonSpeed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
@@ -10229,7 +10741,7 @@ bool PopupOverlayWgcBackBufferHasVisibleContent() {
         return false;
     }
 
-    uint64_t rgbSum = 0;
+    double premultipliedLumaSum = 0.0;
     uint64_t alphaSum = 0;
     BYTE minimumChannel = 0xFF;
     BYTE maximumChannel = 0x00;
@@ -10242,7 +10754,8 @@ bool PopupOverlayWgcBackBufferHasVisibleContent() {
             BYTE green = pixel[1];
             BYTE red = pixel[2];
             BYTE alpha = pixel[3];
-            rgbSum += static_cast<uint64_t>(red) + green + blue;
+            premultipliedLumaSum +=
+                0.2126 * red + 0.7152 * green + 0.0722 * blue;
             alphaSum += alpha;
             minimumChannel =
                 std::min(minimumChannel, std::min(red, std::min(green, blue)));
@@ -10256,12 +10769,24 @@ bool PopupOverlayWgcBackBufferHasVisibleContent() {
     double sampleCount =
         static_cast<double>(sampleWidth) * sampleHeight;
     double averageAlpha = alphaSum / sampleCount;
-    double averageChannel = rgbSum / (sampleCount * 3.0);
+    double averagePremultipliedLuma =
+        premultipliedLumaSum / sampleCount;
+    double averageLuma = averageAlpha > 1.0
+                             ? Clamp(averagePremultipliedLuma * 255.0 /
+                                         averageAlpha,
+                                     0.0, 255.0)
+                             : 0.0;
     bool hasColorVariation =
         maximumChannel >= 12 &&
         static_cast<int>(maximumChannel) - minimumChannel >= 8;
-    return averageAlpha >= 10.0 &&
-           (averageChannel >= 6.0 || hasColorVariation);
+    bool visible = averageAlpha >= 10.0 &&
+                   (averagePremultipliedLuma >= 6.0 || hasColorVariation);
+    if (visible) {
+        g_popupOverlayWgcBackdropLuma.store(
+            static_cast<int>(std::lround(averageLuma)),
+            std::memory_order_release);
+    }
+    return visible;
 }
 
 void RenderPopupOverlayWgcFrameLocked(
@@ -10514,6 +11039,12 @@ void RenderPopupOverlayWgcFrameLocked(
                 g_popupOverlayWgcVisibleFrameStreak = 0;
             }
             finalFrameReady = g_popupOverlayWgcVisibleFrameStreak >= 2;
+        } else if (IsTransparentMaterial() && !IsDarkModeApprox() &&
+                   g_popupOverlayWgcFrameCount <= 36 &&
+                   g_popupOverlayWgcFrameCount % 12 == 0) {
+            // Three low-frequency samples are enough to follow the final morph
+            // position without repeatedly stalling the GPU readback path.
+            PopupOverlayWgcBackBufferHasVisibleContent();
         }
 
         hr = g_popupOverlayWgcSwapChain->Present(0, 0);
@@ -10871,6 +11402,7 @@ bool StartPopupOverlayWgcBackdrop(
     g_popupOverlayWgcDiagnosticHr = S_OK;
     g_popupOverlayWgcHadFrame = false;
     g_popupOverlayWgcReadbackHadVisibleFrame = false;
+    g_popupOverlayWgcBackdropLuma.store(-1, std::memory_order_release);
     g_popupOverlayWgcVisibleFrameStreak = 0;
     g_popupOverlayWgcFrameCount = 0;
     g_popupOverlayWgcRenderFailCount = 0;
@@ -12251,6 +12783,7 @@ void StopHoverRenderLoop() {
 }
 
 void StartExpandRenderLoop(bool expanded);
+void RefreshTransparentDynamicTransportOcclusionClip();
 
 void ResetCompactIslandPressMotion() {
     g_compactPressStarted = false;
@@ -12328,6 +12861,7 @@ void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
                 (g_currentHoverScale - 1.0) / hoverRange, 0.0, 1.0);
             g_islandHoverTranslate.Y(-hoverAmount);
         }
+        RefreshTransparentDynamicTransportOcclusionClip();
 
         if (g_compactPressActivatePending &&
             g_compactPressScaleTarget >= 0.99 &&
@@ -12445,6 +12979,19 @@ double DynamicTransportWidth() {
     return DynamicTransportVisibleWidth() + DynamicTransportOverlap();
 }
 
+// Keep the promoted transparent surface slightly deeper below the main island
+// without changing its outward edge or visible length. The deeper span keeps
+// the complete jelly rebound inside the main-island exclusion geometry.
+constexpr double kDynamicTransportSurfaceSeamBleed = 8.0;
+
+double DynamicTransportSurfaceWidth() {
+    return DynamicTransportWidth() + kDynamicTransportSurfaceSeamBleed;
+}
+
+double DynamicTransportSurfaceOverlap() {
+    return DynamicTransportOverlap() + kDynamicTransportSurfaceSeamBleed;
+}
+
 void StopDynamicCompactRenderLoop() {
     if (g_dynamicCompactRenderingHooked) {
         try {
@@ -12456,6 +13003,274 @@ void StopDynamicCompactRenderLoop() {
     g_lastDynamicCompactFrameTime = {};
 }
 
+// CompositionPath accepts a WinRT geometry source, but Windhawk's SDK doesn't
+// ship the small Windows.Graphics interop header. Keep the local interface
+// declaration private and expose both the WinRT marker IID and the D2D interop
+// IID from one ref-counted object.
+constexpr GUID kIID_IInspectableLocal{
+    0xAF86E2E0, 0xB12D, 0x4C6A,
+    {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+constexpr GUID kIID_IGeometrySource2D{
+    0xCAFF7902, 0x670C, 0x4181,
+    {0xA6, 0x24, 0xDA, 0x97, 0x72, 0x03, 0xB8, 0x45}};
+constexpr GUID kIID_IGeometrySource2DInterop{
+    0x0657AF73, 0x53FD, 0x47CF,
+    {0x84, 0xFF, 0xC8, 0x49, 0x2D, 0x2A, 0x80, 0xA3}};
+
+struct IGeometrySource2DInteropLocal : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetGeometry(
+        ID2D1Geometry** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(
+        ID2D1Factory* factory,
+        ID2D1Geometry** value) = 0;
+};
+
+class DynamicTransportGeometrySource final
+    : public ::IInspectable,
+      public IGeometrySource2DInteropLocal {
+public:
+    explicit DynamicTransportGeometrySource(
+        winrt::com_ptr<ID2D1Geometry> geometry)
+        : geometry_(std::move(geometry)) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
+                                             void** value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = nullptr;
+        if (iid == IID_IUnknown || iid == kIID_IInspectableLocal ||
+            iid == kIID_IGeometrySource2D) {
+            *value = static_cast<::IInspectable*>(this);
+        } else if (iid == kIID_IGeometrySource2DInterop) {
+            *value = static_cast<IGeometrySource2DInteropLocal*>(this);
+        } else {
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return ++references_;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = --references_;
+        if (remaining == 0) {
+            delete this;
+        }
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetIids(ULONG* count, IID** iids) override {
+        if (!count || !iids) {
+            return E_POINTER;
+        }
+        *count = 0;
+        *iids = static_cast<IID*>(CoTaskMemAlloc(sizeof(IID)));
+        if (!*iids) {
+            return E_OUTOFMEMORY;
+        }
+        **iids = kIID_IGeometrySource2D;
+        *count = 1;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetRuntimeClassName(HSTRING* name) override {
+        if (!name) {
+            return E_POINTER;
+        }
+        *name = nullptr;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetTrustLevel(TrustLevel* level) override {
+        if (!level) {
+            return E_POINTER;
+        }
+        *level = BaseTrust;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetGeometry(ID2D1Geometry** value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        geometry_.copy_to(value);
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(
+        ID2D1Factory*, ID2D1Geometry** value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = nullptr;
+        return E_NOTIMPL;
+    }
+
+private:
+    std::atomic<ULONG> references_{1};
+    winrt::com_ptr<ID2D1Geometry> geometry_;
+};
+
+winrt::com_ptr<ID2D1Factory1> g_dynamicTransportClipD2dFactory;
+
+bool EnsureDynamicTransportClipFactory() {
+    if (g_dynamicTransportClipD2dFactory) {
+        return true;
+    }
+
+    D2D1_FACTORY_OPTIONS options{};
+    HRESULT hr = D2D1CreateFactory(
+        D2D1_FACTORY_TYPE_SINGLE_THREADED,
+        __uuidof(ID2D1Factory1),
+        &options,
+        reinterpret_cast<void**>(
+            g_dynamicTransportClipD2dFactory.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: seam D2D factory failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+    return true;
+}
+
+void ClearDynamicTransportCompositionClip(
+    FrameworkElement const& element) {
+    if (!element) {
+        return;
+    }
+    try {
+        auto visual = hosting::ElementCompositionPreview::GetElementVisual(
+            element);
+        visual.Clip(composition::CompositionClip{nullptr});
+    } catch (...) {
+    }
+}
+
+bool ApplyTransparentDynamicTransportOcclusionClip(
+    FrameworkElement const& element,
+    double width,
+    double height,
+    bool expandsRight) {
+    if (!element || !EnsureDynamicTransportClipFactory()) {
+        return false;
+    }
+
+    width = std::max(1.0, width);
+    height = std::max(1.0, height);
+    double radius = Clamp(g_layout.cornerRadius, 0.0, height * 0.5);
+    // Let the two independently antialiased contours overlap by a fraction of
+    // a pixel. A positive inflation left a hairline that disappeared only when
+    // the side surface's later horizontal impulse happened to cover it.
+    double exclusionGuard = IsTransparentBorderedMaterial() ? -0.18 : -0.08;
+
+    double mainLeft = expandsRight ? 0.0 : width - g_layout.compactWidth;
+    double mainRight = mainLeft + g_layout.compactWidth;
+    double mainVisualScaleX = 1.0;
+    double mainVisualScaleY = 1.0;
+    if (g_islandScale) {
+        mainVisualScaleX = Clamp(g_islandScale.ScaleX(), 0.5, 1.5);
+        mainVisualScaleY = Clamp(g_islandScale.ScaleY(), 0.5, 1.5);
+    }
+    double mainCenterX = (mainLeft + mainRight) * 0.5;
+    double mainCenterY = height * 0.5;
+    double visualMainLeft =
+        mainCenterX + (mainLeft - mainCenterX) * mainVisualScaleX;
+    double visualMainRight =
+        mainCenterX + (mainRight - mainCenterX) * mainVisualScaleX;
+    double visualMainTop =
+        mainCenterY + (0.0 - mainCenterY) * mainVisualScaleY;
+    double visualMainBottom =
+        mainCenterY + (height - mainCenterY) * mainVisualScaleY;
+
+    double outerPadding = 24.0;
+    D2D1_RECT_F outerRect = D2D1::RectF(
+        static_cast<float>(-outerPadding),
+        static_cast<float>(-outerPadding),
+        static_cast<float>(width + outerPadding),
+        static_cast<float>(height + outerPadding));
+    D2D1_ROUNDED_RECT excludedMainRect{
+        D2D1::RectF(
+            static_cast<float>(visualMainLeft - exclusionGuard),
+            static_cast<float>(visualMainTop - exclusionGuard),
+            static_cast<float>(visualMainRight + exclusionGuard),
+            static_cast<float>(visualMainBottom + exclusionGuard)),
+        static_cast<float>(radius * mainVisualScaleX + exclusionGuard),
+        static_cast<float>(radius * mainVisualScaleY + exclusionGuard)};
+
+    try {
+        winrt::com_ptr<ID2D1RectangleGeometry> outerGeometry;
+        winrt::check_hresult(
+            g_dynamicTransportClipD2dFactory->CreateRectangleGeometry(
+                outerRect, outerGeometry.put()));
+        winrt::com_ptr<ID2D1RoundedRectangleGeometry> mainGeometry;
+        winrt::check_hresult(
+            g_dynamicTransportClipD2dFactory->CreateRoundedRectangleGeometry(
+                excludedMainRect, mainGeometry.put()));
+        winrt::com_ptr<ID2D1PathGeometry> pathGeometry;
+        winrt::check_hresult(
+            g_dynamicTransportClipD2dFactory->CreatePathGeometry(
+                pathGeometry.put()));
+        winrt::com_ptr<ID2D1GeometrySink> sink;
+        winrt::check_hresult(pathGeometry->Open(sink.put()));
+        winrt::check_hresult(outerGeometry->CombineWithGeometry(
+            mainGeometry.get(), D2D1_COMBINE_MODE_EXCLUDE,
+            nullptr, D2D1_DEFAULT_FLATTENING_TOLERANCE, sink.get()));
+        winrt::check_hresult(sink->Close());
+
+        winrt::com_ptr<DynamicTransportGeometrySource> source;
+        source.attach(new DynamicTransportGeometrySource(
+            pathGeometry.as<ID2D1Geometry>()));
+        composition::CompositionPath compositionPath{
+            source.as<winrt::Windows::Graphics::IGeometrySource2D>()};
+        auto visual = hosting::ElementCompositionPreview::GetElementVisual(
+            element);
+        auto compositor = visual.Compositor();
+        auto compositor5 = compositor.as<composition::ICompositor5>();
+        auto compositor6 = compositor.as<composition::ICompositor6>();
+        auto compositionGeometry =
+            compositor5.CreatePathGeometry(compositionPath);
+        visual.Clip(compositor6.CreateGeometricClip(compositionGeometry));
+        return true;
+    } catch (winrt::hresult_error const& error) {
+        Wh_Log(L"Island: parent occlusion clip failed hr=0x%08X",
+               static_cast<unsigned>(error.code().value));
+    } catch (...) {
+    }
+    return false;
+}
+
+void RefreshTransparentDynamicTransportOcclusionClip() {
+    if (!IsDynamicCompactMode() || !IsTransparentMaterial() ||
+        !g_playerGrid || !g_dynamicTransportOcclusionHost) {
+        return;
+    }
+    // Use the size that XAML has actually committed. Reading the newly set
+    // target width before layout would move the mask one frame ahead of both
+    // the main island and the side content.
+    double width = g_dynamicTransportOcclusionHost.ActualWidth();
+    if (width <= 0.0) {
+        width = g_playerGrid.ActualWidth();
+    }
+    if (width <= 0.0) {
+        width = g_playerGrid.Width();
+    }
+    if (width <= 0.0) {
+        width = g_layout.compactWidth;
+    }
+    double height = g_dynamicTransportOcclusionHost.ActualHeight();
+    if (height <= 0.0) {
+        height = g_layout.compactHeight;
+    }
+    ApplyTransparentDynamicTransportOcclusionClip(
+        g_dynamicTransportOcclusionHost,
+        width,
+        height,
+        DynamicTransportExpandsRight());
+}
 void ApplyDynamicCompactVisuals() {
     if (!IsDynamicCompactMode() || !g_playerGrid || !g_dynamicMainIsland) {
         return;
@@ -12497,6 +13312,31 @@ void ApplyDynamicCompactVisuals() {
     double backgroundVisualReveal = Clamp(backgroundReveal, 0.0, 1.045);
     double overlap = DynamicTransportOverlap() * easedReveal;
     bool expandsRight = DynamicTransportExpandsRight();
+    // Preserve the 0.10.19 parent launch travel. The fixed seam clip below
+    // compensates for this transform, so controls remain smooth without moving
+    // the visible boundary through the transparent main island.
+    double transportShift =
+        (expandsRight ? -1.0 : 1.0) *
+        SmoothStep(Clamp(1.0 - easedReveal, 0.0, 1.0)) *
+        Clamp(DynamicTransportOverlap() * 0.30, 10.0, 18.0);
+    double jelly = Clamp(
+        std::abs(g_dynamicTransportRevealVelocity) * 0.045,
+        0.0, 0.055);
+    double transportScaleX = 1.0 + jelly;
+    double transportScaleY = 1.0 - jelly * 0.45;
+    double backgroundImpulse = 0.0;
+    if (explosivePhase) {
+        double backgroundImpulseGate = SmootherStep(
+            Clamp((reveal - 0.68) / 0.32, 0.0, 1.0));
+        backgroundImpulse = Clamp(
+            std::max(0.0, g_dynamicTransportRevealVelocity) *
+                0.022 * backgroundImpulseGate,
+            0.0, 0.110);
+    }
+    double transportSurfaceScaleX = 1.0 + backgroundImpulse;
+    double transportSurfaceScaleY = 1.0 - backgroundImpulse * 0.62;
+    double transportVerticalClipPadding =
+        Clamp(DynamicTransportButtonSize() * 0.16, 3.5, 5.5);
 
     g_dynamicMainIsland.Width(g_layout.compactWidth);
     g_dynamicMainIsland.Height(g_layout.compactHeight);
@@ -12505,20 +13345,39 @@ void ApplyDynamicCompactVisuals() {
                      : HorizontalAlignment::Right);
     double motionOverflow =
         DynamicTransportButtonMotionPadding() * easedReveal;
-    g_playerGrid.Width(g_layout.compactWidth + revealedTransportWidth -
-                       overlap + motionOverflow);
+    double playerWidth = g_layout.compactWidth + revealedTransportWidth -
+                         overlap + motionOverflow;
+    g_playerGrid.Width(playerWidth);
     g_playerGrid.Margin(
         expandsRight ? xaml::Thickness{0, 0, -motionOverflow, 0}
                      : xaml::Thickness{-motionOverflow, 0, 0, 0});
     g_playerGrid.Height(g_layout.compactHeight);
     g_playerGrid.MinHeight(g_layout.compactHeight);
+    RefreshTransparentDynamicTransportOcclusionClip();
 
     if (g_dynamicMainOcclusion) {
-        double occlusionOpacity =
-            g_dynamicTransportTargetReveal > 0.5
-                ? Clamp(easedReveal * 4.0, 0.0, 1.0)
-                : SmoothStep(Clamp(easedReveal / 0.08, 0.0, 1.0));
+        // Once transparent materials use a precise seam clip, this layer is a
+        // reveal-linked brightness lift rather than a fast opaque mask.
+        double occlusionOpacity = IsTransparentMaterial()
+            ? SmootherStep(Clamp(easedReveal, 0.0, 1.0)) *
+                  g_compactMainTintOpacity
+            : (g_dynamicTransportTargetReveal > 0.5
+                   ? Clamp(easedReveal * 4.0, 0.0, 1.0)
+                   : SmoothStep(Clamp(easedReveal / 0.08, 0.0, 1.0)));
         g_dynamicMainOcclusion.Opacity(occlusionOpacity);
+    }
+
+    if (auto backgroundFe =
+            FindChildByName(g_playerGrid, L"Island_Background")) {
+        if (auto background = backgroundFe.try_as<Border>()) {
+            double seamStroke = IsTransparentBorderedMaterial()
+                ? 1.0 - SmootherStep(Clamp(easedReveal / 0.70, 0.0, 1.0))
+                : 1.0;
+            background.BorderThickness(
+                expandsRight
+                    ? Thickness{1.0, 1.0, seamStroke, 1.0}
+                    : Thickness{seamStroke, 1.0, 1.0, 1.0});
+        }
     }
 
     if (g_dynamicMainWashHost) {
@@ -12543,26 +13402,81 @@ void ApplyDynamicCompactVisuals() {
         double clipPadding =
             Clamp(6.0 + g_layout.cornerRadius * easedReveal * 0.70,
                   6.0, 20.0);
-        double verticalClipPadding =
-            Clamp(DynamicTransportButtonSize() * 0.16, 3.5, 5.5);
-        if (easedReveal >= 0.999) {
+
+        if (IsTransparentMaterial()) {
+            // The stable parent host owns the complete main-shape exclusion.
+            // Keep the animated button subtree free of local clips so its
+            // spring scale cannot move the seam boundary.
             g_dynamicTransportIsland.Clip(nullptr);
         } else {
-            ApplyElementClipWithPadding2D(g_dynamicTransportIsland,
-                                          transportHostWidth,
-                                          g_layout.compactHeight,
-                                          clipPadding,
-                                          verticalClipPadding);
+            ClearDynamicTransportCompositionClip(g_dynamicTransportIsland);
+            if (easedReveal >= 0.999) {
+                g_dynamicTransportIsland.Clip(nullptr);
+            } else {
+                ApplyElementClipWithPadding2D(g_dynamicTransportIsland,
+                                              transportHostWidth,
+                                              g_layout.compactHeight,
+                                              clipPadding,
+                                              transportVerticalClipPadding);
+            }
         }
     }
 
     if (g_dynamicTransportSurface) {
-        g_dynamicTransportSurface.Width(std::max(
-            0.5, transportWidth * backgroundVisualReveal));
-        g_dynamicTransportSurface.Height(g_layout.compactHeight);
-        g_dynamicTransportSurface.HorizontalAlignment(
-            expandsRight ? HorizontalAlignment::Left
-                         : HorizontalAlignment::Right);
+        if (IsTransparentMaterial()) {
+            // Preserve the settled side-island dimensions throughout the
+            // animation. Reveal it by changing how deeply that fixed surface
+            // is parked below the main island, rather than growing its width
+            // from a visible half-pixel line.
+            double surfaceProgress =
+                Clamp(backgroundVisualReveal, 0.0, 1.0);
+            double transportSurfaceWidth = DynamicTransportSurfaceWidth();
+            double settledOverlap = DynamicTransportSurfaceOverlap();
+            // At zero reveal, align the surface's outward edge with the real
+            // seam. Its full width then sits below the main island without the
+            // opposite end travelling toward the main island's far edge.
+            double fullyHiddenOverlap = transportSurfaceWidth;
+            double surfaceOverlap =
+                fullyHiddenOverlap +
+                (settledOverlap - fullyHiddenOverlap) * surfaceProgress;
+            if (backgroundVisualReveal > 1.0) {
+                surfaceOverlap -=
+                    DynamicTransportVisibleWidth() *
+                    (backgroundVisualReveal - 1.0);
+            }
+            g_dynamicTransportSurface.Width(transportSurfaceWidth);
+            g_dynamicTransportSurface.Height(g_layout.compactHeight);
+            g_dynamicTransportSurface.Opacity(chainVisibility);
+            g_dynamicTransportSurface.HorizontalAlignment(
+                expandsRight ? HorizontalAlignment::Left
+                             : HorizontalAlignment::Right);
+            g_dynamicTransportSurface.Margin(
+                expandsRight
+                    ? xaml::Thickness{
+                          g_layout.compactWidth - surfaceOverlap, 0, 0, 0}
+                    : xaml::Thickness{
+                          0, 0, g_layout.compactWidth - surfaceOverlap, 0});
+
+            double rawSurfaceOriginXRatio = expandsRight
+                ? surfaceOverlap / transportSurfaceWidth
+                : 1.0 - surfaceOverlap / transportSurfaceWidth;
+            double surfaceOriginXRatio =
+                Clamp(rawSurfaceOriginXRatio, 0.0, 1.0);
+            g_dynamicTransportSurface.RenderTransformOrigin(
+                {static_cast<float>(surfaceOriginXRatio), 0.5f});
+            // The non-animating parent host clips the complete surface. A
+            // local clip here would inherit this jelly scale and jitter.
+        } else {
+            double transportSurfaceWidth = std::max(
+                0.5, transportWidth * backgroundVisualReveal);
+            g_dynamicTransportSurface.Width(transportSurfaceWidth);
+            g_dynamicTransportSurface.Height(g_layout.compactHeight);
+            g_dynamicTransportSurface.HorizontalAlignment(
+                expandsRight ? HorizontalAlignment::Left
+                             : HorizontalAlignment::Right);
+            ClearDynamicTransportCompositionClip(
+                g_dynamicTransportSurface);
+        }
     }
     if (g_dynamicTransportControls) {
         g_dynamicTransportControls.Margin(
@@ -12623,33 +13537,25 @@ void ApplyDynamicCompactVisuals() {
         }
     }
 
-    double jelly = Clamp(std::abs(g_dynamicTransportRevealVelocity) * 0.045,
-                          0.0, 0.055);
     if (g_dynamicTransportScale) {
-        g_dynamicTransportScale.ScaleX(1.0 + jelly);
-        g_dynamicTransportScale.ScaleY(1.0 - jelly * 0.45);
+        g_dynamicTransportScale.ScaleX(transportScaleX);
+        g_dynamicTransportScale.ScaleY(transportScaleY);
     }
     if (g_dynamicTransportSurfaceScale) {
-        double backgroundImpulse = 0.0;
-        if (explosivePhase) {
-            double backgroundImpulseGate = SmootherStep(
-                Clamp((reveal - 0.68) / 0.32, 0.0, 1.0));
-            backgroundImpulse = Clamp(
-                std::max(0.0, g_dynamicTransportRevealVelocity) *
-                    0.022 * backgroundImpulseGate,
-                0.0, 0.110);
-        }
-        g_dynamicTransportSurfaceScale.ScaleX(1.0 + backgroundImpulse);
-        g_dynamicTransportSurfaceScale.ScaleY(
-            1.0 - backgroundImpulse * 0.62);
+        g_dynamicTransportSurfaceScale.ScaleX(transportSurfaceScaleX);
+        g_dynamicTransportSurfaceScale.ScaleY(transportSurfaceScaleY);
     }
     if (g_dynamicTransportTranslate) {
-        g_dynamicTransportTranslate.X((expandsRight ? -1.0 : 1.0) *
-            SmoothStep(Clamp(1.0 - easedReveal, 0.0, 1.0)) *
-            Clamp(DynamicTransportOverlap() * 0.30, 10.0, 18.0));
+        g_dynamicTransportTranslate.X(transportShift);
     }
 }
 
+void ReapplyTransparentDynamicTransportSeamClipAfterLayout() {
+    if (g_dynamicCompactRenderingHooked) {
+        return;
+    }
+    RefreshTransparentDynamicTransportOcclusionClip();
+}
 void StartDynamicTransportButtonRelease(DynamicTransportButtonMotion& motion) {
     motion.releasePending = false;
     motion.scaleTarget = 1.0;
@@ -12754,6 +13660,71 @@ bool StepDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion,
     return settled;
 }
 
+void StopCompactNavigationRenderLoop() {
+    if (g_compactNavigationRenderingHooked) {
+        try {
+            mediax::CompositionTarget::Rendering(
+                g_compactNavigationRenderingToken);
+        } catch (...) {
+        }
+        g_compactNavigationRenderingHooked = false;
+    }
+    g_lastCompactNavigationFrameTime = {};
+}
+
+void OnCompactNavigationRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    try {
+        if (!g_playerGrid || g_unloading) {
+            StopCompactNavigationRenderLoop();
+            return;
+        }
+        auto now = std::chrono::steady_clock::now();
+        double dt = g_lastCompactNavigationFrameTime.time_since_epoch().count() == 0
+                        ? 1.0 / 60.0
+                        : std::chrono::duration<double>(
+                              now - g_lastCompactNavigationFrameTime).count();
+        g_lastCompactNavigationFrameTime = now;
+        dt = std::clamp(dt, 1.0 / 240.0, 0.05);
+        double speed = Clamp(g_settings.animationSpeed, 0.1, 4.0);
+        bool previousSettled = StepDynamicTransportButtonMotion(
+            g_compactPrevMotion, dt, speed);
+        bool nextSettled = StepDynamicTransportButtonMotion(
+            g_compactNextMotion, dt, speed);
+        if (previousSettled && nextSettled) {
+            StopCompactNavigationRenderLoop();
+        }
+    } catch (...) {
+        StopCompactNavigationRenderLoop();
+    }
+}
+
+void EnsureCompactNavigationRenderLoop() {
+    if (g_compactNavigationRenderingHooked || !g_playerGrid) {
+        return;
+    }
+    g_lastCompactNavigationFrameTime = {};
+    g_compactNavigationRenderingToken =
+        mediax::CompositionTarget::Rendering(OnCompactNavigationRendering);
+    g_compactNavigationRenderingHooked = true;
+}
+
+void TriggerCompactNavigationFailure(
+    DynamicTransportButtonMotion* motion) {
+    if (!motion || motion->direction == 0 || !motion->element) {
+        return;
+    }
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 3;
+    motion->scaleTarget = 1.0;
+    motion->scaleVelocity += 0.25;
+    motion->translateTarget = motion->direction * 1.8;
+    motion->translateVelocity = motion->direction * 28.0;
+    PrimeTransportNavigationFailureFrame(motion);
+    EnsureCompactNavigationRenderLoop();
+}
+
 void OnDynamicCompactRendering(
     winrt::Windows::Foundation::IInspectable const&,
     winrt::Windows::Foundation::IInspectable const&) {
@@ -12835,6 +13806,11 @@ void OnDynamicCompactRendering(
     }
 }
 
+void StepDynamicCompactRenderLoopNow() {
+    winrt::Windows::Foundation::IInspectable empty{nullptr};
+    OnDynamicCompactRendering(empty, empty);
+}
+
 void EnsureDynamicCompactRenderLoop() {
     if (!IsDynamicCompactMode() || !g_dynamicTransportIsland) {
         return;
@@ -12905,10 +13881,55 @@ void TriggerDynamicTransportNavigationFailure(
     motion->releasePending = false;
     motion->failurePhasesRemaining = 3;
     motion->scaleTarget = 1.0;
-    motion->scaleVelocity += 0.4;
-    motion->translateTarget = motion->direction * 2.2;
-    motion->translateVelocity = 0.0;
+    motion->scaleVelocity += 0.25;
+    motion->translateTarget = motion->direction * 1.8;
+    motion->translateVelocity = motion->direction * 28.0;
     EnsureDynamicCompactRenderLoop();
+    PrimeTransportNavigationFailureFrame(motion);
+    StepDynamicCompactRenderLoopNow();
+}
+
+void TriggerNavigationFailureFeedback(int direction) {
+    if (direction < 0) {
+        TriggerDynamicTransportNavigationFailure(
+            &g_dynamicTransportPrevMotion);
+        TriggerCompactNavigationFailure(&g_compactPrevMotion);
+        TriggerPopupTransportNavigationFailure(&g_popupPrevMotion);
+    } else if (direction > 0) {
+        TriggerDynamicTransportNavigationFailure(
+            &g_dynamicTransportNextMotion);
+        TriggerCompactNavigationFailure(&g_compactNextMotion);
+        TriggerPopupTransportNavigationFailure(&g_popupNextMotion);
+    }
+}
+
+void DispatchNavigationFailureFeedback(int direction) {
+    direction = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
+    if (direction == 0 || g_unloading) {
+        return;
+    }
+
+    HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
+                    ? g_taskbarWnd
+                    : FindCurrentProcessTaskbarWnd();
+    if (hwnd && RunFromWindowThread(
+                    hwnd,
+                    [](void* param) {
+                        int queuedDirection = static_cast<int>(
+                            reinterpret_cast<intptr_t>(param));
+                        CancelPendingNavigationValidation();
+                        g_dynamicTransportNavigationFailureDirection.store(0);
+                        TriggerNavigationFailureFeedback(queuedDirection);
+                    },
+                    reinterpret_cast<void*>(
+                        static_cast<intptr_t>(direction)))) {
+        return;
+    }
+
+    // Retain the old refresh path only as a fallback if Explorer is rebuilding
+    // the taskbar and its UI thread can't accept the direct dispatch yet.
+    g_dynamicTransportNavigationFailureDirection.store(direction);
+    RequestMediaRefresh();
 }
 
 void TriggerDynamicTransportNoMediaPlayBounce(
@@ -12924,10 +13945,14 @@ void TriggerDynamicTransportNoMediaPlayBounce(
 }
 
 void ClearDynamicTransportButtonMotions() {
+    StopCompactNavigationRenderLoop();
     ResetDynamicTransportButtonMotion(g_dynamicTransportPrevMotion);
     ResetDynamicTransportButtonMotion(g_dynamicTransportPlayMotion);
     ResetDynamicTransportButtonMotion(g_dynamicTransportNextMotion);
+    ResetDynamicTransportButtonMotion(g_compactPrevMotion);
+    ResetDynamicTransportButtonMotion(g_compactNextMotion);
     g_dynamicTransportNavigationFailureDirection.store(0);
+    CancelPendingNavigationValidation();
 }
 
 void ApplyExpandedState() {
@@ -12976,6 +14001,12 @@ void ApplyExpandedState() {
             }
         }
     };
+    if (auto tintFe = FindChildByName(g_playerGrid, L"Island_MainTint")) {
+        if (auto tint = tintFe.try_as<Border>()) {
+            tint.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                               g_layout.cornerRadius, g_layout.cornerRadius});
+        }
+    }
     updateTransportCorners(L"Island_TransportBackground");
     updateTransportCorners(L"Island_TransportWashHost");
     updateTransportCorners(L"Island_TransportTint");
@@ -13369,9 +14400,20 @@ void MediaThreadProc() {
             }
         }
 
+        // Validate accepted-but-ineffective navigation on the media worker.
+        // This path has its own deadline and no longer waits for layout/theme
+        // timers or for the next play/pause state change.
+        int timedOutNavigationDirection =
+            ConsumeTimedOutNavigationFailure();
+        if (timedOutNavigationDirection != 0) {
+            DispatchNavigationFailureFeedback(
+                timedOutNavigationDirection);
+        }
+
+        auto navigationWait = PendingNavigationValidationWait();
         std::unique_lock lock(g_mediaCommandMutex);
         g_mediaCommandCv.wait_for(
-            lock, std::chrono::seconds(30), [] {
+            lock, navigationWait, [] {
                 return !g_mediaThreadRunning || !g_mediaCommands.empty() ||
                        g_mediaRefreshRequested.load();
             });
@@ -13440,8 +14482,9 @@ TextBlock MakeTextBlock(const wchar_t* name, double fontSize, bool semibold) {
     text.FontSize(fontSize);
     text.FontWeight(semibold ? winrt::Windows::UI::Text::FontWeights::SemiBold()
                              : winrt::Windows::UI::Text::FontWeights::Normal());
-    text.Foreground(Brush(IsDarkModeApprox() ? Color(0xF2, 0xFF, 0xFF, 0xFF)
-                                             : Color(0xF2, 0x18, 0x18, 0x1B)));
+    text.Foreground(Brush(CompactUsesLightForeground()
+                              ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                              : Color(0xF2, 0x18, 0x18, 0x1B)));
     text.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
     text.VerticalAlignment(VerticalAlignment::Center);
     return text;
@@ -13467,6 +14510,66 @@ Button MakeMediaButton(const wchar_t* name, const wchar_t* glyph, void (*onClick
     icon.Text(glyph);
     icon.HorizontalAlignment(HorizontalAlignment::Center);
     button.Content(icon);
+
+    std::wstring buttonName(name);
+    DynamicTransportButtonMotion* motion = nullptr;
+    int direction = 0;
+    if (buttonName == L"Island_Prev") {
+        motion = &g_compactPrevMotion;
+        direction = -1;
+    } else if (buttonName == L"Island_Next") {
+        motion = &g_compactNextMotion;
+        direction = 1;
+    }
+    if (motion) {
+        button.RenderTransformOrigin({0.5, 0.5});
+        TransformGroup transform;
+        ScaleTransform scale;
+        TranslateTransform translate;
+        transform.Children().Append(scale);
+        transform.Children().Append(translate);
+        button.RenderTransform(transform);
+        ResetDynamicTransportButtonMotion(*motion);
+        motion->element = button;
+        motion->scale = scale;
+        motion->translate = translate;
+        motion->direction = direction;
+    }
+    if (motion) {
+        button.PointerPressed([motion, direction](
+            auto const& sender, input::PointerRoutedEventArgs const& args) {
+            auto pressedButton = sender.template try_as<Button>();
+            auto point = args.GetCurrentPoint(pressedButton);
+            if (!point.Properties().IsLeftButtonPressed() ||
+                !IsMediaNavigationKnownUnavailable(direction)) {
+                return;
+            }
+            if (pressedButton) {
+                pressedButton.CapturePointer(args.Pointer());
+            }
+            motion->pressStarted = false;
+            motion->rejectionPressActive = true;
+            TriggerCompactNavigationFailure(motion);
+            args.Handled(true);
+        });
+        button.PointerReleased([motion](
+            auto const& sender, input::PointerRoutedEventArgs const& args) {
+            if (!motion->rejectionPressActive) {
+                return;
+            }
+            motion->rejectionPressActive = false;
+            if (auto releasedButton = sender.template try_as<Button>()) {
+                releasedButton.ReleasePointerCapture(args.Pointer());
+            }
+            args.Handled(true);
+        });
+        button.PointerCanceled([motion](auto const&, auto const&) {
+            motion->rejectionPressActive = false;
+        });
+        button.PointerCaptureLost([motion](auto const&, auto const&) {
+            motion->rejectionPressActive = false;
+        });
+    }
     button.Click([onClick](auto const&, auto const&) { onClick(); });
     return button;
 }
@@ -13536,8 +14639,8 @@ Border MakeDynamicTransportButton(const wchar_t* name,
             hoveredButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         }
     });
-    button.PointerPressed([motion](auto const& sender,
-                                   input::PointerRoutedEventArgs const& args) {
+    button.PointerPressed([motion, direction](auto const& sender,
+                                              input::PointerRoutedEventArgs const& args) {
         auto pressedButton = sender.template try_as<Border>();
         auto point = args.GetCurrentPoint(pressedButton);
         if (!point.Properties().IsLeftButtonPressed()) {
@@ -13546,14 +14649,31 @@ Border MakeDynamicTransportButton(const wchar_t* name,
         if (pressedButton) {
             pressedButton.CapturePointer(args.Pointer());
         }
+        if (motion && direction != 0 &&
+            IsMediaNavigationKnownUnavailable(direction)) {
+            motion->pressStarted = false;
+            motion->rejectionPressActive = true;
+            TriggerDynamicTransportNavigationFailure(motion);
+            args.Handled(true);
+            return;
+        }
         if (motion) {
             motion->pressStarted = true;
+            motion->rejectionPressActive = false;
         }
         BeginDynamicTransportButtonPress(motion);
         args.Handled(true);
     });
     button.PointerReleased([onClick, motion](auto const& sender,
                                              input::PointerRoutedEventArgs const& args) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            if (auto releasedButton = sender.template try_as<Border>()) {
+                releasedButton.ReleasePointerCapture(args.Pointer());
+            }
+            args.Handled(true);
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -13586,6 +14706,10 @@ Border MakeDynamicTransportButton(const wchar_t* name,
     });
     button.PointerCanceled([motion](auto const& sender,
                                     input::PointerRoutedEventArgs const&) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -13597,6 +14721,10 @@ Border MakeDynamicTransportButton(const wchar_t* name,
     });
     button.PointerCaptureLost([motion](auto const& sender,
                                        input::PointerRoutedEventArgs const&) {
+        if (motion && motion->rejectionPressActive) {
+            motion->rejectionPressActive = false;
+            return;
+        }
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -13614,7 +14742,7 @@ void UpdateButtonTheme(const wchar_t* name) {
         return;
     }
 
-    bool dark = IsDarkModeApprox();
+    bool lightForeground = CompactUsesLightForeground();
     if (auto buttonFe = FindChildByName(g_playerGrid, name)) {
         bool transportButton =
             std::wstring(name).rfind(L"Island_Transport", 0) == 0;
@@ -13623,7 +14751,7 @@ void UpdateButtonTheme(const wchar_t* name) {
                 button.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
                 if (auto icon = button.Child().try_as<TextBlock>()) {
                     icon.Foreground(Brush(
-                        dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                        lightForeground ? Color(0xF2, 0xFF, 0xFF, 0xFF)
                              : Color(0xF2, 0x18, 0x18, 0x1B)));
                 }
             }
@@ -13632,15 +14760,266 @@ void UpdateButtonTheme(const wchar_t* name) {
 
         if (auto button = buttonFe.try_as<Button>()) {
             button.Background(Brush(
-                dark ? Color(0x18, 0xFF, 0xFF, 0xFF)
-                     : Color(0x14, 0x00, 0x00, 0x00)));
+                lightForeground ? Color(0x18, 0xFF, 0xFF, 0xFF)
+                                : Color(0x14, 0x00, 0x00, 0x00)));
             button.BorderBrush(CompactPlaybackControlStrokeBrush());
             if (auto icon = button.Content().try_as<TextBlock>()) {
                 icon.Foreground(Brush(
-                    dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                    lightForeground ? Color(0xF2, 0xFF, 0xFF, 0xFF)
                          : Color(0xF2, 0x18, 0x18, 0x1B)));
             }
         }
+    }
+}
+
+double DesiredCompactMainTintOpacity() {
+    return !IsTransparentMaterial() || g_settings.compactIslandTint
+               ? 1.0
+               : 0.0;
+}
+
+double DesiredDynamicTransportTintOpacity() {
+    if (!IsTransparentMaterial()) {
+        return 1.0;
+    }
+    if (IsTransparentBorderlessMaterial() &&
+        !g_settings.compactIslandTint) {
+        return 0.0;
+    }
+    return 1.0;
+}
+
+winrt::Windows::UI::Color DesiredCompactTintColor() {
+    return TransparentMaterialTintColor(
+        TransparentMaterialAccent(),
+        IsDarkModeApprox() ? 0x98 : 0x44);
+}
+
+winrt::Windows::UI::Color DisplayedDynamicTransportTintColor() {
+    auto color = g_compactTintColorCurrent;
+    if (!IsTransparentBorderlessMaterial() || !IsDarkModeApprox()) {
+        return color;
+    }
+
+    // Keep both islands in one album-color family, but lift and enrich the
+    // side surface enough that a borderless join still reads as two layers.
+    double luma = 0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B;
+    constexpr double chromaBoost = 1.24;
+    double r = luma + (static_cast<double>(color.R) - luma) * chromaBoost;
+    double g = luma + (static_cast<double>(color.G) - luma) * chromaBoost;
+    double b = luma + (static_cast<double>(color.B) - luma) * chromaBoost;
+    double targetLuma = Clamp(luma + 16.0, 58.0, 72.0);
+    double scale = luma > 0.001 ? targetLuma / luma : 1.0;
+    return Color(
+        color.A,
+        static_cast<BYTE>(std::lround(Clamp(r * scale, 0.0, 255.0))),
+        static_cast<BYTE>(std::lround(Clamp(g * scale, 0.0, 255.0))),
+        static_cast<BYTE>(std::lround(Clamp(b * scale, 0.0, 255.0))));
+}
+
+winrt::Windows::UI::Color DesiredCompactAccentColor() {
+    auto accent = TransparentMaterialAccent();
+    accent.A = 0xFF;
+    return accent;
+}
+
+bool SameColor(winrt::Windows::UI::Color const& left,
+               winrt::Windows::UI::Color const& right) {
+    return left.A == right.A && left.R == right.R &&
+           left.G == right.G && left.B == right.B;
+}
+
+BYTE BlendTintChannel(BYTE from, BYTE to, double progress) {
+    int delta = static_cast<int>(to) - static_cast<int>(from);
+    if (std::abs(delta) <= 1) {
+        return to;
+    }
+    int blended = static_cast<int>(std::lround(
+        static_cast<double>(from) +
+        static_cast<double>(delta) * progress));
+    if (blended == static_cast<int>(from)) {
+        blended += delta > 0 ? 1 : -1;
+    }
+    return static_cast<BYTE>(std::clamp(blended, 0, 255));
+}
+
+void ApplyCompactTintTransitionVisuals() {
+    if (g_compactMainTintLayer) {
+        g_compactMainTintLayer.Opacity(
+            IsTransparentMaterial() ? g_compactMainTintOpacity : 0.0);
+    }
+    if (g_dynamicTransportTintLayer) {
+        g_dynamicTransportTintLayer.Opacity(
+            IsTransparentMaterial() ? g_dynamicTransportTintOpacity : 1.0);
+    }
+    if (g_compactTintColorValid) {
+        if (g_compactMainTintBrush) {
+            g_compactMainTintBrush.Color(g_compactTintColorCurrent);
+        }
+        if (g_dynamicTransportTintBrush) {
+            g_dynamicTransportTintBrush.Color(
+                DisplayedDynamicTransportTintColor());
+        }
+        if (g_dynamicMainEdgeGlow) {
+            g_dynamicMainEdgeGlow.BorderBrush(
+                DynamicMainEdgeGlowBrush());
+        }
+        if (g_playerGrid) {
+            if (auto strokeFe = FindChildByName(
+                    g_playerGrid, L"Island_TransportStroke")) {
+                if (auto stroke = strokeFe.try_as<Border>()) {
+                    stroke.BorderBrush(DynamicTransportBorderBrush());
+                }
+            }
+        }
+    }
+    if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
+        g_dynamicMainOcclusion.Background(DynamicMainOcclusionBrush());
+        g_dynamicMainOcclusion.Opacity(
+            SmootherStep(Clamp(g_dynamicTransportReveal, 0.0, 1.0)) *
+            g_compactMainTintOpacity);
+    }
+}
+
+void StopCompactTintTransition() {
+    if (g_compactTintRenderingHooked) {
+        try {
+            mediax::CompositionTarget::Rendering(
+                g_compactTintRenderingToken);
+        } catch (...) {
+        }
+        g_compactTintRenderingHooked = false;
+    }
+    g_lastCompactTintFrameTime = {};
+}
+
+void OnCompactTintRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    try {
+        auto now = std::chrono::steady_clock::now();
+        double dt = g_lastCompactTintFrameTime.time_since_epoch().count() == 0
+                        ? 1.0 / 60.0
+                        : std::chrono::duration<double>(
+                              now - g_lastCompactTintFrameTime).count();
+        g_lastCompactTintFrameTime = now;
+        dt = std::clamp(dt, 1.0 / 240.0, 0.05);
+
+        // A short exponential blend is fast enough to feel immediate while
+        // preventing abrupt color or alpha jumps on settings/theme changes.
+        double opacityBlend = 1.0 - std::exp(-18.0 * dt);
+        // Keep artwork changes visibly continuous instead of reaching their
+        // final color in roughly two frames of perceived motion.
+        double colorBlend = 1.0 - std::exp(-6.5 * dt);
+        g_compactMainTintOpacity +=
+            (g_compactMainTintTargetOpacity -
+             g_compactMainTintOpacity) * opacityBlend;
+        g_dynamicTransportTintOpacity +=
+            (g_dynamicTransportTintTargetOpacity -
+             g_dynamicTransportTintOpacity) * opacityBlend;
+
+        if (g_compactTintColorValid) {
+            g_compactTintColorCurrent = Color(
+                BlendTintChannel(g_compactTintColorCurrent.A,
+                                 g_compactTintColorTarget.A, colorBlend),
+                BlendTintChannel(g_compactTintColorCurrent.R,
+                                 g_compactTintColorTarget.R, colorBlend),
+                BlendTintChannel(g_compactTintColorCurrent.G,
+                                 g_compactTintColorTarget.G, colorBlend),
+                BlendTintChannel(g_compactTintColorCurrent.B,
+                                 g_compactTintColorTarget.B, colorBlend));
+        }
+        if (g_compactAccentColorValid) {
+            g_compactAccentColorCurrent = Color(
+                0xFF,
+                BlendTintChannel(g_compactAccentColorCurrent.R,
+                                 g_compactAccentColorTarget.R, colorBlend),
+                BlendTintChannel(g_compactAccentColorCurrent.G,
+                                 g_compactAccentColorTarget.G, colorBlend),
+                BlendTintChannel(g_compactAccentColorCurrent.B,
+                                 g_compactAccentColorTarget.B, colorBlend));
+        }
+        ApplyCompactTintTransitionVisuals();
+
+        bool opacitySettled =
+            std::abs(g_compactMainTintTargetOpacity -
+                     g_compactMainTintOpacity) < 0.002 &&
+            std::abs(g_dynamicTransportTintTargetOpacity -
+                     g_dynamicTransportTintOpacity) < 0.002;
+        bool colorSettled =
+            (!g_compactTintColorValid ||
+             SameColor(g_compactTintColorCurrent,
+                       g_compactTintColorTarget)) &&
+            (!g_compactAccentColorValid ||
+             SameColor(g_compactAccentColorCurrent,
+                       g_compactAccentColorTarget));
+        if (opacitySettled && colorSettled) {
+            g_compactMainTintOpacity = g_compactMainTintTargetOpacity;
+            g_dynamicTransportTintOpacity =
+                g_dynamicTransportTintTargetOpacity;
+            g_compactTintColorCurrent = g_compactTintColorTarget;
+            g_compactAccentColorCurrent = g_compactAccentColorTarget;
+            ApplyCompactTintTransitionVisuals();
+            StopCompactTintTransition();
+        }
+    } catch (...) {
+        StopCompactTintTransition();
+    }
+}
+
+void EnsureCompactTintTransition() {
+    if (g_compactTintRenderingHooked || !g_playerGrid) {
+        return;
+    }
+    g_lastCompactTintFrameTime = {};
+    g_compactTintRenderingToken =
+        mediax::CompositionTarget::Rendering(OnCompactTintRendering);
+    g_compactTintRenderingHooked = true;
+}
+
+void RetargetCompactTintTransition(bool animateOpacity) {
+    double mainTarget = DesiredCompactMainTintOpacity();
+    double sideTarget = DesiredDynamicTransportTintOpacity();
+    if (!animateOpacity) {
+        g_compactMainTintOpacity = mainTarget;
+        g_dynamicTransportTintOpacity = sideTarget;
+    }
+    g_compactMainTintTargetOpacity = mainTarget;
+    g_dynamicTransportTintTargetOpacity = sideTarget;
+
+    if (IsTransparentMaterial()) {
+        auto desiredColor = DesiredCompactTintColor();
+        if (!g_compactTintColorValid) {
+            g_compactTintColorCurrent = desiredColor;
+            g_compactTintColorValid = true;
+        }
+        g_compactTintColorTarget = desiredColor;
+        auto desiredAccent = DesiredCompactAccentColor();
+        if (!g_compactAccentColorValid) {
+            g_compactAccentColorCurrent = desiredAccent;
+            g_compactAccentColorValid = true;
+        }
+        g_compactAccentColorTarget = desiredAccent;
+    } else {
+        g_compactTintColorValid = false;
+        g_compactAccentColorValid = false;
+    }
+
+    ApplyCompactTintTransitionVisuals();
+    bool needsOpacityAnimation =
+        std::abs(g_compactMainTintTargetOpacity -
+                 g_compactMainTintOpacity) >= 0.002 ||
+        std::abs(g_dynamicTransportTintTargetOpacity -
+                 g_dynamicTransportTintOpacity) >= 0.002;
+    bool needsColorAnimation =
+        (g_compactTintColorValid &&
+         !SameColor(g_compactTintColorCurrent,
+                    g_compactTintColorTarget)) ||
+        (g_compactAccentColorValid &&
+         !SameColor(g_compactAccentColorCurrent,
+                    g_compactAccentColorTarget));
+    if (needsOpacityAnimation || needsColorAnimation) {
+        EnsureCompactTintTransition();
     }
 }
 
@@ -13676,15 +15055,22 @@ void UpdateThemeVisuals() {
 
     InvalidateDarkModeCache();
     bool dark = IsDarkModeApprox();
-    if (g_themeVisualsValid && g_lastDarkMode == dark) {
+    RefreshTransparentCompactForegroundContrast();
+    bool lightForeground = CompactUsesLightForeground();
+    if (g_themeVisualsValid && g_lastDarkMode == dark &&
+        g_lastCompactLightForeground == lightForeground) {
         return;
     }
     g_themeVisualsValid = true;
     g_lastDarkMode = dark;
+    g_lastCompactLightForeground = lightForeground;
 
+    RetargetCompactTintTransition(true);
     if (auto bgFe = FindChildByName(g_playerGrid, L"Island_Background")) {
         if (auto bg = bgFe.try_as<Border>()) {
-            bg.Background(IslandBackgroundBrush());
+            bg.Background(IsTransparentMaterial()
+                              ? Brush(Color(0x00, 0x00, 0x00, 0x00))
+                              : IslandBackgroundBrush());
             bg.BorderBrush(IslandBorderBrush());
         }
     }
@@ -13700,7 +15086,9 @@ void UpdateThemeVisuals() {
     }
     if (auto bgFe = FindChildByName(g_playerGrid, L"Island_TransportBackground")) {
         if (auto bg = bgFe.try_as<Border>()) {
-            bg.Background(IslandBackgroundBrush());
+            if (!IsTransparentMaterial()) {
+                bg.Background(DynamicTransportBackgroundBrush());
+            }
         }
     }
     if (g_dynamicTransportWash) {
@@ -13716,10 +15104,12 @@ void UpdateThemeVisuals() {
             stroke.BorderBrush(DynamicTransportBorderBrush());
         }
     }
-    auto primaryTextBrush = Brush(dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
-                                       : Color(0xF2, 0x18, 0x18, 0x1B));
-    auto secondaryTextBrush = Brush(dark ? Color(0xB8, 0xFF, 0xFF, 0xFF)
-                                         : Color(0xB8, 0x1C, 0x1C, 0x20));
+    auto primaryTextBrush = Brush(
+        lightForeground ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                        : Color(0xF2, 0x18, 0x18, 0x1B));
+    auto secondaryTextBrush = Brush(
+        lightForeground ? Color(0xB8, 0xFF, 0xFF, 0xFF)
+                        : Color(0xB8, 0x1C, 0x1C, 0x20));
     if (auto titleFe = FindChildByName(g_playerGrid, L"Island_Title")) {
         if (auto title = titleFe.try_as<TextBlock>()) {
             title.Foreground(primaryTextBrush);
@@ -13896,6 +15286,26 @@ void UpdateRuntimeLayout(HWND hwnd,
 }
 
 Grid BuildIslandGrid() {
+    // A rebuilt tree starts at the requested tint state. Live changes use the
+    // render-loop transition below and deliberately avoid rebuilding.
+    g_compactMainTintOpacity = DesiredCompactMainTintOpacity();
+    g_compactMainTintTargetOpacity = g_compactMainTintOpacity;
+    g_dynamicTransportTintOpacity =
+        DesiredDynamicTransportTintOpacity();
+    g_dynamicTransportTintTargetOpacity =
+        g_dynamicTransportTintOpacity;
+    if (IsTransparentMaterial()) {
+        g_compactTintColorCurrent = DesiredCompactTintColor();
+        g_compactTintColorTarget = g_compactTintColorCurrent;
+        g_compactTintColorValid = true;
+        g_compactAccentColorCurrent = DesiredCompactAccentColor();
+        g_compactAccentColorTarget = g_compactAccentColorCurrent;
+        g_compactAccentColorValid = true;
+    } else {
+        g_compactTintColorValid = false;
+        g_compactAccentColorValid = false;
+    }
+
     Grid wrapper;
     wrapper.Name(L"IslandMedia_Wrapper");
     wrapper.Tag(winrt::box_value(winrt::hstring(L"IslandMediaControls")));
@@ -13963,11 +15373,33 @@ Grid BuildIslandGrid() {
     Border background;
     background.Name(L"Island_Background");
     background.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius, g_layout.cornerRadius, g_layout.cornerRadius});
-    background.Background(IslandBackgroundBrush());
+    background.Background(IsTransparentMaterial()
+                              ? Brush(Color(0x00, 0x00, 0x00, 0x00))
+                              : IslandBackgroundBrush());
     background.BorderBrush(IslandBorderBrush());
     background.BorderThickness({1, 1, 1, 1});
     background.IsHitTestVisible(false);
     controls::Canvas::SetZIndex(background, 0);
+
+    Border mainTintLayer;
+    mainTintLayer.Name(L"Island_MainTint");
+    mainTintLayer.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                                g_layout.cornerRadius, g_layout.cornerRadius});
+    mainTintLayer.IsHitTestVisible(false);
+    controls::Canvas::SetZIndex(mainTintLayer, 0);
+    if (IsTransparentMaterial()) {
+        SolidColorBrush mainTintBrush;
+        mainTintBrush.Color(DesiredCompactTintColor());
+        mainTintLayer.Background(mainTintBrush);
+        mainTintLayer.Opacity(DesiredCompactMainTintOpacity());
+        g_compactMainTintBrush = mainTintBrush;
+    } else {
+        mainTintLayer.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        mainTintLayer.Opacity(0.0);
+        g_compactMainTintBrush = nullptr;
+    }
+    g_compactMainTintLayer = mainTintLayer;
+
     Border mainWashHost;
     mainWashHost.Name(L"Island_MainAlbumWashHost");
     mainWashHost.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
@@ -14180,9 +15612,17 @@ Grid BuildIslandGrid() {
         [] {
             RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
                 NoteMediaNavigationDirection(-1);
-                GetAsyncResultWithTimeout(s.TrySkipPreviousAsync(),
-                                           kMediaCommandAsyncTimeout,
-                                           L"TrySkipPreviousAsync");
+                bool changed = false;
+                try {
+                    changed = GetAsyncResultWithTimeout(
+                        s.TrySkipPreviousAsync(),
+                        kMediaCommandAsyncTimeout,
+                        L"TrySkipPreviousAsync");
+                } catch (...) {
+                }
+                if (!changed) {
+                    DispatchNavigationFailureFeedback(-1);
+                }
             });
         }));
     details.Children().Append(MakeMediaButton(
@@ -14199,9 +15639,17 @@ Grid BuildIslandGrid() {
         [] {
             RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
                 NoteMediaNavigationDirection(1);
-                GetAsyncResultWithTimeout(s.TrySkipNextAsync(),
-                                           kMediaCommandAsyncTimeout,
-                                           L"TrySkipNextAsync");
+                bool changed = false;
+                try {
+                    changed = GetAsyncResultWithTimeout(
+                        s.TrySkipNextAsync(),
+                        kMediaCommandAsyncTimeout,
+                        L"TrySkipNextAsync");
+                } catch (...) {
+                }
+                if (!changed) {
+                    DispatchNavigationFailureFeedback(1);
+                }
             });
         }));
 
@@ -14221,6 +15669,7 @@ Grid BuildIslandGrid() {
     if (IsDynamicCompactMode()) {
         mainIsland.Children().Append(mainOcclusion);
     }
+    mainIsland.Children().Append(mainTintLayer);
     mainIsland.Children().Append(background);
     if (IsDynamicCompactMode()) {
         mainIsland.Children().Append(mainWashHost);
@@ -14239,6 +15688,8 @@ Grid BuildIslandGrid() {
                 ? HorizontalAlignment::Right
                 : HorizontalAlignment::Left);
         transportIsland.VerticalAlignment(VerticalAlignment::Center);
+        // Restore the smooth 0.10.19 spring basis for the complete side-island
+        // subtree. The strict clip independently locks the visible seam.
         transportIsland.RenderTransformOrigin({0.5, 0.5});
         transportIsland.Opacity(0.0);
         transportIsland.IsHitTestVisible(false);
@@ -14256,15 +15707,53 @@ Grid BuildIslandGrid() {
         g_dynamicTransportIsland = transportIsland;
         g_dynamicTransportScale = transportScale;
         g_dynamicTransportTranslate = transportTranslate;
+        transportIsland.LayoutUpdated([](auto const&, auto const&) {
+            ReapplyTransparentDynamicTransportSeamClipAfterLayout();
+        });
+
+        Grid transportOcclusionHost;
+        if (IsTransparentMaterial()) {
+            transportOcclusionHost.Name(L"Island_TransportOcclusionHost");
+            transportOcclusionHost.Height(g_layout.compactHeight);
+            transportOcclusionHost.VerticalAlignment(
+                VerticalAlignment::Center);
+            controls::Canvas::SetZIndex(transportOcclusionHost, 1);
+            wrapper.Children().Append(transportOcclusionHost);
+            g_dynamicTransportOcclusionHost = transportOcclusionHost;
+        } else {
+            g_dynamicTransportOcclusionHost = nullptr;
+        }
 
         Grid transportSurface;
         transportSurface.Name(L"Island_TransportVisualSurface");
-        transportSurface.Width(0.5);
+        double initialSurfaceWidth = IsTransparentMaterial()
+                                         ? DynamicTransportSurfaceWidth()
+                                         : 0.5;
+        transportSurface.Width(initialSurfaceWidth);
         transportSurface.Height(g_layout.compactHeight);
-        transportSurface.HorizontalAlignment(
-            DynamicTransportExpandsRight()
-                ? HorizontalAlignment::Left
-                : HorizontalAlignment::Right);
+        if (IsTransparentMaterial()) {
+            transportSurface.HorizontalAlignment(
+                DynamicTransportExpandsRight()
+                    ? HorizontalAlignment::Left
+                    : HorizontalAlignment::Right);
+            double initialHiddenOverlap = initialSurfaceWidth;
+            transportSurface.Margin(
+                DynamicTransportExpandsRight()
+                    ? xaml::Thickness{
+                          g_layout.compactWidth - initialHiddenOverlap,
+                          0, 0, 0}
+                    : xaml::Thickness{
+                          0, 0,
+                          g_layout.compactWidth - initialHiddenOverlap,
+                          0});
+            transportSurface.Opacity(0.0);
+            controls::Canvas::SetZIndex(transportSurface, 0);
+        } else {
+            transportSurface.HorizontalAlignment(
+                DynamicTransportExpandsRight()
+                    ? HorizontalAlignment::Left
+                    : HorizontalAlignment::Right);
+        }
         transportSurface.VerticalAlignment(VerticalAlignment::Center);
         transportSurface.IsHitTestVisible(false);
         transportSurface.RenderTransformOrigin(
@@ -14273,7 +15762,11 @@ Grid BuildIslandGrid() {
         transportSurfaceScale.ScaleX(1.0);
         transportSurfaceScale.ScaleY(1.0);
         transportSurface.RenderTransform(transportSurfaceScale);
-        transportIsland.Children().Append(transportSurface);
+        if (IsTransparentMaterial()) {
+            transportOcclusionHost.Children().Append(transportSurface);
+        } else {
+            transportIsland.Children().Append(transportSurface);
+        }
         g_dynamicTransportSurface = transportSurface;
         g_dynamicTransportSurfaceScale = transportSurfaceScale;
 
@@ -14286,7 +15779,19 @@ Grid BuildIslandGrid() {
         Border transportBackground;
         transportBackground.Name(L"Island_TransportBackground");
         transportBackground.CornerRadius(transportCorners);
-        transportBackground.Background(IslandBackgroundBrush());
+        if (IsTransparentMaterial()) {
+            SolidColorBrush transportTintBrush;
+            transportTintBrush.Color(DesiredCompactTintColor());
+            transportBackground.Background(transportTintBrush);
+            transportBackground.Opacity(
+                DesiredDynamicTransportTintOpacity());
+            g_dynamicTransportTintBrush = transportTintBrush;
+        } else {
+            transportBackground.Background(DynamicTransportBackgroundBrush());
+            transportBackground.Opacity(1.0);
+            g_dynamicTransportTintBrush = nullptr;
+        }
+        g_dynamicTransportTintLayer = transportBackground;
         transportBackground.BorderThickness({0, 0, 0, 0});
         transportBackground.IsHitTestVisible(false);
         transportSurface.Children().Append(transportBackground);
@@ -14367,8 +15872,7 @@ Grid BuildIslandGrid() {
                     } catch (...) {
                     }
                     if (!changed) {
-                        g_dynamicTransportNavigationFailureDirection.store(-1);
-                        RequestMediaRefresh();
+                        DispatchNavigationFailureFeedback(-1);
                     }
                 });
             },
@@ -14407,15 +15911,18 @@ Grid BuildIslandGrid() {
                     } catch (...) {
                     }
                     if (!changed) {
-                        g_dynamicTransportNavigationFailureDirection.store(1);
-                        RequestMediaRefresh();
+                        DispatchNavigationFailureFeedback(1);
                     }
                 });
             },
             &g_dynamicTransportNextMotion, 1));
         g_dynamicTransportControls = transportControls;
         transportIsland.Children().Append(transportControls);
-        wrapper.Children().Append(transportIsland);
+        if (IsTransparentMaterial()) {
+            transportOcclusionHost.Children().Append(transportIsland);
+        } else {
+            wrapper.Children().Append(transportIsland);
+        }
 
         ApplyDynamicMainIslandShadow();
 
@@ -14432,8 +15939,10 @@ Grid BuildIslandGrid() {
         g_dynamicTransportTargetReveal = 0.0;
         g_dynamicTransportRevealVelocity = 0.0;
         g_dynamicTransportLaunchPhase = false;
+        ApplyCompactTintTransitionVisuals();
     } else {
         g_dynamicTransportIsland = nullptr;
+        g_dynamicTransportOcclusionHost = nullptr;
         g_dynamicTransportSurface = nullptr;
         g_dynamicTransportSurfaceScale = nullptr;
         g_dynamicTransportControls = nullptr;
@@ -14563,6 +16072,8 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
             std::abs(g_layout.taskbarHeightDip - oldTaskbarHeight) > 0.75;
 
         if (layoutChanged || taskbarDirectionChanged) {
+            g_transparentCompactBackdropLumaValid = false;
+            g_transparentCompactBackdropLastSampleTime = {};
             ApplyExpandedState();
             try {
                 g_playerGrid.UpdateLayout();
@@ -14572,6 +16083,46 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
             if (!g_expanded) {
                 CapturePopupSourceGeometry();
             }
+        }
+
+        auto themeProbeNow = std::chrono::steady_clock::now();
+        bool themeProbeDue =
+            g_lastSystemThemeProbeTime.time_since_epoch().count() == 0 ||
+            themeProbeNow - g_lastSystemThemeProbeTime >=
+                std::chrono::milliseconds(1200);
+        if (themeProbeDue) {
+            g_lastSystemThemeProbeTime = themeProbeNow;
+            // g_lastDarkMode records what is currently painted, even while an
+            // unrelated accent update has temporarily invalidated the cache.
+            bool renderedDark = g_lastDarkMode;
+            InvalidateDarkModeCache();
+            bool systemDark = IsDarkModeApprox();
+            if (systemDark != renderedDark) {
+                g_themeVisualsValid = false;
+                g_popupXamlThemeValid = false;
+                g_transparentCompactForegroundValid = false;
+                g_transparentCompactBackdropLumaValid = false;
+                g_transparentCompactBackdropLastSampleTime = {};
+                g_transparentPopupForegroundValid = false;
+                g_popupXamlThumbnailHash = UINT64_MAX;
+                UpdateThemeVisuals();
+                if (g_expandedPopup && IsWindow(g_expandedPopup)) {
+                    ApplyPopupBackdrop(g_expandedPopup);
+                    ApplyPopupXamlTheme(true);
+                    RenderExpandedPopupLayer();
+                }
+                RequestMediaRefresh();
+            }
+        }
+
+        if (RefreshTransparentCompactForegroundContrast()) {
+            g_themeVisualsValid = false;
+            UpdateThemeVisuals();
+        }
+        int timedOutNavigationDirection =
+            ConsumeTimedOutNavigationFailure();
+        if (timedOutNavigationDirection != 0) {
+            TriggerNavigationFailureFeedback(timedOutNavigationDirection);
         }
     } catch (...) {
         StopTaskbarLayoutMonitor();
@@ -14585,6 +16136,7 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
     }
 
     StopTaskbarLayoutMonitor();
+    g_lastSystemThemeProbeTime = {};
     g_taskbarLayoutWatchRoot = root;
     g_taskbarLayoutWatchTarget = targetElement;
     g_taskbarLayoutWatchSystemTrayFrame =
@@ -14619,14 +16171,9 @@ void UpdatePlayerContents() {
     try {
     int failedNavigationDirection =
         g_dynamicTransportNavigationFailureDirection.exchange(0);
-    if (failedNavigationDirection < 0) {
-        TriggerDynamicTransportNavigationFailure(
-            &g_dynamicTransportPrevMotion);
-        TriggerPopupTransportNavigationFailure(&g_popupPrevMotion);
-    } else if (failedNavigationDirection > 0) {
-        TriggerDynamicTransportNavigationFailure(
-            &g_dynamicTransportNextMotion);
-        TriggerPopupTransportNavigationFailure(&g_popupNextMotion);
+    if (failedNavigationDirection != 0) {
+        CancelPendingNavigationValidation();
+        TriggerNavigationFailureFeedback(failedNavigationDirection);
     }
     MediaState state = SnapshotMedia();
 
@@ -14642,16 +16189,19 @@ void UpdatePlayerContents() {
     static std::vector<uint8_t> s_lastNonEmptyThumbnailBytes;
     static std::wstring s_lastNonEmptyThumbnailIdentityKey;
     static uint64_t s_lastNonEmptyThumbnailHash = 0;
-    static std::chrono::steady_clock::time_point s_lastNonEmptyThumbnailTime{};
     static std::wstring s_suspectRepeatedThumbnailIdentityKey;
     static uint64_t s_suspectRepeatedThumbnailHash = 0;
     static std::chrono::steady_clock::time_point s_suspectRepeatedThumbnailSince{};
+    static std::wstring s_pendingThumbnailIdentityKey;
+    static std::chrono::steady_clock::time_point s_pendingThumbnailSince{};
 
     std::vector<uint8_t> visualThumbnailBytes = state.thumbnailBytes;
+    bool holdingPreviousArtwork = false;
     if (!state.hasSession) {
         visualThumbnailBytes.clear();
         s_suspectRepeatedThumbnailIdentityKey.clear();
         s_suspectRepeatedThumbnailHash = 0;
+        s_pendingThumbnailIdentityKey.clear();
     } else if (!state.thumbnailBytes.empty()) {
         bool differentMedia =
             !s_lastNonEmptyThumbnailIdentityKey.empty() &&
@@ -14672,36 +16222,44 @@ void UpdatePlayerContents() {
                 s_suspectRepeatedThumbnailSince = artworkNow;
             }
 
-            // Give browser/GSMTC a short chance to replace a stale thumbnail.
-            // During that window show the placeholder instead of the previous
-            // video's cover. If it never changes, accept it later so the UI
-            // doesn't stay placeholder forever.
+            // Some browser sessions briefly repeat the previous media item's
+            // thumbnail. Keep that already-visible cover in place while the
+            // replacement is pending, instead of inserting a placeholder
+            // between the two real covers.
             auto suspectAge =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     artworkNow - s_suspectRepeatedThumbnailSince)
                     .count();
             if (suspectAge < 3500) {
-                visualThumbnailBytes.clear();
+                visualThumbnailBytes = s_lastNonEmptyThumbnailBytes;
+                holdingPreviousArtwork = true;
             }
         } else {
             s_suspectRepeatedThumbnailIdentityKey.clear();
             s_suspectRepeatedThumbnailHash = 0;
         }
 
-        if (!visualThumbnailBytes.empty()) {
+        if (!holdingPreviousArtwork) {
             s_lastNonEmptyThumbnailBytes = state.thumbnailBytes;
             s_lastNonEmptyThumbnailIdentityKey = artworkIdentityKey;
             s_lastNonEmptyThumbnailHash = rawThumbnailHash;
-            s_lastNonEmptyThumbnailTime = artworkNow;
+            s_pendingThumbnailIdentityKey.clear();
         }
-    } else if (!s_lastNonEmptyThumbnailBytes.empty() &&
-               artworkIdentityKey == s_lastNonEmptyThumbnailIdentityKey) {
-        auto age =
+    } else if (!s_lastNonEmptyThumbnailBytes.empty()) {
+        if (s_pendingThumbnailIdentityKey != artworkIdentityKey) {
+            s_pendingThumbnailIdentityKey = artworkIdentityKey;
+            s_pendingThumbnailSince = artworkNow;
+        }
+        auto pendingAge =
             std::chrono::duration_cast<std::chrono::milliseconds>(
-                artworkNow - s_lastNonEmptyThumbnailTime)
+                artworkNow - s_pendingThumbnailSince)
                 .count();
-        if (age <= 2500) {
+        if (pendingAge <= 8000) {
+            // Metadata commonly arrives one notification before its artwork.
+            // Preserve the current source so the next non-empty source can
+            // crossfade directly from the previous track's cover.
             visualThumbnailBytes = s_lastNonEmptyThumbnailBytes;
+            holdingPreviousArtwork = true;
         } else {
             visualThumbnailBytes.clear();
         }
@@ -14766,7 +16324,8 @@ void UpdatePlayerContents() {
     UpdateThemeVisuals();
 
     auto makeBitmap = [](std::vector<uint8_t> const& bytes,
-                         bool decodeSynchronously = false) -> imaging::BitmapImage {
+                         bool decodeSynchronously = false,
+                         int32_t decodePixelWidth = 0) -> imaging::BitmapImage {
         imaging::BitmapImage bitmap;
         if (bytes.empty()) {
             return imaging::BitmapImage{nullptr};
@@ -14783,9 +16342,12 @@ void UpdatePlayerContents() {
         }
         writer.DetachStream();
         stream.Seek(0);
+        if (decodePixelWidth > 0) {
+            bitmap.DecodePixelWidth(decodePixelWidth);
+        }
         if (decodeSynchronously) {
-            // The transport wash is only a 20x20 PNG. Decode it before its
-            // crossfade begins so the new layer never contributes a blank frame.
+            // Decode visible transition sources before fading out their old
+            // layer, so the placeholder can never show through a blank frame.
             bitmap.SetSource(stream);
         } else {
             bitmap.SetSourceAsync(stream);
@@ -14882,7 +16444,7 @@ void UpdatePlayerContents() {
                         g_compactAlbumArtFade.Opacity(oldSource != nullptr ? 1.0 : 0.0);
                     }
                     if (compactArtHash) {
-                        image.Source(makeBitmap(displayThumbnailBytes));
+                        image.Source(makeBitmap(displayThumbnailBytes, true, 96));
                     } else {
                         image.Source(nullptr);
                     }
@@ -14918,14 +16480,15 @@ void UpdatePlayerContents() {
 
             if (compactArtHash) {
                 auto lowDetailTransportBytes =
-                    CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
-                                                   false, false, false, 6, true);
-                bool haveLowDetailTransportBytes = !lowDetailTransportBytes.empty();
-                auto const& transportWashBytes = haveLowDetailTransportBytes
-                                                     ? lowDetailTransportBytes
-                                                     : displayThumbnailBytes;
-                g_dynamicTransportWash.Source(
-                    makeBitmap(transportWashBytes, haveLowDetailTransportBytes));
+                    CreateResilientLowDetailAlbumCoverBytes(
+                        displayThumbnailBytes,
+                        false, false, false, 6, true);
+                if (!lowDetailTransportBytes.empty()) {
+                    g_dynamicTransportWash.Source(
+                        makeBitmap(lowDetailTransportBytes, true));
+                } else {
+                    g_dynamicTransportWash.Source(nullptr);
+                }
             } else {
                 g_dynamicTransportWash.Source(nullptr);
             }
@@ -14950,14 +16513,15 @@ void UpdatePlayerContents() {
                 // A tiny synchronous decode supplies a stable, deliberately
                 // low-detail wash that reads as blur without a heavy effect graph.
                 auto lowDetailMainBytes =
-                    CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
-                                                   true, false, false, 5, true, true);
-                bool haveLowDetailMainBytes = !lowDetailMainBytes.empty();
-                auto const& mainWashBytes = haveLowDetailMainBytes
-                                                ? lowDetailMainBytes
-                                                : displayThumbnailBytes;
-                g_dynamicMainWash.Source(
-                    makeBitmap(mainWashBytes, haveLowDetailMainBytes));
+                    CreateResilientLowDetailAlbumCoverBytes(
+                        displayThumbnailBytes,
+                        true, false, false, 5, true, true);
+                if (!lowDetailMainBytes.empty()) {
+                    g_dynamicMainWash.Source(
+                        makeBitmap(lowDetailMainBytes, true));
+                } else {
+                    g_dynamicMainWash.Source(nullptr);
+                }
             } else {
                 g_dynamicMainWash.Source(nullptr);
             }
@@ -15136,29 +16700,32 @@ void UpdatePlayerContents() {
                     } else {
                         auto popupArtBytes = CreatePopupG2AlbumCoverBytes(displayThumbnailBytes);
                         g_popupXamlArt.Source(makeBitmap(
-                            popupArtBytes.empty() ? displayThumbnailBytes : popupArtBytes));
+                            popupArtBytes.empty() ? displayThumbnailBytes : popupArtBytes,
+                            true, 320));
                         if (g_popupXamlBackdropCover) {
                             if (useBackdropCover) {
                                 auto lowDetailBackdropBytes =
-                                    CreateLowDetailAlbumCoverBytes(
+                                    CreateResilientLowDetailAlbumCoverBytes(
                                         popupBlurSourceBytes,
                                         true,
                                         g_settings.compact || g_taskbarAtTop,
                                         false);
-                                auto const& backdropBytes = lowDetailBackdropBytes.empty()
-                                                                ? popupBlurSourceBytes
-                                                                : lowDetailBackdropBytes;
-                                g_popupXamlBackdropCover.Source(makeBitmap(backdropBytes));
+                                g_popupXamlBackdropCover.Source(
+                                    lowDetailBackdropBytes.empty()
+                                        ? nullptr
+                                        : makeBitmap(lowDetailBackdropBytes, true));
                             } else {
                                 g_popupXamlBackdropCover.Source(nullptr);
                             }
                         }
                         if (g_popupXamlPanelCover) {
-                            auto lowDetailCoverBytes = CreateLowDetailAlbumCoverBytes(popupBlurSourceBytes);
-                            auto const& coverBytes = lowDetailCoverBytes.empty()
-                                                         ? popupBlurSourceBytes
-                                                         : lowDetailCoverBytes;
-                            g_popupXamlPanelCover.Source(makeBitmap(coverBytes));
+                            auto lowDetailCoverBytes =
+                                CreateResilientLowDetailAlbumCoverBytes(
+                                    popupBlurSourceBytes);
+                            g_popupXamlPanelCover.Source(
+                                lowDetailCoverBytes.empty()
+                                    ? nullptr
+                                    : makeBitmap(lowDetailCoverBytes, true));
                         }
                     }
 
@@ -15243,6 +16810,7 @@ void RemoveIslandGrid() {
     ClearDynamicTransportButtonMotions();
     StopCompactTextRenderLoop();
     StopCompactProgressRenderLoop();
+    StopCompactTintTransition();
     DestroyExpandedPopup();
 
     if (!g_injectionParent || !g_playerGrid) {
@@ -15254,11 +16822,17 @@ void RemoveIslandGrid() {
         g_islandHoverTranslate = nullptr;
         ResetCompactIslandPressMotion();
         g_dynamicMainIsland = nullptr;
+        g_compactMainTintLayer = nullptr;
+        g_dynamicTransportTintLayer = nullptr;
+        g_compactMainTintBrush = nullptr;
+        g_dynamicTransportTintBrush = nullptr;
+        g_compactTintColorValid = false;
         g_dynamicMainOcclusion = nullptr;
         g_dynamicMainWashHost = nullptr;
         g_dynamicMainWash = nullptr;
         g_dynamicMainEdgeGlow = nullptr;
         g_dynamicTransportIsland = nullptr;
+        g_dynamicTransportOcclusionHost = nullptr;
         g_dynamicTransportSurface = nullptr;
         g_dynamicTransportSurfaceScale = nullptr;
         g_dynamicTransportControls = nullptr;
@@ -15342,11 +16916,17 @@ void RemoveIslandGrid() {
     g_islandHoverTranslate = nullptr;
     ResetCompactIslandPressMotion();
     g_dynamicMainIsland = nullptr;
+    g_compactMainTintLayer = nullptr;
+    g_dynamicTransportTintLayer = nullptr;
+    g_compactMainTintBrush = nullptr;
+    g_dynamicTransportTintBrush = nullptr;
+    g_compactTintColorValid = false;
     g_dynamicMainOcclusion = nullptr;
     g_dynamicMainWashHost = nullptr;
     g_dynamicMainWash = nullptr;
     g_dynamicMainEdgeGlow = nullptr;
     g_dynamicTransportIsland = nullptr;
+    g_dynamicTransportOcclusionHost = nullptr;
     g_dynamicTransportSurface = nullptr;
     g_dynamicTransportSurfaceScale = nullptr;
     g_dynamicTransportControls = nullptr;
@@ -15381,6 +16961,7 @@ void RemoveIslandGrid() {
     g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
     g_dynamicTransportAccentColorValid = false;
     g_dynamicTransportAccentColor = Color(0xFF, 0x4F, 0x7D, 0xE8);
+    g_compactAccentColorValid = false;
     g_themeVisualsValid = false;
     g_popupXamlThemeValid = false;
     g_popupXamlThemeMaterial.clear();
@@ -15475,16 +17056,56 @@ bool InjectIslandGrid() {
     }
 }
 
-void ApplyPendingSettings() {
+bool SettingsEqualExceptCompactTint(Settings const& left,
+                                    Settings const& right) {
+    return left.position == right.position &&
+           left.compactWidth == right.compactWidth &&
+           left.sideExpand == right.sideExpand &&
+           left.autoSizeToTaskbar == right.autoSizeToTaskbar &&
+           left.expandedWidth == right.expandedWidth &&
+           left.expandedHeight == right.expandedHeight &&
+           left.expandedCornerRadius == right.expandedCornerRadius &&
+           left.compact == right.compact &&
+           left.popupSpacing == right.popupSpacing &&
+           left.popupCardGap == right.popupCardGap &&
+           left.popupShadowDepth == right.popupShadowDepth &&
+           left.popupShadowOpacity == right.popupShadowOpacity &&
+           left.popupButtonStyle == right.popupButtonStyle &&
+           left.popupBackdropCoverEffect == right.popupBackdropCoverEffect &&
+           left.artworkAbstractMode == right.artworkAbstractMode &&
+           left.height == right.height &&
+           left.marginLeft == right.marginLeft &&
+           left.marginRight == right.marginRight &&
+           left.hideWhenNoMedia == right.hideWhenNoMedia &&
+           left.hoverScale == right.hoverScale &&
+           left.hoverLerpSpeed == right.hoverLerpSpeed &&
+           left.animationSpeed == right.animationSpeed &&
+           left.classicMorphScaleAnimation ==
+               right.classicMorphScaleAnimation &&
+           left.material == right.material &&
+           left.backdropInitialFrameSkip ==
+               right.backdropInitialFrameSkip &&
+           left.backdropFallbackBlurPasses ==
+               right.backdropFallbackBlurPasses &&
+           left.backdropFallbackCaptureScale ==
+               right.backdropFallbackCaptureScale &&
+           left.backdropWgcBlurStdDev == right.backdropWgcBlurStdDev &&
+           left.allowScreenCapture == right.allowScreenCapture;
+}
+
+bool ApplyPendingSettings() {
     std::optional<Settings> settings;
     {
         std::lock_guard lock(g_pendingSettingsMutex);
         settings.swap(g_pendingSettings);
     }
     if (!settings) {
-        return;
+        return false;
     }
 
+    bool tintOnlyChange =
+        g_settings.compactIslandTint != settings->compactIslandTint &&
+        SettingsEqualExceptCompactTint(g_settings, *settings);
     g_settings = std::move(*settings);
     g_themeVisualsValid = false;
     g_popupXamlThemeValid = false;
@@ -15492,13 +17113,20 @@ void ApplyPendingSettings() {
     g_popupXamlThemeShadowDepth = -1;
     g_popupXamlThemeShadowOpacity = -1;
     g_popupXamlThemeButtonStyle.clear();
+    return tintOnlyChange;
 }
 
 void ApplyPendingSettingsAndInject() {
     if (!IsModActive()) {
         return;
     }
-    ApplyPendingSettings();
+    bool tintOnlyChange = ApplyPendingSettings();
+    if (tintOnlyChange && g_playerGrid) {
+        g_themeVisualsValid = false;
+        UpdateThemeVisuals();
+        RetargetCompactTintTransition(true);
+        return;
+    }
     InjectIslandGrid();
 }
 
