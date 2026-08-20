@@ -706,16 +706,21 @@ void StopDotPositionBinding(Controls::Border badge)
         auto visual =
             Hosting::ElementCompositionPreview::GetElementVisual(badge);
 
-        // Translation is the XAML composition hand-off property exposed on
-        // Visual.Properties after SetIsTranslationEnabled(true). Stopping the
-        // expression leaves its last animated value in that property, so a
-        // badge reparented from RootGrid back into IconPanel can otherwise
-        // remain translated away from its normal number-badge position.
+        // Number badges live in IconPanel, while dots live in RootGrid. Clear
+        // all compositor state before the visual is removed or reused.
         auto properties = visual.Properties();
         properties.StopAnimation(L"Translation");
         properties.InsertVector3(
             L"Translation",
             winrt::Windows::Foundation::Numerics::float3{0.0f, 0.0f, 0.0f});
+
+        visual.StopAnimation(L"TransformMatrix");
+        visual.TransformMatrix(
+            winrt::Windows::Foundation::Numerics::float4x4{
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f});
     }
     catch (...)
     {
@@ -723,90 +728,148 @@ void StopDotPositionBinding(Controls::Border badge)
 }
 
 bool BindDotPositionExpression(Controls::Border badge,
+                               FrameworkElement taskListButton,
                                FrameworkElement icon,
                                Controls::Grid dotHost,
                                unsigned int count)
 {
-    if (!badge || !icon || !dotHost)
+    if (!badge || !taskListButton || !icon || !dotHost)
     {
         return false;
     }
 
     try
     {
-        // The badge lives in RootGrid so it isn't clipped by IconPanel. Glue
-        // its composition Translation to the icon's visual-offset chain. The
-        // compositor evaluates this expression on the render thread, so the
-        // dots follow taskbar reordering/insertion animations without XAML
-        // LayoutUpdated/PointerMoved/Rendering callbacks into the mod image.
+        // Keep the dots in RootGrid to avoid IconPanel clipping, but make the
+        // RootGrid badge a TaskListButton-sized visual proxy. Its static
+        // placement follows the button's normal layout Offset chain, while the
+        // shell's live TaskListButton TransformMatrix is copied as a whole so
+        // the dots inherit the same taskbar animation as the real button.
         FrameworkElement hostElement = dotHost;
-        std::vector<winrt::Windows::UI::Composition::Visual> chain;
-        FrameworkElement current = icon;
+        std::vector<winrt::Windows::UI::Composition::Visual> layoutChain;
+        FrameworkElement current = taskListButton;
+
         for (int depth = 0; current && current != hostElement && depth < 20;
              ++depth)
         {
-            chain.push_back(
+            layoutChain.push_back(
                 Hosting::ElementCompositionPreview::GetElementVisual(current));
+
             auto parent = Media::VisualTreeHelper::GetParent(current);
             current = parent ? parent.try_as<FrameworkElement>() : nullptr;
         }
 
-        if (!current || current != hostElement || chain.empty())
+        if (!current || current != hostElement || layoutChain.empty())
         {
             return false;
         }
 
+        double buttonWidth = taskListButton.ActualWidth();
+        double buttonHeight = taskListButton.ActualHeight();
+        double iconWidth = icon.ActualWidth();
+        double iconHeight = icon.ActualHeight();
+
+        if (buttonWidth <= 0 || buttonHeight <= 0 ||
+            iconWidth <= 0 || iconHeight <= 0)
+        {
+            return false;
+        }
+
+        auto iconBoundsInButton =
+            icon.TransformToVisual(taskListButton)
+                .TransformBounds(winrt::Windows::Foundation::Rect{
+                    0.0f, 0.0f,
+                    static_cast<float>(iconWidth),
+                    static_cast<float>(iconHeight)});
+
         constexpr double kDotGap = 2.0;
         constexpr double kDotSpacing = 2.0;
+
         double dotSize = static_cast<double>(g_settings.dotSize);
         unsigned int dotCount = GetVisibleDotCount(count);
+
         double stackHeight = dotCount * dotSize;
         if (dotCount > 1)
         {
             stackHeight += (dotCount - 1) * kDotSpacing;
         }
 
+        auto dotStack = FindChildByName(badge, L"WindhawkDotStack")
+                            .try_as<Controls::StackPanel>();
+        if (!dotStack)
+        {
+            return false;
+        }
+
+        badge.Width(buttonWidth);
+        badge.Height(buttonHeight);
         badge.HorizontalAlignment(HorizontalAlignment::Left);
         badge.VerticalAlignment(VerticalAlignment::Top);
         badge.Margin(Thickness{});
         badge.RenderTransform(nullptr);
 
+        dotStack.HorizontalAlignment(HorizontalAlignment::Left);
+        dotStack.VerticalAlignment(VerticalAlignment::Top);
+
+        double dotX =
+            g_settings.dotPosition == DotPosition::Left
+                ? static_cast<double>(iconBoundsInButton.X) -
+                      kDotGap - dotSize
+                : static_cast<double>(iconBoundsInButton.X) +
+                      static_cast<double>(iconBoundsInButton.Width) +
+                      kDotGap;
+
+        double dotY =
+            static_cast<double>(iconBoundsInButton.Y) +
+            (static_cast<double>(iconBoundsInButton.Height) - stackHeight) /
+                2.0;
+
+        dotStack.Margin(Thickness{dotX, dotY, 0.0, 0.0});
+
         Hosting::ElementCompositionPreview::SetIsTranslationEnabled(badge,
                                                                     true);
-        auto badgeVisual =
+
+        auto proxyVisual =
             Hosting::ElementCompositionPreview::GetElementVisual(badge);
+        auto buttonVisual =
+            Hosting::ElementCompositionPreview::GetElementVisual(
+                taskListButton);
 
         std::wstring sumX;
         std::wstring sumY;
-        for (size_t i = 0; i < chain.size(); ++i)
+
+        for (size_t i = 0; i < layoutChain.size(); ++i)
         {
             std::wstring parameter = L"p" + std::to_wstring(i);
             sumX += parameter + L".Offset.X + ";
             sumY += parameter + L".Offset.Y + ";
         }
 
-        std::wstring xAdjustment =
-            g_settings.dotPosition == DotPosition::Left
-                ? L"(-gap - dotSize)"
-                : L"(p0.Size.X + gap)";
+        std::wstring translationExpression =
+            L"Vector3(" + sumX + L"0.0f - self.Offset.X, " +
+            sumY + L"0.0f - self.Offset.Y, 0.0f)";
 
-        std::wstring expression =
-            L"Vector3(" + sumX + xAdjustment + L" - self.Offset.X, " +
-            sumY + L"(p0.Size.Y - stackHeight) / 2.0f - self.Offset.Y, 0.0f)";
+        auto translationAnimation =
+            proxyVisual.Compositor().CreateExpressionAnimation(
+                winrt::hstring(translationExpression));
 
-        auto animation = badgeVisual.Compositor().CreateExpressionAnimation(
-            winrt::hstring(expression));
-        for (size_t i = 0; i < chain.size(); ++i)
+        for (size_t i = 0; i < layoutChain.size(); ++i)
         {
-            animation.SetReferenceParameter(
-                winrt::hstring(L"p" + std::to_wstring(i)), chain[i]);
+            translationAnimation.SetReferenceParameter(
+                winrt::hstring(L"p" + std::to_wstring(i)),
+                layoutChain[i]);
         }
-        animation.SetScalarParameter(L"gap", static_cast<float>(kDotGap));
-        animation.SetScalarParameter(L"dotSize", static_cast<float>(dotSize));
-        animation.SetScalarParameter(L"stackHeight",
-                                     static_cast<float>(stackHeight));
-        animation.SetReferenceParameter(L"self", badgeVisual);
-        badgeVisual.Properties().StartAnimation(L"Translation", animation);
+
+        translationAnimation.SetReferenceParameter(L"self", proxyVisual);
+        proxyVisual.Properties().StartAnimation(
+            L"Translation", translationAnimation);
+
+        auto matrixAnimation =
+            proxyVisual.Compositor().CreateExpressionAnimation(
+                L"button.TransformMatrix");
+        matrixAnimation.SetReferenceParameter(L"button", buttonVisual);
+        proxyVisual.StartAnimation(L"TransformMatrix", matrixAnimation);
+
         return true;
     }
     catch (...)
@@ -1026,6 +1089,7 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
 
 bool ApplyBadgeVisualStyle(Controls::Border badge,
                            unsigned int count,
+                           FrameworkElement taskListButton = nullptr,
                            FrameworkElement icon = nullptr,
                            Controls::Grid dotHost = nullptr)
 {
@@ -1210,7 +1274,8 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
     dotStack.VerticalAlignment(VerticalAlignment::Center);
 
     RebuildDots(dotStack, count);
-    return BindDotPositionExpression(badge, icon, dotHost, count);
+    return BindDotPositionExpression(badge, taskListButton, icon, dotHost,
+                                     count);
 }
 // -----------------------------------------------------------------------------
 // Badge
@@ -1424,14 +1489,22 @@ bool UpdateCountBadge(TrackedButton &tracked,
         if (!currentParent ||
             winrt::get_abi(currentParent) != winrt::get_abi(desiredParent))
         {
+            // Number and dots intentionally use different parents. Recreate
+            // the tiny badge when crossing IconPanel <-> RootGrid so a fresh
+            // compositor Visual is used for every Number -> Dots transition.
             StopDotPositionBinding(badge);
             if (currentParent)
             {
                 RemoveBadgeFromPanel(currentParent, badge);
             }
-            desiredParent.Children().Append(badge);
+
+            badge = nullptr;
+            tracked.badge = {};
         }
-        tracked.badge = winrt::make_weak(badge);
+        else
+        {
+            tracked.badge = winrt::make_weak(badge);
+        }
     }
 
     if (count < static_cast<unsigned int>(g_settings.minimumCount))
@@ -1451,7 +1524,8 @@ bool UpdateCountBadge(TrackedButton &tracked,
         tracked.badge = winrt::make_weak(badge);
     }
 
-    if (!ApplyBadgeVisualStyle(badge, count, icon, dotHost))
+    if (!ApplyBadgeVisualStyle(badge, count, taskListButton, icon,
+                               dotHost))
     {
         StopDotPositionBinding(badge);
         badge.Visibility(Visibility::Collapsed);
@@ -1694,24 +1768,49 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void *hostShared[2])
         return nullptr;
     }
 
-    // Current Windows 11 TaskbarHost layout uses 0x48 on ARM64. On x64,
-    // detect the offset from TaskbarHost::FrameHeight where possible.
-    size_t elementOffset = 0x48;
+    size_t elementOffset = 0;
 
 #if defined(_M_X64)
-    const BYTE *code = reinterpret_cast<const BYTE *>(g_TaskbarHost_FrameHeight);
-    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
-        code[7] <= 0x7F)
     {
-        elementOffset = code[7];
-    }
-    else
-    {
-        Wh_Log(L"Couldn't detect TaskbarHost XAML offset, using 0x48");
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE *b =
+            reinterpret_cast<const BYTE *>(g_TaskbarHost_FrameHeight);
+
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
+            b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
+            b[7] <= 0x7F)
+        {
+            elementOffset = b[7];
+        }
+        else
+        {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            return nullptr;
+        }
     }
 #elif defined(_M_ARM64)
-    // Use the known/default TaskbarHost XAML element offset.
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp fp, lr, [sp, #-0x10]!
+        // fd030091 mov fp, sp
+        // 080c41f8 ldr x8, [x0, #0x10]!
+        const DWORD *p =
+            reinterpret_cast<const DWORD *>(g_TaskbarHost_FrameHeight);
+
+        if (p[0] == 0xD503237F &&
+            (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD &&
+            (p[3] & 0xFFF00FE0) == 0xF8400C00)
+        {
+            elementOffset = (p[3] >> 12) & 0xFF;
+        }
+        else
+        {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            return nullptr;
+        }
+    }
 #else
 #error "Unsupported architecture"
 #endif
