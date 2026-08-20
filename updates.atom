@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-20T17:12:01.000Z</updated>
+    <updated>2026-08-20T17:26:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Run command on window focus 0.1]]></title>
+        <id>https://windhawk.net/mods/command-on-window-focus#bff5e642356ced63e4d751cfc83003137f812c16</id>
+        <link href="https://windhawk.net/mods/command-on-window-focus"/>
+        <updated>2026-08-20T17:26:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="commandonwindowfocus">Command On Window Focus</h1>
+<p>This mod observes a window focus and will run any command on window focus. 
+This mod has a filter which lets you specify which windows will be allowed to have focus based on the path of the executable
+running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript) so providing a window title or something like "steam" will not work. 
+An example use case for me personally is running a script that sets the scroll wheel on my mouse to a different scroll type every time 
+I focus a game (and the alternate command will reset it to the original type).</p>]]></content>
+        <author>
+            <name>rom4ster</name>
+            <uri>https://github.com/rom4ster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace Shell Format Dialog 1.0]]></title>
         <id>https://windhawk.net/mods/replace-format-dialog#1197822c535ab270b52cd878b9a49c7933d68fa0</id>
@@ -465,21 +481,6 @@ example - are outside the reach of an in-process hook and keep the system colors
         <author>
             <name>Saber Naeemi</name>
             <uri>https://github.com/sabergraphics</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-action-center-recreation#6f1803eb78a36c6578c05d1fc6c35d68473f8cfc</id>
-        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
-        <updated>2026-08-14T09:21:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an icon inaccuracy</li>
-<li>Simplified the code</li>
-<li>Added a Turkish translation (credits to cips_35)</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

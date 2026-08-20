@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-20T17:12:01.000Z</updated>
+    <updated>2026-08-20T17:26:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Run command on window focus 0.1]]></title>
+        <id>https://windhawk.net/mods/command-on-window-focus#bff5e642356ced63e4d751cfc83003137f812c16</id>
+        <link href="https://windhawk.net/mods/command-on-window-focus"/>
+        <updated>2026-08-20T17:26:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="commandonwindowfocus">Command On Window Focus</h1>
+<p>This mod observes a window focus and will run any command on window focus. 
+This mod has a filter which lets you specify which windows will be allowed to have focus based on the path of the executable
+running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript) so providing a window title or something like "steam" will not work. 
+An example use case for me personally is running a script that sets the scroll wheel on my mouse to a different scroll type every time 
+I focus a game (and the alternate command will reset it to the original type).</p>]]></content>
+        <author>
+            <name>rom4ster</name>
+            <uri>https://github.com/rom4ster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace Shell Format Dialog 1.0]]></title>
         <id>https://windhawk.net/mods/replace-format-dialog#1197822c535ab270b52cd878b9a49c7933d68fa0</id>
@@ -956,18 +972,6 @@ extends upward and outward. Total size is
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[macOS magnifying cursor 1.4.7]]></title>
-        <id>https://windhawk.net/mods/mac-magnifying-cursor#e0d29aa93e04e8b7c093c05c7c3d4956878cf40c</id>
-        <link href="https://windhawk.net/mods/mac-magnifying-cursor"/>
-        <updated>2026-08-02T22:24:57.000Z</updated>
-        <content type="html"><![CDATA[<p>Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.</p>
-<p><img src="https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif" alt="Preview" /></p>]]></content>
-        <author>
-            <name>Jaali</name>
-            <uri>https://github.com/alivca</uri>
         </author>
     </entry>
 </feed>

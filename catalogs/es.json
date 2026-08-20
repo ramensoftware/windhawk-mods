@@ -2712,6 +2712,35 @@
         "version": "1.0.0"
       }
     },
+    "command-on-window-focus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787246816000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787246816000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "rom4ster",
+        "compilerOptions": "-lcomdlg32",
+        "description": "Run a command on window focus matching a filter and optionally a command when not matching",
+        "github": "https://github.com/rom4ster",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Run command on window focus",
+        "version": "0.1"
+      }
+    },
     "common-controls-hook": {
       "details": {
         "defaultSorting": 4000,
