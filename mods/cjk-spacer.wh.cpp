@@ -96,12 +96,13 @@ The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
-initializing. The mod waits until supported XAML UI appears before connecting,
-retries when another host window or framework module appears, gives up after
-repeated hard failures, and doesn't retry while another diagnostics tool holds
-the connection. An established connection can be restored after its XAML host
-disappears. If the modern path can't be initialized, enabled classic menus and
-tooltips remain active.
+initializing. The mod waits until supported XAML UI appears before connecting;
+framework module loads only ask the worker to rescan existing hosts and never
+probe connection names from the loader call stack. It gives up after repeated
+hard failures or empty walks, and doesn't retry while another diagnostics tool
+holds the connection. An established connection can be restored after its XAML
+host disappears. If the modern path can't be initialized, enabled classic menus
+and tooltips remain active.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, an intercepted connection attempt can show a confirmation dialog;
 if the tool blocks it by returning success, the walk stops and this mod marks
@@ -1877,9 +1878,9 @@ constexpr unsigned int kXamlDiagnosticsMaxEmptyWalks = 3;
 struct XamlDiagnosticsConnectionState {
     std::atomic_bool connected{false};
     std::atomic_bool blocked{false};
-    // Set by a host-window or module-load trigger to queue a worker attempt,
-    // and cleared by the worker when it picks the attempt up. Triggers that
-    // arrive while an attempt is in flight coalesce into the next one.
+    // Set by a host-window trigger to queue a worker attempt, and cleared by
+    // the worker when it picks the attempt up. Triggers that arrive while an
+    // attempt is in flight coalesce into the next one.
     std::atomic_bool pending{false};
     std::atomic_uint failureCount{0};
     std::atomic_uint emptyWalkCount{0};
@@ -1897,6 +1898,7 @@ bool CanAttemptXamlDiagnosticsConnection(
 
 bool RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor flavor);
+void DiscoverExistingModernXamlHosts();
 void RearmXamlDiagnosticsConnection(
     XamlDiagnosticsFlavor flavor);
 
@@ -2352,6 +2354,7 @@ XamlDiagnosticsConnectionState g_microsoftUiXamlDiagnostics;
 std::mutex g_xamlDiagnosticsWorkerMutex;
 HANDLE g_xamlDiagnosticsWorkerThread;
 HANDLE g_xamlDiagnosticsWorkerWakeEvent;
+std::atomic_bool g_xamlDiagnosticsHostDiscoveryPending{false};
 thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics =
     XamlDiagnosticsFlavor::None;
 
@@ -2525,15 +2528,25 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
         }
 
         // Each pending flag was stored with release ordering before its
-        // SetEvent, so the exchange observes every request that preceded the
-        // wake-up. A request that arrives while an attempt is in flight
-        // re-signals the event and is picked up on the next iteration.
+        // SetEvent, so the exchanges observe every request that preceded the
+        // wake-up. A request that arrives while work is in flight re-signals
+        // the event and is picked up on the next iteration.
+        const bool discoverHosts =
+            g_xamlDiagnosticsHostDiscoveryPending.exchange(
+                false, std::memory_order_acq_rel);
         const bool requestWindows =
             g_windowsUiXamlDiagnostics.pending.exchange(
                 false, std::memory_order_acq_rel);
         const bool requestMicrosoft =
             g_microsoftUiXamlDiagnostics.pending.exchange(
                 false, std::memory_order_acq_rel);
+
+        if (discoverHosts) {
+            // Module-load hooks only arm discovery. Enumerating windows here
+            // keeps that work out of the loader call stack, and a connection
+            // walk is queued only when a supported host actually exists.
+            DiscoverExistingModernXamlHosts();
+        }
         if (!requestWindows && !requestMicrosoft) {
             continue;
         }
@@ -2601,10 +2614,50 @@ bool RequestModernXamlDiagnosticsInitialization(
 
     // Store the request before signaling, so the worker's exchange observes
     // it when the event wakes the worker.
-    state->pending.store(true, std::memory_order_release);
+    const bool wasPending = state->pending.exchange(
+        true, std::memory_order_acq_rel);
     if (!SetEvent(g_xamlDiagnosticsWorkerWakeEvent)) {
+        const DWORD error = GetLastError();
+        if (!wasPending) {
+            state->pending.store(false, std::memory_order_release);
+        }
         Wh_Log(L"Couldn't signal the XAML diagnostics worker: %u",
-               GetLastError());
+               error);
+        return false;
+    }
+    return true;
+}
+
+bool RequestModernXamlHostDiscovery(
+    XamlDiagnosticsFlavor flavor) {
+    if (g_stoppingModernUi.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    XamlDiagnosticsConnectionState* state =
+        GetXamlDiagnosticsConnectionState(flavor);
+    if (!state || !CanAttemptXamlDiagnosticsConnection(*state)) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> guard(
+        g_xamlDiagnosticsWorkerMutex);
+    if (g_stoppingModernUi.load(std::memory_order_acquire) ||
+        !g_xamlDiagnosticsWorkerWakeEvent ||
+        !CanAttemptXamlDiagnosticsConnection(*state)) {
+        return false;
+    }
+
+    const bool wasPending =
+        g_xamlDiagnosticsHostDiscoveryPending.exchange(
+            true, std::memory_order_acq_rel);
+    if (!SetEvent(g_xamlDiagnosticsWorkerWakeEvent)) {
+        const DWORD error = GetLastError();
+        if (!wasPending) {
+            g_xamlDiagnosticsHostDiscoveryPending.store(
+                false, std::memory_order_release);
+        }
+        Wh_Log(L"Couldn't signal XAML host discovery: %u", error);
         return false;
     }
     return true;
@@ -2641,6 +2694,8 @@ void StopModernXamlDiagnosticsWorker() {
              &g_microsoftUiXamlDiagnostics}) {
         state->pending.store(false, std::memory_order_release);
     }
+    g_xamlDiagnosticsHostDiscoveryPending.store(
+        false, std::memory_order_release);
 }
 
 XamlDiagnosticsFlavor ClassifyModernXamlHost(
@@ -2822,10 +2877,11 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
     if (module && !wasLoaded &&
         flavor != XamlDiagnosticsFlavor::None &&
         g_modernUiActive.load(std::memory_order_acquire)) {
-        // Only wake the worker here. Diagnostics initialization must not run
-        // from a library-loading call stack.
-        if (RequestModernXamlDiagnosticsInitialization(flavor)) {
-            Wh_Log(L"Loaded XAML diagnostics module: %s",
+        // A module load only asks the worker to rescan existing hosts. It
+        // must not enumerate windows or probe connection names from this
+        // library-loading call stack.
+        if (RequestModernXamlHostDiscovery(flavor)) {
+            Wh_Log(L"Loaded XAML diagnostics module; rescanning hosts: %s",
                    GetModuleFileNamePart(fileName));
         }
     }
@@ -3023,6 +3079,8 @@ bool InitializeModernUi() {
         state->failureCount.store(0, std::memory_order_release);
         state->emptyWalkCount.store(0, std::memory_order_release);
     }
+    g_xamlDiagnosticsHostDiscoveryPending.store(
+        false, std::memory_order_release);
     g_visualTreeWatcherGeneration.store(
         0, std::memory_order_release);
     g_tapSiteGeneration.store(
