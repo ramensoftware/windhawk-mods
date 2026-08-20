@@ -2103,9 +2103,19 @@ bool EnsureDeferredCountRefreshSubclass()
 
     g_taskbarThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
     g_taskbarSubclassWindow = taskbarWnd;
+
+    // Wh_ModBeforeUninit may have run between the initial unloading check
+    // and subclass installation. Publish the handle first, then re-check:
+    // either the uninit thread sees the handle and removes the subclass, or
+    // this thread sees g_unloading and removes it here.
+    if (g_unloading)
+    {
+        StopDeferredCountRefreshSubclass();
+        return false;
+    }
+
     return true;
 }
-
 void StopDeferredCountRefreshSubclass()
 {
     HWND taskbarWnd = g_taskbarSubclassWindow.exchange(nullptr);
