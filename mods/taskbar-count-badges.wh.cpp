@@ -79,7 +79,7 @@ settings are applied live.
 ## Compatibility
 
 - Windows 11 only
-- Supports x64 Windows
+- Supports x64 and ARM64 Windows
 - Works with multiple monitors and secondary Windows taskbars
 
 On multi-monitor systems, the count follows each individual taskbar button.
@@ -240,7 +240,6 @@ ordering, or application behavior.
 
 #include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <cstdint>
 #include <cwctype>
 #include <limits>
@@ -336,6 +335,7 @@ Settings g_settings;
 // -----------------------------------------------------------------------------
 
 std::atomic<bool> g_taskbarViewHooked = false;
+std::atomic<bool> g_taskbarViewHookAttempted = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_settingsReloadPending = false;
 std::atomic<bool> g_deferredCountRefreshQueued = false;
@@ -632,12 +632,9 @@ Media::SolidColorBrush CreateBrush(const std::wstring &value,
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name);
 unsigned int GetVisibleDotCount(unsigned int count);
-void StopDotPositionBinding(Controls::Border badge);
 
 void ApplyNumberBadgePosition(Controls::Border badge)
 {
-    StopDotPositionBinding(badge);
-
     HorizontalAlignment horizontal = HorizontalAlignment::Right;
 
     VerticalAlignment vertical = VerticalAlignment::Top;
@@ -706,8 +703,9 @@ void StopDotPositionBinding(Controls::Border badge)
         auto visual =
             Hosting::ElementCompositionPreview::GetElementVisual(badge);
 
-        // Number badges live in IconPanel, while dots live in RootGrid. Clear
-        // all compositor state before the visual is removed or reused.
+        // Dot badges live in RootGrid and use compositor expressions for
+        // Translation and TransformMatrix. Clear that compositor state
+        // before a dot badge is hidden or removed.
         auto properties = visual.Properties();
         properties.StopAnimation(L"Translation");
         properties.InsertVector3(
@@ -1367,7 +1365,8 @@ void RemoveOrphanDotBadges(Controls::Grid const &dotHost)
         {
             continue;
         }
-        auto unknown = trackedBadge.try_as<winrt::Windows::Foundation::IUnknown>();
+        auto unknown =
+            trackedBadge.try_as<winrt::Windows::Foundation::IUnknown>();
         if (unknown)
         {
             trackedBadgeIdentities.insert(winrt::get_abi(unknown));
@@ -1437,7 +1436,8 @@ bool UpdateCountBadge(TrackedButton &tracked,
         RemoveBadgeFromPanel(iconPanel, iconPanelBadge);
     }
 
-    // Rebuild badges created by older visual-layout versions.
+    // Recover a stale or partially-created Count Badges visual left by an
+    // interrupted prior instance before trying to reuse it.
     if (badge)
     {
         auto circleVisual = FindChildByName(badge, L"WindhawkCircleVisual");
@@ -1511,7 +1511,10 @@ bool UpdateCountBadge(TrackedButton &tracked,
     {
         if (badge)
         {
-            StopDotPositionBinding(badge);
+            if (g_settings.displayStyle == DisplayStyle::Dots)
+            {
+                StopDotPositionBinding(badge);
+            }
             badge.Visibility(Visibility::Collapsed);
         }
 
@@ -1527,7 +1530,10 @@ bool UpdateCountBadge(TrackedButton &tracked,
     if (!ApplyBadgeVisualStyle(badge, count, taskListButton, icon,
                                dotHost))
     {
-        StopDotPositionBinding(badge);
+        if (g_settings.displayStyle == DisplayStyle::Dots)
+        {
+            StopDotPositionBinding(badge);
+        }
         badge.Visibility(Visibility::Collapsed);
         return false;
     }
@@ -1786,6 +1792,10 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void *hostShared[2])
         else
         {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            if (hostShared[1])
+            {
+                g_RefCount_Decref(hostShared[1]);
+            }
             return nullptr;
         }
     }
@@ -1808,6 +1818,10 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void *hostShared[2])
         else
         {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            if (hostShared[1])
+            {
+                g_RefCount_Decref(hostShared[1]);
+            }
             return nullptr;
         }
     }
@@ -1852,7 +1866,8 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd)
         return nullptr;
     }
 
-    void *taskBand = reinterpret_cast<void *>(GetWindowLongPtrW(taskBandWnd, 0));
+    void *taskBand =
+        reinterpret_cast<void *>(GetWindowLongPtrW(taskBandWnd, 0));
     if (!taskBand)
     {
         return nullptr;
@@ -1891,13 +1906,15 @@ XamlRoot GetSecondaryTaskbarXamlRoot(HWND taskbarWnd)
         return nullptr;
     }
 
-    HWND taskBandWnd = FindWindowExW(taskbarWnd, nullptr, L"WorkerW", nullptr);
+    HWND taskBandWnd =
+        FindWindowExW(taskbarWnd, nullptr, L"WorkerW", nullptr);
     if (!taskBandWnd)
     {
         return nullptr;
     }
 
-    void *taskBand = reinterpret_cast<void *>(GetWindowLongPtrW(taskBandWnd, 0));
+    void *taskBand =
+        reinterpret_cast<void *>(GetWindowLongPtrW(taskBandWnd, 0));
     if (!taskBand)
     {
         return nullptr;
@@ -1966,6 +1983,7 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void *parameter)
     {
         TaskbarThreadProc proc;
         void *parameter;
+        std::atomic<bool> ran{false};
     };
 
     HHOOK hook = SetWindowsHookExW(
@@ -1978,10 +1996,12 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void *parameter)
 
                 if (data->message == message)
                 {
-                    auto request = reinterpret_cast<Request *>(data->lParam);
+                    auto request =
+                        reinterpret_cast<Request *>(data->lParam);
 
                     if (request && request->proc)
                     {
+                        request->ran.store(true, std::memory_order_release);
                         request->proc(request->parameter);
                     }
                 }
@@ -2005,7 +2025,7 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void *parameter)
 
     UnhookWindowsHookEx(hook);
 
-    return true;
+    return request.ran.load(std::memory_order_acquire);
 }
 
 HWND FindWindowOnThread(DWORD threadId)
@@ -2118,6 +2138,7 @@ bool EnsureDeferredCountRefreshSubclass()
 
     return true;
 }
+
 void StopDeferredCountRefreshSubclass()
 {
     HWND taskbarWnd = g_taskbarSubclassWindow.exchange(nullptr);
@@ -2166,9 +2187,22 @@ struct ExistingButtonsInitContext
 
 void WINAPI InitializeExistingButtonsOnTaskbarThread(void *)
 {
+    if (g_unloading)
+    {
+        return;
+    }
+
     if (!EnsureDeferredCountRefreshSubclass())
     {
-        Wh_Log(L"Failed to install deferred count refresh subclass");
+        if (!g_unloading)
+        {
+            Wh_Log(L"Failed to install deferred count refresh subclass");
+        }
+    }
+
+    if (g_unloading)
+    {
+        return;
     }
 
     ExistingButtonsInitContext context;
@@ -2205,14 +2239,17 @@ void WINAPI InitializeExistingButtonsOnTaskbarThread(void *)
 
                 if (!xamlRoot)
                 {
-                    Wh_Log(L"Failed to get taskbar XamlRoot for %s", className);
+                    Wh_Log(L"Failed to get taskbar XamlRoot for %s",
+                           className);
                     return TRUE;
                 }
 
-                auto content = xamlRoot.Content().try_as<FrameworkElement>();
+                auto content =
+                    xamlRoot.Content().try_as<FrameworkElement>();
                 if (!content)
                 {
-                    Wh_Log(L"XamlRoot content unavailable for %s", className);
+                    Wh_Log(L"XamlRoot content unavailable for %s",
+                           className);
                     return TRUE;
                 }
 
@@ -2255,12 +2292,20 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void *pThis)
     try
     {
         EnsureDeferredCountRefreshSubclass();
-        void *taskListButtonIUnknownPtr = reinterpret_cast<void **>(pThis) + 3;
+        if (g_unloading)
+        {
+            return;
+        }
+
+        void *taskListButtonIUnknownPtr =
+            reinterpret_cast<void **>(pThis) + 3;
 
         winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
-        winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+        winrt::copy_from_abi(taskListButtonIUnknown,
+                             taskListButtonIUnknownPtr);
 
-        auto element = taskListButtonIUnknown.try_as<FrameworkElement>();
+        auto element =
+            taskListButtonIUnknown.try_as<FrameworkElement>();
         if (!element)
         {
             return;
@@ -2399,9 +2444,9 @@ void WINAPI CleanupOnTaskbarThreadProc(void *)
 
 bool HookTaskbarView(HMODULE module)
 {
-    if (g_taskbarViewHooked.exchange(true))
+    if (g_taskbarViewHookAttempted.exchange(true))
     {
-        return true;
+        return g_taskbarViewHooked.load();
     }
 
     // Taskbar.View.dll, ExplorerExtensions.dll
@@ -2431,11 +2476,11 @@ bool HookTaskbarView(HMODULE module)
     if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
                                     ARRAYSIZE(taskbarViewHooks)))
     {
-        g_taskbarViewHooked = false;
         Wh_Log(L"Taskbar.View hooks failed");
         return false;
     }
 
+    g_taskbarViewHooked = true;
     Wh_Log(L"Taskbar.View hooks installed");
     return true;
 }
@@ -2516,7 +2561,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags)
 {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
 
-    if (module && !g_unloading && !g_taskbarViewHooked)
+    if (module && !g_unloading && !g_taskbarViewHookAttempted)
     {
         if (HMODULE taskbarView = GetTaskbarViewModuleHandle())
         {
@@ -2536,13 +2581,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags)
 
 BOOL Wh_ModInit()
 {
+    g_taskbarViewHooked = false;
+    g_taskbarViewHookAttempted = false;
     g_unloading = false;
     g_settingsReloadPending = false;
     g_deferredCountRefreshQueued = false;
     g_taskbarThreadId = 0;
     g_taskbarSubclassWindow = nullptr;
-    g_deferredCountRefreshMessage = RegisterWindowMessageW(
-        L"Windhawk_DeferredCountRefresh_" WH_MOD_ID);
+    g_deferredCountRefreshMessage =
+        RegisterWindowMessageW(L"Windhawk_DeferredCountRefresh_" WH_MOD_ID);
     if (!g_deferredCountRefreshMessage)
     {
         return FALSE;
@@ -2575,8 +2622,9 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
-        GetProcAddress(kernelBase, "LoadLibraryExW"));
+    auto loadLibraryExW =
+        reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
     if (!loadLibraryExW)
     {
         return FALSE;
@@ -2594,7 +2642,7 @@ void Wh_ModAfterInit()
     // Taskbar.View can load after Wh_ModInit checked for it but before the
     // LoadLibraryExW hook becomes active. Re-check after hook operations are
     // installed so that narrow startup race can't leave the mod unhooked.
-    if (!g_taskbarViewHooked)
+    if (!g_taskbarViewHookAttempted)
     {
         if (HMODULE module = GetTaskbarViewModuleHandle())
         {
@@ -2624,6 +2672,11 @@ void Wh_ModAfterInit()
 
 void Wh_ModSettingsChanged()
 {
+    if (g_unloading)
+    {
+        return;
+    }
+
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     g_settingsReloadPending = true;
     if (!taskbarWnd)
@@ -2704,3 +2757,4 @@ void Wh_ModUninit()
     g_taskbarThreadId = 0;
     Wh_Log(L"Uninit");
 }
+
