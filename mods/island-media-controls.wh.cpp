@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.36
+// @version         0.10.37
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -78,6 +78,9 @@ play/pause, and next controls.
   songs, and control playback without leaving the taskbar.
 
 > The island currently attaches to the primary taskbar.
+>
+> While the expanded player is open, glass and transparent materials use
+> Windows Graphics Capture to blur the monitor content directly behind it.
 
 ## Material previews
 
@@ -154,17 +157,20 @@ play/pause, and next controls.
     $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, Transparent, and Transparent borderless use a capturable static blurred backdrop without self-capture feedback.
   - CompactWidth: 169
     $name: Island width
+    $description: Accepted range: 96–320 px.
   - Height: 40
     $name: Island height
+    $description: Accepted range: 32–56 px.
   - MarginLeft: 4
     $name: Left margin
   - MarginRight: 4
     $name: Right margin
   - ExpandedWidth: 360
     $name: Expanded player width
+    $description: Accepted range: 240–640 px.
   - ExpandedHeight: 500
     $name: Expanded player maximum height
-    $description: In Fullsize mode, the smaller width or height limit determines the final player size.
+    $description: Accepted range: 430–760 px. In Fullsize mode, the smaller width or height limit determines the final player size.
   - ExpandedCornerRadius: 24
     $name: Expanded player corner radius
     $description: Scales the shared G2 continuous corner profile for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
@@ -388,6 +394,28 @@ struct RuntimeLayout {
     double progressMarginLeft = 8.0;
 };
 
+struct PreparedArtwork {
+    bool ready = false;
+    bool popupReady = false;
+    bool tintAssetsReady = false;
+    bool darkMode = false;
+    int expandedCornerRadius = 24;
+    std::wstring artworkMode;
+    uint64_t visualHash = 0;
+    uint64_t displayHash = 0;
+    std::vector<uint8_t> visualBytes;
+    std::vector<uint8_t> displayBytes;
+    std::vector<uint8_t> transportWashBytes;
+    std::vector<uint8_t> mainWashBytes;
+    std::vector<uint8_t> popupArtBytes;
+    std::vector<uint8_t> popupBackdropBytes;
+    std::vector<uint8_t> popupBackdropTopBytes;
+    std::vector<uint8_t> popupPanelBytes;
+    winrt::Windows::UI::Color accent{0xFF, 0x4F, 0x7D, 0xE8};
+    bool accentValid = false;
+    std::chrono::steady_clock::time_point transientHoldUntil{};
+};
+
 struct MediaState {
     std::wstring title = L"Not Playing";
     std::wstring artist;
@@ -401,6 +429,7 @@ struct MediaState {
     int64_t durationTicks = 0;
     std::wstring sourceAppUserModelId;
     std::vector<uint8_t> thumbnailBytes;
+    std::shared_ptr<PreparedArtwork const> preparedArtwork;
 };
 
 using CTaskBand_GetTaskbarHost_t = void(WINAPI*)(void* pThis, void* result);
@@ -412,6 +441,7 @@ using MediaCommand =
     std::function<void(gsm::GlobalSystemMediaTransportControlsSession const&)>;
 
 Settings g_settings;
+std::mutex g_settingsMutex;
 RuntimeLayout g_layout;
 std::mutex g_pendingSettingsMutex;
 std::optional<Settings> g_pendingSettings;
@@ -459,6 +489,7 @@ std::mutex g_mediaCommandMutex;
 std::condition_variable g_mediaCommandCv;
 std::deque<MediaCommand> g_mediaCommands;
 std::atomic_bool g_mediaRefreshRequested = true;
+std::atomic_bool g_popupArtworkPreparationRequested = false;
 
 bool IsModActive() {
     return g_modActive.load() && !g_unloading.load();
@@ -1053,6 +1084,12 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     if (!appleMusicWindow) {
         return false;
     }
+    if (!SendMessageTimeoutW(
+            appleMusicWindow, WM_NULL, 0, 0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, nullptr)) {
+        Wh_Log(L"Island: Apple Music UI Automation seek skipped; window is unresponsive");
+        return false;
+    }
 
     IUIAutomation* automation = nullptr;
     IUIAutomationElement* windowRoot = nullptr;
@@ -1062,9 +1099,17 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     IUIAutomationRangeValuePattern* range = nullptr;
     bool succeeded = false;
 
-    HRESULT result = CoCreateInstance(CLSID_CUIAutomation, nullptr,
+    HRESULT result = CoCreateInstance(CLSID_CUIAutomation8, nullptr,
                                       CLSCTX_INPROC_SERVER,
                                       IID_PPV_ARGS(&automation));
+    if (SUCCEEDED(result) && automation) {
+        IUIAutomation2* automation2 = nullptr;
+        if (SUCCEEDED(automation->QueryInterface(IID_PPV_ARGS(&automation2)))) {
+            automation2->put_ConnectionTimeout(1000);
+            automation2->put_TransactionTimeout(2000);
+            automation2->Release();
+        }
+    }
     VARIANT idVariant{};
     idVariant.vt = VT_BSTR;
     idVariant.bstrVal = SysAllocString(L"LCDScrubber");
@@ -1573,6 +1618,45 @@ mediax::Brush DynamicMainEdgeGlowBrush() {
     return brush;
 }
 
+void RefreshDynamicAccentGradientColors() {
+    if (IsTransparentBorderlessMaterial()) {
+        return;
+    }
+
+    bool dark = IsDarkModeApprox();
+    auto accent = DynamicTransportAccentColor();
+    auto updateStops = [&](mediax::Brush const& baseBrush,
+                           std::initializer_list<BYTE> alphas) {
+        auto brush = baseBrush.try_as<mediax::LinearGradientBrush>();
+        if (!brush) {
+            return;
+        }
+        auto stops = brush.GradientStops();
+        if (stops.Size() != alphas.size()) {
+            return;
+        }
+        uint32_t index = 0;
+        for (BYTE alpha : alphas) {
+            stops.GetAt(index++).Color(
+                Color(alpha, accent.R, accent.G, accent.B));
+        }
+    };
+
+    if (g_dynamicMainEdgeGlow) {
+        updateStops(
+            g_dynamicMainEdgeGlow.BorderBrush(),
+            dark
+                ? std::initializer_list<BYTE>{0xB8, 0x82, 0x38, 0x08, 0x00, 0x00}
+                : std::initializer_list<BYTE>{0x98, 0x68, 0x2C, 0x08, 0x00, 0x00});
+    }
+    if (g_dynamicTransportStrokeBorder) {
+        updateStops(
+            g_dynamicTransportStrokeBorder.BorderBrush(),
+            dark
+                ? std::initializer_list<BYTE>{0x68, 0x88, 0xA4, 0x98, 0x86, 0x62}
+                : std::initializer_list<BYTE>{0x58, 0x72, 0x8E, 0x82, 0x70, 0x52});
+    }
+}
 double DynamicMainWashOpacity() {
     if (IsTransparentMaterial()) {
         return 0.0;
@@ -1839,6 +1923,8 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
     struct Payload {
         WindowThreadProc proc;
         void* param;
+        bool invoked = false;
+        bool succeeded = false;
     };
 
     DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
@@ -1865,8 +1951,10 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
                     RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == innerMsg) {
                     auto payload = reinterpret_cast<Payload*>(cwp->lParam);
+                    payload->invoked = true;
                     try {
                         payload->proc(payload->param);
+                        payload->succeeded = true;
                     } catch (...) {
                         Wh_Log(L"Island: exception in taskbar-thread hook callback");
                     }
@@ -1884,7 +1972,7 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
     Payload payload{proc, param};
     SendMessageW(hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload));
     UnhookWindowsHookEx(hook);
-    return true;
+    return payload.invoked && payload.succeeded;
 }
 
 xaml::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
@@ -1894,6 +1982,9 @@ xaml::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     }
 
     void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(taskSwWnd, 0));
+    if (!taskBand) {
+        return nullptr;
+    }
     void* taskBandForSite = taskBand;
     for (int i = 0; i < 20; ++i) {
         if (*reinterpret_cast<void**>(taskBandForSite) == CTaskBand_ITaskListWndSite_vftable) {
@@ -1907,29 +1998,43 @@ xaml::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
 
     void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForSite, taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+    auto releaseTaskbarHost = [&] {
+        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) {
+            Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+            taskbarHostSharedPtr[1] = nullptr;
+        }
+    };
+    if (!taskbarHostSharedPtr[0] || !TaskbarHost_FrameHeight_Original) {
+        releaseTaskbarHost();
         return nullptr;
     }
 
-    size_t elementOffset = 0x10;
+    size_t elementOffset = 0;
+    bool signatureMatched = false;
 #if defined(_M_X64) || defined(__x86_64__)
     const BYTE* bytes = reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (bytes[0] == 0x48 && bytes[1] == 0x83 && bytes[2] == 0xEC &&
         bytes[4] == 0x48 && bytes[5] == 0x83 && bytes[6] == 0xC1 &&
         bytes[7] <= 0x7F) {
         elementOffset = bytes[7];
+        signatureMatched = true;
     }
 #elif defined(_M_ARM64) || defined(__aarch64__)
     const DWORD* words = reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
     if (words[0] == 0xD503237F && (words[1] & 0xFFC07FFF) == 0xA9807BFD &&
         words[2] == 0x910003FD && (words[3] & 0xFFF00FE0) == 0xF8400C00) {
         elementOffset = (words[3] >> 12) & 0xFF;
+        signatureMatched = true;
     }
 #endif
+    if (!signatureMatched) {
+        Wh_Log(L"Island: unsupported TaskbarHost::FrameHeight signature; deferring injection");
+        releaseTaskbarHost();
+        return nullptr;
+    }
 
-    auto elementUnknown =
-        *reinterpret_cast<IUnknown**>(reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset);
-
+    auto elementUnknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset);
     FrameworkElement taskbarElement{nullptr};
     if (elementUnknown) {
         elementUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -1937,12 +2042,9 @@ xaml::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     }
 
     auto root = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-    if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) {
-        Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
-    }
+    releaseTaskbarHost();
     return root;
 }
-
 FrameworkElement FindChildByName(FrameworkElement const& root, std::wstring_view name, int depth = 32) {
     if (!root || depth <= 0) {
         return nullptr;
@@ -2198,9 +2300,12 @@ void SetMedia(MediaState&& state) {
         // Some GSMTC providers re-emit the old position when metadata is polled.
         // If we accepted those samples, the meteor tail would jump left and then
         // right again on the next local extrapolation.
+        int64_t backwardGap = estimatedTicks - state.positionTicks;
+        int64_t previousSampleDelta =
+            std::abs(state.positionTicks - g_media.positionTicks);
         bool looksLikeStaleBackwardSample =
-            state.positionTicks < estimatedTicks &&
-            (estimatedTicks - state.positionTicks) < 120000000LL; // not a real big seek
+            backwardGap > 0 && backwardGap <= 40000000LL &&
+            previousSampleDelta <= 1000000LL;
         if (looksLikeStaleBackwardSample) {
             state.positionTicks = estimatedTicks;
         }
@@ -2308,6 +2413,8 @@ gsm::GlobalSystemMediaTransportControlsSession CurrentSessionFromManager(
     return CurrentSession();
 }
 
+void PrepareMediaArtwork(MediaState& state);
+
 void RefreshMediaState(
     gsm::GlobalSystemMediaTransportControlsSessionManager const& manager = nullptr) {
     MediaState state;
@@ -2366,6 +2473,7 @@ void RefreshMediaState(
         // a successful refresh will still clear it when the session is gone.
         state = SnapshotMedia();
     }
+    PrepareMediaArtwork(state);
     SetMedia(std::move(state));
 }
 
@@ -4038,6 +4146,201 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
     return EncodePbgraPngBytes(kSize, kSize, pixels);
 }
 
+void PrepareMediaArtwork(MediaState& state) {
+    bool popupRequested =
+        g_popupArtworkPreparationRequested.load(std::memory_order_acquire);
+    MediaState previous = SnapshotMedia();
+    auto artworkNow = std::chrono::steady_clock::now();
+
+    Settings artworkSettings;
+    {
+        std::lock_guard settingsLock(g_settingsMutex);
+        artworkSettings = g_settings;
+    }
+    bool darkMode = IsDarkModeApprox();
+    bool transparentMaterial =
+        artworkSettings.material == L"transparent" ||
+        artworkSettings.material == L"transparent_borderless";
+    bool needsTintAssets = artworkSettings.sideExpand || transparentMaterial;
+    std::wstring identityKey = MediaIdentityKey(state);
+    std::wstring previousIdentityKey = MediaIdentityKey(previous);
+    uint64_t rawHash = ThumbnailHash(state.thumbnailBytes);
+    uint64_t previousRawHash = ThumbnailHash(previous.thumbnailBytes);
+    if (previous.preparedArtwork && previous.preparedArtwork->ready &&
+        identityKey == previousIdentityKey && rawHash == previousRawHash &&
+        previous.preparedArtwork->darkMode == darkMode &&
+        previous.preparedArtwork->expandedCornerRadius ==
+            artworkSettings.expandedCornerRadius &&
+        previous.preparedArtwork->artworkMode ==
+            artworkSettings.artworkAbstractMode &&
+        (!needsTintAssets || previous.preparedArtwork->tintAssetsReady) &&
+        (!popupRequested || previous.preparedArtwork->popupReady) &&
+        (previous.preparedArtwork->transientHoldUntil
+                 .time_since_epoch().count() == 0 ||
+         artworkNow < previous.preparedArtwork->transientHoldUntil)) {
+        state.preparedArtwork = previous.preparedArtwork;
+        return;
+    }
+
+    auto prepared = std::make_shared<PreparedArtwork>();
+    prepared->darkMode = darkMode;
+    prepared->expandedCornerRadius = artworkSettings.expandedCornerRadius;
+    prepared->artworkMode = artworkSettings.artworkAbstractMode;
+
+    // Keep transient provider thumbnail gaps on the worker as well. The UI
+    // thread receives only final byte buffers and never decodes or re-encodes
+    // source artwork while Explorer is painting the taskbar.
+    static std::vector<uint8_t> s_lastNonEmptyThumbnailBytes;
+    static std::wstring s_lastNonEmptyThumbnailIdentityKey;
+    static uint64_t s_lastNonEmptyThumbnailHash = 0;
+    static std::wstring s_suspectRepeatedThumbnailIdentityKey;
+    static uint64_t s_suspectRepeatedThumbnailHash = 0;
+    static std::chrono::steady_clock::time_point
+        s_suspectRepeatedThumbnailSince{};
+    static std::wstring s_pendingThumbnailIdentityKey;
+    static std::chrono::steady_clock::time_point s_pendingThumbnailSince{};
+
+    prepared->visualBytes = state.thumbnailBytes;
+    bool holdingPreviousArtwork = false;
+    if (!state.hasSession) {
+        prepared->visualBytes.clear();
+        s_suspectRepeatedThumbnailIdentityKey.clear();
+        s_suspectRepeatedThumbnailHash = 0;
+        s_pendingThumbnailIdentityKey.clear();
+    } else if (!state.thumbnailBytes.empty()) {
+        bool differentMedia =
+            !s_lastNonEmptyThumbnailIdentityKey.empty() &&
+            identityKey != s_lastNonEmptyThumbnailIdentityKey;
+        bool repeatedPreviousArtwork =
+            differentMedia && rawHash != 0 &&
+            rawHash == s_lastNonEmptyThumbnailHash;
+        bool browserLiveLike =
+            LooksLikeBrowserMediaSource(state.sourceAppUserModelId) &&
+            state.durationTicks <= 0;
+        if (repeatedPreviousArtwork && browserLiveLike) {
+            if (s_suspectRepeatedThumbnailIdentityKey != identityKey ||
+                s_suspectRepeatedThumbnailHash != rawHash) {
+                s_suspectRepeatedThumbnailIdentityKey = identityKey;
+                s_suspectRepeatedThumbnailHash = rawHash;
+                s_suspectRepeatedThumbnailSince = artworkNow;
+            }
+            auto suspectAge =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    artworkNow - s_suspectRepeatedThumbnailSince)
+                    .count();
+            if (suspectAge < 3500) {
+                prepared->visualBytes = s_lastNonEmptyThumbnailBytes;
+                prepared->transientHoldUntil =
+                    s_suspectRepeatedThumbnailSince +
+                    std::chrono::milliseconds(3500);
+                holdingPreviousArtwork = true;
+            }
+        } else {
+            s_suspectRepeatedThumbnailIdentityKey.clear();
+            s_suspectRepeatedThumbnailHash = 0;
+        }
+        if (!holdingPreviousArtwork) {
+            s_lastNonEmptyThumbnailBytes = state.thumbnailBytes;
+            s_lastNonEmptyThumbnailIdentityKey = identityKey;
+            s_lastNonEmptyThumbnailHash = rawHash;
+            s_pendingThumbnailIdentityKey.clear();
+        }
+    } else if (!s_lastNonEmptyThumbnailBytes.empty()) {
+        if (s_pendingThumbnailIdentityKey != identityKey) {
+            s_pendingThumbnailIdentityKey = identityKey;
+            s_pendingThumbnailSince = artworkNow;
+        }
+        auto pendingAge =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                artworkNow - s_pendingThumbnailSince)
+                .count();
+        if (pendingAge <= 2500) {
+            prepared->visualBytes = s_lastNonEmptyThumbnailBytes;
+            prepared->transientHoldUntil =
+                s_pendingThumbnailSince +
+                std::chrono::milliseconds(2500);
+        } else {
+            prepared->visualBytes.clear();
+        }
+    } else {
+        prepared->visualBytes.clear();
+    }
+
+    prepared->visualHash = ThumbnailHash(prepared->visualBytes);
+    bool browserArtworkSource =
+        LooksLikeBrowserMediaSource(state.sourceAppUserModelId);
+    bool shouldUseAbstractArtwork =
+        browserArtworkSource &&
+        ShouldUseAbstractArtworkForDisplay(prepared->visualBytes);
+    prepared->displayBytes = CreateDisplayAlbumCoverBytes(
+        prepared->visualBytes,
+        state.sourceAppUserModelId,
+        shouldUseAbstractArtwork);
+    prepared->displayHash = ThumbnailHash(prepared->displayBytes);
+
+    std::vector<uint8_t> const& accentSourceBytes =
+        prepared->displayBytes.empty() ? prepared->visualBytes
+                                       : prepared->displayBytes;
+    if ((needsTintAssets || popupRequested) && !accentSourceBytes.empty()) {
+        prepared->accent = ExtractAlbumAccentColor(accentSourceBytes);
+        prepared->accentValid = true;
+    }
+
+    if (needsTintAssets && !prepared->displayBytes.empty()) {
+        prepared->transportWashBytes =
+            CreateResilientLowDetailAlbumCoverBytes(
+                prepared->displayBytes,
+                false, false, false, 6, true);
+        prepared->mainWashBytes =
+            CreateResilientLowDetailAlbumCoverBytes(
+                prepared->displayBytes,
+                true, false, false, 5, true, true);
+        prepared->tintAssetsReady = true;
+    } else {
+        prepared->tintAssetsReady = needsTintAssets;
+    }
+
+    if (popupRequested) {
+        if (prepared->visualBytes.empty()) {
+            auto placeholderArtBytes = CreatePlaceholderAlbumCoverBytes(128);
+            auto placeholderG2Bytes =
+                CreatePopupG2AlbumCoverBytes(placeholderArtBytes);
+            prepared->popupArtBytes = placeholderG2Bytes.empty()
+                                              ? std::move(placeholderArtBytes)
+                                              : std::move(placeholderG2Bytes);
+            prepared->popupPanelBytes = CreatePlaceholderAlbumCoverBytes(20);
+            prepared->popupBackdropBytes =
+                CreatePlaceholderAlbumCoverBytes(20, true, false, false);
+            prepared->popupBackdropTopBytes =
+                CreatePlaceholderAlbumCoverBytes(20, true, true, false);
+        } else {
+            prepared->popupArtBytes =
+                CreatePopupG2AlbumCoverBytes(prepared->displayBytes);
+            if (prepared->popupArtBytes.empty()) {
+                prepared->popupArtBytes = prepared->displayBytes;
+            }
+            bool useGeneratedBlurCover =
+                browserArtworkSource && shouldUseAbstractArtwork &&
+                artworkSettings.artworkAbstractMode != L"browser_original" &&
+                !prepared->displayBytes.empty();
+            std::vector<uint8_t> const& popupBlurSource =
+                useGeneratedBlurCover ? prepared->displayBytes
+                                      : prepared->visualBytes;
+            prepared->popupBackdropBytes =
+                CreateResilientLowDetailAlbumCoverBytes(
+                    popupBlurSource, true, false, false);
+            prepared->popupBackdropTopBytes =
+                CreateResilientLowDetailAlbumCoverBytes(
+                    popupBlurSource, true, true, false);
+            prepared->popupPanelBytes =
+                CreateResilientLowDetailAlbumCoverBytes(popupBlurSource);
+        }
+        prepared->popupReady = true;
+    }
+
+    prepared->ready = true;
+    state.preparedArtwork = std::move(prepared);
+}
 winrt::Windows::UI::Color LerpColor(winrt::Windows::UI::Color const& from,
                                   winrt::Windows::UI::Color const& to,
                                   double progress) {
@@ -8256,7 +8559,7 @@ bool SampleCompactBackdropLuma(double& luma) {
     bool captured = BitBlt(
         memoryDc, 0, 0, captureWidth, captureHeight,
         screenDc, captureRect.left, captureRect.top,
-        SRCCOPY | CAPTUREBLT) != FALSE;
+        SRCCOPY) != FALSE;
     SelectObject(memoryDc, oldBitmap);
     DeleteDC(memoryDc);
     ReleaseDC(nullptr, screenDc);
@@ -9357,6 +9660,8 @@ void StopPopupXamlRenderLoop() {
 void FinishCloseExpandedPopup(HWND hwnd) {
     StopPopupXamlRenderLoop();
     g_expanded = false;
+    g_popupArtworkPreparationRequested.store(
+        false, std::memory_order_release);
     try {
         StopHoverRenderLoop();
         g_currentHoverScale = 1.0;
@@ -11178,9 +11483,18 @@ void StopPopupOverlayWgcBackdrop() {
     } catch (...) {
     }
 
-    // FrameArrived is free-threaded. Revoking the event prevents new
-    // callbacks, and the unbounded drain keeps the mod loaded until every
-    // already-entered callback has released its frame and left the delegate.
+    // Close the pool immediately after revoking the handler. The in-flight
+    // counter increments inside the delegate, so closing first also blocks a
+    // dispatched callback which has not entered the delegate body yet.
+    try {
+        if (framePoolToClose) {
+            framePoolToClose.Close();
+        }
+    } catch (...) {
+    }
+
+    // FrameArrived is free-threaded. The unbounded drain keeps the mod loaded
+    // until every already-entered callback has left the delegate.
     while (g_popupOverlayWgcCallbacksInFlight.load(
                std::memory_order_acquire) != 0) {
         Sleep(1);
@@ -11218,9 +11532,7 @@ void StopPopupOverlayWgcBackdrop() {
         if (sessionToClose) {
             sessionToClose.Close();
         }
-        if (framePoolToClose) {
-            framePoolToClose.Close();
-        }
+
     } catch (...) {
     }
 }
@@ -12585,6 +12897,9 @@ void ShowExpandedPopup() {
 
     g_expanded = true;
     g_popupClosing = false;
+    g_popupArtworkPreparationRequested.store(
+        true, std::memory_order_release);
+    RequestMediaRefresh();
     SetPopupWindowClickThrough(g_expandedPopup, false);
     SetPopupWindowClickThrough(g_popupXamlChild, false);
     g_popupOutsideClickArmed = false;
@@ -12628,6 +12943,8 @@ void ShowExpandedPopup() {
 }
 
 void DestroyExpandedPopup() {
+    g_popupArtworkPreparationRequested.store(
+        false, std::memory_order_release);
     StopPopupXamlRenderLoop();
     UnsubclassPopupXamlChildWindow();
     DestroyPopupBackdropOverlayWindow();
@@ -14498,8 +14815,15 @@ void StopMediaThread() {
         }
         g_mediaThread.reset();
     }
-    std::lock_guard lock(g_mediaCommandMutex);
-    g_mediaCommands.clear();
+    {
+        std::lock_guard lock(g_mediaCommandMutex);
+        g_mediaCommands.clear();
+    }
+    {
+        std::lock_guard lock(g_mediaMutex);
+        g_media.preparedArtwork.reset();
+        g_media.thumbnailBytes.clear();
+    }
 }
 
 TextBlock MakeTextBlock(const wchar_t* name, double fontSize, bool semibold) {
@@ -14899,14 +15223,7 @@ void ApplyCompactTintTransitionVisuals() {
             g_dynamicTransportTintBrush.Color(
                 DisplayedDynamicTransportTintColor());
         }
-        if (g_dynamicMainEdgeGlow) {
-            g_dynamicMainEdgeGlow.BorderBrush(
-                DynamicMainEdgeGlowBrush());
-        }
-        if (g_dynamicTransportStrokeBorder) {
-            g_dynamicTransportStrokeBorder.BorderBrush(
-                DynamicTransportBorderBrush());
-        }
+        RefreshDynamicAccentGradientColors();
     }
     if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
         g_dynamicMainOcclusion.Background(DynamicMainOcclusionBrush());
@@ -16217,146 +16534,21 @@ void UpdatePlayerContents() {
     }
     MediaState state = SnapshotMedia();
 
-    // Some providers briefly report metadata before the matching thumbnail is
-    // available. Reuse old artwork only when the *same media item* temporarily
-    // has an empty thumbnail. Do not carry a previous song/video cover into a
-    // new browser live room, where GSMTC often reports no thumbnail or repeats
-    // the previous thumbnail while the page is still updating.
-    auto artworkNow = std::chrono::steady_clock::now();
-    std::wstring artworkIdentityKey = MediaIdentityKey(state);
-    uint64_t rawThumbnailHash = ThumbnailHash(state.thumbnailBytes);
-
-    static std::vector<uint8_t> s_lastNonEmptyThumbnailBytes;
-    static std::wstring s_lastNonEmptyThumbnailIdentityKey;
-    static uint64_t s_lastNonEmptyThumbnailHash = 0;
-    static std::wstring s_suspectRepeatedThumbnailIdentityKey;
-    static uint64_t s_suspectRepeatedThumbnailHash = 0;
-    static std::chrono::steady_clock::time_point s_suspectRepeatedThumbnailSince{};
-    static std::wstring s_pendingThumbnailIdentityKey;
-    static std::chrono::steady_clock::time_point s_pendingThumbnailSince{};
-
-    std::vector<uint8_t> visualThumbnailBytes = state.thumbnailBytes;
-    bool holdingPreviousArtwork = false;
-    if (!state.hasSession) {
-        visualThumbnailBytes.clear();
-        s_suspectRepeatedThumbnailIdentityKey.clear();
-        s_suspectRepeatedThumbnailHash = 0;
-        s_pendingThumbnailIdentityKey.clear();
-    } else if (!state.thumbnailBytes.empty()) {
-        bool differentMedia =
-            !s_lastNonEmptyThumbnailIdentityKey.empty() &&
-            artworkIdentityKey != s_lastNonEmptyThumbnailIdentityKey;
-        bool repeatedPreviousArtwork =
-            differentMedia &&
-            rawThumbnailHash != 0 &&
-            rawThumbnailHash == s_lastNonEmptyThumbnailHash;
-        bool browserLiveLike =
-            LooksLikeBrowserMediaSource(state.sourceAppUserModelId) &&
-            state.durationTicks <= 0;
-
-        if (repeatedPreviousArtwork && browserLiveLike) {
-            if (s_suspectRepeatedThumbnailIdentityKey != artworkIdentityKey ||
-                s_suspectRepeatedThumbnailHash != rawThumbnailHash) {
-                s_suspectRepeatedThumbnailIdentityKey = artworkIdentityKey;
-                s_suspectRepeatedThumbnailHash = rawThumbnailHash;
-                s_suspectRepeatedThumbnailSince = artworkNow;
-            }
-
-            // Some browser sessions briefly repeat the previous media item's
-            // thumbnail. Keep that already-visible cover in place while the
-            // replacement is pending, instead of inserting a placeholder
-            // between the two real covers.
-            auto suspectAge =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    artworkNow - s_suspectRepeatedThumbnailSince)
-                    .count();
-            if (suspectAge < 3500) {
-                visualThumbnailBytes = s_lastNonEmptyThumbnailBytes;
-                holdingPreviousArtwork = true;
-            }
-        } else {
-            s_suspectRepeatedThumbnailIdentityKey.clear();
-            s_suspectRepeatedThumbnailHash = 0;
-        }
-
-        if (!holdingPreviousArtwork) {
-            s_lastNonEmptyThumbnailBytes = state.thumbnailBytes;
-            s_lastNonEmptyThumbnailIdentityKey = artworkIdentityKey;
-            s_lastNonEmptyThumbnailHash = rawThumbnailHash;
-            s_pendingThumbnailIdentityKey.clear();
-        }
-    } else if (!s_lastNonEmptyThumbnailBytes.empty()) {
-        if (s_pendingThumbnailIdentityKey != artworkIdentityKey) {
-            s_pendingThumbnailIdentityKey = artworkIdentityKey;
-            s_pendingThumbnailSince = artworkNow;
-        }
-        auto pendingAge =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                artworkNow - s_pendingThumbnailSince)
-                .count();
-        if (pendingAge <= 2500) {
-            // Metadata commonly arrives one notification before its artwork.
-            // Preserve the current source so the next non-empty source can
-            // crossfade directly from the previous track's cover.
-            visualThumbnailBytes = s_lastNonEmptyThumbnailBytes;
-            holdingPreviousArtwork = true;
-        } else {
-            visualThumbnailBytes.clear();
-        }
-    } else {
-        visualThumbnailBytes.clear();
-    }
-
-    uint64_t visualThumbnailHash = ThumbnailHash(visualThumbnailBytes);
-    bool browserArtworkSource =
-        LooksLikeBrowserMediaSource(state.sourceAppUserModelId);
-    static uint64_t s_artworkAnalysisHash = UINT64_MAX;
-    static bool s_artworkAnalysisBrowserSource = false;
-    static bool s_shouldUseAbstractArtwork = false;
-    if (visualThumbnailHash != s_artworkAnalysisHash ||
-        browserArtworkSource != s_artworkAnalysisBrowserSource) {
-        s_artworkAnalysisHash = visualThumbnailHash;
-        s_artworkAnalysisBrowserSource = browserArtworkSource;
-        s_shouldUseAbstractArtwork =
-            browserArtworkSource &&
-            ShouldUseAbstractArtworkForDisplay(visualThumbnailBytes);
-    }
-
-    static uint64_t s_displayArtworkHash = UINT64_MAX;
-    static bool s_displayArtworkBrowserSource = false;
-    static bool s_displayArtworkAbstract = false;
-    static std::wstring s_displayArtworkMode;
-    static std::vector<uint8_t> s_displayArtworkBytes;
-    if (visualThumbnailHash != s_displayArtworkHash ||
-        browserArtworkSource != s_displayArtworkBrowserSource ||
-        s_shouldUseAbstractArtwork != s_displayArtworkAbstract ||
-        g_settings.artworkAbstractMode != s_displayArtworkMode) {
-        s_displayArtworkHash = visualThumbnailHash;
-        s_displayArtworkBrowserSource = browserArtworkSource;
-        s_displayArtworkAbstract = s_shouldUseAbstractArtwork;
-        s_displayArtworkMode = g_settings.artworkAbstractMode;
-        s_displayArtworkBytes =
-            CreateDisplayAlbumCoverBytes(visualThumbnailBytes,
-                                         state.sourceAppUserModelId,
-                                         s_shouldUseAbstractArtwork);
-    }
+    auto preparedArtwork = state.preparedArtwork;
+    std::vector<uint8_t> const& visualThumbnailBytes =
+        preparedArtwork ? preparedArtwork->visualBytes : state.thumbnailBytes;
     std::vector<uint8_t> const& displayThumbnailBytes =
-        s_displayArtworkBytes;
-    bool useGeneratedBlurCover =
-        browserArtworkSource && s_shouldUseAbstractArtwork &&
-        g_settings.artworkAbstractMode != L"browser_original" &&
-        !displayThumbnailBytes.empty();
-    std::vector<uint8_t> popupBlurSourceBytes =
-        useGeneratedBlurCover ? displayThumbnailBytes : visualThumbnailBytes;
-
+        preparedArtwork ? preparedArtwork->displayBytes : visualThumbnailBytes;
     if (IsDynamicCompactMode() || IsTransparentMaterial()) {
         uint64_t compactAccentHash = ThumbnailHash(displayThumbnailBytes);
         if (compactAccentHash != g_dynamicTransportAccentThumbnailHash) {
             g_dynamicTransportAccentThumbnailHash = compactAccentHash;
-            g_dynamicTransportAccentColorValid = !displayThumbnailBytes.empty();
-            g_dynamicTransportAccentColor = displayThumbnailBytes.empty()
-                                                ? Color(0xFF, 0x4F, 0x7D, 0xE8)
-                                                : ExtractAlbumAccentColor(displayThumbnailBytes);
+            g_dynamicTransportAccentColorValid =
+                preparedArtwork && preparedArtwork->accentValid;
+            g_dynamicTransportAccentColor =
+                g_dynamicTransportAccentColorValid
+                    ? preparedArtwork->accent
+                    : Color(0xFF, 0x4F, 0x7D, 0xE8);
             // Theme refresh also rebuilds both XAML gradient brushes atomically.
             g_themeVisualsValid = false;
         }
@@ -16518,17 +16710,10 @@ void UpdatePlayerContents() {
                 g_dynamicTransportWashFade.Opacity(0.0);
             }
 
-            if (compactArtHash) {
-                auto lowDetailTransportBytes =
-                    CreateResilientLowDetailAlbumCoverBytes(
-                        displayThumbnailBytes,
-                        false, false, false, 6, true);
-                if (!lowDetailTransportBytes.empty()) {
-                    g_dynamicTransportWash.Source(
-                        makeBitmap(lowDetailTransportBytes, true));
-                } else {
-                    g_dynamicTransportWash.Source(nullptr);
-                }
+            if (compactArtHash && preparedArtwork &&
+                !preparedArtwork->transportWashBytes.empty()) {
+                g_dynamicTransportWash.Source(
+                    makeBitmap(preparedArtwork->transportWashBytes, true));
             } else {
                 g_dynamicTransportWash.Source(nullptr);
             }
@@ -16549,19 +16734,10 @@ void UpdatePlayerContents() {
         (compactArtChanged ||
          (compactArtHash && g_dynamicMainWash.Source() == nullptr))) {
         try {
-            if (compactArtHash) {
-                // A tiny synchronous decode supplies a stable, deliberately
-                // low-detail wash that reads as blur without a heavy effect graph.
-                auto lowDetailMainBytes =
-                    CreateResilientLowDetailAlbumCoverBytes(
-                        displayThumbnailBytes,
-                        true, false, false, 5, true, true);
-                if (!lowDetailMainBytes.empty()) {
-                    g_dynamicMainWash.Source(
-                        makeBitmap(lowDetailMainBytes, true));
-                } else {
-                    g_dynamicMainWash.Source(nullptr);
-                }
+            if (compactArtHash && preparedArtwork &&
+                !preparedArtwork->mainWashBytes.empty()) {
+                g_dynamicMainWash.Source(
+                    makeBitmap(preparedArtwork->mainWashBytes, true));
             } else {
                 g_dynamicMainWash.Source(nullptr);
             }
@@ -16577,7 +16753,12 @@ void UpdatePlayerContents() {
     }
 
     if (g_popupXamlRoot) {
-        if (g_popupRenderingHooked) {
+        bool popupContentActive =
+            g_expanded ||
+            (g_expandedPopup && IsWindowVisible(g_expandedPopup));
+        if (!popupContentActive) {
+            g_popupPendingContentRefresh = true;
+        } else if (g_popupRenderingHooked) {
             g_popupPendingContentRefresh = true;
         } else {
             std::vector<uint8_t> const& accentSourceBytes =
@@ -16587,9 +16768,9 @@ void UpdatePlayerContents() {
             bool accentChanged = accentHash != g_popupAccentThumbnailHash;
             if (accentChanged) {
                 winrt::Windows::UI::Color nextAccent =
-                    accentSourceBytes.empty()
-                        ? DefaultPopupAccentColor()
-                        : ExtractAlbumAccentColor(accentSourceBytes);
+                    preparedArtwork && preparedArtwork->accentValid
+                        ? preparedArtwork->accent
+                        : DefaultPopupAccentColor();
                 winrt::Windows::UI::Color currentAccent = PopupAccentColor();
                 bool canAnimateAccent = g_popupAccentThumbnailHash != UINT64_MAX &&
                                         g_popupXamlRoot &&
@@ -16672,155 +16853,160 @@ void UpdatePlayerContents() {
                 }
             }
 
-            uint64_t popupHash = ThumbnailHash(
-                displayThumbnailBytes.empty() ? visualThumbnailBytes
-                                              : displayThumbnailBytes);
+            uint64_t popupHash = preparedArtwork
+                                     ? (preparedArtwork->displayHash != 0
+                                            ? preparedArtwork->displayHash
+                                            : preparedArtwork->visualHash)
+                                     : ThumbnailHash(displayThumbnailBytes.empty()
+                                                         ? visualThumbnailBytes
+                                                         : displayThumbnailBytes);
             bool useBackdropCover = PopupBackdropCoverEffectEnabled();
-            if (popupHash != g_popupXamlThumbnailHash ||
+            bool popupArtworkChanged =
+                popupHash != g_popupXamlThumbnailHash ||
                 g_popupXamlThumbnailMaterial != g_settings.material ||
                 g_popupXamlThumbnailCompact != g_settings.compact ||
-                useBackdropCover != g_popupXamlBackdropCoverEnabled) {
-                bool canAnimateCover = g_popupXamlThumbnailHash != UINT64_MAX &&
-                                       g_popupXamlRoot &&
-                                       g_expandedPopup &&
-                                       IsWindowVisible(g_expandedPopup);
-                try {
-                    if (canAnimateCover) {
-                        if (g_popupXamlArtFade && g_popupXamlArt) {
-                            auto oldArtSource = g_popupXamlArt.Source();
-                            g_popupXamlArtFade.Source(oldArtSource);
-                            g_popupXamlArtFade.Opacity(oldArtSource != nullptr ? 1.0 : 0.0);
-                        }
-                        if (g_popupXamlBackdropCoverFade && g_popupXamlBackdropCover) {
-                            auto oldBackdropCoverSource = useBackdropCover
-                                                              ? g_popupXamlBackdropCover.Source()
-                                                              : nullptr;
-                            g_popupXamlBackdropCoverFade.Source(oldBackdropCoverSource);
-                            g_popupXamlBackdropCoverFade.Opacity(oldBackdropCoverSource != nullptr ? 1.0 : 0.0);
-                        }
-                        if (g_popupXamlPanelCoverFade && g_popupXamlPanelCover) {
-                            auto oldCoverSource = g_popupXamlPanelCover.Source();
-                            g_popupXamlPanelCoverFade.Source(oldCoverSource);
-                            g_popupXamlPanelCoverFade.Opacity(oldCoverSource != nullptr ? 1.0 : 0.0);
-                        }
+                useBackdropCover != g_popupXamlBackdropCoverEnabled;
+            if (popupArtworkChanged) {
+                if (!preparedArtwork || !preparedArtwork->popupReady) {
+                    // The worker will post another UI refresh with the G2 art
+                    // and wash PNGs. Until then, bind the already-prepared
+                    // compact cover so the opening morph never shows old art.
+                    g_popupPendingContentRefresh = true;
+                    g_popupArtworkPreparationRequested.store(
+                        true, std::memory_order_release);
+                    RequestMediaRefresh();
+                    if (g_popupXamlArt && !displayThumbnailBytes.empty()) {
+                        g_popupXamlArt.Source(
+                            makeBitmap(displayThumbnailBytes, true, 320));
                     }
+                } else {
+                    bool canAnimateCover =
+                        g_popupXamlThumbnailHash != UINT64_MAX &&
+                        g_popupXamlRoot && g_expandedPopup &&
+                        IsWindowVisible(g_expandedPopup);
+                    try {
+                        if (canAnimateCover) {
+                            if (g_popupXamlArtFade && g_popupXamlArt) {
+                                auto oldArtSource = g_popupXamlArt.Source();
+                                g_popupXamlArtFade.Source(oldArtSource);
+                                g_popupXamlArtFade.Opacity(
+                                    oldArtSource != nullptr ? 1.0 : 0.0);
+                            }
+                            if (g_popupXamlBackdropCoverFade &&
+                                g_popupXamlBackdropCover) {
+                                auto oldSource = useBackdropCover
+                                                     ? g_popupXamlBackdropCover.Source()
+                                                     : nullptr;
+                                g_popupXamlBackdropCoverFade.Source(oldSource);
+                                g_popupXamlBackdropCoverFade.Opacity(
+                                    oldSource != nullptr ? 1.0 : 0.0);
+                            }
+                            if (g_popupXamlPanelCoverFade &&
+                                g_popupXamlPanelCover) {
+                                auto oldSource = g_popupXamlPanelCover.Source();
+                                g_popupXamlPanelCoverFade.Source(oldSource);
+                                g_popupXamlPanelCoverFade.Opacity(
+                                    oldSource != nullptr ? 1.0 : 0.0);
+                            }
+                        }
 
-                    if (visualThumbnailBytes.empty()) {
-                        auto placeholderArtBytes = CreatePlaceholderAlbumCoverBytes(128);
-                        auto placeholderG2ArtBytes = CreatePopupG2AlbumCoverBytes(placeholderArtBytes);
-                        auto placeholderPanelBytes = CreatePlaceholderAlbumCoverBytes(20);
-                        auto placeholderBackdropBytes =
-                            CreatePlaceholderAlbumCoverBytes(
-                                20,
-                                true,
-                                g_settings.compact || g_taskbarAtTop,
-                                false);
-                        auto const& popupArtBytes = placeholderG2ArtBytes.empty()
-                                                        ? placeholderArtBytes
-                                                        : placeholderG2ArtBytes;
-                        if (!popupArtBytes.empty()) {
-                            g_popupXamlArt.Source(makeBitmap(popupArtBytes));
+                        if (g_popupXamlArt) {
+                            g_popupXamlArt.Source(
+                                preparedArtwork->popupArtBytes.empty()
+                                    ? nullptr
+                                    : makeBitmap(
+                                          preparedArtwork->popupArtBytes,
+                                          true, 320));
+                        }
+                        if (g_popupXamlBackdropCover) {
+                            bool fadeFromTop =
+                                g_settings.compact || g_taskbarAtTop;
+                            auto const& backdropBytes = fadeFromTop
+                                ? preparedArtwork->popupBackdropTopBytes
+                                : preparedArtwork->popupBackdropBytes;
+                            g_popupXamlBackdropCover.Source(
+                                useBackdropCover && !backdropBytes.empty()
+                                    ? makeBitmap(backdropBytes, true)
+                                    : nullptr);
+                        }
+                        if (g_popupXamlPanelCover) {
+                            g_popupXamlPanelCover.Source(
+                                preparedArtwork->popupPanelBytes.empty()
+                                    ? nullptr
+                                    : makeBitmap(
+                                          preparedArtwork->popupPanelBytes,
+                                          true));
+                        }
+
+                        if (canAnimateCover) {
+                            g_popupCoverTransitionActive = true;
+                            g_popupMediaTransitionProgress = 0.0;
+                            g_popupMediaTransitionActive = true;
+                            ApplyPopupMediaTransitionVisuals();
                         } else {
+                            g_popupCoverTransitionActive = false;
+                            if (g_popupXamlArt) {
+                                g_popupXamlArt.Opacity(1.0);
+                            }
+                            if (g_popupXamlArtFade) {
+                                g_popupXamlArtFade.Opacity(0.0);
+                            }
+                            if (g_popupXamlBackdropCover) {
+                                g_popupXamlBackdropCover.Opacity(
+                                    useBackdropCover ? 1.0 : 0.0);
+                            }
+                            if (g_popupXamlBackdropCoverFade) {
+                                g_popupXamlBackdropCoverFade.Opacity(0.0);
+                            }
+                            if (g_popupXamlPanelCover) {
+                                g_popupXamlPanelCover.Opacity(1.0);
+                            }
+                            if (g_popupXamlPanelCoverFade) {
+                                g_popupXamlPanelCoverFade.Opacity(0.0);
+                            }
+                        }
+                        g_popupXamlThumbnailHash = popupHash;
+                        g_popupXamlThumbnailMaterial = g_settings.material;
+                        g_popupXamlThumbnailCompact = g_settings.compact;
+                        g_popupXamlBackdropCoverEnabled = useBackdropCover;
+                    } catch (...) {
+                        if (g_popupXamlArt) {
                             g_popupXamlArt.Source(nullptr);
                         }
+                        if (g_popupXamlArtFade) {
+                            g_popupXamlArtFade.Source(nullptr);
+                            g_popupXamlArtFade.Opacity(0.0);
+                        }
                         if (g_popupXamlBackdropCover) {
-                            if (useBackdropCover && !placeholderBackdropBytes.empty()) {
-                                g_popupXamlBackdropCover.Source(makeBitmap(placeholderBackdropBytes));
-                            } else {
-                                g_popupXamlBackdropCover.Source(nullptr);
-                            }
+                            g_popupXamlBackdropCover.Source(nullptr);
+                        }
+                        if (g_popupXamlBackdropCoverFade) {
+                            g_popupXamlBackdropCoverFade.Source(nullptr);
+                            g_popupXamlBackdropCoverFade.Opacity(0.0);
                         }
                         if (g_popupXamlPanelCover) {
-                            if (!placeholderPanelBytes.empty()) {
-                                g_popupXamlPanelCover.Source(makeBitmap(placeholderPanelBytes));
-                            } else {
-                                g_popupXamlPanelCover.Source(nullptr);
-                            }
+                            g_popupXamlPanelCover.Source(nullptr);
                         }
-                    } else {
-                        auto popupArtBytes = CreatePopupG2AlbumCoverBytes(displayThumbnailBytes);
-                        g_popupXamlArt.Source(makeBitmap(
-                            popupArtBytes.empty() ? displayThumbnailBytes : popupArtBytes,
-                            true, 320));
-                        if (g_popupXamlBackdropCover) {
-                            if (useBackdropCover) {
-                                auto lowDetailBackdropBytes =
-                                    CreateResilientLowDetailAlbumCoverBytes(
-                                        popupBlurSourceBytes,
-                                        true,
-                                        g_settings.compact || g_taskbarAtTop,
-                                        false);
-                                g_popupXamlBackdropCover.Source(
-                                    lowDetailBackdropBytes.empty()
-                                        ? nullptr
-                                        : makeBitmap(lowDetailBackdropBytes, true));
-                            } else {
-                                g_popupXamlBackdropCover.Source(nullptr);
-                            }
+                        if (g_popupXamlPanelCoverFade) {
+                            g_popupXamlPanelCoverFade.Source(nullptr);
+                            g_popupXamlPanelCoverFade.Opacity(0.0);
                         }
-                        if (g_popupXamlPanelCover) {
-                            auto lowDetailCoverBytes =
-                                CreateResilientLowDetailAlbumCoverBytes(
-                                    popupBlurSourceBytes);
-                            g_popupXamlPanelCover.Source(
-                                lowDetailCoverBytes.empty()
-                                    ? nullptr
-                                    : makeBitmap(lowDetailCoverBytes, true));
-                        }
+                        g_popupXamlThumbnailHash = popupHash;
+                        g_popupXamlThumbnailMaterial = g_settings.material;
+                        g_popupXamlThumbnailCompact = g_settings.compact;
+                        g_popupXamlBackdropCoverEnabled = useBackdropCover;
                     }
-
-                    if (canAnimateCover) {
-                        g_popupCoverTransitionActive = true;
-                        g_popupMediaTransitionProgress = 0.0;
-                        g_popupMediaTransitionActive = true;
-                        ApplyPopupMediaTransitionVisuals();
-                    } else {
-                        g_popupCoverTransitionActive = false;
-                        if (g_popupXamlArt) g_popupXamlArt.Opacity(1.0);
-                        if (g_popupXamlArtFade) g_popupXamlArtFade.Opacity(0.0);
-                        if (g_popupXamlBackdropCover) {
-                            g_popupXamlBackdropCover.Opacity(useBackdropCover ? 1.0 : 0.0);
-                        }
-                        if (g_popupXamlBackdropCoverFade) g_popupXamlBackdropCoverFade.Opacity(0.0);
-                        if (g_popupXamlPanelCover) g_popupXamlPanelCover.Opacity(1.0);
-                        if (g_popupXamlPanelCoverFade) g_popupXamlPanelCoverFade.Opacity(0.0);
-                    }
-                    g_popupXamlThumbnailHash = popupHash;
-                    g_popupXamlThumbnailMaterial = g_settings.material;
-                    g_popupXamlThumbnailCompact = g_settings.compact;
-                    g_popupXamlBackdropCoverEnabled = useBackdropCover;
-                } catch (...) {
-                    g_popupXamlArt.Source(nullptr);
-                    if (g_popupXamlArtFade) {
-                        g_popupXamlArtFade.Source(nullptr);
-                        g_popupXamlArtFade.Opacity(0.0);
-                    }
-                    if (g_popupXamlBackdropCover) {
-                        g_popupXamlBackdropCover.Source(nullptr);
-                    }
-                    if (g_popupXamlBackdropCoverFade) {
-                        g_popupXamlBackdropCoverFade.Source(nullptr);
-                        g_popupXamlBackdropCoverFade.Opacity(0.0);
-                    }
-                    if (g_popupXamlPanelCover) {
-                        g_popupXamlPanelCover.Source(nullptr);
-                    }
-                    if (g_popupXamlPanelCoverFade) {
-                        g_popupXamlPanelCoverFade.Source(nullptr);
-                        g_popupXamlPanelCoverFade.Opacity(0.0);
-                    }
-                    g_popupXamlThumbnailHash = popupHash;
-                    g_popupXamlThumbnailMaterial = g_settings.material;
-                    g_popupXamlThumbnailCompact = g_settings.compact;
-                    g_popupXamlBackdropCoverEnabled = useBackdropCover;
                 }
             }
             if (g_popupMediaTransitionActive && !g_popupRenderingHooked) {
                 StartPopupXamlRenderLoop();
             }
         }
-    } else {
+    } else if (g_expanded ||
+               (g_expandedPopup && IsWindowVisible(g_expandedPopup))) {
         UpdatePopupAlbumBitmap(state);
+    } else {
+        g_popupPendingContentRefresh = true;
     }
     if (g_expandedPopup && IsWindowVisible(g_expandedPopup) && !g_popupXamlRoot) {
         ApplyPopupBackdrop(g_expandedPopup);
@@ -17119,7 +17305,10 @@ bool ApplyPendingSettings() {
     bool tintOnlyChange =
         g_settings.compactIslandTint != settings->compactIslandTint &&
         g_settings == normalized;
-    g_settings = std::move(*settings);
+    {
+        std::lock_guard settingsLock(g_settingsMutex);
+        g_settings = std::move(*settings);
+    }
     g_themeVisualsValid = false;
     g_popupXamlThemeValid = false;
     g_popupXamlThemeMaterial.clear();
@@ -17232,16 +17421,43 @@ void Wh_ModUninit() {
     ReleasePopupOverlayWgcDeviceResources();
     StopMediaThread();
 
-    HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
-                    ? g_taskbarWnd
-                    : FindCurrentProcessTaskbarWnd();
-    if (!hwnd && g_expandedPopup && IsWindow(g_expandedPopup)) {
-        hwnd = g_expandedPopup;
+    bool teardownSucceeded =
+        !g_playerGrid && !g_expandedPopup && !g_popupXamlRoot;
+    for (int attempt = 0; attempt < 3 && !teardownSucceeded; ++attempt) {
+        HWND taskbarWindow = FindCurrentProcessTaskbarWnd();
+        HWND candidates[] = {
+            g_taskbarWnd && IsWindow(g_taskbarWnd) ? g_taskbarWnd : nullptr,
+            taskbarWindow && IsWindow(taskbarWindow) ? taskbarWindow : nullptr,
+            g_expandedPopup && IsWindow(g_expandedPopup) ? g_expandedPopup : nullptr,
+            g_popupXamlChild && IsWindow(g_popupXamlChild) ? g_popupXamlChild : nullptr,
+            g_popupBackdropOverlay && IsWindow(g_popupBackdropOverlay)
+                ? g_popupBackdropOverlay
+                : nullptr,
+        };
+        HWND previous = nullptr;
+        for (HWND candidate : candidates) {
+            if (!candidate || candidate == previous) {
+                continue;
+            }
+            previous = candidate;
+            if (RunFromWindowThread(
+                    candidate,
+                    [](void*) { RemoveIslandGrid(); },
+                    nullptr)) {
+                teardownSucceeded = true;
+                break;
+            }
+        }
+        if (!teardownSucceeded) {
+            Wh_Log(L"Island: UI teardown attempt %d failed; retrying", attempt + 1);
+            Sleep(25);
+        }
     }
-    if (hwnd) {
-        RunFromWindowThread(hwnd, [](void*) { RemoveIslandGrid(); }, nullptr);
+    if (teardownSucceeded) {
+        UnregisterPopupWindowClass();
+    } else {
+        Wh_Log(L"Island: critical: UI-thread teardown could not be dispatched");
     }
-    UnregisterPopupWindowClass();
 }
 
 void Wh_ModSettingsChanged() {
