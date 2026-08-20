@@ -9,7 +9,6 @@
 // @donateUrl       https://ko-fi.com/mazany
 // @include         msedge.exe
 // @include         chrome.exe
-// @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -110,6 +109,27 @@ great in the taskbar but they are not plain letters, which has real costs:
   digits pass through unstyled.
 
 Style short prefixes like `{count}`, not `{title}`.
+
+## Limits worth knowing
+
+- **Edge and Chrome only.** The mod targets `msedge.exe` and `chrome.exe`. It
+  needs no symbols and no PDB, so nothing about it is specific to those two
+  builds, but other Chromium forks are not currently recognized and would each
+  need their own entry and browser-name hint.
+- **The profile list is read once, at startup.** Add, rename or remove a profile
+  and `{profile}` keeps working from the old list until the browser restarts or
+  the mod is reloaded. This is deliberate: the list decides whether text is
+  removed from a title, so going stale is safer than re-reading it underneath a
+  composition in progress.
+- **Titles are restored on unload on a best-effort budget.** Each window gets
+  250 ms to acknowledge the restoring write, because the alternative is letting
+  one unresponsive window hang the uninstall. A window whose thread is busy at
+  that moment keeps the rewritten title until it next sets it itself. The count
+  of unacknowledged writes is logged.
+- **A `UserDataDir` group policy is not read.** On a machine that sets one, the
+  profile list and the browser's UI language are looked for in the default
+  location instead; both fail closed, so `{profile}` stays empty rather than
+  becoming wrong.
 */
 // ==/WindhawkModReadme==
 
@@ -117,7 +137,7 @@ Style short prefixes like `{count}`, not `{title}`.
 /*
 - Format:
     - Preset: keep_profile
-      $name: Title format
+      $name: Format preset
       $options:
         - keep_profile: "Inbox and 16 more pages - Personal   (drop only the browser name)"
         - with_count: "Inbox and 16 more pages"
@@ -159,10 +179,6 @@ Style short prefixes like `{count}`, not `{title}`.
     as it is - app windows, picture in picture, dialogs, and windows named with
     the browser's own naming command. That is deliberate and not configurable.
 - Parsing:
-    - Enabled: true
-      $name: Rewrite titles
-      $description: >-
-        Turn off to leave every title untouched while keeping the mod loaded.
     - BrowserSuffix: ""
       $name: Browser suffix override
       $description: >-
@@ -170,18 +186,6 @@ Style short prefixes like `{count}`, not `{title}`.
         discovery failed for your build. This is the whole literal tail
         including its leading separator, for example " - Google Chrome".
   $name: Title parsing
-- Advanced:
-    - MaxTitleChars: 512
-      $name: Maximum title length
-      $description: >-
-        Safety clamp. Truncation never splits a character and appends an
-        ellipsis.
-    - VerboseLogging: false
-      $name: Verbose logging
-      $description: >-
-        Log every parse and compose decision. Discovery results and failures are
-        logged regardless of this setting.
-  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
@@ -196,6 +200,8 @@ Style short prefixes like `{count}`, not `{title}`.
 // Directly used, and previously reaching this file only through
 // windhawk_utils.h. A translation unit that compiles because of what its
 // dependencies happen to include is one compiler update away from not.
+#include <shellapi.h>  // CommandLineToArgvW
+
 #include <cstdint>   // uint32_t
 #include <cstdlib>   // _wtoi, _wgetenv
 #include <cwchar>    // wcsrchr, _wcsnicmp, wcsncmp
@@ -545,12 +551,11 @@ struct Grammar {
 
 std::wstring TrimCopy(std::wstring_view s) {
     size_t b = 0, e = s.size();
-    // The bidi marks belong here, and leaving them out had teeth. IsFormatEffector
-    // already treats U+200E/U+200F as invisible, but this did not - so a plural
-    // branch in an RTL locale that opens with a bidi mark failed the parser's
-    // "must start with {0}" test, the whole message was rejected, no count forms
-    // were discovered, and every multi-tab title on that build was then left
-    // alone because the grammar the parser needed had just failed to read.
+    // The bidi marks MUST be trimmed here, in step with IsFormatEffector, which
+    // already treats U+200E/U+200F as invisible. Out of step, a plural branch in
+    // an RTL locale that opens with a bidi mark fails the parser's "must start
+    // with {0}" test, the whole message is rejected, no count forms are
+    // discovered, and every multi-tab title on that build is left alone.
     //
     // Ends only. Interior marks are deliberately kept: Edge's composed titles
     // carry them too, and the right-anchored matching compares against the
@@ -919,32 +924,27 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // Reached when no count clause matched at this level - typically a
         // one-tab window, but also a multi-profile title whose count sits BEHIND
         // the profile, which is why the count is retried below after stripping.
-        // It used to strip whatever followed the last separator, and
-        // slot2Seps is always {" - "} on Edge, discovered from the InPrivate
-        // resource, even on an install with a single profile that never puts a
-        // profile in a title at all. So a one-tab window titled
+        // Position is not evidence. slot2Seps is always {" - "} on Edge,
+        // discovered from the InPrivate resource, even on an install with a
+        // single profile that never puts a profile in a title at all - so
+        // "stripping whatever follows the last separator" turns
         //
         //     "GitHub - Some Repo - Microsoft Edge"
         //
-        // parsed as title "GitHub" with profile "Some Repo", and every preset
-        // that does not render {profile} - which is all of them except
-        // keep_profile - displayed just "GitHub". Silent truncation of the
-        // user's own text, in the default configuration, on the exact windows
-        // the presets are tuned for.
+        // into title "GitHub", profile "Some Repo", and every preset except
+        // keep_profile then displays just "GitHub". That is silent truncation of
+        // the user's own text, in the default configuration.
         //
         // TWO conditions, and the count is the important one. The browser only
         // writes a profile into the title when the install has MORE THAN ONE
-        // profile, so a single-profile install never does - and matching by name
-        // alone still truncated "GitHub - Personal - Microsoft Edge" on an
-        // install whose one profile happened to be called Personal.
+        // profile, so on a single-profile install any match here is false by
+        // construction - including a genuine name match, on an install whose one
+        // profile happens to be called Personal.
         //
-        // profileCount, NOT profileNames.size(). Those are different quantities
-        // and using the latter meant this gate was never actually implemented:
-        // DiscoverProfiles reads four keys per profile, so ONE signed-in profile
-        // routinely yields three names - on the machine this was found on,
-        // name='Person 1', gaia_name='Tomas Cerny', shortcut_name='Personal'. The
-        // >= 2 test therefore passed on exactly the single-profile installs the
-        // paragraph above says it excludes.
+        // profileCount, NOT profileNames.size(). They are different quantities:
+        // DiscoverProfiles reads two keys per profile and flattens them, so one
+        // profile routinely yields two or three names and a size test silently
+        // degenerates into no gate at all.
         //
         // What this does NOT establish. On a multi-profile install the browser
         // appends the profile to the window's own title, so a page called
@@ -1167,10 +1167,13 @@ struct Settings {
     std::wstring normal;
     std::wstring chromeOverride;
     std::wstring suffixOverride;
-    bool         enabled = true;
-    bool         verbose = false;
-    size_t       maxChars = 512;
 };
+
+// Was a setting, and should not have been. It is a safety clamp against a
+// pathological template rather than a preference: there is no symptom a user
+// could tune it against, and a template that wants a shorter field already has
+// the per-token `max<N>` modifier, which is the right granularity for it.
+constexpr size_t kMaxTitleChars = 512;
 
 struct WindowState {
     std::wstring source;   // last title the browser composed, pre-transform
@@ -1188,31 +1191,18 @@ Settings g_settings;
 // Guards ONLY the std::wstring members of g_settings, and it has to be its own
 // lock rather than g_lock.
 //
-// The bug it closes: LoadSettings runs on whatever thread Wh_ModSettingsChanged
-// is called on and reassigns those strings, while ComposeFor - on a browser UI
-// thread, mid-title-write - used to bind a const reference to one and carry it
-// through Render. std::wstring::operator= frees the old buffer, so a settings
-// change concurrent with any title write is a use-after-free inside the
-// browser. Every read of a settings STRING now copies it under this lock.
+// LoadSettings runs on whatever thread Wh_ModSettingsChanged is called on and
+// reassigns those strings, while ComposeFor reads them on a browser UI thread
+// mid-title-write. std::wstring::operator= frees the old buffer, so a settings
+// string must be COPIED under this lock and never held by reference across
+// Render - a reference would be a use-after-free inside the browser.
 //
-// It stays separate from g_lock. That began as a hard requirement - the hook
-// used to call ComposeFor while still holding g_lock exclusively, and SRW locks
-// are not reentrant, so reusing it deadlocked the browser's UI thread on the
-// first title write. The hook now releases g_lock before composing, which is
-// what the generation counter exists to make safe, so the deadlock is gone; the
-// locks stay separate because they guard different things with different
-// lifetimes, and merging them would put every settings read behind the
-// per-window map on every title write for no gain.
+// It stays separate from g_lock, which guards the per-window map: merging them
+// would put every settings read behind that map on every title write, for no
+// gain.
 //
-// `enabled` and `maxChars` are read under it too, even though tearing a bool or
-// an aligned size_t is not a real hazard on the architectures Windhawk targets.
-// Concurrent non-atomic access is a data race by the language's definition
-// whether or not the hardware makes it visible, and both are already being read
-// on a path that takes this lock anyway, so the honest version costs nothing.
-//
-// `verbose` is the one deliberate exception. It gates logging only, it is read
-// from a dozen places including PruneDeadWindows, and the worst outcome of a
-// stale read is one log line written under the previous setting.
+// Every remaining member is a string, so there is no unsynchronised scalar left
+// to argue about: the whole struct is read under this lock.
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 Grammar  g_grammar;
 SRWLOCK  g_lock = SRWLOCK_INIT;
@@ -1255,13 +1245,7 @@ bool IsBrowserFrame(HWND hWnd) {
 
 
 std::wstring ComposeFor(const std::wstring& source) {
-    bool enabled;
-    {
-        AcquireSRWLockShared(&g_settingsLock);
-        enabled = g_settings.enabled;
-        ReleaseSRWLockShared(&g_settingsLock);
-    }
-    if (!enabled || !InterlockedCompareExchange(&g_ready, 0, 0)) {
+    if (!InterlockedCompareExchange(&g_ready, 0, 0)) {
         return source;
     }
     Fields f;
@@ -1273,10 +1257,8 @@ std::wstring ComposeFor(const std::wstring& source) {
         //
         // This is the hard invariant the readme states, and it is what keeps
         // every one of those window kinds safe by construction.
-        if (g_settings.verbose) {
-            Wh_Log(L"left as-is (does not match the discovered grammar): %s",
-                   source.c_str());
-        }
+        Wh_Log(L"left as-is (does not match the discovered grammar): %s",
+               source.c_str());
         return source;
     }
 
@@ -1284,13 +1266,11 @@ std::wstring ComposeFor(const std::wstring& source) {
     // Render is the use-after-free described at g_settingsLock: the settings
     // thread can reassign the very string being rendered.
     std::wstring tpl;
-    size_t       maxChars;
     {
         AcquireSRWLockShared(&g_settingsLock);
         tpl = (g_isChrome && !g_settings.chromeOverride.empty())
                   ? g_settings.chromeOverride
                   : g_settings.normal;
-        maxChars = g_settings.maxChars;
         ReleaseSRWLockShared(&g_settingsLock);
     }
     if (tpl.empty()) {
@@ -1302,12 +1282,10 @@ std::wstring ComposeFor(const std::wstring& source) {
     Render(tpl, 0, /*inGroup=*/false, f, &out, &any);
     out = TrimCopy(out);
     if (out.empty()) return source;  // never blank a title
-    out = style::Clamp(std::move(out), maxChars);
+    out = style::Clamp(std::move(out), kMaxTitleChars);
 
-    if (g_settings.verbose) {
-        Wh_Log(L"title='%s' count=%d profile='%s' -> '%s'", f.title.c_str(),
-               f.hasCount ? f.extra + 1 : 0, f.profile.c_str(), out.c_str());
-    }
+    Wh_Log(L"title='%s' count=%d profile='%s' -> '%s'", f.title.c_str(),
+           f.hasCount ? f.extra + 1 : 0, f.profile.c_str(), out.c_str());
     return out;
 }
 
@@ -1318,11 +1296,17 @@ std::wstring ComposeFor(const std::wstring& source) {
 // runs on the worker thread that teardown has to join before the DLL unloads -
 // so a per-window budget of one second would let a single unresponsive window
 // stall an uninstall past any reasonable join.
-void WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
+//
+// Returns whether the write was acknowledged, and callers must count only
+// acknowledged writes. A timed-out send leaves the window carrying its old
+// text, and a "restored" tally that includes those is the only evidence anyone
+// reads when a title is found still rewritten after an uninstall.
+bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
     DWORD_PTR unused = 0;
-    SendMessageTimeoutW(hWnd, WM_SETTEXT, 0,
-                        reinterpret_cast<LPARAM>(text.c_str()),
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
+    return SendMessageTimeoutW(hWnd, WM_SETTEXT, 0,
+                               reinterpret_cast<LPARAM>(text.c_str()),
+                               SMTO_ABORTIFHUNG | SMTO_BLOCK, 250,
+                               &unused) != 0;
 }
 
 bool StopRequested() {
@@ -1394,11 +1378,10 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 
     // Compose with no lock held.
     //
-    // Composition is pure string work, but it is deliberately kept outside the
-    // lock anyway: the write below was ALREADY outside it, so "applied recorded"
-    // and "text on screen" were never atomic, and holding a lock across work
-    // that does not need it is how the mod previously armed a deadlock against
-    // its own hooks.
+    // Composition is pure string work, and it is deliberately kept outside the
+    // lock: the write below is outside it too, so "applied recorded" and "text
+    // on screen" are not atomic in any case, and holding a lock across work that
+    // does not need it is how a hook arms a deadlock against itself.
     //
     // The generation check is what makes that safe. It proves this result is
     // still being committed against the state it was computed from - a check
@@ -1438,12 +1421,21 @@ std::wstring DirOfModule(const wchar_t* name) {
     return (at == std::wstring::npos) ? std::wstring() : s.substr(0, at);
 }
 
-// The user-data directory this browser is actually running with.
+// The user-data directory this browser is most likely running with.
 //
-// --user-data-dir wins, exactly as it does for the browser: the command line is
-// already parsed a few lines below for --lang=, and reading the default location
-// while the browser runs from somewhere else means answering about the wrong
-// install. Falls back to the per-channel default.
+// --user-data-dir first: reading the default location while the browser runs
+// from somewhere else means answering about the wrong install. Then the
+// per-channel default, derived below.
+//
+// NOT authoritative, and the previous version of this comment claimed it was.
+// A `UserDataDir` group policy outranks even the command-line switch, and this
+// does not read it - resolving it properly means HKLM-over-HKCU precedence plus
+// expanding ${local_app_data}-style variables, which is more machinery than a
+// title parser should carry. On a policy-managed machine this therefore answers
+// about the default location instead. The consequence is bounded by the callers:
+// both treat a miss as "unknown", so {profile} stays empty and the locale falls
+// back to the OS default. Wrong-and-silent is the failure this whole function
+// exists to avoid, so it is worth being explicit that one case remains.
 std::wstring UserDataDir() {
     int     argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -1465,6 +1457,62 @@ std::wstring UserDataDir() {
 
     const wchar_t* la = _wgetenv(L"LOCALAPPDATA");
     if (!la) return {};
+
+    // The CHANNEL, taken from the running executable's own path.
+    //
+    // The default user-data directory is not one path per browser, it is one per
+    // channel: Beta, Dev and Canary use "Edge Beta", "Edge Dev", "Edge SxS" and
+    // the Chrome equivalents. All of them run as msedge.exe / chrome.exe, so the
+    // process name cannot tell them apart, and hardcoding the stable name meant
+    // that on any other channel - Canary included, which is what this was
+    // developed against - the profile list and the locale were read from a
+    // DIFFERENT install that merely happened to be the stable one.
+    //
+    // The install directory encodes the channel as "<Vendor>\<Product>\
+    // Application\<exe>", and the same "<Vendor>\<Product>" pair names the
+    // user-data directory under LOCALAPPDATA. That is not a coincidence to rely
+    // on nervously: it is the same install-mode constant on both sides. The
+    // install itself can live anywhere - Program Files or LOCALAPPDATA - and
+    // only the two names are used, never the install path itself.
+    std::wstring exe(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD n =
+            GetModuleFileNameW(nullptr, exe.data(),
+                               static_cast<DWORD>(exe.size()));
+        if (n == 0) break;
+        if (n < exe.size()) { exe.resize(n); break; }
+        if (exe.size() > 32768) { exe.clear(); break; }
+        exe.resize(exe.size() * 2);  // MAX_PATH is not a limit, it is a guess
+    }
+    const size_t appAt = exe.rfind(L"\\Application\\");
+    if (appAt != std::wstring::npos) {
+        const std::wstring head = exe.substr(0, appAt);   // ...\Vendor\Product
+        const size_t prodAt = head.rfind(L'\\');
+        if (prodAt != std::wstring::npos && prodAt > 0) {
+            const std::wstring product = head.substr(prodAt + 1);
+            const size_t vendAt = head.rfind(L'\\', prodAt - 1);
+            if (vendAt != std::wstring::npos) {
+                const std::wstring vendor =
+                    head.substr(vendAt + 1, prodAt - vendAt - 1);
+                // Validated against the names the browser actually uses, so an
+                // unexpected layout falls through to the stable default rather
+                // than inventing a directory.
+                const bool sane =
+                    g_isChrome ? (vendor == L"Google" &&
+                                  product.rfind(L"Chrome", 0) == 0)
+                               : (vendor == L"Microsoft" &&
+                                  product.rfind(L"Edge", 0) == 0);
+                if (sane) {
+                    return std::wstring(la) + L"\\" + vendor + L"\\" + product +
+                           L"\\User Data";
+                }
+            }
+        }
+    }
+
+    // Stable, and the fallback for anything unrecognised - a portable repack, a
+    // dev build run straight out of its output directory, or the test harness,
+    // none of which have an \Application\ component to read.
     return std::wstring(la) +
            (g_isChrome ? L"\\Google\\Chrome\\User Data"
                        : L"\\Microsoft\\Edge\\User Data");
@@ -1574,7 +1622,22 @@ ProfileInfo DiscoverProfiles() {
                                              sv[j] == '\r' || sv[j] == '\n')) {
                         ++j;
                     }
-                    if (j < sv.size() && sv[j] == ':') key.assign(tok);
+                    // The VALUE must then be a string too, and checking that is
+                    // not pedantry. Without it, "name": null followed by
+                    // "shortcut_name": "Work" left `key` armed across the null,
+                    // so the next string token seen - the literal KEY
+                    // "shortcut_name" - was recorded as a profile name, and the
+                    // real "Work" was then skipped because `key` had just been
+                    // cleared. That both invents a name and loses a true one, in
+                    // the list that decides what may be cut from a title.
+                    if (j < sv.size() && sv[j] == ':') {
+                        ++j;
+                        while (j < sv.size() && (sv[j] == ' ' || sv[j] == '\t' ||
+                                                 sv[j] == '\r' || sv[j] == '\n')) {
+                            ++j;
+                        }
+                        if (j < sv.size() && sv[j] == '"') key.assign(tok);
+                    }
                 }
             }
             continue;
@@ -1650,6 +1713,11 @@ std::vector<std::wstring> LocaleCandidates() {
 // The hook's own tid check catches that second case at the moment of reuse; this
 // keeps the map from growing in the first place.
 void PruneDeadWindows() {
+    // The dead entries are MOVED out rather than counted, so their two strings
+    // are freed after g_lock is released rather than during erase() while a
+    // browser UI thread may be waiting on it. That is the whole reason for the
+    // vector - replacing it with a counter would put every deallocation back
+    // inside the exclusive section.
     std::vector<std::pair<HWND, WindowState>> dead;
     {
         AcquireSRWLockExclusive(&g_lock);
@@ -1664,30 +1732,45 @@ void PruneDeadWindows() {
         ReleaseSRWLockExclusive(&g_lock);
     }
 
-    if (g_settings.verbose && !dead.empty()) {
+    if (!dead.empty()) {
         Wh_Log(L"pruned %zu dead window(s)", dead.size());
     }
+}
+
+// A named __stdcall callback rather than a lambda, and that is an architecture
+// requirement rather than a style choice. A captureless lambda converts to a
+// function pointer of the DEFAULT calling convention; on x86-64 and ARM64 there
+// is only one convention so it converts to WNDENUMPROC fine, but on 32-bit x86
+// the default is __cdecl and WNDENUMPROC is __stdcall, and the lambda form
+// simply does not compile. CALLBACK is __stdcall there and nothing everywhere
+// else, so this builds identically on all three.
+BOOL CALLBACK CollectBrowserFrames(HWND h, LPARAM lp) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId() && IsBrowserFrame(h)) {
+        reinterpret_cast<std::vector<HWND>*>(lp)->push_back(h);
+    }
+    return TRUE;
 }
 
 void SweepAllWindows() {
     PruneDeadWindows();
 
-    struct Ctx {
-        std::vector<HWND> frames;
-    } ctx;
-    EnumWindows(
-        [](HWND h, LPARAM lp) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(h, &pid);
-            if (pid == GetCurrentProcessId() && IsBrowserFrame(h)) {
-                reinterpret_cast<Ctx*>(lp)->frames.push_back(h);
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&ctx));
+    std::vector<HWND> frames;
+    EnumWindows(CollectBrowserFrames, reinterpret_cast<LPARAM>(&frames));
+
+    // Threads that already failed to answer within this sweep.
+    //
+    // The per-window timeout below bounds one send, not the whole sweep, and
+    // every browser frame shares a UI thread - so on a session of a hundred
+    // windows whose thread is wedged, a bounded sweep still costs a hundred
+    // timeouts back to back. Wh_ModSettingsChanged runs this on the Windhawk
+    // engine thread, which would mean a settings change taking half a minute.
+    // One failure per thread is all the evidence needed to skip the rest.
+    std::vector<DWORD> mute;
 
     int changed = 0;
-    for (HWND h : ctx.frames) {
+    for (HWND h : frames) {
         // Teardown must be able to cut a sweep short. Without this the worker
         // can still be walking dozens of windows when Wh_ModBeforeUninit tries
         // to join it, and the DLL would then be unloaded out from under a
@@ -1696,17 +1779,65 @@ void SweepAllWindows() {
             Wh_Log(L"sweep aborted: shutting down");
             return;
         }
-        // Sized from the window rather than a fixed buffer. Chromium allows page
-        // titles far longer than a kilobyte, and a truncated read is not merely
-        // a shorter string: it loses the browser suffix, so Decompose refuses it
-        // and the window is silently never retitled by any sweep. +1 for the
-        // terminator GetWindowTextW always writes.
-        const int len = GetWindowTextLengthW(h);
-        if (len <= 0) continue;
+        const DWORD owner = GetWindowThreadProcessId(h, nullptr);
+        if (std::find(mute.begin(), mute.end(), owner) != mute.end()) continue;
+        // BOTH reads are bounded, for the same reason the write below is.
+        //
+        // GetWindowTextW and GetWindowTextLengthW look like local calls and are
+        // not: for a window owned by THIS process but another thread - which is
+        // every window this loop visits - they are SendMessage(WM_GETTEXT) and
+        // SendMessage(WM_GETTEXTLENGTH), and a cross-thread SendMessage has no
+        // timeout. It returns when the owning thread pumps, and not before. A
+        // browser UI thread blocked on a sync IPC to a wedged renderer therefore
+        // parked this loop indefinitely, and the StopRequested() check above is
+        // no help because the flag is never re-read from inside a send. Both
+        // callers made that fatal rather than slow: Wh_ModBeforeUninit joins the
+        // worker with INFINITE, so the mod could not be unloaded or updated,
+        // and Wh_ModSettingsChanged runs this on the Windhawk engine thread.
+        //
+        // Still sized from the window rather than a fixed buffer, because a
+        // truncated read is not merely a shorter string: it loses the browser
+        // suffix, so Decompose refuses it and the window is silently never
+        // retitled by any sweep. That costs a second bounded send, which is only
+        // ever paid in full by a window that is not answering anyway.
+        DWORD_PTR len = 0;
+        if (!SendMessageTimeoutW(h, WM_GETTEXTLENGTH, 0, 0,
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &len)) {
+            mute.push_back(owner);
+            continue;
+        }
+        if (len == 0 || len > 0x10000) {
+            continue;  // empty, or an answer too large to be a real title
+        }
+        // WM_GETTEXT's wParam counts the terminator; its result does not.
         std::wstring cur(static_cast<size_t>(len) + 1, L'\0');
-        const int n = GetWindowTextW(h, cur.data(), len + 1);
-        if (n <= 0) continue;
-        cur.resize(static_cast<size_t>(n));
+        DWORD_PTR copied = 0;
+        if (!SendMessageTimeoutW(h, WM_GETTEXT, static_cast<WPARAM>(cur.size()),
+                                 reinterpret_cast<LPARAM>(cur.data()),
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &copied)) {
+            mute.push_back(owner);
+            continue;
+        }
+        // WM_GETTEXTLENGTH is allowed to overestimate, so the copied count is
+        // the authoritative one. A conforming handler never exceeds capacity-1.
+        if (copied == 0 || copied >= cur.size()) continue;
+        cur.resize(static_cast<size_t>(copied));
+
+        // Capture the generation with the source, validate it on commit.
+        //
+        // The sweep used to commit unconditionally, which let it write a stale
+        // pair over state a concurrent title write had just refreshed: the
+        // remembered `source` then belonged to the PREVIOUS page, and a settings
+        // change before the next browser write recomposed from it and put that
+        // older title on the window. This is the same capture/validate/commit
+        // the hook already performs, so it adds no new invariant.
+        //
+        // It makes the STATE MAP coherent and nothing more. The final write
+        // below is still outside the lock, so a title write that lands between
+        // the commit and the send is overwritten and restored by the next write.
+        // Closing that would mean performing the whole recompose on the owning
+        // UI thread, which is a different design, not a bigger lock.
+        unsigned gen = 0;
         std::wstring src;
         {
             AcquireSRWLockShared(&g_lock);
@@ -1717,23 +1848,30 @@ void SweepAllWindows() {
                    it->second.applied == cur)
                       ? it->second.source
                       : cur;
+            gen = (it != g_states.end()) ? it->second.generation : 0;
             ReleaseSRWLockShared(&g_lock);
         }
         const std::wstring out = ComposeFor(src);
         {
             AcquireSRWLockExclusive(&g_lock);
             WindowState& st = g_states[h];
-            st.source  = src;
-            st.applied = out;
-            st.tid     = GetWindowThreadProcessId(h, nullptr);
+            if (st.generation != gen) {
+                // A title write overtook this window while we composed. Its
+                // result is newer than ours; leave it alone.
+                ReleaseSRWLockExclusive(&g_lock);
+                continue;
+            }
+            st.source     = src;
+            st.applied    = out;
+            st.generation = gen + 1;
+            st.tid        = owner;
             ReleaseSRWLockExclusive(&g_lock);
         }
-        if (out != cur) {
-            WriteTitleFromOtherThread(h, out);
+        if (out != cur && WriteTitleFromOtherThread(h, out)) {
             ++changed;
         }
     }
-    Wh_Log(L"sweep: %zu frame(s), %d retitled", ctx.frames.size(), changed);
+    Wh_Log(L"sweep: %zu frame(s), %d retitled", frames.size(), changed);
 }
 
 DWORD WINAPI DiscoveryThread(LPVOID) {
@@ -1825,15 +1963,14 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
     } else {
         // Published WITHOUT g_lock, and the ordering is g_ready's job alone.
         //
-        // g_lock used to be taken here, which was theatre: readers reach the
-        // grammar through ComposeFor -> Decompose and take no lock at all, so a
-        // lock only one side participates in protects nothing while implying a
-        // discipline that does not exist. What actually makes this safe is that
-        // the grammar is written once, before g_ready is set, and never touched
-        // again - and every reader tests g_ready first. The InterlockedExchange
-        // below and the InterlockedCompareExchange in ComposeFor are full
-        // fences, so a reader that observes g_ready == 1 necessarily observes
-        // the completed assignment.
+        // Readers reach the grammar through ComposeFor -> Decompose and take no
+        // lock at all, so a lock here would protect nothing while implying a
+        // discipline they do not share. What makes this safe is that the grammar
+        // is written once, before g_ready is set, and never touched again - and
+        // every reader tests g_ready first. The InterlockedExchange below and
+        // the InterlockedCompareExchange in ComposeFor are full fences, so a
+        // reader that observes g_ready == 1 necessarily observes the completed
+        // assignment.
         g_grammar = std::move(g);
         InterlockedExchange(&g_ready, 1);
 
@@ -1901,18 +2038,6 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"Format.ChromeOverride").get();
     s.suffixOverride =
         WindhawkUtils::StringSetting::make(L"Parsing.BrowserSuffix").get();
-    s.enabled    = Wh_GetIntSetting(L"Parsing.Enabled") != 0;
-    s.verbose    = Wh_GetIntSetting(L"Advanced.VerboseLogging") != 0;
-
-    const int mx = Wh_GetIntSetting(L"Advanced.MaxTitleChars");
-    s.maxChars = (mx > 16) ? static_cast<size_t>(mx) : 512;
-    if (mx <= 16) {
-        // Say so. Silently substituting 512 for a deliberate 10 looks like the
-        // setting being ignored, which is exactly what it is - just not
-        // arbitrarily.
-        Wh_Log(L"maximum title length %d is below the minimum of 17; using 512",
-               mx);
-    }
 
     if (s.normal.empty()) {
         s.normal = L"{title}?( {more})?( - {profile})";
@@ -2047,11 +2172,10 @@ void Wh_ModBeforeUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
 
     if (g_worker) {
-        // WAIT UNCONDITIONALLY. This used to give up after 10 s and leak the
-        // handle, which does not help: Windhawk unloads this DLL right after
-        // Wh_ModUninit returns, and what matters is the worker's instruction
-        // pointer, not its handle. A thread still executing mod code when the
-        // image unmaps faults the browser.
+        // WAIT UNCONDITIONALLY - no timeout, because a timeout does not help.
+        // Windhawk unloads this DLL right after Wh_ModUninit returns, and what
+        // matters is the worker's instruction pointer, not its handle: a thread
+        // still executing mod code when the image unmaps faults the browser.
         //
         // The worker's longest operation is reading and scanning a .pak, and it
         // checks the stop flag between candidate locales, so in practice this
@@ -2073,13 +2197,20 @@ void Wh_ModUninit() {
     ReleaseSRWLockExclusive(&g_lock);
 
     int restored = 0;
+    int failed   = 0;
     for (const auto& [hWnd, st] : snapshot) {
         if (st.source.empty() || st.source == st.applied) continue;
         if (!IsWindow(hWnd)) continue;
-        WriteTitleFromOtherThread(hWnd, st.source);
-        ++restored;
+        if (WriteTitleFromOtherThread(hWnd, st.source)) {
+            ++restored;
+        } else {
+            ++failed;
+        }
     }
-    Wh_Log(L"restored %d title(s)", restored);
+    // Both numbers, because the second one is the interesting one: a window
+    // whose thread did not answer within the budget keeps our title after the
+    // mod is gone, and this log line is the only place that says so.
+    Wh_Log(L"restored %d title(s), %d not acknowledged", restored, failed);
 
     // Last, and only here. Wh_ModBeforeUninit has already joined the worker, so
     // nothing can still be waiting on this handle - closing it while a wait was
