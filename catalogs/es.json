@@ -10494,6 +10494,35 @@
         "version": "1.0"
       }
     },
+    "replace-format-dialog": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787245921000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787245921000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "FireBlade",
+        "compilerOptions": "-lshell32",
+        "description": "Replaces the Shell Disk Format Dialog with a custom app of your choosing.",
+        "github": "https://github.com/FireBlade211",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Replace Shell Format Dialog",
+        "version": "1.0"
+      }
+    },
     "replace-winver-with-exe": {
       "details": {
         "defaultSorting": 310,

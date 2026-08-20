@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-20T17:08:46.000Z</updated>
+    <updated>2026-08-20T17:12:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Replace Shell Format Dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/replace-format-dialog#1197822c535ab270b52cd878b9a49c7933d68fa0</id>
+        <link href="https://windhawk.net/mods/replace-format-dialog"/>
+        <updated>2026-08-20T17:12:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="replaceshellformatdialog">Replace Shell Format Dialog</h1>
+<p>A simple mod that allows you to replace the File Explorer disk format dialog with a custom one.</p>
+<h2 id="note">Note</h2>
+<p>This will replace the format dialog in all apps that use the Shell Format dialog, not just File Explorer. You can manually
+set the exclusion list in this mod's <strong>Advanced</strong> tab.</p>
+<h2 id="moredetailsabouttheformatargumentsoption">More details about the Format Arguments option</h2>
+<p>If you enable the <strong>Format Arguments</strong> option in the mod settings, the mod will automatically replace the first instance of %s in your
+argument string with the drive letter of the drive the app is attempting to format. This drive letter does not include the <code>:</code> suffix
+(e.g, it will say <code>C</code> instead of <code>C:</code>).</p>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Proportional cursor between monitors 1.0.0]]></title>
         <id>https://windhawk.net/mods/proportional-monitor-cursor#47d6b37d08ed96f27b3be31913d8cb4ee1b9d994</id>
@@ -949,36 +968,6 @@ extends upward and outward. Total size is
         <author>
             <name>Jaali</name>
             <uri>https://github.com/alivca</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
-        <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
-        <link href="https://windhawk.net/mods/fix-10-taskbar-notifications"/>
-        <updated>2026-08-01T17:35:18.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod hooks the function responsible for crashing the Explorer shell provided by the Win10 taskbar mod at runtime.</p>
-<p>But it is not confirmed if notifications arrive to the Notification Center.
-Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)</p>
-<p><strong>!Important! You MUST install, follow the instructions and run at least 2 times the <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar mod.</a></strong>
-<strong>If you don't follow these instructions carefully, the mod will not apply correctly.</strong></p>
-<h1 id="technicaldetails">Technical details</h1>
-<p>When a notification is rendered, it invokes from explorer a method called </p>
-<pre><code class="cpp language-cpp">NotificationDataSink::NotificationsAdded(
-    NotificationDataSink *this,
-    int32_t _arg2,
-    struct NOC_REFINED_NOTIFICATION *const *iterator,
-    uint32_t length
-);
-</code></pre>
-<p>.</p>
-<p><strong>Given I haven't experienced any destabilization from explorer thus far, I claim that this has something to do with the Notification Center.</strong></p>
-<p>I won't go too deep into details of the function, but the crash is observed as a <code>NULL</code> pointer exception when it tries to access <code>*(iterator + 0x88)</code> for the first time, which is probably where the actual elements are.</p>
-<p>Normally, it would use that pointer to add 0x150 in a do-while loop until the notification thing elements are exhausted, but instead it's just <code>NULL</code>.
-I haven't given a look at the iterator memory to see if it's more than just the first element that's <code>NULL</code>, or more or all of them are such.</p>
-<p>There is no <code>NULL</code> check in that loop, so it is likely that the iterator was never supposed to have <code>NULL</code> elements in the first place.</p>]]></content>
-        <author>
-            <name>ilovethisgame</name>
-            <uri>https://github.com/bozohi</uri>
         </author>
     </entry>
 </feed>
