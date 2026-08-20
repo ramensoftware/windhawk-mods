@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.37
+// @version         0.10.38
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -401,6 +401,8 @@ struct PreparedArtwork {
     bool darkMode = false;
     int expandedCornerRadius = 24;
     std::wstring artworkMode;
+    std::wstring identityKey;
+    uint64_t rawHash = 0;
     uint64_t visualHash = 0;
     uint64_t displayHash = 0;
     std::vector<uint8_t> visualBytes;
@@ -449,9 +451,10 @@ std::mutex g_mediaMutex;
 std::mutex g_seekMutex;
 MediaState g_media;
 std::chrono::steady_clock::time_point g_mediaStateTimestamp;
+uint64_t g_mediaProgressRevision = 0;
 double g_popupLiveProgressValue = 0.0;
 bool g_popupLiveProgressValid = false;
-std::wstring g_popupLiveProgressKey;
+uint64_t g_popupLiveProgressRevision = 0;
 std::chrono::steady_clock::time_point g_popupLiveProgressFrameTime;
 bool g_popupSeekDragging = false;
 double g_popupSeekPreviewRatio = 0.0;
@@ -950,6 +953,11 @@ double g_popupExpandedHeight = 0.0;
 bool g_popupClosing = false;
 bool g_popupOutsideClickArmed = false;
 HBITMAP g_popupAlbumBitmap = nullptr;
+HFONT g_popupTitleFont = nullptr;
+HFONT g_popupArtistFont = nullptr;
+HFONT g_popupIconFont = nullptr;
+int g_popupTitleFontSize = 0;
+int g_popupArtistFontSize = 0;
 uint64_t g_popupThumbnailHash = 0;
 RECT g_popupSourceRect{};
 RECT g_popupSourceArtRect{};
@@ -1918,7 +1926,10 @@ HWND FindCurrentProcessTaskbarWnd() {
     return result;
 }
 
-bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
+bool RunFromWindowThread(HWND hwnd,
+                         WindowThreadProc proc,
+                         void* param,
+                         bool* callbackInvoked = nullptr) {
     static const UINT msg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     struct Payload {
         WindowThreadProc proc;
@@ -1927,12 +1938,19 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
         bool succeeded = false;
     };
 
+    if (callbackInvoked) {
+        *callbackInvoked = false;
+    }
+
     DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
     if (!tid) {
         return false;
     }
 
     if (tid == GetCurrentThreadId()) {
+        if (callbackInvoked) {
+            *callbackInvoked = true;
+        }
         try {
             proc(param);
         } catch (...) {
@@ -1972,6 +1990,9 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
     Payload payload{proc, param};
     SendMessageW(hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload));
     UnhookWindowsHookEx(hook);
+    if (callbackInvoked) {
+        *callbackInvoked = payload.invoked;
+    }
     return payload.invoked && payload.succeeded;
 }
 
@@ -2242,10 +2263,51 @@ bool IsMediaNavigationKnownUnavailable(int direction) {
     return direction < 0 ? !state.canSkipPrevious : !state.canSkipNext;
 }
 
-MediaState SnapshotMediaWithTimestamp(std::chrono::steady_clock::time_point& timestamp) {
+struct MediaProgressSnapshot {
+    bool hasSession = false;
+    bool isPlaying = false;
+    int64_t positionTicks = 0;
+    int64_t durationTicks = 0;
+    uint64_t revision = 0;
+    std::chrono::steady_clock::time_point timestamp{};
+};
+
+MediaProgressSnapshot SnapshotMediaProgress() {
     std::lock_guard lock(g_mediaMutex);
-    timestamp = g_mediaStateTimestamp;
-    return g_media;
+    return {
+        g_media.hasSession,
+        g_media.isPlaying,
+        g_media.positionTicks,
+        g_media.durationTicks,
+        g_mediaProgressRevision,
+        g_mediaStateTimestamp,
+    };
+}
+
+struct MediaPaintSnapshot {
+    std::wstring title;
+    std::wstring artist;
+    bool hasSession = false;
+    bool isPlaying = false;
+    int64_t positionTicks = 0;
+    int64_t durationTicks = 0;
+};
+
+MediaPaintSnapshot SnapshotMediaForPaint() {
+    std::lock_guard lock(g_mediaMutex);
+    return {
+        g_media.title,
+        g_media.artist,
+        g_media.hasSession,
+        g_media.isPlaying,
+        g_media.positionTicks,
+        g_media.durationTicks,
+    };
+}
+
+std::wstring SnapshotMediaIdentityKey() {
+    std::lock_guard lock(g_mediaMutex);
+    return MediaIdentityKey(g_media);
 }
 
 void SetMedia(MediaState&& state) {
@@ -2258,6 +2320,11 @@ void SetMedia(MediaState&& state) {
     bool sameMedia = g_media.hasSession && state.hasSession &&
                      !currentKey.empty() && currentKey == nextKey &&
                      state.durationTicks > 0 && g_media.durationTicks == state.durationTicks;
+    bool progressIdentityChanged =
+        g_media.hasSession != state.hasSession ||
+        g_media.title != state.title ||
+        g_media.artist != state.artist ||
+        g_media.durationTicks != state.durationTicks;
 
     {
         std::lock_guard seekLock(g_seekMutex);
@@ -2312,6 +2379,12 @@ void SetMedia(MediaState&& state) {
     }
 
     g_media = std::move(state);
+    if (progressIdentityChanged) {
+        ++g_mediaProgressRevision;
+        if (g_mediaProgressRevision == 0) {
+            ++g_mediaProgressRevision;
+        }
+    }
     g_mediaStateTimestamp = now;
 }
 
@@ -3014,7 +3087,9 @@ double PopupCoverG2MaskScale(UINT x, UINT y, UINT size, double radius) {
            static_cast<double>(kSamplesPerAxis * kSamplesPerAxis);
 }
 
-void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels, UINT size) {
+void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels,
+                           UINT size,
+                           int expandedCornerRadius) {
     if (size == 0 || pixels.size() < static_cast<size_t>(size) * size * 4) {
         return;
     }
@@ -3022,7 +3097,7 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels, UINT size) {
     constexpr double kPopupCoverG2RadiusRatio = 0.118;
     constexpr double kPopupG2DefaultSettingRadius = 24.0;
     double radiusScale =
-        static_cast<double>(Clamp(g_settings.expandedCornerRadius, 1, 80)) /
+        static_cast<double>(Clamp(expandedCornerRadius, 1, 80)) /
         kPopupG2DefaultSettingRadius;
     const double radius = Clamp(
         static_cast<double>(size) * kPopupCoverG2RadiusRatio * radiusScale,
@@ -3044,7 +3119,10 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels, UINT size) {
     }
 }
 
-std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(std::vector<uint8_t> const& bytes, UINT size = 512) {
+std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
+    std::vector<uint8_t> const& bytes,
+    int expandedCornerRadius,
+    UINT size = 512) {
     std::vector<uint8_t> output;
     if (bytes.empty() || size == 0) {
         return output;
@@ -3116,7 +3194,7 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(std::vector<uint8_t> const& by
             std::memcpy(target, source, static_cast<size_t>(size) * 4);
         }
 
-        ApplyPopupCoverG2Mask(pixels, size);
+        ApplyPopupCoverG2Mask(pixels, size, expandedCornerRadius);
         output = EncodePbgraPngBytes(size, size, pixels);
     }
 
@@ -3832,7 +3910,8 @@ std::vector<uint8_t> CreateEnergyFlameAlbumCoverBytes(std::vector<uint8_t> const
 std::vector<uint8_t> CreateDisplayAlbumCoverBytes(
     std::vector<uint8_t> const& bytes,
     std::wstring const& sourceAppUserModelId,
-    bool shouldUseAbstractArtwork) {
+    bool shouldUseAbstractArtwork,
+    std::wstring const& artworkAbstractMode) {
     if (bytes.empty()) {
         return {};
     }
@@ -3840,15 +3919,15 @@ std::vector<uint8_t> CreateDisplayAlbumCoverBytes(
     bool browserSource = LooksLikeBrowserMediaSource(sourceAppUserModelId);
     if (!browserSource ||
         !shouldUseAbstractArtwork ||
-        g_settings.artworkAbstractMode == L"browser_original" ||
-        g_settings.artworkAbstractMode == L"off") {
+        artworkAbstractMode == L"browser_original" ||
+        artworkAbstractMode == L"off") {
         return bytes;
     }
 
     std::vector<uint8_t> abstractBytes;
-    if (g_settings.artworkAbstractMode == L"energy_flame") {
+    if (artworkAbstractMode == L"energy_flame") {
         abstractBytes = CreateEnergyFlameAlbumCoverBytes(bytes);
-    } else if (g_settings.artworkAbstractMode == L"mesh_gradient") {
+    } else if (artworkAbstractMode == L"mesh_gradient") {
         abstractBytes = CreateMeshGradientAlbumCoverBytes(bytes);
     }
     return abstractBytes.empty() ? bytes : abstractBytes;
@@ -4149,7 +4228,11 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
 void PrepareMediaArtwork(MediaState& state) {
     bool popupRequested =
         g_popupArtworkPreparationRequested.load(std::memory_order_acquire);
-    MediaState previous = SnapshotMedia();
+    std::shared_ptr<PreparedArtwork const> previousPreparedArtwork;
+    {
+        std::lock_guard mediaLock(g_mediaMutex);
+        previousPreparedArtwork = g_media.preparedArtwork;
+    }
     auto artworkNow = std::chrono::steady_clock::now();
 
     Settings artworkSettings;
@@ -4163,22 +4246,21 @@ void PrepareMediaArtwork(MediaState& state) {
         artworkSettings.material == L"transparent_borderless";
     bool needsTintAssets = artworkSettings.sideExpand || transparentMaterial;
     std::wstring identityKey = MediaIdentityKey(state);
-    std::wstring previousIdentityKey = MediaIdentityKey(previous);
     uint64_t rawHash = ThumbnailHash(state.thumbnailBytes);
-    uint64_t previousRawHash = ThumbnailHash(previous.thumbnailBytes);
-    if (previous.preparedArtwork && previous.preparedArtwork->ready &&
-        identityKey == previousIdentityKey && rawHash == previousRawHash &&
-        previous.preparedArtwork->darkMode == darkMode &&
-        previous.preparedArtwork->expandedCornerRadius ==
+    if (previousPreparedArtwork && previousPreparedArtwork->ready &&
+        identityKey == previousPreparedArtwork->identityKey &&
+        rawHash == previousPreparedArtwork->rawHash &&
+        previousPreparedArtwork->darkMode == darkMode &&
+        previousPreparedArtwork->expandedCornerRadius ==
             artworkSettings.expandedCornerRadius &&
-        previous.preparedArtwork->artworkMode ==
+        previousPreparedArtwork->artworkMode ==
             artworkSettings.artworkAbstractMode &&
-        (!needsTintAssets || previous.preparedArtwork->tintAssetsReady) &&
-        (!popupRequested || previous.preparedArtwork->popupReady) &&
-        (previous.preparedArtwork->transientHoldUntil
+        (!needsTintAssets || previousPreparedArtwork->tintAssetsReady) &&
+        (!popupRequested || previousPreparedArtwork->popupReady) &&
+        (previousPreparedArtwork->transientHoldUntil
                  .time_since_epoch().count() == 0 ||
-         artworkNow < previous.preparedArtwork->transientHoldUntil)) {
-        state.preparedArtwork = previous.preparedArtwork;
+         artworkNow < previousPreparedArtwork->transientHoldUntil)) {
+        state.preparedArtwork = std::move(previousPreparedArtwork);
         return;
     }
 
@@ -4186,6 +4268,8 @@ void PrepareMediaArtwork(MediaState& state) {
     prepared->darkMode = darkMode;
     prepared->expandedCornerRadius = artworkSettings.expandedCornerRadius;
     prepared->artworkMode = artworkSettings.artworkAbstractMode;
+    prepared->identityKey = identityKey;
+    prepared->rawHash = rawHash;
 
     // Keep transient provider thumbnail gaps on the worker as well. The UI
     // thread receives only final byte buffers and never decodes or re-encodes
@@ -4275,13 +4359,14 @@ void PrepareMediaArtwork(MediaState& state) {
     prepared->displayBytes = CreateDisplayAlbumCoverBytes(
         prepared->visualBytes,
         state.sourceAppUserModelId,
-        shouldUseAbstractArtwork);
+        shouldUseAbstractArtwork,
+        artworkSettings.artworkAbstractMode);
     prepared->displayHash = ThumbnailHash(prepared->displayBytes);
 
     std::vector<uint8_t> const& accentSourceBytes =
         prepared->displayBytes.empty() ? prepared->visualBytes
                                        : prepared->displayBytes;
-    if ((needsTintAssets || popupRequested) && !accentSourceBytes.empty()) {
+    if (!accentSourceBytes.empty()) {
         prepared->accent = ExtractAlbumAccentColor(accentSourceBytes);
         prepared->accentValid = true;
     }
@@ -4304,7 +4389,8 @@ void PrepareMediaArtwork(MediaState& state) {
         if (prepared->visualBytes.empty()) {
             auto placeholderArtBytes = CreatePlaceholderAlbumCoverBytes(128);
             auto placeholderG2Bytes =
-                CreatePopupG2AlbumCoverBytes(placeholderArtBytes);
+                CreatePopupG2AlbumCoverBytes(
+                    placeholderArtBytes, artworkSettings.expandedCornerRadius);
             prepared->popupArtBytes = placeholderG2Bytes.empty()
                                               ? std::move(placeholderArtBytes)
                                               : std::move(placeholderG2Bytes);
@@ -4315,7 +4401,8 @@ void PrepareMediaArtwork(MediaState& state) {
                 CreatePlaceholderAlbumCoverBytes(20, true, true, false);
         } else {
             prepared->popupArtBytes =
-                CreatePopupG2AlbumCoverBytes(prepared->displayBytes);
+                CreatePopupG2AlbumCoverBytes(
+                    prepared->displayBytes, artworkSettings.expandedCornerRadius);
             if (prepared->popupArtBytes.empty()) {
                 prepared->popupArtBytes = prepared->displayBytes;
             }
@@ -5063,7 +5150,7 @@ void DispatchNavigationFailureFeedback(int direction);
 void NoteMediaNavigationDirection(int direction) {
     direction = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
     auto now = std::chrono::steady_clock::now();
-    std::wstring originKey = MediaIdentityKey(SnapshotMedia());
+    std::wstring originKey = SnapshotMediaIdentityKey();
     std::lock_guard lock(g_mediaNavigationMutex);
     g_pendingMediaNavigationDirection = direction;
     g_pendingMediaNavigationTime = now;
@@ -5099,8 +5186,7 @@ void CancelPendingNavigationValidation() {
 constexpr auto kNavigationValidationDelay = std::chrono::milliseconds(750);
 
 int ConsumeTimedOutNavigationFailure() {
-    MediaState state = SnapshotMedia();
-    std::wstring currentKey = MediaIdentityKey(state);
+    std::wstring currentKey = SnapshotMediaIdentityKey();
     auto now = std::chrono::steady_clock::now();
     std::lock_guard lock(g_mediaNavigationMutex);
     if (g_pendingNavigationValidationDirection == 0) {
@@ -5738,6 +5824,52 @@ RECT PopupButtonRect(int index, int width, int height) {
     return {left, top, left + buttonSize, top + buttonSize};
 }
 
+HFONT EnsurePopupPaintFont(HFONT& font,
+                           int& cachedSize,
+                           int size,
+                           int weight,
+                           wchar_t const* face) {
+    if (font && cachedSize == size) {
+        return font;
+    }
+    if (font) {
+        DeleteObject(font);
+        font = nullptr;
+    }
+    font = CreateFontW(-size, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                       DEFAULT_PITCH, face);
+    cachedSize = font ? size : 0;
+    return font;
+}
+
+HFONT EnsurePopupIconFont() {
+    if (!g_popupIconFont) {
+        g_popupIconFont = CreateFontW(
+            -16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe Fluent Icons");
+    }
+    return g_popupIconFont;
+}
+
+void ReleasePopupPaintFonts() {
+    HFONT* fonts[] = {
+        &g_popupTitleFont,
+        &g_popupArtistFont,
+        &g_popupIconFont,
+    };
+    for (HFONT* font : fonts) {
+        if (*font) {
+            DeleteObject(*font);
+            *font = nullptr;
+        }
+    }
+    g_popupTitleFontSize = 0;
+    g_popupArtistFontSize = 0;
+}
+
 void PaintExpandedPopup(HWND hwnd, HDC dc) {
     RECT client{};
     GetClientRect(hwnd, &client);
@@ -5805,18 +5937,16 @@ void PaintExpandedPopup(HWND hwnd, HDC dc) {
     RestoreDC(dc, saved);
     DeleteObject(artClip);
 
-    MediaState state = SnapshotMedia();
+    MediaPaintSnapshot state = SnapshotMediaForPaint();
     SetBkMode(dc, TRANSPARENT);
     int titleSize = LerpInt(12, 16, progress);
     int artistSize = LerpInt(10, 13, progress);
-    HFONT titleFont = CreateFontW(-titleSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                  DEFAULT_PITCH, L"Segoe UI Variable Text");
-    HFONT artistFont = CreateFontW(-artistSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                   CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                   DEFAULT_PITCH, L"Segoe UI Variable Text");
+    HFONT titleFont = EnsurePopupPaintFont(
+        g_popupTitleFont, g_popupTitleFontSize, titleSize, FW_BOLD,
+        L"Segoe UI Variable Text");
+    HFONT artistFont = EnsurePopupPaintFont(
+        g_popupArtistFont, g_popupArtistFontSize, artistSize, FW_NORMAL,
+        L"Segoe UI Variable Text");
 
     RECT titleScreen{
         LerpInt(g_popupSourceTitleRect.left, targetTitleScreen.left, progress),
@@ -5872,10 +6002,7 @@ void PaintExpandedPopup(HWND hwnd, HDC dc) {
         FillRect(dc, &progressValue, valueBrush);
         DeleteObject(valueBrush);
 
-        HFONT iconFont = CreateFontW(-16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                     CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                     DEFAULT_PITCH, L"Segoe Fluent Icons");
+        HFONT iconFont = EnsurePopupIconFont();
         SelectObject(dc, iconFont);
         const wchar_t* glyphs[] = {L"\uE892", state.isPlaying ? L"\uE769" : L"\uE768", L"\uE893"};
         for (int i = 0; i < 3; ++i) {
@@ -5885,12 +6012,9 @@ void PaintExpandedPopup(HWND hwnd, HDC dc) {
                       DT_CENTER | DT_SINGLELINE | DT_VCENTER);
         }
         SelectObject(dc, oldFont);
-        DeleteObject(iconFont);
     }
 
     SelectObject(dc, oldFont);
-    DeleteObject(artistFont);
-    DeleteObject(titleFont);
 }
 
 bool PopupButtonStyleIs(std::wstring_view style) {
@@ -9000,14 +9124,13 @@ bool UpdateCompactProgressFromSnapshot() {
         return false;
     }
 
-    std::chrono::steady_clock::time_point timestamp;
-    MediaState state = SnapshotMediaWithTimestamp(timestamp);
+    MediaProgressSnapshot state = SnapshotMediaProgress();
     int64_t positionTicks = state.positionTicks;
     if (state.hasSession && state.isPlaying && state.durationTicks > 0 &&
-        timestamp.time_since_epoch().count() != 0) {
+        state.timestamp.time_since_epoch().count() != 0) {
         double ageSeconds =
             std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - timestamp)
+                std::chrono::steady_clock::now() - state.timestamp)
                 .count() /
             1000.0;
         // The event-driven media worker has a 30-second safety refresh, so local
@@ -9424,8 +9547,7 @@ void UpdatePopupLiveProgressFromSnapshot() {
     auto now = std::chrono::steady_clock::now();
     g_popupLiveProgressFrameTime = now;
 
-    std::chrono::steady_clock::time_point timestamp;
-    MediaState state = SnapshotMediaWithTimestamp(timestamp);
+    MediaProgressSnapshot state = SnapshotMediaProgress();
     if (!state.hasSession || state.durationTicks <= 0) {
         g_popupSeekDragging = false;
         EndPopupSeekFeedback();
@@ -9438,7 +9560,7 @@ void UpdatePopupLiveProgressFromSnapshot() {
         }
         g_popupLiveProgressValue = 0.0;
         g_popupLiveProgressValid = false;
-        g_popupLiveProgressKey.clear();
+        g_popupLiveProgressRevision = 0;
         g_popupXamlProgress.Value(0.0);
         if (g_popupXamlElapsed) {
             g_popupXamlElapsed.Text(L"0:00");
@@ -9446,9 +9568,9 @@ void UpdatePopupLiveProgressFromSnapshot() {
         return;
     }
 
-    std::wstring key = state.title + L"\n" + state.artist + L"\n" +
-                       std::to_wstring(state.durationTicks);
-    bool trackChanged = !g_popupLiveProgressValid || key != g_popupLiveProgressKey;
+    bool trackChanged =
+        !g_popupLiveProgressValid ||
+        state.revision != g_popupLiveProgressRevision;
     if (trackChanged) {
         g_popupSeekDragging = false;
         EndPopupSeekFeedback();
@@ -9459,7 +9581,7 @@ void UpdatePopupLiveProgressFromSnapshot() {
             g_popupSeekCommitTargetTicks = 0;
             g_popupSeekCommitUntil = {};
         }
-        g_popupLiveProgressKey = key;
+        g_popupLiveProgressRevision = state.revision;
         g_popupLiveProgressValid = true;
     }
 
@@ -9492,9 +9614,9 @@ void UpdatePopupLiveProgressFromSnapshot() {
     }
 
     int64_t livePositionTicks = state.positionTicks;
-    if (state.isPlaying && timestamp.time_since_epoch().count() != 0) {
+    if (state.isPlaying && state.timestamp.time_since_epoch().count() != 0) {
         double ageSec = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            now - timestamp)
+                            now - state.timestamp)
                             .count() /
                         1000.0;
         // Keep progress moving between event-driven timeline updates. The media
@@ -9704,7 +9826,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
     g_popupOutsideClickArmed = false;
     g_popupLiveProgressValue = 0.0;
     g_popupLiveProgressValid = false;
-    g_popupLiveProgressKey.clear();
+    g_popupLiveProgressRevision = 0;
     g_popupLiveProgressFrameTime = {};
     g_popupSeekDragging = false;
     ResetPopupSeekFeedback();
@@ -9893,6 +10015,9 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             return 0;
         }
         case WM_TIMER: {
+            if (wParam != kPopupTimerId) {
+                return DefWindowProcW(hwnd, message, wParam, lParam);
+            }
             if (!g_popupSeekDragging) {
                 bool leftDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
                 if (!leftDown) {
@@ -12831,12 +12956,14 @@ bool RegisterPopupWindowClass() {
 void UnregisterPopupWindowClass() {
     UnregisterPopupBackdropOverlayClass();
     if (!g_popupClassRegistered) {
+        ReleasePopupPaintFonts();
         return;
     }
 
     HINSTANCE moduleInstance = ModInstance();
     if (moduleInstance && UnregisterClassW(kPopupClassName, moduleInstance)) {
         g_popupClassRegistered = false;
+        ReleasePopupPaintFonts();
     }
 }
 
@@ -16694,7 +16821,9 @@ void UpdatePlayerContents() {
         }
     }
 
-    if (compactArtChanged && g_dynamicTransportWash) {
+    if (g_dynamicTransportWash &&
+        (compactArtChanged ||
+         (compactArtHash && g_dynamicTransportWash.Source() == nullptr))) {
         bool canAnimateTransportWash =
             compactWasInitialized && !g_expanded && !g_unloading;
         try {
@@ -16875,9 +17004,29 @@ void UpdatePlayerContents() {
                     g_popupArtworkPreparationRequested.store(
                         true, std::memory_order_release);
                     RequestMediaRefresh();
-                    if (g_popupXamlArt && !displayThumbnailBytes.empty()) {
+                    if (g_popupXamlArt) {
                         g_popupXamlArt.Source(
-                            makeBitmap(displayThumbnailBytes, true, 320));
+                            displayThumbnailBytes.empty()
+                                ? nullptr
+                                : makeBitmap(displayThumbnailBytes, true, 320));
+                    }
+                    if (g_popupXamlArtFade) {
+                        g_popupXamlArtFade.Source(nullptr);
+                        g_popupXamlArtFade.Opacity(0.0);
+                    }
+                    if (g_popupXamlBackdropCover) {
+                        g_popupXamlBackdropCover.Source(nullptr);
+                    }
+                    if (g_popupXamlBackdropCoverFade) {
+                        g_popupXamlBackdropCoverFade.Source(nullptr);
+                        g_popupXamlBackdropCoverFade.Opacity(0.0);
+                    }
+                    if (g_popupXamlPanelCover) {
+                        g_popupXamlPanelCover.Source(nullptr);
+                    }
+                    if (g_popupXamlPanelCoverFade) {
+                        g_popupXamlPanelCoverFade.Source(nullptr);
+                        g_popupXamlPanelCoverFade.Opacity(0.0);
                     }
                 } else {
                     bool canAnimateCover =
@@ -17423,7 +17572,10 @@ void Wh_ModUninit() {
 
     bool teardownSucceeded =
         !g_playerGrid && !g_expandedPopup && !g_popupXamlRoot;
-    for (int attempt = 0; attempt < 3 && !teardownSucceeded; ++attempt) {
+    bool teardownCallbackFailed = false;
+    for (int attempt = 0;
+         attempt < 3 && !teardownSucceeded && !teardownCallbackFailed;
+         ++attempt) {
         HWND taskbarWindow = FindCurrentProcessTaskbarWnd();
         HWND candidates[] = {
             g_taskbarWnd && IsWindow(g_taskbarWnd) ? g_taskbarWnd : nullptr,
@@ -17440,24 +17592,37 @@ void Wh_ModUninit() {
                 continue;
             }
             previous = candidate;
+            bool callbackInvoked = false;
             if (RunFromWindowThread(
                     candidate,
                     [](void*) { RemoveIslandGrid(); },
-                    nullptr)) {
+                    nullptr,
+                    &callbackInvoked)) {
                 teardownSucceeded = true;
                 break;
             }
+            if (callbackInvoked) {
+                teardownCallbackFailed = true;
+                Wh_Log(L"Island: UI teardown callback threw; not retrying the same thread");
+                break;
+            }
         }
-        if (!teardownSucceeded) {
+        if (!teardownSucceeded && !teardownCallbackFailed) {
             Wh_Log(L"Island: UI teardown attempt %d failed; retrying", attempt + 1);
             Sleep(25);
         }
     }
-    if (teardownSucceeded) {
-        UnregisterPopupWindowClass();
-    } else {
-        Wh_Log(L"Island: critical: UI-thread teardown could not be dispatched");
+    if (!teardownSucceeded) {
+        if (teardownCallbackFailed) {
+            Wh_Log(L"Island: critical: UI-thread teardown callback failed");
+        } else {
+            Wh_Log(L"Island: critical: UI-thread teardown could not be dispatched");
+        }
     }
+    // UnregisterClassW safely fails while a window of the class still exists.
+    // Always attempt it so a taskbar rebuild without live popup windows can't
+    // leave the class registered and break the next mod load.
+    UnregisterPopupWindowClass();
 }
 
 void Wh_ModSettingsChanged() {
