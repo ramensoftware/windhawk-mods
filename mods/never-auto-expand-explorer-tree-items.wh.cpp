@@ -158,19 +158,18 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
         auto* pTreeViewNotify = reinterpret_cast<LPNMTREEVIEWW>(lParam);
         if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
             _wcsicmp(szClassName, L"NamespaceTreeControl") == 0 &&
+            pTreeViewNotify &&
             pTreeViewNotify->hdr.code == TVN_ITEMEXPANDINGW &&
-            pTreeViewNotify->action == TVE_EXPAND)
+            pTreeViewNotify->action == TVE_EXPAND &&
+            IsExplorerNavigationPane(pTreeViewNotify->hdr.hwndFrom) &&
+            !IsUserInteractingWithTreeView(pTreeViewNotify->hdr.hwndFrom) &&
+            !IsSingleRootItem(pTreeViewNotify->hdr.hwndFrom,
+                pTreeViewNotify->itemNew.hItem) &&
+            !(settings.allowTopLevelItemAutoExpansion &&
+                IsTopLevelItem(pTreeViewNotify->hdr.hwndFrom,
+                    pTreeViewNotify->itemNew.hItem)))
         {
-            auto hTreeView = pTreeViewNotify->hdr.hwndFrom;
-            auto hTreeItem = pTreeViewNotify->itemNew.hItem;
-            if (IsExplorerNavigationPane(hTreeView) &&
-                !IsUserInteractingWithTreeView(hTreeView) &&
-                !IsSingleRootItem(hTreeView, hTreeItem) &&
-                !(settings.allowTopLevelItemAutoExpansion &&
-                    IsTopLevelItem(hTreeView, hTreeItem)))
-            {
-                return TRUE;
-            }
+            return TRUE;
         }
     }
 
