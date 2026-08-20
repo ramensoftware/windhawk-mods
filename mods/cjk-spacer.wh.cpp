@@ -96,13 +96,11 @@ The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
-initializing. The mod waits until supported XAML UI appears before connecting;
-framework module loads only ask the worker to rescan existing hosts and never
-probe connection names from the loader call stack. It gives up after repeated
-hard failures or empty walks, and doesn't retry while another diagnostics tool
-holds the connection. An established connection can be restored after its XAML
-host disappears. If the modern path can't be initialized, enabled classic menus
-and tooltips remain active.
+initializing. The mod connects when supported XAML UI appears, gives up after
+repeated failures, and doesn't retry while another diagnostics tool holds the
+connection. An established connection can be restored after its XAML host
+disappears. If the modern path can't be initialized, enabled classic menus and
+tooltips remain active.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, an intercepted connection attempt can show a confirmation dialog;
 if the tool blocks it by returning success, the walk stops and this mod marks
@@ -2527,26 +2525,27 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
             break;
         }
 
+        // Run discovery before consuming flavor requests so a matching host
+        // coalesces into this iteration instead of scheduling a duplicate
+        // connection walk for the next one.
+        if (g_xamlDiagnosticsHostDiscoveryPending.exchange(
+                false, std::memory_order_acq_rel)) {
+            // Module-load hooks only arm discovery. Enumerating windows here
+            // keeps that work out of the loader call stack, and a connection
+            // walk is queued only when a supported host actually exists.
+            DiscoverExistingModernXamlHosts();
+        }
+
         // Each pending flag was stored with release ordering before its
         // SetEvent, so the exchanges observe every request that preceded the
         // wake-up. A request that arrives while work is in flight re-signals
         // the event and is picked up on the next iteration.
-        const bool discoverHosts =
-            g_xamlDiagnosticsHostDiscoveryPending.exchange(
-                false, std::memory_order_acq_rel);
         const bool requestWindows =
             g_windowsUiXamlDiagnostics.pending.exchange(
                 false, std::memory_order_acq_rel);
         const bool requestMicrosoft =
             g_microsoftUiXamlDiagnostics.pending.exchange(
                 false, std::memory_order_acq_rel);
-
-        if (discoverHosts) {
-            // Module-load hooks only arm discovery. Enumerating windows here
-            // keeps that work out of the loader call stack, and a connection
-            // walk is queued only when a supported host actually exists.
-            DiscoverExistingModernXamlHosts();
-        }
         if (!requestWindows && !requestMicrosoft) {
             continue;
         }
