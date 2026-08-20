@@ -1,3 +1,10 @@
+## 1.2.0 ([Aug 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1bd07309c86154278e3a2df58acc948fcc9a8cba/mods/lock-keys-notifier.wh.cpp))
+
+* Add sound trigger condition and per-state WAVs
+* Give Insert key its own sound toggle
+* Move the keyboard hook off the render thread onto a dedicated thread
+* Make the worker thread DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+
 ## 1.1.0 ([Jun 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00056305e81658b3ca6dda4c76f391593f3a17c1/mods/lock-keys-notifier.wh.cpp))
 
 * NEW: show notifications even if an elevated application is currently focused via a poll-timer (toggleable)
