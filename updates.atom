@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-20T18:19:06.000Z</updated>
+    <updated>2026-08-20T18:23:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Always Allow CTRL+SHIFT+ENTER 1.0.0]]></title>
+        <id>https://windhawk.net/mods/always-allow-ctrl-shift-enter#75b8cc7e573ac73efbc9e9df7fd768f3510a5530</id>
+        <link href="https://windhawk.net/mods/always-allow-ctrl-shift-enter"/>
+        <updated>2026-08-20T18:23:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alwaysallowctrlshiftenter">Always Allow CTRL+SHIFT+ENTER</h1>
+<p>The system run dialog (most commonly WIN+R) allows you to press CTRL+SHIFT+ENTER
+to run the command as administrator. However, this feature needs to be
+explicitly enabled by the program.</p>
+<p>This mod makes it always enabled, so that it works everywhere, including but not
+limited to:</p>
+<ul>
+<li>Explorer7</li>
+<li>Old versions of Task Manager</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[On-Screen Indicator Position 1.1.4]]></title>
         <id>https://windhawk.net/mods/on-screen-indicator-position#54b0e49c4e5899cc7b3f38f3f0ccbf428857b3c5</id>
@@ -465,26 +485,6 @@ Class#Name2</code>.</li>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Animations 1.2.0]]></title>
-        <id>https://windhawk.net/mods/windows-animations#3d753806f59713ff1824c20cb24b6414e006ce03</id>
-        <link href="https://windhawk.net/mods/windows-animations"/>
-        <updated>2026-08-14T09:53:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Windows 10 Style:</strong> Added the <code>Windows 10</code> (Collapse-to-taskbar) minimize/restore animation style. Perfect for those who love the clean, classic look of Windows 10 but with the flawless execution of our new rendering engine.</li>
-<li><strong>Random Effects Mode:</strong> Can't decide on just one style? You can now enable the <strong>Random</strong> option to let the mod surprise you with a different effect every time you Close, Minimize, or Restore a window.</li>
-<li><strong>Flawless "Spam Click" Handling:</strong> The biggest upgrade of this release! By introducing the <code>NativeMinimizeBarrier</code> and <code>AsyncRestoreAnimData</code> reservation system, the mod can now gracefully queue and synchronize overlapping requests. Whether you double-click or rapidly spam clicks on the taskbar icon, the minimize/restore animations will flow seamlessly without stuttering or skipping frames.</li>
-<li><strong>Pinpoint Taskbar Positioning:</strong> The taskbar icon tracking algorithm has been completely overhauled. Using window set signature hashing combined with Explorer UI events, windows will now accurately suck right into their exact icon position on the taskbar with perfect cache invalidation.</li>
-<li><strong>Alt+Tab Optimization:</strong> The mod no longer continuously polls global keys in the background. Alt+Tab session tracking has been refactored to use an <code>ExplorerFgHookThread</code>, saving CPU resources and providing smarter, more reliable responsiveness.</li>
-<li>Improved window uncloaking reliability, ensuring the correct Z-order is maintained and complex visual backdrops (like DWM Mica/Acrylic -- Translucent Windows mod) are properly restored.</li>
-<li>Fixed a focus management bug that occurred when temporarily borrowing taskbar focus to reveal an auto-hidden taskbar during the <strong>Genie</strong> effect.</li>
-<li>Migrated all API hooking and string setting retrievals to use standard <code>WindhawkUtils</code>, resulting in a cleaner and more maintainable codebase.</li>
-</ul>]]></content>
-        <author>
-            <name>ReDrag</name>
-            <uri>https://github.com/redrag2105</uri>
         </author>
     </entry>
 </feed>

@@ -368,6 +368,34 @@
         "version": "1.2"
       }
     },
+    "always-allow-ctrl-shift-enter": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787250204000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787250204000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "aubymori",
+        "description": "Always allow CTRL+SHIFT+ENTER in the Run dialog",
+        "github": "https://github.com/aubymori",
+        "include": [
+          "*"
+        ],
+        "license": "BSD-3-Clause",
+        "name": "Always Allow CTRL+SHIFT+ENTER",
+        "version": "1.0.0"
+      }
+    },
     "always-on-top": {
       "details": {
         "defaultSorting": 5060,
