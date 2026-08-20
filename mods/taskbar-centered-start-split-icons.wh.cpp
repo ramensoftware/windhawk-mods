@@ -426,6 +426,15 @@ thread_local bool g_inTaskbarArrangeOverride;
 // unsafe.
 
 HWND g_hTaskbarWnd;
+
+// Whether TaskbarWndSubclassProc is currently installed on g_hTaskbarWnd -
+// see EnsureTaskbarWnd (where it's installed) and InvalidateTaskbarLayout
+// (which checks it to pick PostMessage vs. the RunFromWindowThread
+// fallback). atomic: set from Explorer's UI thread (EnsureTaskbarWnd) or
+// Wh_ModAfterInit's thread, read from InvalidateTaskbarLayout's callers,
+// which include the dedicated WinEventHook thread.
+std::atomic<bool> g_taskbarWndSubclassed;
+
 HWINEVENTHOOK g_locationChangeHook;
 HWINEVENTHOOK g_showEventHook;
 std::atomic<int> g_winEventRawCount;
@@ -453,6 +462,15 @@ UINT_PTR g_buttonHwndResolveTimerId;
 // against whatever raw event last landed outside the 150ms window before
 // the trailing timer took over.
 ULONGLONG g_lastDragFollowInvalidate;
+
+// Leading-edge throttle for EVENT_OBJECT_SHOW, mirroring the
+// LOCATIONCHANGE throttle above - a top-level window becoming visible
+// fires this event just as often system-wide, and a single arm(0) call is
+// enough to catch every button that's currently pending regardless of how
+// many SHOW events land in the same burst (unlike drag-follow, there's no
+// "final position" that specifically needs the trailing event, so no
+// trailing timer is needed here).
+ULONGLONG g_lastShowEventArm;
 
 // ============================================================================
 // Generic taskbar/XAML helpers
@@ -1647,6 +1665,25 @@ void StartWinEventHook();
 // brand-new button coming on its own.
 void ArmButtonHwndResolveTimer(DWORD delayMs);
 
+// Defined later (Live drag-follow section, alongside InvalidateTaskbarLayout
+// itself); forward-declared here so EnsureTaskbarWnd (below) can install it
+// on g_hTaskbarWnd as soon as the window resolves - see
+// InvalidateTaskbarLayout's own comment for why a subclass is what lets it
+// use a non-blocking PostMessage instead of RunFromWindowThread's per-call
+// blocking marshal.
+LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
+                                        UINT uMsg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        UINT_PTR uIdSubclass,
+                                        DWORD_PTR dwRefData);
+
+// Passed to both SetWindowSubclassFromAnyThread (EnsureTaskbarWnd) and
+// RemoveWindowSubclass (Wh_ModBeforeUninit) - only needs to be unique among
+// subclasses this mod installs on the same window, and it only ever
+// installs this one.
+constexpr UINT_PTR kTaskbarWndSubclassId = 1;
+
 // g_hTaskbarWnd is normally resolved once, in Wh_ModAfterInit. But if
 // Windhawk injects into explorer.exe before Shell_TrayWnd has been created
 // yet - observed after a fresh boot, never after a manual mod disable/
@@ -1667,6 +1704,13 @@ HWND EnsureTaskbarWnd() {
     // to check unconditionally every pass.
     if (g_hTaskbarWnd && !IsWindow(g_hTaskbarWnd)) {
         g_hTaskbarWnd = nullptr;
+        // The old window's subclass chain goes with it (comctl32 tears it
+        // down via WM_NCDESTROY, which TaskbarWndSubclassProc already
+        // forwards to DefSubclassProc for every message it doesn't
+        // otherwise handle) - this just keeps the flag in step so a fresh
+        // resolve below knows to install a subclass on the new window
+        // rather than assuming the old one still covers it.
+        g_taskbarWndSubclassed = false;
     }
 
     if (g_hTaskbarWnd) {
@@ -1686,6 +1730,23 @@ HWND EnsureTaskbarWnd() {
     if (g_hTaskbarWnd) {
         Wh_Log(L"Resolved taskbar window: %p", g_hTaskbarWnd);
         StartWinEventHook();
+
+        // Lets InvalidateTaskbarLayout notify this window with a
+        // non-blocking PostMessage instead of RunFromWindowThread's
+        // per-call SetWindowsHookEx/SendMessage/UnhookWindowsHookEx dance -
+        // see its own comment. A one-time blocking install here (via
+        // SetWindowSubclassFromAnyThread's own marshal, if this isn't
+        // already running on the taskbar thread) is fine; it's the
+        // per-event cost on the hot invalidate path this is meant to
+        // avoid, not one-shot setup.
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                g_hTaskbarWnd, TaskbarWndSubclassProc, kTaskbarWndSubclassId)) {
+            g_taskbarWndSubclassed = true;
+        } else {
+            Wh_Log(L"EnsureTaskbarWnd: SetWindowSubclassFromAnyThread "
+                   L"failed, InvalidateTaskbarLayout will use the blocking "
+                   L"fallback instead");
+        }
     }
 
     return g_hTaskbarWnd;
@@ -1699,6 +1760,42 @@ FrameworkElement FindTaskbarFrameRepeater(FrameworkElement anyDescendant) {
         return child;
     }
     return nullptr;
+}
+
+// Caches the resolved repeater across calls instead of every caller
+// redoing GetTaskbarXamlRoot's resolution chain (taskband HWND -> vtable
+// scan -> TaskbarHost::FrameHeight prologue parse -> QueryInterface) plus
+// FindTaskbarFrameRepeater's three-level tree walk from scratch - this used
+// to run independently in RecomputeLayoutPlan, InvalidateTaskbarLayout, and
+// ResolvePendingButtonHwnds on every single call.
+//
+// A weak_ref is enough to know when to re-resolve: XAML's own visual tree
+// holds the only strong reference to the repeater, so once the taskbar's
+// tree is torn down and rebuilt (Explorer restart, a DPI/monitor change),
+// the old instance is destructed and the weak_ref naturally comes back
+// empty - exactly the signal to redo the real resolution. No separate
+// "is this still attached" check is needed on top of that.
+//
+// MUST only run when confirmed to be on g_hTaskbarWnd's own thread - same
+// constraint as GetTaskbarXamlRoot itself, which this wraps.
+winrt::weak_ref<FrameworkElement> g_cachedTaskbarRepeaterWeak;
+
+FrameworkElement GetCachedTaskbarRepeater() {
+    if (FrameworkElement cached = g_cachedTaskbarRepeaterWeak.get()) {
+        return cached;
+    }
+
+    XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
+    if (!xamlRoot) {
+        return nullptr;
+    }
+
+    FrameworkElement content = xamlRoot.Content().try_as<FrameworkElement>();
+    FrameworkElement repeater = FindTaskbarFrameRepeater(content);
+    if (repeater) {
+        g_cachedTaskbarRepeaterWeak = repeater;
+    }
+    return repeater;
 }
 
 // Walks the primary taskbar's current TaskListButtons and (re)resolves any
@@ -1733,13 +1830,7 @@ void ResolvePendingButtonHwnds() {
     // tree is being recreated - an uncaught throw here crosses the boundary
     // and fail-fasts explorer.exe.
     try {
-        XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
-        if (!xamlRoot) {
-            return;
-        }
-
-        FrameworkElement content = xamlRoot.Content().try_as<FrameworkElement>();
-        FrameworkElement repeater = FindTaskbarFrameRepeater(content);
+        FrameworkElement repeater = GetCachedTaskbarRepeater();
         if (!repeater) {
             return;
         }
@@ -1973,20 +2064,52 @@ void RecomputeLayoutPlan() {
     }
     if (!g_planDirty &&
         GetTickCount64() - g_lastPlanRecomputeTick < kMaxPlanStalenessMs) {
-        return;
+        // This backstop only bounds staleness while ArrangeOverride keeps
+        // getting called at least this often - once XAML stops producing
+        // layout passes, this early return would never get reevaluated
+        // again, so a change that landed in a skipped pass (see
+        // g_planDirty's own comment) could then sit stale indefinitely
+        // instead of just kMaxPlanStalenessMs (concretely: a pin/unpin on
+        // an otherwise-idle desktop). The repeater is cached now (see
+        // GetCachedTaskbarRepeater), so checking the realized task-list-
+        // button set against what the plan actually covers is affordable
+        // every time this branch is taken - if any live button isn't in
+        // g_lastArrangedX, the plan is stale regardless of the dirty flag
+        // or the clock, and this pass needs to fall through to a real
+        // recompute rather than trust the backstop.
+        bool planCoversLiveTaskListButtons = true;
+        try {
+            if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
+                for (auto& child : GetRepeaterChildElements(repeater)) {
+                    if (IsTaskListButton(child) &&
+                        !g_lastArrangedX.count(winrt::get_abi(child))) {
+                        planCoversLiveTaskListButtons = false;
+                        break;
+                    }
+                }
+            }
+        } catch (...) {
+            // Conservative default: treat an exception here as "can't
+            // confirm the plan is current" and fall through to the real
+            // recompute below, which has its own exception handling.
+            planCoversLiveTaskListButtons = false;
+        }
+        if (planCoversLiveTaskListButtons) {
+            return;
+        }
     }
     g_lastPlanRecomputeTick = GetTickCount64();
 
     g_planStats = {};
 
     try {
-        XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
-        if (!xamlRoot) {
+        FrameworkElement repeater = GetCachedTaskbarRepeater();
+        if (!repeater) {
             return;
         }
-        FrameworkElement content = xamlRoot.Content().try_as<FrameworkElement>();
-        FrameworkElement repeater = FindTaskbarFrameRepeater(content);
-        if (!repeater) {
+        FrameworkElement content =
+            repeater.XamlRoot().Content().try_as<FrameworkElement>();
+        if (!content) {
             return;
         }
 
@@ -2238,15 +2361,72 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
 // Live drag-follow: force a taskbar relayout when a top-level window moves
 // ============================================================================
 
-// Guards against reentering InvalidateTaskbarLayout itself on the
-// taskbar's own thread. WinEventProc can fire in rapid bursts (observed:
-// thousands of raw events within seconds while something on screen is
-// spamming EVENT_OBJECT_LOCATIONCHANGE).
+// Guards against reentering the invalidate body itself on the taskbar's
+// own thread. WinEventProc can fire in rapid bursts (observed: thousands
+// of raw events within seconds while something on screen is spamming
+// EVENT_OBJECT_LOCATIONCHANGE), and both call paths below
+// (TaskbarWndSubclassProc's dispatch and RunFromWindowThread's fallback)
+// land on that same thread, so one thread_local flag covers either.
 //
-// This lambda deliberately never calls UpdateLayout() - see the note on
+// This deliberately never calls UpdateLayout() - see the note on
 // InvalidateTaskbarLayout below for why forcing a synchronous layout pass
 // here is unsafe regardless of this guard.
 thread_local bool g_inInvalidateTaskbarLayout;
+
+// The actual invalidate work, shared by both of InvalidateTaskbarLayout's
+// call paths below. MUST only run on g_hTaskbarWnd's own thread - same
+// constraint as GetCachedTaskbarRepeater, which this uses.
+void PerformTaskbarLayoutInvalidate() {
+    if (g_inInvalidateTaskbarLayout) {
+        g_invalidateSkippedReentrant++;
+        return;
+    }
+    g_inInvalidateTaskbarLayout = true;
+
+    try {
+        FrameworkElement repeater = GetCachedTaskbarRepeater();
+        if (!repeater) {
+            Wh_Log(L"InvalidateTaskbarLayout: GetCachedTaskbarRepeater failed");
+        } else {
+            repeater.InvalidateArrange();
+            repeater.InvalidateMeasure();
+        }
+    } catch (...) {
+        g_invalidateExceptions++;
+    }
+
+    g_inInvalidateTaskbarLayout = false;
+}
+
+// Private message InvalidateTaskbarLayout posts to run
+// PerformTaskbarLayoutInvalidate on the taskbar's own thread without
+// blocking the caller - see InvalidateTaskbarLayout's own comment for why
+// that matters on this specific call path.
+const UINT g_invalidateTaskbarLayoutMsg =
+    RegisterWindowMessage(L"Windhawk_InvalidateTaskbarLayout_" WH_MOD_ID);
+
+// Installed on g_hTaskbarWnd by EnsureTaskbarWnd via
+// SetWindowSubclassFromAnyThread. A subclass proc only ever runs on the
+// thread that owns the window, which is what lets InvalidateTaskbarLayout
+// use a plain PostMessage here instead of RunFromWindowThread's
+// SetWindowsHookEx/SendMessage/UnhookWindowsHookEx dance on every single
+// call. Everything other than the private message is forwarded to
+// DefSubclassProc, which is also what lets comctl32 clean this subclass up
+// automatically via WM_NCDESTROY if the window is ever destroyed out from
+// under the mod without Wh_ModBeforeUninit's explicit RemoveWindowSubclass
+// call running first.
+LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
+                                        UINT uMsg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        UINT_PTR uIdSubclass,
+                                        DWORD_PTR dwRefData) {
+    if (uMsg == g_invalidateTaskbarLayoutMsg) {
+        PerformTaskbarLayoutInvalidate();
+        return 0;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
 
 // Marks the layout dirty and lets the XAML dispatcher pick it up on its
 // own next tick, rather than forcing a synchronous UpdateLayout() call:
@@ -2269,40 +2449,26 @@ void InvalidateTaskbarLayout() {
     // that needs to know about all of them.
     g_planDirty = true;
 
-    bool posted = RunFromWindowThread(g_hTaskbarWnd, [] {
-        if (g_inInvalidateTaskbarLayout) {
-            g_invalidateSkippedReentrant++;
-            return;
+    if (g_taskbarWndSubclassed) {
+        // The hot path: called from WinEventProc's drag-follow throttle
+        // at up to ~7 times/sec while any window on the system is being
+        // dragged, plus every resolve tick. PostMessage doesn't block on
+        // Explorer's UI thread pumping it, unlike RunFromWindowThread
+        // below, which installs a WH_CALLWNDPROC hook and blocks in
+        // SendMessage until that thread processes it - a real cost at
+        // this frequency, even though it's fine for a one-shot call.
+        if (!PostMessage(g_hTaskbarWnd, g_invalidateTaskbarLayoutMsg, 0, 0)) {
+            Wh_Log(L"InvalidateTaskbarLayout: PostMessage failed, error=%lu",
+                   GetLastError());
         }
-        g_inInvalidateTaskbarLayout = true;
+        return;
+    }
 
-        try {
-            XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
-            if (!xamlRoot) {
-                Wh_Log(L"InvalidateTaskbarLayout: GetTaskbarXamlRoot failed");
-                g_inInvalidateTaskbarLayout = false;
-                return;
-            }
-
-            FrameworkElement content =
-                xamlRoot.Content().try_as<FrameworkElement>();
-            FrameworkElement repeater = FindTaskbarFrameRepeater(content);
-            if (!repeater) {
-                Wh_Log(
-                    L"InvalidateTaskbarLayout: FindTaskbarFrameRepeater "
-                    L"failed");
-                g_inInvalidateTaskbarLayout = false;
-                return;
-            }
-
-            repeater.InvalidateArrange();
-            repeater.InvalidateMeasure();
-        } catch (...) {
-            g_invalidateExceptions++;
-        }
-
-        g_inInvalidateTaskbarLayout = false;
-    });
+    // Fallback for the (should stay rare) case where the taskbar window
+    // was never successfully subclassed - still gets the job done, just
+    // without the non-blocking benefit above.
+    bool posted =
+        RunFromWindowThread(g_hTaskbarWnd, PerformTaskbarLayoutInvalidate);
     if (!posted) {
         Wh_Log(L"InvalidateTaskbarLayout: RunFromWindowThread failed");
     }
@@ -2363,6 +2529,23 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
         // this is a fast path on top of it, not a replacement for it, in
         // case a launch is ever reached through a code path that
         // legitimately doesn't produce this event.
+        //
+        // Leading-edge throttled the same way the location-change branch
+        // below is: this event fires for every top-level window becoming
+        // visible anywhere on the system, unthrottled, so an app that
+        // opens several windows at once (or a burst of unrelated launches)
+        // would otherwise schedule a full resolve pass - a blocking
+        // marshal onto Explorer's UI thread plus a repeater walk and an
+        // AutomationProperties::GetName per button - for every single one.
+        // No trailing timer is needed the way drag-follow has one: unlike
+        // a window's final drop position, arm(0) just needs to run once to
+        // pick up every currently-pending button, so missing the last
+        // event in a burst costs nothing.
+        ULONGLONG nowShow = GetTickCount64();
+        if (nowShow - g_lastShowEventArm < 150) {
+            return;
+        }
+        g_lastShowEventArm = nowShow;
         ArmButtonHwndResolveTimer(0);
         return;
     }
@@ -2971,6 +3154,30 @@ void Wh_ModBeforeUninit() {
     // has removed them. g_unloading being set here (before that) is what
     // keeps ResolvePendingButtonHwnds' click-sentinel probe from running
     // once the hooks it depends on are gone - see its own comment.
+
+    // Removed here, before the final InvalidateTaskbarLayout() call below,
+    // for two reasons: it makes that call fall back to RunFromWindowThread's
+    // blocking marshal instead of the normally non-blocking PostMessage
+    // path, restoring this function's "runs before Wh_ModBeforeUninit
+    // returns" guarantee for this last invalidate exactly as it was before
+    // the subclass existed; and it gets TaskbarWndSubclassProc off
+    // Shell_TrayWnd as early as it's safe to, rather than leaving it wired
+    // in for the rest of teardown. RemoveWindowSubclass isn't safe to call
+    // across threads any more than SetWindowSubclass is, so this reuses
+    // RunFromWindowThread's existing marshal rather than calling it
+    // directly - safe here since RunFromWindowThread only depends on raw
+    // Win32 APIs, not on any of this mod's own hooks (which are still
+    // installed at this point regardless).
+    if (g_hTaskbarWnd && g_taskbarWndSubclassed.exchange(false)) {
+        if (!RunFromWindowThread(g_hTaskbarWnd, [] {
+                RemoveWindowSubclass(g_hTaskbarWnd, TaskbarWndSubclassProc,
+                                     kTaskbarWndSubclassId);
+            })) {
+            Wh_Log(L"Wh_ModBeforeUninit: RunFromWindowThread failed, "
+                   L"taskbar subclass not removed");
+        }
+    }
+
     InvalidateTaskbarLayout();
 }
 
