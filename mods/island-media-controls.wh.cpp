@@ -157,20 +157,20 @@ play/pause, and next controls.
     $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, Transparent, and Transparent borderless use a capturable static blurred backdrop without self-capture feedback.
   - CompactWidth: 169
     $name: Island width
-    $description: Accepted range: 96–320 px.
+    $description: "Accepted range: 96–320 px."
   - Height: 40
     $name: Island height
-    $description: Accepted range: 32–56 px.
+    $description: "Accepted range: 32–56 px."
   - MarginLeft: 4
     $name: Left margin
   - MarginRight: 4
     $name: Right margin
   - ExpandedWidth: 360
     $name: Expanded player width
-    $description: Accepted range: 240–640 px.
+    $description: "Accepted range: 240–640 px."
   - ExpandedHeight: 500
     $name: Expanded player maximum height
-    $description: Accepted range: 430–760 px. In Fullsize mode, the smaller width or height limit determines the final player size.
+    $description: "Accepted range: 430–760 px. In Fullsize mode, the smaller width or height limit determines the final player size."
   - ExpandedCornerRadius: 24
     $name: Expanded player corner radius
     $description: Scales the shared G2 continuous corner profile for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
