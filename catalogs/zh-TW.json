@@ -1466,7 +1466,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1785934694000,
+        "updated": 1787245108000,
         "users": 22
       },
       "metadata": {
@@ -1482,7 +1482,7 @@
         ],
         "license": "GPL-3.0",
         "name": "CJK Spacer",
-        "version": "0.1.27"
+        "version": "0.1.28"
       }
     },
     "classic-browser-fix": {

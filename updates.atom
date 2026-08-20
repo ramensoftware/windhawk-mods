@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-20T16:51:19.000Z</updated>
+    <updated>2026-08-20T16:58:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CJK Spacer 0.1.28]]></title>
+        <id>https://windhawk.net/mods/cjk-spacer#74549269a15a4e540dea200a961aa836b65f3714</id>
+        <link href="https://windhawk.net/mods/cjk-spacer"/>
+        <updated>2026-08-20T16:58:28.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix a confirmed startup race in the opt-in modern XAML path. When Explorer, Windhawk, and notification-area applications start concurrently, a diagnostics attempt can run before the corresponding XAML core is ready. The previous one-shot attempt then remains disabled until a mod reload.</p>
+<p>The modern diagnostics path now:</p>
+<ul>
+<li>reacts to matching XAML host-window creation through narrowly filtered <code>CreateWindowExW</code>, <code>CreateWindowInBand</code>, and <code>CreateWindowInBandEx</code> hooks instead of DLL-load timing or timed polling;</li>
+<li>scans existing top-level and child windows in the current Explorer process from <code>Wh_ModAfterInit</code>, stopping once both XAML flavors are already queued or no longer need a trigger;</li>
+<li>maps <code>XamlExplorerHostIslandWindow</code> and a taskbar-owned <code>Windows.UI.Composition.DesktopWindowContentBridge</code> to Windows.UI.Xaml, and maps <code>CabinetWClass</code> plus <code>XamlExplorerHostIslandWindow_WASDK</code> to Microsoft.UI.Xaml;</li>
+<li>only signals a managed worker from window hooks, keeping COM activation and XAML Diagnostics work outside window-creation call stacks;</li>
+<li>coalesces Windows.UI.Xaml and Microsoft.UI.Xaml requests independently;</li>
+<li>allows hard connection failures to be retried by later matching host-window notifications, with at most three attempts per flavor;</li>
+<li>suppresses further attempts when a diagnostics call succeeds without creating a watcher, avoiding repeated conflicts with another Diagnostics consumer;</li>
+<li>resets only the affected flavor's attempt budget when an established connection disconnects;</li>
+<li>stops and joins the worker before unload, preserving the existing thread-lifetime guarantees.</li>
+</ul>
+<p>The connection-name walk matches the range the reference mods use (up to 10,000 names), because the endpoint name embeds a process-lifetime core ordinal that is never reused and a live endpoint can sit at a high index. The cost of a failed walk is bounded by the walk count instead: after three empty walks in a session a flavor stops probing until an established connection disconnects. The walk runs only after a matching host-window or framework-module trigger indicates that the corresponding core should be ready.</p>]]></content>
+        <author>
+            <name>aenerv7</name>
+            <uri>https://github.com/aenerv7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Keys Notifier 1.2.0]]></title>
         <id>https://windhawk.net/mods/lock-keys-notifier#1bd07309c86154278e3a2df58acc948fcc9a8cba</id>
@@ -407,51 +431,6 @@ Lavrinenko</a>.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.16.0]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#e9237a6f4eb990817987ed34d41c00842f43dadd</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-08-10T18:32:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="snapsentry">SnapSentry</h1>
-<p>Watches your Windows <strong>Screenshots</strong> folder, wherever it is, and handles new
-screenshots as they are saved. Copy the image, delete the file after a delay, or
-choose what to do from a notification.</p>
-<p><img src="https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png" alt="The SnapSentry notification" /></p>
-<h2 id="clipboardmodes">Clipboard modes</h2>
-<ul>
-<li><strong>Image</strong> copies the picture so it stays pasteable even after the file is deleted.</li>
-<li><strong>File</strong> copies the file for pasting into File Explorer. Deletion is disabled.</li>
-<li><strong>Path</strong> copies the full path as text. You can pick plain text, a quoted path, a
-file link, or a Markdown image link, which is handy for pasting a screenshot
-straight into notes or a bug report. Deletion is disabled.</li>
-<li><strong>None</strong> leaves the clipboard unchanged.</li>
-</ul>
-<h2 id="naming">Naming</h2>
-<p>You can have SnapSentry rename each new screenshot from the window that was in
-front when it was taken, together with a timestamp, so a file ends up named for
-what it shows instead of Screenshot (1). The file stays in the same folder.</p>
-<h2 id="thenotification">The notification</h2>
-<p>The popup is a real Windows notification, so it matches your light or dark theme.
-While the popup is turned on, SnapSentry registers itself with Windows so the
-notification buttons work, and turning the popup off or disabling the mod removes
-that registration again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. If you have turned its notifications off, it takes that as a
-cue to stay quiet: it still copies to the clipboard but shows no dialog and never
-auto deletes.</p>
-<h2 id="privacy">Privacy</h2>
-<p>SnapSentry treats any supported image written into the watched folder within the
-last few seconds as a new screenshot. Files that were already there, and copies of
-older images dragged in or synced from another device, are left alone. A brand new
-file saved or downloaded straight into the folder cannot be told apart from a
-capture, so avoid pointing the folder at a place where downloads land. By default a
-deleted screenshot goes to the Recycle Bin so it can be restored; if you turn that
-off, deletion is permanent. Deleting a screenshot does not remove copies already
-stored in clipboard history, cloud sync, backups, or other programs.</p>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
