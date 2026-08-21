@@ -2,7 +2,7 @@
 // @id              start-button-replacer
 // @name            Start Button Replacer
 // @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image
-// @version         0.12.3
+// @version         0.12.4
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
@@ -3345,14 +3345,18 @@ bool RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, void* procParam) {
     return allSucceeded;
 }
 
-HWND FindAnyWindowOnThread(DWORD threadId) {
-    HWND result = nullptr;
+std::vector<HWND> FindWindowsOnThread(DWORD threadId) {
+    std::vector<HWND> result;
 
     EnumThreadWindows(
         threadId,
         [](HWND window, LPARAM param) -> BOOL {
-            *reinterpret_cast<HWND*>(param) = window;
-            return FALSE;
+            try {
+                reinterpret_cast<std::vector<HWND>*>(param)->push_back(window);
+                return TRUE;
+            } catch (...) {
+                return FALSE;
+            }
         },
         reinterpret_cast<LPARAM>(&result));
 
@@ -3365,16 +3369,25 @@ bool RunOnTrackedInstanceThreads(RunFromWindowThreadProc_t proc,
     bool allSucceeded = true;
 
     for (DWORD threadId : threadIds) {
-        HWND window = FindAnyWindowOnThread(threadId);
+        auto windows = FindWindowsOnThread(threadId);
 
-        if (!window) {
-            Wh_Log(L"No window was found on tracked taskbar thread %lu",
+        if (windows.empty()) {
+            Wh_Log(L"No windows were found on tracked taskbar thread %lu",
                    threadId);
             allSucceeded = false;
             continue;
         }
 
-        if (!RunFromWindowThread(window, proc, procParam)) {
+        bool succeeded = false;
+
+        for (HWND window : windows) {
+            if (RunFromWindowThread(window, proc, procParam)) {
+                succeeded = true;
+                break;
+            }
+        }
+
+        if (!succeeded) {
             Wh_Log(L"Running code on tracked taskbar thread %lu failed",
                    threadId);
             allSucceeded = false;
@@ -3597,7 +3610,6 @@ void HandleLoadedTaskbarViewModule(HMODULE module) {
     Wh_Log(L"Taskbar view module loaded");
 
     if (!HookTaskbarViewDllSymbols(module)) {
-        g_taskbarViewDllLoaded = false;
         return;
     }
 
@@ -3769,12 +3781,22 @@ void Wh_ModBeforeUninit() {
     // callback and XAML reference is gone before controlled unload continues.
     RunOnTrackedInstanceThreads(DetachAllTaskbarsProc, nullptr);
 
-    // A thread window can be recreated while it's being enumerated. Retry once
-    // if the first pass didn't visit every tracked owner thread.
     size_t remainingInstances = GetTrackedInstanceCount();
 
     if (remainingInstances != 0) {
-        Wh_Log(L"%zu Start icon instance(s) remained after cleanup; retrying",
+        Wh_Log(L"%zu Start icon instance(s) remained after owner-thread "
+               L"cleanup; trying current taskbar windows",
+               remainingInstances);
+
+        RunOnAllTaskbarThreads(DetachAllTaskbarsProc, nullptr);
+        remainingInstances = GetTrackedInstanceCount();
+    }
+
+    // A taskbar window can be recreated while either pass is enumerating.
+    // Retry the recorded owner threads once before allowing unload to continue.
+    if (remainingInstances != 0) {
+        Wh_Log(L"%zu Start icon instance(s) remained after taskbar-window "
+               L"cleanup; retrying owner threads",
                remainingInstances);
 
         RunOnTrackedInstanceThreads(DetachAllTaskbarsProc, nullptr);
