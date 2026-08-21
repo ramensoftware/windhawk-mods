@@ -85,7 +85,13 @@ right next to Start on whichever side you prefer.
   made by native layout logic (this mod only overrides each button's
   final X position afterward, it never touches sizing), evaluated against
   the taskbar's native, unsplit layout rather than this mod's split one -
-  unconfirmed, not yet investigated further.
+  unconfirmed, not yet investigated further. **Separately reported:** with
+  "Always" enabled, multiple windows of the same app have been observed
+  not combining into one button at all, appearing as separate icons
+  regardless of count. This mod has no code path that could cause that -
+  grouping is a native decision made before this mod's hooks ever see a
+  button - but it's flagged here as a planned follow-up pending
+  confirmation of whether it reproduces with the mod disabled.
 - **Undocumented internals.** This mod hooks private, unversioned classes
   inside `taskbar.dll` and `Taskbar.View.dll` (via symbols resolved from
   Microsoft's public symbol server at runtime, not hardcoded offsets). A
@@ -208,6 +214,7 @@ community.
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -369,7 +376,10 @@ double PinnedAppOrderKey() {
 // assignment - see its comment for why.
 ModSettings LoadSettingsFromStore() {
     ModSettings s;
-    s.gapPx = Wh_GetIntSetting(L"gapPx");
+    // Clamped rather than trusted as-is: a negative value from the
+    // settings UI would otherwise pull the flanking icon groups into the
+    // Start button instead of away from it.
+    s.gapPx = std::max(0, Wh_GetIntSetting(L"gapPx"));
 
     auto placement = WindhawkUtils::StringSetting::make(L"systemButtonsPlacement");
     s.systemButtonsPlacement =
@@ -821,12 +831,30 @@ thread_local void* g_clickSentinel_TaskGroup;
 // The interception either works on this Windows build or it doesn't - it
 // isn't a per-button thing - so one confirmed capture is proof it works,
 // and one probe that reaches ReportClicked with zero capture, before any
-// capture has ever been confirmed, is proof it doesn't. g_clickSentinelBroken
-// latches that verdict permanently: ResolveHwndFromTaskListButton bails
-// out before ever calling ReportClicked again once it's set, rather than
+// capture has ever been confirmed, is proof it doesn't. Latched per path
+// (item vs. group), not as one shared flag: the two paths reach
+// CTaskListWnd::HandleClick through different internal call chains
+// (TaskItem::ReportClicked vs. TaskGroup::ReportClicked), so a Windows
+// update could break only one of them - a shared flag would let a still-
+// working item-path confirmation mask a broken group path, which matters
+// most because the group path is the one a pinned-but-not-running app's
+// button keeps retrying (see ResolveHwndFromTaskGroup's IsRunning check
+// for how that retry is now also avoided at the source). Each *Broken
+// latch permanently gates its own path in ResolveHwndFromTaskListButton -
+// once set, that path never calls ReportClicked again, rather than
 // retrying a mechanism now known to dispatch real clicks.
-std::atomic<bool> g_clickSentinelConfirmed;
-std::atomic<bool> g_clickSentinelBroken;
+std::atomic<bool> g_clickSentinelItemConfirmed;
+std::atomic<bool> g_clickSentinelItemBroken;
+std::atomic<bool> g_clickSentinelGroupConfirmed;
+std::atomic<bool> g_clickSentinelGroupBroken;
+
+// Which path's probe is in flight on this thread when a sentinel click
+// might land in CTaskListWnd_HandleClick_Hook below - the hook only sees
+// the click itself, not which resolve function dispatched it, so this is
+// what lets it credit the right path's *Confirmed flag. Set immediately
+// before dispatching a probe, alongside the existing reset-before/read-
+// after g_clickSentinel_TaskItem/_TaskGroup pattern.
+thread_local bool g_clickSentinelProbingGroup;
 
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                               void* taskGroup,
@@ -835,7 +863,11 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
     if (launcherOptions && *launcherOptions == (void*)&g_clickSentinel) {
         g_clickSentinel_TaskItem = taskItem;
         g_clickSentinel_TaskGroup = taskGroup;
-        g_clickSentinelConfirmed = true;
+        if (g_clickSentinelProbingGroup) {
+            g_clickSentinelGroupConfirmed = true;
+        } else {
+            g_clickSentinelItemConfirmed = true;
+        }
         return S_OK;
     }
 
@@ -847,14 +879,21 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
 // capture - the one point where "no capture" is actually evidence about
 // the interception itself, as opposed to an earlier, unrelated failure
 // (missing view-model, no task item) that never reached ReportClicked at
-// all. See g_clickSentinelBroken's own comment for the full reasoning.
-void NoteUnconfirmedClickSentinelMiss() {
-    if (!g_clickSentinelConfirmed && !g_clickSentinelBroken.exchange(true)) {
-        Wh_Log(L"Click-sentinel interception never confirmed working - "
-               L"disabling further HWND-resolution probes to avoid "
-               L"dispatching real clicks. This usually means a Windows "
-               L"update changed CTaskListWnd::HandleClick's internal call "
-               L"path; consider disabling this mod until it's updated.");
+// all. See g_clickSentinelItemBroken/g_clickSentinelGroupBroken's own
+// comment for the full reasoning and why this is tracked per path.
+void NoteUnconfirmedClickSentinelMiss(bool isGroupPath) {
+    std::atomic<bool>& confirmed =
+        isGroupPath ? g_clickSentinelGroupConfirmed : g_clickSentinelItemConfirmed;
+    std::atomic<bool>& broken =
+        isGroupPath ? g_clickSentinelGroupBroken : g_clickSentinelItemBroken;
+    if (!confirmed && !broken.exchange(true)) {
+        Wh_Log(L"Click-sentinel interception (%s path) never confirmed "
+               L"working - disabling further HWND-resolution probes on "
+               L"this path to avoid dispatching real clicks. This usually "
+               L"means a Windows update changed CTaskListWnd::HandleClick's "
+               L"internal call path; consider disabling this mod until "
+               L"it's updated.",
+               isGroupPath ? L"group" : L"item");
     }
 }
 
@@ -882,6 +921,19 @@ TaskListGroupViewModel_IsMultiWindow_t
 
 thread_local bool g_captureTaskGroup;
 thread_local void* g_capturedTaskGroup;
+
+// RAII around g_captureTaskGroup's set/clear pair - if the IsMultiWindow
+// call between them ever exited non-locally, a plain set/clear (the
+// original form) would leave this stuck true, and ITaskGroup_IsRunning_Hook
+// would then answer every subsequent real IsRunning call with a hardcoded
+// false instead of forwarding to Original - a wrong answer to a question
+// the taskbar itself uses for real decisions (running indicators, click
+// behavior), for the rest of the session. Same reasoning as
+// ScopedArrangeOverrideFlag elsewhere in this file.
+struct ScopedCaptureTaskGroup {
+    ScopedCaptureTaskGroup() { g_captureTaskGroup = true; }
+    ~ScopedCaptureTaskGroup() { g_captureTaskGroup = false; }
+};
 
 using ITaskGroup_IsRunning_t = bool(WINAPI*)(void* pThis);
 ITaskGroup_IsRunning_t ITaskGroup_IsRunning_Original;
@@ -1003,13 +1055,14 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
     }
 
     g_clickSentinel_TaskItem = nullptr;
+    g_clickSentinelProbingGroup = false;
     TaskItem_ReportClicked_Original(windowsUdkTaskItem.get(),
                                      &g_clickSentinel);
 
     void* nativeTaskItem = g_clickSentinel_TaskItem;
     g_clickSentinel_TaskItem = nullptr;
     if (!nativeTaskItem) {
-        NoteUnconfirmedClickSentinelMiss();
+        NoteUnconfirmedClickSentinelMiss(/*isGroupPath=*/false);
         g_resolveStats.failure++;
         return nullptr;
     }
@@ -1039,16 +1092,18 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
     }
 
     g_capturedTaskGroup = nullptr;
-    g_captureTaskGroup = true;
-    // IsMultiWindow's implementation happens to call ITaskGroup::IsRunning
-    // internally, which is hooked above to capture its `this` (the native
-    // WindowsUdk task group) instead of really answering the question. The
-    // -1 adjusts from the interface pointer QueryInterface handed back to
-    // the adjacent vtable IsMultiWindow actually needs - a fixed ABI detail
-    // of this object, not a magic number specific to this mod.
-    TaskListGroupViewModel_IsMultiWindow_Original(
-        (void**)groupViewModel.get() - 1);
-    g_captureTaskGroup = false;
+    {
+        // IsMultiWindow's implementation happens to call
+        // ITaskGroup::IsRunning internally, which is hooked above to
+        // capture its `this` (the native WindowsUdk task group) instead
+        // of really answering the question. The -1 adjusts from the
+        // interface pointer QueryInterface handed back to the adjacent
+        // vtable IsMultiWindow actually needs - a fixed ABI detail of
+        // this object, not a magic number specific to this mod.
+        ScopedCaptureTaskGroup scopedCapture;
+        TaskListGroupViewModel_IsMultiWindow_Original(
+            (void**)groupViewModel.get() - 1);
+    }
 
     void* windowsUdkTaskGroup = g_capturedTaskGroup;
     g_capturedTaskGroup = nullptr;
@@ -1057,12 +1112,31 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
         return nullptr;
     }
 
+    // A group with no running windows (a pinned-but-not-running app) can
+    // never yield an HWND - its task items array is legitimately empty,
+    // so GetTaskItemsArray's check below always fails for it anyway -
+    // and it's exactly the group that would otherwise get re-probed
+    // forever at the backoff ceiling for the life of the session. Bail
+    // out before dispatching a click at it at all, rather than detecting
+    // the failure after the fact. IsRunning is a sibling method on the
+    // same interface already captured above; the "consume" calling
+    // convention it was hooked under (see ITaskGroup_IsRunning_Hook's
+    // *(void**)pThis capture) expects a pointer to a variable holding the
+    // interface pointer, not the interface pointer itself - hence
+    // &windowsUdkTaskGroup here, matching how it was captured.
+    if (ITaskGroup_IsRunning_Original &&
+        !ITaskGroup_IsRunning_Original(&windowsUdkTaskGroup)) {
+        g_resolveStats.failure++;
+        return nullptr;
+    }
+
     g_clickSentinel_TaskGroup = nullptr;
+    g_clickSentinelProbingGroup = true;
     TaskGroup_ReportClicked_Original(windowsUdkTaskGroup, &g_clickSentinel);
     void* nativeTaskGroup = g_clickSentinel_TaskGroup;
     g_clickSentinel_TaskGroup = nullptr;
     if (!nativeTaskGroup) {
-        NoteUnconfirmedClickSentinelMiss();
+        NoteUnconfirmedClickSentinelMiss(/*isGroupPath=*/true);
         g_resolveStats.failure++;
         return nullptr;
     }
@@ -1084,19 +1158,22 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
 }
 
 HWND ResolveHwndFromTaskListButton(FrameworkElement element) {
-    // See g_clickSentinelBroken's comment - once the sentinel is known not
-    // to be intercepted on this build, every further probe would be a
-    // genuine click rather than a resolution attempt, so this bails out
-    // before either resolution path can call ReportClicked again.
-    if (g_clickSentinelBroken) {
-        return nullptr;
-    }
-
-    HWND hwnd = ResolveHwndFromIndividualTaskItem(element);
+    // See g_clickSentinelItemBroken/g_clickSentinelGroupBroken's comment -
+    // once a path's sentinel is known not to be intercepted on this
+    // build, every further probe on that path would be a genuine click
+    // rather than a resolution attempt, so each path bails out before
+    // calling its own ReportClicked again. The other path is unaffected,
+    // since a Windows update could break just one of the two call chains.
+    HWND hwnd = g_clickSentinelItemBroken
+                    ? nullptr
+                    : ResolveHwndFromIndividualTaskItem(element);
     if (hwnd) {
         return hwnd;
     }
 
+    if (g_clickSentinelGroupBroken) {
+        return nullptr;
+    }
     return ResolveHwndFromTaskGroup(element);
 }
 
@@ -2675,9 +2752,9 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
         return 0;
     }
     if (uMsg == SettingsChangedMsg()) {
-        auto* heapSettings = reinterpret_cast<ModSettings*>(lParam);
+        std::unique_ptr<ModSettings> heapSettings(
+            reinterpret_cast<ModSettings*>(lParam));
         g_settings = std::move(*heapSettings);
-        delete heapSettings;
         // The plan the previous recompute produced was built from the
         // settings that just got replaced - see InvalidateTaskbarLayout's
         // comment for why this needs to be set exactly here, not by the
@@ -3169,7 +3246,11 @@ DWORD WINAPI WinEventHookThreadProc(LPVOID) {
 }
 
 HANDLE g_winEventThread;
-DWORD g_winEventThreadId;
+// Written under g_winEventThreadMutex (Start/StopWinEventHook), but read
+// without it in ArmButtonHwndResolveTimer from the taskbar thread -
+// atomic makes that well-defined, matching g_taskbarWndSubclassed's own
+// treatment elsewhere in this file.
+std::atomic<DWORD> g_winEventThreadId;
 
 // Serializes StartWinEventHook/StopWinEventHook against each other.
 // EnsureTaskbarWnd can call StartWinEventHook from either Wh_ModAfterInit's
@@ -3192,10 +3273,16 @@ void StartWinEventHook() {
         return;
     }
 
+    // CreateThread's out-parameter needs a plain DWORD*, not
+    // atomic<DWORD>* - written through the local and then published to
+    // the atomic once CreateThread returns.
+    DWORD threadId = 0;
     g_winEventThread = CreateThread(nullptr, 0, WinEventHookThreadProc,
-                                    nullptr, 0, &g_winEventThreadId);
+                                    nullptr, 0, &threadId);
     if (!g_winEventThread) {
         Wh_Log(L"StartWinEventHook: CreateThread failed");
+    } else {
+        g_winEventThreadId = threadId;
     }
 }
 
@@ -3504,19 +3591,21 @@ void ApplyLoadedSettings(ModSettings settings) {
 
     if (g_taskbarWndSubclassed) {
         // PostMessage is async, so the settings can't live on this
-        // function's own stack - ownership transfers to the heap pointer,
-        // and TaskbarWndSubclassProc's SettingsChangedMsg case deletes
-        // it after moving out of it.
-        auto* heapSettings = new ModSettings(std::move(settings));
+        // function's own stack - ownership transfers to the heap
+        // allocation, released via .release() only once PostMessage has
+        // actually queued it, and reclaimed by TaskbarWndSubclassProc's
+        // SettingsChangedMsg case on the dispatch side.
+        auto heapSettings = std::make_unique<ModSettings>(std::move(settings));
         if (PostMessage(g_hTaskbarWnd, SettingsChangedMsg(), 0,
-                        (LPARAM)heapSettings)) {
+                        (LPARAM)heapSettings.get())) {
+            heapSettings.release();
             return;
         }
         Wh_Log(L"ApplyLoadedSettings: PostMessage failed, error=%lu, "
                L"falling back to RunFromWindowThread", GetLastError());
-        // Reclaim ownership before falling through to the blocking path.
+        // Reclaim ownership before falling through to the blocking path;
+        // heapSettings frees the now-moved-from struct automatically.
         settings = std::move(*heapSettings);
-        delete heapSettings;
     }
 
     if (!RunFromWindowThread(g_hTaskbarWnd,
