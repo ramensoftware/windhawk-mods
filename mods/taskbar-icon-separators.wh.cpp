@@ -1378,13 +1378,9 @@ static double LoadSeparatorWidthSetting() {
 }
 
 static InteractionMode LoadInteractionModeSetting() {
-    const wchar_t* value =
-        Wh_GetStringSetting(L"interactionMode");
-
-    std::wstring mode = value ? value : L"";
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
+    std::wstring mode =
+        WindhawkUtils::StringSetting::make(
+            L"interactionMode").get();
 
     if (_wcsicmp(mode.c_str(), L"middleClick") == 0) {
         return InteractionMode::MiddleClick;
@@ -1396,13 +1392,9 @@ static InteractionMode LoadInteractionModeSetting() {
 static IconAppearanceSettings LoadIconAppearanceSettings() {
     IconAppearanceSettings settings;
 
-    const wchar_t* rotationValue =
-        Wh_GetStringSetting(L"iconRotation");
     std::wstring rotationText =
-        rotationValue ? rotationValue : L"0";
-    if (rotationValue) {
-        Wh_FreeStringSetting(rotationValue);
-    }
+        WindhawkUtils::StringSetting::make(
+            L"iconRotation").get();
 
     int rotation = 0;
     if (rotationText == L"90") {
@@ -2334,6 +2326,12 @@ static bool BuildCustomizedSeparatorIcon(
             return false;
         }
 
+        // Taskbar pins don't need the embedded 256px frame. Re-encoding it as
+        // an uncompressed DIB would dominate the generated ICO's size.
+        if (width == 256) {
+            continue;
+        }
+
         winrt::com_ptr<IWICFormatConverter> converter;
         hr = factory->CreateFormatConverter(converter.put());
         if (SUCCEEDED(hr)) {
@@ -2385,17 +2383,22 @@ static bool BuildCustomizedSeparatorIcon(
 
     constexpr size_t kIcoHeaderSize = 6;
     constexpr size_t kIcoEntrySize = 16;
+    const UINT outputFrameCount =
+        static_cast<UINT>(frames.size());
+    if (!outputFrameCount) {
+        return false;
+    }
     const size_t directorySize =
         kIcoHeaderSize +
-        static_cast<size_t>(frameCount) * kIcoEntrySize;
+        static_cast<size_t>(outputFrameCount) * kIcoEntrySize;
 
     output->assign(directorySize, 0);
     (*output)[2] = 1;  // ICONDIR::idType = 1
-    (*output)[4] = static_cast<BYTE>(frameCount & 0xFF);
-    (*output)[5] = static_cast<BYTE>((frameCount >> 8) & 0xFF);
+    (*output)[4] = static_cast<BYTE>(outputFrameCount & 0xFF);
+    (*output)[5] = static_cast<BYTE>((outputFrameCount >> 8) & 0xFF);
 
     size_t nextOffset = directorySize;
-    for (UINT i = 0; i < frameCount; i++) {
+    for (UINT i = 0; i < outputFrameCount; i++) {
         const auto& frame = frames[i];
         const auto& dib = dibFrames[i];
         if (dib.size() > MAXDWORD || nextOffset > MAXDWORD ||
@@ -2421,33 +2424,33 @@ static bool BuildCustomizedSeparatorIcon(
     return true;
 }
 
-static bool BuildConfiguredBundledSeparatorIconBytes(
-    std::vector<BYTE>* output) {
-    if (!output) {
-        return false;
+static const std::vector<BYTE>*
+GetConfiguredBundledSeparatorIconBytes() {
+    // Appearance changes reload the mod. Cache only a successful build so a
+    // transient WIC failure can still be retried by the backend.
+    static std::vector<BYTE> cachedIconBytes;
+    if (!cachedIconBytes.empty()) {
+        return &cachedIconBytes;
     }
 
-    output->clear();
+    std::vector<BYTE> iconBytes;
 
     if (g_iconAppearance.rotation == 0 &&
         g_iconAppearance.brightness == kDefaultIconBrightness &&
         g_iconAppearance.alpha == kDefaultIconAlpha) {
-        output->assign(
+        iconBytes.assign(
             std::begin(kSeparatorIcon),
             std::end(kSeparatorIcon));
-        return true;
+    } else if (!BuildCustomizedSeparatorIcon(
+                   g_iconAppearance,
+                   &iconBytes) ||
+               iconBytes.empty() ||
+               iconBytes.size() > MAXDWORD) {
+        return nullptr;
     }
 
-    if (!BuildCustomizedSeparatorIcon(
-            g_iconAppearance,
-            output) ||
-        output->empty() ||
-        output->size() > MAXDWORD) {
-        output->clear();
-        return false;
-    }
-
-    return true;
+    cachedIconBytes = std::move(iconBytes);
+    return &cachedIconBytes;
 }
 
 static bool TryBinaryFileEquals(
@@ -2525,16 +2528,17 @@ static ConfiguredIconDiskState GetConfiguredBundledIconDiskState() {
         return ConfiguredIconDiskState::Error;
     }
 
-    std::vector<BYTE> expected;
-    if (!BuildConfiguredBundledSeparatorIconBytes(&expected)) {
+    const std::vector<BYTE>* expected =
+        GetConfiguredBundledSeparatorIconBytes();
+    if (!expected) {
         return ConfiguredIconDiskState::Error;
     }
 
     bool matches = false;
     if (!TryBinaryFileEquals(
             g_bundledIconPath,
-            expected.data(),
-            expected.size(),
+            expected->data(),
+            expected->size(),
             &matches)) {
         return ConfiguredIconDiskState::Error;
     }
@@ -2545,8 +2549,9 @@ static ConfiguredIconDiskState GetConfiguredBundledIconDiskState() {
 }
 
 static bool WriteConfiguredBundledSeparatorIcon() {
-    std::vector<BYTE> iconBytes;
-    if (!BuildConfiguredBundledSeparatorIconBytes(&iconBytes)) {
+    const std::vector<BYTE>* iconBytes =
+        GetConfiguredBundledSeparatorIconBytes();
+    if (!iconBytes) {
         return false;
     }
 
@@ -2558,13 +2563,13 @@ static bool WriteConfiguredBundledSeparatorIcon() {
             g_iconAppearance.rotation,
             g_iconAppearance.brightness,
             g_iconAppearance.alpha,
-            iconBytes.size());
+            iconBytes->size());
     }
 
     return WriteBinaryFileAtomically(
         g_bundledIconPath,
-        iconBytes.data(),
-        static_cast<DWORD>(iconBytes.size()));
+        iconBytes->data(),
+        static_cast<DWORD>(iconBytes->size()));
 }
 
 static bool LoadSettings() {
@@ -5875,6 +5880,7 @@ static bool RunTryMoveGroupObserver(
         outer &&
         result &&
         pinned &&
+        !appId.empty() &&
         oldIndex >= 0 &&
         newIndex >= 0 &&
         oldIndex != newIndex) {
@@ -6057,7 +6063,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskGroupGetAppIdAddress,
             nullptr,
-            true,
         },
         {
             {
@@ -6065,7 +6070,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndIsPinned,
             nullptr,
-            true,
         },
         {
             {
@@ -6073,7 +6077,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndGetRelativeTaskOrder,
             nullptr,
-            true,
         },
         {
             {
@@ -6097,7 +6100,6 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndTryMoveGroupOriginal,
             TaskListWnd_TryMoveGroup_Hook,
-            true,
         },
         {
             {
