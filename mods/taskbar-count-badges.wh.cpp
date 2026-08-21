@@ -1642,8 +1642,12 @@ bool GetTaskbarButtonViewModelCount(FrameworkElement element,
 void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 {
     uint64_t settingsGeneration = g_settingsGeneration;
+    bool badgeExpected =
+        count >= static_cast<unsigned int>(g_settings.minimumCount);
+
     if (item.lastAppliedCount == count &&
-        item.lastSettingsGeneration == settingsGeneration)
+        item.lastSettingsGeneration == settingsGeneration &&
+        (!badgeExpected || item.badge.get()))
     {
         return;
     }
