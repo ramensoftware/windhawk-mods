@@ -63,13 +63,13 @@ right next to Start on whichever side you prefer.
   thread, so secondary-monitor elements are simply never included in it
   and fall through to Windows' native positioning.
 - **Don't enable alongside "Start button always on the left".** Both mods
-  hook the same process-wide `IUIElement::Arrange` vtable slot to force
-  the Start button's own X position; with both enabled, whichever one
-  installed its hook second wins, and the result is undefined. This mod's
-  `systemButtonsPlacement: far-left` setting covers the same "keep
-  everything else out of Start's way" goal that mod's
-  `otherSystemButtonsOnTheLeft` option does, so there's no reason to run
-  both together.
+  hook the same process-wide `IUIElement::Arrange` vtable slot, and both
+  write their own X position for the Start button - with both enabled,
+  they simply disagree, and whichever one's hook runs last for a given
+  Arrange call wins for that pass. This mod's `systemButtonsPlacement:
+  far-left` setting covers the same "keep everything else out of Start's
+  way" goal that mod's `otherSystemButtonsOnTheLeft` option does, so
+  there's no reason to run both together.
 - **A very crowded side compresses instead of overflowing cleanly.** If
   enough app icons pile up on one side that they'd run into the system
   tray/clock on the right (or, in "far left" placement, into Search/Task
@@ -802,6 +802,32 @@ WCHAR g_clickSentinel[] = L"click-sentinel";
 thread_local void* g_clickSentinel_TaskItem;
 thread_local void* g_clickSentinel_TaskGroup;
 
+// The click-sentinel resolution technique (see the section comment above)
+// dispatches a REAL click through TaskItem::ReportClicked/
+// TaskGroup::ReportClicked, relying entirely on this hook recognizing the
+// sentinel and swallowing it before the taskbar's real HandleClick ever
+// runs. Reference mods using the same technique only fire it in response
+// to an actual user gesture on one specific button, so a broken
+// interception there just means the user's own click happens twice. This
+// mod instead fires it unattended, from a background timer, against every
+// button it hasn't resolved yet - if a future Windows update changes
+// ReportClicked's internal call path so it stops reaching this hook, every
+// one of those probes silently becomes a genuine click, which for the
+// buttons actually retried (pinned-but-not-running apps) means Explorer
+// spontaneously launching them on a timer, forever, with no user action
+// and no visible sign anything is wrong (an unintercepted probe looks
+// identical to an ordinary resolution failure).
+//
+// The interception either works on this Windows build or it doesn't - it
+// isn't a per-button thing - so one confirmed capture is proof it works,
+// and one probe that reaches ReportClicked with zero capture, before any
+// capture has ever been confirmed, is proof it doesn't. g_clickSentinelBroken
+// latches that verdict permanently: ResolveHwndFromTaskListButton bails
+// out before ever calling ReportClicked again once it's set, rather than
+// retrying a mechanism now known to dispatch real clicks.
+std::atomic<bool> g_clickSentinelConfirmed;
+std::atomic<bool> g_clickSentinelBroken;
+
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                               void* taskGroup,
                                               void* taskItem,
@@ -809,11 +835,27 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
     if (launcherOptions && *launcherOptions == (void*)&g_clickSentinel) {
         g_clickSentinel_TaskItem = taskItem;
         g_clickSentinel_TaskGroup = taskGroup;
+        g_clickSentinelConfirmed = true;
         return S_OK;
     }
 
     return CTaskListWnd_HandleClick_Original(pThis, taskGroup, taskItem,
                                               launcherOptions);
+}
+
+// Called right after a real ReportClicked probe comes back with no
+// capture - the one point where "no capture" is actually evidence about
+// the interception itself, as opposed to an earlier, unrelated failure
+// (missing view-model, no task item) that never reached ReportClicked at
+// all. See g_clickSentinelBroken's own comment for the full reasoning.
+void NoteUnconfirmedClickSentinelMiss() {
+    if (!g_clickSentinelConfirmed && !g_clickSentinelBroken.exchange(true)) {
+        Wh_Log(L"Click-sentinel interception never confirmed working - "
+               L"disabling further HWND-resolution probes to avoid "
+               L"dispatching real clicks. This usually means a Windows "
+               L"update changed CTaskListWnd::HandleClick's internal call "
+               L"path; consider disabling this mod until it's updated.");
+    }
 }
 
 using TryGetItemFromContainer_TaskListWindowViewModel_t =
@@ -863,12 +905,15 @@ CTaskGroup_GetNumItems_t CTaskGroup_GetNumItems_Original;
 // value, revealing the real offset without needing the struct layout.
 // Adapted from the per-app volume control mod, which needs the same task
 // group -> item list access for an unrelated reason.
+// Shared with GetTaskItemsArray's bounds check below - the probe can
+// never legitimately return an offset at or past this size.
+constexpr int kTaskItemsArrayProbeSize = 256;
+
 size_t GetTaskItemsArrayOffset() {
     static size_t offset = [] {
-        constexpr int kIntArraySize = 256;
-        int arrayOfInts[kIntArraySize];
-        int* arrayOfIntPtrs[kIntArraySize];
-        for (int i = 0; i < kIntArraySize; i++) {
+        int arrayOfInts[kTaskItemsArrayProbeSize];
+        int* arrayOfIntPtrs[kTaskItemsArrayProbeSize];
+        for (int i = 0; i < kTaskItemsArrayProbeSize; i++) {
             arrayOfInts[i] = i;
             arrayOfIntPtrs[i] = &arrayOfInts[i];
         }
@@ -883,7 +928,19 @@ HDPA GetTaskItemsArray(void* taskGroup) {
     if (!CTaskGroup_GetNumItems_Original) {
         return nullptr;
     }
-    return (HDPA)((void**)taskGroup)[GetTaskItemsArrayOffset()];
+    size_t offset = GetTaskItemsArrayOffset();
+    // Offset 0 is the vtable slot, so the probe can never legitimately
+    // land there - either GetNumItems' implementation stopped being the
+    // trivial "return DPA_GetPtrCount(this->taskItemsArray)" form this
+    // technique relies on, or the probe array (kTaskItemsArrayProbeSize
+    // ints) was too small to reach the real offset. Either way, trusting
+    // an out-of-range offset here means dereferencing whatever happens to
+    // be there and handing it to DPA_GetPtrCount as if it were a real
+    // array - a wild read on a background timer, not a user gesture.
+    if (offset == 0 || offset >= kTaskItemsArrayProbeSize) {
+        return nullptr;
+    }
+    return (HDPA)((void**)taskGroup)[offset];
 }
 
 using TaskGroup_ReportClicked_t = int(WINAPI*)(void* pThis, void* param);
@@ -952,6 +1009,7 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
     void* nativeTaskItem = g_clickSentinel_TaskItem;
     g_clickSentinel_TaskItem = nullptr;
     if (!nativeTaskItem) {
+        NoteUnconfirmedClickSentinelMiss();
         g_resolveStats.failure++;
         return nullptr;
     }
@@ -1004,6 +1062,7 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
     void* nativeTaskGroup = g_clickSentinel_TaskGroup;
     g_clickSentinel_TaskGroup = nullptr;
     if (!nativeTaskGroup) {
+        NoteUnconfirmedClickSentinelMiss();
         g_resolveStats.failure++;
         return nullptr;
     }
@@ -1025,6 +1084,14 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
 }
 
 HWND ResolveHwndFromTaskListButton(FrameworkElement element) {
+    // See g_clickSentinelBroken's comment - once the sentinel is known not
+    // to be intercepted on this build, every further probe would be a
+    // genuine click rather than a resolution attempt, so this bails out
+    // before either resolution path can call ReportClicked again.
+    if (g_clickSentinelBroken) {
+        return nullptr;
+    }
+
     HWND hwnd = ResolveHwndFromIndividualTaskItem(element);
     if (hwnd) {
         return hwnd;
@@ -2074,16 +2141,18 @@ IUIElement_Arrange_t IUIElement_Arrange_Original;
 std::unordered_map<void*, double> g_lastArrangedX;
 
 // Set whenever something might have changed that g_lastArrangedX doesn't
-// reflect yet - every InvalidateTaskbarLayout call covers every real
-// trigger (a window moving, a button's HWND/side resolving, the
-// ArrangeOverride hook's button-count-change check, a settings change,
-// mod startup). Starts true so the first ArrangeOverride pass always
+// reflect yet - a window moving, a button's HWND/side resolving, the
+// ArrangeOverride hook's button-count-change check, a settings change, or
+// mod startup, each setting it at the point that specific change actually
+// becomes visible on the taskbar thread (see InvalidateTaskbarLayout's own
+// comment for why it can't be set any earlier, at the calling thread's
+// call site). Starts true so the first ArrangeOverride pass always
 // computes a real plan. RecomputeLayoutPlan clears it only after a
 // genuinely successful recompute - left set on an exception so a later
-// pass retries rather than freezing on a broken plan. atomic: it can be
-// set from threads other than the taskbar's own (the dedicated
-// WinEventHook thread, for one), while RecomputeLayoutPlan only ever
-// reads/clears it from the taskbar thread itself.
+// pass retries rather than freezing on a broken plan. Every read and write
+// now happens on the taskbar thread only, so plain bool would be
+// sufficient - kept atomic as low-risk insurance rather than downgrading
+// it while touching this area for an unrelated fix.
 //
 // This flag skips RecomputeLayoutPlan's full traversal (a taskbar.dll
 // vtable scan, a VisualTreeHelper walk, a classification per child) on
@@ -2524,6 +2593,12 @@ void PerformTaskbarLayoutInvalidate() {
     }
     g_inInvalidateTaskbarLayout = true;
 
+    // Set here, not in InvalidateTaskbarLayout - see that function's own
+    // comment for why marking dirty has to happen at the point a change
+    // actually becomes visible on the taskbar thread, not at the calling
+    // thread's call site.
+    g_planDirty = true;
+
     try {
         FrameworkElement repeater = GetCachedTaskbarRepeater();
         if (!repeater) {
@@ -2603,31 +2678,45 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
         auto* heapSettings = reinterpret_cast<ModSettings*>(lParam);
         g_settings = std::move(*heapSettings);
         delete heapSettings;
+        // The plan the previous recompute produced was built from the
+        // settings that just got replaced - see InvalidateTaskbarLayout's
+        // comment for why this needs to be set exactly here, not by the
+        // separate InvalidateTaskbarLayout() call Wh_ModSettingsChanged
+        // also makes.
+        g_planDirty = true;
         return 0;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Marks the layout dirty and lets the XAML dispatcher pick it up on its
-// own next tick, rather than forcing a synchronous UpdateLayout() call:
-// this function's callers include a raw OS callback (WinEventProc) that
-// can fire while already nested inside XAML-internal layout activity, and
-// a forced UpdateLayout() there reenters WinUI layout and fails fast with
+// Lets the XAML dispatcher pick up a relayout on its own next tick,
+// rather than forcing a synchronous UpdateLayout() call: this function's
+// callers include a raw OS callback (WinEventProc) that can fire while
+// already nested inside XAML-internal layout activity, and a forced
+// UpdateLayout() there reenters WinUI layout and fails fast with
 // STATUS_STOWED_EXCEPTION - a raw SEH RaiseException, not a C++
 // exception, so no try/catch anywhere in this file can contain it. Don't
 // reintroduce a forced call here without a fundamentally different
 // mechanism (e.g. a genuinely async, post-unwind-only deferred call).
+//
+// Deliberately does NOT set g_planDirty itself, even though every real
+// trigger for a layout change goes through here - marking dirty on this
+// function's OWN calling thread would be premature when the marshal below
+// is asynchronous (the common PostMessage case): a natural ArrangeOverride
+// pass can land on the taskbar thread between this call setting the flag
+// and the posted message actually being processed, see it already true,
+// recompute with whatever state existed before the real change (settings
+// not yet applied, an HWND not yet re-cached), and clear the flag - so the
+// posted invalidate that finally runs afterward finds g_planDirty already
+// false and skips the recompute the change actually needed. Each real
+// caller marks dirty itself, at the point its own state change becomes
+// visible on the taskbar thread: PerformTaskbarLayoutInvalidate (the
+// PostMessage/RunFromWindowThread call this function makes) and the
+// SettingsChangedMsg dispatch case in TaskbarWndSubclassProc.
 void InvalidateTaskbarLayout() {
     if (!g_hTaskbarWnd) {
         return;
     }
-
-    // Every real trigger for a layout change goes through this function
-    // (see g_planDirty's own comment for the full list), so marking the
-    // plan dirty here - unconditionally, before the marshal below, so it
-    // still happens even if the marshal itself fails - is the one place
-    // that needs to know about all of them.
-    g_planDirty = true;
 
     if (g_taskbarWndSubclassed) {
         // The hot path: called from WinEventProc's drag-follow throttle
@@ -2695,6 +2784,21 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
         return;
     }
 
+    // For LOCATIONCHANGE specifically, this is the cheapest and most
+    // selective filter available - only a window this mod has actually
+    // resolved to a taskbar button can change the layout, and checking a
+    // hashset first skips the three cross-process USER32 calls below for
+    // every other moving window on the system (there are a lot of them -
+    // see this function's own comment on raw event volume further down).
+    // Not applied to SHOW: a newly-shown window that's about to become a
+    // taskbar button's target is, by definition, not resolved yet.
+    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+        std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
+        if (!g_resolvedHwnds.count(hwnd)) {
+            return;
+        }
+    }
+
     if (!IsWindowVisible(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd ||
         GetWindow(hwnd, GW_OWNER) != nullptr) {
         return;
@@ -2732,23 +2836,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     }
 
     // event == EVENT_OBJECT_LOCATIONCHANGE from here on - drag-follow.
-    // Only a window this mod has actually resolved to a taskbar button
-    // can change the layout; every other moving window on the system
-    // (there are a lot of them - see this function's own comment on raw
-    // event volume) would trigger a full RecomputeLayoutPlan pass for
-    // nothing. Checked before the throttle below, not after, so an
-    // untracked window's events don't even arm the trailing timer or
-    // touch g_lastDragFollowInvalidate. Lock released before
-    // InvalidateTaskbarLayout() is ever reached - its fallback path
-    // blocks in SendMessage on the taskbar thread, which must never run
-    // while this thread is holding g_resolvedHwndsMutex.
-    {
-        std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
-        if (!g_resolvedHwnds.count(hwnd)) {
-            return;
-        }
-    }
-
+    // (Already filtered against g_resolvedHwnds above, before the
+    // top-level-window checks.)
     ULONGLONG now = GetTickCount64();
     if (now - g_lastDragFollowInvalidate < 150) {
         // The throttle above is leading-edge only, so the final
