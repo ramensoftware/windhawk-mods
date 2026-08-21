@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.2.1
+// @version         1.2.2
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -175,6 +175,9 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinHome: false
     $name: Win+Home
     $description: Minimize inactive windows
+  - DisableWinShiftC: false
+    $name: Win+Shift+C
+    $description: Charms Menu (Windows 10)
   - DisableWinShiftM: false
     $name: Win+Shift+M
     $description: Restore minimized windows
@@ -354,6 +357,7 @@ struct
     bool DisableWinLeft;
     bool DisableWinRight;
     bool DisableWinHome;
+    bool DisableWinShiftC;
     bool DisableWinShiftM;
     bool DisableWinComma;
     bool DisableWinPause;
@@ -447,6 +451,7 @@ void LoadSettings()
     g_settings.DisableWinLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinLeft");
     g_settings.DisableWinRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinRight");
     g_settings.DisableWinHome = Wh_GetIntSetting(L"StandardShortcuts.DisableWinHome");
+    g_settings.DisableWinShiftC = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftC");
     g_settings.DisableWinShiftM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftM");
     g_settings.DisableWinComma = Wh_GetIntSetting(L"StandardShortcuts.DisableWinComma");
     g_settings.DisableWinPause = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPause");
@@ -540,6 +545,7 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
         {
             switch (vk)
             {
+                case 'C': block = g_settings.DisableWinShiftC; break;
                 case 'M': block = g_settings.DisableWinShiftM; break;
                 case 'S': block = g_settings.DisableWinShiftS; break;
                 case VK_LEFT: block = g_settings.DisableWinShiftLeft; break;
