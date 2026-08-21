@@ -358,7 +358,6 @@ require Windows 11 for tabbed Explorer support.
 #include <cstdlib>
 #include <cwchar>
 #include <cwctype>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -777,8 +776,6 @@ static bool InvokeFolderContextMenuFromBrowser(IShellBrowser* browser, HWND hwnd
     return found;
 }
 
-// Legacy path-based fallback — only used by brand-specific actions (OpenInVSCode etc.)
-// which are kept for backward compatibility. The browser-based version above is preferred.
 // ---- Duplicate Tab infrastructure ----
 
 static thread_local wchar_t g_pendingNavPath[MAX_PATH] = {};
@@ -846,8 +843,9 @@ struct PendingAction {
 // Per-thread FIFO backing the deferred-action dispatch. The producer (mouse
 // handlers) and the consumer (the g_msgDoAction handler) always run on the
 // same Explorer UI thread, so a simple vector is sufficient and we never pass
-// an owning pointer through a globally-visible window message. Cleared by the
-// DLL's thread_local teardown on mod unload, so a disable/enable cycle cannot
+// an owning pointer through a globally-visible window message. Drained in the
+// g_msgTeardown handler (thread_local destructors only run at thread exit, and
+// Explorer's UI threads outlive the mod), so a disable/enable cycle cannot
 // leak or double-free an allocation from a previous instance.
 static thread_local std::vector<PendingAction> g_pendingActions;
 
@@ -918,7 +916,7 @@ class ExplorerWrapper {
     winrt::com_ptr<IShellBrowser> hBrowser;
 
     // Helper: get current folder path via IShellView chain
-    bool GetCurrentFolderPath(wchar_t* outPath, size_t outLen) {
+    bool GetCurrentFolderPath(wchar_t* outPath) {
         IShellView* psv = nullptr;
         if (FAILED(hBrowser->QueryActiveShellView(&psv)) || !psv)
             return false;
@@ -1003,7 +1001,7 @@ public:
 
     void DuplicateTab() {
         wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
+        if (!GetCurrentFolderPath(path)) return;
         wcsncpy(g_pendingNavPath, path, MAX_PATH - 1);
         g_pendingNavPath[MAX_PATH - 1] = L'\0';
         if (g_pendingNavBrowser) {  // release a previously pending browser, if any
@@ -1030,7 +1028,7 @@ public:
 
     void CopyPath() {
         wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
+        if (!GetCurrentFolderPath(path)) return;
         size_t len = wcslen(path) + 1;
         HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
         if (!hMem) return;
@@ -1048,7 +1046,7 @@ public:
         }
     }
 
-    // ---- External program launchers (via browser — works for virtual folders too) ----
+    // ---- External program launchers ----
 
     void OpenInVSCode(PCWSTR match) {
         // "Code" is a loose substring match — entries like "Encode with HandBrake"
@@ -1060,7 +1058,7 @@ public:
 
     void OpenInTerminal() {
         wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) {
+        if (!GetCurrentFolderPath(path)) {
             Wh_Log(L"OpenInTerminal: no real folder path (virtual folder?), nothing to open");
             return;
         }
@@ -1238,6 +1236,10 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
         ReleasePendingNavForThread();
+        // Drop any not-yet-dispatched actions. The thread_local queue outlives
+        // the mod on Explorer's long-lived UI threads, so without this it would
+        // keep holding the wstrings for the rest of the process's life.
+        g_pendingActions.clear();
         return 0;
     }
 
@@ -1426,6 +1428,10 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
         ReleasePendingNavForThread();
+        // Drop any not-yet-dispatched actions. The thread_local queue outlives
+        // the mod on Explorer's long-lived UI threads, so without this it would
+        // keep holding the wstrings for the rest of the process's life.
+        g_pendingActions.clear();
         return 0;
     }
 
