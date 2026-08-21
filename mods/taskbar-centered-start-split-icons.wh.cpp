@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-centered-start-split-icons
 // @name            Taskbar Start Button Centered Origin
-// @description     Pins the Start button to the true horizontal center of the screen, and splits running-app taskbar buttons into two groups flanking it based on which side of the screen each window is currently on (Windows 11 only, incompatible with "Start button always on the left")
+// @description     Pins the Start button to true screen-center and splits running-app taskbar buttons into two groups flanking it by which side of the screen each window is on (Windows 11 only; incompatible with "Start button always on the left")
 // @version         0.1.0
 // @author          rick
 // @github          https://github.com/rycalvo
