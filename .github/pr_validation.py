@@ -74,6 +74,20 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
 }
 
 
+# RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
+# Anything else, whitespace included, has to be percent-encoded.
+URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
+
+# Scheme, dotted host, optional port, optional path/query/fragment.
+URL_PATTERN = (
+    r'https?://'
+    r'[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?'
+    r'(\.[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?)+'
+    r'(:[0-9]+)?'
+    rf'([/?#][{URL_ALLOWED_CHARS}]*)?'
+)
+
+
 def add_warning(file: Path, line: int, message: str):
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
@@ -288,9 +302,21 @@ class PropertyValidator:
         return self
 
     def validate_url_format(self) -> 'PropertyValidator':
-        """Validate URL starts with http:// or https://."""
+        """Validate value is a well-formed http(s) URL."""
         if not re.match(r'https?://', self.value):
             self.warn('@@ must start with "http://" or "https://"')
+            return self
+
+        disallowed = set(re.findall(f'[^{URL_ALLOWED_CHARS}]', self.value))
+        if disallowed:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(disallowed))
+            self.warn(
+                f'@@ contains characters which are not allowed in a URL ({chars}),'
+                ' they must be percent-encoded'
+            )
+        elif not re.fullmatch(URL_PATTERN, self.value):
+            self.warn(f'@@ is not a valid URL: "{self.value}"')
+
         return self
 
 
