@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-20T18:23:24.000Z</updated>
+    <updated>2026-08-21T09:33:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.1.1]]></title>
+        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#bd08bc5ccd5bf6006923944e660795e7e89d7444</id>
+        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
+        <updated>2026-08-21T09:33:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Resolved an issue where navigating back to an external drive from a pinned folder unexpectedly auto-expands the "This PC" item.</li>
+<li>Fixed a bug that caused OneDrive to crash during the sign-in process.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always Allow CTRL+SHIFT+ENTER 1.0.0]]></title>
         <id>https://windhawk.net/mods/always-allow-ctrl-shift-enter#75b8cc7e573ac73efbc9e9df7fd768f3510a5530</id>
@@ -466,25 +480,6 @@ Class#Name2</code>.</li>
         <author>
             <name>Giggig</name>
             <uri>https://github.com/Giggigx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Separators 0.5.38]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-separators#b895e6b2cf4ae9140dcb70b1200634ad4ceb13c4</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
-        <updated>2026-08-14T11:34:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbariconseparators">Taskbar Icon Separators</h1>
-<p>Create tracked icon separators with configurable padding on the taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png" alt="Screenshot" />
-<em>Example for creating separators on the taskbar</em></p>
-<p>Another mod offers similar functionality, but this implementation takes a different approach.</p>
-<p>This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.</p>
-<p>Native taskbar extent-offset resolution is derived from m417z's <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>, published under GPLv3.</p>
-<p>Note: The mod creates pinned shortcuts targeting the Windows <code>systray.exe</code> stub (with a hidden, immediately exiting <code>cmd.exe</code> fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.</p>
-<p>Windows 11 only.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
