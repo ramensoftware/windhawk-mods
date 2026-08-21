@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.30
+// @version         1.0.31
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -76,7 +76,25 @@ Windows 11 only.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_api.h>
+
+// Windhawk 1.6/1.6.1 ships a windhawk_utils.h helper lambda written as
+//     [](args) WINAPI -> LRESULT { ... }
+// which Clang rejects when -fms-extensions is enabled. This mod needs that
+// option for the small SEH guards used by Win+number compensation. On the
+// supported 64-bit targets (x64/ARM64), WINAPI does not change the ABI, so
+// hide only that macro while parsing windhawk_utils.h, then restore its exact
+// Windows definition afterwards. windhawk_api.h is included first so the
+// Windhawk/Windows API declarations themselves keep their normal definitions.
+#if defined(__clang__) && defined(_WIN64)
+#pragma push_macro("WINAPI")
+#undef WINAPI
+#define WINAPI
 #include <windhawk_utils.h>
+#pragma pop_macro("WINAPI")
+#else
+#include <windhawk_utils.h>
+#endif
 
 #undef GetCurrentTime
 
