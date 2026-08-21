@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -fms-extensions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi -lwindowscodecs
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -77,24 +77,7 @@ Windows 11 only.
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
-
-// Windhawk 1.6/1.6.1 ships a windhawk_utils.h helper lambda written as
-//     [](args) WINAPI -> LRESULT { ... }
-// which Clang rejects when -fms-extensions is enabled. This mod needs that
-// option for the small SEH guards used by Win+number compensation. On the
-// supported 64-bit targets (x64/ARM64), WINAPI does not change the ABI, so
-// hide only that macro while parsing windhawk_utils.h, then restore its exact
-// Windows definition afterwards. windhawk_api.h is included first so the
-// Windhawk/Windows API declarations themselves keep their normal definitions.
-#if defined(__clang__) && defined(_WIN64)
-#pragma push_macro("WINAPI")
-#undef WINAPI
-#define WINAPI
 #include <windhawk_utils.h>
-#pragma pop_macro("WINAPI")
-#else
-#include <windhawk_utils.h>
-#endif
 
 #undef GetCurrentTime
 
@@ -3109,8 +3092,11 @@ struct SeparatorVisualState {
     bool anchorHintQueued = false;
 };
 
-static thread_local std::list<SeparatorVisualState>
-    g_separatorVisualStates;
+// XAML references are released explicitly on their UI thread during unload;
+// don't release them from TLS destruction after Explorer's XAML teardown.
+[[clang::no_destroy]] static thread_local
+    std::optional<std::list<SeparatorVisualState>>
+        g_separatorVisualStates{std::in_place};
 static thread_local bool g_updatingSeparatorVisualStates;
 
 struct SeparatorVisualStateUpdateGuard {
@@ -3147,11 +3133,11 @@ static void CloseSeparatorAnchorHint(
 }
 
 static void PruneExpiredSeparatorVisualStates() {
-    for (auto it = g_separatorVisualStates.begin();
-         it != g_separatorVisualStates.end();) {
+    for (auto it = g_separatorVisualStates->begin();
+         it != g_separatorVisualStates->end();) {
         if (!it->element.get()) {
             CloseSeparatorAnchorHint(*it);
-            it = g_separatorVisualStates.erase(it);
+            it = g_separatorVisualStates->erase(it);
         } else {
             ++it;
         }
@@ -3160,8 +3146,8 @@ static void PruneExpiredSeparatorVisualStates() {
 
 static auto FindSeparatorVisualState(void* taskListButton) {
     return std::find_if(
-        g_separatorVisualStates.begin(),
-        g_separatorVisualStates.end(),
+        g_separatorVisualStates->begin(),
+        g_separatorVisualStates->end(),
         [taskListButton](const SeparatorVisualState& state) {
             return state.taskListButton == taskListButton;
         });
@@ -3283,9 +3269,15 @@ static void ShowQueuedSeparatorAnchorHint(
     void* taskListButton,
     winrt::weak_ref<FrameworkElement> weakElement,
     std::wstring identity) {
+    if (g_updatingSeparatorVisualStates) {
+        return;
+    }
+    g_updatingSeparatorVisualStates = true;
+    SeparatorVisualStateUpdateGuard updateGuard;
+
     auto stateIt =
         FindSeparatorVisualState(taskListButton);
-    if (stateIt == g_separatorVisualStates.end()) {
+    if (stateIt == g_separatorVisualStates->end()) {
         return;
     }
 
@@ -3719,7 +3711,7 @@ static void RestoreSeparatorVisualState(
     // The FrameworkElement weak reference is the lifetime authority for the
     // raw TaskListButton implementation pointer stored alongside it.
     if (!element) {
-        g_separatorVisualStates.erase(stateIt);
+        g_separatorVisualStates->erase(stateIt);
         return;
     }
 
@@ -3787,7 +3779,7 @@ static void RestoreSeparatorVisualState(
         }
     }
 
-    g_separatorVisualStates.erase(stateIt);
+    g_separatorVisualStates->erase(stateIt);
 }
 
 using RunFromWindowThreadProc = void(WINAPI*)(void* parameter);
@@ -3879,8 +3871,8 @@ static void WINAPI RestoreSeparatorVisualStatesOnCurrentThread(void*) {
     SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
 
-    while (!g_separatorVisualStates.empty()) {
-        RestoreSeparatorVisualState(g_separatorVisualStates.begin());
+    while (!g_separatorVisualStates->empty()) {
+        RestoreSeparatorVisualState(g_separatorVisualStates->begin());
     }
 }
 
@@ -3936,8 +3928,8 @@ static void WINAPI RefreshSeparatorVisualStatesOnCurrentThread(void*) {
     SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
 
-    for (auto it = g_separatorVisualStates.begin();
-         it != g_separatorVisualStates.end();) {
+    for (auto it = g_separatorVisualStates->begin();
+         it != g_separatorVisualStates->end();) {
         auto current = it++;
 
         SeparatorVisualState& state = *current;
@@ -4745,18 +4737,18 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     // ItemsRepeater recycles TaskListButton containers. Undo every property
     // owned by this mod as soon as a container stops representing a separator.
     if (!isSeparator || !element || g_unloading) {
-        if (stateIt != g_separatorVisualStates.end()) {
+        if (stateIt != g_separatorVisualStates->end()) {
             RestoreSeparatorVisualState(stateIt);
         }
         return;
     }
 
-    if (stateIt == g_separatorVisualStates.end()) {
-        g_separatorVisualStates.push_back({
+    if (stateIt == g_separatorVisualStates->end()) {
+        g_separatorVisualStates->push_back({
             .element = winrt::make_weak(element),
             .taskListButton = pThis,
         });
-        stateIt = std::prev(g_separatorVisualStates.end());
+        stateIt = std::prev(g_separatorVisualStates->end());
     }
 
     SeparatorVisualState& state = *stateIt;
@@ -5167,6 +5159,7 @@ static bool InitializeTaskbarStylingHooks() {
 
 static void* g_taskGroupGetAppIdAddress;
 static void* g_taskBtnGroupGetGroupAddress;
+static void* g_taskListWndVtableITaskListUI;
 
 using TaskListWnd_HandleClick_t =
     HRESULT(WINAPI*)(
@@ -5437,101 +5430,54 @@ static bool TryProbeButtonGroupsArrayOffset(size_t* offsetOut) {
         return false;
     }
 
-    // Keep SEH in a POD-only helper. This intentionally calls the tiny private
-    // GetButtonGroupCount body with a synthetic this pointer; if Microsoft ever
-    // changes that implementation, an access violation must disable Win+N
-    // compensation rather than take Explorer down.
-    __try {
-        constexpr size_t kProbeSize = 256;
-        int values[kProbeSize];
-        int* pointers[kProbeSize];
+    constexpr size_t kProbeSize = 256;
+    int values[kProbeSize];
+    int* pointers[kProbeSize];
 
-        for (size_t i = 0; i < kProbeSize; i++) {
-            values[i] = static_cast<int>(i);
-            pointers[i] = &values[i];
-        }
+    for (size_t i = 0; i < kProbeSize; i++) {
+        values[i] = static_cast<int>(i);
+        pointers[i] = &values[i];
+    }
 
-        int probe =
-            g_taskListWndGetButtonGroupCount(pointers);
-        if (probe <= 0 ||
-            static_cast<size_t>(probe) >= kProbeSize) {
-            return false;
-        }
-
-        *offsetOut = static_cast<size_t>(probe);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    int probe =
+        g_taskListWndGetButtonGroupCount(pointers);
+    if (probe <= 0 ||
+        static_cast<size_t>(probe) >= kProbeSize) {
         return false;
     }
+
+    *offsetOut = static_cast<size_t>(probe);
+    return true;
 }
 
 static bool TryReadTaskButtonGroupDpa(
     void* taskListWnd,
     size_t offset,
     int* countOut,
-    void*** itemsOut,
-    int* reportedCountOut) {
-    if (!taskListWnd || !countOut || !itemsOut || !reportedCountOut ||
-        !g_taskListWndGetButtonGroupCount) {
+    void*** itemsOut) {
+    if (!taskListWnd || !countOut || !itemsOut ||
+        !g_taskListWndVtableITaskListUI) {
         return false;
     }
 
-    // The offset and HDPA layout are both private ABI. Catch a stale/invalid
-    // layout before it can turn an optional Win+N convenience into an Explorer
-    // crash. This helper owns no C++ objects so SEH does not cross destructors.
-    __try {
-        auto dpa = reinterpret_cast<unsigned char*>(
-            reinterpret_cast<void**>(taskListWnd)[offset]);
-        if (!dpa) {
-            return false;
-        }
-
-        *countOut = *reinterpret_cast<int*>(dpa);
-        *itemsOut = *reinterpret_cast<void***>(
-            dpa + sizeof(void*));
-        *reportedCountOut =
-            g_taskListWndGetButtonGroupCount(taskListWnd);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+    // GetButtonGroupCount's member offset is relative to the ITaskListUI
+    // subobject, while HandleWinNumHotKey can provide another subobject.
+    void* taskListUi = taskListWnd;
+    while (*reinterpret_cast<void**>(taskListUi) !=
+           g_taskListWndVtableITaskListUI) {
+        taskListUi = reinterpret_cast<void**>(taskListUi) + 1;
     }
-}
 
-static bool TryReadTaskButtonGroupItem(
-    void** items,
-    int index,
-    void** taskBtnGroupOut) {
-    if (!items || index < 0 || !taskBtnGroupOut) {
+    auto dpa = reinterpret_cast<unsigned char*>(
+        reinterpret_cast<void**>(taskListUi)[offset]);
+    if (!dpa) {
         return false;
     }
 
-    __try {
-        *taskBtnGroupOut = items[index];
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-static bool TryGetTaskGroupFromButtonGroup(
-    void* taskBtnGroup,
-    void** taskGroupOut) {
-    if (!taskBtnGroup || !taskGroupOut || !g_taskBtnGroupGetGroupAddress) {
-        return false;
-    }
-
-    using CTaskBtnGroup_GetGroup_t =
-        void*(WINAPI*)(void* pThis);
-    auto getGroup =
-        reinterpret_cast<CTaskBtnGroup_GetGroup_t>(
-            g_taskBtnGroupGetGroupAddress);
-
-    __try {
-        *taskGroupOut = getGroup(taskBtnGroup);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
+    *countOut = *reinterpret_cast<int*>(dpa);
+    *itemsOut = *reinterpret_cast<void***>(
+        dpa + sizeof(void*));
+    return true;
 }
 
 static std::optional<size_t> GetButtonGroupsArrayOffset() {
@@ -5556,7 +5502,7 @@ static std::optional<size_t> GetButtonGroupsArrayOffset() {
             kUnavailable,
             std::memory_order_release);
         Wh_Log(
-            L"[WINNUM] Button-group offset probe failed safely; disabling compensation");
+            L"[WINNUM] Button-group offset probe failed; disabling compensation");
         return std::nullopt;
     }
 
@@ -5584,29 +5530,22 @@ static bool GetTaskButtonGroups(
 
     int count = 0;
     void** items = nullptr;
-    int reportedCount = 0;
     if (!TryReadTaskButtonGroupDpa(
             taskListWnd,
             *offset,
             &count,
-            &items,
-            &reportedCount)) {
+            &items)) {
         Wh_Log(
-            L"[WINNUM] Live button-group DPA read failed safely; using stock Win+N");
+            L"[WINNUM] Live button-group DPA read failed; using stock Win+N");
         return false;
     }
 
-    // Corruption, an unexpected this-pointer adjustment, or a changed private
-    // layout should fail closed to stock Win+N. The direct method result must
-    // agree with the DPA field we recovered from the same object.
     constexpr int kMaxReasonableButtonGroups = 4096;
     if (count < 0 || count > kMaxReasonableButtonGroups ||
-        reportedCount != count ||
         (count > 0 && !items)) {
         Wh_Log(
-            L"[WINNUM] Invalid live button-group array count=%d reported=%d items=%p",
+            L"[WINNUM] Invalid live button-group array count=%d items=%p",
             count,
-            reportedCount,
             items);
         return false;
     }
@@ -5625,6 +5564,7 @@ static short CompensateWinNumHotKeyIndex(
         g_unloading ||
         g_internalCleanupInProgress.load(std::memory_order_acquire) ||
         !g_taskBtnGroupGetGroupAddress ||
+        !g_taskListWndVtableITaskListUI ||
         !g_taskListWndGetButtonGroupCount) {
         return logicalIndex;
     }
@@ -5638,25 +5578,24 @@ static short CompensateWinNumHotKeyIndex(
         return logicalIndex;
     }
 
+    using CTaskBtnGroup_GetGroup_t =
+        void*(WINAPI*)(void* pThis);
+    auto getGroup =
+        reinterpret_cast<CTaskBtnGroup_GetGroup_t>(
+            g_taskBtnGroupGetGroupAddress);
+
     int remaining = logicalIndex;
     for (int i = 0;
          i < count && i <= SHRT_MAX;
          i++) {
-        void* taskBtnGroup = nullptr;
-        if (!TryReadTaskButtonGroupItem(
-                groups,
-                i,
-                &taskBtnGroup) ||
-            !taskBtnGroup) {
+        void* taskBtnGroup = groups[i];
+        if (!taskBtnGroup) {
             // Don't risk translating against a partially mutating/corrupt list.
             return logicalIndex;
         }
 
-        void* taskGroup = nullptr;
-        if (!TryGetTaskGroupFromButtonGroup(
-                taskBtnGroup,
-                &taskGroup) ||
-            !taskGroup) {
+        void* taskGroup = getGroup(taskBtnGroup);
+        if (!taskGroup) {
             return logicalIndex;
         }
 
@@ -6080,6 +6019,14 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
         },
         {
             {
+                LR"(const CTaskListWnd::`vftable'{for `ITaskListUI'})"
+            },
+            &g_taskListWndVtableITaskListUI,
+            nullptr,
+            true,
+        },
+        {
+            {
                 LR"(public: virtual int __cdecl CTaskListWnd::GetButtonGroupCount(void))"
             },
             &g_taskListWndGetButtonGroupCount,
@@ -6183,8 +6130,9 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
 
     Wh_Log(
         L"[TASKBAR] taskbar.dll hooks installed in one symbol pass; "
-        L"WinNum=%d ButtonGroups=%d GetGroup=%d LegacyContextSuppress=%d",
+        L"WinNum=%d TaskListUI=%d ButtonGroups=%d GetGroup=%d LegacyContextSuppress=%d",
         g_taskListWndHandleWinNumHotKeyOriginal ? 1 : 0,
+        g_taskListWndVtableITaskListUI ? 1 : 0,
         g_taskListWndGetButtonGroupCount ? 1 : 0,
         g_taskBtnGroupGetGroupAddress ? 1 : 0,
         g_taskListWndOnContextMenuOriginal ? 1 : 0);
