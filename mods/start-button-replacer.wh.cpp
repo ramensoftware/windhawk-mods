@@ -2,7 +2,7 @@
 // @id              start-button-replacer
 // @name            Start Button Replacer
 // @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image
-// @version         0.12.1
+// @version         0.12.2
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
@@ -32,14 +32,11 @@
 /*
 # Start Button Replacer
 
-Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or
-GIF image. Animated GIF playback and hover/pressed effects are optional
-features.
+Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.
 
-![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/preview-1.gif)
+![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif)
 
-Only the icon is replaced. Windows continues to handle clicking, keyboard
-navigation, accessibility and Start menu activation.
+Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.
 
 ## Image sources
 
@@ -64,32 +61,19 @@ HTTP/HTTPS URLs are also supported:
 
 ## Effects
 
-Separate scale, rotation and opacity settings are available for hover and
-pressed states.
+Separate scale, rotation and opacity settings are available for hover and pressed states.
 
 ## Separate state images
 
-The main **Image source** is always the normal image. Add a hover, pressed or
-activated image source to enable that state automatically. The activated image
-is shown while the Start menu is open. If it is blank or unavailable, activated
-falls back to the pressed image, then the hover image, then the main image.
-Other blank or unavailable state images fall back to the main image.
+The main **Image source** is always the normal image. Add a hover, pressed or activated image source to enable that state automatically. The activated image is shown while the Start menu is open. If it is blank or unavailable, activated falls back to the pressed image, then the hover image, then the main image. Other blank or unavailable state images fall back to the main image.
 
-While the Start menu is shown, pressing the button temporarily uses the pressed
-state. The activated state resumes on release and otherwise takes priority over
-the hover state.
+While the Start menu is shown, pressing the button temporarily uses the pressed state. The activated state resumes on release and otherwise takes priority over the hover state.
 
-State images crossfade whenever their applicable duration is greater than zero.
-Hover transitions use the hover duration; pressed and activated transitions use
-the pressed duration. Set a duration to `0` to switch instantly.
+State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to `0` to switch instantly.
 
 ## Notes
 
-For crisp results, use a square image with transparency. Keep animated GIFs
-reasonably small, such as 64x64 or 128x128. The displayed size is independent
-from the source image resolution. XAML loads and decodes image sources
-asynchronously. XAML also caches images by source URI, so after replacing a file
-at the same path, reload the mod if the previous image remains visible.
+For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.
 */
 // ==/WindhawkModReadme==
 
@@ -97,31 +81,25 @@ at the same path, reload the mod if the previous image remains visible.
 /*
 - images:
   - imageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/be76faf00be2a45cb166a4971e67eb32afd4b1fb/windhawk-mods/start-button-replacer/gecko/normal-hover.gif"
-    $name: Image source (necessary)
+    $name: Image source (required)
     $description: >-
-      Absolute file path, path containing environment variables, or HTTP/HTTPS
-      URL. Supports PNG, JPG and animated GIF. This is the normal image and the
-      final fallback for every other state.
+      Absolute file path, path containing environment variables, or HTTP/HTTPS URL. Supports PNG, JPG and animated GIF. This is the normal image and the final fallback for every other state.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
-      Image shown while the pointer is over the Start button. Leave blank to use
-      the normal image.
+      Image shown while the pointer is over the Start button. Leave blank to use the normal image.
   - pressedImageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/be76faf00be2a45cb166a4971e67eb32afd4b1fb/windhawk-mods/start-button-replacer/gecko/pressed.png"
     $name: Pressed image source
     $description: >-
-      Image shown while the Start button is pressed. Leave blank to use the
-      normal image.
+      Image shown while the Start button is pressed. Leave blank to use the normal image.
   - activatedImageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/be76faf00be2a45cb166a4971e67eb32afd4b1fb/windhawk-mods/start-button-replacer/gecko/activated.png"
     $name: Activated image source
     $description: >-
-      Image shown while the Start menu is open. If blank or unavailable, the
-      pressed image is used, followed by the hover image and normal image.
+      Image shown while the Start menu is open. If blank or unavailable, the pressed image is used, followed by the hover image and normal image.
   - iconSize: 34
     $name: Icon size
     $description: >-
-      Displayed size in device-independent pixels, from 8 to 128. The default is
-      34.
+      Displayed size in device-independent pixels, from 8 to 128. The default is 34.
   $name: Images
   $description: Configure the replacement images and their displayed size.
 
@@ -137,14 +115,11 @@ at the same path, reload the mod if the previous image remains visible.
   - hoverFadeDuration: 120
     $name: Hover crossfade duration
     $description: >-
-      Crossfade duration in milliseconds when entering or leaving the hover
-      state. Set to 0 to switch images instantly. The default is 120.
+      Crossfade duration in milliseconds when entering or leaving the hover state. Set to 0 to switch images instantly. The default is 120.
   - pressedFadeDuration: 80
     $name: Pressed and activated crossfade duration
     $description: >-
-      Crossfade duration in milliseconds when entering or leaving the pressed
-      or activated state. Set to 0 to switch images instantly. The default is
-      80.
+      Crossfade duration in milliseconds when entering or leaving the pressed or activated state. Set to 0 to switch images instantly. The default is 80.
   $name: Image animation
   $description: Configure animated GIF playback and crossfades between images.
 
@@ -152,8 +127,7 @@ at the same path, reload the mod if the previous image remains visible.
   - hoverScale: 115
     $name: Scale
     $description: >-
-      Icon scale as a percentage while hovering. 100 keeps its size. The default
-      is 115.
+      Icon scale as a percentage while hovering. 100 keeps its size. The default is 115.
   - hoverRotation: 4
     $name: Rotation
     $description: >-
@@ -173,8 +147,7 @@ at the same path, reload the mod if the previous image remains visible.
   - pressedScale: 95
     $name: Scale
     $description: >-
-      Icon scale as a percentage while pressed. 100 keeps its size. The default
-      is 95.
+      Icon scale as a percentage while pressed. 100 keeps its size. The default is 95.
   - pressedRotation: -4
     $name: Rotation
     $description: >-
@@ -194,15 +167,18 @@ at the same path, reload the mod if the previous image remains visible.
   - releaseDuration: 140
     $name: Release duration
     $description: >-
-      Effect transition duration in milliseconds when the pointer leaves or the
-      button is released. The default is 140.
+      Effect transition duration in milliseconds when the pointer leaves or the button is released. The default is 140.
   - respectSystemAnimations: true
     $name: Respect Windows animation setting
     $description: >-
-      Stop GIF playback and make all transitions instant when animation effects
-      are disabled in Windows.
+      Stop GIF playback and make all transitions instant when animation effects are disabled in Windows.
   $name: Animation behavior
   $description: Configure shared animation and accessibility behavior.
+
+- showImageLoadFailureWarnings: true
+  $name: Show image load failure warnings
+  $description: >-
+    Show a popup when one or more configured images cannot be loaded. Image-loading errors are always recorded in the Windhawk log.
 */
 // ==/WindhawkModSettings==
 
@@ -313,12 +289,18 @@ struct ModSettings {
     int releaseDuration = 140;
 
     bool respectSystemAnimations = true;
+    bool showImageLoadFailureWarnings = true;
 };
 
 ModSettings g_settings;
 std::mutex g_settingsMutex;
+std::atomic<uint64_t> g_settingsGeneration{0};
 
 std::atomic<bool> g_unloading = false;
+
+std::mutex g_imageFailureMessagesMutex;
+uint64_t g_imageFailureMessageGeneration = 0;
+bool g_imageFailureMessageQueued = false;
 
 // -----------------------------------------------------------------------------
 // Start icon instance
@@ -339,11 +321,13 @@ struct ImageResource {
     bool imageFailedAttached = false;
     bool opened = false;
     bool failed = false;
+    bool reportableFailure = false;
 };
 
 struct StartIconInstance {
     DWORD threadId = 0;
     ModSettings settings;
+    uint64_t settingsGeneration = 0;
 
     winrt::weak_ref<wux::FrameworkElement> startButton;
     winrt::weak_ref<wux::FrameworkElement> stockIcon;
@@ -359,6 +343,7 @@ struct StartIconInstance {
     // Multiple logical states can share one decoded image resource when their
     // configured sources are identical.
     std::array<size_t, kIconStateCount> imageResourceIndexByState{0, 1, 2, 3};
+    bool imageLoadingSetupComplete = false;
 
     size_t activeImageIndex = 0;
     bool activeImageSet = false;
@@ -459,6 +444,38 @@ std::wstring ExpandPath(const std::wstring& source) {
     return result;
 }
 
+std::wstring MakeFileUri(const std::wstring& path) {
+    std::wstring result;
+    result.reserve(path.size() + 8);
+    result = L"file:///";
+
+    for (wchar_t c : path) {
+        switch (c) {
+            case L'\\':
+                result += L'/';
+                break;
+
+            case L' ':
+                result += L"%20";
+                break;
+
+            case L'#':
+                result += L"%23";
+                break;
+
+            case L'%':
+                result += L"%25";
+                break;
+
+            default:
+                result += c;
+                break;
+        }
+    }
+
+    return result;
+}
+
 ModSettings LoadSettings() {
     ModSettings settings;
 
@@ -536,17 +553,27 @@ ModSettings LoadSettings() {
     settings.respectSystemAnimations =
         Wh_GetIntSetting(L"animationBehavior.respectSystemAnimations") != 0;
 
+    settings.showImageLoadFailureWarnings =
+        Wh_GetIntSetting(L"showImageLoadFailureWarnings") != 0;
+
     return settings;
 }
 
-void StoreSettings(ModSettings settings) {
+uint64_t StoreSettings(ModSettings settings) {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
     g_settings = std::move(settings);
+
+    return g_settingsGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-ModSettings GetSettingsSnapshot() {
+ModSettings GetSettingsSnapshot(uint64_t* generation = nullptr) {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
+
+    if (generation) {
+        *generation =
+            g_settingsGeneration.load(std::memory_order_relaxed);
+    }
 
     return g_settings;
 }
@@ -694,6 +721,191 @@ const wchar_t* IconStateName(IconState state) {
 
         default:
             return L"unknown";
+    }
+}
+
+constexpr wchar_t kImageFailureMessageTitle[] =
+    L"Start Button Replacer - Windhawk";
+
+const wchar_t* IconStateSettingName(IconState state) {
+    switch (state) {
+        case IconState::Normal:
+            return L"Image source";
+
+        case IconState::Hover:
+            return L"Hover image source";
+
+        case IconState::Pressed:
+            return L"Pressed image source";
+
+        case IconState::Activated:
+            return L"Activated image source";
+
+        default:
+            return L"Image source";
+    }
+}
+
+struct ImageFailureDetail {
+    IconState state = IconState::Normal;
+};
+
+std::wstring BuildImageFailureMessage(
+    const std::vector<ImageFailureDetail>& failures) {
+    if (failures.empty()) {
+        return L"";
+    }
+
+    bool mainImageFailed = failures.front().state == IconState::Normal;
+    bool multipleFailures = failures.size() > 1;
+
+    std::wstring message = multipleFailures
+                               ? L"The following images could not be loaded:\n\n"
+                               : L"The following image could not be loaded:\n\n";
+
+    for (size_t i = 0; i < failures.size(); i++) {
+        message += L"- ";
+        message += IconStateSettingName(failures[i].state);
+        message += L"\n";
+    }
+
+    if (mainImageFailed) {
+        message +=
+            L"\nNo custom Start icon is applied because Image source is "
+            L"required.";
+    } else if (multipleFailures) {
+        message +=
+            L"\nThe custom Start icon remains active, using available "
+            L"fallback images for the affected states.";
+    } else {
+        message +=
+            L"\nThe custom Start icon remains active, using an available "
+            L"fallback image for the affected state.";
+    }
+
+    message += L"\n\nCheck the image settings and Windhawk log for details.";
+
+    return message;
+}
+
+struct ImageFailureMessageParams {
+    std::wstring message;
+    uint64_t settingsGeneration = 0;
+    HMODULE pinnedModule = nullptr;
+};
+
+DWORD WINAPI ImageFailureMessageThreadProc(void* parameter) {
+    std::unique_ptr<ImageFailureMessageParams> params(
+        static_cast<ImageFailureMessageParams*>(parameter));
+
+    HMODULE pinnedModule = params->pinnedModule;
+
+    // Suppress a warning queued by old settings or just as controlled unload
+    // began. The module reference below still protects this worker if unload
+    // starts while an already visible message box is open.
+    if (!g_unloading &&
+        params->settingsGeneration ==
+            g_settingsGeneration.load(std::memory_order_relaxed)) {
+        MessageBoxW(nullptr, params->message.c_str(),
+                    kImageFailureMessageTitle,
+                    MB_OK | MB_ICONWARNING | MB_TOPMOST);
+    }
+
+    // Destroy all C++ objects while the mod is still mapped, then release the
+    // reference which keeps this worker's code valid during controlled unload.
+    params.reset();
+    FreeLibraryAndExitThread(pinnedModule, 0);
+}
+
+void ResetReportedImageFailures(uint64_t settingsGeneration) {
+    std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+
+    g_imageFailureMessageGeneration = settingsGeneration;
+    g_imageFailureMessageQueued = false;
+}
+
+void ForgetReportedImageFailure(uint64_t settingsGeneration) {
+    std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+
+    if (g_imageFailureMessageGeneration == settingsGeneration) {
+        g_imageFailureMessageQueued = false;
+    }
+}
+
+void ShowImageFailureMessage(uint64_t settingsGeneration,
+                             const std::vector<ImageFailureDetail>& failures)
+    noexcept {
+    if (!settingsGeneration || failures.empty() || g_unloading ||
+        settingsGeneration !=
+            g_settingsGeneration.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    bool messageMarkedAsQueued = false;
+
+    try {
+        {
+            std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+
+            if (g_unloading ||
+                settingsGeneration !=
+                    g_settingsGeneration.load(std::memory_order_relaxed) ||
+                g_imageFailureMessageGeneration != settingsGeneration ||
+                g_imageFailureMessageQueued) {
+                return;
+            }
+
+            g_imageFailureMessageQueued = true;
+            messageMarkedAsQueued = true;
+        }
+
+        auto params = std::make_unique<ImageFailureMessageParams>();
+        params->message = BuildImageFailureMessage(failures);
+        params->settingsGeneration = settingsGeneration;
+
+        if (g_unloading ||
+            settingsGeneration !=
+                g_settingsGeneration.load(std::memory_order_relaxed)) {
+            ForgetReportedImageFailure(settingsGeneration);
+            return;
+        }
+
+        if (!GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                reinterpret_cast<LPCWSTR>(&ImageFailureMessageThreadProc),
+                &params->pinnedModule)) {
+            Wh_Log(L"Pinning the mod for the image failure message failed: %u",
+                   GetLastError());
+            ForgetReportedImageFailure(settingsGeneration);
+            return;
+        }
+
+        auto rawParams = params.release();
+        HANDLE thread = CreateThread(nullptr, 0, ImageFailureMessageThreadProc,
+                                     rawParams, 0, nullptr);
+
+        if (!thread) {
+            DWORD error = GetLastError();
+            HMODULE pinnedModule = rawParams->pinnedModule;
+            params.reset(rawParams);
+            params.reset();
+            FreeLibrary(pinnedModule);
+            ForgetReportedImageFailure(settingsGeneration);
+            Wh_Log(L"Creating the image failure message thread failed: %u",
+                   error);
+            return;
+        }
+
+        CloseHandle(thread);
+    } catch (...) {
+        if (messageMarkedAsQueued) {
+            try {
+                ForgetReportedImageFailure(settingsGeneration);
+            } catch (...) {
+            }
+        }
+
+        Wh_Log(L"Preparing the image failure message failed");
     }
 }
 
@@ -909,11 +1121,42 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
         }
     };
 
+    auto useStockIcon = [&]() {
+        for (size_t layerIndex = 0; layerIndex < 2; layerIndex++) {
+            auto layer = GetImageLayer(instance, layerIndex);
+
+            try {
+                layer.Source(wuxm::ImageSource{nullptr});
+            } catch (...) {
+            }
+
+            SetImageLayerOpacity(layer, 0.0f);
+        }
+
+        instance->activeImageSet = false;
+        instance->displayedState = IconState::Normal;
+        instance->displayedStateSet = true;
+
+        setStockOpacity(instance->originalStockOpacity);
+
+        return false;
+    };
+
     IconState desiredState = GetCurrentIconState(instance);
 
     size_t normalIndex = IconStateIndex(IconState::Normal);
 
-    size_t selectedIndex = normalIndex;
+    size_t normalResourceIndex =
+        instance->imageResourceIndexByState[normalIndex];
+
+    // The main image is required. Keep the stock icon visible until it has
+    // opened successfully, and never display optional state images if it fails.
+    if (!ImageResourceAvailable(
+            instance->imageResources[normalResourceIndex])) {
+        return useStockIcon();
+    }
+
+    size_t selectedIndex = normalResourceIndex;
     IconState selectedState = IconState::Normal;
 
     auto selectIfAvailable = [&](IconState state) {
@@ -955,24 +1198,7 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
     }
 
     if (!ImageResourceAvailable(selectedResource)) {
-        for (size_t layerIndex = 0; layerIndex < 2; layerIndex++) {
-            auto layer = GetImageLayer(instance, layerIndex);
-
-            try {
-                layer.Source(wuxm::ImageSource{nullptr});
-            } catch (...) {
-            }
-
-            SetImageLayerOpacity(layer, 0.0f);
-        }
-
-        instance->activeImageSet = false;
-        instance->displayedState = IconState::Normal;
-        instance->displayedStateSet = true;
-
-        setStockOpacity(instance->originalStockOpacity);
-
-        return false;
+        return useStockIcon();
     }
 
     if (instance->activeImageSet &&
@@ -1396,8 +1622,76 @@ wuxc::Panel FindHostPanel(const wux::FrameworkElement& stockIcon,
 
 void DetachInstance(const std::shared_ptr<StartIconInstance>& instance);
 
+bool IsInstanceAttachedToCurrentVisualTree(
+    const std::shared_ptr<StartIconInstance>& instance) {
+    if (!instance || instance->detached) {
+        return false;
+    }
+
+    auto startButton = instance->startButton.get();
+    auto stockIcon = instance->stockIcon.get();
+    auto hostPanel = instance->hostPanel.get();
+    auto imageHost = instance->customImageHost.get();
+
+    if (!startButton || !stockIcon || !hostPanel || !imageHost) {
+        return false;
+    }
+
+    try {
+        // A control can keep the same object while ApplyTemplate replaces its
+        // template-generated visual subtree. Verify both our injected host and
+        // the stock icon still belong to this Start button before treating the
+        // instance as attached.
+        auto imageHostParent = wuxm::VisualTreeHelper::GetParent(imageHost);
+
+        if (!imageHostParent || imageHostParent != hostPanel) {
+            return false;
+        }
+
+        bool foundStartButton = false;
+        wux::DependencyObject current = hostPanel;
+
+        while (current) {
+            if (current == startButton) {
+                foundStartButton = true;
+                break;
+            }
+
+            current = wuxm::VisualTreeHelper::GetParent(current);
+        }
+
+        if (!foundStartButton) {
+            return false;
+        }
+
+        // The stock icon is normally below the host panel, not above it. Check
+        // its ancestry separately to ensure it belongs to the same live
+        // template subtree.
+        bool foundHostPanel = false;
+        current = stockIcon;
+
+        while (current) {
+            if (current == hostPanel) {
+                foundHostPanel = true;
+            }
+
+            if (current == startButton) {
+                return foundHostPanel;
+            }
+
+            current = wuxm::VisualTreeHelper::GetParent(current);
+        }
+    } catch (...) {
+        // XAML access can fail while a template is being torn down. In that
+        // case, retire the old instance and let the caller attach a fresh one.
+    }
+
+    return false;
+}
+
 void PruneDeadInstancesForCurrentThread() {
     DWORD threadId = GetCurrentThreadId();
+    std::vector<std::shared_ptr<StartIconInstance>> threadInstances;
     std::vector<std::shared_ptr<StartIconInstance>> deadInstances;
 
     {
@@ -1407,26 +1701,37 @@ void PruneDeadInstancesForCurrentThread() {
             return;
         }
 
-        for (auto it = g_instances->begin(); it != g_instances->end();) {
-            auto instance = *it;
+        std::erase(*g_instances, nullptr);
 
-            if (!instance) {
-                it = g_instances->erase(it);
-                continue;
+        for (const auto& instance : *g_instances) {
+            if (instance->threadId == threadId) {
+                threadInstances.push_back(instance);
             }
+        }
+    }
 
-            if (instance->threadId == threadId &&
-                !instance->startButton.get()) {
-                deadInstances.push_back(instance);
-                it = g_instances->erase(it);
-                continue;
-            }
+    // Inspect XAML only on the instance's owning UI thread and without holding
+    // the global instance mutex.
+    for (const auto& instance : threadInstances) {
+        if (!IsInstanceAttachedToCurrentVisualTree(instance)) {
+            deadInstances.push_back(instance);
+        }
+    }
 
-            ++it;
+    if (!deadInstances.empty()) {
+        std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+        if (g_instances) {
+            std::erase_if(*g_instances, [&](const auto& instance) {
+                return std::find(deadInstances.begin(), deadInstances.end(),
+                                 instance) != deadInstances.end();
+            });
         }
     }
 
     for (const auto& instance : deadInstances) {
+        Wh_Log(L"Start button template changed; replacing the stale custom "
+               L"image host");
         DetachInstance(instance);
     }
 }
@@ -1837,6 +2142,74 @@ std::vector<DWORD> GetTrackedInstanceThreadIds() {
 // Bitmap/image loading
 // -----------------------------------------------------------------------------
 
+void MaybeShowImageFailureMessageImpl(
+    const std::shared_ptr<StartIconInstance>& instance) {
+    if (!instance || instance->detached || g_unloading ||
+        !instance->imageLoadingSetupComplete ||
+        !instance->settings.showImageLoadFailureWarnings) {
+        return;
+    }
+
+    size_t normalIndex = IconStateIndex(IconState::Normal);
+    size_t normalResourceIndex =
+        instance->imageResourceIndexByState[normalIndex];
+    const auto& normalResource =
+        instance->imageResources[normalResourceIndex];
+
+    // A failed main image decides the result for every state, so report only
+    // that required setting without waiting for optional images.
+    if (normalResource.reportableFailure) {
+        ShowImageFailureMessage(instance->settingsGeneration,
+                                {{IconState::Normal}});
+        return;
+    }
+
+    // Optional failures only matter after the required main image succeeds.
+    if (!ImageResourceAvailable(normalResource)) {
+        return;
+    }
+
+    std::vector<ImageFailureDetail> failures;
+
+    for (size_t stateIndex = 1; stateIndex < kIconStateCount; stateIndex++) {
+        IconState state = static_cast<IconState>(stateIndex);
+        std::wstring source = GetImageSourceForState(instance->settings, state);
+
+        if (source.empty()) {
+            continue;
+        }
+
+        size_t resourceIndex =
+            instance->imageResourceIndexByState[stateIndex];
+        const auto& resource = instance->imageResources[resourceIndex];
+
+        // Wait for every configured optional resource to reach a terminal
+        // state so one dialog can list all unavailable settings.
+        if (!resource.opened && !resource.failed) {
+            return;
+        }
+
+        if (resource.reportableFailure) {
+            failures.push_back({state});
+        }
+    }
+
+    if (!failures.empty()) {
+        ShowImageFailureMessage(instance->settingsGeneration, failures);
+    }
+}
+
+void MaybeShowImageFailureMessage(
+    const std::shared_ptr<StartIconInstance>& instance) noexcept {
+    try {
+        MaybeShowImageFailureMessageImpl(instance);
+    } catch (...) {
+        // Never allow allocation or string-formatting failures to escape a
+        // XAML ImageOpened/ImageFailed callback into Explorer.
+        Wh_Log(L"Preparing the image failure summary failed");
+    }
+}
+
 bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
                        IconState state,
                        const std::wstring& source) {
@@ -1847,6 +2220,7 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
     size_t stateIndex = IconStateIndex(state);
 
     auto& resource = instance->imageResources[stateIndex];
+    bool sourceUriConstructionInProgress = false;
 
     try {
         wuxmi::BitmapImage bitmap;
@@ -1858,6 +2232,7 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
         resource.bitmap = bitmap;
         resource.opened = false;
         resource.failed = false;
+        resource.reportableFailure = false;
 
         std::weak_ptr<StartIconInstance> weakInstance = instance;
 
@@ -1866,7 +2241,7 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
                                        const wux::RoutedEventArgs&) {
                 auto instance = weakInstance.lock();
 
-                if (!instance) {
+                if (!instance || instance->detached || g_unloading) {
                     return;
                 }
 
@@ -1874,6 +2249,7 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
                 resource.opened = true;
                 resource.failed = false;
+                resource.reportableFailure = false;
 
                 auto state = static_cast<IconState>(stateIndex);
 
@@ -1882,17 +2258,19 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
                 // Apply both the image and the current transform. The pointer
                 // might already be hovering or pressed when decoding finishes.
                 ApplyCurrentState(instance, 0);
+                MaybeShowImageFailureMessage(instance);
             });
 
         resource.imageOpenedAttached = true;
 
-        resource.imageFailedToken =
-            bitmap.ImageFailed([weakInstance, stateIndex](
+        resource.imageFailedToken = bitmap.ImageFailed(
+            [weakInstance, stateIndex,
+             configuredSource = std::wstring(source)](
                                    const wf::IInspectable&,
                                    const wux::ExceptionRoutedEventArgs& args) {
                 auto instance = weakInstance.lock();
 
-                if (!instance) {
+                if (!instance || instance->detached || g_unloading) {
                     return;
                 }
 
@@ -1900,31 +2278,60 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
                 resource.opened = false;
                 resource.failed = true;
+                resource.reportableFailure = true;
 
                 auto state = static_cast<IconState>(stateIndex);
 
-                Wh_Log(L"Custom Start %s image failed: %s",
-                       IconStateName(state), args.ErrorMessage().c_str());
+                Wh_Log(L"Custom Start %s image failed: %s; source: %s",
+                       IconStateName(state), args.ErrorMessage().c_str(),
+                       configuredSource.c_str());
+
+                if (state == IconState::Normal) {
+                    Wh_Log(L"The main image is unavailable; keeping the stock "
+                           L"Start icon and ignoring optional state images");
+                }
 
                 UpdateDisplayedImage(instance);
                 UpdateGifPlayback(instance);
+                MaybeShowImageFailureMessage(instance);
             });
 
         resource.imageFailedAttached = true;
 
-        // Preserve URLs exactly, including percent-encoded content. Environment
-        // variable expansion applies only to local file paths.
-        std::wstring resolvedSource =
-            IsHttpUrl(source) ? source : ExpandPath(source);
+        // Preserve URLs exactly, including percent-encoded content. Local paths
+        // need environment expansion followed by conversion to an escaped file
+        // URI so characters such as '#' and '%' remain part of the filename.
+        std::wstring resolvedSource;
+
+        if (IsHttpUrl(source)) {
+            resolvedSource = source;
+        } else {
+            std::wstring expandedPath = ExpandPath(source);
+
+            if (expandedPath.empty()) {
+                resource.failed = true;
+                resource.reportableFailure = true;
+                Wh_Log(L"Custom Start %s image path couldn't be expanded: %s",
+                       IconStateName(state), source.c_str());
+                return false;
+            }
+
+            resolvedSource = MakeFileUri(expandedPath);
+        }
 
         if (resolvedSource.empty()) {
             resource.failed = true;
+            resource.reportableFailure = true;
+            Wh_Log(L"Custom Start %s image URI couldn't be created: %s",
+                   IconStateName(state), source.c_str());
             return false;
         }
 
         // UriSource lets XAML retrieve and decode the image asynchronously.
         // ImageOpened and ImageFailed above report completion.
+        sourceUriConstructionInProgress = true;
         bitmap.UriSource(wf::Uri(resolvedSource));
+        sourceUriConstructionInProgress = false;
 
         auto imageHost = instance->customImageHost.get();
 
@@ -1953,13 +2360,22 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
     } catch (const winrt::hresult_error& e) {
         resource.failed = true;
 
-        Wh_Log(L"Loading %s image failed: 0x%08X %s", IconStateName(state),
-               e.code().value, e.message().c_str());
+        Wh_Log(L"Loading %s image failed: 0x%08X %s; source: %s",
+               IconStateName(state), e.code().value, e.message().c_str(),
+               source.c_str());
+
+        if (sourceUriConstructionInProgress) {
+            resource.reportableFailure = true;
+        }
     } catch (...) {
         resource.failed = true;
 
-        Wh_Log(L"Loading %s image failed with unknown exception",
-               IconStateName(state));
+        Wh_Log(L"Loading %s image failed with unknown exception; source: %s",
+               IconStateName(state), source.c_str());
+
+        if (sourceUriConstructionInProgress) {
+            resource.reportableFailure = true;
+        }
     }
 
     return false;
@@ -1969,6 +2385,8 @@ bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
     if (!instance) {
         return false;
     }
+
+    instance->imageLoadingSetupComplete = false;
 
     std::array<std::wstring, kIconStateCount> sources;
 
@@ -1981,6 +2399,8 @@ bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
 
     if (!LoadImageResource(instance, IconState::Normal,
                            sources[IconStateIndex(IconState::Normal)])) {
+        instance->imageLoadingSetupComplete = true;
+        MaybeShowImageFailureMessage(instance);
         return false;
     }
 
@@ -2020,6 +2440,9 @@ bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
                    IconStateName(state));
         }
     }
+
+    instance->imageLoadingSetupComplete = true;
+    MaybeShowImageFailureMessage(instance);
 
     return true;
 }
@@ -2278,7 +2701,8 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
         return false;
     }
 
-    ModSettings settings = GetSettingsSnapshot();
+    uint64_t settingsGeneration = 0;
+    ModSettings settings = GetSettingsSnapshot(&settingsGeneration);
 
     if (IsBlank(GetImageSourceForState(settings, IconState::Normal))) {
         // An earlier build or an interrupted hot reload might have left the
@@ -2337,6 +2761,7 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
         instance->threadId = GetCurrentThreadId();
 
         instance->settings = std::move(settings);
+        instance->settingsGeneration = settingsGeneration;
 
         instance->startButton = winrt::make_weak(startButton);
 
@@ -3179,7 +3604,8 @@ BOOL Wh_ModInit() {
 
     g_unloading = false;
 
-    StoreSettings(LoadSettings());
+    uint64_t settingsGeneration = StoreSettings(LoadSettings());
+    ResetReportedImageFailures(settingsGeneration);
 
     if (IsBlank(GetSettingsSnapshot().imageSource)) {
         Wh_Log(L"No image source is configured; leaving the stock Start icon "
@@ -3269,7 +3695,8 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Start Button Replacer settings changed");
 
-    StoreSettings(LoadSettings());
+    uint64_t settingsGeneration = StoreSettings(LoadSettings());
+    ResetReportedImageFailures(settingsGeneration);
 
     RunOnAllTaskbarThreads(RebuildAllTaskbarsProc, nullptr);
 }
