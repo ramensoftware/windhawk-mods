@@ -1,3 +1,11 @@
+## 1.6 ([Aug 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dddabf466ecd540485cb9ecb066964779a7bd7e8/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Updated themes for compatibility with recent Windows 11 changes (ViVeTool flag 61017737).
+* Added the Float theme.
+* Several target controls can now be specified for the same styles by separating them with commas, for example: `ParentClass > Class#Name1, ParentClass > Class#Name2`.
+* Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.
+* Improved handling for remote images.
+
 ## 1.5 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b00037cb502ab29dc6f0290861e1b776142118e4/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added the following themes: MicaTabless, OS26 Liquid Glass, ZEUSosX_044, Compact Explorer11.
