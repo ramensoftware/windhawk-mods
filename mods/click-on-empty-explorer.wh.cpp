@@ -126,9 +126,11 @@ Match*). Leave one empty to fall back to the global **Context Menu Match** above
 — this is the recommended way to use several context-menu triggers with
 different entries at once.
 
-Matching is a loose substring test, so keep match text specific: a short string
-like `code` also matches `Encode`, `Decode`, or `Open with Code Insiders`. If
-the wrong entry fires, use a longer or more specific match, or the entry's verb.
+Matching prefers an **exact** match on the normalized text or verb and only then
+falls back to a loose substring test, so keep match text specific: a short
+string like `code` also matches `Encode`, `Decode`, or `Open with Code Insiders`.
+If the wrong entry fires, type the full entry name or its verb to get an exact
+match.
 
 ### Tips
 
@@ -336,7 +338,7 @@ require Windows 11 for tabbed Explorer support.
   $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - contextMenuMatch: ""
   $name: Context Menu Match
-  $description: "Used by the 'Open Context Menu Item' action. Text to match (case-insensitive substring) against the folder background right-click menu entries' display text or verb. Ex: VS Code, Terminal, Git Bash, PowerShell, Cursor. Any program that registered an 'Open in ...' entry works regardless of install path."
+  $description: "Used by the 'Open Context Menu Item' action. Text to match (case-insensitive; exact text/verb match preferred, then substring) against the folder background right-click menu entries' display text or verb. Ex: VS Code, Terminal, Git Bash, PowerShell, Cursor. Any program that registered an 'Open in ...' entry works regardless of install path."
 */
 // ==/WindhawkModSettings==
 
@@ -574,7 +576,10 @@ static void SendParsedHotkey(const std::wstring& combo) {
         if (end == std::wstring::npos) break;
         start = end + 1;
     }
-    if (keys.empty() || keys.size() > 4) return;
+    if (keys.empty() || keys.size() > 4) {
+        Wh_Log(L"SendParsedHotkey: unparseable hotkey combo \"%s\"", combo.c_str());
+        return;
+    }
 
     std::vector<INPUT> in;
     auto Key = [&](WORD vk, DWORD flags) {
@@ -654,7 +659,7 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
 
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_SUBMENU;
+        mii.fMask = MIIM_ID | MIIM_SUBMENU | MIIM_STATE;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
 
         if (mii.hSubMenu != NULL) {
@@ -674,9 +679,12 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
             continue;
         }
 
-        // Leaf item: skip separators and items outside the context-menu command range.
+        // Leaf item: skip separators, items outside the context-menu command
+        // range, and disabled/greyed entries (invoking those fails anyway, and a
+        // live entry matching the same text should win).
         if (mii.wID == 0) continue;
         if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
+        if (mii.fState & (MFS_DISABLED | MFS_GRAYED)) continue;
 
         UINT offset = mii.wID - idCmdFirst;
 
@@ -712,11 +720,15 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
     }
 
     auto invokeLeaf = [&](const LeafItem& it) -> bool {
-        CMINVOKECOMMANDINFO ci = { sizeof(ci) };
+        // CMINVOKECOMMANDINFOEX with the UNICODE flag: some shell extensions
+        // behave better with the wide form, and the offset verb works with it.
+        CMINVOKECOMMANDINFOEX ci = { sizeof(ci) };
         ci.hwnd = hwnd;
+        ci.fMask = CMIC_MASK_UNICODE;
         ci.lpVerb = MAKEINTRESOURCEA(it.offset);
+        ci.lpVerbW = MAKEINTRESOURCEW(it.offset);
         ci.nShow = SW_SHOWNORMAL;
-        return SUCCEEDED(pcm->InvokeCommand(&ci));
+        return SUCCEEDED(pcm->InvokeCommand((CMINVOKECOMMANDINFO*)&ci));
     };
 
     // Pass 1: exact match on the normalized text or verb.
@@ -860,10 +872,21 @@ static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
         g_pendingActions.pop_back();
 }
 
+// A delayed action may fire up to GetDoubleClickTime() (~500 ms) after the
+// click. SendInput injects into the *foreground* window, so by then the user
+// may have moved on (Alt+Tab, notifications, a launched app). Gate the delayed
+// dispatch on the clicked Explorer frame still being foreground so keys can't
+// land in an unrelated window (closing a browser tab, pasting into another app).
+static bool StillForeground(HWND hWnd) {
+    HWND root = GetAncestor(hWnd, GA_ROOT);
+    return root && root == GetForegroundWindow();
+}
+
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     KillTimer(hwnd, idEvent);
     g_midClickTimerId = 0;
-    if (g_midClickPendingHwnd && IsWindow(g_midClickPendingHwnd) && g_initialized) {
+    if (g_midClickPendingHwnd && IsWindow(g_midClickPendingHwnd) && g_initialized &&
+        StillForeground(g_midClickPendingHwnd)) {
         SettingsSnapshot s = CopySettings();
         if (wcscmp(s.middleClick.c_str(), L"none") != 0) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
@@ -886,7 +909,8 @@ static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
     KillTimer(hwnd, idEvent);
     CHECK_INIT_OR_RETURN_VOID();
     g_pendingDblClickTimerId = 0;
-    if (g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd)) {
+    if (g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd) &&
+        StillForeground(g_pendingDblClickHwnd)) {
         if (!g_pendingDblClickAction.empty()) {
             if (!TryCustomHotkey(g_pendingDblClickAction.c_str(), g_pendingDblClickCombo))
                 FindShellTabAndDoAction(g_pendingDblClickHwnd, g_pendingDblClickAction.c_str(),
