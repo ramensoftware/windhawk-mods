@@ -13,9 +13,11 @@
 // @description:ko-KR macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다 (모든 작업 표시줄 위치 지원 및 멀티 모니터 버그가 수정된 업데이트 버전)
 // @description:pt-BR Anima os ícones da barra de tarefas ao passar o mouse, como no macOS (versão atualizada com suporte para todas as posições da barra e correções para múltiplos monitores)
 // @description:it-IT Anima le icone della barra delle applicazioni al passaggio del mouse, come su macOS (versione aggiornata con supporto per tutte le posizioni della barra e correzioni multi-monitor)
-// @version           2.0.1
+// @version           2.0.2
 // @author            incconutwo
 // @github            https://github.com/incconutwo
+// @twitter           https://x.com/tnemoroccan
+// @homepage          https://incconutwo.com
 // @include           explorer.exe
 // @architecture      x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32
@@ -33,7 +35,7 @@ This is an updated fork of the original Taskbar Dock Animation mod, adding compa
 
 ---
 
-### 🌟 Key Additions in this Fork
+### ![Sparkles](https://raw.githubusercontent.com/incconutwo/windhawk-mods/main/assets/sparkles.svg) Key Additions in this Fork
 * **Support for all Taskbar Placements**: Works seamlessly on Bottom, Top, Left, and Right taskbar positions.
 * **Multi-Monitor Stability**: Fixes crashes and compatibility issues when using multiple screens or monitors.
 * **Smoother Animations**: The idle "breathing" / bounce animation now fades in and out smoothly instead of snapping abruptly.
@@ -41,7 +43,7 @@ This is an updated fork of the original Taskbar Dock Animation mod, adding compa
 
 ---
 
-### ⚠️ Known Issues & Limitations
+### ![Triangle Alert](https://raw.githubusercontent.com/incconutwo/windhawk-mods/main/assets/triangle-alert.svg) Known Issues & Limitations
 * Icons are sometimes clipped by the taskbar.
 * Upscaled icons may appear slightly blurry.
 
@@ -54,12 +56,22 @@ You can experiment with the **radius** value to achieve the best result for your
 
 ---
 
-### 💖 Credits
+### ![Globe](https://raw.githubusercontent.com/incconutwo/windhawk-mods/main/assets/globe.svg) Author & Support
+
+If you enjoy this mod and want to support its continued development:
+* **Personal Website & Projects:** [incconutwo.com](https://incconutwo.com)
+* **Support My Work:** [Ko-fi](https://ko-fi.com/incconutwo)
+* **GitHub Profile:** [github.com/incconutwo](https://github.com/incconutwo)
+* **X (Twitter):** [@tnemoroccan](https://x.com/tnemoroccan)
+
+---
+
+### ![Heart](https://raw.githubusercontent.com/incconutwo/windhawk-mods/main/assets/heart.svg) Credits
 This mod is a fork of the original [Taskbar Dock Animation](https://windhawk.net/mods/taskbar-dock-animation) mod created by [@Ph0en1x-dev](https://github.com/Ph0en1x-dev). All original logic and visual concepts belong to the original author.
 
 ---
 
-## 🖼️ Preview
+## ![Image](https://raw.githubusercontent.com/incconutwo/windhawk-mods/main/assets/image.svg) Preview
 ![Taskbar Dock Animation Preview](https://raw.githubusercontent.com/Ph0en1x-dev/Hlam/refs/heads/main/Screen-recording-2025-11-06-155028.gif)
 */
 // ==/WindhawkModReadme==
