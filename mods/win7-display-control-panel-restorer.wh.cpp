@@ -31,14 +31,14 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 
 ## Features
 
-- **No File Replacement:** The mod is stable and user-friendly, and does not require replacing any Windows system files.
-- **Complete Classic UI:** Restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.
-- **Full Breadcrumb & Sidebar:** Shows the original **Display > Screen Resolution** breadcrumb title and the classic Control Panel sidebar task links.
+- **No File Replacement:** The mod is designed to be stable and user-friendly, and does not require replacing any Windows system files.
+- **Complete Classic UI:** The mod restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.
+- **Full Breadcrumb & Sidebar:** The mod shows the original **Display > Screen Resolution** breadcrumb title and the classic Control Panel sidebar task links.
 - **Working classic DPI presets:** The 100/125/150/200% radio choices use the existing Apply button and the classic Please Wait transition.
-- **Classic Icon & Localized Text:** Uses the classic Display icon and localized strings for all supported languages.
-- **Optional Redirects:** Can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
+- **Classic Icon & Localized Text:** The mod uses the classic Display icon and localized strings for all supported languages.
+- **Optional Redirects:** The mod can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
 - **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use. After the load, the module the loader actually mapped is confirmed to be the very same file object that passed verification (`GetFileInformationByHandleEx(FileIdInfo)`), and is unloaded and refused otherwise.
-- **No permanent background work:** the hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks. While no Display page is open the worker thread is blocked on its wait handles with no timeout, so there is neither a window-tree enumeration nor a periodic wake-up.
+- **No permanent background work:** The hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks. While no Display page is open the worker thread is blocked on its wait handles with no timeout, so there is neither a window-tree enumeration nor a periodic wake-up.
 - **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
 - **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
 
@@ -74,7 +74,6 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 ## Notes
 
 - The mod runs inside `explorer.exe` and requires **64‑bit Windows 10 or Windows 11**. It is **x64-only and is not supported on ARM64** (on an ARM64 device the mod has no effect; see Known Limitations).
-- **Coexistence with Windows 7 Legacy Applet Restorer (fixed in 1.0.1):** the namespace enumeration injection now honors the documented "same `(hKey, index)` → same entry" contract of `RegEnumKeyExW`. The Legacy Applet Restorer probes indices through the hook chain and then re-issues the same index for the selected entry; the previous one-shot injection was consumed by that probe and returned `ERROR_NO_MORE_ITEMS` to the retry, which ended the enumeration early and hid the Display entry from Control Panel whenever the hook order placed the other mod on top (e.g. after a settings save reloaded it). The injection is now re-served for repeated same-index queries, so the entry stays visible regardless of which mod hooks the registry APIs first.
 - On first use, wait a few seconds for the setup to finish, then reopen Control Panel.
 - After changing a setting or language, close any already open Display page and reopen it.
 - If the page does not appear, check the Windhawk log for download or hash verification errors.
@@ -107,7 +106,7 @@ These are useful as an alternative entry point if a Control Panel task link ever
 
 ## Credits
 
-- **Cips** — testing on Windows 11 25H2.
+- **Cips** — testing on Windows 11 25H2
 
 ---
 
@@ -148,9 +147,9 @@ These are useful as an alternative entry point if a Control Panel task link ever
   $name: Redirect classic Display launch routes
   $description: Intercept the exact legacy Display command lines (bare desk.cpl, control.exe /name Microsoft.Display, and desk.cpl,,2 for Screen Resolution) and open the restored Windows 7 pages instead of the modern Settings handoff. When disabled, Windows keeps its default modern behavior for those launches.
 
-- redirectDisplaySettingsUri: true
+- redirectDisplaySettingsUri: false
   $name: Redirect "Display settings" to the restored page
-  $description: When the desktop context menu (or any other shell component inside Explorer) opens ms-settings:display, open the restored Display page instead of the modern Settings app, like the Windows 7 desktop menu did. The Screen Resolution page is then one sidebar click away (Adjust resolution), exactly as in Windows 7. Disable to keep the modern Settings app.
+  $description: When the desktop context menu (or any other shell component inside Explorer) opens ms-settings:display, open the restored Display page instead of the modern Settings app, like the Windows 7 desktop menu did. The Screen Resolution page is then one sidebar click away (Adjust resolution), exactly as in Windows 7. Off by default because the separate "Redirect Settings to Control Panel" mod (also by this author) already owns ms-settings:display; both mods hook ShellExecuteExW/ShellExecuteW, so with both enabled and this on, which one wins depends on Windhawk hook ordering rather than your choice. Enable this only if you don't run that mod, or once the two mods' redirects have been coordinated.
 
 - showOrientationPanel: false
   $name: Show the classic Orientation row
@@ -755,7 +754,7 @@ std::atomic<int> g_forcedLanguage{static_cast<int>(MuiLanguage::EN_US)};
 std::atomic<bool> g_showSidebarLinks{true};
 std::atomic<bool> g_resolutionPageCompatibility{true};
 std::atomic<bool> g_redirectClassicLaunch{true};
-std::atomic<bool> g_redirectDisplaySettingsUri{true};
+std::atomic<bool> g_redirectDisplaySettingsUri{false};
 std::atomic<bool> g_enableDpiPresets{true};
 std::atomic<bool> g_hideBrokenTextSizeSection{true};
 std::atomic<bool> g_showOrientationPanel{false};
@@ -6647,6 +6646,13 @@ static void NotifyControlPanelContractReady() {
 // image has passed its runtime compatibility checks. Its implementation lives
 // with the native-navigation code below.
 static void InstallPinnedDisplayProviderHooks(HMODULE module);
+// Registry/COM/DirectUI hook surface that only makes sense once the pinned
+// provider is actually loadable. Defined near the other Install* helpers
+// (after GetRegFunc, InstallComHook, InstallTranslationHook,
+// InstallNativeControlPanelNavLinksHook) and invoked from here once setup
+// has produced a usable module, following the same schedule-then-
+// Wh_ApplyHookOperations() shape as InstallPinnedDisplayProviderHooks.
+static void InstallDeferredContractHooks();
 
 // -----------------------------------------------------------------------------
 // Async setup - runs on a worker thread so explorer.exe startup is never blocked.
@@ -6891,6 +6897,14 @@ static void RunSetup() {
         // it before publishing the virtual Control Panel contract, so the first
         // page can receive a native task list without an Explorer restart.
         InstallPinnedDisplayProviderHooks(h);
+
+        // The registry-virtualization / COM / DirectUI hook surface is only
+        // useful once the provider can actually be loaded; installing it
+        // unconditionally in Wh_ModInit would pay for RegOpenKeyExW,
+        // RegQueryValueExW, RegCloseKey, LoadStringW and CoCreateInstance
+        // hooks in explorer.exe for the rest of the session even when setup
+        // never succeeds. Schedule it here, once, now that we have a module.
+        InstallDeferredContractHooks();
 
         bool localizedResourcesReady = false;
         try {
@@ -7828,7 +7842,7 @@ static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
             if (!full.empty()) full += L"\\";
             full += sub;
         }
-        if (IsTargetKey(full)) {
+        if (IsTargetKey(full) && IsDisplayAppletContractPublished()) {
             if (!out) return ERROR_INVALID_PARAMETER;
             if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
             HKEY f = g_keyTracker.CreateFake(full);
@@ -7852,7 +7866,7 @@ static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
     if (st == ERROR_SUCCESS && out && *out) {
         g_keyTracker.Track(*out, fp);
     } else if (st == ERROR_FILE_NOT_FOUND && out) {
-        if (IsTargetKey(fp)) {
+        if (IsTargetKey(fp) && IsDisplayAppletContractPublished()) {
             if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
             HKEY f = g_keyTracker.CreateFake(fp);
             if (!f) return ERROR_OUTOFMEMORY;
@@ -10196,10 +10210,10 @@ static NativeDisplayNavList* g_fabricatedNavList = nullptr;
 
 static void InvalidateFabricatedNavCache() {
     std::lock_guard<std::mutex> lock(g_fabricatedNavListMutex);
-    if (g_fabricatedNavList) {
-        DestroyFabricatedNavigationList(g_fabricatedNavList);
-        g_fabricatedNavList = nullptr;
-    }
+    // Never destroy a list that was already published: the bag holds a raw
+    // pointer to it and the pinned refcount means Release can't free it.
+    // Dropping the cache just makes the next fallback build a fresh one.
+    g_fabricatedNavList = nullptr;
 }
 
 static NativeDisplayNavList* CreateFabricatedDisplayNavigationImpl() {
@@ -14664,6 +14678,131 @@ void InstallComHook() {
            combaseHook, ole32Hook);
 }
 
+static void InstallDeferredContractHooks() {
+    // Guard: setup can in principle observe/confirm readiness more than once
+    // (re-verifying an already-loaded module), but the hook surface must be
+    // scheduled and applied exactly once per process.
+    static std::atomic<bool> attempted{false};
+    if (attempted.exchange(true)) return;
+
+    void* pOpen = GetRegFunc("RegOpenKeyExW");
+    void* pOpenOldW = GetRegFunc("RegOpenKeyW");
+    void* pCreateW = GetRegFunc("RegCreateKeyExW");
+    void* pClose = GetRegFunc("RegCloseKey");
+    void* pQV = GetRegFunc("RegQueryValueExW");
+    void* pGV = GetRegFunc("RegGetValueW");
+    void* pEnumEx = GetRegFunc("RegEnumKeyExW");
+    void* pEnum = GetRegFunc("RegEnumKeyW");
+    void* pEnumValue = GetRegFunc("RegEnumValueW");
+    void* pQInfo = GetRegFunc("RegQueryInfoKeyW");
+
+    if (!pOpen || !pClose || !pQV || !pGV || !pEnumEx || !pEnum || !pQInfo) {
+        Wh_Log(L"Display Restorer: deferred hook installation aborted; "
+               L"required registry APIs could not be resolved (open=%d "
+               L"close=%d query=%d get=%d enumEx=%d enum=%d info=%d)",
+               pOpen != nullptr, pClose != nullptr, pQV != nullptr,
+               pGV != nullptr, pEnumEx != nullptr, pEnum != nullptr,
+               pQInfo != nullptr);
+        return;
+    }
+
+    bool coreHooksOk = true;
+    auto recordHook = [&coreHooksOk](bool ok, const wchar_t* name,
+                                     bool required) {
+        if (!ok) {
+            Wh_Log(L"Display Restorer: hook installation failed for %s%s",
+                   name, required ? L" (required)" : L" (optional)");
+            if (required) coreHooksOk = false;
+        }
+        return ok;
+    };
+
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegOpenKeyExW_t>(pOpen), RegOpenKeyExWHook,
+            &RegOpenKeyExWOriginal),
+        L"RegOpenKeyExW", true);
+    if (pOpenOldW) {
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegOpenKeyW_t>(pOpenOldW), RegOpenKeyWHook,
+                &RegOpenKeyWOriginal),
+            L"RegOpenKeyW", false);
+    } else {
+        Wh_Log(L"Display Restorer: RegOpenKeyW is unavailable; continuing");
+    }
+    if (pCreateW) {
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegCreateKeyExW_t>(pCreateW),
+                RegCreateKeyExWHook, &RegCreateKeyExWOriginal),
+            L"RegCreateKeyExW", false);
+    } else {
+        Wh_Log(L"Display Restorer: RegCreateKeyExW is unavailable; continuing");
+    }
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegCloseKey_t>(pClose), RegCloseKeyHook,
+            &RegCloseKeyOriginal),
+        L"RegCloseKey", true);
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegQueryValueExW_t>(pQV), RegQueryValueExWHook,
+            &RegQueryValueExWOriginal),
+        L"RegQueryValueExW", true);
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegGetValueW_t>(pGV), RegGetValueWHook,
+            &RegGetValueWOriginal),
+        L"RegGetValueW", true);
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegEnumKeyExW_t>(pEnumEx), RegEnumKeyExWHook,
+            &RegEnumKeyExWOriginal),
+        L"RegEnumKeyExW", true);
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegEnumKeyW_t>(pEnum), RegEnumKeyWHook,
+            &RegEnumKeyWOriginal),
+        L"RegEnumKeyW", true);
+
+    bool enumValueHookOk = false;
+    if (pEnumValue) {
+        enumValueHookOk = recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegEnumValueW_t>(pEnumValue),
+                RegEnumValueWHook, &RegEnumValueWOriginal),
+            L"RegEnumValueW", false);
+    } else {
+        Wh_Log(L"Display Restorer: RegEnumValueW is unavailable; synthetic "
+               L"values remain queryable but won't be advertised for enumeration");
+    }
+    g_regEnumValueHookAvailable.store(enumValueHookOk);
+
+    recordHook(
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RegQueryInfoKeyW_t>(pQInfo),
+            RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal),
+        L"RegQueryInfoKeyW", true);
+    if (!coreHooksOk) {
+        Wh_Log(L"Display Restorer: deferred registry hook installation "
+               L"incomplete; the virtualized CLSID contract may not be fully "
+               L"served");
+    }
+
+    InstallComHook();
+    InstallTranslationHook();
+    InstallNativeControlPanelNavLinksHook();
+
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"Display Restorer: Wh_ApplyHookOperations failed for the "
+               L"deferred contract-dependent hook surface");
+        return;
+    }
+    Wh_Log(L"Display Restorer: contract-dependent hooks (registry "
+           L"virtualization, COM, DirectUI/translation) are now active");
+}
+
 // -----------------------------------------------------------------------------
 // Windhawk entry points
 // -----------------------------------------------------------------------------
@@ -14764,122 +14903,19 @@ if (!clsidRegistered || !controlExePresent) {
         // that don't apply to the current process kind.
         InstallShellExecuteRedirect();
 
-        // --- Install conservative registry hooks (Unicode *W only: 10 hooks) ---
-        void* pOpen = GetRegFunc("RegOpenKeyExW");
-        void* pOpenOldW = GetRegFunc("RegOpenKeyW");
-        void* pCreateW = GetRegFunc("RegCreateKeyExW");
-        void* pClose = GetRegFunc("RegCloseKey");
-        void* pQV = GetRegFunc("RegQueryValueExW");
-        void* pGV = GetRegFunc("RegGetValueW");
-        void* pEnumEx = GetRegFunc("RegEnumKeyExW");
-        void* pEnum = GetRegFunc("RegEnumKeyW");
-        void* pEnumValue = GetRegFunc("RegEnumValueW");
-        void* pQInfo = GetRegFunc("RegQueryInfoKeyW");
-
-        if (!pOpen || !pClose || !pQV || !pGV || !pEnumEx || !pEnum || !pQInfo) {
-            Wh_Log(L"Display Restorer startup failed: required registry APIs "
-                   L"could not be resolved (open=%d close=%d query=%d get=%d "
-                   L"enumEx=%d enum=%d info=%d)",
-                   pOpen != nullptr, pClose != nullptr, pQV != nullptr,
-                   pGV != nullptr, pEnumEx != nullptr, pEnum != nullptr,
-                   pQInfo != nullptr);
-            return FALSE;
-        }
-
-        bool coreHooksOk = true;
-        auto recordHook = [&coreHooksOk](bool ok, const wchar_t* name,
-                                         bool required) {
-            if (!ok) {
-                Wh_Log(L"Display Restorer: hook installation failed for %s%s",
-                       name, required ? L" (required)" : L" (optional)");
-                if (required) coreHooksOk = false;
-            }
-            return ok;
-        };
-
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegOpenKeyExW_t>(pOpen), RegOpenKeyExWHook,
-                &RegOpenKeyExWOriginal),
-            L"RegOpenKeyExW", true);
-        if (pOpenOldW) {
-            recordHook(
-                WindhawkUtils::SetFunctionHook(
-                    reinterpret_cast<RegOpenKeyW_t>(pOpenOldW), RegOpenKeyWHook,
-                    &RegOpenKeyWOriginal),
-                L"RegOpenKeyW", false);
-        } else {
-            Wh_Log(L"Display Restorer: RegOpenKeyW is unavailable; continuing");
-        }
-        if (pCreateW) {
-            recordHook(
-                WindhawkUtils::SetFunctionHook(
-                    reinterpret_cast<RegCreateKeyExW_t>(pCreateW),
-                    RegCreateKeyExWHook, &RegCreateKeyExWOriginal),
-                L"RegCreateKeyExW", false);
-        } else {
-            Wh_Log(L"Display Restorer: RegCreateKeyExW is unavailable; continuing");
-        }
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegCloseKey_t>(pClose), RegCloseKeyHook,
-                &RegCloseKeyOriginal),
-            L"RegCloseKey", true);
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegQueryValueExW_t>(pQV), RegQueryValueExWHook,
-                &RegQueryValueExWOriginal),
-            L"RegQueryValueExW", true);
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegGetValueW_t>(pGV), RegGetValueWHook,
-                &RegGetValueWOriginal),
-            L"RegGetValueW", true);
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegEnumKeyExW_t>(pEnumEx), RegEnumKeyExWHook,
-                &RegEnumKeyExWOriginal),
-            L"RegEnumKeyExW", true);
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegEnumKeyW_t>(pEnum), RegEnumKeyWHook,
-                &RegEnumKeyWOriginal),
-            L"RegEnumKeyW", true);
-
-        bool enumValueHookOk = false;
-        if (pEnumValue) {
-            enumValueHookOk = recordHook(
-                WindhawkUtils::SetFunctionHook(
-                    reinterpret_cast<RegEnumValueW_t>(pEnumValue),
-                    RegEnumValueWHook, &RegEnumValueWOriginal),
-                L"RegEnumValueW", false);
-        } else {
-            Wh_Log(L"Display Restorer: RegEnumValueW is unavailable; synthetic "
-                   L"values remain queryable but won't be advertised for enumeration");
-        }
-        g_regEnumValueHookAvailable.store(enumValueHookOk);
-
-        recordHook(
-            WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<RegQueryInfoKeyW_t>(pQInfo),
-                RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal),
-            L"RegQueryInfoKeyW", true);
-        if (!coreHooksOk) {
-            Wh_Log(L"Display Restorer startup failed: one or more required "
-                   L"registry hooks could not be installed");
-            return FALSE;
-        }
-        Wh_Log(L"Display Restorer startup phase 3/4: registry hooks scheduled");
-
-        InstallComHook();
-        InstallTranslationHook();
-        InstallNativeControlPanelNavLinksHook();
-        // ResolutionControlClass is discovered by the joined worker. Avoid a
-        // process-wide CreateWindowExW hook: it overwrites OpenGlass's window-
-        // creation detour and makes all glass frames opaque until OpenGlass is
-        // reconfigured.
-        Wh_Log(L"Display Restorer startup phase 4/4: COM/DirectUI/native-navigation "
-               L"hooks processed; hosted controls use non-invasive discovery");
+        // The registry-virtualization, COM, DirectUI-translation, and native
+        // nav-links hook surface is intentionally NOT installed here. It is
+        // only useful once the pinned provider has actually been downloaded,
+        // verified, and loaded; installing it unconditionally would leave
+        // explorer.exe paying for hooked RegOpenKeyExW/RegQueryValueExW/
+        // RegCloseKey/LoadStringW/CoCreateInstance calls for the entire
+        // session on a machine where setup never succeeds. It is scheduled
+        // once, from InstallDeferredContractHooks(), right after the setup
+        // worker (RunSetup) confirms a loadable module - mirroring the same
+        // schedule-then-Wh_ApplyHookOperations() shape already used by
+        // InstallPinnedDisplayProviderHooks for the pinned-vtable hooks.
+        Wh_Log(L"Display Restorer startup phase 3/4: contract-dependent hooks "
+               L"deferred until setup confirms a loadable provider");
 
         if (!g_stopEvent) {
             g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
