@@ -119,12 +119,21 @@ Examples:
 - `-Notepad` places a separator after Notepad
 - `+-Notepad` places separators before and after Notepad
 
-Plain values such as `3` or `Notepad` continue to place the separator after the
-target.
+Positions follow the current visual order of taskbar application buttons.
+Opening, closing, pinning, unpinning, or rearranging applications can change
+which icons appear beside a configured numbered separator.
+
+Application-name separators are matched against the taskbar button's accessible
+name (`AutomationProperties.Name`), with tooltip text used as a fallback. The
+accessible name is localized and can include additional status text such as
+running-window counts or pinned state.
+
+Matching is case-insensitive and uses whole-word matching. If more than one
+taskbar button matches a name, the first matching application button is used;
+use a more specific name to disambiguate.
 
 Application-name separators follow the matching application when its taskbar
-icon is reordered. If more than one taskbar button matches a name, the first
-matching application button is used; use a more specific name to disambiguate.
+icon is reordered. Numbered separators remain tied to visual taskbar positions.
 
 Enable **Separator before first app** to place a separator before the first
 application button.
@@ -490,19 +499,6 @@ struct TaskbarAppDetails {
     std::wstring displayName;
 };
 
-bool EqualsIgnoreCase(std::wstring_view left, std::wstring_view right) {
-    if (left.size() != right.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < left.size(); ++i) {
-        if (std::towlower(left[i]) != std::towlower(right[i])) {
-            return false;
-        }
-    }
-
-    return true;
-}
 bool IsWordBoundary(wchar_t ch) {
     return std::iswspace(ch) || ch == L'-' || ch == L'(' || ch == L')' ||
            ch == L'[' || ch == L']' || ch == L',' || ch == L'.' || ch == L':' ||
@@ -516,16 +512,10 @@ bool ContainsWholeIgnoreCase(std::wstring_view source,
     }
 
     for (size_t i = 0; i + target.size() <= source.size(); ++i) {
-        bool match = true;
-
-        for (size_t j = 0; j < target.size(); ++j) {
-            if (std::towlower(source[i + j]) != std::towlower(target[j])) {
-                match = false;
-                break;
-            }
-        }
-
-        if (!match) {
+        if (CompareStringOrdinal(source.data() + i,
+                                 static_cast<int>(target.size()), target.data(),
+                                 static_cast<int>(target.size()),
+                                 TRUE) != CSTR_EQUAL) {
             continue;
         }
 
