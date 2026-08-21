@@ -2,7 +2,7 @@
 // @id              start-button-replacer
 // @name            Start Button Replacer
 // @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image
-// @version         0.12.2
+// @version         0.12.3
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
@@ -184,6 +184,8 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 
 #include <windhawk_utils.h>
 
+#include <commctrl.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -301,6 +303,9 @@ std::atomic<bool> g_unloading = false;
 std::mutex g_imageFailureMessagesMutex;
 uint64_t g_imageFailureMessageGeneration = 0;
 bool g_imageFailureMessageQueued = false;
+HANDLE g_imageFailureMessageThread = nullptr;
+std::atomic<HWND> g_imageFailureMessageWindow = nullptr;
+std::atomic<bool> g_imageFailureMessageCancelRequested = false;
 
 // -----------------------------------------------------------------------------
 // Start icon instance
@@ -791,37 +796,123 @@ std::wstring BuildImageFailureMessage(
 struct ImageFailureMessageParams {
     std::wstring message;
     uint64_t settingsGeneration = 0;
-    HMODULE pinnedModule = nullptr;
 };
 
 DWORD WINAPI ImageFailureMessageThreadProc(void* parameter) {
     std::unique_ptr<ImageFailureMessageParams> params(
         static_cast<ImageFailureMessageParams*>(parameter));
 
-    HMODULE pinnedModule = params->pinnedModule;
-
-    // Suppress a warning queued by old settings or just as controlled unload
-    // began. The module reference below still protects this worker if unload
-    // starts while an already visible message box is open.
-    if (!g_unloading &&
-        params->settingsGeneration ==
+    if (g_unloading || g_imageFailureMessageCancelRequested ||
+        params->settingsGeneration !=
             g_settingsGeneration.load(std::memory_order_relaxed)) {
-        MessageBoxW(nullptr, params->message.c_str(),
-                    kImageFailureMessageTitle,
-                    MB_OK | MB_ICONWARNING | MB_TOPMOST);
+        return 0;
     }
 
-    // Destroy all C++ objects while the mod is still mapped, then release the
-    // reference which keeps this worker's code valid during controlled unload.
-    params.reset();
-    FreeLibraryAndExitThread(pinnedModule, 0);
+    HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
+    auto taskDialogIndirect = comctl32
+                                  ? reinterpret_cast<decltype(
+                                        &TaskDialogIndirect)>(GetProcAddress(
+                                        comctl32, "TaskDialogIndirect"))
+                                  : nullptr;
+
+    if (!taskDialogIndirect) {
+        Wh_Log(L"TaskDialogIndirect is unavailable; image failures are in the "
+               L"Windhawk log");
+        return 0;
+    }
+
+    TASKDIALOGCONFIG config{
+        .cbSize = sizeof(config),
+        .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+        .dwCommonButtons = TDCBF_OK_BUTTON,
+        .pszWindowTitle = kImageFailureMessageTitle,
+        .pszMainIcon = TD_WARNING_ICON,
+        .pszContent = params->message.c_str(),
+        .pfCallback = [](HWND hwnd, UINT notification, WPARAM, LPARAM,
+                         LONG_PTR callbackData) WINAPI -> HRESULT {
+            auto params = reinterpret_cast<ImageFailureMessageParams*>(
+                callbackData);
+
+            switch (notification) {
+                case TDN_CREATED:
+                    g_imageFailureMessageWindow = hwnd;
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE);
+
+                    if (g_unloading ||
+                        g_imageFailureMessageCancelRequested || !params ||
+                        params->settingsGeneration != g_settingsGeneration.load(
+                                                          std::memory_order_relaxed)) {
+                        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                    }
+                    break;
+
+                case TDN_DESTROYED: {
+                    HWND expected = hwnd;
+                    g_imageFailureMessageWindow.compare_exchange_strong(
+                        expected, nullptr);
+                    break;
+                }
+            }
+
+            return S_OK;
+        },
+        .lpCallbackData = reinterpret_cast<LONG_PTR>(params.get()),
+    };
+
+    int button = 0;
+    HRESULT result = taskDialogIndirect(&config, &button, nullptr, nullptr);
+
+    if (FAILED(result)) {
+        Wh_Log(L"Showing the image failure dialog failed: 0x%08X",
+               result);
+    }
+
+    return 0;
+}
+
+void StopImageFailureMessageThread() {
+    HANDLE thread = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+        g_imageFailureMessageCancelRequested = true;
+        thread = g_imageFailureMessageThread;
+    }
+
+    if (HWND window = g_imageFailureMessageWindow.load()) {
+        PostMessageW(window, WM_CLOSE, 0, 0);
+    }
+
+    if (!thread) {
+        return;
+    }
+
+    DWORD waitResult = WaitForSingleObject(thread, INFINITE);
+
+    if (waitResult == WAIT_FAILED) {
+        Wh_Log(L"Waiting for the image failure dialog thread failed: %u",
+               GetLastError());
+    }
+
+    g_imageFailureMessageWindow = nullptr;
+    CloseHandle(thread);
+
+    std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+
+    if (g_imageFailureMessageThread == thread) {
+        g_imageFailureMessageThread = nullptr;
+    }
 }
 
 void ResetReportedImageFailures(uint64_t settingsGeneration) {
+    StopImageFailureMessageThread();
+
     std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
 
     g_imageFailureMessageGeneration = settingsGeneration;
     g_imageFailureMessageQueued = false;
+    g_imageFailureMessageCancelRequested = false;
 }
 
 void ForgetReportedImageFailure(uint64_t settingsGeneration) {
@@ -870,33 +961,37 @@ void ShowImageFailureMessage(uint64_t settingsGeneration,
             return;
         }
 
-        if (!GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                reinterpret_cast<LPCWSTR>(&ImageFailureMessageThreadProc),
-                &params->pinnedModule)) {
-            Wh_Log(L"Pinning the mod for the image failure message failed: %u",
-                   GetLastError());
-            ForgetReportedImageFailure(settingsGeneration);
-            return;
+        {
+            std::lock_guard<std::mutex> lock(g_imageFailureMessagesMutex);
+
+            if (g_unloading || g_imageFailureMessageCancelRequested ||
+                settingsGeneration !=
+                    g_settingsGeneration.load(std::memory_order_relaxed) ||
+                g_imageFailureMessageGeneration != settingsGeneration ||
+                g_imageFailureMessageThread) {
+                if (g_imageFailureMessageGeneration == settingsGeneration) {
+                    g_imageFailureMessageQueued = false;
+                }
+
+                return;
+            }
+
+            auto rawParams = params.release();
+            HANDLE thread =
+                CreateThread(nullptr, 0, ImageFailureMessageThreadProc,
+                             rawParams, 0, nullptr);
+
+            if (!thread) {
+                DWORD error = GetLastError();
+                params.reset(rawParams);
+                g_imageFailureMessageQueued = false;
+                Wh_Log(L"Creating the image failure message thread failed: %u",
+                       error);
+                return;
+            }
+
+            g_imageFailureMessageThread = thread;
         }
-
-        auto rawParams = params.release();
-        HANDLE thread = CreateThread(nullptr, 0, ImageFailureMessageThreadProc,
-                                     rawParams, 0, nullptr);
-
-        if (!thread) {
-            DWORD error = GetLastError();
-            HMODULE pinnedModule = rawParams->pinnedModule;
-            params.reset(rawParams);
-            params.reset();
-            FreeLibrary(pinnedModule);
-            ForgetReportedImageFailure(settingsGeneration);
-            Wh_Log(L"Creating the image failure message thread failed: %u",
-                   error);
-            return;
-        }
-
-        CloseHandle(thread);
     } catch (...) {
         if (messageMarkedAsQueued) {
             try {
@@ -3664,6 +3759,10 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"Start Button Replacer restoring stock icon");
 
     BeginInstanceShutdown();
+
+    // The dialog owns a return address in this module. Close it and join its
+    // worker before Windhawk can unload the module.
+    StopImageFailureMessageThread();
 
     // Drive cleanup from the instances themselves instead of rediscovering
     // taskbar window classes. RunFromWindowThread is synchronous, so every
