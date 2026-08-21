@@ -1,3 +1,9 @@
+## 1.3 ([Aug 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/af54c5ac79b7506cb684d56acb126edc840b77c5/mods/explorer-folder-hover-menu.wh.cpp))
+
+* Added an option to show hidden files and folders. By default, the mod now follows File Explorer's settings.
+* Improved high DPI support.
+* Fixed the mod not working in open/save dialogs in some cases.
+
 ## 1.2 ([Jun 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c6d25a49f8ecf6159e4c32e8ff3019a9d6c7b63/mods/explorer-folder-hover-menu.wh.cpp))
 
 * Added support for open/save dialogs. It's optional and can be disabled in the settings.

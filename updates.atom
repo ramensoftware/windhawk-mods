@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-21T09:33:18.000Z</updated>
+    <updated>2026-08-21T11:02:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.3]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#af54c5ac79b7506cb684d56acb126edc840b77c5</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-08-21T11:02:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to show hidden files and folders. By default, the mod now follows File Explorer's settings.</li>
+<li>Improved high DPI support.</li>
+<li>Fixed the mod not working in open/save dialogs in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.1.1]]></title>
         <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#bd08bc5ccd5bf6006923944e660795e7e89d7444</id>
@@ -451,35 +466,6 @@ Class#Name2</code>.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[GNOME-like dynamic virtual desktops 1.4]]></title>
-        <id>https://windhawk.net/mods/gnome-dynamic-desktops#c1f498cfa9d567959de6f1e662cb8156108212fc</id>
-        <link href="https://windhawk.net/mods/gnome-dynamic-desktops"/>
-        <updated>2026-08-14T12:14:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="gnomelikedynamicvirtualdesktops">GNOME-Like dynamic virtual desktops</h1>
-<p>Makes Windows' virtual desktops behave like the GNOME desktop environment. </p>
-<h3 id="whatisgnomebehavior">What is "GNOME behavior"?</h3>
-<p>In the GNOME desktop environment (popular on Linux), virtual workspaces are managed dynamically:</p>
-<ul>
-<li>There is always exactly <em>one</em> empty desktop at the end of your workspace list.</li>
-<li>If you move or open a window in that last empty desktop, a new empty desktop is immediately created to its right.</li>
-<li>If a desktop in the middle of your workspaces becomes completely empty, it is automatically deleted, shifting the others over.</li>
-<li>When absolutely no windows are open, the system cleanly reduces itself to a single empty desktop.</li>
-</ul>
-<p>This mod implements this exact logic on Windows 11. It's perfect for laptops with trackpad gestures, allowing for endless, seamless switching between workspaces without ever having to manually create or close a desktop again.</p>
-<p><img src="https://i.imgur.com/wih0nm0.gif" alt="GNOME mod demo" /></p>
-<p><strong>⚠️ Warning:</strong> When this mod runs, your existing virtual desktops and their custom names are dynamically managed and reset to match GNOME's behavior. Disabling the mod does not automatically restore your previous desktop layout.</p>
-<p>Works with Windows 11 build 26100+</p>
-<p><strong>Settings</strong></p>
-<ul>
-<li><strong>Don't delete empty desktop immediately</strong>: If you're in an empty virtual desktop it waits for you to switch into another virtual desktop before deleting it. If disabled the desktop will be deleted as soon as it becomes empty.</li>
-</ul>
-<p>Special thanks to <a href="https://github.com/FuPeiJiang/VD.ahk">VD.ahk</a> for providing the correct GUIDs to interface with the virtual desktops system.</p>]]></content>
-        <author>
-            <name>Giggig</name>
-            <uri>https://github.com/Giggigx</uri>
         </author>
     </entry>
 </feed>
