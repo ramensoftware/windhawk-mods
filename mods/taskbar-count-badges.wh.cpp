@@ -2757,4 +2757,3 @@ void Wh_ModUninit()
     g_taskbarThreadId = 0;
     Wh_Log(L"Uninit");
 }
-
