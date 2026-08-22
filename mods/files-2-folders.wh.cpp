@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.5.3
+// @version         2.6
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -98,6 +98,31 @@ The **Operation** setting controls what happens to the selection:
   leaving the originals in place. Same shell progress / undo / conflict UI as
   the safe move.
 
+## Defolder — the reverse operation
+**Defolder** is the fourth button in the dialog's Operation control. Instead of
+moving files *into* a new subfolder, it moves the contents of the folders you
+selected *out* into the folder you are browsing, and then offers to remove the
+folders that were left empty.
+
+It is **recursive**: files at any depth are pulled up to the top level, so the
+inner folder structure is discarded. Select a few folders, pick **Defolder**,
+and confirm the summary ("Move 47 files out of 3 folders...") — the subfolder
+mode options are greyed out while it is selected, because there is no
+destination to choose.
+
+Notes:
+
+- Only the folders in your selection are touched; any files you also selected
+  are ignored.
+- Folders are removed only if they actually end up empty. Anything that could
+  not be moved keeps its folder alive, so nothing is deleted with contents
+  still in it.
+- Junctions and symbolic links are skipped rather than followed, so a link
+  inside the selection can't pull in files from elsewhere.
+- The **Defolder: use the safe move engine** setting controls whether the files
+  move via the shell (Ctrl+Z undo, conflict prompts, permission prompts) or the
+  fast direct move (auto-renames collisions, cannot be undone).
+
 In copy mode the dialog options say "Copy" rather than "Move", so you can tell
 the configured operation at a glance.
 
@@ -160,6 +185,11 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
     On (default): in "Fixed name" mode, if a folder of that name already exists, files are moved into it (e.g. everything goes into "archive").
     Off: a new numbered folder is created instead ("archive", "archive (2)", "archive (3)"…), the way Explorer numbers duplicates.
     Only affects the "Fixed name" mode. "By date" always creates a new numbered folder; "by name"/"by extension" always reuse.
+- defolderUseShell: true
+  $name: "Defolder: use the safe move engine"
+  $description: |-
+    On (default): Defolder moves files with the same Windows file-operation engine as "Move - safe", so you get Ctrl+Z undo, the "Replace or skip files?" prompt, and a permission prompt for protected locations.
+    Off: uses the fast direct move instead, which auto-renames collisions ("file (2).txt") and is quicker for very large folders, but cannot be undone.
 - showNestedPreview: true
   $name: "Fixed name: show nested-folder preview"
   $description: |-
@@ -207,10 +237,12 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
     Move - fast (default): instant same-volume rename via MoveFileExW — but no Ctrl+Z undo, no progress bar, and it can't move into locations that need administrator permission.
     Move - safe: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and Windows' own permission prompt for protected locations. Noticeably slower, especially with hundreds of files. (A move carried out with administrator permission can't be undone with Ctrl+Z — Windows doesn't record it on your undo stack.)
     Copy: copies the items into the subfolder and leaves the originals in place (same shell progress / undo / conflict UI as the safe move).
+    Defolder: the reverse operation - moves the contents of the selected folders OUT into the folder you are browsing, then offers to remove the folders left empty. Recursive: files at any depth are pulled up to the top level and the inner folder structure is discarded.
   $options:
   - moveFast: "Move - fast (instant)"
   - moveSafe: "Move - safe (progress, Ctrl+Z undo)"
   - copy: "Copy (leave originals)"
+  - defolder: "Defolder (unpack folders)"
 - hotkeyEnabled: true
   $name: "Workaround for other programs"
   $description: |-
@@ -360,12 +392,18 @@ enum F2FOperation {
     F2F_MOVE_FAST = 0,
     F2F_MOVE_SAFE = 1,
     F2F_COPY      = 2,
+    // Not a destination-building operation like the three above: Defolder moves
+    // the *contents* of the selected folders up into the folder being browsed
+    // and then offers to remove the emptied folders. It ignores the subfolder
+    // mode radios entirely, which the dialog greys out while it is selected.
+    F2F_DEFOLDER  = 3,
 };
 
 static const struct { const wchar_t* key; F2FOperation op; } kOperationKeys[] = {
     { L"moveFast", F2F_MOVE_FAST },
     { L"moveSafe", F2F_MOVE_SAFE },
     { L"copy",     F2F_COPY },
+    { L"defolder", F2F_DEFOLDER },
 };
 
 static F2FOperation OperationFromKey(const std::wstring& key) {
@@ -381,6 +419,7 @@ static F2FOperation OperationFromKey(const std::wstring& key) {
 struct ModSettings {
     std::wstring defaultSubfolderName;
     bool fixedNameReuse;
+    bool defolderUseShell;
     bool showNestedPreview;
     bool showAddLevelButton;
     std::wstring dateFormat;
@@ -408,6 +447,7 @@ static void LoadSettings() {
     if (s) Wh_FreeStringSetting(s);
 
     g_settings.fixedNameReuse = Wh_GetIntSetting(L"fixedNameReuse") != 0;
+    g_settings.defolderUseShell = Wh_GetIntSetting(L"defolderUseShell") != 0;
     g_settings.showNestedPreview = Wh_GetIntSetting(L"showNestedPreview") != 0;
     g_settings.showAddLevelButton = Wh_GetIntSetting(L"showAddLevelButton") != 0;
 
@@ -1220,6 +1260,162 @@ static void BatchCreateSiblings(HWND owner,
 }
 
 
+// ============================================================
+//  Defolder — move the contents of the selected folders up into
+//  the folder being browsed, then optionally remove the folders
+//  that were emptied.
+//
+//  Recursive: every file anywhere under a selected folder is
+//  pulled up to the top level, so the internal structure is
+//  discarded. That is the point of the feature, but it is also
+//  destructive and effectively irreversible for the folder
+//  removal, so the caller confirms with a summary first.
+// ============================================================
+
+// Depth-first walk collecting every *file* under `dir` (at any depth), plus
+// every directory encountered, deepest-last so the caller can remove them in
+// reverse order once they are empty.
+//
+// Reparse points are not followed: a junction or symlink under the selection
+// would otherwise pull in files from outside it, or loop.
+static void CollectTreeContents(const std::wstring& dir,
+                                std::vector<std::wstring>& filesOut,
+                                std::vector<std::wstring>& dirsOut,
+                                int depth = 0) {
+    if (depth > 64) {          // pathological nesting guard
+        Wh_Log(L"defolder: depth limit reached at '%s'", dir.c_str());
+        return;
+    }
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW(PathJoin(dir, L"*").c_str(), FindExInfoBasic,
+                                &fd, FindExSearchNameMatch, nullptr, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
+            continue;
+        std::wstring full = PathJoin(dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            // Don't descend, and don't move it either — a reparse point is
+            // neither safely a file nor safely a directory for this purpose.
+            Wh_Log(L"defolder: skipping reparse point '%s'", full.c_str());
+            continue;
+        }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            CollectTreeContents(full, filesOut, dirsOut, depth + 1);
+            dirsOut.push_back(full);      // after its children: deepest-last
+        } else {
+            filesOut.push_back(full);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+// Remove directories that are now empty, deepest-first. Returns how many went
+// away. Never recursive-deletes: RemoveDirectoryW fails on a non-empty
+// directory, which is exactly the safety property we want — anything the move
+// left behind (a skipped reparse point, a file that failed to move) keeps its
+// parent alive.
+static int RemoveEmptyDirs(const std::vector<std::wstring>& dirsDeepestLast,
+                           const std::vector<std::wstring>& roots) {
+    int removed = 0;
+    for (auto& d : dirsDeepestLast) {
+        if (RemoveDirectoryW(d.c_str())) removed++;
+    }
+    // The selected folders themselves come last — their children are gone by now.
+    for (auto& r : roots) {
+        if (RemoveDirectoryW(r.c_str())) removed++;
+    }
+    return removed;
+}
+
+static void DoDefolder(HWND owner,
+                       const std::wstring& folder,
+                       const std::vector<std::wstring>& items,
+                       bool silent,
+                       F2FOperation moveVia)
+{
+    // Only directories can be defoldered; a mixed selection just ignores files.
+    std::vector<std::wstring> roots;
+    for (auto& item : items)
+        if (IsDirectoryPath(item)) roots.push_back(item);
+
+    if (roots.empty()) {
+        if (!silent)
+            MessageBoxW(owner,
+                L"Select one or more folders to defolder.\n\n"
+                L"Defolder moves the contents of the selected folders into the "
+                L"current folder.",
+                L"Files 2 Folder", MB_ICONINFORMATION);
+        return;
+    }
+
+    std::vector<std::wstring> files, dirs;
+    for (auto& r : roots)
+        CollectTreeContents(r, files, dirs);
+
+    if (files.empty()) {
+        // Nothing to move, but the folders may still be removable.
+        if (!silent) {
+            WCHAR q[256];
+            wsprintfW(q, L"The selected folder(s) contain no files.\n\n"
+                         L"Remove %d empty folder(s)?", (int)(dirs.size() + roots.size()));
+            if (MessageBoxW(owner, q, L"Files 2 Folder",
+                            MB_ICONQUESTION | MB_YESNO) != IDYES)
+                return;
+        }
+        int gone = RemoveEmptyDirs(dirs, roots);
+        Wh_Log(L"defolder: no files; removed %d empty folder(s)", gone);
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                       folder.c_str(), nullptr);
+        return;
+    }
+
+    // One summary confirmation covering both halves of the operation, since the
+    // flatten discards the folder structure and the removal can't be undone.
+    if (!silent) {
+        std::wstring q = L"Move ";
+        q += std::to_wstring(files.size());
+        q += (files.size() == 1) ? L" file out of " : L" files out of ";
+        q += std::to_wstring(roots.size());
+        q += (roots.size() == 1) ? L" folder into this one," : L" folders into this one,";
+        q += L"\nand then remove the folders that end up empty?";
+        q += L"\n\nAny subfolder structure inside them is discarded.";
+        if (MessageBoxW(owner, q.c_str(), L"Files 2 Folder",
+                        MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) != IDYES)
+            return;
+    }
+
+    // Every file lands directly in the browsed folder. UniqueDest is applied by
+    // the move helpers themselves for the fast path; the shell path resolves
+    // collisions through its own rename-on-collision handling.
+    std::vector<std::pair<std::wstring, std::wstring>> moves;
+    for (auto& f : files) moves.push_back({ f, folder });
+
+    int done = (moveVia == F2F_MOVE_FAST)
+        ? MoveItemsFast(owner, moves, silent)
+        : RunItemsShell(owner, moves, /*copy=*/false);
+
+    Wh_Log(L"defolder: moved %d of %d file(s)", done, (int)files.size());
+
+    // Only clean up what actually emptied. RemoveDirectoryW refuses non-empty
+    // directories, so a partial move simply leaves those folders in place.
+    int gone = RemoveEmptyDirs(dirs, roots);
+    Wh_Log(L"defolder: removed %d folder(s)", gone);
+
+    if (!silent && done < (int)files.size()) {
+        std::wstring m = L"Moved ";
+        m += std::to_wstring(done);
+        m += L" of ";
+        m += std::to_wstring(files.size());
+        m += L" file(s). Folders that still contain items were left in place.";
+        MessageBoxW(owner, m.c_str(), L"Files 2 Folder", MB_ICONWARNING);
+    }
+
+    SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                   folder.c_str(), nullptr);
+}
+
+
 static void DoFiles2Folder(HWND owner,
                            F2FMode mode,
                            const std::wstring& folder,
@@ -1229,6 +1425,15 @@ static void DoFiles2Folder(HWND owner,
                            bool silent,
                            F2FOperation effectiveOp)
 {
+    // Defolder is the odd one out: it has no destination to build, so it runs
+    // before any of the subfolder-mode logic and returns. The dialog greys out
+    // the mode radios while it is selected for the same reason.
+    if (effectiveOp == F2F_DEFOLDER) {
+        DoDefolder(owner, folder, items, silent,
+                   g_settings.defolderUseShell ? F2F_MOVE_SAFE : F2F_MOVE_FAST);
+        return;
+    }
+
     std::vector<std::pair<std::wstring, std::wstring>> moves;
 
     // Elevation state for this whole run. Move - fast cannot complete an
@@ -1323,9 +1528,7 @@ static void DoFiles2Folder(HWND owner,
     // consent is requested and no empty folder is left behind.
     if (moves.empty() && !silent && !elev.allowed) {
         MessageBoxW(owner,
-            L"This location requires administrator permission.
-
-"
+            L"This location requires administrator permission.\n\n"
             L"\"Move - fast\" cannot request it - use \"Move - safe\" or "
             L"\"Copy\", which let Windows prompt for permission.",
             L"Files 2 Folder", MB_ICONWARNING);
@@ -1537,6 +1740,7 @@ struct DlgState {
 #define IDC_OP_MOVE_FAST       1028
 #define IDC_OP_MOVE_SAFE       1029
 #define IDC_OP_COPY            1030
+#define IDC_OP_DEFOLDER        1031
 
 // Per-dialog runtime state. Stored on the heap and reached via
 // GWLP_USERDATA so two dialogs open at once on different threads (a
@@ -1589,16 +1793,37 @@ static void ApplyF2FLabels(HWND hDlg, const DlgState* s) {
         SetDlgItemTextW(hDlg, IDC_HEADER, header);
     }
 
-    // Operation segmented control: three BS_PUSHLIKE buttons (Move - fast /
-    // Move - safe / Copy) glued together above the mode list. The checked
-    // one renders pressed/held down via the normal radio-check state.
+    // Operation segmented control: four BS_PUSHLIKE buttons (Move - fast /
+    // Move - safe / Copy / Defolder) glued together above the mode list. The
+    // checked one renders pressed/held down via the normal radio-check state.
     int opRb = IDC_OP_MOVE_FAST;
     switch (s->runOp) {
         case F2F_MOVE_FAST: opRb = IDC_OP_MOVE_FAST; break;
         case F2F_MOVE_SAFE: opRb = IDC_OP_MOVE_SAFE; break;
-        case F2F_COPY:       opRb = IDC_OP_COPY;      break;
+        case F2F_COPY:      opRb = IDC_OP_COPY;      break;
+        case F2F_DEFOLDER:  opRb = IDC_OP_DEFOLDER;  break;
     }
-    CheckRadioButton(hDlg, IDC_OP_MOVE_FAST, IDC_OP_COPY, opRb);
+    CheckRadioButton(hDlg, IDC_OP_MOVE_FAST, IDC_OP_DEFOLDER, opRb);
+
+    // Defolder has no destination to choose, so the subfolder-mode radios and
+    // their inputs don't apply — grey them out rather than leave controls that
+    // silently do nothing. The header explains what will happen instead.
+    const BOOL modesOn = (s->runOp != F2F_DEFOLDER);
+    const int modeCtls[] = { IDC_RB_FIXED, IDC_RB_PERNAME, IDC_RB_PEREXT,
+                             IDC_RB_DATE, IDC_ED_FIXED, IDC_ED_DATE,
+                             IDC_BTN_ADD_LEVEL, IDC_LBL_NESTED_PREVIEW };
+    for (int id : modeCtls) {
+        if (HWND h = GetDlgItem(hDlg, id)) EnableWindow(h, modesOn);
+    }
+
+    if (!modesOn) {
+        SetDlgItemTextW(hDlg, IDC_HEADER,
+            s->singleItem
+                ? L"Defolder: move everything out of the selected folder into "
+                  L"this one."
+                : L"Defolder: move everything out of the selected folders into "
+                  L"this one.");
+    }
 }
 
 // Renders the live nested-folder breadcrumb preview under the "Fixed name"
@@ -1703,7 +1928,8 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             UpdateNestedPreview(hDlg);
             return TRUE;
         }
-        if ((id == IDC_OP_MOVE_FAST || id == IDC_OP_MOVE_SAFE || id == IDC_OP_COPY)
+        if ((id == IDC_OP_MOVE_FAST || id == IDC_OP_MOVE_SAFE ||
+             id == IDC_OP_COPY || id == IDC_OP_DEFOLDER)
             && code == BN_CLICKED)
         {
             // Set the per-run Operation from whichever radio was picked and
@@ -1711,7 +1937,8 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             // Operation setting — this only affects the current run.
             s->runOp = (id == IDC_OP_MOVE_FAST) ? F2F_MOVE_FAST
                      : (id == IDC_OP_MOVE_SAFE) ? F2F_MOVE_SAFE
-                                                  : F2F_COPY;
+                     : (id == IDC_OP_COPY)      ? F2F_COPY
+                                                : F2F_DEFOLDER;
             ApplyF2FLabels(hDlg, s);
             return TRUE;
         }
@@ -1855,20 +2082,24 @@ static bool ShowF2FDialog(HWND owner, DlgState& state) {
             L"You have selected multiple items.  What would you like to do?");
     cdit++;
 
-    // Operation segmented control: three BS_PUSHLIKE autoradio buttons glued
+    // Operation segmented control: four BS_PUSHLIKE autoradio buttons glued
     // together edge-to-edge (no gap, no group box) so they read as one
-    // three-state control. The checked one renders pressed/held down.
+    // four-state control. The checked one renders pressed/held down.
     // Picking one sets the per-run Operation without touching the Operation
     // setting; ApplyF2FLabels keeps the pressed segment in sync and
     // re-renders the Move/Copy verb in the mode list below.
+    // The four segments share the same 7..273 span the three used to.
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_GROUP | WS_TABSTOP, 0,
-            7, 18, 89, 14, IDC_OP_MOVE_FAST, CLS_BUTTON, L"Move - fast");
+            7, 18, 67, 14, IDC_OP_MOVE_FAST, CLS_BUTTON, L"Move - fast");
     cdit++;
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
-            96, 18, 89, 14, IDC_OP_MOVE_SAFE, CLS_BUTTON, L"Move - safe");
+            74, 18, 67, 14, IDC_OP_MOVE_SAFE, CLS_BUTTON, L"Move - safe");
     cdit++;
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
-            185, 18, 88, 14, IDC_OP_COPY, CLS_BUTTON, L"Copy");
+            141, 18, 62, 14, IDC_OP_COPY, CLS_BUTTON, L"Copy");
+    cdit++;
+    addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
+            203, 18, 70, 14, IDC_OP_DEFOLDER, CLS_BUTTON, L"Defolder");
     cdit++;
 
     // Row 1: RB fixed name + edit + "Add level" button (button only added
