@@ -69,11 +69,13 @@ Temperatures are read from HWiNFO in this order:
 1. HWiNFO shared memory (`Global\\HWiNFO_SENS_SM2`).
 2. HWiNFO Gadget registry (`HKCU\\Software\\HWiNFO64\\VSB`).
 
-HWiNFO is optional and is not bundled with this mod. If neither interface is
-available, temperatures are shown as `--°C`; all other metrics continue to
-work. Shared-memory availability is governed by the installed HWiNFO edition.
-The Gadget fallback can be configured by reporting the desired CPU and GPU
-temperature readings to Gadget in the HWiNFO Sensors window.
+HWiNFO is optional and is not bundled with this mod. Shared-memory integration
+targets HWiNFO 7.0 or newer, which permits full disclosure of the interface.
+The free HWiNFO64 edition disables shared memory after 12 hours of continuous
+use; HWiNFO64 Pro has no such limit. The Gadget fallback can be configured
+under **Sensor Settings > HWiNFO Gadget** by enabling **Report to Gadget** for
+the desired CPU and GPU temperature readings. If neither source is available,
+temperatures are shown as `--°C`; all other metrics continue to work.
 
 ## Compatibility and placement
 
@@ -219,6 +221,7 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <deque>
@@ -648,7 +651,7 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                 const uint8_t* readingAddress =
                     bytes + header->readingOffset +
                     static_cast<size_t>(i) * header->readingStride;
-                memcpy(&reading, readingAddress, sizeof(reading));
+                std::memcpy(&reading, readingAddress, sizeof(reading));
 
                 if (reading.readingType != kHwInfoTemperatureType ||
                     reading.sensorIndex >= header->sensorCount ||
@@ -662,7 +665,7 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                     bytes + header->sensorOffset +
                     static_cast<size_t>(reading.sensorIndex) *
                         header->sensorStride;
-                memcpy(&sensor, sensorAddress, sizeof(sensor));
+                std::memcpy(&sensor, sensorAddress, sizeof(sensor));
 
                 std::wstring sensorName =
                     FixedAnsiToWide(sensor.originalName,
@@ -907,7 +910,8 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
 
     wchar_t luid[32];
     swprintf(luid, std::size(luid), L"0x%08X_0x%08X",
-             selected.AdapterLuid.HighPart, selected.AdapterLuid.LowPart);
+             static_cast<DWORD>(selected.AdapterLuid.HighPart),
+             selected.AdapterLuid.LowPart);
     cachedFilter = filterLower;
     cachedInfo = DxgiAdapterInfo{selected.Description, ToLower(luid),
                                   selected.DedicatedVideoMemory};
@@ -1243,6 +1247,11 @@ std::optional<Color> ParseColor(const std::wstring& value) {
         hex.erase(hex.begin());
     }
     if (hex.size() != 6 && hex.size() != 8) {
+        return std::nullopt;
+    }
+    if (!std::all_of(hex.begin(), hex.end(), [](wchar_t character) {
+            return std::iswxdigit(character) != 0;
+        })) {
         return std::nullopt;
     }
 
@@ -1639,7 +1648,9 @@ void EnsureTimer() {
         try {
             UpdateWidgetText();
         } catch (...) {
-            Wh_Log(L"Metrics update failed: %08X", winrt::to_hresult());
+            HRESULT error = winrt::to_hresult();
+            Wh_Log(L"Metrics update failed: %08X",
+                   static_cast<unsigned>(error));
         }
     });
     g_timer.Start();
@@ -1844,13 +1855,24 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
         return false;
     }
 
-    for (auto child : root.Children()) {
-        auto element = child.try_as<FrameworkElement>();
-        if (element && element.Name() == kWidgetName) {
+    auto children = root.Children();
+    for (uint32_t index = 0; index < children.Size();) {
+        auto element = children.GetAt(index).try_as<FrameworkElement>();
+        if (!element || element.Name() != kWidgetName) {
+            index++;
+            continue;
+        }
+
+        uint32_t currentWidgetIndex = 0;
+        if (g_widget && children.IndexOf(g_widget, currentWidgetIndex) &&
+            currentWidgetIndex == index) {
             ApplyWidgetSettings();
             UpdateWidgetText();
             return true;
         }
+
+        Wh_Log(L"Removing stale Taskbar System Info widget");
+        children.RemoveAt(index);
     }
 
     RemoveWidget();
@@ -1969,13 +1991,11 @@ bool RunFromWindowThread(HWND window,
     }
 
     CallbackContext callbackContext{callback, context, false};
-    LRESULT messageResult = SendMessageTimeoutW(
-        window, message, 0, reinterpret_cast<LPARAM>(&callbackContext),
-        SMTO_ABORTIFHUNG, 2000, nullptr);
+    SendMessageW(window, message, 0,
+                 reinterpret_cast<LPARAM>(&callbackContext));
     UnhookWindowsHookEx(hook);
-    if (!messageResult && !callbackContext.invoked) {
-        Wh_Log(L"Taskbar thread dispatch failed for thread %u: %u", threadId,
-               GetLastError());
+    if (!callbackContext.invoked) {
+        Wh_Log(L"Taskbar thread dispatch failed for thread %u", threadId);
     }
     return callbackContext.invoked;
 }
@@ -2105,7 +2125,7 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
         return nullptr;
     }
 
-    size_t elementOffset = 0x10;
+    size_t elementOffset = 0;
 #if defined(_M_X64)
     const BYTE* code =
         reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
@@ -2116,6 +2136,8 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
         elementOffset = code[7];
     } else {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
+        RefCountBase_Decref_Original(taskbarHostSharedPtr[1]);
+        return nullptr;
     }
 #elif defined(_M_ARM64)
     const DWORD* code =
@@ -2127,6 +2149,8 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
         elementOffset = (code[3] >> 12) & 0xFF;
     } else {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
+        RefCountBase_Decref_Original(taskbarHostSharedPtr[1]);
+        return nullptr;
     }
 #else
 #error "Unsupported architecture"
@@ -2167,7 +2191,9 @@ void ApplyToCurrentTaskbar(void*) {
             RememberTaskbarWindow(taskbarWindow);
         }
     } catch (...) {
-        Wh_Log(L"Applying widget failed: %08X", winrt::to_hresult());
+        HRESULT error = winrt::to_hresult();
+        Wh_Log(L"Applying widget failed: %08X",
+               static_cast<unsigned>(error));
     }
 }
 
@@ -2175,13 +2201,16 @@ void RemoveFromCurrentTaskbar(void*) {
     try {
         RemoveWidget();
     } catch (...) {
-        Wh_Log(L"Removing widget failed: %08X", winrt::to_hresult());
+        HRESULT error = winrt::to_hresult();
+        Wh_Log(L"Removing widget failed: %08X",
+               static_cast<unsigned>(error));
     }
     try {
         g_loadedRevokers.reset();
     } catch (...) {
+        HRESULT error = winrt::to_hresult();
         Wh_Log(L"Removing taskbar Loaded handlers failed: %08X",
-               winrt::to_hresult());
+               static_cast<unsigned>(error));
     }
     g_taskbarWindow = nullptr;
     g_taskbarThreadId = 0;
@@ -2218,7 +2247,7 @@ void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
     auto revoker = std::prev(g_loadedRevokers->end());
     *revoker = taskbarFrame.Loaded(
         winrt::auto_revoke_t{},
-        [revoker](IInspectable const& sender, RoutedEventArgs const&) {
+        [revoker](IInspectable const&, RoutedEventArgs const&) {
             if (!g_loadedRevokers) {
                 return;
             }
@@ -2227,14 +2256,11 @@ void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
                 return;
             }
             try {
-                if (InjectWidget(sender.try_as<FrameworkElement>())) {
-                    HWND taskbarWindow = FindCurrentProcessTaskbarWindow();
-                    if (taskbarWindow) {
-                        RememberTaskbarWindow(taskbarWindow);
-                    }
-                }
+                ApplyToCurrentTaskbar(nullptr);
             } catch (...) {
-                Wh_Log(L"Loaded injection failed: %08X", winrt::to_hresult());
+                HRESULT error = winrt::to_hresult();
+                Wh_Log(L"Loaded injection failed: %08X",
+                       static_cast<unsigned>(error));
             }
         });
     return result;
