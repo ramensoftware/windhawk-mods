@@ -74,6 +74,20 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
 }
 
 
+# RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
+# Anything else, whitespace included, has to be percent-encoded.
+URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
+
+# Scheme, dotted host, optional port, optional path/query/fragment.
+URL_PATTERN = (
+    r'https?://'
+    r'[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?'
+    r'(\.[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?)+'
+    r'(:[0-9]+)?'
+    rf'([/?#][{URL_ALLOWED_CHARS}]*)?'
+)
+
+
 def add_warning(file: Path, line: int, message: str):
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
@@ -288,9 +302,27 @@ class PropertyValidator:
         return self
 
     def validate_url_format(self) -> 'PropertyValidator':
-        """Validate URL starts with http:// or https://."""
+        """Validate value is a well-formed http(s) URL."""
         if not re.match(r'https?://', self.value):
             self.warn('@@ must start with "http://" or "https://"')
+            return self
+
+        disallowed = set(re.findall(f'[^{URL_ALLOWED_CHARS}]', self.value))
+        if disallowed:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(disallowed))
+            self.warn(
+                f'@@ contains characters which are not allowed in a URL ({chars}),'
+                ' they must be percent-encoded'
+            )
+        elif not re.fullmatch(URL_PATTERN, self.value):
+            self.warn(f'@@ is not a valid URL: "{self.value}"')
+
+        return self
+
+    def validate_no_tabs(self) -> 'PropertyValidator':
+        """Validate value contains no tab characters."""
+        if '\t' in self.value:
+            self.warn('@@ must not contain tab characters')
         return self
 
 
@@ -341,6 +373,19 @@ class ModMetadataValidator:
         if warn_if_missing:
             self.ctx.warn(f'Missing {at(key_name)}')
         return None
+
+    def property_variants(self, key_name: str) -> list[PropertyValidator]:
+        """Get validators for the given key and all of its language variants."""
+        return [
+            PropertyValidator(
+                self.ctx,
+                key_name if language is None else f'{key_name}:{language}',
+                value,
+                line_number,
+            )
+            for (key, language), (value, line_number) in self.properties.items()
+            if key == key_name
+        ]
 
     def validate_all(self) -> int:
         """Run all validations and return warning count."""
@@ -447,6 +492,9 @@ class ModMetadataValidator:
 
     def validate_author(self):
         """Validate author name against existing records."""
+        for variant in self.property_variants('author'):
+            variant.validate_no_tabs()
+
         prop = self.property('author', warn_if_missing=True)
         if not prop:
             return
@@ -522,6 +570,8 @@ class ModMetadataValidator:
                     f' {self.github_url}'
                 )
 
+        prop.validate_url_format()
+
         if not re.match(r'https://(x|twitter)\.com/', prop.value):
             prop.warn('@@ must start with https://x.com/ or https://twitter.com/')
         elif not re.match(r'https://(x|twitter)\.com/[^/]+$', prop.value):
@@ -567,7 +617,15 @@ class ModMetadataValidator:
             return
 
         def is_allowed_option(option: str) -> bool:
-            return bool(option.startswith('-l') or option == '-fms-extensions')
+            return bool(
+                option.startswith('-l')
+                or option
+                in [
+                    '-DWIN32_LEAN_AND_MEAN',
+                    '-fms-extensions',
+                    '-ffp-exception-behavior=maytrap',
+                ]
+            )
 
         options = prop.value.split()
         disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
@@ -588,6 +646,9 @@ class ModMetadataValidator:
 
     def validate_name(self):
         """Validate name exists and is unique."""
+        for variant in self.property_variants('name'):
+            variant.validate_no_tabs()
+
         prop = self.property('name', warn_if_missing=True)
         if not prop:
             return
@@ -608,6 +669,9 @@ class ModMetadataValidator:
 
     def validate_description(self):
         """Validate description exists."""
+        for variant in self.property_variants('description'):
+            variant.validate_no_tabs()
+
         prop = self.property('description', warn_if_missing=True)
         if not prop:
             return
@@ -989,7 +1053,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source_lines = mod_source.splitlines()
+    # Split on newlines only; splitlines() would also split on vertical tab,
+    # form feed and similar, hiding them from the control character check.
+    mod_source_lines = mod_source.split('\n')
 
     # Words to check (pattern, description)
     keyword_patterns = [
@@ -1023,12 +1089,24 @@ def validate_specific_keywords(path: Path, mod_source: str):
             or (unicodedata.category(c) == 'Zs' and c != ' ')
         ]
         if hidden_ws:
-            chars = ', '.join(f'U+{ord(c):04X}' for c in set(hidden_ws))
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(hidden_ws)))
             warnings += add_warning(
                 path,
                 line_num,
                 f'Line contains {len(hidden_ws)} non-standard whitespace characters'
                 f' ({chars}), requires manual inspection',
+            )
+
+        control_chars = [
+            c for c in line if unicodedata.category(c) == 'Cc' and c != '\t'
+        ]
+        if control_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(control_chars)))
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line contains {len(control_chars)} control characters ({chars}),'
+                ' which are not allowed',
             )
 
     return warnings
@@ -1160,6 +1238,19 @@ def main():
             'Must be one added or one modified file, got '
             f'{added_count=} {modified_count=} {all_count=}',
         )
+
+    if added_count != 0:
+        pr_body = os.environ.get('PR_BODY', '')
+        if '## Mod authorship' not in pr_body:
+            warnings += add_warning(
+                Path('.github/pull_request_template.md'),
+                1,
+                'New mod submissions must keep the "## Mod authorship" section from the'
+                ' pull request template'
+                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+                ' in the PR description, so reviewers know how the mod was authored.'
+                ' Please restore that section and fill it in.',
+            )
 
     for path in paths:
         print(f'Checking {path=}')

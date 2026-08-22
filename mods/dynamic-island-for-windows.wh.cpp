@@ -2,7 +2,7 @@
 // @id              dynamic-island-for-windows
 // @name            Dynamic Island for Windows
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
-// @version         1.1.0
+// @version         1.1.1
 // @author          Himanshu
 // @github          https://github.com/devcode90
 // @include         windhawk.exe
@@ -106,6 +106,19 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
       - '1.8': 1.8x
       - '2.0': 2.0x
       - '2.5': 2.5x
+  - AutoHideIdleSeconds: '0'
+    $name: Auto-hide idle island
+    $description: Hide the idle pill after this many seconds of inactivity. 0 to disable.
+    $options:
+      - '-1': Hide instantly
+      - '0': Never hide (default)
+      - '5': Hide after 5 seconds
+      - '10': Hide after 10 seconds
+      - '30': Hide after 30 seconds
+      - '60': Hide after 60 seconds
+  - UnhideOnHover: true
+    $name: Unhide on hover
+    $description: Allow the hidden island to reappear when you hover your mouse over it.
   - AutoDpiScale: true
     $name: Auto DPI scaling
     $description: Automatically scales the island to match your monitor's DPI. Recommended for 4K screens.
@@ -115,6 +128,9 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
   - AlwaysOnTop: true
     $name: Always on top
     $description: Keeps the island above all other windows. Turn this off if it blocks other apps.
+  - ExpandOnHover: true
+    $name: Expand on hover
+    $description: Expand the island automatically when hovered. If disabled, click to expand.
   - AnimationSpeed: normal
     $name: Animation speed
     $description: How fast the island expands and collapses.
@@ -163,9 +179,6 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
   - Progress: true
     $name: Progress module
     $description: Shows a progress ring around the island for downloads or file copies.
-  - AlwaysShowClock: true
-    $name: Always show dynamic island
-    $description: Shows a minimal clock and system stats when nothing else is happening.
   - GameOverlay: false
     $name: Enable game overlay mode
     $description: Replaces the clock with live stats like FPS, CPU, and RAM usage.
@@ -175,6 +188,9 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
   - WeatherCity: ""
     $name: Weather City (Optional)
     $description: Enter your city (e.g. London). Leave blank to use auto IP geolocation.
+  - WeatherFahrenheit: false
+    $name: Use Fahrenheit
+    $description: Display weather temperature and wind speed in imperial units.
   $name: Modules & Features
 */
 // ==/WindhawkModSettings==
@@ -299,8 +315,11 @@ struct Settings {
     bool gameOverlay = false;
     bool showMetricText = true;
     std::wstring weatherCity;
-    bool alwaysShowClock = true;
+    bool weatherFahrenheit = false;
+    int autoHideIdleSeconds = 0;
+    bool unhideOnHover = true;
     bool alwaysOnTop = true;
+    bool expandOnHover = true;
     bool autoDpiScale = true;
     bool w11Style = false;
     // Color customization
@@ -484,6 +503,8 @@ HANDLE g_notificationThread = nullptr;
 std::atomic<bool> g_running = false;
 std::atomic<int> g_idleTab = 0;
 std::atomic<bool> g_layoutDirty = true;
+std::atomic<bool> g_clickExpanded = false;
+std::atomic<int> g_pressedMediaButton = -1;
 FILETIME g_prevIdleTime = {};
 FILETIME g_prevKernelTime = {};
 FILETIME g_prevUserTime = {};
@@ -644,8 +665,13 @@ void LoadSettings() {
     next.gameOverlay = Wh_GetIntSetting(L"Modules.GameOverlay") != 0;
     next.showMetricText = Wh_GetIntSetting(L"Modules.ShowMetricText") != 0;
     next.weatherCity = GetStringSettingCopy(L"Modules.WeatherCity");
-    next.alwaysShowClock = Wh_GetIntSetting(L"Modules.AlwaysShowClock") != 0;
+    next.weatherFahrenheit = Wh_GetIntSetting(L"Modules.WeatherFahrenheit") != 0;
+    const std::wstring hideSec = GetStringSettingCopy(L"Appearance.AutoHideIdleSeconds");
+    next.autoHideIdleSeconds = hideSec.empty() ? 0 : _wtoi(hideSec.c_str());
+    next.unhideOnHover = Wh_GetIntSetting(L"Appearance.UnhideOnHover") != 0;
     next.alwaysOnTop = Wh_GetIntSetting(L"Appearance.AlwaysOnTop") != 0;
+    const int localExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1);
+    next.expandOnHover = localExpandOnHover >= 0 ? (localExpandOnHover != 0) : (Wh_GetIntSetting(L"Appearance.ExpandOnHover") != 0);
     next.autoDpiScale = Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0;
     next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
     next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
@@ -762,6 +788,17 @@ void PositionOverlayWindow(HWND hwnd, int width, int height) {
     }
 
     HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
+    
+    // Manage owner window to firmly anchor to desktop when alwaysOnTop is false
+    if (g_settings.alwaysOnTop) {
+        SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, 0);
+    } else {
+        HWND hProgman = FindWindowW(L"Progman", nullptr);
+        if (hProgman) {
+            SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(hProgman));
+        }
+    }
+
     x += g_settings.offsetX;
     y += g_settings.offsetY;
     SetWindowPos(hwnd, zOrder, x, y, width, height,
@@ -1797,9 +1834,11 @@ DWORD WINAPI WeatherThreadProc(void*) {
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         std::wstring cityOverride;
+        bool isFahrenheit = false;
         {
             std::lock_guard lock(g_stateMutex);
             cityOverride = g_settings.weatherCity;
+            isFahrenheit = g_settings.weatherFahrenheit;
         }
 
         std::wstring url = L"/?format=j1";
@@ -1870,7 +1909,7 @@ DWORD WINAPI WeatherThreadProc(void*) {
                     }
                 };
 
-                const char* tempStr = strstr(currentStr, "\"temp_C\":");
+                const char* tempStr = strstr(currentStr, isFahrenheit ? "\"temp_F\":" : "\"temp_C\":");
                 if (tempStr) {
                     tempStr += 9;
                     while (*tempStr == ' ' || *tempStr == '\"') tempStr++;
@@ -1903,13 +1942,13 @@ DWORD WINAPI WeatherThreadProc(void*) {
                     }
                 }
                 
-                ParseStringField("\"windspeedKmph\"", windSpeed);
+                ParseStringField(isFahrenheit ? "\"windspeedMiles\"" : "\"windspeedKmph\"", windSpeed);
                 ParseStringField("\"winddir16Point\"", windDir);
                 ParseStringField("\"humidity\"", humidity);
-                ParseStringField("\"FeelsLikeC\"", feelsLike);
+                ParseStringField(isFahrenheit ? "\"FeelsLikeF\"" : "\"FeelsLikeC\"", feelsLike);
 
                 std::wstring finalCity = cityOverride.empty() ? cityLabel : cityOverride;
-                Wh_Log(L"Weather parsed success: city=%s, temp=%.1fC, feelsLike=%sC, humidity=%s%%, desc=%s",
+                Wh_Log(L"Weather parsed success: city=%s, temp=%.1f, feelsLike=%s, humidity=%s%%, desc=%s",
                        finalCity.c_str(), temp, feelsLike.c_str(), humidity.c_str(), desc.c_str());
             } else {
                 Wh_Log(L"Weather: Failed to find \"current_condition\" in response.");
@@ -2712,10 +2751,51 @@ void OpenRelevantApp() {
         }
     }
 
-    // Fallback: Launch or focus via AppUserModelId
+    // Fallback: Launch or focus via AppUserModelId or Path
     if (!app.empty()) {
-        std::wstring shellPath = L"shell:AppsFolder\\" + app;
-        ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        std::wstring executePath = app;
+        
+        // Remove surrounding quotes if any
+        if (executePath.size() >= 2 && executePath.front() == L'"' && executePath.back() == L'"') {
+            executePath = executePath.substr(1, executePath.size() - 2);
+        }
+
+        bool isFilePath = (executePath.find(L":\\") != std::wstring::npos || 
+                           (executePath.size() >= 4 && executePath.substr(executePath.size() - 4) == L".exe"));
+
+        if (isFilePath) {
+            if (GetFileAttributesW(executePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                // Path doesn't exist. Try 64-bit Program Files if it was in x86
+                size_t x86Pos = executePath.find(L" (x86)");
+                if (x86Pos != std::wstring::npos) {
+                    std::wstring altPath = executePath;
+                    altPath.erase(x86Pos, 6);
+                    if (GetFileAttributesW(altPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                        executePath = altPath;
+                    }
+                }
+                
+                // If it STILL doesn't exist after trying alternatives, just gracefully abort!
+                // Trying to guess 'brave.exe' triggers broken Windows Registry App Paths.
+                if (GetFileAttributesW(executePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    return;
+                }
+            }
+            
+            SHELLEXECUTEINFOW sei = { sizeof(sei) };
+            sei.fMask = SEE_MASK_FLAG_NO_UI;
+            sei.lpFile = executePath.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        } else {
+            // It's a UWP/Desktop AppUserModelId, launch via AppsFolder
+            std::wstring shellPath = L"shell:AppsFolder\\" + executePath;
+            SHELLEXECUTEINFOW sei = { sizeof(sei) };
+            sei.fMask = SEE_MASK_FLAG_NO_UI;
+            sei.lpFile = shellPath.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        }
         return;
     }
 
@@ -2740,6 +2820,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
                           ? Wh_GetIntValue(L"W11StyleOverride", 0)
                           : Wh_GetIntSetting(L"Appearance.W11Style");
     AppendMenuW(menu, MF_STRING, 10, activeW11 ? L"Use iPhone Pill Style" : L"Use Windows 11 Flyout Style");
+    const int activeExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1) >= 0
+                          ? Wh_GetIntValue(L"ExpandOnHoverOverride", 0)
+                          : Wh_GetIntSetting(L"Appearance.ExpandOnHover");
+    AppendMenuW(menu, MF_STRING, 11, activeExpandOnHover ? L"Expand on Click" : L"Expand on Hover");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 4, L"Transparency 100%");
     AppendMenuW(menu, MF_STRING, 5, L"Transparency 85%");
@@ -2809,6 +2893,15 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
                                   ? Wh_GetIntValue(L"W11StyleOverride", 0)
                                   : Wh_GetIntSetting(L"Appearance.W11Style");
             Wh_SetIntValue(L"W11StyleOverride", activeW11Val ? 0 : 1);
+            LoadSettings();
+            g_layoutDirty = true;
+            break;
+        }
+        case 11: {
+            const int activeExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1) >= 0
+                                  ? Wh_GetIntValue(L"ExpandOnHoverOverride", 0)
+                                  : Wh_GetIntSetting(L"Appearance.ExpandOnHover");
+            Wh_SetIntValue(L"ExpandOnHoverOverride", activeExpandOnHover ? 0 : 1);
             LoadSettings();
             g_layoutDirty = true;
             break;
@@ -2942,13 +3035,17 @@ class Renderer {
         if (width >= 2.0f && height >= 2.0f) {
             if (secondary) {
                 const float gap = 12.0f * settings.sizeScale;
+                const float maxH = std::max(primary.height, secondary->height);
+                const float pTop = top + (maxH - primary.height) * 0.5f;
+                const float sTop = top + (maxH - secondary->height) * 0.5f;
+
                 DrawPill(state, settings, primary,
-                         D2D1::RectF(left, top, left + primary.width, top + primary.height),
+                         D2D1::RectF(left, pTop, left + primary.width, pTop + primary.height),
                          scale, now);
                 DrawPill(state, settings, *secondary,
-                         D2D1::RectF(left + primary.width + gap, top,
+                         D2D1::RectF(left + primary.width + gap, sTop,
                                       left + primary.width + gap + secondary->width,
-                                      top + secondary->height),
+                                      sTop + secondary->height),
                          scale, now);
             } else {
                 DrawPill(state, settings, primary,
@@ -3495,48 +3592,54 @@ class Renderer {
         if (hasWeather) swprintf_s(wTemp, L"%.0f\x00B0", state.weather.temperature);
         else wcscpy_s(wTemp, L"--\x00B0");
 
+        std::wstring city = hasWeather ? state.weather.city : L"Locating...";
+        std::wstring desc = wText;
+
         textBrush_->SetOpacity(0.96f);
+        // City Name
+        target_->DrawTextW(city.c_str(), static_cast<UINT32>(city.length()), boldTextFormat_.Get(),
+                           D2D1::RectF(rect.left + 35.0f * scale, rect.top + 35.0f * scale, rect.left + 185.0f * scale, rect.bottom),
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        // Weather Icon
         target_->DrawTextW(wIcon.c_str(), static_cast<UINT32>(wIcon.length()), hugeTextFormat_.Get(),
-                           D2D1::RectF(rect.left + 20.0f * scale, rect.top + 34.0f * scale, rect.left + 100.0f * scale, rect.bottom),
-                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           D2D1::RectF(rect.left + 35.0f * scale, rect.top + 60.0f * scale, rect.left + 95.0f * scale, rect.bottom),
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                            
+        // Temperature
         target_->DrawTextW(wTemp, static_cast<UINT32>(wcslen(wTemp)), hugeTextFormat_.Get(),
-                           D2D1::RectF(rect.left + 85.0f * scale, rect.top + 34.0f * scale, rect.left + 180.0f * scale, rect.bottom),
+                           D2D1::RectF(rect.left + 95.0f * scale, rect.top + 60.0f * scale, rect.left + 185.0f * scale, rect.bottom),
                            textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        mutedBrush_->SetOpacity(0.85f);
+        // Description
+        target_->DrawTextW(desc.c_str(), static_cast<UINT32>(desc.length()), textFormat_.Get(),
+                           D2D1::RectF(rect.left + 35.0f * scale, rect.top + 120.0f * scale, rect.left + 185.0f * scale, rect.bottom),
+                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
 
         ComPtr<ID2D1SolidColorBrush> divider;
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f * settingsOpacity_), &divider);
         target_->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(rect.left + 185.0f * scale, rect.top + 20.0f * scale,
-                                           rect.left + 186.5f * scale, rect.bottom - 24.0f * scale),
+            D2D1::RoundedRect(D2D1::RectF(rect.left + 190.0f * scale, rect.top + 30.0f * scale,
+                                           rect.left + 191.5f * scale, rect.bottom - 34.0f * scale),
                               0.5f * scale, 0.5f * scale), divider.Get());
 
-        std::wstring city = hasWeather ? state.weather.city : L"Locating...";
-        std::wstring desc = wText;
-        
-        D2D1_RECT_F rightTop = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 28.0f * scale, rect.right, rect.bottom);
-        target_->DrawTextW(city.c_str(), static_cast<UINT32>(city.length()), boldTextFormat_.Get(),
-                           rightTop, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
-                           
-        mutedBrush_->SetOpacity(0.70f);
-        D2D1_RECT_F rightMid = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 48.0f * scale, rect.right, rect.bottom);
-        target_->DrawTextW(desc.c_str(), static_cast<UINT32>(desc.length()), smallTextFormat_.Get(),
-                           rightMid, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
-                           
-        std::wstring line3 = hasWeather ? L"Wind: " + state.weather.windSpeed + L" km/h " + state.weather.windDir : L"Updated recently";
+        std::wstring line3 = hasWeather ? L"Wind: " + state.weather.windSpeed + (settings.weatherFahrenheit ? L" mph " : L" km/h ") + state.weather.windDir : L"Updated recently";
         std::wstring line4 = hasWeather ? L"Feels Like: " + state.weather.feelsLike + L"\x00B0" : L"";
         std::wstring line5 = hasWeather ? L"Humidity: " + state.weather.humidity + L"%" : L"";
 
-        D2D1_RECT_F rightLine3 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 68.0f * scale, rect.right, rect.bottom);
-        target_->DrawTextW(line3.c_str(), static_cast<UINT32>(line3.length()), smallTextFormat_.Get(),
+        mutedBrush_->SetOpacity(0.70f);
+        
+        D2D1_RECT_F rightLine3 = D2D1::RectF(rect.left + 215.0f * scale, rect.top + 55.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line3.c_str(), static_cast<UINT32>(line3.length()), textFormat_.Get(),
                            rightLine3, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
                            
-        D2D1_RECT_F rightLine4 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 88.0f * scale, rect.right, rect.bottom);
-        target_->DrawTextW(line4.c_str(), static_cast<UINT32>(line4.length()), smallTextFormat_.Get(),
+        D2D1_RECT_F rightLine4 = D2D1::RectF(rect.left + 215.0f * scale, rect.top + 85.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line4.c_str(), static_cast<UINT32>(line4.length()), textFormat_.Get(),
                            rightLine4, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
                            
-        D2D1_RECT_F rightLine5 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 108.0f * scale, rect.right, rect.bottom);
-        target_->DrawTextW(line5.c_str(), static_cast<UINT32>(line5.length()), smallTextFormat_.Get(),
+        D2D1_RECT_F rightLine5 = D2D1::RectF(rect.left + 215.0f * scale, rect.top + 115.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line5.c_str(), static_cast<UINT32>(line5.length()), textFormat_.Get(),
                            rightLine5, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
     }
 
@@ -3546,8 +3649,10 @@ class Renderer {
             DrawGameOverlay(state, rect, 1.0f);
             return;
         }
+        target_->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        
         bool privacyActive = state.system.micActive || state.system.cameraActive;
-        if ((!settings.alwaysShowClock && !privacyActive) || !clockFormat_) return;
+        if (!clockFormat_) return;
 
         SYSTEMTIME local = {};
         GetLocalTime(&local);
@@ -3587,8 +3692,9 @@ class Renderer {
             D2D1_RECT_F wRect = D2D1::RectF(rect.left + 94.0f * scale, rect.top + 7.0f * scale,
                                             rect.right, rect.bottom - 7.0f * scale);
             target_->DrawTextW(weatherLabel, static_cast<UINT32>(wcslen(weatherLabel)), smallTextFormat_.Get(),
-                               wRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                               wRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
             textBrush_->SetOpacity(1.0f);
+            target_->PopAxisAlignedClip();
             return;
         }
 
@@ -3617,6 +3723,8 @@ class Renderer {
 
         target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY - spacing * 0.5f), r, r), tab == 0 ? activeDot.Get() : inactiveDot.Get());
         target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY + spacing * 0.5f), r, r), tab == 1 ? activeDot.Get() : inactiveDot.Get());
+
+        target_->PopAxisAlignedClip();
     }
 
     void DrawGameOverlay(const SharedState& state, D2D1_RECT_F rect, float unused_scale) {
@@ -4302,10 +4410,17 @@ class Renderer {
     }
 
     void DrawMediaButton(D2D1_POINT_2F center, float radius, int kind, bool primary) {
+        int buttonCmd = (kind == 0) ? 0 : ((kind == 1 || kind == 2) ? 1 : 2);
+        bool isPressed = (g_pressedMediaButton.load() == buttonCmd);
+
+        if (isPressed) {
+            radius *= 0.88f; // Shrink by 12% on click
+        }
+
         ComPtr<ID2D1SolidColorBrush> bg;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, primary ? 0.080f : 0.040f), &bg);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, primary ? (isPressed ? 0.16f : 0.080f) : (isPressed ? 0.10f : 0.040f)), &bg);
         target_->FillEllipse(D2D1::Ellipse(center, radius, radius), bg.Get());
-        accentBrush_->SetOpacity(primary ? 0.88f : 0.62f);
+        accentBrush_->SetOpacity(primary ? (isPressed ? 1.0f : 0.88f) : (isPressed ? 0.80f : 0.62f));
 
         if (kind == 1) {  // pause
             const float h = radius * 0.72f;
@@ -4322,9 +4437,14 @@ class Renderer {
         } else {
             const float dir = kind == 0 ? -1.0f : 1.0f;
             const float tri = radius * (primary ? 0.70f : 0.62f);
-            D2D1_POINT_2F p1 = D2D1::Point2F(center.x - dir * tri * 0.35f, center.y - tri * 0.58f);
-            D2D1_POINT_2F p2 = D2D1::Point2F(center.x - dir * tri * 0.35f, center.y + tri * 0.58f);
-            D2D1_POINT_2F p3 = D2D1::Point2F(center.x + dir * tri * 0.55f, center.y);
+            
+            // The combined bounding box of the triangle and the line is not centered.
+            // We apply a slight horizontal shift to perfectly center the next/prev icons inside the circle.
+            const float cx = (kind == 0 || kind == 3) ? center.x - dir * radius * 0.16f : center.x;
+
+            D2D1_POINT_2F p1 = D2D1::Point2F(cx - dir * tri * 0.35f, center.y - tri * 0.58f);
+            D2D1_POINT_2F p2 = D2D1::Point2F(cx - dir * tri * 0.35f, center.y + tri * 0.58f);
+            D2D1_POINT_2F p3 = D2D1::Point2F(cx + dir * tri * 0.55f, center.y);
             ComPtr<ID2D1PathGeometry> geom;
             d2dFactory_->CreatePathGeometry(&geom);
             ComPtr<ID2D1GeometrySink> sink;
@@ -4337,7 +4457,7 @@ class Renderer {
             target_->FillGeometry(geom.Get(), accentBrush_.Get());
 
             if (kind == 0 || kind == 3) {
-                const float x = center.x + dir * radius * 0.55f;
+                const float x = cx + dir * radius * 0.55f;
                 target_->DrawLine(D2D1::Point2F(x, center.y - radius * 0.45f),
                                   D2D1::Point2F(x, center.y + radius * 0.45f),
                                   accentBrush_.Get(), 1.5f);
@@ -5127,7 +5247,7 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings, const Shared
             break;
         case IslandKind::Idle:
         default:
-            if (!settings.alwaysShowClock && !state.system.micActive && !state.system.cameraActive) {
+            if (settings.autoHideIdleSeconds == -1 && !state.system.micActive && !state.system.cameraActive) {
                 activity.width = 0.0f;
                 activity.height = 0.0f;
             } else {
@@ -5166,7 +5286,7 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
     if (settings.progress && state.progress.active) {
         activities.push_back(IslandKind::Progress);
     }
-    if (settings.media && state.media.available && state.media.playing) {
+    if (settings.media && state.media.available) {
         activities.push_back(IslandKind::Media);
     }
 
@@ -5276,14 +5396,71 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             return 0;
 
+
+
         case WM_APP_LAYOUT_CHANGED:
             g_layoutDirty = true;
             return 0;
 
-        case WM_LBUTTONUP:
+        case WM_LBUTTONDOWN:
             {
                 int xPos = GET_X_LPARAM(lParam);
                 int yPos = GET_Y_LPARAM(lParam);
+                
+                bool mediaActive = false;
+                {
+                    std::lock_guard lock(g_stateMutex);
+                    mediaActive = g_settings.media && g_state.media.available;
+                }
+
+                RECT clientRect;
+                GetClientRect(hwnd, &clientRect);
+                const float height = static_cast<float>(clientRect.bottom - clientRect.top);
+                const float width = static_cast<float>(clientRect.right - clientRect.left);
+
+                if (mediaActive && height > 60.0f && (g_idleTab % 3) == 0) {
+                    float totalScale = (GetDpiForWindow(hwnd) / 96.0f) * g_settings.sizeScale;
+                    float cx = width / 2.0f;
+                    float cy = height / 2.0f;
+                    
+                    float unX = (xPos - cx) / totalScale;
+                    float unY = (yPos - cy) / totalScale;
+
+                    if (unY > 56.0f - 30.0f && unY < 56.0f + 30.0f) {
+                        int cmd = -1;
+                        if (unX > -84.0f && unX < -44.0f) cmd = 0; // Prev
+                        else if (unX > -24.0f && unX < 24.0f) cmd = 1; // Play/Pause
+                        else if (unX > 44.0f && unX < 84.0f) cmd = 2; // Next
+
+                        if (cmd != -1) {
+                            g_pressedMediaButton = cmd;
+                            SetCapture(hwnd);
+                            g_layoutDirty = true;
+                            return 0;
+                        }
+                    }
+                }
+            }
+            break;
+
+        case WM_LBUTTONUP:
+            {
+                if (g_pressedMediaButton.load() != -1) {
+                    g_pressedMediaButton = -1;
+                    ReleaseCapture();
+                    g_layoutDirty = true;
+                }
+
+                int xPos = GET_X_LPARAM(lParam);
+                int yPos = GET_Y_LPARAM(lParam);
+                
+                bool expanded = Wh_GetIntValue(L"PinnedExpanded", 0) != 0 || g_clickExpanded.load();
+                if (!g_settings.expandOnHover && !expanded) {
+                    g_clickExpanded = true;
+                    g_layoutDirty = true;
+                    return 0; // consumed click to expand
+                }
+                
                 bool mediaActive = false;
                 std::vector<IslandKind> kinds;
                 {
@@ -5351,6 +5528,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (height > 45.0f && xPos > width - 30.0f) {
                         // Clicked on the right edge scroll area in Media
                         g_idleTab = (g_idleTab + 1) % 3;
+                        g_layoutDirty = true;
                     } else {
                         OpenRelevantApp();
                     }
@@ -5358,6 +5536,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (!kinds.empty() && kinds[0] == IslandKind::Idle && height > 45.0f) {
                         if (xPos < width / 2.0f) g_idleTab = (g_idleTab - 1 + 2) % 2;
                         else g_idleTab = (g_idleTab + 1) % 2;
+                        g_layoutDirty = true;
                     } else {
                         HandleStatusClickAtPoint(hwnd, lParam);
                     }
@@ -5376,7 +5555,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_MOUSEWHEEL: {
             static ULONGLONG lastScrollTime = 0;
             ULONGLONG now = GetTickCount64();
-            if (now - lastScrollTime < 300) return 0; // 300ms debounce
+            if (now - lastScrollTime < 150) return 0; // 150ms debounce
             lastScrollTime = now;
 
             bool mediaActive = false;
@@ -5386,8 +5565,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             int tabCount = mediaActive ? 3 : 2;
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            if (delta > 0) g_idleTab = (g_idleTab - 1 + tabCount) % tabCount;
-            else if (delta < 0) g_idleTab = (g_idleTab + 1) % tabCount;
+            if (delta > 0) {
+                if (g_idleTab > 0) g_idleTab--;
+            } else if (delta < 0) {
+                if (g_idleTab < tabCount - 1) g_idleTab++;
+            }
+            
+            g_layoutDirty = true;
             return 0;
         }
 
@@ -5451,8 +5635,8 @@ DWORD WINAPI RenderThreadProc(void*) {
     SpringValue widthSpring;
     SpringValue heightSpring;
     SpringValue nudgeSpring;
-    widthSpring.Reset((g_settings.alwaysShowClock ? 120.0f : 0.0f) * g_settings.sizeScale);
-    heightSpring.Reset((g_settings.alwaysShowClock ? 36.0f : 0.0f) * g_settings.sizeScale);
+    widthSpring.Reset((g_settings.autoHideIdleSeconds == -1 ? 0.0f : 120.0f) * g_settings.sizeScale);
+    heightSpring.Reset((g_settings.autoHideIdleSeconds == -1 ? 0.0f : 36.0f) * g_settings.sizeScale);
     nudgeSpring.Reset(0.0f);
 
     IslandKind previousPrimary = IslandKind::Idle;
@@ -5544,11 +5728,45 @@ DWORD WINAPI RenderThreadProc(void*) {
         POINT cursor = {};
         GetCursorPos(&cursor);
         const bool hover = PtInRect(&windowRect, cursor) != FALSE;
+        
+        bool needsRender = false;
+        
+        if (!hover && g_clickExpanded.load()) {
+            g_clickExpanded = false;
+            needsRender = true;
+        }
+        static double lastInteractionTime = NowSeconds();
+        bool currentlyHidden = false;
+        if (g_settings.autoHideIdleSeconds == -1) {
+            currentlyHidden = true;
+        } else if (g_settings.autoHideIdleSeconds > 0) {
+            currentlyHidden = (now - lastInteractionTime > g_settings.autoHideIdleSeconds);
+        }
+
+        bool isHoverExpanded = g_settings.expandOnHover ? hover : (hover && g_clickExpanded.load());
+        
+        if (currentlyHidden && !g_settings.unhideOnHover && primary.kind == IslandKind::Idle) {
+            isHoverExpanded = false;
+        } else if (isHoverExpanded || pinned || primary.kind != IslandKind::Idle) {
+            lastInteractionTime = now;
+        }
+        
+        bool isHidden = false;
+        if (g_settings.autoHideIdleSeconds == -1) {
+            isHidden = true;
+        } else if (g_settings.autoHideIdleSeconds > 0) {
+            isHidden = (now - lastInteractionTime > g_settings.autoHideIdleSeconds);
+        }
 
         bool privacyActive = snapshot.system.micActive || snapshot.system.cameraActive;
-        if (primary.kind == IslandKind::Idle && (pinned || (hover && (g_settings.alwaysShowClock || privacyActive)))) {
-            primary.width = 380.0f * g_settings.sizeScale;
-            primary.height = 184.0f * g_settings.sizeScale;
+        if (primary.kind == IslandKind::Idle) {
+            if (pinned || isHoverExpanded) {
+                primary.width = 380.0f * g_settings.sizeScale;
+                primary.height = 184.0f * g_settings.sizeScale;
+            } else if (isHidden && !privacyActive) {
+                primary.width = 0.0f;
+                primary.height = 0.0f;
+            }
         }
         if (primary.kind == IslandKind::Idle &&
             (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0)) {
@@ -5557,7 +5775,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
         if (primary.kind == IslandKind::Media) {
             bool recentArtChange = (NowSeconds() - g_state.media.artChangedAt) < 4.0;
-            if (hover || pinned || recentArtChange) {
+            if (isHoverExpanded || pinned || recentArtChange) {
                 primary.width = 380.0f * g_settings.sizeScale;
                 primary.height = 184.0f * g_settings.sizeScale;
             }
@@ -5624,8 +5842,6 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         SetClickThrough(hwnd, primary.kind == IslandKind::Idle && !hover && !pinned);
 
-        bool needsRender = false;
-
         // Check if animating structurally
         if (std::abs(widthSpring.velocity) > 0.01f || std::abs(widthSpring.target - widthSpring.value) > 0.01f ||
             std::abs(heightSpring.velocity) > 0.01f || std::abs(heightSpring.target - heightSpring.value) > 0.01f ||
@@ -5672,7 +5888,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         
         // Idle dashboard clock changes once a minute
         static SYSTEMTIME prevTime = {};
-        if (primary.kind == IslandKind::Idle && g_settings.alwaysShowClock) {
+        if (primary.kind == IslandKind::Idle && !isHidden) {
             SYSTEMTIME local = {};
             GetLocalTime(&local);
             if (local.wMinute != prevTime.wMinute) {

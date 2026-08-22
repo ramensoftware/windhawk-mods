@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
 // @description     Enables native titlebars in UWP apps
-// @version         1.1.0
+// @version         1.2.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -18,7 +18,7 @@ Replaces the UWP titlebars with native Win32 titlebars.
 
 This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.
 
-![Screenshot](https://i.imgur.com/gqw78kB.png)
+![Screenshot](https://i.imgur.com/oeCYWJY.png)
 
 */
 // ==/WindhawkModReadme==
@@ -32,8 +32,8 @@ This mod is focused on the Classic theme, so may produce sub-optimal results in 
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <gdiplus.h>
+#include <vector>
 
-// Определяем все GUID локально
 static const GUID BHID_SFUIObject_local =
     {0x3981e225, 0xf559, 0x11d3, {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
 
@@ -43,8 +43,7 @@ static const GUID FOLDERID_AppsFolder_local =
 static const GUID IID_IExtractIconW_local =
     {0x000214fa, 0x0000, 0x0000, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 
-// PKEY_AppUserModel_ID = {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5
-static const PROPERTYKEY PKEY_AppUserModel_ID_local = 
+static const PROPERTYKEY PKEY_AppUserModel_ID_local =
     {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
 
 typedef INT64 (*CTitleBar__CreateTitleBarWindow_t)(void *);
@@ -76,7 +75,7 @@ struct FindAppFrameData
 BOOL CALLBACK FindAppFrameProc(HWND hWnd, LPARAM lParam)
 {
     FindAppFrameData *pData = (FindAppFrameData *)lParam;
-    
+
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid != pData->processId)
@@ -101,138 +100,177 @@ HWND FindApplicationFrameWindow()
     return data.hAppFrame;
 }
 
-HICON BitmapToHIcon(Gdiplus::Bitmap* bitmap)
+HWND FindOwningApplicationFrameWindow(HWND hWnd)
 {
-    HICON hIcon = NULL;
-    if (bitmap && bitmap->GetLastStatus() == Gdiplus::Ok)
+    HWND hCandidate = hWnd;
+
+    for (int i = 0; i < 16 && hCandidate; i++)
     {
-        bitmap->GetHICON(&hIcon);
+        WCHAR wszClassName[64] = {0};
+        GetClassNameW(hCandidate, wszClassName, ARRAYSIZE(wszClassName));
+        if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
+        {
+            return hCandidate;
+        }
+
+        HWND hNext = GetWindow(hCandidate, GW_OWNER);
+        if (!hNext)
+        {
+            hNext = GetParent(hCandidate);
+        }
+        if (hNext == hCandidate)
+        {
+            break;
+        }
+        hCandidate = hNext;
     }
-    return hIcon;
+
+    return FindApplicationFrameWindow();
 }
 
-HICON LoadPngAsIcon(const WCHAR* szFile)
-{
-    using namespace Gdiplus;
-    
-    static ULONG_PTR gdiplusToken = 0;
-    if (gdiplusToken == 0)
-    {
-        GdiplusStartupInput gdiplusStartupInput;
-        GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-    }
+static ULONG_PTR g_gdiplusToken = 0;
 
-    // szFile = "C:\...\StoreAppList.png-100"
-    // Нам нужно найти "StoreAppList.scale-100.png" или похожее
-    
-    // Получаем директорию и базовое имя файла
-    WCHAR dir[MAX_PATH];
-    WCHAR baseName[MAX_PATH];
-    wcscpy_s(dir, MAX_PATH, szFile);
-    
-    // Обрезаем до директории
-    WCHAR* lastSlash = wcsrchr(dir, L'\\');
-    if (!lastSlash) return NULL;
-    
-    wcscpy_s(baseName, MAX_PATH, lastSlash + 1);
-    *(lastSlash + 1) = L'\0';
-    
-    // Убираем суффикс "-100" из имени файла
-    // baseName = "StoreAppList.png-100" -> "StoreAppList"
-    WCHAR stem[MAX_PATH];
-    wcscpy_s(stem, MAX_PATH, baseName);
-    WCHAR* pngPos = wcsstr(stem, L".png");
-    if (pngPos) *pngPos = L'\0';
-    
-    Wh_Log(L"Dir: %s, Stem: %s", dir, stem);
-    
-    // Ищем файлы по маске stem*.png
-    WCHAR searchMask[MAX_PATH];
-    swprintf_s(searchMask, MAX_PATH, L"%s%s*.png", dir, stem);
-    Wh_Log(L"Search mask: %s", searchMask);
-    
-    WCHAR bestFile[MAX_PATH] = {0};
-    WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(searchMask, &fd);
-    if (hFind != INVALID_HANDLE_VALUE)
+static CRITICAL_SECTION g_csSubclassedWindows;
+static std::vector<HWND> g_subclassedWindows;
+
+void RememberSubclassedWindow(HWND hWnd)
+{
+    EnterCriticalSection(&g_csSubclassedWindows);
+    g_subclassedWindows.push_back(hWnd);
+    LeaveCriticalSection(&g_csSubclassedWindows);
+}
+
+void ForgetSubclassedWindow(HWND hWnd)
+{
+    EnterCriticalSection(&g_csSubclassedWindows);
+    for (auto it = g_subclassedWindows.begin(); it != g_subclassedWindows.end(); ++it)
     {
-        do
+        if (*it == hWnd)
         {
-            Wh_Log(L"Found file: %s", fd.cFileName);
-            // Берём первый найденный файл
-            if (bestFile[0] == L'\0')
-            {
-                swprintf_s(bestFile, MAX_PATH, L"%s%s", dir, fd.cFileName);
-            }
-            // Предпочитаем scale-100 или просто .png
-            if (wcsstr(fd.cFileName, L"scale-100") ||
-                wcscmp(fd.cFileName + wcslen(fd.cFileName) - 4, L".png") == 0)
-            {
-                swprintf_s(bestFile, MAX_PATH, L"%s%s", dir, fd.cFileName);
-                break;
-            }
+            g_subclassedWindows.erase(it);
+            break;
         }
-        while (FindNextFileW(hFind, &fd));
-        FindClose(hFind);
     }
-    else
+    LeaveCriticalSection(&g_csSubclassedWindows);
+}
+
+static CRITICAL_SECTION g_csGdiplus;
+
+void EnsureGdiplus()
+{
+    EnterCriticalSection(&g_csGdiplus);
+    if (g_gdiplusToken == 0)
     {
-        Wh_Log(L"FindFirstFile failed, error=%d", GetLastError());
+        Gdiplus::GdiplusStartupInput inp;
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &inp, NULL);
+    }
+    LeaveCriticalSection(&g_csGdiplus);
+}
+
+HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
+{
+    EnsureGdiplus();
+
+    WCHAR dir[MAX_PATH];
+    WCHAR stem[MAX_PATH];
+    wcscpy_s(dir, MAX_PATH, szFile);
+
+    WCHAR *lastSlash = wcsrchr(dir, L'\\');
+    if (!lastSlash) return NULL;
+
+    wcscpy_s(stem, MAX_PATH, lastSlash + 1);
+    *(lastSlash + 1) = L'\0';
+
+    WCHAR *pngPos = wcsstr(stem, L".png");
+    if (pngPos) *pngPos = L'\0';
+
+    // Для крупных значков ищем крупные ресурсы в первую очередь
+    const WCHAR *priorities_large[] = {
+        L"targetsize-256",
+        L"targetsize-96",
+        L"targetsize-48",
+        L"scale-400",
+        L"scale-200",
+        L"scale-100",
+        NULL
+    };
+
+    const WCHAR *priorities_small[] = {
+        L"targetsize-16",
+        L"targetsize-24",
+        L"scale-100",
+        NULL
+    };
+
+    const WCHAR **priorities = (targetSize >= 48) ? priorities_large : priorities_small;
+
+    WCHAR bestFile[MAX_PATH] = {0};
+
+    for (int p = 0; priorities[p] != NULL && bestFile[0] == L'\0'; p++)
+    {
+        WCHAR searchMask[MAX_PATH];
+        swprintf_s(searchMask, MAX_PATH, L"%s%s*%s*.png", dir, stem, priorities[p]);
+
+        WIN32_FIND_DATAW fd;
+        HANDLE hFind = FindFirstFileW(searchMask, &fd);
+        if (hFind != INVALID_HANDLE_VALUE)
+        {
+            swprintf_s(bestFile, MAX_PATH, L"%s%s", dir, fd.cFileName);
+            FindClose(hFind);
+        }
     }
 
     if (bestFile[0] == L'\0')
     {
-        Wh_Log(L"No PNG file found");
+        WCHAR searchMask[MAX_PATH];
+        swprintf_s(searchMask, MAX_PATH, L"%s%s*.png", dir, stem);
+
+        WIN32_FIND_DATAW fd;
+        HANDLE hFind = FindFirstFileW(searchMask, &fd);
+        if (hFind != INVALID_HANDLE_VALUE)
+        {
+            swprintf_s(bestFile, MAX_PATH, L"%s%s", dir, fd.cFileName);
+            FindClose(hFind);
+        }
+    }
+
+    if (bestFile[0] == L'\0')
+    {
+        Wh_Log(L"No PNG found for: %s", szFile);
         return NULL;
     }
 
-    Wh_Log(L"Loading: %s", bestFile);
+    Wh_Log(L"Loading PNG: %s at size %d", bestFile, targetSize);
 
-    IStream* pStream = NULL;
-    HRESULT hr = SHCreateStreamOnFileEx(
-        bestFile,
-        STGM_READ | STGM_SHARE_DENY_NONE,
-        0, FALSE, NULL, &pStream);
-
-    if (SUCCEEDED(hr) && pStream)
+    Gdiplus::Bitmap *bmp = new Gdiplus::Bitmap(bestFile);
+    if (bmp->GetLastStatus() != Gdiplus::Ok)
     {
-        Bitmap* bitmap = new Bitmap(pStream);
-        pStream->Release();
-        
-        if (bitmap && bitmap->GetLastStatus() == Ok)
-        {
-            Wh_Log(L"Bitmap loaded, width=%d height=%d", bitmap->GetWidth(), bitmap->GetHeight());
-            HICON hIcon = BitmapToHIcon(bitmap);
-            delete bitmap;
-            Wh_Log(L"HICON: %p", hIcon);
-            return hIcon;
-        }
-        else if (bitmap)
-        {
-            Wh_Log(L"Bitmap status=%d", bitmap->GetLastStatus());
-            delete bitmap;
-        }
-    }
-    else
-    {
-        Wh_Log(L"Stream failed hr=0x%08X", hr);
+        delete bmp;
+        return NULL;
     }
 
-    // Прямая загрузка
-    Bitmap* bitmap = new Bitmap(bestFile);
-    if (bitmap && bitmap->GetLastStatus() == Ok)
+    Gdiplus::Bitmap *scaled = new Gdiplus::Bitmap(targetSize, targetSize, PixelFormat32bppARGB);
+    if (scaled->GetLastStatus() != Gdiplus::Ok)
     {
-        HICON hIcon = BitmapToHIcon(bitmap);
-        delete bitmap;
-        return hIcon;
+        delete bmp;
+        delete scaled;
+        return NULL;
     }
-    if (bitmap) delete bitmap;
 
-    Wh_Log(L"Failed to load PNG");
-    return NULL;
+    Gdiplus::Graphics g(scaled);
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    g.DrawImage(bmp, 0, 0, targetSize, targetSize);
+    delete bmp;
+
+    HICON hIcon = NULL;
+    scaled->GetHICON(&hIcon);
+    delete scaled;
+
+    return hIcon;
 }
 
-HICON GetIconForWindow(HWND hWnd)
+HICON GetIconForWindow(HWND hWnd, int size)
 {
     HICON hIcon = NULL;
 
@@ -257,7 +295,8 @@ HICON GetIconForWindow(HWND hWnd)
             if (SUCCEEDED(hr))
             {
                 IExtractIconW *pei = NULL;
-                hr = psi->BindToHandler(NULL, BHID_SFUIObject_local, IID_IExtractIconW_local, (void**)&pei);
+                hr = psi->BindToHandler(NULL, BHID_SFUIObject_local,
+                                        IID_IExtractIconW_local, (void **)&pei);
 
                 if (SUCCEEDED(hr))
                 {
@@ -270,28 +309,45 @@ HICON GetIconForWindow(HWND hWnd)
                     {
                         if (wcsstr(szFile, L".png"))
                         {
-                            hIcon = LoadPngAsIcon(szFile);
+                            hIcon = LoadPngAsIconSized(szFile, size);
                         }
                         else
                         {
-                            HICON hLarge = NULL, hSmall = NULL;
-                            ExtractIconExW(szFile, iIndex, &hLarge, &hSmall, 1);
+                            hIcon = (HICON)LoadImageW(
+                                NULL, szFile, IMAGE_ICON,
+                                size, size, LR_LOADFROMFILE);
 
-                            if (hLarge)
-                                hIcon = hLarge;
-                            else if (hSmall)
-                                hIcon = hSmall;
+                            if (!hIcon)
+                            {
+                                HICON hSmall = NULL, hLarge = NULL;
+                                ExtractIconExW(szFile, iIndex, &hLarge, &hSmall, 1);
+
+                                HICON hWanted = (size >= 32) ? hLarge : hSmall;
+                                HICON hOther  = (size >= 32) ? hSmall : hLarge;
+
+                                if (hWanted)
+                                {
+                                    hIcon = hWanted;
+                                    if (hOther) DestroyIcon(hOther);
+                                }
+                                else if (hOther)
+                                {
+                                    hIcon = hOther;
+                                }
+                            }
                         }
                     }
                     pei->Release();
                 }
 
+                // Запасной вариант — SHGetFileInfoW
                 if (!hIcon)
                 {
                     SHFILEINFOW sfi = {0};
+                    UINT sizeFlag = (size >= 32) ? SHGFI_LARGEICON : SHGFI_SMALLICON;
                     DWORD_PTR ret = SHGetFileInfoW(pv.pwszVal, 0, &sfi, sizeof(sfi),
-                        SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES);
-
+                                                   SHGFI_ICON | sizeFlag |
+                                                   SHGFI_USEFILEATTRIBUTES);
                     if (ret && sfi.hIcon)
                         hIcon = sfi.hIcon;
                 }
@@ -306,17 +362,61 @@ HICON GetIconForWindow(HWND hWnd)
     return hIcon;
 }
 
+void SetTitlebarIcon(HWND hWnd, HWND hAppFrame)
+{
+    HICON hSmall = GetIconForWindow(hAppFrame, 16);
+    // Для Alt+Tab запрашиваем 256px — LoadPngAsIconSized найдёт
+    // targetsize-256 / scale-400 и т.д.
+    HICON hBig   = GetIconForWindow(hAppFrame, 256);
+
+    if (hSmall)
+    {
+        SendMessageW(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmall);
+        SetPropW(hWnd, L"NativeTitlebarIconSmall", (HANDLE)hSmall);
+    }
+
+    if (hBig)
+    {
+        SendMessageW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hBig);
+        SetPropW(hWnd, L"NativeTitlebarIconBig", (HANDLE)hBig);
+    }
+
+    if (hSmall || hBig)
+    {
+        SetPropW(hWnd, L"NativeTitlebarIconSet", (HANDLE)1);
+    }
+}
+
+void DestroyTitlebarIcons(HWND hWnd)
+{
+    if (HICON hSmall = (HICON)GetPropW(hWnd, L"NativeTitlebarIconSmall"))
+    {
+        DestroyIcon(hSmall);
+        RemovePropW(hWnd, L"NativeTitlebarIconSmall");
+    }
+
+    if (HICON hBig = (HICON)GetPropW(hWnd, L"NativeTitlebarIconBig"))
+    {
+        DestroyIcon(hBig);
+        RemovePropW(hWnd, L"NativeTitlebarIconBig");
+    }
+
+    RemovePropW(hWnd, L"NativeTitlebarIconSet");
+}
+
+// 5-параметровая сигнатура для WindhawkUtils::SetWindowSubclassFromAnyThread
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData)
 {
     if (uMsg == WM_NCDESTROY)
     {
-        RemoveWindowSubclass(hWnd, SubclassProc, uIdSubclass);
+        // Обёртка сама снимет subclass; мы только чистим за собой
+        DestroyTitlebarIcons(hWnd);
+        ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -327,15 +427,12 @@ LRESULT CALLBACK SubclassProc(
 
     if (uMsg == WM_NCACTIVATE || uMsg == WM_ACTIVATE)
     {
-        HWND hAppFrame = FindApplicationFrameWindow();
-
-        if (hAppFrame)
+        if (!GetPropW(hWnd, L"NativeTitlebarIconSet"))
         {
-            HICON hIcon = GetIconForWindow(hAppFrame);
-            if (hIcon)
+            HWND hAppFrame = FindOwningApplicationFrameWindow(hWnd);
+            if (hAppFrame)
             {
-                SendMessageW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-                SendMessageW(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+                SetTitlebarIcon(hWnd, hAppFrame);
             }
         }
     }
@@ -362,32 +459,31 @@ HWND WINAPI CreateWindowInBandEx_hook(
     DWORD dwTypeFlags)
 {
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
-    dwExStyle &= ~0x00200000L; // WS_EX_NOREDIRECTIONBITMAP
+    dwExStyle &= ~0x00200000L;
     dwStyle = WS_OVERLAPPEDWINDOW | WS_DLGFRAME;
 
-    HWND res = CreateWindowInBandEx_orig(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    HWND res = CreateWindowInBandEx_orig(
+        dwExStyle, lpClassName, lpWindowName, dwStyle,
+        x, y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam,
+        dwBand, dwTypeFlags);
 
     if (res != NULL)
     {
-        SetWindowSubclass(res, SubclassProc, 1, 0);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(res, SubclassProc, 0);
+        RememberSubclassedWindow(res);
 
-        HWND hAppFrame = FindApplicationFrameWindow();
-
+        HWND hAppFrame = FindOwningApplicationFrameWindow(res);
         if (hAppFrame != NULL)
         {
-            HICON hIcon = GetIconForWindow(hAppFrame);
-            if (hIcon)
-            {
-                SendMessageW(res, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-                SendMessageW(res, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-            }
+            SetTitlebarIcon(res, hAppFrame);
         }
     }
 
     return res;
 }
 
-typedef HRESULT (WINAPI *DwmExtendFrameIntoClientArea_t)(HWND, const MARGINS *);
+typedef HRESULT(WINAPI *DwmExtendFrameIntoClientArea_t)(HWND, const MARGINS *);
 DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_orig;
 HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     HWND hWnd,
@@ -398,7 +494,7 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 
     if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
     {
-        return 0x80263001; // DWM_E_COMPOSITIONDISABLED
+        return 0x80263001;
     }
 
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
@@ -406,9 +502,18 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 
 BOOL Wh_ModInit()
 {
-    Wh_SetFunctionHook((void *)GetProcAddress(LoadLibraryW(L"user32.dll"), "CreateWindowInBandEx"), (void *)CreateWindowInBandEx_hook, (void **)&CreateWindowInBandEx_orig);
+    InitializeCriticalSection(&g_csSubclassedWindows);
+    InitializeCriticalSection(&g_csGdiplus);
 
-    Wh_SetFunctionHook((void *)DwmExtendFrameIntoClientArea, (void *)DwmExtendFrameIntoClientArea_hook, (void **)&DwmExtendFrameIntoClientArea_orig);
+    Wh_SetFunctionHook(
+        (void *)GetProcAddress(LoadLibraryW(L"user32.dll"), "CreateWindowInBandEx"),
+        (void *)CreateWindowInBandEx_hook,
+        (void **)&CreateWindowInBandEx_orig);
+
+    Wh_SetFunctionHook(
+        (void *)DwmExtendFrameIntoClientArea,
+        (void *)DwmExtendFrameIntoClientArea_hook,
+        (void **)&DwmExtendFrameIntoClientArea_orig);
 
     WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
         {
@@ -425,5 +530,34 @@ BOOL Wh_ModInit()
         },
     };
 
-    return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), ApplicationFrame_dll_hooks, ARRAYSIZE(ApplicationFrame_dll_hooks));
+    return WindhawkUtils::HookSymbols(
+        LoadLibraryW(L"ApplicationFrame.dll"),
+        ApplicationFrame_dll_hooks,
+        ARRAYSIZE(ApplicationFrame_dll_hooks));
+}
+
+void Wh_ModUninit()
+{
+    EnterCriticalSection(&g_csSubclassedWindows);
+    std::vector<HWND> windowsCopy = g_subclassedWindows;
+    g_subclassedWindows.clear();
+    LeaveCriticalSection(&g_csSubclassedWindows);
+
+    for (HWND hWnd : windowsCopy)
+    {
+        if (IsWindow(hWnd))
+        {
+            DestroyTitlebarIcons(hWnd);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+        }
+    }
+
+    DeleteCriticalSection(&g_csSubclassedWindows);
+    DeleteCriticalSection(&g_csGdiplus);
+
+    if (g_gdiplusToken != 0)
+    {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
 }

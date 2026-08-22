@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id           explorer-nav-dragover-fix
 // @name         Explorer Nav DragOver Fix
-// @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, and restores mouse-wheel scrolling to reach out-of-view drop targets
-// @version      1.1.9
+// @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, restores mouse-wheel scrolling during drag, accelerates edge-scroll, and optionally collapses drag-opened folders when the drag ends
+// @version      1.2.6
 // @author       tonythethompson
 // @github       https://github.com/tonythethompson
 // @include      explorer.exe
@@ -37,6 +37,15 @@ Two fixes for File Explorer's drag-over behavior:
    views via SysListView32). Scrolling prefers UI Automation so wheel messages
    are not sent to SHELLDLL_DefView during a drag. Disable the corresponding
    setting to fall back to native behavior.
+
+3. **Faster edge-scroll during drag.** When the cursor is pinned to the top
+   or bottom of the nav pane, scroll speed scales with how close you are to
+   the edge (instead of Explorer's slow one-line-at-a-time crawl).
+
+4. **Optional transient-folder cleanup.** Folders that auto-expand only
+   because you dragged over them are collapsed again when the drag ends
+   (cancel, or drop outside that branch). A successful drop keeps ancestors
+   on the path to the last nav-pane drop target expanded.
 
 ## Demo
 
@@ -108,6 +117,31 @@ normal use.
     drag. On Win11 25H2 Details view the file list uses DirectUI ItemsView,
     not SysListView32.
     Disable to fall back to native (no-scroll) behavior.
+- accelerateEdgeScrollDuringDrag: true
+  $name: Accelerate edge-scroll during drag
+  $description: >-
+    When the cursor is pinned to the top or bottom of the navigation pane
+    during a drag, scroll faster the closer it is to the edge. Disable to
+    keep Explorer's native one-line edge-scroll speed.
+- edgeScrollBandPx: 48
+  $name: Edge-scroll acceleration band (pixels)
+  $description: >-
+    Distance from the top or bottom client edge within which edge-scroll
+    accelerates. At the edge you get the maximum line count; at the far end
+    of the band you get a single line (native speed). (8-128)
+- edgeScrollMaxLines: 6
+  $name: Edge-scroll maximum lines per tick
+  $description: >-
+    Maximum number of line scroll steps applied for one edge-scroll tick
+    when the cursor is at the pane boundary. (1-24)
+- collapseTransientExpansions: true
+  $name: Collapse drag-opened folders when drag ends
+  $description: >-
+    Folders that were collapsed before the drag and auto-expanded only
+    because the cursor hovered over them during the drag are collapsed again
+    when the drag ends, unless you dropped into that branch. Cancelled drags
+    collapse all such folders. Disable to leave the nav pane as Explorer
+    left it.
 */
 // ==/WindhawkModSettings==
 
@@ -147,6 +181,7 @@ normal use.
 #include <uiautomation.h>
 #include <wchar.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -165,11 +200,15 @@ namespace {
 // read and store site -- we just need atomicity per field, not cross-field
 // ordering.
 struct Settings {
-    std::atomic<int> protectedMaxDepth{2};
+    std::atomic<int> protectedMaxDepth{3};
     std::atomic<int> releaseMoveY{6};
     std::atomic<int> capturedRowMarginX{8};
     std::atomic<int> capturedRowMarginY{3};
     std::atomic<bool> enableWheelScrollDuringDrag{true};
+    std::atomic<bool> accelerateEdgeScrollDuringDrag{true};
+    std::atomic<int> edgeScrollBandPx{48};
+    std::atomic<int> edgeScrollMaxLines{6};
+    std::atomic<bool> collapseTransientExpansions{true};
 };
 
 Settings g_settings;
@@ -179,10 +218,15 @@ Settings g_settings;
 // global and atomic so any thread's subclass proc can observe it.
 std::atomic<int> g_dragLoopDepth{0};
 
-// Bumped on every fresh drag (0 -> 1 transition in g_dragLoopDepth). Each
-// captured hover stores the generation at capture time; once the generation
-// changes, the per-thread thread_local capture is treated as stale.
+// Bumped on every fresh drag (0 -> 1 transition in g_dragLoopDepth) and on
+// nav-pane wheel scroll during drag. Protected-hover and file-pane caches use
+// this; it must NOT gate transient-expansion flush (wheel would orphan earlier
+// branches).
 std::atomic<uint64_t> g_dragGeneration{0};
+
+// One id per outer drag (0 -> 1 only). Transient expansions and last drop
+// target are keyed to this so wheel bumps do not skip collapse.
+std::atomic<uint64_t> g_dragSessionId{0};
 
 // Per-tree-thread hover capture. Each tree only ever runs on one thread, and
 // each thread can have at most one captured row at a time.
@@ -195,6 +239,35 @@ thread_local struct ProtectedHoverState {
     RECT rowRectScreen = {};
     uint64_t generation = 0;
 } g_protectedHover;
+
+// Drag-scoped nav-tree bookkeeping (transient expansions, last drop target).
+// HTREEITEM values are only valid for the active drag session and HWND;
+// purge aggressively on WM_NCDESTROY and flush before drag-loop cleanup.
+struct TransientExpansionRecord {
+    HWND hwndTree = nullptr;
+    HTREEITEM hItem = nullptr;
+    LPARAM itemLParam = 0;
+    uint64_t sessionId = 0;
+};
+
+struct TransientCollapseTarget {
+    HTREEITEM hItem = nullptr;
+    LPARAM itemLParam = 0;
+};
+
+struct NavDropTargetRecord {
+    HWND hwndTree = nullptr;
+    HTREEITEM hItem = nullptr;
+    uint64_t sessionId = 0;
+};
+
+std::mutex g_dragTreeStateMutex;
+std::vector<TransientExpansionRecord> g_transientExpansions;
+NavDropTargetRecord g_lastNavDropTarget;
+
+// During drag the cursor is often clipped to the screen edge and maps slightly
+// outside the tree client rect, especially at the bottom.
+constexpr int kEdgeScrollOutsideSlackPx = 16;
 
 // While protection is active we suppress Explorer-initiated jumps
 // (TVM_EXPAND restoration, TVM_SELECTITEM/TVGN_FIRSTVISIBLE,
@@ -309,6 +382,11 @@ DoDragDrop_t DoDragDrop_Original = nullptr;
 void ClearProtectedHover() {
     g_protectedHover = {};
 }
+
+void RecordNavDropTarget(HWND hwndTree, HTREEITEM hItem);
+void PurgeStaleDragTreeStateNotInSession(uint64_t activeSession);
+void PurgeDragTreeStateForWindow(HWND hwndTree);
+void FlushDragTreeState(DWORD dropEffect);
 
 bool IsDragLoopActive() {
     return g_dragLoopDepth.load(std::memory_order_relaxed) > 0;
@@ -1092,6 +1170,7 @@ void UpdateProtectedHoverFromCursor(HWND hwndTree) {
     if (currentHilite != hit.hItem) {
         SendInternal(hwndTree, TVM_SELECTITEM, TVGN_DROPHILITE,
                      reinterpret_cast<LPARAM>(hit.hItem));
+        RecordNavDropTarget(hwndTree, hit.hItem);
     }
 }
 
@@ -1129,12 +1208,555 @@ void RestoreViewportAndDropTarget(HWND hwndTree, HTREEITEM hFirstVisible) {
     }
 }
 
+int ClampInt(int value, int lo, int hi) {
+    if (value < lo) {
+        return lo;
+    }
+    if (value > hi) {
+        return hi;
+    }
+    return value;
+}
+
+struct OptionalSubclassResult {
+    bool handled = false;
+    LRESULT value = 0;
+};
+
+bool IsExpandTreeMessage(WPARAM wParam) {
+    return (wParam & TVE_EXPAND) != 0;
+}
+
+bool IsTreeItemExpanded(HWND hwndTree, HTREEITEM hItem) {
+    if (!hItem) {
+        return false;
+    }
+    const UINT state = static_cast<UINT>(SendInternal(
+        hwndTree, TVM_GETITEMSTATE, reinterpret_cast<WPARAM>(hItem),
+        TVIS_EXPANDED));
+    return (state & TVIS_EXPANDED) != 0;
+}
+
+bool ReadTreeItemLParam(HWND hwndTree, HTREEITEM hItem, LPARAM* itemLParam) {
+    if (!hwndTree || !hItem || !itemLParam) {
+        return false;
+    }
+    TVITEMW tvi = {};
+    tvi.hItem = hItem;
+    tvi.mask = TVIF_PARAM;
+    if (!SendInternal(hwndTree, TVM_GETITEM, 0,
+                      reinterpret_cast<LPARAM>(&tvi))) {
+        return false;
+    }
+    *itemLParam = tvi.lParam;
+    return true;
+}
+
+bool IsTreeItemHandleValid(HWND hwndTree, HTREEITEM hItem) {
+    if (!hwndTree || !hItem) {
+        return false;
+    }
+    TVITEMW tvi = {};
+    tvi.hItem = hItem;
+    tvi.mask = TVIF_HANDLE;
+    return SendInternal(hwndTree, TVM_GETITEM, 0,
+                        reinterpret_cast<LPARAM>(&tvi)) != FALSE;
+}
+
+HTREEITEM TreeChild(HWND hwndTree, HTREEITEM hItem) {
+    return reinterpret_cast<HTREEITEM>(SendInternal(
+        hwndTree, TVM_GETNEXTITEM, TVGN_CHILD,
+        reinterpret_cast<LPARAM>(hItem)));
+}
+
+HTREEITEM TreeNextSibling(HWND hwndTree, HTREEITEM hItem) {
+    return reinterpret_cast<HTREEITEM>(SendInternal(
+        hwndTree, TVM_GETNEXTITEM, TVGN_NEXT,
+        reinterpret_cast<LPARAM>(hItem)));
+}
+
+void VisitTreeItemsDepthFirstRec(HWND hwndTree, HTREEITEM hItem,
+                               void (*visitor)(HTREEITEM, void*), void* ctx,
+                               int& guard) {
+    if (!hItem || guard >= 4096) {
+        return;
+    }
+    guard++;
+    visitor(hItem, ctx);
+    for (HTREEITEM child = TreeChild(hwndTree, hItem); child;
+         child = TreeNextSibling(hwndTree, child)) {
+        VisitTreeItemsDepthFirstRec(hwndTree, child, visitor, ctx, guard);
+    }
+}
+
+void VisitTreeItemsDepthFirst(HWND hwndTree, HTREEITEM hItem,
+                              void (*visitor)(HTREEITEM, void*),
+                              void* ctx) {
+    int guard = 0;
+    VisitTreeItemsDepthFirstRec(hwndTree, hItem, visitor, ctx, guard);
+}
+
+struct FindTreeItemByLParamContext {
+    HWND hwndTree = nullptr;
+    LPARAM targetLParam = 0;
+    HTREEITEM found = nullptr;
+};
+
+void FindTreeItemByLParamVisitor(HTREEITEM hItem, void* ctx) {
+    auto* findCtx = reinterpret_cast<FindTreeItemByLParamContext*>(ctx);
+    if (findCtx->found) {
+        return;
+    }
+    LPARAM itemLParam = 0;
+    if (!ReadTreeItemLParam(findCtx->hwndTree, hItem, &itemLParam)) {
+        return;
+    }
+    if (itemLParam == findCtx->targetLParam) {
+        findCtx->found = hItem;
+    }
+}
+
+HTREEITEM FindTreeItemByLParam(HWND hwndTree, LPARAM itemLParam,
+                               HTREEITEM hintItem) {
+    if (!hwndTree || !itemLParam) {
+        return hintItem;
+    }
+    if (hintItem && IsTreeItemHandleValid(hwndTree, hintItem)) {
+        LPARAM hintLParam = 0;
+        if (ReadTreeItemLParam(hwndTree, hintItem, &hintLParam) &&
+            hintLParam == itemLParam) {
+            return hintItem;
+        }
+    }
+    HTREEITEM root = reinterpret_cast<HTREEITEM>(
+        SendInternal(hwndTree, TVM_GETNEXTITEM, TVGN_ROOT, 0));
+    if (!root) {
+        return nullptr;
+    }
+    FindTreeItemByLParamContext ctx{hwndTree, itemLParam};
+    VisitTreeItemsDepthFirst(hwndTree, root, FindTreeItemByLParamVisitor, &ctx);
+    return ctx.found;
+}
+
+HTREEITEM ResolveCollapseTarget(HWND hwndTree,
+                                const TransientCollapseTarget& target) {
+    return FindTreeItemByLParam(hwndTree, target.itemLParam, target.hItem);
+}
+
+int CollapseTargetDepth(HWND hwndTree, const TransientCollapseTarget& target) {
+    HTREEITEM item = ResolveCollapseTarget(hwndTree, target);
+    return item ? TreeItemDepth(hwndTree, item) : 0;
+}
+
+void PurgeStaleDragTreeStateNotInSession(uint64_t activeSession) {
+    std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
+    g_transientExpansions.erase(
+        std::remove_if(g_transientExpansions.begin(),
+                       g_transientExpansions.end(),
+                       [activeSession](const TransientExpansionRecord& e) {
+                           return e.sessionId != activeSession;
+                       }),
+        g_transientExpansions.end());
+    if (g_lastNavDropTarget.sessionId != activeSession) {
+        g_lastNavDropTarget = {};
+    }
+}
+
+void RecordNavDropTarget(HWND hwndTree, HTREEITEM hItem) {
+    if (!hwndTree || !hItem || !IsDragLoopActive()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
+    g_lastNavDropTarget.hwndTree = hwndTree;
+    g_lastNavDropTarget.hItem = hItem;
+    g_lastNavDropTarget.sessionId =
+        g_dragSessionId.load(std::memory_order_acquire);
+}
+
+void RecordDragTransientExpansion(HWND hwndTree, HTREEITEM hItem,
+                                LPARAM itemLParam) {
+    if (!hwndTree || !hItem ||
+        !g_settings.collapseTransientExpansions.load(
+            std::memory_order_relaxed)) {
+        return;
+    }
+    if (!itemLParam) {
+        ReadTreeItemLParam(hwndTree, hItem, &itemLParam);
+    }
+    const uint64_t sessionId =
+        g_dragSessionId.load(std::memory_order_acquire);
+    std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
+    for (const auto& existing : g_transientExpansions) {
+        if (existing.sessionId != sessionId || existing.hwndTree != hwndTree) {
+            continue;
+        }
+        if (existing.hItem == hItem) {
+            return;
+        }
+        if (itemLParam && existing.itemLParam == itemLParam) {
+            return;
+        }
+    }
+    TransientExpansionRecord record{};
+    record.hwndTree = hwndTree;
+    record.hItem = hItem;
+    record.itemLParam = itemLParam;
+    record.sessionId = sessionId;
+    g_transientExpansions.push_back(record);
+}
+
+void PurgeDragTreeStateForWindow(HWND hwndTree) {
+    std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
+    auto eraseMatching = [hwndTree](auto& container) {
+        container.erase(
+            std::remove_if(container.begin(), container.end(),
+                           [hwndTree](const auto& entry) {
+                               return entry.hwndTree == hwndTree;
+                           }),
+            container.end());
+    };
+    eraseMatching(g_transientExpansions);
+    if (g_lastNavDropTarget.hwndTree == hwndTree) {
+        g_lastNavDropTarget = {};
+    }
+}
+
+struct TreeEdgeScrollGeometry {
+    bool inBand = false;
+    int distanceFromEdge = INT_MAX;
+};
+
+TreeEdgeScrollGeometry GetTreeEdgeScrollGeometry(HWND hwndTree,
+                                                 WORD scrollCode) {
+    TreeEdgeScrollGeometry geo;
+    POINT screen = {};
+    if (!GetCursorPos(&screen)) {
+        return geo;
+    }
+    POINT client = screen;
+    if (!ScreenToClient(hwndTree, &client)) {
+        return geo;
+    }
+    RECT clientRect = {};
+    if (!GetClientRect(hwndTree, &clientRect)) {
+        return geo;
+    }
+
+    const int band = ClampInt(
+        g_settings.edgeScrollBandPx.load(std::memory_order_relaxed), 8, 128);
+    const int lastY = clientRect.bottom - 1;
+    if (lastY < clientRect.top) {
+        return geo;
+    }
+
+    if (scrollCode == SB_LINEUP) {
+        if (client.y < clientRect.top) {
+            const int overshoot = clientRect.top - client.y;
+            if (overshoot <= kEdgeScrollOutsideSlackPx) {
+                geo.inBand = true;
+                geo.distanceFromEdge = 0;
+            }
+        } else {
+            geo.distanceFromEdge = client.y - clientRect.top;
+            geo.inBand = geo.distanceFromEdge <= band;
+        }
+    } else if (scrollCode == SB_LINEDOWN) {
+        if (client.y > lastY) {
+            const int overshoot = client.y - lastY;
+            if (overshoot <= kEdgeScrollOutsideSlackPx) {
+                geo.inBand = true;
+                geo.distanceFromEdge = 0;
+            }
+        } else {
+            geo.distanceFromEdge = lastY - client.y;
+            geo.inBand = geo.distanceFromEdge <= band;
+        }
+    }
+    return geo;
+}
+
+int ComputeEdgeScrollLines(const TreeEdgeScrollGeometry& geo) {
+    if (!geo.inBand) {
+        return 1;
+    }
+
+    const int band = ClampInt(
+        g_settings.edgeScrollBandPx.load(std::memory_order_relaxed), 8, 128);
+    const int maxLines = ClampInt(
+        g_settings.edgeScrollMaxLines.load(std::memory_order_relaxed), 1, 24);
+
+    int distanceFromEdge = geo.distanceFromEdge;
+    if (distanceFromEdge < 0) {
+        distanceFromEdge = 0;
+    }
+    if (distanceFromEdge > band) {
+        distanceFromEdge = band;
+    }
+
+    const int span = maxLines - 1;
+    if (span <= 0 || band <= 0) {
+        return maxLines;
+    }
+    const int scaled =
+        1 + ((band - distanceFromEdge) * span + (band / 2)) / band;
+    return ClampInt(scaled, 1, maxLines);
+}
+
+void CollapseOneTreeItem(HWND hwndTree, HTREEITEM item) {
+    if (!hwndTree || !item || !IsTreeItemExpanded(hwndTree, item)) {
+        return;
+    }
+    // One visible step: batch layout churn, then repaint once.
+    SendInternal(hwndTree, WM_SETREDRAW, FALSE, 0);
+    SendInternal(hwndTree, TVM_EXPAND, TVE_COLLAPSE,
+                 reinterpret_cast<LPARAM>(item));
+    SendInternal(hwndTree, WM_SETREDRAW, TRUE, 0);
+    RedrawWindow(hwndTree, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+}
+
+void SortCollapseTargetsByDepth(HWND hwndTree,
+                                std::vector<TransientCollapseTarget>* targets) {
+    if (!targets) {
+        return;
+    }
+    std::sort(targets->begin(), targets->end(),
+              [hwndTree](const TransientCollapseTarget& a,
+                         const TransientCollapseTarget& b) {
+                  return CollapseTargetDepth(hwndTree, a) >
+                         CollapseTargetDepth(hwndTree, b);
+              });
+}
+
+void CollapseTargetsNow(HWND hwndTree,
+                        std::vector<TransientCollapseTarget> targets) {
+    if (!IsWindow(hwndTree) || targets.empty()) {
+        return;
+    }
+    SortCollapseTargetsByDepth(hwndTree, &targets);
+    for (const auto& target : targets) {
+        HTREEITEM item = ResolveCollapseTarget(hwndTree, target);
+        if (item) {
+            CollapseOneTreeItem(hwndTree, item);
+        }
+    }
+}
+
+void ReconcileTransientCollapses(
+    HWND hwndTree, const std::vector<TransientCollapseTarget>& targets) {
+    if (!IsWindow(hwndTree) || targets.empty()) {
+        return;
+    }
+    std::vector<TransientCollapseTarget> ordered = targets;
+    SortCollapseTargetsByDepth(hwndTree, &ordered);
+    for (int pass = 0; pass < 4; pass++) {
+        bool collapsedAny = false;
+        for (const auto& target : ordered) {
+            HTREEITEM item = ResolveCollapseTarget(hwndTree, target);
+            if (!item || !IsTreeItemExpanded(hwndTree, item)) {
+                continue;
+            }
+            CollapseOneTreeItem(hwndTree, item);
+            collapsedAny = true;
+        }
+        if (!collapsedAny) {
+            break;
+        }
+    }
+}
+
+void RunTransientCollapseForWindow(
+    HWND hwndTree, std::vector<TransientCollapseTarget> targets) {
+    if (!hwndTree || targets.empty() || !IsWindow(hwndTree)) {
+        return;
+    }
+    const std::vector<TransientCollapseTarget> reconcile = targets;
+    CollapseTargetsNow(hwndTree, std::move(targets));
+    ReconcileTransientCollapses(hwndTree, reconcile);
+}
+
+OptionalSubclassResult HandleDragTreeScroll(HWND hwndTree, WPARAM wParam,
+                                            LPARAM lParam) {
+    const WORD scrollCode = LOWORD(wParam);
+    if (scrollCode == SB_THUMBTRACK || scrollCode == SB_THUMBPOSITION ||
+        scrollCode == SB_ENDSCROLL) {
+        return {};
+    }
+    if (scrollCode != SB_LINEUP && scrollCode != SB_LINEDOWN) {
+        return {};
+    }
+
+    if (HasProtectedHover(hwndTree) && InPostJumpScrollSuppressionWindow()) {
+        return {true, 0};
+    }
+
+    const TreeEdgeScrollGeometry geo =
+        GetTreeEdgeScrollGeometry(hwndTree, scrollCode);
+    if (!g_settings.accelerateEdgeScrollDuringDrag.load(
+            std::memory_order_relaxed) ||
+        !geo.inBand) {
+        return {};
+    }
+
+    const int lines = ComputeEdgeScrollLines(geo);
+    if (lines <= 1) {
+        return {};
+    }
+
+    // Keep Explorer's native edge-scroll tick, then add extra line steps on
+    // top. Replacing the message entirely was prone to stutter (especially at
+    // the bottom edge when the cursor maps just outside the client rect).
+    const LRESULT result =
+        DefSubclassProc(hwndTree, WM_VSCROLL, wParam, lParam);
+    for (int i = 1; i < lines; i++) {
+        SendInternal(hwndTree, WM_VSCROLL, scrollCode, 0);
+    }
+    return {true, result};
+}
+
+LRESULT HandleDragTreeExpand(HWND hwndTree, WPARAM wParam, LPARAM lParam,
+                             bool hasProtectedHover) {
+    HTREEITEM item = reinterpret_cast<HTREEITEM>(lParam);
+    const bool mayExpand = IsExpandTreeMessage(wParam);
+    const bool wasExpanded = mayExpand && IsTreeItemExpanded(hwndTree, item);
+
+    HTREEITEM firstVisibleBefore = nullptr;
+    const bool needsAntiJumpRestore =
+        hasProtectedHover && mayExpand && item == g_protectedHover.hItem;
+    if (needsAntiJumpRestore) {
+        firstVisibleBefore = GetFirstVisibleItem(hwndTree);
+        NoteJumpAttempt();
+    }
+
+    const LRESULT result =
+        DefSubclassProc(hwndTree, TVM_EXPAND, wParam, lParam);
+
+    if (needsAntiJumpRestore) {
+        RestoreViewportAndDropTarget(hwndTree, firstVisibleBefore);
+    }
+
+    if (mayExpand && !wasExpanded) {
+        LPARAM itemLParam = 0;
+        ReadTreeItemLParam(hwndTree, item, &itemLParam);
+        RecordDragTransientExpansion(hwndTree, item, itemLParam);
+    }
+
+    return result;
+}
+
+OptionalSubclassResult HandleDragTreeProtectedMessages(HWND hwndTree,
+                                                       UINT uMsg,
+                                                       WPARAM wParam,
+                                                       LPARAM lParam) {
+    switch (uMsg) {
+        case TVM_ENSUREVISIBLE: {
+            HTREEITEM targetItem = reinterpret_cast<HTREEITEM>(lParam);
+            if (IsSameOrDescendant(hwndTree, targetItem,
+                                   g_protectedHover.hItem)) {
+                NoteJumpAttempt();
+                return {true, TRUE};
+            }
+            break;
+        }
+
+        case TVM_SELECTITEM:
+            if (wParam == TVGN_FIRSTVISIBLE) {
+                NoteJumpAttempt();
+                return {true, TRUE};
+            }
+            if (wParam == TVGN_DROPHILITE && lParam != 0 &&
+                reinterpret_cast<HTREEITEM>(lParam) !=
+                    g_protectedHover.hItem) {
+                SendInternal(hwndTree, TVM_SELECTITEM, TVGN_DROPHILITE,
+                             reinterpret_cast<LPARAM>(g_protectedHover.hItem));
+                RecordNavDropTarget(hwndTree, g_protectedHover.hItem);
+                return {true, TRUE};
+            }
+            break;
+
+        default:
+            break;
+    }
+    return {};
+}
+
+void FlushDragTreeState(DWORD dropEffect) {
+    if (!g_settings.collapseTransientExpansions.load(
+            std::memory_order_relaxed)) {
+        return;
+    }
+
+    const uint64_t sessionId =
+        g_dragSessionId.load(std::memory_order_acquire);
+    const bool successfulDrop = dropEffect != DROPEFFECT_NONE;
+
+    HWND preserveTree = nullptr;
+    HTREEITEM preserveItem = nullptr;
+    std::vector<TransientExpansionRecord> toCollapse;
+
+    {
+        std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
+        if (successfulDrop && g_lastNavDropTarget.sessionId == sessionId &&
+            g_lastNavDropTarget.hwndTree && g_lastNavDropTarget.hItem) {
+            preserveTree = g_lastNavDropTarget.hwndTree;
+            preserveItem = g_lastNavDropTarget.hItem;
+        }
+
+        for (const auto& entry : g_transientExpansions) {
+            if (entry.sessionId != sessionId) {
+                continue;
+            }
+            toCollapse.push_back(entry);
+        }
+
+        g_transientExpansions.erase(
+            std::remove_if(g_transientExpansions.begin(),
+                           g_transientExpansions.end(),
+                           [sessionId](const TransientExpansionRecord& e) {
+                               return e.sessionId == sessionId;
+                           }),
+            g_transientExpansions.end());
+
+        if (g_lastNavDropTarget.sessionId == sessionId) {
+            g_lastNavDropTarget = {};
+        }
+    }
+
+    if (toCollapse.empty()) {
+        return;
+    }
+
+    std::unordered_map<HWND, std::vector<TransientCollapseTarget>> byTree;
+
+    for (const auto& entry : toCollapse) {
+        if (!IsWindow(entry.hwndTree)) {
+            continue;
+        }
+        if (successfulDrop && entry.hwndTree == preserveTree && preserveItem &&
+            IsSameOrDescendant(entry.hwndTree, preserveItem, entry.hItem)) {
+            continue;
+        }
+        TransientCollapseTarget target{};
+        target.hItem = entry.hItem;
+        target.itemLParam = entry.itemLParam;
+        if (!target.itemLParam) {
+            ReadTreeItemLParam(entry.hwndTree, entry.hItem, &target.itemLParam);
+        }
+        byTree[entry.hwndTree].push_back(target);
+    }
+
+    for (auto& pair : byTree) {
+        RunTransientCollapseForWindow(pair.first, std::move(pair.second));
+    }
+}
+
 // Windhawk's WH_SUBCLASSPROC drops the standard SUBCLASSPROC's uIdSubclass
 // parameter -- the utility manages the subclass ID internally and only passes
 // dwRefData through.
 LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                   LPARAM lParam, DWORD_PTR /*dwRefData*/) {
     if (uMsg == WM_NCDESTROY) {
+        PurgeDragTreeStateForWindow(hWnd);
         {
             std::lock_guard<std::mutex> lock(g_subclassMutex);
             g_subclassedTrees.erase(hWnd);
@@ -1170,92 +1792,33 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     UpdateProtectedHoverFromCursor(hWnd);
     const bool hasProtectedHover = HasProtectedHover(hWnd);
 
-    if (hasProtectedHover) {
-        switch (uMsg) {
-            case TVM_EXPAND: {
-                HTREEITEM expandedItem = reinterpret_cast<HTREEITEM>(lParam);
-                if ((wParam & TVE_EXPAND) &&
-                    expandedItem == g_protectedHover.hItem) {
-                    HTREEITEM firstVisibleBefore = GetFirstVisibleItem(hWnd);
-                    // Stamp BEFORE DefSubclassProc: some Explorer builds emit
-                    // a synchronous WM_VSCROLL during the expansion cascade,
-                    // and we want that to land inside the suppression window
-                    // so the WM_VSCROLL handler swallows it.
-                    NoteJumpAttempt();
-                    // Allow normal auto-expansion. The guard only prevents
-                    // the viewport / drop target from jumping afterward.
-                    LRESULT result =
-                        DefSubclassProc(hWnd, uMsg, wParam, lParam);
-                    RestoreViewportAndDropTarget(hWnd, firstVisibleBefore);
-                    return result;
-                }
-                break;
-            }
+    if (uMsg == TVM_EXPAND) {
+        return HandleDragTreeExpand(hWnd, wParam, lParam, hasProtectedHover);
+    }
 
-            case TVM_ENSUREVISIBLE: {
-                HTREEITEM targetItem = reinterpret_cast<HTREEITEM>(lParam);
-                if (IsSameOrDescendant(hWnd, targetItem,
-                                       g_protectedHover.hItem)) {
-                    // Cursor is already over the parent row. We pretend the
-                    // scroll succeeded (TRUE = scrolled) to suppress
-                    // Explorer's "ensure visible" jumping new children under
-                    // the cursor. A small lie -- the row was already
-                    // on-screen anyway.
-                    NoteJumpAttempt();
-                    return TRUE;
-                }
-                break;
-            }
-
-            case TVM_SELECTITEM:
-                if (wParam == TVGN_FIRSTVISIBLE) {
-                    // Aggressive viewport-jump path: Explorer asks the
-                    // TreeView to place an item at the top of the viewport.
-                    NoteJumpAttempt();
-                    return TRUE;
-                }
-                if (wParam == TVGN_DROPHILITE && lParam != 0 &&
-                    reinterpret_cast<HTREEITEM>(lParam) !=
-                        g_protectedHover.hItem) {
-                    SendInternal(hWnd, TVM_SELECTITEM, TVGN_DROPHILITE,
-                                 reinterpret_cast<LPARAM>(
-                                     g_protectedHover.hItem));
-                    return TRUE;
-                }
-                break;
-
-            case WM_VSCROLL: {
-                // Two different things can fire a line-based WM_VSCROLL on a
-                // protected tree:
-                //   1. The scroll tail of an Explorer-initiated jump
-                //      (TVM_EXPAND / TVM_SELECTITEM / TVM_ENSUREVISIBLE that
-                //      we just suppressed). This is what we want to swallow.
-                //   2. Edge-scroll-while-dragging: Explorer's built-in
-                //      behavior where pinning the cursor to the top/bottom
-                //      of the window auto-scrolls the pane during DoDragDrop.
-                //      This is legitimate user input -- it must pass through.
-                // The messages themselves are indistinguishable, so use the
-                // suppression-window timestamp: a line-based scroll arriving
-                // right after a stamped jump attempt is (1); anything outside
-                // the window is (2).
-                WORD scrollCode = LOWORD(wParam);
-                if (scrollCode == SB_THUMBTRACK ||
-                    scrollCode == SB_THUMBPOSITION ||
-                    scrollCode == SB_ENDSCROLL) {
-                    // Thumb interactions can't really fire during DoDragDrop
-                    // (the LMB is captured by the drag), but keep the
-                    // pass-through for defense in depth.
-                    break;
-                }
-                if (InPostJumpScrollSuppressionWindow()) {
-                    return 0;
-                }
-                break;
-            }
+    if (uMsg == WM_VSCROLL) {
+        const OptionalSubclassResult scrollResult =
+            HandleDragTreeScroll(hWnd, wParam, lParam);
+        if (scrollResult.handled) {
+            return scrollResult.value;
         }
     }
 
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    if (hasProtectedHover) {
+        const OptionalSubclassResult protectedResult =
+            HandleDragTreeProtectedMessages(hWnd, uMsg, wParam, lParam);
+        if (protectedResult.handled) {
+            return protectedResult.value;
+        }
+    }
+
+    const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    if (uMsg == TVM_SELECTITEM && wParam == TVGN_DROPHILITE && lParam != 0) {
+        RecordNavDropTarget(hWnd, reinterpret_cast<HTREEITEM>(lParam));
+    }
+
+    return result;
 }
 
 void TrySubclassTree(HWND hwnd) {
@@ -1558,10 +2121,14 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
                                    pdwEffect);
     }
 
-    // On the 0 -> 1 edge, bump the generation so any leftover hover capture
-    // on other (tree-owning) threads is invalidated before they consult it.
+    // On the 0 -> 1 edge, start a new drag session and bump the viewport
+    // generation so any leftover hover capture on other (tree-owning) threads
+    // is invalidated before they consult it.
     if (g_dragLoopDepth.fetch_add(1, std::memory_order_acq_rel) == 0) {
         g_dragGeneration.fetch_add(1, std::memory_order_acq_rel);
+        const uint64_t sessionId =
+            g_dragSessionId.fetch_add(1, std::memory_order_acq_rel) + 1;
+        PurgeStaleDragTreeStateNotInSession(sessionId);
     }
 
     // Install the per-thread mouse hook for the duration of the modal drag
@@ -1602,6 +2169,12 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
     HRESULT result =
         DoDragDrop_Original(pDataObj, pDropSource, dwOKEffects, pdwEffect);
 
+    DWORD dropEffect = DROPEFFECT_NONE;
+    if (pdwEffect) {
+        dropEffect = *pdwEffect;
+    }
+    FlushDragTreeState(dropEffect);
+
     if (installedHook && g_dragMouseHook) {
         {
             std::lock_guard<std::mutex> lock(g_dragHookMutex);
@@ -1619,12 +2192,6 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
         TeardownDragThreadWheelState();
     }
     return result;
-}
-
-int ClampInt(int value, int lo, int hi) {
-    if (value < lo) return lo;
-    if (value > hi) return hi;
-    return value;
 }
 
 void LoadSettings() {
@@ -1647,6 +2214,20 @@ void LoadSettings() {
     g_settings.enableWheelScrollDuringDrag.store(
         Wh_GetIntSetting(L"enableWheelScrollDuringDrag") != 0,
         std::memory_order_relaxed);
+    g_settings.accelerateEdgeScrollDuringDrag.store(
+        Wh_GetIntSetting(L"accelerateEdgeScrollDuringDrag") != 0,
+        std::memory_order_relaxed);
+    g_settings.edgeScrollBandPx.store(
+        ClampInt(static_cast<int>(Wh_GetIntSetting(L"edgeScrollBandPx")), 8,
+                 128),
+        std::memory_order_relaxed);
+    g_settings.edgeScrollMaxLines.store(
+        ClampInt(static_cast<int>(Wh_GetIntSetting(L"edgeScrollMaxLines")), 1,
+                 24),
+        std::memory_order_relaxed);
+    g_settings.collapseTransientExpansions.store(
+        Wh_GetIntSetting(L"collapseTransientExpansions") != 0,
+        std::memory_order_relaxed);
 }
 
 }  // namespace
@@ -1654,12 +2235,23 @@ void LoadSettings() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     Wh_Log(L"Settings reloaded: depth=%d releaseY=%d marginX=%d marginY=%d "
-           L"wheelDuringDrag=%d",
+           L"wheelDuringDrag=%d edgeAccel=%d edgeBand=%d edgeMaxLines=%d "
+           L"collapseTransient=%d",
            g_settings.protectedMaxDepth.load(std::memory_order_relaxed),
            g_settings.releaseMoveY.load(std::memory_order_relaxed),
            g_settings.capturedRowMarginX.load(std::memory_order_relaxed),
            g_settings.capturedRowMarginY.load(std::memory_order_relaxed),
            g_settings.enableWheelScrollDuringDrag.load(
+               std::memory_order_relaxed)
+               ? 1
+               : 0,
+           g_settings.accelerateEdgeScrollDuringDrag.load(
+               std::memory_order_relaxed)
+               ? 1
+               : 0,
+           g_settings.edgeScrollBandPx.load(std::memory_order_relaxed),
+           g_settings.edgeScrollMaxLines.load(std::memory_order_relaxed),
+           g_settings.collapseTransientExpansions.load(
                std::memory_order_relaxed)
                ? 1
                : 0);

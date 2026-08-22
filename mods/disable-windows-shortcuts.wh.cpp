@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.2.0
+// @version         1.2.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -109,6 +109,9 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinF: false
     $name: Win+F
     $description: Feedback Hub
+  - DisableWinF1: false
+    $name: Win+F1
+    $description: Open Windows Help
   - DisableWinG: false
     $name: Win+G
     $description: Game Bar
@@ -324,6 +327,7 @@ struct
     bool DisableWinD;
     bool DisableWinE;
     bool DisableWinF;
+    bool DisableWinF1;
     bool DisableWinG;
     bool DisableWinH;
     bool DisableWinI;
@@ -416,6 +420,7 @@ void LoadSettings()
     g_settings.DisableWinD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinD");
     g_settings.DisableWinE = Wh_GetIntSetting(L"StandardShortcuts.DisableWinE");
     g_settings.DisableWinF = Wh_GetIntSetting(L"StandardShortcuts.DisableWinF");
+    g_settings.DisableWinF1 = Wh_GetIntSetting(L"StandardShortcuts.DisableWinF1");
     g_settings.DisableWinG = Wh_GetIntSetting(L"StandardShortcuts.DisableWinG");
     g_settings.DisableWinH = Wh_GetIntSetting(L"StandardShortcuts.DisableWinH");
     g_settings.DisableWinI = Wh_GetIntSetting(L"StandardShortcuts.DisableWinI");
@@ -590,6 +595,7 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'D': block = g_settings.DisableWinD; break;
                 case 'E': block = g_settings.DisableWinE; break;
                 case 'F': block = g_settings.DisableWinF; break;
+                case VK_F1: block = g_settings.DisableWinF1; break;
                 case 'G': block = g_settings.DisableWinG; break;
                 case 'H': block = g_settings.DisableWinH; break;
                 case 'I': block = g_settings.DisableWinI; break;

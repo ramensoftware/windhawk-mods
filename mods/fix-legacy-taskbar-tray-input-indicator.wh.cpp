@@ -2,7 +2,7 @@
 // @id              fix-legacy-taskbar-tray-input-indicator
 // @name            Fix language indicator in Win10 taskbar under Win11 24H2+
 // @description     Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+
-// @version         1.4.0
+// @version         1.5
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -32,6 +32,7 @@ Windows 11 taskbar.
 #include <windows.h>
 
 static wchar_t g_text[8] = {};
+static wchar_t g_lastDrawnText[8] = {};
 static LOGFONTW g_font = {};
 static int g_srcW = 0;
 static int g_srcH = 0;
@@ -39,6 +40,7 @@ static bool g_pending = false;
 static DWORD g_threadId = 0;
 static COLORREF g_lastGoodBg = CLR_INVALID;
 static bool g_firstBltDone = false;
+static bool g_alreadyDrawn = false;
 
 static bool LooksLikeLayoutText(LPCWSTR s, int len) {
     if (!s || len < 2 || len > 4) return false;
@@ -66,6 +68,17 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
     LOGFONTW lf = {};
 
     if (LooksLikeLayoutText(lpString, len) && IsRotatedFont(hdc, &lf)) {
+        
+        wchar_t newText[8] = {};
+        wcsncpy_s(newText, lpString, len);
+        newText[len] = 0;
+        
+        bool textChanged = (wcscmp(newText, g_lastDrawnText) != 0);
+        
+        if (textChanged) {
+            g_alreadyDrawn = false;
+        }
+        
         HBITMAP hbm = (HBITMAP)GetCurrentObject(hdc, OBJ_BITMAP);
         BITMAP bm = {};
         if (hbm && GetObject(hbm, sizeof(bm), &bm)) {
@@ -114,7 +127,6 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         return result;
     }
 
-    // BitBlt #1: точное совпадение с исходным размером — пропускаем
     bool isFirstBlit = (w == g_srcW && h == g_srcH);
     if (isFirstBlit) {
         g_firstBltDone = true;
@@ -125,12 +137,35 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         return result;
     }
     
-    // BitBlt #2: первый после #1, размер БОЛЬШЕ исходного
-    // (индикатор всегда больше чем маленький bitmap с текстом)
-    // Ширина должна быть >= srcH (текст был повёрнут, теперь горизонтальный)
     bool isIndicator = (w > g_srcW || h > g_srcH) && (w >= g_srcH);
     
     if (!isIndicator) {
+        return result;
+    }
+
+    // Если уже был нарисован (это hover) — рисуем поверх того что уже есть
+    // не очищая фон, чтобы сохранить hover-эффект Windows
+    if (g_alreadyDrawn) {
+        RECT rc = { 0, 0, w, h };
+        
+        LOGFONTW lfH = g_font;
+        lfH.lfEscapement = 0;
+        lfH.lfOrientation = 0;
+
+        HFONT hFont = CreateFontIndirectW(&lfH);
+        if (hFont) {
+            HFONT hOld = (HFONT)SelectObject(hdcDest, hFont);
+            SetBkMode(hdcDest, TRANSPARENT);
+            SetTextColor(hdcDest, GetSysColor(COLOR_BTNTEXT));
+
+            DrawTextW(hdcDest, g_text, -1, &rc,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+            SelectObject(hdcDest, hOld);
+            DeleteObject(hFont);
+        }
+        
+        g_pending = false;
         return result;
     }
 
@@ -167,6 +202,8 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         DeleteObject(hFont);
     }
 
+    wcscpy_s(g_lastDrawnText, g_text);
+    g_alreadyDrawn = true;
     g_pending = false;
 
     return result;
@@ -182,4 +219,3 @@ BOOL Wh_ModInit() {
                         (void**)&BitBlt_Original);
     return TRUE;
 }
-

@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.11
+// @version         1.3.13
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -200,6 +200,10 @@ bool g_inHoverFlyoutController_UpdateFlyoutWindowPosition;
 HWND g_notificationCenterWnd;
 
 std::vector<winrt::weak_ref<XamlRoot>> g_notifyIconsUpdated;
+
+// XamlRoots (taskbars) that already have a deferred ApplyStyle queued, used to
+// coalesce redundant applies.
+std::vector<winrt::weak_ref<XamlRoot>> g_applyStyleQueued;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -577,6 +581,7 @@ bool IsTaskbarWindow(HWND hWnd) {
 
 bool UpdateNotifyIcons(XamlRoot xamlRoot);
 bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot);
+bool ApplyStyleIfNeeded(XamlRoot xamlRoot);
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -1112,7 +1117,7 @@ void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
             return 0;
         }
 
-    // Find the last height offset to reset the height value.
+        // Find the last height offset to reset the height value.
 #if defined(_M_X64)
         // 66 0f 2e b3 b0 00 00 00 UCOMISD    uVar4,qword ptr [RBX + 0xb0]
         // 7a 4c                   JP         LAB_180075641
@@ -1469,6 +1474,84 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     return true;
 }
 
+void RemoveExpiredQueuedApplyStyles() {
+    g_applyStyleQueued.erase(
+        std::remove_if(
+            g_applyStyleQueued.begin(), g_applyStyleQueued.end(),
+            [](const auto& xamlRootRef) { return !xamlRootRef.get(); }),
+        g_applyStyleQueued.end());
+}
+
+void RemoveQueuedApplyStyle(XamlRoot xamlRoot) {
+    g_applyStyleQueued.erase(
+        std::remove_if(g_applyStyleQueued.begin(), g_applyStyleQueued.end(),
+                       [&xamlRoot](const auto& queuedXamlRootRef) {
+                           auto queuedXamlRoot = queuedXamlRootRef.get();
+                           return !queuedXamlRoot || queuedXamlRoot == xamlRoot;
+                       }),
+        g_applyStyleQueued.end());
+}
+
+// Applies the style asynchronously, outside the measure pass that triggered it.
+// Mutating layout properties from within MeasureOverride can cause an
+// AG_E_LAYOUT_CYCLE fail-fast on some Taskbar.View.dll builds. At most one
+// apply is queued per XamlRoot (taskbar) at a time, otherwise every measure
+// pass of the taskbar and system tray frames would queue a redundant one.
+void QueueApplyStyle(FrameworkElement element) {
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot) {
+        return;
+    }
+
+    RemoveExpiredQueuedApplyStyles();
+
+    if (std::find_if(g_applyStyleQueued.begin(), g_applyStyleQueued.end(),
+                     [&xamlRoot](const auto& queuedXamlRootRef) {
+                         auto queuedXamlRoot = queuedXamlRootRef.get();
+                         return queuedXamlRoot && queuedXamlRoot == xamlRoot;
+                     }) != g_applyStyleQueued.end()) {
+        return;
+    }
+
+    auto xamlRootWeak = winrt::make_weak(xamlRoot);
+    g_applyStyleQueued.push_back(xamlRootWeak);
+
+    try {
+        auto asyncOperation = element.Dispatcher().TryRunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+            [xamlRootWeak]() {
+                auto xamlRoot = xamlRootWeak.get();
+                if (!xamlRoot) {
+                    RemoveExpiredQueuedApplyStyles();
+                    return;
+                }
+
+                RemoveQueuedApplyStyle(xamlRoot);
+
+                try {
+                    ApplyStyleIfNeeded(xamlRoot);
+                } catch (...) {
+                    HRESULT hr = winrt::to_hresult();
+                    Wh_Log(L"Error %08X", hr);
+                }
+            });
+
+        if (asyncOperation.Status() ==
+                winrt::Windows::Foundation::AsyncStatus::Completed &&
+            !asyncOperation.GetResults()) {
+            if (auto queuedXamlRoot = xamlRootWeak.get()) {
+                RemoveQueuedApplyStyle(queuedXamlRoot);
+            } else {
+                RemoveExpiredQueuedApplyStyles();
+            }
+        }
+    } catch (...) {
+        RemoveQueuedApplyStyle(xamlRoot);
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
+}
+
 using TaskbarFrame_MeasureOverride_t =
     int(WINAPI*)(void* pThis,
                  winrt::Windows::Foundation::Size size,
@@ -1487,12 +1570,7 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(taskbarFrame));
     if (taskbarFrame) {
-        try {
-            ApplyStyle(taskbarFrame.XamlRoot());
-        } catch (...) {
-            HRESULT hr = winrt::to_hresult();
-            Wh_Log(L"Error %08X", hr);
-        }
+        QueueApplyStyle(taskbarFrame);
     }
 
     int ret = TaskbarFrame_MeasureOverride_Original(pThis, size, resultSize);
@@ -1522,12 +1600,7 @@ int WINAPI SystemTrayFrame_MeasureOverride_Hook(
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(systemTrayFrame));
     if (systemTrayFrame) {
-        try {
-            ApplyStyle(systemTrayFrame.XamlRoot());
-        } catch (...) {
-            HRESULT hr = winrt::to_hresult();
-            Wh_Log(L"Error %08X", hr);
-        }
+        QueueApplyStyle(systemTrayFrame);
     }
 
     int ret = SystemTrayFrame_MeasureOverride_Original(pThis, size, resultSize);
@@ -1854,29 +1927,27 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
         }
     }
 
+    static const struct {
+        PCWSTR className;
+        SystemTrayIconType iconType;
+    } iconContentTypes[] = {
+        {L"SystemTray.TextIconContent", SystemTrayIconType::Other},
+        {L"SystemTray.BatteryIconContent", SystemTrayIconType::Battery},
+        {L"SystemTray.DateTimeIconContent", SystemTrayIconType::DateTime},
+        // Language bar main icon.
+        {L"SystemTray.LanguageTextIconContent", SystemTrayIconType::Other},
+        {L"SystemTray.LanguageImageIconContent", SystemTrayIconType::Other},
+        // Language bar supplementary icon.
+        {L"SystemTray.ImageIconContent", SystemTrayIconType::Other},
+    };
+
+    FrameworkElement iconContent = nullptr;
     SystemTrayIconType iconType = SystemTrayIconType::Other;
-
-    auto iconContent =
-        FindChildByClassName(contentGrid, L"SystemTray.TextIconContent");
-
-    if (!iconContent) {
-        iconContent =
-            FindChildByClassName(contentGrid, L"SystemTray.BatteryIconContent");
+    for (const auto& [className, type] : iconContentTypes) {
+        iconContent = FindChildByClassName(contentGrid, className);
         if (iconContent) {
-            iconType = SystemTrayIconType::Battery;
-        }
-    }
-
-    if (!iconContent) {
-        iconContent = FindChildByClassName(
-            contentGrid, L"SystemTray.LanguageTextIconContent");
-    }
-
-    if (!iconContent) {
-        iconContent = FindChildByClassName(contentGrid,
-                                           L"SystemTray.DateTimeIconContent");
-        if (iconContent) {
-            iconType = SystemTrayIconType::DateTime;
+            iconType = type;
+            break;
         }
     }
 
@@ -1985,8 +2056,9 @@ void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
     DateTimeIconContent_OnApplyTemplate_Original(pThis);
 
     FrameworkElement dateTimeIconContent = nullptr;
-    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(dateTimeIconContent));
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(dateTimeIconContent));
     if (!dateTimeIconContent) {
         return;
     }
@@ -2001,11 +2073,6 @@ void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
 }
 
 bool ApplyStyleIfNeeded(XamlRoot xamlRoot) {
-    // Calling this when unloading causes a crash with a secondary taskbar.
-    if (g_unloading) {
-        return true;
-    }
-
     FrameworkElement contentGrid =
         xamlRoot.Content().try_as<FrameworkElement>();
 
@@ -4522,7 +4589,7 @@ bool HookSystemTraySymbols(HMODULE module) {
             IconView_IconView_Hook,
         },
         {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
@@ -4714,7 +4781,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
             IconView_IconView_Hook,
         },
         {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
