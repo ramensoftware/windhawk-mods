@@ -15292,6 +15292,36 @@
         "version": "1.5.260416"
       }
     },
+    "win-x-hotcorners": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787412222000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787412222000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "lost_husky",
+        "compilerOptions": "-ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32",
+        "description": "macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge",
+        "donateUrl": "https://ko-fi.com/losthusky_",
+        "github": "https://github.com/DhakadG",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Win-X Hot Corners",
+        "version": "1.3.0"
+      }
+    },
     "win-xp-sorted-columns": {
       "details": {
         "defaultSorting": 450,
