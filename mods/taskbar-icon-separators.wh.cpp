@@ -5462,14 +5462,20 @@ static bool TryReadTaskButtonGroupDpa(
 
     // GetButtonGroupCount's member offset is relative to the ITaskListUI
     // subobject, while HandleWinNumHotKey can provide another subobject.
-    void* taskListUi = taskListWnd;
-    while (*reinterpret_cast<void**>(taskListUi) !=
-           g_taskListWndVtableITaskListUI) {
-        taskListUi = reinterpret_cast<void**>(taskListUi) + 1;
+    constexpr size_t kMaxSubobjectSlots = 32;
+    void** taskListUi = reinterpret_cast<void**>(taskListWnd);
+    size_t slot = 0;
+    while (slot < kMaxSubobjectSlots &&
+           *taskListUi != g_taskListWndVtableITaskListUI) {
+        slot++;
+        taskListUi++;
+    }
+    if (slot == kMaxSubobjectSlots) {
+        return false;
     }
 
     auto dpa = reinterpret_cast<unsigned char*>(
-        reinterpret_cast<void**>(taskListUi)[offset]);
+        taskListUi[offset]);
     if (!dpa) {
         return false;
     }
