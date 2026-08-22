@@ -33,7 +33,7 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 - **Registry virtualization**: All registry entries are provided through an in-memory virtualization layer and nothing is written to the real registry
 - **Conservative resource handling**: The mod is designed to be stable and user friendly using a conservative approach
 - **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately
-- **25 embedded languages**: The replacement text is provided for all 249 HomeGroup resource IDs in 25 languages; no MUI content is copied, downloaded, or required
+- **25 embedded languages**: Replacement text for all 249 HomeGroup resource IDs is embedded in 25 languages; no MUI files are copied, downloaded, or required (the wording was written for this mod and inevitably overlaps Microsoft's original UI text where there is little room for variation)
 - **Language selector**: The mod follows the Windows UI language automatically or allows a manual language override
 - **Offline re-enable**: Once downloaded, the base DLL is cached locally for offline use
 
@@ -48,7 +48,7 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 - **No actual networking**: HomeGroup sharing/joining is non-functional because the backend services were removed/disabled by Microsoft in Windows 10 1803+ and the control panel page was removed from Windows 11
 - **Windows 11**: The page displays but some sub-features may show errors since the COM infrastructure is more heavily stripped
 - **Private resource copy**: The mod builds a private resource-only copy of the verified DLL and injects the embedded RT_STRING blocks without modifying Windows files or the verified executable DLL
-- **Do not enable HomeGroup in both mods at once**: This mod and the [Windows 7 Legacy Applet Restorer](https://windhawk.net/mods/win7-legacy-applet-restorer) both register the HomeGroup CLSID `{67CA7650-96E6-4FDD-BB43-A8E774F73A57}` in the Control Panel namespace. There is no reliable cross-mod handshake, and this mod's registry hooks make the CLSID look present to the other mod, so enabling both with HomeGroup active produces duplicate entries. Pick one: either disable HomeGroup in Windows 7 Legacy Applet Restorer, or disable this mod.
+- **Coexistence with Windows 7 Legacy Applet Restorer**: This mod and the [Windows 7 Legacy Applet Restorer](https://windhawk.net/mods/win7-legacy-applet-restorer) both provide the HomeGroup Control Panel entry (`{67CA7650-96E6-4FDD-BB43-A8E774F73A57}`). Duplicate entries are prevented automatically instead of relying on a "pick one" rule: before injecting the HomeGroup CLSID into the Control Panel namespace enumeration, this mod checks whether that name is already being provided — by the real registry (Windows versions that still have it, or a third-party registration) or by the other mod's hooks in the same enumeration — and yields if so. If you still see a duplicate entry with an old version of the other mod, update it (its side needs the same check) or disable its HomeGroup option.
 
 ## Credits
 
@@ -98,10 +98,6 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 - enableAdvancedWriter: true
   $name: Enable HomeGroup Advanced Settings Writer
   $description: If enabled, this setting also registers the HomeGroup CPL Advanced Settings Writer COM object ({ffe1df5f-...}) for elevated settings access.
-
-- forceHomeGroupInjection: false
-  $name: Force HomeGroup injection (override conflict detection)
-  $description: If enabled, this setting forces this mod to inject the HomeGroup CLSID into the Control Panel namespace even when a conflicting mod (e.g., Windows 7 Legacy Applet Restorer) is detected. This may cause duplicate entries — use only if the other mod is not handling HomeGroup correctly. Disabled by default.
 */
 // ==/WindhawkModSettings==
 
@@ -130,11 +126,16 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 #include <windhawk_utils.h>
 
 // =============================================================================
-// AUTHOR-WRITTEN HOMEGROUP STRING CATALOG - 249 IDs in 25 languages
-// The resource IDs describe the UI contract. The English wording below was
-// independently paraphrased for this mod; the other tables are translations of
-// that new wording. No hgcpl.dll.mui bytes or verbatim MUI string table is
-// embedded, generated, downloaded, or required at runtime.
+// HOMEGROUP STRING CATALOG - 249 IDs in 25 languages
+// The resource IDs describe the UI contract with hgcpl.dll. The English
+// wording below was written by hand for this mod, but no independent-
+// paraphrase claim is made for it: short functional labels ("On", "Off",
+// "Working…") and fixed status sentences necessarily match — or come very
+// close to — Microsoft's original HomeGroup UI wording wherever there is
+// little room to phrase the same status differently. The non-English
+// tables are translations of the English table. No hgcpl.dll.mui file or
+// string-table binary is embedded, generated, downloaded, or required at
+// runtime.
 // =============================================================================
 enum class EmbeddedLanguage {
     EN_US, IT_IT, ES_ES, FR_FR, TR_TR, RU_RU, ZH_CN, DE_DE, PT_BR, PL_PL, JA_JP, KO_KR, AR_SA, NL_NL, SV_SE, CS_CZ, DA_DK, FI_FI, EL_GR, HE_IL, HU_HU, NB_NO, RO_RO, SK_SK, UK_UA
@@ -7113,18 +7114,13 @@ static std::mutex g_localizedResourceMutex;
 static std::wstring g_localizedResourcePath;
 static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 
-// Conflict detection state — declared early because registry hooks (defined
-// before the conflict-detection section) read this flag to decide whether
-// to skip namespace enumeration injection in cooperative mode.
-std::atomic<bool> g_yieldNamespaceInjection{false};
+// Named event published while this mod is active, so that other mods (a
+// future win7-legacy-applet-restorer, for instance) can detect us.
+// Duplicate-entry prevention needs no shared flag anymore: the namespace
+// enumeration hooks decide from what the hook chain actually yields —
+// see NamespaceChainAlreadyYieldsClsid in the registry hooks section.
 static HANDLE g_modActiveEvent = nullptr;
 static const wchar_t* kModActiveEventName = L"WindhawkHomeGroupRestorerActive";
-// NOTE: We previously probed for a named event exported by the Win7 Legacy
-// Applet Restorer mod, but that mod does not publish one, so the probe was
-// dead code and (worse) the surviving CLSID probe below is spoofed by our
-// own registry hooks — enabling both mods produced duplicate namespace
-// entries. The check has been removed; coexistence is now documented in
-// the README as a "pick one" limitation.
 
 // Manual-reset stop event set by Wh_ModUninit.
 static HANDLE g_stopEvent = nullptr;
@@ -7707,7 +7703,12 @@ static bool TryLoadLocalDll(const std::wstring& searchDir, const std::wstring& d
 // Wh_ModUninit behind it because the setup thread has no cancellation
 // inside CreateFileW.
 static bool IsFixedDrivePath(const wchar_t* path) {
-    if (!path || !path[0] || path[1] != L':') return true;  // not a drive path
+    if (!path || !path[0]) return false;
+    // Never probe UNC paths (roaming-profile or OneDrive folder
+    // redirection targets): GetDriveTypeW would hit the network and can
+    // block for tens of seconds with no cancellation inside the call.
+    if (path[0] == L'\\' && path[1] == L'\\') return false;
+    if (path[1] != L':') return false;  // not a drive-letter path
     wchar_t root[4] = { path[0], L':', L'\\', L'\0' };
     return GetDriveTypeW(root) == DRIVE_FIXED;
 }
@@ -7723,9 +7724,13 @@ static bool SearchLocalForDll(const std::wstring& destPath) {
     }
     if (g_shuttingDown.load(std::memory_order_acquire)) return false;
 
-    // 2. WinDbg local symbol cache directories
+    // 2. WinDbg local symbol cache directories. %TEMP% can be redirected
+    //    to a UNC share (roaming profiles) or a network drive, so guard it
+    //    with IsFixedDrivePath exactly like the hard-coded paths below —
+    //    the setup thread joins in Wh_ModUninit and must not stall on a
+    //    network probe.
     wchar_t tempPath[MAX_PATH] = {};
-    if (GetTempPathW(MAX_PATH, tempPath)) {
+    if (GetTempPathW(MAX_PATH, tempPath) && IsFixedDrivePath(tempPath)) {
         std::wstring symCache = std::wstring(tempPath) + L"symbols\\hgcpl.dll";
         Wh_Log(L"HomeGroup: Checking WinDbg cache: %s", symCache.c_str());
         // Try the flat cache directory
@@ -7762,13 +7767,11 @@ static bool SearchLocalForDll(const std::wstring& destPath) {
         if (TryLoadLocalDll(loc, destPath)) return true;
     }
 
-    // 5. User's Downloads folder
-    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
-    wchar_t userProfile[MAX_PATH] = {};
-    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH)) {
-        std::wstring downloads = std::wstring(userProfile) + L"\\Downloads";
-        if (TryLoadLocalDll(downloads, destPath)) return true;
-    }
+    // Note: an earlier version also probed the Downloads folder here.
+    // Removed — Downloads is commonly redirected (OneDrive Known Folder
+    // Move, roaming profiles) and is not a standard source for a system
+    // DLL. For offline setup, place hgcpl.dll in the mod storage folder
+    // or one of the symbol cache locations above.
 
     Wh_Log(L"HomeGroup: No local hgcpl.dll found — will attempt download");
     return false;
@@ -8207,8 +8210,14 @@ static bool RunSetupImpl(const std::wstring& dir) {
                     }
 
                     Wh_Log(L"HomeGroup: Loading DLL with LoadLibraryExW...");
-                    LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr,
-                                                    LOAD_WITH_ALTERED_SEARCH_PATH));
+                    // Flags 0: the path is absolute, so no altered search
+                    // order is needed, and LOAD_WITH_ALTERED_SEARCH_PATH
+                    // would place the mod storage folder at the head of
+                    // the search order used to resolve hgcpl.dll's own
+                    // imports (provsvc.dll, wkscli.dll, dui70.dll, ...) —
+                    // a DLL planting surface. performance-info-tools-
+                    // restorer passes 0 for the same reason.
+                    LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr, 0));
                     if (!mod.valid()) {
                         Wh_Log(L"HomeGroup: ❌ LoadLibraryExW failed (error=%lu)", GetLastError());
                         return false;
@@ -8249,8 +8258,9 @@ static bool RunSetupImpl(const std::wstring& dir) {
             WinHandle pin = PinDllForLoad(dllPath);
             if (pin.valid() &&
                 VerifyDllIsCompatible(pin.get(), kExpectedSha256Primary)) {
-                LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr,
-                                                LOAD_WITH_ALTERED_SEARCH_PATH));
+                // Flags 0 — absolute path, no altered search order (see
+                // the note at the reuse path above).
+                LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr, 0));
                 if (mod.valid() && ConfirmLoadedModuleMatchesPin(mod.get(), pin.get())) {
                     BuildLocalizedResourceModule(dllPath, dir);
                     auto* pathStr = new std::wstring(dllPath);
@@ -8329,8 +8339,14 @@ static bool RunSetupImpl(const std::wstring& dir) {
                     }
 
                     Wh_Log(L"HomeGroup: Loading DLL with LoadLibraryExW...");
-                    LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr,
-                                                    LOAD_WITH_ALTERED_SEARCH_PATH));
+                    // Flags 0: the path is absolute, so no altered search
+                    // order is needed, and LOAD_WITH_ALTERED_SEARCH_PATH
+                    // would place the mod storage folder at the head of
+                    // the search order used to resolve hgcpl.dll's own
+                    // imports (provsvc.dll, wkscli.dll, dui70.dll, ...) —
+                    // a DLL planting surface. performance-info-tools-
+                    // restorer passes 0 for the same reason.
+                    LoadedModule mod(LoadLibraryExW(dllPath.c_str(), nullptr, 0));
                     if (!mod.valid()) {
                         Wh_Log(L"HomeGroup: ❌ LoadLibraryExW failed (error=%lu)", GetLastError());
                         return false;
@@ -8574,7 +8590,37 @@ static void ReleaseVirtualKeyRoot() {
 }
 
 // =============================================================================
-// KeyTracker — maps HKEY handles to registry paths
+// Case-insensitive ASCII substring search, allocation-free. Registry paths
+// are case-insensitive and callers may use any casing (mixed-case GUIDs,
+// "ControlPanel\NameSpace", "Shell Extensions\APPROVED", ...), so every
+// keyword gate in this file matches via this helper instead of relying on
+// a particular spelling. ASCII-only uppercasing is sufficient because all
+// gate tokens are plain ASCII.
+static bool AsciiIContains(const wchar_t* s, const char* needle) {
+    wchar_t needleW[32] = {};
+    size_t nlen = 0;
+    for (; needle[nlen] && nlen < 31; ++nlen) {
+        char c = needle[nlen];
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        needleW[nlen] = static_cast<wchar_t>(c);
+    }
+    needleW[nlen] = 0;
+    if (!nlen) return false;
+
+    for (const wchar_t* p = s; *p; ++p) {
+        const wchar_t* a = p;
+        const wchar_t* b = needleW;
+        while (*b) {
+            wchar_t ca = *a;
+            if (ca >= L'a' && ca <= L'z') ca = static_cast<wchar_t>(ca - L'a' + L'A');
+            if (ca != *b) break;
+            ++a; ++b;
+        }
+        if (!*b) return true;
+    }
+    return false;
+}
+
 // =============================================================================
 class KeyTracker {
 public:
@@ -8667,57 +8713,29 @@ private:
     }
 
     // Cheap keyword gate — avoids allocation for the vast majority of
-    // registry accesses that are irrelevant to this mod.
+    // registry accesses that are irrelevant to this mod. Must stay
+    // allocation-free (AsciiIContains) and case-insensitive: registry
+    // paths are case-insensitive and callers use arbitrary casings.
     //
-    // The previous version admitted any path containing "clsid",
-    // "controlpanel", "homegroup" or "shell extensions", which in
-    // explorer.exe is essentially every COM class lookup the shell
-    // performs. Each admitted call then constructed std::wstrings, ran
-    // ToLower(), and did up to 15 EndsWith comparisons in ClassifyPath —
-    // on the two hottest registry APIs (RegOpenKeyExW/RegGetValueW).
-    //
-    // The mod only ever virtualizes paths that are descendants of one of
-    // four fixed CLSID GUIDs, plus two fixed parent paths. Gate on those
-    // instead. Every path ClassifyPath / IsApprovedKey / IsTargetKey
-    // eventually accepts still matches one of these substrings (the
-    // GUIDs appear directly, the two parent-suffix strings match
-    // ControlPanel\Namespace and Shell Extensions\Approved), and the
-    // parent-tracking chain that RegOpenKeyVirtual relies on is
-    // preserved because parent CLSID keys always contain the GUID too.
+    // The token set has to stay BROAD. Track() feeds the handle-to-path
+    // map that RegOpenKeyVirtual uses to prefix relative opens, and
+    // callers routinely open the parent key first and the child second
+    // (e.g. RegOpenKeyExW(HKCR, L"CLSID") followed by opening the GUID
+    // relative to that handle). The bare parent path HKEY_CLASSES_ROOT\CLSID
+    // contains no GUID — only the "clsid" token — so a gate narrowed to
+    // the four target GUIDs leaves the parent untracked; the child's
+    // reconstructed path then misses the "clsid\{guid}" suffixes that
+    // ClassifyPath matches, and the fabricated key silently disappears
+    // for those callers. "controlpanel" and "shell extensions" are broad
+    // for the same reason (they keep the NameSpace and Approved parent
+    // keys tracked).
     static bool ContainsKeyword(const wchar_t* s) {
         if (!s || !*s) return false;
-        return AsciiIContains(s, "67ca7650") ||
-               AsciiIContains(s, "24d568c5") ||
-               AsciiIContains(s, "006e61df") ||
-               AsciiIContains(s, "ffe1df5f") ||
-               AsciiIContains(s, "controlpanel\\namespace") ||
-               AsciiIContains(s, "shell extensions\\approved");
+        return AsciiIContains(s, "clsid") ||
+               AsciiIContains(s, "controlpanel") ||
+               AsciiIContains(s, "shell extensions");
     }
 
-    static bool AsciiIContains(const wchar_t* s, const char* needle) {
-        wchar_t needleW[32] = {};
-        size_t nlen = 0;
-        for (; needle[nlen] && nlen < 31; ++nlen) {
-            char c = needle[nlen];
-            if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-            needleW[nlen] = static_cast<wchar_t>(c);
-        }
-        needleW[nlen] = 0;
-        if (!nlen) return false;
-
-        for (const wchar_t* p = s; *p; ++p) {
-            const wchar_t* a = p;
-            const wchar_t* b = needleW;
-            while (*b) {
-                wchar_t ca = *a;
-                if (ca >= L'a' && ca <= L'z') ca = static_cast<wchar_t>(ca - L'a' + L'A');
-                if (ca != *b) break;
-                ++a; ++b;
-            }
-            if (!*b) return true;
-        }
-        return false;
-    }
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
@@ -9100,31 +9118,71 @@ static DWORD GetRealNamespaceSubKeyCount(HKEY key) {
     return count;
 }
 
+// True when the HomeGroup CLSID is already visible for this Control Panel
+// namespace parent key — either as a real subkey, or as an extra name
+// injected by another mod's RegEnumKeyExW hook that sits below ours in
+// the hook chain (RegEnumKeyExWOriginal targets that hook in that case).
+// Both mods' HomeGroup entries meet in the enumeration, which is what
+// lets this mod and win7-legacy-applet-restorer coexist without duplicate
+// Control Panel entries and without user configuration. This replaces
+// the old init-time "cooperative mode" yield, which was spoofed by our
+// own hooks and could never see the other mod anyway. Bounded cost: the
+// namespace key holds a few dozen entries and this only runs after the
+// caller has finished enumerating the real names.
+static bool NamespaceChainAlreadyYieldsClsid(HKEY namespaceKey) {
+    // Cheap probe first: a real subkey named after the CLSID.
+    {
+        HKEY hTest = nullptr;
+        if (RegOpenKeyExWOriginal(namespaceKey, g_clsidLower.c_str(), 0,
+                                  KEY_READ, &hTest) == ERROR_SUCCESS) {
+            RegCloseKeyOriginal(hTest);
+            return true;
+        }
+    }
+    // Scan the names the hook chain yields, in any casing.
+    wchar_t name[256];
+    for (DWORD i = 0;; ++i) {
+        DWORD nameChars = ARRAYSIZE(name);
+        LSTATUS st = RegEnumKeyExWOriginal(namespaceKey, i, name, &nameChars,
+                                           nullptr, nullptr, nullptr, nullptr);
+        if (st != ERROR_SUCCESS) break;
+        if (_wcsicmp(name, g_clsidLower.c_str()) == 0) return true;
+    }
+    return false;
+}
+
 static bool IsWriteAccess(REGSAM sam) {
     return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
 
-// Same narrowing as KeyTracker::ContainsKeyword. wcsstr is case-sensitive,
-// so each token is checked in the two casings that Windows callers use in
-// practice (registry paths are case-insensitive but callers are consistent
-// within a component — SHCore/Shell32/OLE32 all use one canonical spelling).
+// Keyword gate for the registry hooks; matches the token set of
+// KeyTracker::ContainsKeyword. Registry paths are case-insensitive and
+// callers are free to use any spelling (mixed-case GUIDs,
+// "ControlPanel\NameSpace", "Shell Extensions\APPROVED", ...), so the
+// tokens are matched case-insensitively with the allocation-free
+// AsciiIContains helper. A previous version used case-sensitive wcsstr
+// with two hand-picked casings per token, which silently dropped
+// virtualization for callers using any other spelling.
+//
+// The tokens also have to stay BROAD, end to end with
+// KeyTracker::ContainsKeyword: a caller that opens HKEY_CLASSES_ROOT\CLSID
+// first and the GUID second only gets a fabricated child if the bare
+// "CLSID" open passes this gate and reaches KeyTracker::Track (the
+// parent-tracking chain). The cost is a handful of allocation-free
+// substring scans; the heavier work (std::wstring building, ClassifyPath)
+// still only runs for keyword hits.
+//
 // The g_dllVerifiedOk check runs FIRST so that during the startup window
-// (before setup finishes) this function returns false without touching the
-// KeyTracker's shared_mutex at all — that keeps the pre-setup hot path
-// completely lock-free even for CLSID lookups that only happen to mention
-// one of the four target GUIDs.
+// (before setup finishes) this function returns false without touching
+// the KeyTracker's shared_mutex at all — that keeps the pre-setup hot
+// path completely lock-free even for CLSID lookups.
 static bool MightNeedVirtualization(HKEY hk, LPCWSTR sub) {
     if (!g_dllVerifiedOk.load(std::memory_order_acquire)) return false;
     if (g_keyTracker.IsTrackedOrFake(hk)) return true;
     if (!sub) return false;
-    return wcsstr(sub, L"67ca7650") || wcsstr(sub, L"67CA7650") ||
-           wcsstr(sub, L"24d568c5") || wcsstr(sub, L"24D568C5") ||
-           wcsstr(sub, L"006e61df") || wcsstr(sub, L"006E61DF") ||
-           wcsstr(sub, L"ffe1df5f") || wcsstr(sub, L"FFE1DF5F") ||
-           wcsstr(sub, L"ControlPanel\\NameSpace") ||
-           wcsstr(sub, L"controlpanel\\namespace") ||
-           wcsstr(sub, L"Shell Extensions\\Approved") ||
-           wcsstr(sub, L"shell extensions\\approved");
+    return AsciiIContains(sub, "clsid") ||
+           AsciiIContains(sub, "controlpanel") ||
+           AsciiIContains(sub, "shell extensions");
 }
 
 static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
@@ -9311,22 +9369,15 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
         const LSTATUS st = RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         if (st != ERROR_NO_MORE_ITEMS) return st;
 
-        // --- Cooperative mode check ---
-        // If another mod (e.g., Win7 Legacy Applet Restorer) is already
-        // handling HomeGroup namespace injection, skip our injection to
-        // avoid duplicate entries in the Control Panel enumeration.
-        if (g_yieldNamespaceInjection.load(std::memory_order_acquire)) {
+        // Duplicate prevention, replacing the old init-time
+        // "cooperative mode" yield: skip our injection when the
+        // enumeration chain already yields the HomeGroup CLSID name —
+        // either because it exists as a real subkey (Windows < 1803,
+        // third-party registration) or because another mod's
+        // RegEnumKeyExW hook below ours in the chain injects it. See
+        // NamespaceChainAlreadyYieldsClsid.
+        if (NamespaceChainAlreadyYieldsClsid(k)) {
             return ERROR_NO_MORE_ITEMS;
-        }
-
-        // Check if the CLSID already exists in the real registry.
-        {
-            HKEY hTest = nullptr;
-            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
-                ERROR_SUCCESS) {
-                RegCloseKeyOriginal(hTest);
-                return ERROR_NO_MORE_ITEMS;
-            }
         }
 
         if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
@@ -9370,18 +9421,9 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
         const LSTATUS st = RegEnumKeyWOriginal(k, idx, name, cch);
         if (st != ERROR_NO_MORE_ITEMS) return st;
 
-        // --- Cooperative mode check (same as RegEnumKeyExWHook) ---
-        if (g_yieldNamespaceInjection.load(std::memory_order_acquire)) {
+        // Duplicate prevention — same as RegEnumKeyExWHook.
+        if (NamespaceChainAlreadyYieldsClsid(k)) {
             return ERROR_NO_MORE_ITEMS;
-        }
-
-        {
-            HKEY hTest = nullptr;
-            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
-                ERROR_SUCCESS) {
-                RegCloseKeyOriginal(hTest);
-                return ERROR_NO_MORE_ITEMS;
-            }
         }
 
         if (!name) return ERROR_INVALID_PARAMETER;
@@ -9424,20 +9466,15 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
             LSTATUS st = RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
                                                   lpcMaxCls, cValues, lpcMaxValName,
                                                   lpcMaxValData, sec, ft);
-            // Only increment the subkey count if we are actually going to
-            // inject the CLSID (i.e., cooperative mode is not active).
+            // Only increment the subkey count if we are actually going
+            // to inject the CLSID (i.e., the chain doesn't already yield
+            // it). See NamespaceChainAlreadyYieldsClsid.
             if (st == ERROR_SUCCESS && cSubKeys &&
-                !g_yieldNamespaceInjection.load(std::memory_order_acquire)) {
-                HKEY hTest = nullptr;
-                if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) !=
-                    ERROR_SUCCESS) {
-                    (*cSubKeys)++;
-                    if (lpcMaxSub) {
-                        DWORD need = static_cast<DWORD>(g_clsidLower.size() + 1);
-                        if (*lpcMaxSub < need) *lpcMaxSub = need;
-                    }
-                } else {
-                    RegCloseKeyOriginal(hTest);
+                !NamespaceChainAlreadyYieldsClsid(k)) {
+                (*cSubKeys)++;
+                if (lpcMaxSub) {
+                    DWORD need = static_cast<DWORD>(g_clsidLower.size() + 1);
+                    if (*lpcMaxSub < need) *lpcMaxSub = need;
                 }
             }
             return st;
@@ -9913,6 +9950,19 @@ static HRESULT HG_DUI_THISCALL DUISetXMLFromResourceHook(
                 instance2);
         }
 
+        // Cheap gate before any decoding: UIFILE is used by most DirectUI
+        // surfaces in the shell, and LoadDirectUiXml does a full
+        // FindResource + LoadResource + MultiByteToWideChar of the whole
+        // resource before IsHomeGroupDirectUiXml can reject it. Only our
+        // own modules (hgcpl.dll or the private localized copy) can host
+        // the HomeGroup UIFILE, so pass everything else straight through.
+        if (!g_dllVerifiedOk.load() ||
+            !IsHomeGroupResourceModule(resourceModule)) {
+            return DUISetXMLFromResourceOriginal(
+                parser, resourceName, resourceType, resourceModule, instance1,
+                instance2);
+        }
+
         std::wstring xml =
             LoadDirectUiXml(resourceModule, resourceName, resourceType);
         if (xml.empty() || !IsHomeGroupDirectUiXml(xml)) {
@@ -10355,89 +10405,21 @@ static void InstallComHook() {
 }
 
 // =============================================================================
-// Conflict Detection and Resolution
+// Coexistence with Windows 7 Legacy Applet Restorer
 // =============================================================================
-//
-// This mod can coexist with the "Windows 7 Legacy Applet Restorer" mod by
-// babamohammed2022, which also handles the HomeGroup CLSID
-// {67CA7650-96E6-4FDD-BB43-A8E774F73A57}. The two mods use different
-// approaches (this one virtualizes the entire CLSID tree + downloads hgcpl.dll;
-// the other relies on the CLSID being present in the real registry and only
-// injects a category assignment), and both hook the same registry functions.
-//
-// Conflict scenarios:
-//   1. DUPLICATE INJECTION: Both mods try to append the HomeGroup CLSID to
-//      the Control Panel namespace enumeration, causing two entries.
-//   2. FAKE HANDLE COLLISION: Both mods' KeyTrackers create fake handles
-//      (this one uses volatile registry keys, the other uses heap-allocated
-//      ints). If both create fakes for the same CLSID path, the second
-//      mod's RegCloseKeyHook may close a handle the first mod created.
-//   3. COM HOOK INTERFERENCE: This mod hooks CoCreateInstance; the other
-//      does not. No conflict here — this mod's COM hook is CLSID-specific.
-//
-// Resolution strategy:
-//   - At Wh_ModInit, detect whether the Win7 Legacy Applet Restorer is
-//     active AND has HomeGroup enabled. Detection methods (tried in order):
-//       a) Named event: check for the other mod's activity marker
-//       b) Registry probe: check if the HomeGroup CLSID exists in the
-//          real registry (HKCR\CLSID\{67CA7650-...}) — if it does, the
-//          other mod (or Windows < 1803) is already handling it
-//   - If the other mod is detected with HomeGroup active, this mod enters
-//     "cooperative mode": it still downloads and loads hgcpl.dll (for COM
-//     and resource purposes), but DOES NOT inject the CLSID into the
-//     namespace enumeration — the other mod handles that.
-//   - A manual override setting (forceHomeGroupInjection) lets the user
-//     force injection even when coexistence is detected.
+// That mod also provides the HomeGroup Control Panel entry and hooks the
+// same registry functions. The old init-time "cooperative mode" probe was
+// removed: a registry probe from inside this mod is spoofed by this mod's
+// own hooks, the other mod publishes no marker to detect, and the
+// forceHomeGroupInjection override was only ever read in Wh_ModInit — so
+// toggling it in the UI did nothing, and the yield path was unreachable
+// on the Windows 11 target anyway (the only remaining check tested for a
+// real-registry CLSID that does not exist there). Duplicate prevention
+// now happens where both mods' work is actually visible — in the hooked
+// namespace enumeration itself. See NamespaceChainAlreadyYieldsClsid in
+// the registry hooks section; the "pick one" advice is gone from the
+// README accordingly.
 
-// Note: g_yieldNamespaceInjection, g_modActiveEvent, and kModActiveEventName
-// are declared in the Shared State section above (before the registry hooks)
-// so they are visible to all hooks.
-
-// Check if the HomeGroup CLSID is already registered in the real registry
-// (not through our hooks). This is the same check the Win7 Legacy mod
-// performs at startup via IsRegisteredClsid(). If it returns true, either:
-//   a) Windows < 1803 still has it natively, OR
-//   b) Another mod/restoration has already registered it
-// In either case, we don't need to inject it into the namespace.
-static bool IsHomeGroupClsidInRealRegistry() {
-    // Use the un-hooked original if available (our hooks may not be
-    // installed yet at this point). Fall back to the raw API.
-    HKEY hKey = nullptr;
-    LSTATUS st = RegOpenKeyExW(
-        HKEY_CLASSES_ROOT,
-        L"CLSID\\{67ca7650-96e6-4fdd-bb43-a8e774f73a57}",
-        0, KEY_READ, &hKey);
-    if (st == ERROR_SUCCESS) {
-        RegCloseKey(hKey);
-        return true;
-    }
-    return false;
-}
-
-// Perform conflict detection and decide whether to yield namespace
-// injection. Returns a description of what was detected for logging.
-//
-// We used to also probe for a named event exported by the Win7 Legacy
-// Applet Restorer mod, but that mod never published such an event, so
-// the check was dead code. Detecting the other mod through the registry
-// is also unreliable here: on Windows 11 the CLSID is absent from the
-// real registry, and once our own RegOpenKeyExW hook is installed a
-// direct probe would just see our fabricated key. Cross-mod coexistence
-// is therefore documented in the README as a "pick one" limitation
-// rather than handled here. The single check that remains still catches
-// the useful case of Windows < 1803 (where the CLSID really exists in
-// the real registry) or any other third-party registration.
-static bool DetectConflictsAndDecideYield(std::wstring& reason) {
-    if (IsHomeGroupClsidInRealRegistry()) {
-        reason = L"HomeGroup CLSID already exists in real registry "
-                 L"(Windows < 1803 or another restoration); "
-                 L"namespace injection not needed";
-        return true;
-    }
-
-    reason = L"No conflicting registration detected in real registry";
-    return false;
-}
 
 // Publish our own named event so other mods can detect us.
 static void PublishModActiveEvent() {
@@ -10478,28 +10460,11 @@ BOOL Wh_ModInit(void) {
         LoadLanguageSetting();
         g_enableAdvancedWriter.store(Wh_GetIntSetting(L"enableAdvancedWriter") != 0);
 
-        // --- Conflict detection (before installing hooks) ---
-        // Detect other mods that might conflict with our HomeGroup CLSID
-        // injection. The Win7 Legacy Applet Restorer also handles HomeGroup
-        // and hooks the same registry functions. If detected, we enter
-        // cooperative mode: COM hooks and DLL download still run, but we
-        // skip namespace enumeration injection to avoid duplicates.
-        {
-            std::wstring conflictReason;
-            bool shouldYield = DetectConflictsAndDecideYield(conflictReason);
-
-            // Allow manual override via setting.
-            if (shouldYield && Wh_GetIntSetting(L"forceHomeGroupInjection") != 0) {
-                Wh_Log(L"HomeGroup Restorer: conflict detected but "
-                       L"forceHomeGroupInjection is enabled — proceeding "
-                       L"with injection anyway");
-                shouldYield = false;
-            }
-
-            g_yieldNamespaceInjection.store(shouldYield, std::memory_order_release);
-            Wh_Log(L"HomeGroup Restorer: %s (yield=%d)",
-                   conflictReason.c_str(), shouldYield ? 1 : 0);
-        }
+        // Note on coexistence with win7-legacy-applet-restorer: duplicate
+        // prevention is handled at enumeration time (see
+        // NamespaceChainAlreadyYieldsClsid), not by an init-time probe —
+        // our own registry hooks would spoof any registry probe made
+        // here, and the other mod publishes no detectable marker.
 
         // Install registry hooks.
         void* pOpen = GetRegFunc("RegOpenKeyExW");
