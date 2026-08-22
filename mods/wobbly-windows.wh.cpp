@@ -7,6 +7,7 @@
 // @github        https://github.com/Potassiumuncher
 // @include       *
 // @exclude       explorer.exe
+// @license       GPL-2.0-or-later
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1 -luser32 -lcomctl32 -lwinmm
 // ==/WindhawkMod==
 
@@ -293,12 +294,14 @@ static void CaptureWindowForWobbly(HWND hwnd) {
     }
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hbmRaw);
 
+    bool alphaAlreadyOpaque = false;
     if (g_captureTranslucentBackdrops.load(std::memory_order_relaxed)) {
         BitBlt(hdcMem, 0, 0, rawW, rawH, hdcScreen, rcWin.left, rcWin.top, SRCCOPY);
         BYTE* pScreenCap = (BYTE*)rawBits;
         for (size_t i = 0; i < (size_t)rawW * rawH; i++) {
             pScreenCap[i * 4 + 3] = 255;
         }
+        alphaAlreadyOpaque = true;
     } else {
         PrintWindow(hwnd, hdcMem, PW_RENDERFULLCONTENT);
     }
@@ -314,13 +317,15 @@ static void CaptureWindowForWobbly(HWND hwnd) {
     int cornerZoneW = doCorners ? (int)ceilf(capRadiusX) + 1 : 0;
     int cornerZoneH = doCorners ? (int)ceilf(capRadiusY) + 1 : 0;
 
-    for (int y = 0; y < rawH; y++) {
-        BYTE* row = pRaw + (size_t)y * rawW * 4;
-        for (int x = 0; x < rawW; x++) {
-            BYTE a = row[x * 4 + 3];
-            if (row[x * 4 + 0] > a) row[x * 4 + 0] = a;
-            if (row[x * 4 + 1] > a) row[x * 4 + 1] = a;
-            if (row[x * 4 + 2] > a) row[x * 4 + 2] = a;
+    if (!alphaAlreadyOpaque) {
+        for (int y = 0; y < rawH; y++) {
+            BYTE* row = pRaw + (size_t)y * rawW * 4;
+            for (int x = 0; x < rawW; x++) {
+                BYTE a = row[x * 4 + 3];
+                if (row[x * 4 + 0] > a) row[x * 4 + 0] = a;
+                if (row[x * 4 + 1] > a) row[x * 4 + 1] = a;
+                if (row[x * 4 + 2] > a) row[x * 4 + 2] = a;
+            }
         }
     }
 
@@ -1240,10 +1245,7 @@ void Wh_ModUninit() {
     }
     for (HWND hwnd : subclassedSnapshot) {
         if (IsWindow(hwnd)) {
-            DWORD_PTR result = 0;
-            if (!SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, &result) && IsWindow(hwnd)) {
-                Wh_Log(L"Subclassed window did not respond to detach during unload");
-            }
+            SendMessageW(hwnd, g_wmDetach, 0, 0);
         }
     }
     {
@@ -1253,21 +1255,14 @@ void Wh_ModUninit() {
 
     if (g_overlayHwnd) {
         HWND overlayToClose = g_overlayHwnd;
-        for (int attempt = 0; attempt < 20 && IsWindow(overlayToClose); attempt++) {
-            SendMessageTimeoutW(overlayToClose, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 250, NULL);
+        while (IsWindow(overlayToClose)) {
+            SendMessageW(overlayToClose, WM_CLOSE, 0, 0);
         }
-        if (IsWindow(overlayToClose)) {
-            Wh_Log(L"Overlay window did not close during unload");
-        } else {
-            g_overlayHwnd = NULL;
-        }
+        g_overlayHwnd = NULL;
     }
 
-    for (int waited = 0; g_hookRefCount.load(std::memory_order_acquire) > 0 && waited < 50; waited++) {
-        Sleep(100);
-    }
-    if (g_hookRefCount.load(std::memory_order_acquire) > 0) {
-        Wh_Log(L"Mod callbacks still active after waiting during unload");
+    while (g_hookRefCount.load(std::memory_order_acquire) > 0) {
+        Sleep(200);
     }
 
     {
