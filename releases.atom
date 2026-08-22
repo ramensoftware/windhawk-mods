@@ -2,12 +2,85 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-20T18:23:24.000Z</updated>
+    <updated>2026-08-22T15:17:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 Open With Dialog Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-open-with-dialog#5e1bd29d18f28fbb37e339b7b4ae6504a9f74ecf</id>
+        <link href="https://windhawk.net/mods/win7-open-with-dialog"/>
+        <updated>2026-08-22T15:17:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7openwithdialogrecreation">Windows 7 Open With Dialog Recreation</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic Windows Vista/7 <strong>Open with</strong> dialog on Windows 10 and
+11, replacing the modern picker with an accurate recreation of the original while
+keeping file and application paths completely untouched.</p>
+<p>The mod has been tested primarily on <strong>Windows 10 21H2</strong>, <strong>Windows 11 24H2</strong> and <strong>Windows 11 25H2</strong>. It is designed to work reliably and safely on both current and future Windows versions where possible.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/openwith.PNG" alt="openwith" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><p><strong>Accurate Vista/7-style dialog</strong>: The mod accurately recreates the classic layout with
+recommended and other-program groups, Browse button, Web search, and the Always
+use checkbox.</p></li>
+<li><p><strong>Open with context menu integration</strong>: The mod works correctly with the right-click
+"Open with" menu option.</p></li>
+<li><p><strong>Unknown-file double-click support</strong>: The mod handles double-clicks on files without
+a known association, just like the original.</p></li>
+<li><p><strong>Properties → Change handler</strong>: The mod applies a new default program when the user clicks
+"Change" from a file's Properties window, without opening the file.</p></li>
+<li><p><strong>Persistent defaults</strong>: When choosing "Always use", the selection is saved
+as the new default. If Windows protects a specific association, the mod will
+guide to the Default Apps settings.</p></li>
+<li><p><strong>Direct program launch</strong>: The mod opens the selected program immediately, avoiding
+unnecessary extra steps.</p></li>
+<li><p><strong>Extensionless file support</strong>: Works with files that have no extension, offering
+a selection of registered applications.</p></li>
+<li><p><strong>Fully localized interface</strong>: The mod is available in 120 languages (including English,
+Italian, Spanish, French, German, Portuguese, Russian, Chinese, Japanese, Korean,
+Turkish, Dutch, Polish and 107 more) with automatic system language detection.</p></li>
+<li><p><strong>Concise file display</strong>: For example, the mod shows <code>File: photo.png</code> instead of the full path for a
+cleaner look, while keeping the complete path for actual execution like in Windows Vista/7.</p></li>
+<li><p><strong>Optional description box</strong>: The description field can be hidden via settings
+(enabled by default), making the dialog more compact.</p></li>
+<li><p><strong>DPI-aware</strong>: The mod tries to support multiple DPIs where possible.</p></li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>Windows 10 or Windows 11 — x64 architecture</strong></li>
+<li><strong>Windhawk</strong> with injection enabled for <code>explorer.exe</code>, <code>OpenWith.exe</code> and
+<code>rundll32.exe</code></li>
+<li>The mod setting <strong>Enable the Windows 7-style picker</strong> must be turned on</li>
+</ul>
+<h2 id="note">Note</h2>
+<p>When explicitly selecting <strong>Always use</strong>, the mod saves the choice as the new
+default. All other selections open the file once without changing the system default.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>Single-file selection</strong>: Opening multiple files at once with "Open with" is
+not currently supported.</li>
+<li><strong>No default for extensionless files</strong>: Files without an extension can be opened,
+but there is no extension to associate permanently.</li>
+<li><strong>Composite extensions</strong>: Windows treats <code>archive.tar.gz</code> as a <code>.gz</code> file; the
+mod follows this same standard behavior.</li>
+<li><strong>Store/UWP applications</strong>: Some modern apps may not appear in the list or may
+not open correctly if their registration is incomplete.</li>
+<li><strong>Protected associations</strong>: Windows may prevent changing certain file associations.
+In these cases, please use the Windows Default Apps settings to make your changes.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>ReactOS</strong> — Inspiration</li>
+<li><strong>aubymori</strong> — Inspiration</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always Allow CTRL+SHIFT+ENTER 1.0.0]]></title>
         <id>https://windhawk.net/mods/always-allow-ctrl-shift-enter#75b8cc7e573ac73efbc9e9df7fd768f3510a5530</id>
@@ -843,54 +916,6 @@ mods by Michael Maltsev (m417z).</p>]]></content>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Animations 1.1.5]]></title>
-        <id>https://windhawk.net/mods/windows-animations#fcf4752975ee79f29179fa66057e216ba4f52ff5</id>
-        <link href="https://windhawk.net/mods/windows-animations"/>
-        <updated>2026-08-05T16:52:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsanimations">Windows Animations</h1>
-<p>Welcome to <strong>Windows Animations</strong>, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. </p>
-<p>By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and seamless execution.</p>
-<h2 id="keyfeatures">✨ Key Features</h2>
-<ul>
-<li><p><strong>🚀 Smart Hybrid Engine:</strong> Intelligently seamlessly switches between lightning-fast GDI (for pixel-perfect destruction physics) and the native DWM Thumbnail API (to perfectly preserve Windows 11 rounded corners and drop shadows).</p></li>
-<li><p><strong>🎬 Cinematic Close Effects:</strong> Transform how you close applications with four physics-based animations:</p></li>
-<li><p><strong>Square Shatter:</strong> The window violently explodes outward into digital blocks before drifting into the void.</p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/shatter_close.gif" alt="Square Shatter Preview" /></p></li>
-<li><p><strong>Thanos Snap:</strong> A disintegration wave sweeps across the window, turning it into thousands of tiny dust particles that curve away into the wind.</p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/0e0508083d6c3108b2b3da8c5f0140f01cd21e37/close_preview.gif" alt="Thanos Snap Preview" /></p></li>
-<li><p><strong>Perlin Dissolve:</strong> The window organically melts and dissolves into thin air using a smooth Perlin noise map.</p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/perlin_close.gif" alt="Perlin Dissolve Preview" /></p></li>
-<li><p><strong>Cyber Glitch:</strong> The window fractures into irregular horizontal data strips that shudder, then tear left and right like a corrupted hologram.</p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/glitchy_close.gif" alt="Cyber Glitch Preview" /></p></li>
-<li><p><strong>🧞 Fluid Minimize & Restore:</strong> Choose between the classic Genie "suck into the taskbar" effect (derived from macos-minimize-animation by Abdullah Masood under MIT license) and <strong>Ink Splash</strong> — an organic blot reveal/retract.</p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif" alt="Genie Minimize Preview" /></p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif" alt="Ink Splash Preview" /></p></li>
-<li><p><strong>🔄 Soft Switch Animation:</strong> A pristine scale and fade-in animation triggered <em>exclusively</em> when actively switching windows via the Alt+Tab menu.</p></li>
-<li><p><strong>Before:</strong></p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_before.gif" alt="Alt Tab Switch Before" /></p></li>
-<li><p><strong>After:</strong></p>
-<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif" alt="Alt Tab Switch After" /></p></li>
-<li><p><strong>🛡️ Rock-Solid Stability:</strong> Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency. Tray apps only <em>hide</em> their window instead of closing it, so animating them is opt-in via the <strong>Treat hiding a window as closing it</strong> setting.</p></li>
-</ul>
-<h2 id="customizationsettings">⚙️ Customization &amp; Settings</h2>
-<p>You can deeply customize the feel and pacing of every animation via the Windhawk Settings tab:</p>
-<ul>
-<li><strong>Minimize/Restore Animation Style:</strong> Choose between Genie (taskbar suck) and Ink Splash (organic blot reveal/retract).</li>
-<li><strong>Close Animation Effect:</strong> Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', and 'Cyber Glitch'.</li>
-<li><strong>Minimize/Restore duration (ms):</strong> Controls Genie speed directly; Ink Splash is paced slower from the same value. (Default: 360ms, clamp 200–1400)</li>
-<li><strong>Close animation duration (ms):</strong> Controls how long the dramatic close animation lasts. (Default: 900ms)</li>
-<li><strong>Switch animation duration (ms):</strong> Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)</li>
-<li><strong>Shatter block size (px):</strong> Determines the size of the dust/shatter particles. </li>
-<li><em>Performance Tip:</em> Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).</li>
-<li><strong>Treat hiding a window as closing it:</strong> Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.</li>
-<li><strong>Toggles:</strong> Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.</li>
-</ul>]]></content>
-        <author>
-            <name>ReDrag</name>
-            <uri>https://github.com/redrag2105</uri>
         </author>
     </entry>
 </feed>
