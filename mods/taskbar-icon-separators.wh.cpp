@@ -2,13 +2,13 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.13
+// @version         1.0.31
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,12 +29,17 @@ Separators remain genuine, can be manually reordered, and can also be created fr
 Note: The mod creates pinned shortcuts targeting Windows `systray.exe` (with fallback) and reorders the persisted taskbar pin list. 
 Cleanup is best-effort; in the worst failure case, manual taskbar unpinning and reordering may be required.
 
-Add separators from the taskbar context menu and drag them into place; positions
-are saved automatically. A newly added, unanchored separator keeps a small
-"Drag to anchor this separator" guide attached above it until it is moved once; the guide is attached directly to the live TaskListButton with Popup.PlacementTarget, so Windows keeps it aligned through dragging and taskbar relayouts.
-Right-click a separator to remove it. Windhawk settings expose only the global separator width.
-Win+1 through Win+0 taskbar shortcuts automatically skip anchored separator slots
-when selecting their numbered app.
+By default, add separators from the taskbar context menu and drag them into place;
+positions are saved automatically. Right-click a separator to remove it. If another
+shell replaces the Windows taskbar context menu, switch interaction mode to
+"Middle click": middle-click empty taskbar space to add and middle-click a separator
+to remove it.
+
+A newly added, unanchored separator keeps a small "Drag to anchor this separator"
+guide on the desktop side of the taskbar until it is moved once. Win+1 through Win+0
+skips live separator buttons when selecting numbered apps. Windhawk settings also
+provide a single global separator width plus rotation, brightness, and alpha controls
+for the bundled icon.
 
 Windows 11 only.
 */
@@ -45,9 +50,33 @@ Windows 11 only.
 - width: 20
   $name: Separator Width
   $description: Width of every separator slot.
+- interactionMode: contextMenu
+  $name: Add/remove interaction
+  $description: >-
+    Context menu is the normal mode. Middle click is a fallback for shells that
+    replace the Windows taskbar context menu: middle-click empty taskbar space
+    to add a separator and middle-click a separator to remove it.
+  $options:
+  - contextMenu: Context menu
+  - middleClick: Middle click
+- iconRotation: "0"
+  $name: Icon rotation
+  $description: Rotation of the bundled separator artwork. Changing this reloads the mod.
+  $options:
+  - "0": 0 degrees
+  - "90": 90 degrees clockwise
+  - "180": 180 degrees
+  - "270": 270 degrees clockwise
+- iconBrightness: 168
+  $name: Icon brightness
+  $description: 0 = black, 168 = default, 255 = white. Changing this reloads the mod.
+- iconAlpha: 173
+  $name: Icon alpha
+  $description: 0 = transparent, 173 = default, 255 = fully opaque. Changing this reloads the mod.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_api.h>
 #include <windhawk_utils.h>
 
 #undef GetCurrentTime
@@ -58,11 +87,13 @@ Windows 11 only.
 #include <shobjidl.h>
 #include <propkey.h>
 #include <propvarutil.h>
+#include <wincodec.h>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -74,6 +105,7 @@ Windows 11 only.
 #include <atomic>
 #include <cwctype>
 #include <cwchar>
+#include <cstring>
 #include <climits>
 #include <iterator>
 #include <list>
@@ -162,7 +194,7 @@ struct IPinManagerInterop3 : IPinManagerInterop2 {
 struct SeparatorSetting {
     int ordinal;       // Current mod-state row, 1-based (logging only).
     int sourceIndex;   // Current mod-state vector index, 0-based.
-    int targetIndex;   // Zero-based value passed to MoveTaskbarPin.
+    int targetIndex;   // Zero-based pinned-list ordinal passed to MoveTaskbarPin.
     double width;      // FrameworkElement::MaxWidth for the separator slot.
     std::wstring stableId; // Persistent internal identity, independent of array order.
     std::wstring identity; // AppUserModelID / shortcut stem derived from stableId.
@@ -182,8 +214,37 @@ static std::shared_mutex g_settingsMutex;
 // Serializes native Add/drag/Unpin mutations with state-file writes and the
 // global Windhawk width-setting callback.
 static std::mutex g_settingsMutationMutex;
+
+enum class InteractionMode : int {
+    ContextMenu,
+    MiddleClick,
+};
+
+static std::atomic<InteractionMode> g_interactionMode =
+    InteractionMode::ContextMenu;
+// Runtime capabilities are published only after the relevant optional symbols
+// have been resolved. Keeping them atomic avoids reading function-pointer slots
+// concurrently with a late Taskbar.View/taskbar.dll installation.
+static std::atomic<bool> g_contextMenuInteractionAvailable = false;
+static std::atomic<bool> g_middleClickInteractionAvailable = false;
+static std::atomic<bool> g_separatorContextSuppressionAvailable = false;
+
+static constexpr int kDefaultIconBrightness = 168;
+static constexpr int kDefaultIconAlpha = 173;
+// Increment this whenever the generated artwork/encoding changes in a way that
+// should force Explorer to see a completely new shell identity even when the
+// user-facing appearance settings are unchanged.
+static constexpr int kIconGenerationRevision = 1;
+struct IconAppearanceSettings {
+    int rotation = 0;
+    int brightness = kDefaultIconBrightness;
+    int alpha = kDefaultIconAlpha;
+};
+
+static IconAppearanceSettings g_iconAppearance;
+
 static std::wstring g_storagePath;
-static std::wstring g_iconPath;
+static std::wstring g_bundledIconPath;
 static std::wstring g_separatorStatePath;
 
 // True after native state changes in memory and until the backend worker has
@@ -208,6 +269,10 @@ static std::atomic<bool> g_internalCleanupInProgress = false;
 static std::mutex g_lifecycleMutex;
 static bool g_backendStopped = false;
 static std::atomic<bool> g_backendHasConverged = false;
+// Incremented only by taskbar lifecycle starts. The backend keeps its own
+// handled generation so a reconstruction that arrives during a convergence
+// pass can never be lost by a boolean clear.
+static std::atomic<unsigned long long> g_taskbarRefreshGeneration = 0;
 static HANDLE g_backendThread = nullptr;
 static HANDLE g_backendStopEvent = nullptr;
 static HANDLE g_backendWakeEvent = nullptr;
@@ -224,9 +289,9 @@ static constexpr wchar_t kSeparatorStateFileName[] = L"separator-state-v1.txt";
 static constexpr wchar_t kLegacyIdentityManifestValueName[] =
     L"separatorIdentityManifestV1";
 
-// Reserved outside the supported separator range. The helper is briefly
-// pinned and unpinned after positioning to make Explorer process a concrete
-// pin-list mutation and reconcile stale taskbar visuals.
+// Reserved outside the supported separator range. The helper is used only for
+// taskbar startup/reconstruction and backing-file recovery, where Explorer may
+// need a concrete pin-list mutation to reconcile stale taskbar visuals.
 static constexpr int kRefreshPulseOrdinal = 100001;
 
 // -----------------------------------------------------------------------------
@@ -391,14 +456,46 @@ static std::wstring JoinPath(
     return directory + L"\\" + fileName;
 }
 
+static std::wstring BuildIconGenerationToken(
+    const IconAppearanceSettings& appearance) {
+    wchar_t token[64] = {};
+    swprintf_s(
+        token,
+        L"g%d-r%d-b%d-a%d",
+        kIconGenerationRevision,
+        appearance.rotation,
+        appearance.brightness,
+        appearance.alpha);
+    return token;
+}
+
+static std::wstring BuildBundledIconFileName(
+    const IconAppearanceSettings& appearance) {
+    return L"separator-icon-" +
+        BuildIconGenerationToken(appearance) +
+        L".ico";
+}
+
+static void ConfigureAppearanceGenerationPaths() {
+    g_bundledIconPath = JoinPath(
+        g_storagePath,
+        BuildBundledIconFileName(g_iconAppearance));
+}
+
 static std::wstring BuildSeparatorIdentity(
     std::wstring_view prefix,
     std::wstring_view stableId) {
+    // stableId is the durable identity stored in separator-state-v1.txt. The
+    // generation suffix is deliberately shell-facing only: an icon appearance
+    // change produces a fresh .lnk path and AppUserModelID without disturbing
+    // the user's persisted separator positions.
     return std::wstring(prefix) +
            L"." +
            kSeparatorIdentitySuffix +
            L"." +
-           std::wstring(stableId);
+           std::wstring(stableId) +
+           L"." +
+           BuildIconGenerationToken(g_iconAppearance);
 }
 
 static std::wstring GetSeparatorShortcutPath(
@@ -457,6 +554,173 @@ static std::vector<std::wstring> EnumerateSeparatorShortcuts() {
     return paths;
 }
 
+static bool IsValidIconGenerationToken(std::wstring_view token) {
+    if (token.empty()) {
+        return false;
+    }
+
+    std::wstring candidate(token);
+    int revision = 0;
+    int rotation = 0;
+    int brightness = 0;
+    int alpha = 0;
+    int consumed = 0;
+    int matched = swscanf(
+        candidate.c_str(),
+        L"g%d-r%d-b%d-a%d%n",
+        &revision,
+        &rotation,
+        &brightness,
+        &alpha,
+        &consumed);
+
+    return matched == 4 &&
+        consumed == static_cast<int>(candidate.size()) &&
+        revision > 0 &&
+        (rotation == 0 || rotation == 90 ||
+         rotation == 180 || rotation == 270) &&
+        brightness >= 0 && brightness <= 255 &&
+        alpha >= 0 && alpha <= 255;
+}
+
+static bool IsOwnedBundledIconArtifactName(std::wstring_view fileName) {
+    std::wstring candidate(fileName);
+    if (candidate.size() > 4 &&
+        _wcsicmp(candidate.c_str() + candidate.size() - 4, L".tmp") == 0) {
+        candidate.resize(candidate.size() - 4);
+    }
+
+    // Fixed-name artifact from 1.0.25 and earlier.
+    if (_wcsicmp(candidate.c_str(), L"separator.ico") == 0) {
+        return true;
+    }
+
+    static constexpr std::wstring_view currentPrefix = L"separator-icon-";
+    static constexpr std::wstring_view icoSuffix = L".ico";
+    std::wstring_view candidateView(candidate);
+    if (candidateView.size() > currentPrefix.size() + icoSuffix.size() &&
+        candidateView.substr(0, currentPrefix.size()) == currentPrefix &&
+        candidateView.substr(candidateView.size() - icoSuffix.size()) == icoSuffix) {
+        std::wstring_view generation = candidateView.substr(
+            currentPrefix.size(),
+            candidateView.size() - currentPrefix.size() - icoSuffix.size());
+        if (IsValidIconGenerationToken(generation)) {
+            return true;
+        }
+    }
+
+    // Appearance-keyed names used by 1.0.22-1.0.24. Keep recognizing them
+    // strictly as legacy mod-owned artifacts so successful convergence can
+    // purge every obsolete icon generation.
+    int revision = 0;
+    int rotation = 0;
+    int brightness = 0;
+    int alpha = 0;
+    int consumed = 0;
+    int matched = swscanf(
+        candidate.c_str(),
+        L"separator-icon-v%d-r%d-b%d-a%d.ico%n",
+        &revision,
+        &rotation,
+        &brightness,
+        &alpha,
+        &consumed);
+
+    return matched == 4 &&
+        consumed == static_cast<int>(candidate.size()) &&
+        revision > 0 &&
+        (rotation == 0 || rotation == 90 ||
+         rotation == 180 || rotation == 270) &&
+        brightness >= 0 && brightness <= 255 &&
+        alpha >= 0 && alpha <= 255;
+}
+
+static std::vector<std::wstring> EnumerateBundledIconArtifacts() {
+    std::vector<std::wstring> paths;
+    if (g_storagePath.empty()) {
+        return paths;
+    }
+    WIN32_FIND_DATAW findData = {};
+    HANDLE find = FindFirstFileW(
+        JoinPath(g_storagePath, L"separator*.ico*").c_str(),
+        &findData);
+
+    if (find == INVALID_HANDLE_VALUE) {
+        return paths;
+    }
+
+    do {
+        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            IsOwnedBundledIconArtifactName(findData.cFileName)) {
+            paths.push_back(
+                JoinPath(g_storagePath, findData.cFileName));
+        }
+    } while (FindNextFileW(find, &findData));
+
+    FindClose(find);
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
+
+static bool PathsEqualOrdinalIgnoreCase(
+    std::wstring_view first,
+    std::wstring_view second) {
+    if (first.size() > INT_MAX || second.size() > INT_MAX) {
+        return false;
+    }
+
+    return CompareStringOrdinal(
+               first.data(),
+               static_cast<int>(first.size()),
+               second.data(),
+               static_cast<int>(second.size()),
+               TRUE) == CSTR_EQUAL;
+}
+
+static void DeleteAllBundledIconArtifacts() {
+    if (g_storagePath.empty()) {
+        return;
+    }
+
+    for (const auto& path : EnumerateBundledIconArtifacts()) {
+        DeleteFileIfPresent(path);
+    }
+}
+
+static bool DeleteStaleBundledIconArtifacts() {
+    if (g_storagePath.empty() || g_bundledIconPath.empty()) {
+        return true;
+    }
+
+    bool success = true;
+    const std::wstring currentTemporaryPath =
+        g_bundledIconPath + L".tmp";
+
+    // Only call this after a successful convergence: at that point every
+    // surviving owned shortcut has been verified/recreated against the current
+    // appearance path. Until then an interrupted older reload may still have a
+    // live shortcut referencing one of these previous cache files.
+    for (const auto& path : EnumerateBundledIconArtifacts()) {
+        if (PathsEqualOrdinalIgnoreCase(path, g_bundledIconPath) ||
+            PathsEqualOrdinalIgnoreCase(path, currentTemporaryPath)) {
+            continue;
+        }
+
+        if (!DeleteFileIfPresent(path)) {
+            success = false;
+        }
+    }
+
+    // A completed atomic write never needs its temporary sibling. Keeping this
+    // separate also cleans a .tmp left by an interrupted process without
+    // touching the current final icon.
+    if (!DeleteFileIfPresent(currentTemporaryPath)) {
+        success = false;
+    }
+
+    return success;
+}
+
 static std::wstring GetShortcutIdentity(const std::wstring& path) {
     size_t fileNameStart = path.find_last_of(L"\\/");
     fileNameStart = fileNameStart == std::wstring::npos
@@ -510,15 +774,30 @@ static std::optional<std::wstring> ExtractStableIdFromSeparatorIdentity(
         kSeparatorIdentitySuffix +
         L".";
 
-    size_t markerPosition =
-        identity.rfind(marker);
+    size_t markerPosition = identity.rfind(marker);
     if (markerPosition == std::wstring_view::npos) {
         return std::nullopt;
     }
 
-    std::wstring_view stableId =
-        identity.substr(
-            markerPosition + marker.size());
+    std::wstring_view payload = identity.substr(
+        markerPosition + marker.size());
+    if (payload.empty()) {
+        return std::nullopt;
+    }
+
+    // <=1.0.25 identities ended immediately after stableId. 1.0.26+ appends
+    // one validated appearance generation token. Accept both so stale task
+    // groups remain inert during upgrade and state-less legacy adoption can
+    // recover the same durable stable ID before replacing their shell objects.
+    std::wstring_view stableId = payload;
+    size_t generationSeparator = payload.rfind(L'.');
+    if (generationSeparator != std::wstring_view::npos) {
+        stableId = payload.substr(0, generationSeparator);
+        std::wstring_view generation = payload.substr(generationSeparator + 1);
+        if (!IsValidIconGenerationToken(generation)) {
+            return std::nullopt;
+        }
+    }
 
     if (!IsValidStableId(stableId)) {
         return std::nullopt;
@@ -1081,6 +1360,130 @@ static double LoadSeparatorWidthSetting() {
     return static_cast<double>(width);
 }
 
+static InteractionMode LoadInteractionModeSetting() {
+    std::wstring mode =
+        WindhawkUtils::StringSetting::make(
+            L"interactionMode").get();
+
+    if (_wcsicmp(mode.c_str(), L"middleClick") == 0) {
+        return InteractionMode::MiddleClick;
+    }
+
+    return InteractionMode::ContextMenu;
+}
+
+static IconAppearanceSettings LoadIconAppearanceSettings() {
+    IconAppearanceSettings settings;
+
+    std::wstring rotationText =
+        WindhawkUtils::StringSetting::make(
+            L"iconRotation").get();
+
+    int rotation = 0;
+    if (rotationText == L"90") {
+        rotation = 90;
+    } else if (rotationText == L"180") {
+        rotation = 180;
+    } else if (rotationText == L"270") {
+        rotation = 270;
+    } else if (rotationText != L"0") {
+        Wh_Log(
+            L"[SETTINGS] Unsupported icon rotation '%s'; using 0 degrees",
+            rotationText.c_str());
+    }
+
+    int brightness = Wh_GetIntSetting(L"iconBrightness");
+    int alpha = Wh_GetIntSetting(L"iconAlpha");
+
+    int clampedBrightness = std::clamp(brightness, 0, 255);
+    int clampedAlpha = std::clamp(alpha, 0, 255);
+
+    if (clampedBrightness != brightness) {
+        Wh_Log(
+            L"[SETTINGS] Clamped icon brightness from %d to %d",
+            brightness,
+            clampedBrightness);
+    }
+    if (clampedAlpha != alpha) {
+        Wh_Log(
+            L"[SETTINGS] Clamped icon alpha from %d to %d",
+            alpha,
+            clampedAlpha);
+    }
+
+    settings.rotation = rotation;
+    settings.brightness = clampedBrightness;
+    settings.alpha = clampedAlpha;
+    return settings;
+}
+
+static bool IconAppearanceSettingsEqual(
+    const IconAppearanceSettings& left,
+    const IconAppearanceSettings& right) {
+    return left.rotation == right.rotation &&
+        left.brightness == right.brightness &&
+        left.alpha == right.alpha;
+}
+
+static const wchar_t* InteractionModeName(
+    InteractionMode mode) {
+    return mode == InteractionMode::MiddleClick
+               ? L"middleClick"
+               : L"contextMenu";
+}
+
+static bool IsContextMenuInteractionMode() {
+    return g_interactionMode.load(
+               std::memory_order_acquire) ==
+        InteractionMode::ContextMenu;
+}
+
+static bool IsMiddleClickInteractionMode() {
+    return g_interactionMode.load(
+               std::memory_order_acquire) ==
+        InteractionMode::MiddleClick;
+}
+
+static InteractionMode ResolveInteractionModeAgainstCapabilities(
+    InteractionMode requestedMode) {
+    const bool contextAvailable =
+        g_contextMenuInteractionAvailable.load(std::memory_order_acquire);
+    const bool middleAvailable =
+        g_middleClickInteractionAvailable.load(std::memory_order_acquire);
+
+    if (requestedMode == InteractionMode::ContextMenu &&
+        !contextAvailable && middleAvailable) {
+        return InteractionMode::MiddleClick;
+    }
+
+    if (requestedMode == InteractionMode::MiddleClick &&
+        !middleAvailable && contextAvailable) {
+        return InteractionMode::ContextMenu;
+    }
+
+    // If both frontends are unavailable, preserve the user's configured mode.
+    // This makes the degraded state explicit in logs without pretending the
+    // other equally-unavailable frontend is a meaningful fallback.
+    return requestedMode;
+}
+
+static void ApplyInteractionModeCapabilityFallback(
+    const wchar_t* logCategory) {
+    InteractionMode requested =
+        g_interactionMode.load(std::memory_order_acquire);
+    InteractionMode resolved =
+        ResolveInteractionModeAgainstCapabilities(requested);
+
+    if (resolved != requested) {
+        g_interactionMode.store(resolved, std::memory_order_release);
+        Wh_Log(
+            L"[%s] Interaction mode %s unavailable; falling back to %s",
+            logCategory,
+            InteractionModeName(requested),
+            InteractionModeName(resolved));
+    }
+}
+
 static bool AdoptLegacySeparatorShortcuts(
     Settings* settings) {
     if (!settings) {
@@ -1143,9 +1546,13 @@ static bool AdoptLegacySeparatorShortcuts(
             .targetIndex = -1,
             .width = settings->width,
             .stableId = *stableId,
-            // Preserve the exact old shortcut identity for this migration
-            // session. The new state format stores only stable IDs/positions.
-            .identity = std::move(identity),
+            // The old/no-generation shortcut is evidence for the durable stable
+            // ID only. Desired state immediately uses the current shell generation
+            // so this same convergence pass unpins the legacy shortcut and creates
+            // the fresh .lnk/AUMID instead of postponing migration to next startup.
+            .identity = BuildSeparatorIdentity(
+                settings->identifierPrefix,
+                *stableId),
         });
 
         adoptedCount++;
@@ -1640,6 +2047,514 @@ static bool WriteBinaryFile(
     return true;
 }
 
+static bool WriteBinaryFileAtomically(
+    const std::wstring& path,
+    const void* data,
+    DWORD size) {
+    const std::wstring temporaryPath = path + L".tmp";
+    if (!WriteBinaryFile(temporaryPath, data, size)) {
+        DeleteFileW(temporaryPath.c_str());
+        return false;
+    }
+
+    if (!MoveFileExW(
+            temporaryPath.c_str(),
+            path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        Wh_Log(
+            L"[FILES] Atomic file replace failed path='%s' error=%u",
+            path.c_str(),
+            GetLastError());
+        DeleteFileW(temporaryPath.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+
+struct DecodedIconFrame {
+    UINT width = 0;
+    UINT height = 0;
+    UINT stride = 0;
+    std::vector<BYTE> pixels;
+};
+
+static BYTE ScaleIconChannel(
+    BYTE value,
+    int requestedMaximum,
+    int sourceMaximum) {
+    int scaled =
+        (static_cast<int>(value) * requestedMaximum + sourceMaximum / 2) /
+        sourceMaximum;
+    return static_cast<BYTE>(std::clamp(scaled, 0, 255));
+}
+
+static bool TransformIconFrame(
+    DecodedIconFrame* frame,
+    const IconAppearanceSettings& appearance) {
+    if (!frame || frame->pixels.empty()) {
+        return false;
+    }
+
+    for (size_t i = 0; i + 3 < frame->pixels.size(); i += 4) {
+        // Preserve the embedded artwork's anti-aliasing by scaling its existing
+        // straight-alpha BGRA channels instead of flattening non-zero pixels.
+        for (size_t channel = 0; channel < 3; channel++) {
+            frame->pixels[i + channel] = ScaleIconChannel(
+                frame->pixels[i + channel],
+                appearance.brightness,
+                kDefaultIconBrightness);
+        }
+        frame->pixels[i + 3] = ScaleIconChannel(
+            frame->pixels[i + 3],
+            appearance.alpha,
+            kDefaultIconAlpha);
+    }
+
+    if (appearance.rotation == 0) {
+        return true;
+    }
+    if ((appearance.rotation != 90 &&
+         appearance.rotation != 180 &&
+         appearance.rotation != 270) ||
+        frame->width != frame->height) {
+        return false;
+    }
+
+    std::vector<BYTE> rotated(frame->pixels.size());
+    for (UINT y = 0; y < frame->height; y++) {
+        for (UINT x = 0; x < frame->width; x++) {
+            UINT dstX = x;
+            UINT dstY = y;
+
+            switch (appearance.rotation) {
+                case 90:
+                    dstX = frame->height - 1 - y;
+                    dstY = x;
+                    break;
+                case 180:
+                    dstX = frame->width - 1 - x;
+                    dstY = frame->height - 1 - y;
+                    break;
+                case 270:
+                    dstX = y;
+                    dstY = frame->width - 1 - x;
+                    break;
+            }
+
+            const size_t sourceOffset =
+                static_cast<size_t>(y) * frame->stride + x * 4;
+            const size_t destinationOffset =
+                static_cast<size_t>(dstY) * frame->stride + dstX * 4;
+            std::copy_n(
+                frame->pixels.data() + sourceOffset,
+                4,
+                rotated.data() + destinationOffset);
+        }
+    }
+
+    frame->pixels = std::move(rotated);
+    return true;
+}
+
+static void AppendLe16(std::vector<BYTE>* output, WORD value) {
+    output->push_back(static_cast<BYTE>(value & 0xFF));
+    output->push_back(static_cast<BYTE>((value >> 8) & 0xFF));
+}
+
+static void AppendLe32(std::vector<BYTE>* output, DWORD value) {
+    output->push_back(static_cast<BYTE>(value & 0xFF));
+    output->push_back(static_cast<BYTE>((value >> 8) & 0xFF));
+    output->push_back(static_cast<BYTE>((value >> 16) & 0xFF));
+    output->push_back(static_cast<BYTE>((value >> 24) & 0xFF));
+}
+
+static void WriteLe32(BYTE* data, DWORD value) {
+    data[0] = static_cast<BYTE>(value & 0xFF);
+    data[1] = static_cast<BYTE>((value >> 8) & 0xFF);
+    data[2] = static_cast<BYTE>((value >> 16) & 0xFF);
+    data[3] = static_cast<BYTE>((value >> 24) & 0xFF);
+}
+
+static bool BuildDibIconFrame(
+    const DecodedIconFrame& frame,
+    std::vector<BYTE>* output) {
+    if (!output || !frame.width || !frame.height ||
+        frame.width != frame.height || frame.width > 256 ||
+        frame.stride != frame.width * 4 || frame.pixels.empty()) {
+        return false;
+    }
+
+    const UINT xorSize = frame.stride * frame.height;
+    const UINT maskStride = ((frame.width + 31) / 32) * 4;
+    const UINT maskSize = maskStride * frame.height;
+
+    output->clear();
+    output->reserve(40 + xorSize + maskSize);
+
+    // A 32-bit ICO DIB stores twice the logical height: XOR color bitmap plus
+    // the 1-bpp AND transparency mask. Pixel rows are bottom-up BGRA.
+    AppendLe32(output, 40);                    // BITMAPINFOHEADER::biSize
+    AppendLe32(output, frame.width);           // biWidth
+    AppendLe32(output, frame.height * 2);      // biHeight
+    AppendLe16(output, 1);                     // biPlanes
+    AppendLe16(output, 32);                    // biBitCount
+    AppendLe32(output, BI_RGB);                // biCompression
+    AppendLe32(output, xorSize);               // biSizeImage
+    AppendLe32(output, 0);                     // biXPelsPerMeter
+    AppendLe32(output, 0);                     // biYPelsPerMeter
+    AppendLe32(output, 0);                     // biClrUsed
+    AppendLe32(output, 0);                     // biClrImportant
+
+    for (UINT y = frame.height; y-- > 0;) {
+        const BYTE* row =
+            frame.pixels.data() +
+            static_cast<size_t>(y) * frame.stride;
+        output->insert(
+            output->end(),
+            row,
+            row + frame.stride);
+    }
+
+    std::vector<BYTE> mask(maskStride, 0);
+    for (UINT y = frame.height; y-- > 0;) {
+        std::fill(mask.begin(), mask.end(), 0);
+        const BYTE* row =
+            frame.pixels.data() +
+            static_cast<size_t>(y) * frame.stride;
+        for (UINT x = 0; x < frame.width; x++) {
+            if (row[x * 4 + 3] == 0) {
+                mask[x / 8] |= static_cast<BYTE>(0x80 >> (x % 8));
+            }
+        }
+        output->insert(output->end(), mask.begin(), mask.end());
+    }
+
+    return true;
+}
+
+static bool BuildCustomizedSeparatorIcon(
+    const IconAppearanceSettings& appearance,
+    std::vector<BYTE>* output) {
+    if (!output || sizeof(kSeparatorIcon) > MAXDWORD) {
+        return false;
+    }
+
+    winrt::com_ptr<IWICImagingFactory> factory;
+    HRESULT hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        __uuidof(IWICImagingFactory),
+        factory.put_void());
+    if (FAILED(hr)) {
+        Wh_Log(
+            L"[ICON] WIC factory creation failed hr=0x%08X",
+            static_cast<unsigned int>(hr));
+        return false;
+    }
+
+    winrt::com_ptr<IWICStream> stream;
+    hr = factory->CreateStream(stream.put());
+    if (SUCCEEDED(hr)) {
+        hr = stream->InitializeFromMemory(
+            const_cast<BYTE*>(kSeparatorIcon),
+            static_cast<DWORD>(sizeof(kSeparatorIcon)));
+    }
+
+    winrt::com_ptr<IWICBitmapDecoder> decoder;
+    if (SUCCEEDED(hr)) {
+        hr = factory->CreateDecoderFromStream(
+            stream.get(),
+            nullptr,
+            WICDecodeMetadataCacheOnLoad,
+            decoder.put());
+    }
+
+    UINT frameCount = 0;
+    if (SUCCEEDED(hr)) {
+        hr = decoder->GetFrameCount(&frameCount);
+    }
+    if (FAILED(hr) || !frameCount || frameCount > 32) {
+        Wh_Log(
+            L"[ICON] Embedded ICO decoder setup failed hr=0x%08X frames=%u",
+            static_cast<unsigned int>(hr),
+            frameCount);
+        return false;
+    }
+
+    std::vector<DecodedIconFrame> frames;
+    std::vector<std::vector<BYTE>> dibFrames;
+    frames.reserve(frameCount);
+    dibFrames.reserve(frameCount);
+
+    for (UINT i = 0; i < frameCount; i++) {
+        winrt::com_ptr<IWICBitmapFrameDecode> sourceFrame;
+        hr = decoder->GetFrame(i, sourceFrame.put());
+
+        UINT width = 0;
+        UINT height = 0;
+        if (SUCCEEDED(hr)) {
+            hr = sourceFrame->GetSize(&width, &height);
+        }
+        if (FAILED(hr) || !width || width > 256 ||
+            height != width) {
+            Wh_Log(
+                L"[ICON] Invalid embedded ICO frame %u hr=0x%08X size=%ux%u",
+                i,
+                static_cast<unsigned int>(hr),
+                width,
+                height);
+            return false;
+        }
+
+        // Taskbar pins don't need the embedded 256px frame. Re-encoding it as
+        // an uncompressed DIB would dominate the generated ICO's size.
+        if (width == 256) {
+            continue;
+        }
+
+        winrt::com_ptr<IWICFormatConverter> converter;
+        hr = factory->CreateFormatConverter(converter.put());
+        if (SUCCEEDED(hr)) {
+            hr = converter->Initialize(
+                sourceFrame.get(),
+                GUID_WICPixelFormat32bppBGRA,
+                WICBitmapDitherTypeNone,
+                nullptr,
+                0.0,
+                WICBitmapPaletteTypeCustom);
+        }
+        if (FAILED(hr)) {
+            Wh_Log(
+                L"[ICON] Failed to convert ICO frame %u hr=0x%08X",
+                i,
+                static_cast<unsigned int>(hr));
+            return false;
+        }
+
+        DecodedIconFrame frame;
+        frame.width = width;
+        frame.height = height;
+        frame.stride = width * 4;
+        frame.pixels.resize(
+            static_cast<size_t>(frame.stride) * height);
+
+        hr = converter->CopyPixels(
+            nullptr,
+            frame.stride,
+            static_cast<UINT>(frame.pixels.size()),
+            frame.pixels.data());
+        if (FAILED(hr) || !TransformIconFrame(&frame, appearance)) {
+            Wh_Log(
+                L"[ICON] Failed to read/transform ICO frame %u hr=0x%08X",
+                i,
+                static_cast<unsigned int>(hr));
+            return false;
+        }
+
+        std::vector<BYTE> dib;
+        if (!BuildDibIconFrame(frame, &dib)) {
+            Wh_Log(L"[ICON] Failed to build ICO DIB frame %u", i);
+            return false;
+        }
+
+        frames.push_back(std::move(frame));
+        dibFrames.push_back(std::move(dib));
+    }
+
+    constexpr size_t kIcoHeaderSize = 6;
+    constexpr size_t kIcoEntrySize = 16;
+    const UINT outputFrameCount =
+        static_cast<UINT>(frames.size());
+    if (!outputFrameCount) {
+        return false;
+    }
+    const size_t directorySize =
+        kIcoHeaderSize +
+        static_cast<size_t>(outputFrameCount) * kIcoEntrySize;
+
+    output->assign(directorySize, 0);
+    (*output)[2] = 1;  // ICONDIR::idType = 1
+    (*output)[4] = static_cast<BYTE>(outputFrameCount & 0xFF);
+    (*output)[5] = static_cast<BYTE>((outputFrameCount >> 8) & 0xFF);
+
+    size_t nextOffset = directorySize;
+    for (UINT i = 0; i < outputFrameCount; i++) {
+        const auto& frame = frames[i];
+        const auto& dib = dibFrames[i];
+        if (dib.size() > MAXDWORD || nextOffset > MAXDWORD ||
+            dib.size() > MAXDWORD - nextOffset) {
+            output->clear();
+            return false;
+        }
+
+        BYTE* entry =
+            output->data() + kIcoHeaderSize +
+            static_cast<size_t>(i) * kIcoEntrySize;
+        entry[0] = frame.width == 256 ? 0 : static_cast<BYTE>(frame.width);
+        entry[1] = frame.height == 256 ? 0 : static_cast<BYTE>(frame.height);
+        entry[4] = 1;   // planes
+        entry[6] = 32;  // bit depth
+        WriteLe32(entry + 8, static_cast<DWORD>(dib.size()));
+        WriteLe32(entry + 12, static_cast<DWORD>(nextOffset));
+
+        output->insert(output->end(), dib.begin(), dib.end());
+        nextOffset += dib.size();
+    }
+
+    return true;
+}
+
+static const std::vector<BYTE>*
+GetConfiguredBundledSeparatorIconBytes() {
+    // Appearance changes reload the mod. Cache only a successful build so a
+    // transient WIC failure can still be retried by the backend.
+    static std::vector<BYTE> cachedIconBytes;
+    if (!cachedIconBytes.empty()) {
+        return &cachedIconBytes;
+    }
+
+    std::vector<BYTE> iconBytes;
+
+    if (g_iconAppearance.rotation == 0 &&
+        g_iconAppearance.brightness == kDefaultIconBrightness &&
+        g_iconAppearance.alpha == kDefaultIconAlpha) {
+        iconBytes.assign(
+            std::begin(kSeparatorIcon),
+            std::end(kSeparatorIcon));
+    } else if (!BuildCustomizedSeparatorIcon(
+                   g_iconAppearance,
+                   &iconBytes) ||
+               iconBytes.empty() ||
+               iconBytes.size() > MAXDWORD) {
+        return nullptr;
+    }
+
+    cachedIconBytes = std::move(iconBytes);
+    return &cachedIconBytes;
+}
+
+static bool TryBinaryFileEquals(
+    const std::wstring& path,
+    const BYTE* expected,
+    size_t expectedSize,
+    bool* matchesOut) {
+    if ((!expected && expectedSize != 0) || !matchesOut) {
+        return false;
+    }
+
+    *matchesOut = false;
+
+    HANDLE file = CreateFileW(
+        path.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND ||
+            error == ERROR_PATH_NOT_FOUND) {
+            return true;
+        }
+        return false;
+    }
+
+    LARGE_INTEGER fileSize = {};
+    if (!GetFileSizeEx(file, &fileSize) ||
+        fileSize.QuadPart < 0) {
+        CloseHandle(file);
+        return false;
+    }
+
+    if (static_cast<unsigned long long>(fileSize.QuadPart) !=
+        static_cast<unsigned long long>(expectedSize)) {
+        CloseHandle(file);
+        return true;
+    }
+
+    BYTE buffer[64 * 1024];
+    size_t offset = 0;
+    while (offset < expectedSize) {
+        DWORD chunk = static_cast<DWORD>(
+            std::min<size_t>(sizeof(buffer), expectedSize - offset));
+        DWORD read = 0;
+        if (!ReadFile(file, buffer, chunk, &read, nullptr) ||
+            read != chunk) {
+            CloseHandle(file);
+            return false;
+        }
+        if (memcmp(buffer, expected + offset, chunk) != 0) {
+            CloseHandle(file);
+            return true;
+        }
+        offset += chunk;
+    }
+
+    CloseHandle(file);
+    *matchesOut = true;
+    return true;
+}
+
+enum class ConfiguredIconDiskState {
+    Match,
+    Mismatch,
+    Error,
+};
+
+static ConfiguredIconDiskState GetConfiguredBundledIconDiskState() {
+    if (g_bundledIconPath.empty()) {
+        return ConfiguredIconDiskState::Error;
+    }
+
+    const std::vector<BYTE>* expected =
+        GetConfiguredBundledSeparatorIconBytes();
+    if (!expected) {
+        return ConfiguredIconDiskState::Error;
+    }
+
+    bool matches = false;
+    if (!TryBinaryFileEquals(
+            g_bundledIconPath,
+            expected->data(),
+            expected->size(),
+            &matches)) {
+        return ConfiguredIconDiskState::Error;
+    }
+
+    return matches
+               ? ConfiguredIconDiskState::Match
+               : ConfiguredIconDiskState::Mismatch;
+}
+
+static bool WriteConfiguredBundledSeparatorIcon() {
+    const std::vector<BYTE>* iconBytes =
+        GetConfiguredBundledSeparatorIconBytes();
+    if (!iconBytes) {
+        return false;
+    }
+
+    if (g_iconAppearance.rotation != 0 ||
+        g_iconAppearance.brightness != kDefaultIconBrightness ||
+        g_iconAppearance.alpha != kDefaultIconAlpha) {
+        Wh_Log(
+            L"[ICON] Generated bundled icon rotation=%d brightness=%d alpha=%d size=%zu",
+            g_iconAppearance.rotation,
+            g_iconAppearance.brightness,
+            g_iconAppearance.alpha,
+            iconBytes->size());
+    }
+
+    return WriteBinaryFileAtomically(
+        g_bundledIconPath,
+        iconBytes->data(),
+        static_cast<DWORD>(iconBytes->size()));
+}
+
 static bool LoadSettings() {
     Settings settings;
     SeparatorSetting refreshPulse;
@@ -1735,14 +2650,91 @@ static bool InitializeStoragePath() {
         }
     }
 
-    g_iconPath =
-        JoinPath(
-            g_storagePath,
-            L"separator.ico");
+    g_bundledIconPath.clear();
     g_separatorStatePath =
         JoinPath(
             g_storagePath,
             kSeparatorStateFileName);
+
+    return true;
+}
+
+static bool GetShortcutIconLocation(
+    const std::wstring& shortcutPath,
+    std::wstring* iconPathOut,
+    int* iconIndexOut) {
+    if (!iconPathOut || !iconIndexOut) {
+        return false;
+    }
+
+    iconPathOut->clear();
+    *iconIndexOut = 0;
+
+    IShellLinkW* shellLink = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_ShellLink,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&shellLink));
+    if (FAILED(hr) || !shellLink) {
+        return false;
+    }
+
+    IPersistFile* persistFile = nullptr;
+    hr = shellLink->QueryInterface(
+        IID_PPV_ARGS(&persistFile));
+    if (SUCCEEDED(hr) && persistFile) {
+        hr = persistFile->Load(
+            shortcutPath.c_str(),
+            STGM_READ);
+    }
+
+    wchar_t iconPath[32768] = {};
+    int iconIndex = 0;
+    if (SUCCEEDED(hr)) {
+        hr = shellLink->GetIconLocation(
+            iconPath,
+            ARRAYSIZE(iconPath),
+            &iconIndex);
+    }
+
+    if (persistFile) {
+        persistFile->Release();
+    }
+    shellLink->Release();
+
+    if (FAILED(hr) || !iconPath[0]) {
+        return false;
+    }
+
+    *iconPathOut = iconPath;
+    *iconIndexOut = iconIndex;
+    return true;
+}
+
+static bool ShortcutUsesConfiguredBundledIcon(
+    const std::wstring& shortcutPath) {
+    std::wstring iconPath;
+    int iconIndex = 0;
+    if (!GetShortcutIconLocation(
+            shortcutPath,
+            &iconPath,
+            &iconIndex)) {
+        Wh_Log(
+            L"[ICON] Can't read icon location from owned shortcut '%s'; recycling it",
+            shortcutPath.c_str());
+        return false;
+    }
+
+    if (iconIndex != 0 ||
+        !PathsEqualOrdinalIgnoreCase(iconPath, g_bundledIconPath)) {
+        Wh_Log(
+            L"[ICON] Owned shortcut has stale icon location path='%s' index=%d expected='%s'; recycling it",
+            iconPath.c_str(),
+            iconIndex,
+            g_bundledIconPath.c_str());
+        return false;
+    }
 
     return true;
 }
@@ -1782,11 +2774,14 @@ static void WINAPI TaskListButton_OnDragCompletedGesture_Hook(
         }
 
         if (stateDirty) {
-            // Persistence was already queued by TryMoveGroup. This optional
-            // completion callback only refreshes presentation after the native
-            // drag has completely unwound, closing an unanchored separator's
-            // guide once it has its first concrete index.
+            // Refresh presentation only after the native drag has completely
+            // unwound. This closes an unanchored separator's persistent guide
+            // as soon as TryMoveGroup has assigned its first concrete index.
             RefreshTrackedSeparatorVisualStates();
+
+            // The taskbar UI thread only signals work. The backend worker owns
+            // the durable write so drag completion never blocks on disk I/O.
+            QueueBackendWork();
         }
 
     }
@@ -1885,6 +2880,66 @@ static bool ContainsIdentityToken(
     return false;
 }
 
+static std::optional<std::wstring>
+ExtractStableIdFromSeparatorIdentityToken(
+    std::wstring_view text) {
+    static const std::wstring marker =
+        std::wstring(L".") + kSeparatorIdentitySuffix + L".";
+
+    const auto isStableIdCharacter = [](wchar_t ch) {
+        return std::iswalnum(ch) || ch == L'-' || ch == L'_';
+    };
+    const auto isIdentityCharacter = [](wchar_t ch) {
+        return std::iswalnum(ch) ||
+               ch == L'_' || ch == L'-' || ch == L'.';
+    };
+
+    size_t markerPosition = text.find(marker);
+    while (markerPosition != std::wstring_view::npos) {
+        const size_t stableStart =
+            markerPosition + marker.size();
+        size_t stableEnd = stableStart;
+        while (stableEnd < text.size() &&
+               isStableIdCharacter(text[stableEnd])) {
+            stableEnd++;
+        }
+
+        std::wstring_view stableId =
+            text.substr(stableStart, stableEnd - stableStart);
+        if (IsValidStableId(stableId)) {
+            size_t tokenEnd = stableEnd;
+            bool generationValid = true;
+
+            if (stableEnd < text.size() && text[stableEnd] == L'.') {
+                const size_t generationStart = stableEnd + 1;
+                size_t generationEnd = generationStart;
+                while (generationEnd < text.size() &&
+                       isIdentityCharacter(text[generationEnd])) {
+                    generationEnd++;
+                }
+
+                generationValid = IsValidIconGenerationToken(
+                    text.substr(
+                        generationStart,
+                        generationEnd - generationStart));
+                tokenEnd = generationEnd;
+            }
+
+            if (generationValid &&
+                (tokenEnd == text.size() ||
+                 !isIdentityCharacter(text[tokenEnd]))) {
+                return std::wstring(stableId);
+            }
+        }
+
+        markerPosition = text.find(
+            marker,
+            markerPosition + marker.size());
+    }
+
+    return std::nullopt;
+}
+
 static bool FindSeparatorByAutomationName(
     std::wstring_view name,
     SeparatorSetting* separatorOut = nullptr) {
@@ -1927,6 +2982,23 @@ static bool FindSeparatorByAutomationName(
             name,
             g_refreshPulseSetting.identity)) {
         return copyMatch(g_refreshPulseSetting);
+    }
+
+    // During an appearance-generation migration, an old taskbar button can
+    // remain alive briefly after its backing .lnk has become stale. Exact shell
+    // identity matching above intentionally won't match it. Recover its durable
+    // stable ID from either the <=1.0.25 unsuffixed form or a valid generated
+    // form, then use the current desired separator only for presentation. Native
+    // activation suppression remains stricter and validates the task group's
+    // actual AppUserModelID independently.
+    if (auto stableId =
+            ExtractStableIdFromSeparatorIdentityToken(name)) {
+        if (const SeparatorSetting* desired =
+                FindSeparatorByStableId(
+                    g_settings,
+                    *stableId)) {
+            return copyMatch(*desired);
+        }
     }
 
     return false;
@@ -2020,8 +3092,11 @@ struct SeparatorVisualState {
     bool anchorHintQueued = false;
 };
 
-static thread_local std::list<SeparatorVisualState>
-    g_separatorVisualStates;
+// XAML references are released explicitly on their UI thread during unload;
+// don't release them from TLS destruction after Explorer's XAML teardown.
+[[clang::no_destroy]] static thread_local
+    std::optional<std::list<SeparatorVisualState>>
+        g_separatorVisualStates{std::in_place};
 static thread_local bool g_updatingSeparatorVisualStates;
 
 struct SeparatorVisualStateUpdateGuard {
@@ -2058,11 +3133,11 @@ static void CloseSeparatorAnchorHint(
 }
 
 static void PruneExpiredSeparatorVisualStates() {
-    for (auto it = g_separatorVisualStates.begin();
-         it != g_separatorVisualStates.end();) {
+    for (auto it = g_separatorVisualStates->begin();
+         it != g_separatorVisualStates->end();) {
         if (!it->element.get()) {
             CloseSeparatorAnchorHint(*it);
-            it = g_separatorVisualStates.erase(it);
+            it = g_separatorVisualStates->erase(it);
         } else {
             ++it;
         }
@@ -2071,20 +3146,138 @@ static void PruneExpiredSeparatorVisualStates() {
 
 static auto FindSeparatorVisualState(void* taskListButton) {
     return std::find_if(
-        g_separatorVisualStates.begin(),
-        g_separatorVisualStates.end(),
+        g_separatorVisualStates->begin(),
+        g_separatorVisualStates->end(),
         [taskListButton](const SeparatorVisualState& state) {
             return state.taskListButton == taskListButton;
         });
+}
+
+static HWND FindTaskbarWindowForCurrentThread() {
+    struct EnumContext {
+        DWORD processId;
+        DWORD threadId;
+        HWND window;
+    } context{
+        GetCurrentProcessId(),
+        GetCurrentThreadId(),
+        nullptr,
+    };
+
+    EnumWindows(
+        [](HWND window, LPARAM lParam) -> BOOL {
+            auto* context =
+                reinterpret_cast<EnumContext*>(lParam);
+
+            DWORD processId = 0;
+            DWORD threadId =
+                GetWindowThreadProcessId(
+                    window,
+                    &processId);
+            if (!threadId ||
+                processId != context->processId ||
+                threadId != context->threadId) {
+                return TRUE;
+            }
+
+            wchar_t className[64] = {};
+            if (!GetClassNameW(
+                    window,
+                    className,
+                    ARRAYSIZE(className))) {
+                return TRUE;
+            }
+
+            if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+                _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+                return TRUE;
+            }
+
+            context->window = window;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    return context.window;
+}
+
+static winrt::Windows::UI::Xaml::Controls::Primitives::PopupPlacementMode
+GetSeparatorAnchorHintPlacement() {
+    using winrt::Windows::UI::Xaml::Controls::Primitives::PopupPlacementMode;
+
+    HWND taskbarWindow =
+        FindTaskbarWindowForCurrentThread();
+    RECT taskbarRect = {};
+    MONITORINFO monitorInfo = {sizeof(monitorInfo)};
+
+    if (taskbarWindow &&
+        GetWindowRect(taskbarWindow, &taskbarRect)) {
+        HMONITOR monitor =
+            MonitorFromWindow(
+                taskbarWindow,
+                MONITOR_DEFAULTTONEAREST);
+        if (monitor &&
+            GetMonitorInfoW(monitor, &monitorInfo)) {
+            LONG width =
+                taskbarRect.right - taskbarRect.left;
+            LONG height =
+                taskbarRect.bottom - taskbarRect.top;
+
+            auto distance = [](LONG a, LONG b) -> LONG {
+                return a >= b ? a - b : b - a;
+            };
+
+            if (height > width) {
+                LONG leftDistance =
+                    distance(
+                        taskbarRect.left,
+                        monitorInfo.rcMonitor.left);
+                LONG rightDistance =
+                    distance(
+                        taskbarRect.right,
+                        monitorInfo.rcMonitor.right);
+
+                return leftDistance <= rightDistance
+                           ? PopupPlacementMode::Right
+                           : PopupPlacementMode::Left;
+            }
+
+            LONG topDistance =
+                distance(
+                    taskbarRect.top,
+                    monitorInfo.rcMonitor.top);
+            LONG bottomDistance =
+                distance(
+                    taskbarRect.bottom,
+                    monitorInfo.rcMonitor.bottom);
+
+            return topDistance <= bottomDistance
+                       ? PopupPlacementMode::Bottom
+                       : PopupPlacementMode::Top;
+        }
+    }
+
+    // Fall back to the configured artwork orientation if a customized taskbar
+    // no longer exposes a recognizable tray HWND on this UI thread.
+    return (g_iconAppearance.rotation == 90 ||
+            g_iconAppearance.rotation == 270)
+               ? PopupPlacementMode::Right
+               : PopupPlacementMode::Top;
 }
 
 static void ShowQueuedSeparatorAnchorHint(
     void* taskListButton,
     winrt::weak_ref<FrameworkElement> weakElement,
     std::wstring identity) {
+    if (g_updatingSeparatorVisualStates) {
+        return;
+    }
+    g_updatingSeparatorVisualStates = true;
+    SeparatorVisualStateUpdateGuard updateGuard;
+
     auto stateIt =
         FindSeparatorVisualState(taskListButton);
-    if (stateIt == g_separatorVisualStates.end()) {
+    if (stateIt == g_separatorVisualStates->end()) {
         return;
     }
 
@@ -2099,7 +3292,8 @@ static void ShowQueuedSeparatorAnchorHint(
     state.anchorHintQueued = false;
     state.anchorHintAction = nullptr;
 
-    if (g_unloading) {
+    if (g_unloading ||
+        g_internalCleanupInProgress.load(std::memory_order_acquire)) {
         CloseSeparatorAnchorHint(state);
         return;
     }
@@ -2117,8 +3311,27 @@ static void ShowQueuedSeparatorAnchorHint(
     if (!GetSeparatorForElement(
             element,
             &separator) ||
-        separator.identity != identity ||
-        separator.targetIndex >= 0) {
+        separator.identity != identity) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    // Recognition intentionally outlives desired state while native removal is
+    // converging. The guide belongs only to a separator that is still desired
+    // and still intentionally unanchored.
+    bool desiredUnanchored = false;
+    {
+        std::shared_lock lock(g_settingsMutex);
+        const SeparatorSetting* desired =
+            FindSeparatorByIdentity(
+                g_settings,
+                identity);
+        if (desired && desired->targetIndex < 0) {
+            separator = *desired;
+            desiredUnanchored = true;
+        }
+    }
+    if (!desiredUnanchored) {
         CloseSeparatorAnchorHint(state);
         return;
     }
@@ -2140,10 +3353,25 @@ static void ShowQueuedSeparatorAnchorHint(
         popup.ShouldConstrainToRootBounds(false);
         popup.IsHitTestVisible(false);
 
-        // A tiny self-contained callout rather than another taskbar tooltip.
-        // It deliberately owns no input and remains visible until we close it.
+        // XAML Popup hosts can still intercept pointer input at the island/window
+        // level even when the child tree is not hit-testable. Put the guide on
+        // the desktop side of the taskbar so it doesn't cover the drag target.
+        auto placement =
+            GetSeparatorAnchorHintPlacement();
+        bool horizontalCallout =
+            placement == PopupPlacementMode::Left ||
+            placement == PopupPlacementMode::Right;
+
         StackPanel callout;
-        callout.HorizontalAlignment(HorizontalAlignment::Center);
+        callout.Orientation(
+            horizontalCallout
+                ? Orientation::Horizontal
+                : Orientation::Vertical);
+        if (horizontalCallout) {
+            callout.VerticalAlignment(VerticalAlignment::Center);
+        } else {
+            callout.HorizontalAlignment(HorizontalAlignment::Center);
+        }
         callout.IsHitTestVisible(false);
 
         bool lightTheme =
@@ -2184,14 +3412,28 @@ static void ShowQueuedSeparatorAnchorHint(
 
         // A short stem visually ties the callout to the narrow separator slot.
         Border stem;
-        stem.Width(2);
-        stem.Height(6);
+        if (horizontalCallout) {
+            stem.Width(6);
+            stem.Height(2);
+            stem.VerticalAlignment(VerticalAlignment::Center);
+        } else {
+            stem.Width(2);
+            stem.Height(6);
+            stem.HorizontalAlignment(HorizontalAlignment::Center);
+        }
         stem.Background(backgroundBrush);
-        stem.HorizontalAlignment(HorizontalAlignment::Center);
         stem.IsHitTestVisible(false);
 
-        callout.Children().Append(card);
-        callout.Children().Append(stem);
+        const bool stemFirst =
+            placement == PopupPlacementMode::Right ||
+            placement == PopupPlacementMode::Bottom;
+        if (stemFirst) {
+            callout.Children().Append(stem);
+            callout.Children().Append(card);
+        } else {
+            callout.Children().Append(card);
+            callout.Children().Append(stem);
+        }
         popup.Child(callout);
 
         // Windows 11 Popup has a real PlacementTarget. Let XAML own the
@@ -2200,7 +3442,7 @@ static void ShowQueuedSeparatorAnchorHint(
         // native drag transforms, virtual-desktop relayouts, animations and
         // container movement automatically.
         popup.PlacementTarget(element);
-        popup.DesiredPlacement(PopupPlacementMode::Top);
+        popup.DesiredPlacement(placement);
 
         state.anchorHintPopup = popup;
         state.anchorHintIdentity = identity;
@@ -2224,7 +3466,23 @@ static void UpdateSeparatorAnchorHint(
     const SeparatorSetting& separator) {
     if (!element ||
         g_unloading ||
+        g_internalCleanupInProgress.load(std::memory_order_acquire) ||
         separator.targetIndex >= 0) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    bool stillDesiredUnanchored = false;
+    {
+        std::shared_lock lock(g_settingsMutex);
+        const SeparatorSetting* desired =
+            FindSeparatorByIdentity(
+                g_settings,
+                separator.identity);
+        stillDesiredUnanchored =
+            desired && desired->targetIndex < 0;
+    }
+    if (!stillDesiredUnanchored) {
         CloseSeparatorAnchorHint(state);
         return;
     }
@@ -2453,7 +3711,7 @@ static void RestoreSeparatorVisualState(
     // The FrameworkElement weak reference is the lifetime authority for the
     // raw TaskListButton implementation pointer stored alongside it.
     if (!element) {
-        g_separatorVisualStates.erase(stateIt);
+        g_separatorVisualStates->erase(stateIt);
         return;
     }
 
@@ -2521,7 +3779,7 @@ static void RestoreSeparatorVisualState(
         }
     }
 
-    g_separatorVisualStates.erase(stateIt);
+    g_separatorVisualStates->erase(stateIt);
 }
 
 using RunFromWindowThreadProc = void(WINAPI*)(void* parameter);
@@ -2601,81 +3859,20 @@ static bool RunFromWindowThread(
     return parameters.executed;
 }
 
-// XAML owns menu items and their delegates beyond the hook invocation that
-// creates them. Retain the exact objects/tokens on their taskbar UI thread so
-// teardown can unregister every mod-owned delegate before the DLL is unmapped.
-static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem
-    g_injectedAddSeparatorMenuItem{nullptr};
-static thread_local winrt::event_token
-    g_injectedAddSeparatorClickToken{};
-static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyout
-    g_openSeparatorContextMenu{nullptr};
-static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem
-    g_openSeparatorContextMenuItem{nullptr};
-static thread_local winrt::event_token
-    g_openSeparatorContextMenuClickToken{};
-static thread_local winrt::event_token
-    g_openSeparatorContextMenuClosedToken{};
-static std::atomic<bool> g_separatorContextMenuOpen = false;
-
-static void DetachInjectedAddSeparatorMenuHandler() {
-    try {
-        if (g_injectedAddSeparatorMenuItem) {
-            g_injectedAddSeparatorMenuItem.Click(
-                g_injectedAddSeparatorClickToken);
-        }
-    } catch (...) {
-        Wh_Log(L"[CTX] Failed to detach Add separator menu handler");
-    }
-    g_injectedAddSeparatorMenuItem = nullptr;
-    g_injectedAddSeparatorClickToken = {};
-}
-
-static void CloseSeparatorContextMenuOnCurrentThread(bool hide) {
-    try {
-        if (g_openSeparatorContextMenuItem) {
-            g_openSeparatorContextMenuItem.Click(
-                g_openSeparatorContextMenuClickToken);
-        }
-    } catch (...) {
-        Wh_Log(L"[CTX] Failed to detach separator menu command");
-    }
-
-    try {
-        if (g_openSeparatorContextMenu) {
-            g_openSeparatorContextMenu.Closed(
-                g_openSeparatorContextMenuClosedToken);
-        }
-    } catch (...) {
-        Wh_Log(L"[CTX] Failed to detach separator menu close handler");
-    }
-
-    if (hide) {
-        try {
-            if (g_openSeparatorContextMenu) {
-                g_openSeparatorContextMenu.Hide();
-            }
-        } catch (...) {
-            Wh_Log(L"[CTX] Failed to hide separator context menu");
-        }
-    }
-    g_openSeparatorContextMenuItem = nullptr;
-    g_openSeparatorContextMenu = nullptr;
-    g_openSeparatorContextMenuClickToken = {};
-    g_openSeparatorContextMenuClosedToken = {};
-}
+static void RevokeTaskbarUiCallbacksOnCurrentThread();
 
 static void WINAPI RestoreSeparatorVisualStatesOnCurrentThread(void*) {
-    DetachInjectedAddSeparatorMenuHandler();
-    CloseSeparatorContextMenuOnCurrentThread(true);
-    g_separatorContextMenuOpen = false;
+    // XAML menus/items can outlive the stack frame that created them. Revoke
+    // every callback into this module on the owning taskbar UI thread before
+    // Windhawk is allowed to unload our code.
+    RevokeTaskbarUiCallbacksOnCurrentThread();
 
     g_updatingSeparatorVisualStates = true;
     SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
 
-    while (!g_separatorVisualStates.empty()) {
-        RestoreSeparatorVisualState(g_separatorVisualStates.begin());
+    while (!g_separatorVisualStates->empty()) {
+        RestoreSeparatorVisualState(g_separatorVisualStates->begin());
     }
 }
 
@@ -2731,8 +3928,8 @@ static void WINAPI RefreshSeparatorVisualStatesOnCurrentThread(void*) {
     SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
 
-    for (auto it = g_separatorVisualStates.begin();
-         it != g_separatorVisualStates.end();) {
+    for (auto it = g_separatorVisualStates->begin();
+         it != g_separatorVisualStates->end();) {
         auto current = it++;
 
         SeparatorVisualState& state = *current;
@@ -2824,7 +4021,7 @@ static void RefreshTrackedSeparatorVisualStates() {
 // the ShowTaskbarSettingsContextMenu build scope, intercept the first
 // IVector<MenuFlyoutItemBase>::Append, and add one native MenuFlyoutItem.
 static void RequestBackendReconcile();
-static void AddSeparatorFromTaskbarMenu();
+static void AddSeparatorFromUserAction();
 
 static constexpr wchar_t kAddSeparatorMenuText[] = L"Add separator";
 static constexpr wchar_t kAddSeparatorMenuName[] = L"WindhawkAddSeparatorItem";
@@ -2833,6 +4030,48 @@ static constexpr wchar_t kAddSeparatorMenuDividerName[] =
 
 static thread_local int g_taskbarSettingsMenuDepth = 0;
 static thread_local bool g_taskbarSettingsMenuInjected = false;
+
+struct AddMenuCallbackRegistration {
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem> item;
+    winrt::event_token clickToken{};
+};
+
+struct SeparatorMenuCallbackRegistration {
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::MenuFlyout> menu;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem> item;
+    winrt::event_token clickToken{};
+    winrt::event_token closedToken{};
+};
+
+// XAML objects are apartment-affine. Keep only weak references and their event
+// tokens on the UI thread which registered them. Expired entries are cheap to
+// prune; live entries are explicitly revoked during Wh_ModBeforeUninit.
+static thread_local std::vector<AddMenuCallbackRegistration>
+    g_addMenuCallbackRegistrations;
+static thread_local std::vector<SeparatorMenuCallbackRegistration>
+    g_separatorMenuCallbackRegistrations;
+
+static void PruneExpiredTaskbarUiCallbackRegistrations() {
+    std::erase_if(
+        g_addMenuCallbackRegistrations,
+        [](const AddMenuCallbackRegistration& registration) {
+            try {
+                return !registration.item.get();
+            } catch (...) {
+                return true;
+            }
+        });
+
+    std::erase_if(
+        g_separatorMenuCallbackRegistrations,
+        [](const SeparatorMenuCallbackRegistration& registration) {
+            try {
+                return !registration.menu.get();
+            } catch (...) {
+                return true;
+            }
+        });
+}
 
 static bool IsNamedMenuItem(
     winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item,
@@ -2859,7 +4098,9 @@ static bool IsMenuSeparator(
 static void OnAddSeparatorMenuClick(
     winrt::Windows::Foundation::IInspectable const&,
     RoutedEventArgs const&) {
-    AddSeparatorFromTaskbarMenu();
+    if (IsContextMenuInteractionMode()) {
+        AddSeparatorFromUserAction();
+    }
 }
 
 using MenuFlyoutItemBaseVector_Append_t =
@@ -2871,10 +4112,6 @@ static MenuFlyoutItemBaseVector_Append_t
 
 static void AppendAddSeparatorMenuItems(void* vectorThis) {
     using namespace winrt::Windows::UI::Xaml::Controls;
-
-    // A newer taskbar-menu build supersedes the previous injected item on this
-    // UI thread. Detach its callback before replacing our retained reference.
-    DetachInjectedAddSeparatorMenuHandler();
 
     MenuFlyoutItem item;
     item.Name(kAddSeparatorMenuName);
@@ -2888,9 +4125,14 @@ static void AppendAddSeparatorMenuItems(void* vectorThis) {
     icon.Glyph(L"\xE710");
     icon.FontSize(16);
     item.Icon(icon);
+
+    PruneExpiredTaskbarUiCallbackRegistrations();
     winrt::event_token clickToken =
-        item.Click(
-            RoutedEventHandler{&OnAddSeparatorMenuClick});
+        item.Click(RoutedEventHandler{&OnAddSeparatorMenuClick});
+    g_addMenuCallbackRegistrations.push_back({
+        .item = winrt::make_weak(item),
+        .clickToken = clickToken,
+    });
 
     MenuFlyoutSeparator divider;
     divider.Name(kAddSeparatorMenuDividerName);
@@ -2899,8 +4141,6 @@ static void AppendAddSeparatorMenuItems(void* vectorThis) {
             winrt::hstring{kAddSeparatorMenuDividerName}));
 
     g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, item);
-    g_injectedAddSeparatorMenuItem = item;
-    g_injectedAddSeparatorClickToken = clickToken;
     g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, divider);
 
     g_taskbarSettingsMenuInjected = true;
@@ -2911,6 +4151,7 @@ static void __cdecl MenuFlyoutItemBaseVector_Append_Hook(
     void* pThis,
     winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item) {
     if (!g_unloading &&
+        IsContextMenuInteractionMode() &&
         g_taskbarSettingsMenuDepth > 0 &&
         !g_taskbarSettingsMenuInjected) {
         try {
@@ -2959,6 +4200,15 @@ static void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
     void* taskbarSettings,
     winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args,
     unsigned long long options) {
+    if (!IsContextMenuInteractionMode()) {
+        g_contextMenusShowTaskbarSettingsContextMenuOriginal(
+            target,
+            taskbarSettings,
+            args,
+            options);
+        return;
+    }
+
     ScopedTaskbarSettingsMenuBuild scopedBuild;
     g_contextMenusShowTaskbarSettingsContextMenuOriginal(
         target,
@@ -3001,14 +4251,57 @@ using TaskbarResources_OnTaskListButtonContextRequested_t =
 static TaskbarResources_OnTaskListButtonContextRequested_t
     g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
 
-static void RemoveSeparatorFromContextMenu(
+static std::atomic<bool> g_separatorContextMenuOpen = false;
+
+static void RemoveSeparatorByIdentity(
     std::wstring identity);
 
+static void ReleaseSeparatorMenuRegistration(
+    const winrt::Windows::Foundation::IInspectable& sender) {
+    try {
+        auto senderMenu =
+            sender.try_as<
+                winrt::Windows::UI::Xaml::Controls::MenuFlyout>();
+        if (!senderMenu) {
+            return;
+        }
+
+        void* senderAbi = winrt::get_abi(senderMenu);
+        for (auto it = g_separatorMenuCallbackRegistrations.begin();
+             it != g_separatorMenuCallbackRegistrations.end();
+             ++it) {
+            auto menu = it->menu.get();
+            if (!menu || winrt::get_abi(menu) != senderAbi) {
+                continue;
+            }
+
+            if (auto item = it->item.get()) {
+                try {
+                    item.Click(it->clickToken);
+                } catch (...) {
+                }
+            }
+
+            // It is legal to remove an event handler while that event is being
+            // dispatched. Doing so prevents a closed flyout retained by XAML
+            // from keeping a callback into this module until object destruction.
+            try {
+                menu.Closed(it->closedToken);
+            } catch (...) {
+            }
+
+            g_separatorMenuCallbackRegistrations.erase(it);
+            return;
+        }
+    } catch (...) {
+    }
+}
+
 static void OnSeparatorContextMenuClosed(
-    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const& sender,
     winrt::Windows::Foundation::IInspectable const&) {
-    CloseSeparatorContextMenuOnCurrentThread(false);
     g_separatorContextMenuOpen = false;
+    ReleaseSeparatorMenuRegistration(sender);
 }
 
 static void OnSeparatorUnpinMenuClick(
@@ -3042,7 +4335,7 @@ static void OnSeparatorUnpinMenuClick(
             return;
         }
 
-        RemoveSeparatorFromContextMenu(
+        RemoveSeparatorByIdentity(
             std::wstring(identity.c_str(), identity.size()));
     } catch (...) {
         Wh_Log(L"[CTX] Separator Unpin callback failed");
@@ -3065,11 +4358,6 @@ static void ShowSeparatorContextMenu(
         return;
     }
 
-    // The click callback releases the process-wide gate before XAML always
-    // delivers Closed. If this UI thread still owns that older menu, retire it
-    // before publishing a replacement.
-    CloseSeparatorContextMenuOnCurrentThread(true);
-
     try {
         using namespace winrt::Windows::UI::Xaml::Controls;
         using namespace winrt::Windows::UI::Xaml::Controls::Primitives;
@@ -3091,6 +4379,8 @@ static void ShowSeparatorContextMenu(
         icon.Glyph(L"\xE738");
         icon.FontSize(16);
         unpin.Icon(icon);
+
+        PruneExpiredTaskbarUiCallbackRegistrations();
         winrt::event_token clickToken =
             unpin.Click(
                 RoutedEventHandler{
@@ -3103,22 +4393,53 @@ static void ShowSeparatorContextMenu(
                     EventHandler<winrt::Windows::Foundation::IInspectable>{
                         &OnSeparatorContextMenuClosed});
 
-        // Publish ownership before ShowAt: if XAML partially opens the flyout
-        // and then throws, the catch path can still detach both delegates.
-        g_openSeparatorContextMenu = menu;
-        g_openSeparatorContextMenuItem = unpin;
-        g_openSeparatorContextMenuClickToken = clickToken;
-        g_openSeparatorContextMenuClosedToken = closedToken;
+        g_separatorMenuCallbackRegistrations.push_back({
+            .menu = winrt::make_weak(menu),
+            .item = winrt::make_weak(unpin),
+            .clickToken = clickToken,
+            .closedToken = closedToken,
+        });
 
         menu.ShowAt(target);
         Wh_Log(
             L"[CTX] Opened separator context menu identity='%s'",
             separator.identity.c_str());
     } catch (...) {
-        CloseSeparatorContextMenuOnCurrentThread(true);
         g_separatorContextMenuOpen = false;
         Wh_Log(L"[CTX] Failed to show separator context menu");
     }
+}
+
+static void RevokeTaskbarUiCallbacksOnCurrentThread() {
+    for (const auto& registration : g_addMenuCallbackRegistrations) {
+        try {
+            if (auto item = registration.item.get()) {
+                item.Click(registration.clickToken);
+            }
+        } catch (...) {
+        }
+    }
+    g_addMenuCallbackRegistrations.clear();
+
+    // Revoke before hiding so Hide() cannot dispatch Closed back into this mod.
+    for (const auto& registration : g_separatorMenuCallbackRegistrations) {
+        try {
+            if (auto item = registration.item.get()) {
+                item.Click(registration.clickToken);
+            }
+        } catch (...) {
+        }
+
+        try {
+            if (auto menu = registration.menu.get()) {
+                menu.Closed(registration.closedToken);
+                menu.Hide();
+            }
+        } catch (...) {
+        }
+    }
+    g_separatorMenuCallbackRegistrations.clear();
+    g_separatorContextMenuOpen.store(false, std::memory_order_release);
 }
 
 static bool TryHandleSeparatorContextRequest(
@@ -3137,9 +4458,15 @@ static bool TryHandleSeparatorContextRequest(
         return false;
     }
 
-    ShowSeparatorContextMenu(
-        element,
-        separator);
+    if (IsContextMenuInteractionMode()) {
+        ShowSeparatorContextMenu(
+            element,
+            separator);
+    }
+
+    // In middle-click mode the separator right-click is still consumed. Letting
+    // the stock JumpView expose an ordinary Unpin command would desynchronize
+    // Windows' pin list from our mod-owned state.
     return true;
 }
 
@@ -3195,6 +4522,192 @@ static void WINAPI TaskbarResources_OnTaskListButtonContextRequested_Hook(
         args);
 }
 
+using TaskbarController_OnPointerPressedHandler_t =
+    void(WINAPI*)(
+        void* pThis,
+        winrt::Windows::Foundation::IInspectable const& sender,
+        winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& args);
+static TaskbarController_OnPointerPressedHandler_t
+    g_taskbarControllerOnPointerPressedHandlerOriginal;
+
+static std::wstring GetRuntimeClassName(
+    const DependencyObject& object) {
+    if (!object) {
+        return {};
+    }
+
+    try {
+        winrt::hstring className =
+            winrt::get_class_name(object);
+        return std::wstring(
+            className.c_str(),
+            className.size());
+    } catch (...) {
+        return {};
+    }
+}
+
+static bool IsTaskbarBackgroundClass(
+    std::wstring_view className) {
+    return className == L"Taskbar.TaskbarBackground";
+}
+
+static bool IsTaskbarFrameClass(
+    std::wstring_view className) {
+    return className == L"Taskbar.TaskbarFrame";
+}
+
+static bool IsSystemTrayTaskbarElement(
+    std::wstring_view className) {
+    return className.starts_with(L"SystemTray.");
+}
+
+static bool IsButtonBaseElement(
+    const DependencyObject& object) {
+    if (!object) {
+        return false;
+    }
+
+    try {
+        return !!object.try_as<
+            winrt::Windows::UI::Xaml::Controls::Primitives::ButtonBase>();
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool TryHandleMiddleClickInteraction(
+    const winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs& args) {
+    if (!IsMiddleClickInteractionMode() ||
+        g_unloading ||
+        g_internalCleanupInProgress.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    try {
+        auto point = args.GetCurrentPoint(nullptr);
+        if (!point ||
+            !point.Properties().IsMiddleButtonPressed()) {
+            return false;
+        }
+
+        DependencyObject current =
+            args.OriginalSource().try_as<DependencyObject>();
+        bool reachedTaskbarFrame = false;
+        bool sawRootGrid = false;
+        bool sawClickableControl = false;
+
+        while (current) {
+            std::wstring className =
+                GetRuntimeClassName(current);
+
+            if (className == L"Taskbar.TaskListButton") {
+                if (auto element = current.try_as<FrameworkElement>()) {
+                    SeparatorSetting separator;
+                    if (GetSeparatorForElement(
+                            element,
+                            &separator)) {
+                        // Mark the routed event handled before publishing desired
+                        // state so no downstream middle-click action can launch the
+                        // inert shortcut while the backend removes it.
+                        args.Handled(true);
+                        RemoveSeparatorByIdentity(
+                            separator.identity);
+                        Wh_Log(
+                            L"[MIDDLE] Remove separator identity='%s'",
+                            separator.identity.c_str());
+                        return true;
+                    }
+                }
+
+                // A normal task button is never empty taskbar space. Stop here
+                // instead of later seeing its common TaskbarFrame ancestor.
+                return false;
+            }
+
+            // Don't immediately reject ButtonBase descendants: a routed
+            // separator click can originate below the owning TaskListButton.
+            // Remember the interactive ancestry and only use it to veto an
+            // eventual background classification if no TaskListButton was found.
+            if (IsButtonBaseElement(current)) {
+                sawClickableControl = true;
+            }
+
+            // The system tray is a distinct subtree and can be rejected
+            // immediately; no separator TaskListButton lives under it.
+            if (IsSystemTrayTaskbarElement(className)) {
+                return false;
+            }
+
+            if (IsTaskbarBackgroundClass(className)) {
+                if (sawClickableControl) {
+                    return false;
+                }
+
+                args.Handled(true);
+                AddSeparatorFromUserAction();
+                Wh_Log(L"[MIDDLE] Add separator from TaskbarBackground");
+                return true;
+            }
+
+            if (auto element = current.try_as<FrameworkElement>()) {
+                // On some taskbar templates the hit-tested empty-space source is
+                // RootGrid/BackgroundFill rather than a visual descendant of the
+                // TaskbarBackground control. Record those known background-layer
+                // names and finish classification when we reach TaskbarFrame.
+                const winrt::hstring name = element.Name();
+                std::wstring_view nameView(
+                    name.c_str(),
+                    name.size());
+                if (nameView == L"RootGrid" ||
+                    nameView == L"BackgroundFill") {
+                    sawRootGrid = true;
+                }
+            }
+
+            if (IsTaskbarFrameClass(className)) {
+                reachedTaskbarFrame = true;
+                break;
+            }
+
+            current =
+                winrt::Windows::UI::Xaml::Media::
+                    VisualTreeHelper::GetParent(current);
+        }
+
+        // The current Windows 11 template can report Grid#RootGrid itself for
+        // otherwise empty space, making TaskbarBackground a sibling rather than
+        // an ancestor of OriginalSource. Only take this fallback after the walk
+        // has ruled out task buttons/ButtonBase/SystemTray descendants.
+        if (reachedTaskbarFrame &&
+            sawRootGrid &&
+            !sawClickableControl) {
+            args.Handled(true);
+            AddSeparatorFromUserAction();
+            Wh_Log(L"[MIDDLE] Add separator from taskbar RootGrid background");
+            return true;
+        }
+    } catch (...) {
+        Wh_Log(L"[MIDDLE] Pointer inspection failed; using stock behavior");
+    }
+
+    return false;
+}
+
+static void WINAPI TaskbarController_OnPointerPressedHandler_Hook(
+    void* pThis,
+    winrt::Windows::Foundation::IInspectable const& sender,
+    winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& args) {
+    if (TryHandleMiddleClickInteraction(args)) {
+        return;
+    }
+
+    g_taskbarControllerOnPointerPressedHandlerOriginal(
+        pThis,
+        sender,
+        args);
+}
+
 static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     void* pThis) {
     // Preserve the original precedence: Windows and every downstream hook,
@@ -3224,18 +4737,18 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     // ItemsRepeater recycles TaskListButton containers. Undo every property
     // owned by this mod as soon as a container stops representing a separator.
     if (!isSeparator || !element || g_unloading) {
-        if (stateIt != g_separatorVisualStates.end()) {
+        if (stateIt != g_separatorVisualStates->end()) {
             RestoreSeparatorVisualState(stateIt);
         }
         return;
     }
 
-    if (stateIt == g_separatorVisualStates.end()) {
-        g_separatorVisualStates.push_back({
+    if (stateIt == g_separatorVisualStates->end()) {
+        g_separatorVisualStates->push_back({
             .element = winrt::make_weak(element),
             .taskListButton = pThis,
         });
-        stateIt = std::prev(g_separatorVisualStates.end());
+        stateIt = std::prev(g_separatorVisualStates->end());
     }
 
     SeparatorVisualState& state = *stateIt;
@@ -3278,6 +4791,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_contextMenusShowTaskbarSettingsContextMenuOriginal,
             ContextMenus_ShowTaskbarSettingsContextMenu_Hook,
+            true,
         },
         {
             {
@@ -3285,6 +4799,15 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_menuFlyoutItemBaseVectorAppendOriginal,
             MenuFlyoutItemBaseVector_Append_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnPointerPressedHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"
+            },
+            &g_taskbarControllerOnPointerPressedHandlerOriginal,
+            TaskbarController_OnPointerPressedHandler_Hook,
+            true,
         },
         {
             {
@@ -3335,28 +4858,51 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
-    if (!g_contextMenusShowTaskbarSettingsContextMenuOriginal ||
-        !g_menuFlyoutItemBaseVectorAppendOriginal) {
-        Wh_Log(
-            L"[STYLE] Add-separator taskbar menu route unavailable");
-        return false;
-    }
-
     const bool hasContextRequestRoute =
         g_taskListButtonOnContextRequestedOriginal ||
         g_taskListButtonHandlersHandleContextRequestedOriginal ||
         g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
+    const bool hasAddMenuRoute =
+        g_contextMenusShowTaskbarSettingsContextMenuOriginal &&
+        g_menuFlyoutItemBaseVectorAppendOriginal;
+    const bool hasMiddleClickRoute =
+        g_taskbarControllerOnPointerPressedHandlerOriginal != nullptr;
+
+    const bool contextInteractionAvailable =
+        hasAddMenuRoute && hasContextRequestRoute;
+    g_contextMenuInteractionAvailable.store(
+        contextInteractionAvailable,
+        std::memory_order_release);
+    g_middleClickInteractionAvailable.store(
+        hasMiddleClickRoute,
+        std::memory_order_release);
+    if (hasContextRequestRoute) {
+        g_separatorContextSuppressionAvailable.store(
+            true,
+            std::memory_order_release);
+    }
 
     Wh_Log(
-        L"[STYLE] Context routes: button=%d handlers=%d resources=%d",
+        L"[STYLE] Interaction routes: addMenu=%d context(button=%d handlers=%d resources=%d) middleClick=%d",
+        hasAddMenuRoute ? 1 : 0,
         g_taskListButtonOnContextRequestedOriginal ? 1 : 0,
         g_taskListButtonHandlersHandleContextRequestedOriginal ? 1 : 0,
-        g_taskbarResourcesOnTaskListButtonContextRequestedOriginal ? 1 : 0);
+        g_taskbarResourcesOnTaskListButtonContextRequestedOriginal ? 1 : 0,
+        hasMiddleClickRoute ? 1 : 0);
 
-    if (!hasContextRequestRoute) {
-        Wh_Log(L"[STYLE] No supported Taskbar.View context-request route resolved");
-        return false;
+    if (!contextInteractionAvailable) {
+        Wh_Log(
+            L"[STYLE] Context-menu interaction is unavailable/partial on this build");
     }
+    if (!hasMiddleClickRoute) {
+        Wh_Log(
+            L"[STYLE] Middle-click interaction route is unavailable on this build");
+    }
+
+    // Both frontends are hooked opportunistically, so a missing selected route
+    // can fall back immediately without a mod reload. Do this symmetrically in
+    // either direction.
+    ApplyInteractionModeCapabilityFallback(L"STYLE");
 
     Wh_Log(L"[STYLE] Taskbar view hooks installed; widthMode=MaxWidth");
 
@@ -3368,7 +4914,7 @@ static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
 static bool HookTaskbarDllSymbols(HMODULE taskbarDll);
 static HWND FindCurrentProcessTaskbarWnd();
-static void StartBackendWorker();
+static void StartBackendWorker(bool refreshIfAlreadyRunning);
 
 class HookInstallerScope {
 public:
@@ -3613,6 +5159,7 @@ static bool InitializeTaskbarStylingHooks() {
 
 static void* g_taskGroupGetAppIdAddress;
 static void* g_taskBtnGroupGetGroupAddress;
+static void* g_taskListWndVtableITaskListUI;
 
 using TaskListWnd_HandleClick_t =
     HRESULT(WINAPI*)(
@@ -3672,26 +5219,18 @@ static bool IsSeparatorTaskGroup(void* taskGroup) {
         return false;
     }
 
-    std::wstring_view appIdView(appId);
-    std::shared_lock lock(g_settingsMutex);
-
-    for (const auto& separator : g_settings.separators) {
-        if (appIdView ==
-            std::wstring_view(separator.identity)) {
-            return true;
-        }
-    }
-
-    for (const auto& separator : g_storedSeparatorSettings) {
-        if (appIdView ==
-            std::wstring_view(separator.identity)) {
-            return true;
-        }
-    }
-
-    return appIdView ==
-        std::wstring_view(
-            g_refreshPulseSetting.identity);
+    // Recognition here must outlive the desired/storage snapshots. A pointer
+    // gesture can remove a separator from desired state and the backend can
+    // unpin/delete its shortcut before Windows finishes dispatching the same
+    // mouse gesture through CTaskListWnd::HandleClick. If identity recognition
+    // depended on g_settings/g_storedSeparatorSettings, that late callback could
+    // fall through and try to launch the now-deleted .lnk. The suffix is this
+    // mod's private AppUserModelID namespace, and the stable-ID parser also
+    // validates the trailing component, so a still-alive task group remains
+    // inert for its entire native lifetime.
+    return ExtractStableIdFromSeparatorIdentity(
+               std::wstring_view(appId))
+        .has_value();
 }
 
 static HRESULT WINAPI TaskListWnd_HandleClick_Hook(
@@ -3794,6 +5333,11 @@ static TaskListWnd_GetRelativeTaskOrder_t
 static TaskListWnd_GetRelativeTaskOrder_t
     g_taskListWndMultiGetRelativeTaskOrder;
 
+using TaskListWnd_GetButtonGroupCount_t =
+    int(WINAPI*)(void* pThis);
+static TaskListWnd_GetButtonGroupCount_t
+    g_taskListWndGetButtonGroupCount;
+
 using TaskListWnd_TryMoveGroup_t =
     bool(WINAPI*)(void* pThis, void* taskGroup, unsigned int index);
 static TaskListWnd_TryMoveGroup_t
@@ -3875,74 +5419,209 @@ static void ApplyPinnedMoveToSnapshot(
 // -----------------------------------------------------------------------------
 // Win+number compensation.
 //
-// CTaskListWnd::HandleWinNumHotKey uses a zero-based taskbar-group index. The
-// stock implementation counts our genuine pinned separator groups, which makes
-// every app to the right of a separator shift by one Win+number slot. Translate
-// the requested logical app index to the corresponding physical taskbar-group
-// index by skipping every resolved separator position.
-//
-// targetIndex == -1 is intentionally ignored. It means the separator is
-// unanchored: PinManager leaves it at the native right edge until the user drags
-// it once. Since no existing taskbar app lies to the right of a freshly appended
-// unanchored slot, it must not shift any existing Win+number target. The first
-// native separator drag records a concrete targetIndex, after which normal
-// compensation applies automatically.
+// targetIndex is deliberately *not* used here. GetRelativeTaskOrder/TryMoveGroup
+// expose pinned-list ordinals, while CTaskListWnd::HandleWinNumHotKey indexes the
+// live task-button-group array, which also contains running non-pinned groups.
+// Walk that live array on the taskbar UI thread and skip separator groups there.
 // -----------------------------------------------------------------------------
 
-static short CompensateWinNumHotKeyIndex(short logicalIndex) {
+static bool TryProbeButtonGroupsArrayOffset(size_t* offsetOut) {
+    if (!offsetOut || !g_taskListWndGetButtonGroupCount) {
+        return false;
+    }
+
+    constexpr size_t kProbeSize = 256;
+    int values[kProbeSize];
+    int* pointers[kProbeSize];
+
+    for (size_t i = 0; i < kProbeSize; i++) {
+        values[i] = static_cast<int>(i);
+        pointers[i] = &values[i];
+    }
+
+    int probe =
+        g_taskListWndGetButtonGroupCount(pointers);
+    if (probe <= 0 ||
+        static_cast<size_t>(probe) >= kProbeSize) {
+        return false;
+    }
+
+    *offsetOut = static_cast<size_t>(probe);
+    return true;
+}
+
+static bool TryReadTaskButtonGroupDpa(
+    void* taskListWnd,
+    size_t offset,
+    int* countOut,
+    void*** itemsOut) {
+    if (!taskListWnd || !countOut || !itemsOut ||
+        !g_taskListWndVtableITaskListUI) {
+        return false;
+    }
+
+    // GetButtonGroupCount's member offset is relative to the ITaskListUI
+    // subobject, while HandleWinNumHotKey can provide another subobject.
+    constexpr size_t kMaxSubobjectSlots = 32;
+    void** taskListUi = reinterpret_cast<void**>(taskListWnd);
+    size_t slot = 0;
+    while (slot < kMaxSubobjectSlots &&
+           *taskListUi != g_taskListWndVtableITaskListUI) {
+        slot++;
+        taskListUi++;
+    }
+    if (slot == kMaxSubobjectSlots) {
+        return false;
+    }
+
+    auto dpa = reinterpret_cast<unsigned char*>(
+        taskListUi[offset]);
+    if (!dpa) {
+        return false;
+    }
+
+    *countOut = *reinterpret_cast<int*>(dpa);
+    *itemsOut = *reinterpret_cast<void***>(
+        dpa + sizeof(void*));
+    return true;
+}
+
+static std::optional<size_t> GetButtonGroupsArrayOffset() {
+    // 0 = uninitialized, kUnavailable = permanently unavailable for this
+    // process, otherwise the value is offset+1. Caching failure matters because
+    // Win+N is a hot input path and a changed private ABI should be probed once.
+    static constexpr size_t kUnavailable = static_cast<size_t>(-1);
+    static std::atomic<size_t> cachedOffsetPlusOne{0};
+
+    size_t cached =
+        cachedOffsetPlusOne.load(std::memory_order_acquire);
+    if (cached == kUnavailable) {
+        return std::nullopt;
+    }
+    if (cached != 0) {
+        return cached - 1;
+    }
+
+    size_t offset = 0;
+    if (!TryProbeButtonGroupsArrayOffset(&offset)) {
+        cachedOffsetPlusOne.store(
+            kUnavailable,
+            std::memory_order_release);
+        Wh_Log(
+            L"[WINNUM] Button-group offset probe failed; disabling compensation");
+        return std::nullopt;
+    }
+
+    cachedOffsetPlusOne.store(
+        offset + 1,
+        std::memory_order_release);
+    Wh_Log(
+        L"[WINNUM] Live button-group DPA member offset=%zu",
+        offset);
+    return offset;
+}
+
+static bool GetTaskButtonGroups(
+    void* taskListWnd,
+    int* countOut,
+    void*** itemsOut) {
+    if (!taskListWnd || !countOut || !itemsOut) {
+        return false;
+    }
+
+    auto offset = GetButtonGroupsArrayOffset();
+    if (!offset) {
+        return false;
+    }
+
+    int count = 0;
+    void** items = nullptr;
+    if (!TryReadTaskButtonGroupDpa(
+            taskListWnd,
+            *offset,
+            &count,
+            &items)) {
+        Wh_Log(
+            L"[WINNUM] Live button-group DPA read failed; using stock Win+N");
+        return false;
+    }
+
+    constexpr int kMaxReasonableButtonGroups = 4096;
+    if (count < 0 || count > kMaxReasonableButtonGroups ||
+        (count > 0 && !items)) {
+        Wh_Log(
+            L"[WINNUM] Invalid live button-group array count=%d items=%p",
+            count,
+            items);
+        return false;
+    }
+
+    *countOut = count;
+    *itemsOut = items;
+    return true;
+}
+
+static short CompensateWinNumHotKeyIndex(
+    void* taskListWnd,
+    short logicalIndex) {
     // Win+1..Win+0 reaches this layer as zero-based 0..9. Leave any unexpected
     // internal/special value alone rather than changing undocumented behavior.
     if (logicalIndex < 0 || logicalIndex > 9 ||
         g_unloading ||
-        g_internalCleanupInProgress.load(std::memory_order_acquire)) {
+        g_internalCleanupInProgress.load(std::memory_order_acquire) ||
+        !g_taskBtnGroupGetGroupAddress ||
+        !g_taskListWndVtableITaskListUI ||
+        !g_taskListWndGetButtonGroupCount) {
         return logicalIndex;
     }
 
-    // While the backend is creating/removing/recovering pins, desired state can
-    // briefly differ from the visible taskbar. Stock behavior is safer for that
-    // very short transition. Native user drags don't clear this latch: their
-    // new positions are mirrored synchronously by TryMoveGroup below, so Win+N
-    // compensation follows a completed drag immediately.
-    if (!g_backendHasConverged.load(std::memory_order_acquire)) {
+    int count = 0;
+    void** groups = nullptr;
+    if (!GetTaskButtonGroups(
+            taskListWnd,
+            &count,
+            &groups)) {
         return logicalIndex;
     }
 
-    std::vector<int> separatorPositions;
-    {
-        std::shared_lock lock(g_settingsMutex);
-        separatorPositions.reserve(g_settings.separators.size());
+    using CTaskBtnGroup_GetGroup_t =
+        void*(WINAPI*)(void* pThis);
+    auto getGroup =
+        reinterpret_cast<CTaskBtnGroup_GetGroup_t>(
+            g_taskBtnGroupGetGroupAddress);
 
-        for (const auto& separator : g_settings.separators) {
-            if (separator.targetIndex >= 0) {
-                separatorPositions.push_back(separator.targetIndex);
-            }
+    int remaining = logicalIndex;
+    for (int i = 0;
+         i < count && i <= SHRT_MAX;
+         i++) {
+        void* taskBtnGroup = groups[i];
+        if (!taskBtnGroup) {
+            // Don't risk translating against a partially mutating/corrupt list.
+            return logicalIndex;
         }
-    }
 
-    if (separatorPositions.empty()) {
-        return logicalIndex;
-    }
-
-    std::sort(
-        separatorPositions.begin(),
-        separatorPositions.end());
-
-    int physicalIndex = logicalIndex;
-    for (int separatorIndex : separatorPositions) {
-        if (separatorIndex <= physicalIndex) {
-            ++physicalIndex;
-        } else {
-            // Positions are sorted, so no later separator can affect this
-            // target unless an earlier one has already shifted it into range.
-            break;
+        void* taskGroup = getGroup(taskBtnGroup);
+        if (!taskGroup) {
+            return logicalIndex;
         }
+
+        if (IsSeparatorTaskGroup(taskGroup)) {
+            continue;
+        }
+
+        if (remaining == 0) {
+            return static_cast<short>(i);
+        }
+
+        remaining--;
     }
 
-    if (physicalIndex > SHRT_MAX) {
-        return logicalIndex;
-    }
-
-    return static_cast<short>(physicalIndex);
+    // Fewer ordinary groups than the requested slot. Feed stock code a
+    // guaranteed one-past-end physical index so a separator can't accidentally
+    // become the target merely because it made the raw group array long enough.
+    return count <= SHRT_MAX
+               ? static_cast<short>(count)
+               : logicalIndex;
 }
 
 static HRESULT WINAPI TaskListWnd_HandleWinNumHotKey_Hook(
@@ -3950,7 +5629,9 @@ static HRESULT WINAPI TaskListWnd_HandleWinNumHotKey_Hook(
     short index,
     unsigned short flags) {
     short compensatedIndex =
-        CompensateWinNumHotKeyIndex(index);
+        CompensateWinNumHotKeyIndex(
+            pThis,
+            index);
 
     if (compensatedIndex != index) {
         Wh_Log(
@@ -3971,11 +5652,10 @@ static HRESULT WINAPI TaskListWnd_HandleWinNumHotKey_Hook(
 // Native taskbar mutation persistence.
 //
 // Windhawk no longer owns separator position/list configuration. TryMoveGroup
-// mirrors native reorder operations into the in-memory separator state and
-// immediately queues the backend persistence pass. The optional Taskbar.View
-// drag-completion hook only refreshes presentation. Add and Remove have their
-// own discrete commit points and queue the same worker; live taskbar UI
-// callbacks never perform synchronous disk I/O.
+// mirrors native reorder operations into the in-memory separator state. The
+// Taskbar.View drag-completion hook queues one backend persistence pass when
+// the drag ends. Add and Unpin have their own discrete commit points and queue
+// the same worker; live taskbar UI callbacks never perform synchronous disk I/O.
 // -----------------------------------------------------------------------------
 
 static void FlushPendingSeparatorStateSynchronously() {
@@ -4014,12 +5694,13 @@ static void RecordNativePinnedMove(
         return;
     }
 
+    std::lock_guard<std::mutex> mutationLock(
+        g_settingsMutationMutex);
+
     bool touchesSeparator = false;
 
     {
-        std::lock_guard<std::mutex> mutationLock(
-            g_settingsMutationMutex);
-        std::unique_lock settingsLock(g_settingsMutex);
+        std::unique_lock lock(g_settingsMutex);
 
         Settings before = g_settings;
 
@@ -4079,9 +5760,14 @@ static void RecordNativePinnedMove(
         oldIndex,
         newIndex);
 
-    // Persist through the long-lived worker even if the optional
-    // OnDragCompletedGesture presentation callback isn't available.
-    QueueBackendWork();
+    // Normally the Taskbar.View drag-completion hook queues one persistence
+    // pass after the gesture fully unwinds. That presentation callback is an
+    // optional private symbol, though, while TryMoveGroup can still be available.
+    // Preserve crash durability on such builds by waking the worker immediately.
+    if (!g_taskbarViewDllHooked.load(std::memory_order_acquire) ||
+        !g_taskListButtonOnDragCompletedGestureOriginal) {
+        QueueBackendWork();
+    }
 }
 
 static bool RunTryMoveGroupObserver(
@@ -4225,7 +5911,7 @@ static void ShiftSeparatorTargetsAfterRemoval(
 }
 
 
-static void RemoveSeparatorFromContextMenu(
+static void RemoveSeparatorByIdentity(
     std::wstring identity) {
     if (identity.empty() ||
         g_unloading ||
@@ -4239,6 +5925,11 @@ static void RemoveSeparatorFromContextMenu(
     {
         std::lock_guard<std::mutex> mutationLock(
             g_settingsMutationMutex);
+
+        if (g_unloading ||
+            g_internalCleanupInProgress.load(std::memory_order_acquire)) {
+            return;
+        }
 
         {
             std::shared_lock lock(g_settingsMutex);
@@ -4297,7 +5988,9 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     }
 
     Wh_Log(L"[LIFECYCLE] TrayUI::StartTaskbar completed");
-    StartBackendWorker();
+    // A repeated TrayUI::StartTaskbar is an in-process reconstruction and must
+    // force one lifecycle refresh even when the persistent backend is running.
+    StartBackendWorker(true);
 }
 
 static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
@@ -4329,6 +6022,22 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndGetRelativeTaskOrder,
             nullptr,
+        },
+        {
+            {
+                LR"(const CTaskListWnd::`vftable'{for `ITaskListUI'})"
+            },
+            &g_taskListWndVtableITaskListUI,
+            nullptr,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskListWnd::GetButtonGroupCount(void))"
+            },
+            &g_taskListWndGetButtonGroupCount,
+            nullptr,
+            true,
         },
         {
             {
@@ -4419,7 +6128,20 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
         return false;
     }
 
-    Wh_Log(L"[TASKBAR] taskbar.dll hooks installed in one symbol pass");
+    if (g_taskListWndOnContextMenuOriginal) {
+        g_separatorContextSuppressionAvailable.store(
+            true,
+            std::memory_order_release);
+    }
+
+    Wh_Log(
+        L"[TASKBAR] taskbar.dll hooks installed in one symbol pass; "
+        L"WinNum=%d TaskListUI=%d ButtonGroups=%d GetGroup=%d LegacyContextSuppress=%d",
+        g_taskListWndHandleWinNumHotKeyOriginal ? 1 : 0,
+        g_taskListWndVtableITaskListUI ? 1 : 0,
+        g_taskListWndGetButtonGroupCount ? 1 : 0,
+        g_taskBtnGroupGetGroupAddress ? 1 : 0,
+        g_taskListWndOnContextMenuOriginal ? 1 : 0);
     return true;
 }
 
@@ -4519,7 +6241,7 @@ static HRESULT CreateSeparatorShortcut(
 
     if (SUCCEEDED(hr)) {
         hr = shellLink->SetIconLocation(
-            g_iconPath.c_str(),
+            g_bundledIconPath.c_str(),
             0);
     }
 
@@ -4550,6 +6272,17 @@ static HRESULT CreateSeparatorShortcut(
 
             persistFile->Release();
         }
+    }
+
+    if (SUCCEEDED(hr)) {
+        // The shortcut has just been recreated after any required icon refresh.
+        // Notify the Shell about this exact item as a targeted hint; don't
+        // globally invalidate Explorer's icon/association caches.
+        SHChangeNotify(
+            SHCNE_UPDATEITEM,
+            SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
+            shortcutPath.c_str(),
+            nullptr);
     }
 
     shellLink->Release();
@@ -4678,19 +6411,73 @@ static bool UnpinAndDeleteShortcut(
         return false;
     }
 
-    return DeleteFileIfPresent(shortcutPath);
+    if (!DeleteFileIfPresent(shortcutPath)) {
+        return false;
+    }
+
+    // Pair the later targeted shortcut update with an explicit deletion hint.
+    // This keeps Explorer from treating a same-path recreated .lnk as a silent
+    // in-place mutation during an icon appearance refresh.
+    SHChangeNotify(
+        SHCNE_DELETE,
+        SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
+        shortcutPath.c_str(),
+        nullptr);
+    return true;
 }
 
 static bool CleanupStaleSeparatorShortcuts(
     IPinManagerInterop3* pinManager,
     const Settings& settings) {
     std::vector<std::wstring> stalePaths;
+    const auto shortcutPaths = EnumerateSeparatorShortcuts();
 
-    for (const auto& path : EnumerateSeparatorShortcuts()) {
-        if (!IsIdentityInSettings(
+    size_t staleIdentityCount = 0;
+    size_t staleIconCount = 0;
+
+    ConfiguredIconDiskState iconState =
+        GetConfiguredBundledIconDiskState();
+    if (iconState == ConfiguredIconDiskState::Error) {
+        // Don't destroy otherwise-good pins if WIC or storage is temporarily
+        // unavailable. A later backend retry can reassess the same state.
+        Wh_Log(
+            L"[ICON] Can't verify configured separator icon generation; leaving live shortcuts untouched for this retry");
+        return false;
+    }
+
+    const bool iconContentsStale =
+        iconState == ConfiguredIconDiskState::Mismatch;
+
+    if (iconContentsStale && !shortcutPaths.empty()) {
+        Wh_Log(
+            L"[ICON] Current separator icon generation doesn't match configured appearance; recycling separator shortcuts before regenerating it");
+    }
+
+    for (const auto& path : shortcutPaths) {
+        // Exact shell identity is intentional here. The durable stable ID may
+        // match, but an old/no-generation .lnk must still be unpinned and deleted
+        // before the current generation is created. This bounds storage to one
+        // shortcut generation after every successful convergence.
+        bool identityIsDesired =
+            IsIdentityInSettings(
                 settings,
-                GetShortcutIdentity(path))) {
+                GetShortcutIdentity(path));
+
+        if (!identityIsDesired) {
             stalePaths.push_back(path);
+            staleIdentityCount++;
+            continue;
+        }
+
+        // The current generation ICO is the single authoritative artwork file. Never
+        // replace its bytes underneath a live pin: if its contents changed, destroy
+        // every desired backing shortcut first and recreate the pins afterward.
+        // Exact shell-identity matching above independently catches every old/no-
+        // generation .lnk so upgrades cannot accumulate shortcut generations.
+        if (iconContentsStale ||
+            !ShortcutUsesConfiguredBundledIcon(path)) {
+            stalePaths.push_back(path);
+            staleIconCount++;
         }
     }
 
@@ -4699,8 +6486,10 @@ static bool CleanupStaleSeparatorShortcuts(
     }
 
     Wh_Log(
-        L"[SYNC] Removing %zu shortcut(s) not present in desired settings",
-        stalePaths.size());
+        L"[SYNC] Recycling %zu shortcut(s): staleIdentity=%zu staleIcon=%zu",
+        stalePaths.size(),
+        staleIdentityCount,
+        staleIconCount);
 
     bool success = true;
     for (auto it = stalePaths.rbegin();
@@ -4729,33 +6518,46 @@ static bool PrepareSeparatorFiles(
     const Settings& settings,
     const Settings& appliedSettings,
     const SeparatorSetting& refreshPulse,
-    std::vector<std::wstring>* identitiesToPin) {
+    bool lifecycleRefreshRequested,
+    std::vector<std::wstring>* identitiesToPin,
+    bool* recoveryDetected) {
     if (IsBackendPassSuperseded()) {
         return false;
     }
 
     identitiesToPin->clear();
+    *recoveryDetected = false;
 
     if (settings.separators.empty()) {
         Wh_Log(L"[PIN] No separators configured");
         return true;
     }
 
-    // The icon file is shared by every separator shortcut. Rewriting it during
-    // a live settings change needlessly invalidates Explorer's icon-cache
-    // assumptions, so leave an existing file untouched.
-    if (!FileExists(g_iconPath) &&
-        !WriteBinaryFile(
-            g_iconPath,
-            kSeparatorIcon,
-            static_cast<DWORD>(sizeof(kSeparatorIcon)))) {
+    // Exactly one generated ICO is authoritative for the current shell generation.
+    // CleanupStaleSeparatorShortcuts removes old shortcut generations first, and
+    // stale ICO generations are purged only after convergence succeeds.
+    ConfiguredIconDiskState iconState =
+        GetConfiguredBundledIconDiskState();
+    if (iconState == ConfiguredIconDiskState::Error) {
+        Wh_Log(L"[PIN] Failed to verify current separator icon generation");
         return false;
     }
+    if (iconState == ConfiguredIconDiskState::Mismatch) {
+        if (!WriteConfiguredBundledSeparatorIcon()) {
+            Wh_Log(L"[PIN] Failed to create current separator icon generation");
+            return false;
+        }
 
-    // Stable separator shortcuts are immutable while their identity survives.
-    // Overwriting a pinned .lnk in place can make Explorer keep the taskbar
-    // button while losing its cached glyph. Create only genuinely new/missing
-    // backing files; survivors keep the exact file Windows already knows.
+        SHChangeNotify(
+            SHCNE_UPDATEITEM,
+            SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
+            g_bundledIconPath.c_str(),
+            nullptr);
+    }
+
+    // Shortcut/AUMID identity includes the appearance generation. Within one
+    // generation, surviving shortcuts remain immutable; across generations the
+    // stale cleanup above destroys them before these fresh paths are created.
     for (const auto& separator : settings.separators) {
         if (IsBackendPassSuperseded()) {
             return false;
@@ -4797,25 +6599,37 @@ static bool PrepareSeparatorFiles(
             identitiesToPin->push_back(
                 separator.identity);
         }
+
+        // Recreating the backing shortcut for a separator that belonged to the
+        // last converged snapshot is recovery, not an ordinary Add. That is the
+        // only non-lifecycle convergence which still needs the transient pulse.
+        if (shortcutCreated &&
+            appliedSeparator &&
+            appliedSeparator->identity == separator.identity) {
+            *recoveryDetected = true;
+        }
     }
 
     if (IsBackendPassSuperseded()) {
         return false;
     }
 
-    // The refresh helper is intentionally transient, so recreating it is safe.
-    std::wstring refreshShortcutPath =
-        GetSeparatorShortcutPath(refreshPulse);
-    HRESULT refreshHr =
-        CreateSeparatorShortcut(
-            refreshPulse,
-            refreshShortcutPath);
+    if (lifecycleRefreshRequested || *recoveryDetected) {
+        // The refresh helper is intentionally transient, so recreating it is
+        // safe. Ordinary Add/Remove passes never create it anymore.
+        std::wstring refreshShortcutPath =
+            GetSeparatorShortcutPath(refreshPulse);
+        HRESULT refreshHr =
+            CreateSeparatorShortcut(
+                refreshPulse,
+                refreshShortcutPath);
 
-    if (FAILED(refreshHr)) {
-        Wh_Log(
-            L"[REFRESH] Failed to create pin-pulse shortcut hr=0x%08X",
-            static_cast<unsigned int>(refreshHr));
-        return false;
+        if (FAILED(refreshHr)) {
+            Wh_Log(
+                L"[REFRESH] Failed to create pin-pulse shortcut hr=0x%08X",
+                static_cast<unsigned int>(refreshHr));
+            return false;
+        }
     }
 
     return true;
@@ -5075,10 +6889,11 @@ static bool PulseTaskbarPinList(
 static bool ConvergeSeparatorPins(
     const Settings& settings,
     const Settings& appliedSettings,
-    const SeparatorSetting& refreshPulse) {
+    const SeparatorSetting& refreshPulse,
+    bool lifecycleRefreshRequested) {
     if (settings.separators.empty() &&
         EnumerateSeparatorShortcuts().empty()) {
-        DeleteFileIfPresent(g_iconPath);
+        DeleteAllBundledIconArtifacts();
         return true;
     }
 
@@ -5088,6 +6903,7 @@ static bool ConvergeSeparatorPins(
     DWORD retryDelay = kInitialRetryDelay;
     bool staleCleanupComplete = false;
     bool filesPrepared = false;
+    bool recoveryDetected = false;
     std::vector<std::wstring> identitiesToPin;
 
     for (int attempt = 1;
@@ -5135,13 +6951,15 @@ static bool ConvergeSeparatorPins(
                         settings,
                         appliedSettings,
                         refreshPulse,
-                        &identitiesToPin);
+                        lifecycleRefreshRequested,
+                        &identitiesToPin,
+                        &recoveryDetected);
                 filesReady = filesPrepared;
             }
 
             if (staleShortcutsRemoved && filesReady &&
                 settings.separators.empty()) {
-                DeleteFileIfPresent(g_iconPath);
+                DeleteAllBundledIconArtifacts();
                 pinsReady = true;
                 positioned = true;
                 refreshed = true;
@@ -5159,10 +6977,23 @@ static bool ConvergeSeparatorPins(
                             settings);
 
                     if (positioned) {
-                        refreshed =
-                            PulseTaskbarPinList(
-                                pinManager,
-                                refreshPulse);
+                        if (lifecycleRefreshRequested || recoveryDetected) {
+                            Wh_Log(
+                                L"[REFRESH] Pulsing pin list reason=%s",
+                                lifecycleRefreshRequested
+                                    ? (recoveryDetected
+                                           ? L"taskbar-lifecycle+recovery"
+                                           : L"taskbar-lifecycle")
+                                    : L"recovery");
+                            refreshed =
+                                PulseTaskbarPinList(
+                                    pinManager,
+                                    refreshPulse);
+                        } else {
+                            // Add, remove and ordinary reorder persistence are
+                            // already backed by a real native pin-list mutation.
+                            refreshed = true;
+                        }
                     }
                 } else {
                     Wh_Log(
@@ -5175,6 +7006,20 @@ static bool ConvergeSeparatorPins(
 
         if (staleShortcutsRemoved && filesReady &&
             pinsReady && positioned && refreshed) {
+            // Only now is it safe to remove obsolete icon generations: every
+            // surviving .lnk has been recreated/verified against the one current
+            // authoritative ICO. A failed/partial pass deliberately keeps old
+            // artifacts because a stranded shortcut may still reference one.
+            if (!settings.separators.empty() &&
+                !DeleteStaleBundledIconArtifacts()) {
+                // Dead icon generations are no longer referenced by any owned
+                // shortcut after convergence. A transient deletion failure is
+                // therefore observable but must not turn a healthy pin state
+                // into a failed reconciliation; later passes/teardown retry it.
+                Wh_Log(
+                    L"[ICON] Some obsolete separator icon artifacts couldn't be deleted; keeping converged pin state");
+            }
+
             Wh_Log(
                 L"[SYNC] Separator state converged on attempt %d",
                 attempt);
@@ -5235,7 +7080,7 @@ static bool UnpinAndDeleteSeparators(bool recoverMissingPins) {
         EnumerateSeparatorShortcuts();
 
     if (shortcutPaths.empty()) {
-        DeleteFileIfPresent(g_iconPath);
+        DeleteAllBundledIconArtifacts();
         return true;
     }
 
@@ -5269,12 +7114,11 @@ static bool UnpinAndDeleteSeparators(bool recoverMissingPins) {
     pinManager->Release();
 
     if (allUnpinned) {
-        DeleteFileIfPresent(g_iconPath);
+        DeleteAllBundledIconArtifacts();
     } else {
         Wh_Log(
             L"[CLEANUP] At least one unpin failed; "
-            L"keeping shared icon '%s'",
-            g_iconPath.c_str());
+            L"keeping mod-owned shortcuts and all icon variants in place");
     }
 
     return allUnpinned;
@@ -5328,6 +7172,7 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
         4000,
     };
     size_t stateWriteFailureCount = 0;
+    unsigned long long handledTaskbarRefreshGeneration = 0;
 
     for (;;) {
         // A request that arrived before this iteration is represented by the
@@ -5339,6 +7184,10 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
         Settings appliedSettings;
         SeparatorSetting refreshPulse;
         bool stateDirty = false;
+        const unsigned long long taskbarRefreshGeneration =
+            g_taskbarRefreshGeneration.load(std::memory_order_acquire);
+        const bool lifecycleRefreshRequested =
+            taskbarRefreshGeneration != handledTaskbarRefreshGeneration;
 
         {
             // Keep the established mutation->settings lock order, but only for
@@ -5398,6 +7247,7 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
         }
 
         bool needsReconcile =
+            lifecycleRefreshRequested ||
             !g_backendHasConverged.load(std::memory_order_acquire) ||
             SettingsRequireBackendReconcile(
                 appliedSettings,
@@ -5409,7 +7259,8 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
                 ConvergeSeparatorPins(
                     settings,
                     appliedSettings,
-                    refreshPulse);
+                    refreshPulse,
+                    lifecycleRefreshRequested);
 
             if (success) {
                 {
@@ -5433,6 +7284,15 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
                             false,
                             std::memory_order_release);
                     }
+                }
+
+                // Consume exactly the lifecycle generation this pass observed.
+                // If another reconstruction arrived while convergence was in
+                // flight, its larger generation remains pending for the next
+                // iteration (and its wake event supersedes this pass as usual).
+                if (lifecycleRefreshRequested) {
+                    handledTaskbarRefreshGeneration =
+                        taskbarRefreshGeneration;
                 }
 
                 // Directory enumeration belongs to the worker as well. No
@@ -5547,10 +7407,21 @@ static HWND FindCurrentProcessTaskbarWnd() {
 }
 
 static bool CleanupSeparatorArtifacts(bool recoverMissingPins) {
+    // Icon files don't affect the pin list. If no owned shortcuts survive, no
+    // separator can still depend on any generated/legacy icon variant, so clean
+    // that cache even during the brief part of Explorer teardown where
+    // Shell_TrayWnd is already gone.
+    if (!SeparatorShortcutArtifactsExist()) {
+        DeleteAllBundledIconArtifacts();
+        return true;
+    }
+
     // Shared mod storage may be visible to several explorer.exe instances.
     // Only the process that owns Shell_TrayWnd may mutate the taskbar pin list.
-    if (!FindCurrentProcessTaskbarWnd() ||
-        !SeparatorShortcutArtifactsExist()) {
+    // If shortcuts do survive and this process isn't the owner, keep *all* icon
+    // variants too: one of those shortcuts can legitimately reference an older
+    // appearance after an interrupted reload.
+    if (!FindCurrentProcessTaskbarWnd()) {
         return true;
     }
 
@@ -5687,7 +7558,7 @@ static bool StartBackendWorkerLocked() {
     return true;
 }
 
-static void StartBackendWorker() {
+static void StartBackendWorker(bool refreshIfAlreadyRunning) {
     std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
     if (g_unloading || g_backendStopped) {
@@ -5700,15 +7571,30 @@ static void StartBackendWorker() {
             g_backendThread,
             0) == WAIT_TIMEOUT;
 
+    // A newly created backend always represents initial taskbar attachment. A
+    // repeated TrayUI::StartTaskbar is reconstruction and requests another
+    // lifecycle generation. Wh_ModAfterInit passes false so it can't duplicate
+    // a startup already observed through TrayUI::StartTaskbar.
+    const bool lifecycleRefreshRequested =
+        !workerWasRunning || refreshIfAlreadyRunning;
+
+    if (lifecycleRefreshRequested) {
+        g_taskbarRefreshGeneration.fetch_add(
+            1,
+            std::memory_order_acq_rel);
+        g_backendHasConverged.store(
+            false,
+            std::memory_order_release);
+    }
+
     if (!StartBackendWorkerLocked()) {
         Wh_Log(L"[INIT] Failed to start separator backend worker");
         return;
     }
 
-    // TrayUI::StartTaskbar can run again if Explorer reconstructs the taskbar
-    // in-process. A persistent worker already exists in that case, so wake it
-    // to re-assert the pin order and refresh pulse for the new presentation.
-    if (workerWasRunning && g_backendWakeEvent) {
+    if (workerWasRunning &&
+        lifecycleRefreshRequested &&
+        g_backendWakeEvent) {
         SetEvent(g_backendWakeEvent);
     }
 }
@@ -5768,67 +7654,84 @@ static void QueueBackendWork() {
     }
 }
 
-static void AddSeparatorFromTaskbarMenu() {
+static void AddSeparatorFromUserAction() {
     if (g_unloading ||
-        g_internalCleanupInProgress.load()) {
+        g_internalCleanupInProgress.load(std::memory_order_acquire)) {
         return;
     }
 
-    std::lock_guard<std::mutex> mutationLock(
-        g_settingsMutationMutex);
-
-    Settings updated;
-    {
-        std::shared_lock lock(g_settingsMutex);
-        updated = g_settings;
-    }
-
-    std::wstring stableId;
-    const auto alreadyUsed =
-        [&updated](std::wstring_view candidate) {
-            return std::any_of(
-                updated.separators.begin(),
-                updated.separators.end(),
-                [candidate](const SeparatorSetting& separator) {
-                    return separator.stableId ==
-                        candidate;
-                });
-        };
-
-    do {
-        stableId = GenerateStableId();
-    } while (alreadyUsed(stableId));
-
-    int sourceIndex =
-        static_cast<int>(
-            updated.separators.size());
-
-    updated.separators.push_back({
-        .ordinal = sourceIndex + 1,
-        .sourceIndex = sourceIndex,
-        // Explicitly unanchored. Windows appends it at the native end; the
-        // first user drag records the concrete position through TryMoveGroup.
-        .targetIndex = -1,
-        .width = updated.width,
-        .stableId = stableId,
-        .identity = BuildSeparatorIdentity(
-            updated.identifierPrefix,
-            stableId),
-    });
+    std::wstring addedIdentity;
 
     {
-        std::unique_lock lock(g_settingsMutex);
-        g_settings = updated;
-        g_backendHasConverged = false;
-    }
+        // Serialize only the desired-state mutation itself. QueueBackendWork()
+        // takes g_lifecycleMutex, so call it after this scope to keep the lock
+        // graph strictly mutation/settings -> release -> lifecycle.
+        std::lock_guard<std::mutex> mutationLock(
+            g_settingsMutationMutex);
 
-    // Publish the desired state immediately, but let the backend worker make
-    // it durable before PinManager is allowed to create the new pin.
-    g_separatorStateDirty = true;
+        // Recheck after acquiring the mutation lock: shutdown may have closed
+        // user interactions while this callback was waiting behind a state write.
+        if (g_unloading ||
+            g_internalCleanupInProgress.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        Settings updated;
+        {
+            std::shared_lock lock(g_settingsMutex);
+            updated = g_settings;
+        }
+
+        std::wstring stableId;
+        const auto alreadyUsed =
+            [&updated](std::wstring_view candidate) {
+                return std::any_of(
+                    updated.separators.begin(),
+                    updated.separators.end(),
+                    [candidate](const SeparatorSetting& separator) {
+                        return separator.stableId ==
+                            candidate;
+                    });
+            };
+
+        do {
+            stableId = GenerateStableId();
+        } while (alreadyUsed(stableId));
+
+        int sourceIndex =
+            static_cast<int>(
+                updated.separators.size());
+
+        updated.separators.push_back({
+            .ordinal = sourceIndex + 1,
+            .sourceIndex = sourceIndex,
+            // Explicitly unanchored. Windows appends it at the native end; the
+            // first user drag records the concrete position through TryMoveGroup.
+            .targetIndex = -1,
+            .width = updated.width,
+            .stableId = stableId,
+            .identity = BuildSeparatorIdentity(
+                updated.identifierPrefix,
+                stableId),
+        });
+
+        addedIdentity =
+            updated.separators.back().identity;
+
+        {
+            std::unique_lock lock(g_settingsMutex);
+            g_settings = updated;
+            g_backendHasConverged = false;
+        }
+
+        // Publish the desired state immediately, but let the backend worker make
+        // it durable before PinManager is allowed to create the new pin.
+        g_separatorStateDirty = true;
+    }
 
     Wh_Log(
         L"[NATIVE-ADD] Added separator identity='%s' at native end",
-        updated.separators.back().identity.c_str());
+        addedIdentity.c_str());
 
     QueueBackendWork();
 }
@@ -5924,6 +7827,21 @@ BOOL ExplorerModInit() {
         return FALSE;
     }
 
+    g_interactionMode.store(
+        LoadInteractionModeSetting(),
+        std::memory_order_release);
+    g_iconAppearance = LoadIconAppearanceSettings();
+    ConfigureAppearanceGenerationPaths();
+
+    Wh_Log(
+        L"[SETTINGS] Interaction mode=%s icon(rotation=%d brightness=%d alpha=%d path='%s')",
+        InteractionModeName(
+            g_interactionMode.load(std::memory_order_acquire)),
+        g_iconAppearance.rotation,
+        g_iconAppearance.brightness,
+        g_iconAppearance.alpha,
+        g_bundledIconPath.c_str());
+
     if (!LoadSettings()) {
         return FALSE;
     }
@@ -5963,7 +7881,10 @@ void ExplorerModAfterInit() {
     // TrayUI::StartTaskbar has already returned and won't fire for us.
     if (FindCurrentProcessTaskbarWnd()) {
         Wh_Log(L"[LIFECYCLE] Existing taskbar window found; starting backend");
-        StartBackendWorker();
+        // Late attach needs an initial refresh only when it actually creates the
+        // worker. If TrayUI::StartTaskbar already started it, don't manufacture
+        // a duplicate reconstruction pulse from Wh_ModAfterInit.
+        StartBackendWorker(false);
     } else {
         Wh_Log(L"[LIFECYCLE] Waiting for TrayUI::StartTaskbar");
     }
@@ -5975,6 +7896,13 @@ void ExplorerModBeforeUninit() {
     // bounded chance to leave the Windhawk hook engine. Never block unload
     // indefinitely waiting on engine work from another thread.
     g_hookInstallationClosed.store(true, std::memory_order_release);
+
+    // Close user Add/Remove entry points immediately as teardown begins. A
+    // callback that already passed its first guard rechecks this flag after
+    // taking the mutation mutex, so no desired-state mutation can race the
+    // installer drain or the final synchronous state flush.
+    g_internalCleanupInProgress.store(true, std::memory_order_release);
+
     DrainHookInstallers();
 
     // Join the worker first so there can be no concurrent state-file writer.
@@ -5985,7 +7913,6 @@ void ExplorerModBeforeUninit() {
 
     // Remove pins while the styling and input hooks can still keep a transient
     // recovery pin styled and inert.
-    g_internalCleanupInProgress = true;
     CleanupSeparatorArtifacts(true);
 
     // Stop applying separator state before releasing the cleanup guard.
@@ -6001,15 +7928,21 @@ void ExplorerModUninit() {
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloading");
 
     // Defensive in case an older Windhawk build skips Wh_ModBeforeUninit.
-    g_unloading = true;
+    g_unloading.store(true, std::memory_order_release);
+    g_internalCleanupInProgress.store(true, std::memory_order_release);
     StopBackendWorker();
     FlushPendingSeparatorStateSynchronously();
 
-    // Defensive fallback for Windhawk builds that skip Wh_ModBeforeUninit.
     // Hooks may already be gone here, so never recover an absent pin by
     // temporarily pinning it again. Cleanup is also restricted to the
     // explorer.exe instance that actually owns the taskbar.
     CleanupSeparatorArtifacts(false);
+
+    // Wh_ModBeforeUninit normally does this while hooks are still installed.
+    // Keep a best-effort defensive pass here as well so a skipped BeforeUninit
+    // doesn't leave XAML delegates pointing into an unloading module.
+    RestoreTrackedSeparatorVisualStates();
+    g_internalCleanupInProgress.store(false, std::memory_order_release);
 
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloaded");
 }
@@ -6017,6 +7950,59 @@ void ExplorerModUninit() {
 BOOL ExplorerModSettingsChanged(BOOL* bReload) {
     if (bReload) {
         *bReload = FALSE;
+    }
+
+    // Existing .lnk/icon state deliberately isn't rewritten in place because
+    // Explorer caches taskbar groups and shortcut imagery aggressively. Appearance
+    // changes reload the mod; the new generation changes the ICO path, shortcut
+    // path and AppUserModelID, while persisted stable IDs/positions stay unchanged.
+    // Reconciliation purges all older shortcut/icon generations before converging.
+    IconAppearanceSettings newIconAppearance =
+        LoadIconAppearanceSettings();
+    if (!IconAppearanceSettingsEqual(
+            newIconAppearance,
+            g_iconAppearance)) {
+        Wh_Log(
+            L"[SETTINGS] Separator icon appearance changed; requesting reload");
+        if (bReload) {
+            *bReload = TRUE;
+        }
+        return TRUE;
+    }
+
+    InteractionMode newInteractionMode =
+        LoadInteractionModeSetting();
+
+    if (g_taskbarViewDllHooked.load(std::memory_order_acquire)) {
+        InteractionMode resolvedMode =
+            ResolveInteractionModeAgainstCapabilities(
+                newInteractionMode);
+        if (resolvedMode != newInteractionMode) {
+            Wh_Log(
+                L"[SETTINGS] Requested interaction mode %s unavailable; using %s",
+                InteractionModeName(newInteractionMode),
+                InteractionModeName(resolvedMode));
+            newInteractionMode = resolvedMode;
+        }
+    }
+
+    if (newInteractionMode == InteractionMode::MiddleClick &&
+        !g_separatorContextSuppressionAvailable.load(
+            std::memory_order_acquire)) {
+        Wh_Log(
+            L"[SETTINGS] Warning: no separator right-click suppression route is currently available");
+    }
+
+    InteractionMode oldInteractionMode =
+        g_interactionMode.exchange(
+            newInteractionMode,
+            std::memory_order_acq_rel);
+
+    if (newInteractionMode != oldInteractionMode) {
+        Wh_Log(
+            L"[SETTINGS] Interaction mode changed %s -> %s",
+            InteractionModeName(oldInteractionMode),
+            InteractionModeName(newInteractionMode));
     }
 
     double newWidth =
