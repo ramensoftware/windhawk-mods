@@ -154,14 +154,15 @@ using DefProcCallback = WNDPROC;
 
 // == Verbose Logging ==
 
+#pragma clang diagnostic ignored "-Wformat-security"
 /**
  * @brief Formats a narrow (char) printf-style string and append its converted UTF-16
  * representation to a wide output string using `MultiByteToWideChar`
  * with the specified @p codePage.
  *
  * @remark It is used to convert narrow ANSI string from
- * `__builtin_dump_struct` intrinsic (see `Dump` below) to wide UTF-16 string because
- * `Wh_Log` (macro around `InternalWh_Log_Wrapper`) expects wide string.
+ * `__builtin_dump_struct` intrinsic (see `Dump` below) to wide UTF-16 string
+ * because `Wh_Log` expects wide string.
  * https://clang.llvm.org/docs/LanguageExtensions.html#builtin-dump-struct
  * @see Dump
  *
