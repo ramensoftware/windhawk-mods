@@ -119,12 +119,6 @@ std::atomic<bool> g_isUnloading{false};
 HINSTANCE g_hInstance = NULL;
 static bool g_classRegistered = false;
 
-std::atomic<int> g_hookRefCount{0};
-struct HookRefCountScope {
-    HookRefCountScope() { g_hookRefCount.fetch_add(1, std::memory_order_acq_rel); }
-    ~HookRefCountScope() { g_hookRefCount.fetch_sub(1, std::memory_order_acq_rel); }
-};
-
 std::mutex g_subclassedSetMutex;
 std::unordered_set<HWND> g_subclassedWindows;
 
@@ -799,7 +793,6 @@ static void FinishWobblyTracking() {
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    HookRefCountScope hookScope;
     if (msg == g_wmDetach) {
         KillTimer(hwnd, 1);
         DestroyWindow(hwnd);
@@ -1053,7 +1046,6 @@ static void UntrackSubclassedWindow(HWND hwnd) {
 }
 
 LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    HookRefCountScope hookScope;
     if (msg == g_wmDetach) {
 
         bool needsRestore = false;
@@ -1108,7 +1100,6 @@ static bool IsInternalModClass(HWND hwnd) {
 }
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HookRefCountScope hookScope;
     HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) {
         if (SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0)) TrackSubclassedWindow(hwnd);
@@ -1117,7 +1108,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HookRefCountScope hookScope;
     HWND hwnd = CreateWindowExA_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) {
         if (SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0)) TrackSubclassedWindow(hwnd);
@@ -1126,7 +1116,6 @@ HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpW
 }
 
 static LRESULT CALLBACK CrossThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    HookRefCountScope hookScope;
     if (nCode == HC_ACTION) {
         CWPSTRUCT* pCwp = (CWPSTRUCT*)lParam;
         if (pCwp->message == g_wmAttach) {
@@ -1259,10 +1248,6 @@ void Wh_ModUninit() {
             SendMessageW(overlayToClose, WM_CLOSE, 0, 0);
         }
         g_overlayHwnd = NULL;
-    }
-
-    while (g_hookRefCount.load(std::memory_order_acquire) > 0) {
-        Sleep(200);
     }
 
     {
