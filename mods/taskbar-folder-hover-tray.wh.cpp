@@ -200,14 +200,19 @@ Menu shortcut — and it disappears with the shortcuts when the mod is disabled.
 their Start Menu shortcuts and their jump lists, so nothing it put on the taskbar
 or in your Start Menu is left behind.
 
-**The folder list survives.** Windhawk runs the same unload path for a real
-disable, for a mod update, for a settings-page save and for an engine restart,
-and cannot tell them apart, so wiping the list there would mean an update
-silently deleted your folders. Instead the entries are kept and re-pinned the
-next time the mod loads. Uninstalling drops them too — Windhawk deletes a mod's
-storage itself when the mod is removed — and **Remove all folder buttons...** in
-the Taskbar Folders window is the explicit, confirmed way to forget everything
-without uninstalling.
+**The folder list survives a mod update, a settings-page save and an engine
+restart** — Windhawk runs the same unload path for all of those as for a real
+disable, and cannot tell them apart from inside the mod, so wiping the list on
+every one of them would mean an update silently deleted your folders. Instead
+the entries are kept and re-pinned the next time the mod loads, *unless* the
+version the mod loads with is the same one it last loaded with — which is the
+one case that isn't an update, and means a real disable/enable happened. That
+case wipes the folder list too, so disabling and re-enabling the mod resets it
+completely, the same as a fresh install. Uninstalling drops the list either
+way — Windhawk deletes a mod's storage itself when the mod is removed — and
+**Remove all folder buttons...** in the Taskbar Folders window is the
+explicit, confirmed way to forget everything without disabling or
+uninstalling.
 
 While the mod is disabled, nothing of it runs, so nothing is left running or
 hooked; while it is *enabled*, the pins and shortcuts above are live. Note that
@@ -1035,6 +1040,30 @@ int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
         }
     }
     return -1;
+}
+
+// Bump this alongside the `@version` line in the metadata block at the top of
+// the file. It is the only signal Wh_ModInit has for telling a real
+// disable/enable cycle apart from a mod update: Windhawk calls Wh_ModUninit
+// then Wh_ModInit for both, and for an engine restart, with nothing in the
+// callbacks themselves saying which happened — see the reset note in
+// Wh_ModInit.
+constexpr PCWSTR kVersionMarker = L"2.0";
+
+// True the first time this is called after a real disable/enable — i.e. the
+// version marker stored last time this mod loaded still reads the same as
+// this build's, so nothing about this load came from installing a new
+// version. False on a fresh install (no marker stored yet) or a genuine
+// update (the marker changed), which both must leave the folder list alone.
+//
+// Always rewrites the marker to the current version, so this can only be
+// called once per load — Wh_ModInit is the only caller.
+bool ConsumeVersionResetSignal() {
+    WCHAR buf[64]{};
+    Wh_GetStringValue(L"versionMarker", buf, ARRAYSIZE(buf));
+    bool sameVersion = wcscmp(buf, kVersionMarker) == 0;
+    Wh_SetStringValue(L"versionMarker", kVersionMarker);
+    return sameVersion;
 }
 
 }  // namespace FolderStore
@@ -2100,6 +2129,11 @@ HANDLE g_thread = nullptr;
 HANDLE g_stopEvent = nullptr;  // manual-reset
 HANDLE g_kickEvent = nullptr;  // auto-reset
 
+// Guards g_thread/g_stopEvent/g_kickEvent so RequestReconcile (reached from
+// LoadFolders on the taskbar UI thread at the end of every reload) cannot
+// SetEvent a handle that Stop() is in the middle of closing.
+std::mutex g_mutex;
+
 // Set by Stop() before it signals g_stopEvent, run by ThreadProc itself right
 // before it uninitializes COM and exits. This is a known-good STA — the pin
 // verb's COM class is ThreadingModel=Apartment with no marshaler, so cleanup
@@ -2256,14 +2290,18 @@ DWORD WINAPI ThreadProc(void*) {
 }
 
 void RequestReconcile() {
+    std::lock_guard<std::mutex> lock(g_mutex);
     if (g_kickEvent) {
         SetEvent(g_kickEvent);
     }
 }
 
 void Start() {
+    std::lock_guard<std::mutex> lock(g_mutex);
     if (g_thread) {
-        RequestReconcile();
+        if (g_kickEvent) {
+            SetEvent(g_kickEvent);
+        }
         return;
     }
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
@@ -2273,39 +2311,50 @@ void Start() {
     }
     g_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
     if (g_thread) {
-        RequestReconcile();
+        SetEvent(g_kickEvent);
     }
 }
 
 // finalAction, if given, runs on the worker's own STA right before it
 // uninitializes COM and exits — see g_finalAction above.
 void Stop(std::function<void()> finalAction = nullptr) {
-    if (finalAction) {
-        if (g_thread) {
-            g_finalAction = std::move(finalAction);
-        } else {
-            // Worker never started this session (Start() failed, or was never
-            // called) — nowhere else to run it, so run it here directly.
-            finalAction();
+    HANDLE thread;
+    HANDLE stopEvent;
+    HANDLE kickEvent;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (finalAction) {
+            if (g_thread) {
+                g_finalAction = std::move(finalAction);
+            } else {
+                // Worker never started this session (Start() failed, or was
+                // never called) — nowhere else to run it, run it here.
+                finalAction();
+            }
         }
+        if (g_stopEvent) {
+            SetEvent(g_stopEvent);
+        }
+        // Move globals out under the lock so RequestReconcile/Start cannot
+        // SetEvent or touch a handle we are about to close.
+        thread = g_thread;
+        g_thread = nullptr;
+        stopEvent = g_stopEvent;
+        g_stopEvent = nullptr;
+        kickEvent = g_kickEvent;
+        g_kickEvent = nullptr;
     }
-    if (g_stopEvent) {
-        SetEvent(g_stopEvent);
-    }
-    if (g_thread) {
+    if (thread) {
         // Joined, not abandoned: the worker's return address is in this image,
         // and Windhawk unmaps it as soon as uninit returns.
-        WaitForSingleObject(g_thread, INFINITE);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+    if (stopEvent) {
+        CloseHandle(stopEvent);
     }
-    if (g_kickEvent) {
-        CloseHandle(g_kickEvent);
-        g_kickEvent = nullptr;
+    if (kickEvent) {
+        CloseHandle(kickEvent);
     }
 }
 
@@ -6759,9 +6808,13 @@ void OnPointerEnteredButton(int folderIndex,
 // copies the shortcut, so a pinned item keeps the name it had when it was
 // pinned even after the source is renamed, and the two drift apart.
 //
-// The label is still the only handle XAML gives us on a taskbar button without
-// hooking the shell's group type, but going through the pinned copy means the
-// comparison is against what is really there rather than what should be.
+// The label is a prefix match against the announced (localized) accessible
+// name, which an unrelated pinned app's title can also satisfy ("Work" against
+// "Work Chat - 1 running window"). TaskListButtonIsPin below closes that gap by
+// bridging the XAML button to its real native ITaskGroup and checking the
+// AppID the shell actually put there — see "XAML button -> native ITaskGroup
+// bridge" further down — falling back to the label match alone only when that
+// bridge is unavailable.
 
 std::wstring AutomationNameOf(FrameworkElement const& element) {
     try {
@@ -6773,6 +6826,113 @@ std::wstring AutomationNameOf(FrameworkElement const& element) {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// XAML button -> native ITaskGroup bridge
+//
+// The label match above can be fooled by an unrelated pinned app whose
+// announced name happens to start with a folder's leaf on a word boundary
+// ("Work" matching "Work Chat - 1 running window"), because the accessible
+// name is the only handle XAML gives a Taskbar.TaskListButton directly. The
+// click path (CTaskListWnd__HandleClick_Hook) does not have this problem: it
+// already compares CTaskGroup::GetAppID() against Pins::IsOurAppId on the
+// native ITaskGroup it gets from the click. GetTaskGroupFromTaskListButton
+// gets that same native pointer from the XAML side, so a label match can be
+// verified against the real AppID before hover is ever bound to it.
+//
+// Bridging works by asking the view model behind the container for its
+// ITaskItem, then calling ReportClicked with a sentinel LauncherOptions
+// pointer instead of a real one. ReportClicked's implementation runs down
+// into CTaskListWnd::HandleClick with that same pointer; the hook below
+// recognizes the sentinel, stashes the ITaskGroup it was called with, and
+// returns immediately without doing the real (launcher) work of a click.
+// Same technique the published "Taskbar Numberer" mod uses to tell same-app
+// windows apart.
+//
+// All of this is optional: every symbol here is resolved with `optional`, so
+// on a taskbar.dll build where one is missing, GetTaskGroupFromTaskListButton
+// just returns null and callers fall back to trusting the label match alone
+// — no worse than before this bridge existed.
+using TryGetItemFromContainer_TaskListWindowViewModel_t =
+    void*(WINAPI*)(void** output, UIElement const* container);
+TryGetItemFromContainer_TaskListWindowViewModel_t
+    TryGetItemFromContainer_TaskListWindowViewModel_Original;
+
+using TaskListWindowViewModel_get_TaskItem_t = int(WINAPI*)(void* pThis,
+                                                             void** taskItem);
+TaskListWindowViewModel_get_TaskItem_t
+    TaskListWindowViewModel_get_TaskItem_Original;
+
+using TaskItem_ReportClicked_t = int(WINAPI*)(void* pThis, void* param);
+TaskItem_ReportClicked_t TaskItem_ReportClicked_Original;
+
+using CTaskListWnd_HandleClick_t = HRESULT(WINAPI*)(void* pThis,
+                                                     void* taskGroup,
+                                                     void* taskItem,
+                                                     void** launcherOptions);
+CTaskListWnd_HandleClick_t CTaskListWnd_HandleClick_Original;
+
+using CTaskGroup_GetAppID_t = PCWSTR(WINAPI*)(void* pThis);
+CTaskGroup_GetAppID_t CTaskGroup_GetAppID_Original;
+
+// Address-of is the sentinel itself; the content never matters.
+WCHAR g_clickSentinel[] = L"pins-click-sentinel";
+void* g_clickSentinel_TaskGroup = nullptr;
+
+HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
+                                             void* taskGroup,
+                                             void* taskItem,
+                                             void** launcherOptions) {
+    if (launcherOptions && *launcherOptions == &g_clickSentinel) {
+        g_clickSentinel_TaskGroup = taskGroup;
+        return S_OK;
+    }
+    return CTaskListWnd_HandleClick_Original(pThis, taskGroup, taskItem,
+                                             launcherOptions);
+}
+
+// Null if the bridge is unavailable (missing symbol) or this button's
+// container has no task item behind it yet.
+void* GetTaskGroupFromTaskListButton(UIElement const& element) {
+    if (!TryGetItemFromContainer_TaskListWindowViewModel_Original ||
+        !TaskListWindowViewModel_get_TaskItem_Original ||
+        !TaskItem_ReportClicked_Original || !CTaskListWnd_HandleClick_Original) {
+        return nullptr;
+    }
+
+    winrt::com_ptr<IUnknown> windowViewModel;
+    TryGetItemFromContainer_TaskListWindowViewModel_Original(
+        windowViewModel.put_void(), &element);
+    if (!windowViewModel) {
+        return nullptr;
+    }
+
+    winrt::com_ptr<IUnknown> taskItem;
+    TaskListWindowViewModel_get_TaskItem_Original(windowViewModel.get(),
+                                                  taskItem.put_void());
+    if (!taskItem) {
+        return nullptr;
+    }
+
+    g_clickSentinel_TaskGroup = nullptr;
+    void* sentinel = &g_clickSentinel;
+    TaskItem_ReportClicked_Original(taskItem.get(), &sentinel);
+    return g_clickSentinel_TaskGroup;
+}
+
+// True only once verified against the real ITaskGroup's AppID — never trusts
+// the label match alone when the bridge above is available.
+bool TaskListButtonIsPin(FrameworkElement const& button,
+                        const std::wstring& pinId) {
+    void* taskGroup = GetTaskGroupFromTaskListButton(button);
+    if (!taskGroup || !CTaskGroup_GetAppID_Original) {
+        // Bridge unavailable on this build — nothing to verify against, so
+        // fall back to trusting the label match that got us here.
+        return true;
+    }
+    PCWSTR appId = CTaskGroup_GetAppID_Original(taskGroup);
+    return appId && Pins::AppIdFor(pinId) == appId;
+}
+
 // -1 when this button is not one of ours.
 int FolderIndexForTaskListButton(FrameworkElement const& button) {
     std::wstring label = AutomationNameOf(button);
@@ -6781,6 +6941,12 @@ int FolderIndexForTaskListButton(FrameworkElement const& button) {
     }
     std::wstring pinId = Pins::PinIdForLabel(label);
     if (pinId.empty()) {
+        return -1;
+    }
+    if (!TaskListButtonIsPin(button, pinId)) {
+        Wh_Log(L"Pins: '%s' label-matches pin %s but its real AppID says "
+               L"otherwise; leaving it unbound",
+               label.c_str(), pinId.c_str());
         return -1;
     }
     std::lock_guard<std::mutex> lock(g_foldersMutex);
@@ -8224,8 +8390,11 @@ void RemoveSelected(HWND hWnd) {
 // clearStore separates the two callers. The user-facing action means "forget
 // everything" and empties the folder list. The unload path must not: Windhawk
 // routes a mod update, a settings-page save and an engine restart through the
-// same Wh_ModUninit as a real disable, and wiping the list there would delete
-// the user's configuration every time the mod is updated. Windhawk removes the
+// same Wh_ModUninit as a real disable, and wiping the list here would delete
+// the user's configuration every time the mod is updated. (A real disable
+// followed by re-enable does still wipe the list — that happens separately,
+// from Wh_ModInit's version-marker check, once it is clear no update was
+// involved; see FolderStore::ConsumeVersionResetSignal.) Windhawk removes the
 // mod's storage itself when the mod is uninstalled, so the unload path only has
 // to undo what it put outside that storage.
 //
@@ -8325,13 +8494,15 @@ void RemoveAllFolderButtons(HWND hWnd) {
 // its own storage goes: the real taskbar pins, their Start Menu shortcuts and
 // their jump lists.
 //
-// The folder list itself stays. It is the user's configuration, it lives in the
-// mod's private Windhawk storage (which Windhawk deletes on its own when the mod
-// is uninstalled), and it is the one thing here that cannot be reconstructed.
-// Wiping it on every unload would mean publishing an update silently deleted
-// every user's folders. A re-enable therefore re-pins what was configured, and
-// "Remove all folder buttons..." in the manager stays the explicit, confirmed
-// way to forget everything.
+// The folder list itself stays here — clearStore is always false on this path.
+// It is the user's configuration, it lives in the mod's private Windhawk
+// storage (which Windhawk deletes on its own when the mod is uninstalled), and
+// wiping it on every unload would mean publishing an update silently deleted
+// every user's folders. A re-enable therefore re-pins what was configured...
+// unless Wh_ModInit's version-marker check finds this load was not an update,
+// in which case it wipes the list right after this sweep runs. "Remove all
+// folder buttons..." in the manager stays the explicit, confirmed way to
+// forget everything without waiting on a disable/enable cycle.
 void UnpinAllForDisable() {
     RemoveAllFolderButtonsCore(/*clearStore=*/false);
 }
@@ -9152,8 +9323,9 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
 CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
 
-using CTaskGroup_GetAppID_t = PCWSTR(WINAPI*)(void* pThis);
-CTaskGroup_GetAppID_t CTaskGroup_GetAppID_Original;
+// CTaskGroup_GetAppID_t / CTaskGroup_GetAppID_Original are declared earlier,
+// next to GetTaskGroupFromTaskListButton, which needs them in scope before
+// this point in the file.
 
 using CTaskListWnd__HandleClick_t = void(WINAPI*)(void* pThis,
                                                  void* taskBtnGroup,
@@ -9342,10 +9514,59 @@ bool HookTaskbarDllSymbols() {
             CTaskListWnd__OnJumpViewShown_Hook,
             true,  // optional
         },
+        {
+            {LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
+            &CTaskListWnd_HandleClick_Original,
+            CTaskListWnd_HandleClick_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskItem,struct winrt::WindowsUdk::UI::Shell::ITaskItem>::ReportClicked(void *))"},
+            &TaskItem_ReportClicked_Original,
+            nullptr,
+            true,  // optional
+        },
     };
 
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                       ARRAYSIZE(taskbarDllHooks));
+}
+
+// The two symbols GetTaskGroupFromTaskListButton needs to walk from a XAML
+// container to its view model live in the taskbar's own WinRT view assembly,
+// not in taskbar.dll — its module name has changed across Windows 11
+// releases, hence trying both. Optional like everything else in
+// HookTaskbarDllSymbols: on failure the bridge just stays unavailable and
+// label matches are trusted as-is, same as before it existed.
+bool HookTaskbarViewDllSymbols() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    if (!module) {
+        Wh_Log(L"Taskbar.View.dll/ExplorerExtensions.dll not loaded yet; "
+               L"the AppID verification bridge will be unavailable this "
+               L"session");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+        {
+            {LR"(struct winrt::Taskbar::TaskListWindowViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListWindowViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
+            &TryGetItemFromContainer_TaskListWindowViewModel_Original,
+            nullptr,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::get_TaskItem(void * *))"},
+            &TaskListWindowViewModel_get_TaskItem_Original,
+            nullptr,
+            true,  // optional
+        },
+    };
+
+    return WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
+                                      ARRAYSIZE(taskbarViewDllHooks));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9429,6 +9650,24 @@ HWND FindShellViewWindow(HWND hwnd) {
         }
     }
     return nullptr;
+}
+
+// True if `defView` (from FindShellViewWindow) is the desktop's shell view
+// rather than a regular Explorer window's — the desktop's SHELLDLL_DefView
+// sits under Progman (or WorkerW, on setups where the desktop's icon layer
+// has been reparented there), while every other shell view sits under
+// CabinetWClass. This is what lets the background click below tell "empty
+// desktop, no item selected" apart from "empty space in a folder window,
+// no item selected" — only the former gets a menu.
+bool IsDesktopShellView(HWND defView) {
+    for (HWND h = defView; h; h = GetParent(h)) {
+        WCHAR cls[64]{};
+        GetClassNameW(h, cls, ARRAYSIZE(cls));
+        if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // CWM_GETISHELLBROWSER. Undocumented, and WM_USER-relative, so it means
@@ -9650,21 +9889,39 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     } com;
 
     std::wstring path = GetSelectedPath(defView);
-    // This runs on the Explorer browser thread with that window's context menu
-    // waiting on us to return, and Explorer's own QueryContextMenu work is
-    // already done — a GetFileAttributesW on an offline share would freeze the
-    // whole window for the network timeout purely to decide whether to add our
-    // item. Degrade to no submenu, same as everywhere else the mod meets a
-    // remote path.
-    if (path.empty() || IsLikelyRemotePath(path)) {
+    // No selection: normally nothing to hang a menu on, and every other empty-
+    // space right-click (a folder window's background) is left alone. The one
+    // exception is the desktop's own background — right-clicking it with
+    // nothing selected still gets a "Taskbar Folders" entry, just with nothing
+    // in it but "Manage folders...", since there is no item here to pin, move
+    // or copy.
+    bool desktopBackground = false;
+    if (path.empty()) {
+        if (!IsDesktopShellView(defView)) {
+            return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
+        }
+        desktopBackground = true;
+    } else if (IsLikelyRemotePath(path)) {
+        // This runs on the Explorer browser thread with that window's context
+        // menu waiting on us to return, and Explorer's own QueryContextMenu
+        // work is already done — a GetFileAttributesW on an offline share
+        // would freeze the whole window for the network timeout purely to
+        // decide whether to add our item. Degrade to no submenu, same as
+        // everywhere else the mod meets a remote path.
         return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
     }
-    DWORD attrs = GetFileAttributesW(path.c_str());
-    if (attrs == INVALID_FILE_ATTRIBUTES) {
-        return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
+
+    DWORD attrs = 0;
+    bool isLnk = false;
+    bool isDir = false;
+    if (!desktopBackground) {
+        attrs = GetFileAttributesW(path.c_str());
+        if (attrs == INVALID_FILE_ATTRIBUTES) {
+            return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
+        }
+        isLnk = PathIsLnkFile(path);
+        isDir = (attrs & FILE_ATTRIBUTE_DIRECTORY) && !isLnk;
     }
-    bool isLnk = PathIsLnkFile(path);
-    bool isDir = (attrs & FILE_ATTRIBUTE_DIRECTORY) && !isLnk;
 
     std::vector<FolderEntry> folders;
     {
@@ -9688,8 +9945,8 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     // Pin / Move / Copy / Copy as shortcut.
     bool menuEnabled = g_settings.explorerMenu;
     bool canPin = menuEnabled && isDir && !IsPinnedTaskbarFolder(path);
-    bool showMoveCopy = menuEnabled && !isDir && n > 0;
-    bool showShortcut = menuEnabled && !isLnk && n > 0;
+    bool showMoveCopy = menuEnabled && !desktopBackground && !isDir && n > 0;
+    bool showShortcut = menuEnabled && !desktopBackground && !isLnk && n > 0;
 
     auto buildDestinationSubmenu = [&](PCWSTR header, UINT idBase) {
         HMENU sub = CreatePopupMenu();
@@ -9929,6 +10186,20 @@ BOOL Wh_ModInit() {
     // starting it late means a return FALSE below leaves no thread running in
     // an image Windhawk is about to unmap.
     LoadSettings();
+
+    // Same-version marker from the last load means nothing about this load
+    // came from installing a new version — the only remaining explanation
+    // Windhawk's callbacks leave room for is a real user disable/enable (an
+    // engine or Explorer restart with no update also looks like this, and
+    // gets swept the same way; there is no callback that tells those apart
+    // either). A version change, or no marker at all on a fresh install,
+    // means the folder list must survive. See FolderStore::kVersionMarker
+    // and the "What this writes" README section above.
+    if (FolderStore::ConsumeVersionResetSignal()) {
+        Wh_Log(L"Version marker unchanged since last load; wiping the "
+               L"folder list as a disable/enable reset");
+        FolderStore::Write({});
+    }
     ResetFolderData();
 
     Gdiplus::GdiplusStartupInput startupInput;
@@ -9951,6 +10222,17 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook taskbar.dll, the taskbar XamlRoot is "
                L"unreachable; hover will not bind, the folder buttons and the "
                L"manager still work");
+    }
+
+    // Best-effort only: by the time a taskbar mod loads, Explorer's taskbar
+    // XAML view is already up in virtually every real case, so this almost
+    // always succeeds here. If it doesn't (a very early injection), the
+    // AppID verification bridge just stays off for the session and folder
+    // buttons fall back to trusting the label match alone, same as before
+    // the bridge existed.
+    if (!HookTaskbarViewDllSymbols()) {
+        Wh_Log(L"AppID verification bridge unavailable; folder button "
+               L"matching falls back to the label heuristic alone");
     }
 
     Pins::Start();
@@ -10002,6 +10284,13 @@ void Wh_ModAfterInit() {
 // Tears down UI, reloads settings (+ pinned folders), and restarts. Shared by
 // Wh_ModSettingsChanged and the Explorer right-click "pin to taskbar" action.
 void ReloadAndRefreshUI() {
+    if (g_unloading) {
+        // A pin action's context menu can outlive uninit's wait for an
+        // in-flight reload (RequestReloadUI runs after the modal menu
+        // returns) — don't start a fresh one during teardown.
+        return;
+    }
+
     struct InFlightGuard {
         InFlightGuard() { g_reloadInFlight++; }
         ~InFlightGuard() { g_reloadInFlight--; }
@@ -10069,6 +10358,41 @@ void Wh_ModUninit() {
     FolderManager::CloseAndWait();
     StopRetryThread();
     StopScanThread();
+
+    // Every one of these waits is unbounded on purpose, for the reason
+    // FolderManager::CloseAndWait spells out: Wh_ModUninit runs on a Windhawk
+    // engine thread, not on any Explorer UI thread, so blocking here does not
+    // freeze the shell — while falling through early is exactly what unmaps the
+    // image with one of these frames still executing inside it. Cancellation is
+    // attempted for the first couple of seconds only; past that, whatever is
+    // still live is work that has to finish on its own (a folder copy can run
+    // for minutes) and re-asking every 20ms is pointless.
+    constexpr int kUninitWaitPollMs = 50;
+    constexpr int kUninitCancelForMs = 2000;
+    constexpr int kUninitLogEveryMs = 5000;
+    auto waitOut = [](PCWSTR what, auto stillLive, auto attemptCancel) {
+        for (int elapsedMs = 0; stillLive(); elapsedMs += kUninitWaitPollMs) {
+            if (elapsedMs < kUninitCancelForMs) {
+                attemptCancel();
+            } else if (elapsedMs % kUninitLogEveryMs == 0) {
+                Wh_Log(L"Uninit: still waiting on %s (%d s)", what,
+                       elapsedMs / 1000);
+            }
+            Sleep(kUninitWaitPollMs);
+        }
+    };
+
+    // Wait out any reload already in flight BEFORE Pins::Stop closes the
+    // worker's event handles: ReloadAndRefreshUI ends with
+    // Pins::RequestReconcile, which touches those handles from the taskbar UI
+    // thread with no synchronization of its own beyond what Pins now does
+    // internally — a reload that finished after the handles were closed could
+    // otherwise SetEvent a recycled, unrelated handle value in Explorer.
+    // Nothing to cancel, and it cannot restart a worker behind us:
+    // StartRetryThread bails on g_unloading, and ReloadAndRefreshUI now bails
+    // on g_unloading too.
+    waitOut(L"a UI reload", [] { return g_reloadInFlight.load() > 0; }, [] {});
+
     // Disabling (or uninstalling — Wh_ModUninit does not see a difference)
     // must leave the system as it was: real taskbar pins, Start Menu
     // shortcuts and jump lists this mod created do not get to outlive it.
@@ -10107,29 +10431,6 @@ void Wh_ModUninit() {
         g_taskbarHosts.reset();
     };
 
-    // Every one of these waits is unbounded on purpose, for the reason
-    // FolderManager::CloseAndWait spells out: Wh_ModUninit runs on a Windhawk
-    // engine thread, not on any Explorer UI thread, so blocking here does not
-    // freeze the shell — while falling through early is exactly what unmaps the
-    // image with one of these frames still executing inside it. Cancellation is
-    // attempted for the first couple of seconds only; past that, whatever is
-    // still live is work that has to finish on its own (a folder copy can run
-    // for minutes) and re-asking every 20ms is pointless.
-    constexpr int kUninitWaitPollMs = 50;
-    constexpr int kUninitCancelForMs = 2000;
-    constexpr int kUninitLogEveryMs = 5000;
-    auto waitOut = [](PCWSTR what, auto stillLive, auto attemptCancel) {
-        for (int elapsedMs = 0; stillLive(); elapsedMs += kUninitWaitPollMs) {
-            if (elapsedMs < kUninitCancelForMs) {
-                attemptCancel();
-            } else if (elapsedMs % kUninitLogEveryMs == 0) {
-                Wh_Log(L"Uninit: still waiting on %s (%d s)", what,
-                       elapsedMs / 1000);
-            }
-            Sleep(kUninitWaitPollMs);
-        }
-    };
-
     // First, before any window handle is picked: a reload already past
     // MenuOwnerWndProc's g_unloading check destroys every level window and
     // clears g_levelWindows, so a handle latched ahead of this wait would be
@@ -10138,9 +10439,7 @@ void Wh_ModUninit() {
     // with its WndProc in the image about to be unmapped. The reload also parks
     // the taskbar UI thread in joins that pump sent messages, so waiting here
     // keeps the teardown send below from running re-entrantly inside one.
-    // Nothing to cancel, and it cannot restart a worker behind us:
-    // StartRetryThread bails on g_unloading.
-    waitOut(L"a UI reload", [] { return g_reloadInFlight.load() > 0; }, [] {});
+    // (Already waited out above, before Pins::Stop.)
 
     // g_menuOwnerWnd first: it lives on the same taskbar UI thread and nothing
     // but the teardown itself destroys it, so it is the stable choice. A level
