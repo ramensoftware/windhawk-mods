@@ -11,7 +11,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -lversion -DWIN32_LEAN_AND_MEAN
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -DWIN32_LEAN_AND_MEAN
 // ==/WindhawkMod==
 
 // Taskbar XAML discovery and window-thread marshaling are based on techniques
@@ -42,6 +42,11 @@ bars. Fixed-width fields prevent the layout from shifting as values change.
 Normal values remain monochrome; only warning and critical readings receive
 color. Network and disk activity are intentionally not collected.
 
+Unlike the performance placeholders in
+[Taskbar Clock Customization](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-clock-customization.wh.cpp),
+this mod does not alter the clock. It uses the free far-left taskbar area for a
+stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
+
 ## Metrics
 
 - CPU utilization from Windows system time counters.
@@ -49,6 +54,9 @@ color. Network and disk activity are intentionally not collected.
 - GPU utilization and dedicated VRAM usage from Windows PDH counters.
 - Dedicated VRAM capacity and adapter identity from DXGI.
 - CPU and GPU temperatures from HWiNFO when available.
+
+Metric collection runs on a worker thread. The taskbar UI thread only renders
+the latest completed snapshot.
 
 The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
@@ -69,7 +77,8 @@ temperature readings to Gadget in the HWiNFO Sensors window.
 
 ## Compatibility and placement
 
-- Windows 11 x64, primary taskbar.
+- Windows 11 64-bit, primary taskbar. x64 is hardware-tested; ARM64 is
+  compilation-tested.
 - Centered taskbar icons are recommended.
 - Enable **Reserve space before the Start button** if the widget overlaps
   left-aligned taskbar buttons.
@@ -89,8 +98,8 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 - width: 410
   $name: Widget width
   $name:uk-UA: Ширина блока
-  $description: "A width of 380-450 pixels works well with most display scales."
-  $description:uk-UA: "Рекомендовано 380-450 пікселів залежно від масштабу екрана."
+  $description: "Allowed range: 330-800 pixels. A width of 380-450 works well with most display scales."
+  $description:uk-UA: "Діапазон: 330-800 пікселів. Зазвичай добре підходить ширина 380-450."
 
 - leftOffset: 10
   $name: Left offset
@@ -121,6 +130,8 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 - fontSize: 11
   $name: Font size
   $name:uk-UA: Розмір тексту
+  $description: "From 9 to 13 pixels."
+  $description:uk-UA: "Від 9 до 13 пікселів."
 
 - fontFamily: "Segoe UI Variable Text"
   $name: Font family
@@ -215,6 +226,7 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -253,7 +265,6 @@ constexpr double kMemoryLabelWidth = 43.0;
 constexpr double kMemoryPercentWidth = 38.0;
 constexpr double kGraphHeight = 12.0;
 constexpr uint32_t kHwInfoSignature = 0x53695748;  // "HWiS"
-constexpr uint32_t kHwInfoDeadSignature = 0x44414544;  // "DEAD"
 constexpr uint32_t kHwInfoTemperatureType = 1;
 
 struct ModSettings {
@@ -285,38 +296,42 @@ ModSettings g_settings;
 std::mutex g_settingsMutex;
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<HWND> g_taskbarWindow{nullptr};
+std::atomic<DWORD> g_taskbarThreadId{0};
 
-Grid g_widget{nullptr};
-Grid g_rootGrid{nullptr};
-FrameworkElement g_taskItemsRepeater{nullptr};
+[[clang::no_destroy]] Grid g_widget{nullptr};
+[[clang::no_destroy]] Grid g_rootGrid{nullptr};
+[[clang::no_destroy]] FrameworkElement g_taskItemsRepeater{nullptr};
 double g_reservedMargin = 0.0;
 double g_graphWidth = 96.0;
 double g_memoryBarWidth = 120.0;
-DispatcherTimer g_timer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 event_token g_timerToken{};
-std::list<FrameworkElement::Loaded_revoker> g_loadedRevokers;
+[[clang::no_destroy]]
+std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
+    std::in_place};
 
-TextBlock g_cpuLabel{nullptr};
-TextBlock g_cpuUsageText{nullptr};
-TextBlock g_cpuTempText{nullptr};
-TextBlock g_gpuLabel{nullptr};
-TextBlock g_gpuUsageText{nullptr};
-TextBlock g_gpuTempText{nullptr};
-TextBlock g_ramLabel{nullptr};
-TextBlock g_ramPercentText{nullptr};
-TextBlock g_ramCapacityText{nullptr};
-TextBlock g_vramLabel{nullptr};
-TextBlock g_vramPercentText{nullptr};
-TextBlock g_vramCapacityText{nullptr};
-XamlPolyline g_cpuGraph{nullptr};
-XamlPolyline g_gpuGraph{nullptr};
-XamlRectangle g_ramTrack{nullptr};
-XamlRectangle g_ramFill{nullptr};
-XamlRectangle g_vramTrack{nullptr};
-XamlRectangle g_vramFill{nullptr};
-ColumnDefinition g_leftColumn{nullptr};
-ColumnDefinition g_gapColumn{nullptr};
-ColumnDefinition g_rightColumn{nullptr};
+[[clang::no_destroy]] TextBlock g_cpuLabel{nullptr};
+[[clang::no_destroy]] TextBlock g_cpuUsageText{nullptr};
+[[clang::no_destroy]] TextBlock g_cpuTempText{nullptr};
+[[clang::no_destroy]] TextBlock g_gpuLabel{nullptr};
+[[clang::no_destroy]] TextBlock g_gpuUsageText{nullptr};
+[[clang::no_destroy]] TextBlock g_gpuTempText{nullptr};
+[[clang::no_destroy]] TextBlock g_ramLabel{nullptr};
+[[clang::no_destroy]] TextBlock g_ramPercentText{nullptr};
+[[clang::no_destroy]] TextBlock g_ramCapacityText{nullptr};
+[[clang::no_destroy]] TextBlock g_vramLabel{nullptr};
+[[clang::no_destroy]] TextBlock g_vramPercentText{nullptr};
+[[clang::no_destroy]] TextBlock g_vramCapacityText{nullptr};
+[[clang::no_destroy]] XamlPolyline g_cpuGraph{nullptr};
+[[clang::no_destroy]] XamlPolyline g_gpuGraph{nullptr};
+[[clang::no_destroy]] XamlRectangle g_ramTrack{nullptr};
+[[clang::no_destroy]] XamlRectangle g_ramFill{nullptr};
+[[clang::no_destroy]] XamlRectangle g_vramTrack{nullptr};
+[[clang::no_destroy]] XamlRectangle g_vramFill{nullptr};
+[[clang::no_destroy]] ColumnDefinition g_leftColumn{nullptr};
+[[clang::no_destroy]] ColumnDefinition g_gapColumn{nullptr};
+[[clang::no_destroy]] ColumnDefinition g_rightColumn{nullptr};
 
 std::deque<double> g_cpuHistory;
 std::deque<double> g_gpuHistory;
@@ -339,16 +354,21 @@ struct MetricsSnapshot {
     bool vramAvailable = false;
     std::optional<double> cpuTemp;
     std::optional<double> gpuTemp;
-    std::wstring sensorSource = L"none";
 };
 
+std::mutex g_metricsMutex;
+MetricsSnapshot g_latestMetrics;
+uint64_t g_latestMetricsSequence = 0;
+bool g_latestMetricsAvailable = false;
+uint64_t g_lastRenderedMetricsSequence = 0;
+
+std::mutex g_metricsWorkerMutex;
+std::atomic<bool> g_stopMetricsWorker{false};
+HANDLE g_metricsWorkerWakeEvent = nullptr;
+[[clang::no_destroy]] std::optional<std::thread> g_metricsWorker;
+
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 void LoadSettings() {
@@ -613,7 +633,6 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
         size_t mappedSize = memoryInfo.RegionSize - viewOffset;
 
         if (header->signature == kHwInfoSignature &&
-            header->signature != kHwInfoDeadSignature &&
             IsRangeValid(mappedSize, header->sensorOffset,
                          header->sensorStride, header->sensorCount,
                          sizeof(HwInfoSensorPrefix)) &&
@@ -668,7 +687,6 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
             }
 
             available = true;
-            snapshot.sensorSource = L"HWiNFO SM";
         }
     }
 
@@ -758,9 +776,6 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     }
 
     RegCloseKey(key);
-    if (foundAny && snapshot.sensorSource == L"none") {
-        snapshot.sensorSource = L"HWiNFO Gadget";
-    }
     return foundAny;
 }
 
@@ -906,6 +921,8 @@ bool MatchesGpuAdapter(const std::wstring& instance,
                        const std::optional<DxgiAdapterInfo>& adapter) {
     return !adapter || Contains(ToLower(instance), adapter->luid);
 }
+
+void CloseMetricSources();
 
 void EnsurePdhQuery() {
     if (g_pdhQuery) {
@@ -1054,6 +1071,114 @@ MetricsSnapshot CollectMetrics(const ModSettings& settings) {
     ReadPdhMetrics(snapshot, settings);
     ReadTemperatures(snapshot, settings);
     return snapshot;
+}
+
+void PublishMetrics(MetricsSnapshot snapshot) {
+    std::lock_guard lock(g_metricsMutex);
+    g_latestMetrics = std::move(snapshot);
+    g_latestMetricsSequence++;
+    g_latestMetricsAvailable = true;
+}
+
+bool GetLatestMetrics(MetricsSnapshot& snapshot, uint64_t& sequence) {
+    std::lock_guard lock(g_metricsMutex);
+    if (!g_latestMetricsAvailable) {
+        return false;
+    }
+    snapshot = g_latestMetrics;
+    sequence = g_latestMetricsSequence;
+    return true;
+}
+
+void MetricsWorkerProc() {
+    ReadCpuUsage();
+    EnsurePdhQuery();
+
+    bool firstSample = true;
+    while (!g_stopMetricsWorker) {
+        ModSettings settings = CurrentSettings();
+        DWORD waitMilliseconds =
+            firstSample ? 250 : static_cast<DWORD>(settings.updateInterval) * 1000;
+        DWORD waitResult =
+            WaitForSingleObject(g_metricsWorkerWakeEvent, waitMilliseconds);
+        firstSample = false;
+
+        if (g_stopMetricsWorker) {
+            break;
+        }
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Metrics worker wait failed: %u", GetLastError());
+            break;
+        }
+
+        settings = CurrentSettings();
+        PublishMetrics(CollectMetrics(settings));
+    }
+
+    CloseMetricSources();
+}
+
+bool StartMetricsWorker() {
+    std::lock_guard lock(g_metricsWorkerMutex);
+    if (g_metricsWorker) {
+        return true;
+    }
+    if (g_unloading) {
+        return false;
+    }
+
+    g_metricsWorkerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_metricsWorkerWakeEvent) {
+        Wh_Log(L"Creating metrics worker event failed: %u", GetLastError());
+        return false;
+    }
+
+    {
+        std::lock_guard metricsLock(g_metricsMutex);
+        g_latestMetrics = {};
+        g_latestMetricsSequence = 0;
+        g_latestMetricsAvailable = false;
+    }
+    g_stopMetricsWorker = false;
+    try {
+        g_metricsWorker.emplace(MetricsWorkerProc);
+    } catch (...) {
+        CloseHandle(g_metricsWorkerWakeEvent);
+        g_metricsWorkerWakeEvent = nullptr;
+        Wh_Log(L"Starting metrics worker failed");
+        return false;
+    }
+    return true;
+}
+
+void WakeMetricsWorker() {
+    std::lock_guard lock(g_metricsWorkerMutex);
+    if (g_metricsWorkerWakeEvent) {
+        SetEvent(g_metricsWorkerWakeEvent);
+    }
+}
+
+void StopMetricsWorker() {
+    std::lock_guard lock(g_metricsWorkerMutex);
+    g_stopMetricsWorker = true;
+    if (g_metricsWorkerWakeEvent) {
+        SetEvent(g_metricsWorkerWakeEvent);
+    }
+    if (g_metricsWorker) {
+        if (g_metricsWorker->joinable()) {
+            g_metricsWorker->join();
+        }
+        g_metricsWorker.reset();
+    }
+    if (g_metricsWorkerWakeEvent) {
+        CloseHandle(g_metricsWorkerWakeEvent);
+        g_metricsWorkerWakeEvent = nullptr;
+    }
+
+    std::lock_guard metricsLock(g_metricsMutex);
+    g_latestMetrics = {};
+    g_latestMetricsSequence = 0;
+    g_latestMetricsAvailable = false;
 }
 
 std::wstring FormatFixed(double value, int decimals) {
@@ -1430,7 +1555,11 @@ void UpdateWidgetText() {
         return;
     }
     ModSettings settings = CurrentSettings();
-    MetricsSnapshot snapshot = CollectMetrics(settings);
+    MetricsSnapshot snapshot;
+    uint64_t metricsSequence = 0;
+    if (!GetLatestMetrics(snapshot, metricsSequence)) {
+        return;
+    }
 
     g_cpuTemperatureAlert = snapshot.cpuTemp
                                 ? EvaluateAlert(*snapshot.cpuTemp,
@@ -1486,11 +1615,14 @@ void UpdateWidgetText() {
                            snapshot.vramAvailable));
     }
 
-    size_t historyCapacity = HistoryCapacity(settings);
-    AppendHistory(g_cpuHistory, snapshot.cpu, historyCapacity);
-    AppendHistory(g_gpuHistory, snapshot.gpu, historyCapacity);
-    UpdateSparkline(g_cpuGraph, g_cpuHistory, historyCapacity);
-    UpdateSparkline(g_gpuGraph, g_gpuHistory, historyCapacity);
+    if (metricsSequence != g_lastRenderedMetricsSequence) {
+        size_t historyCapacity = HistoryCapacity(settings);
+        AppendHistory(g_cpuHistory, snapshot.cpu, historyCapacity);
+        AppendHistory(g_gpuHistory, snapshot.gpu, historyCapacity);
+        UpdateSparkline(g_cpuGraph, g_cpuHistory, historyCapacity);
+        UpdateSparkline(g_gpuGraph, g_gpuHistory, historyCapacity);
+        g_lastRenderedMetricsSequence = metricsSequence;
+    }
     UpdateMemoryBar(g_ramFill, snapshot.ram, true, g_ramAlert, settings);
     UpdateMemoryBar(g_vramFill, snapshot.vram, snapshot.vramAvailable,
                     g_vramAlert, settings);
@@ -1694,6 +1826,7 @@ void RemoveWidget() {
     g_rightColumn = nullptr;
     g_cpuHistory.clear();
     g_gpuHistory.clear();
+    g_lastRenderedMetricsSequence = 0;
     g_cpuTemperatureAlert = AlertLevel::Normal;
     g_gpuTemperatureAlert = AlertLevel::Normal;
     g_ramAlert = AlertLevel::Normal;
@@ -1782,6 +1915,9 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
     g_reservedMargin = 0.0;
 
     ApplyWidgetSettings();
+    if (!StartMetricsWorker()) {
+        Wh_Log(L"Metrics worker unavailable");
+    }
     EnsureTimer();
     UpdateWidgetText();
     Wh_Log(L"Taskbar System Info injected");
@@ -1798,6 +1934,7 @@ bool RunFromWindowThread(HWND window,
     struct CallbackContext {
         RunFromWindowThreadProc callback;
         void* context;
+        bool invoked;
     };
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
@@ -1815,26 +1952,32 @@ bool RunFromWindowThread(HWND window,
             if (code == HC_ACTION) {
                 const auto* messageData =
                     reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (messageData->message == RegisterWindowMessageW(
-                                                L"Windhawk_RunFromWindowThread_"
-                                                WH_MOD_ID)) {
+                if (messageData->message == message) {
                     auto* callbackContext =
                         reinterpret_cast<CallbackContext*>(messageData->lParam);
                     callbackContext->callback(callbackContext->context);
+                    callbackContext->invoked = true;
                 }
             }
             return CallNextHookEx(nullptr, code, wParam, lParam);
         },
         nullptr, threadId);
     if (!hook) {
+        Wh_Log(L"SetWindowsHookEx failed for taskbar thread %u: %u", threadId,
+               GetLastError());
         return false;
     }
 
-    CallbackContext callbackContext{callback, context};
-    SendMessageW(window, message, 0,
-                 reinterpret_cast<LPARAM>(&callbackContext));
+    CallbackContext callbackContext{callback, context, false};
+    LRESULT messageResult = SendMessageTimeoutW(
+        window, message, 0, reinterpret_cast<LPARAM>(&callbackContext),
+        SMTO_ABORTIFHUNG, 2000, nullptr);
     UnhookWindowsHookEx(hook);
-    return true;
+    if (!messageResult && !callbackContext.invoked) {
+        Wh_Log(L"Taskbar thread dispatch failed for thread %u: %u", threadId,
+               GetLastError());
+    }
+    return callbackContext.invoked;
 }
 
 HWND FindCurrentProcessTaskbarWindow() {
@@ -1856,6 +1999,61 @@ HWND FindCurrentProcessTaskbarWindow() {
     return result;
 }
 
+bool IsCurrentProcessWindow(HWND window) {
+    DWORD processId = 0;
+    WCHAR className[64];
+    return window && IsWindow(window) &&
+           GetWindowThreadProcessId(window, &processId) != 0 &&
+           processId == GetCurrentProcessId() &&
+           GetClassNameW(window, className, std::size(className)) != 0 &&
+           _wcsicmp(className, L"Shell_TrayWnd") == 0;
+}
+
+void RememberTaskbarWindow(HWND window) {
+    if (!IsCurrentProcessWindow(window)) {
+        return;
+    }
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (threadId) {
+        g_taskbarWindow = window;
+        g_taskbarThreadId = threadId;
+    }
+}
+
+HWND FindRememberedTaskbarWindow() {
+    HWND rememberedWindow = g_taskbarWindow.load();
+    if (IsCurrentProcessWindow(rememberedWindow)) {
+        return rememberedWindow;
+    }
+
+    DWORD rememberedThreadId = g_taskbarThreadId.load();
+    if (rememberedThreadId) {
+        HWND threadWindow = nullptr;
+        EnumThreadWindows(
+            rememberedThreadId,
+            [](HWND window, LPARAM context) -> BOOL {
+                WCHAR className[64];
+                if (GetClassNameW(window, className, std::size(className)) &&
+                    _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    *reinterpret_cast<HWND*>(context) = window;
+                    return FALSE;
+                }
+                return TRUE;
+            },
+            reinterpret_cast<LPARAM>(&threadWindow));
+        if (IsCurrentProcessWindow(threadWindow)) {
+            RememberTaskbarWindow(threadWindow);
+            return threadWindow;
+        }
+    }
+
+    HWND currentWindow = FindCurrentProcessTaskbarWindow();
+    if (currentWindow) {
+        RememberTaskbarWindow(currentWindow);
+    }
+    return currentWindow;
+}
+
 using CTaskBand_GetTaskbarHost_t =
     void*(WINAPI*)(void* pThis, void* taskbarHostSharedPtr);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
@@ -1869,10 +2067,6 @@ RefCountBase_Decref_t RefCountBase_Decref_Original = nullptr;
 void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 
 XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
-#if !defined(_M_X64)
-    (void)taskbarWindow;
-    return nullptr;
-#else
     if (!CTaskBand_GetTaskbarHost_Original ||
         !TaskbarHost_FrameHeight_Original || !RefCountBase_Decref_Original ||
         !CTaskBand_ITaskListWndSite_vftable) {
@@ -1912,15 +2106,31 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     }
 
     size_t elementOffset = 0x10;
+#if defined(_M_X64)
     const BYTE* code =
         reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[3] == 0x28 &&
         code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
         code[7] <= 0x7F) {
         elementOffset = code[7];
     } else {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
     }
+#elif defined(_M_ARM64)
+    const DWORD* code =
+        reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0xD503237F &&
+        (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD &&
+        (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        elementOffset = (code[3] >> 12) & 0xFF;
+    } else {
+        Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
+    }
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* elementUnknown = *reinterpret_cast<::IUnknown**>(
         static_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset);
@@ -1935,7 +2145,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
     RefCountBase_Decref_Original(taskbarHostSharedPtr[1]);
     return result;
-#endif
 }
 
 void ApplyToCurrentTaskbar(void*) {
@@ -1954,8 +2163,8 @@ void ApplyToCurrentTaskbar(void*) {
         auto taskbarFrame = FindChildRecursive(content, [](FrameworkElement child) {
             return winrt::get_class_name(child) == L"Taskbar.TaskbarFrame";
         });
-        if (taskbarFrame) {
-            InjectWidget(taskbarFrame);
+        if (taskbarFrame && InjectWidget(taskbarFrame)) {
+            RememberTaskbarWindow(taskbarWindow);
         }
     } catch (...) {
         Wh_Log(L"Applying widget failed: %08X", winrt::to_hresult());
@@ -1965,16 +2174,27 @@ void ApplyToCurrentTaskbar(void*) {
 void RemoveFromCurrentTaskbar(void*) {
     try {
         RemoveWidget();
-        g_loadedRevokers.clear();
     } catch (...) {
         Wh_Log(L"Removing widget failed: %08X", winrt::to_hresult());
     }
+    try {
+        g_loadedRevokers.reset();
+    } catch (...) {
+        Wh_Log(L"Removing taskbar Loaded handlers failed: %08X",
+               winrt::to_hresult());
+    }
+    g_taskbarWindow = nullptr;
+    g_taskbarThreadId = 0;
 }
 
 void ApplyOnTaskbarThread() {
-    HWND taskbarWindow = FindCurrentProcessTaskbarWindow();
-    if (taskbarWindow) {
-        RunFromWindowThread(taskbarWindow, ApplyToCurrentTaskbar, nullptr);
+    HWND taskbarWindow = FindRememberedTaskbarWindow();
+    if (!taskbarWindow) {
+        Wh_Log(L"Taskbar window not found");
+        return;
+    }
+    if (!RunFromWindowThread(taskbarWindow, ApplyToCurrentTaskbar, nullptr)) {
+        Wh_Log(L"Applying widget on taskbar thread failed");
     }
 }
 
@@ -1983,6 +2203,9 @@ TaskbarFrame_Constructor_t TaskbarFrame_Constructor_Original = nullptr;
 
 void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
     void* result = TaskbarFrame_Constructor_Original(pThis);
+    if (g_unloading || !g_loadedRevokers) {
+        return result;
+    }
 
     FrameworkElement taskbarFrame = nullptr;
     reinterpret_cast<::IUnknown**>(pThis)[1]->QueryInterface(
@@ -1991,17 +2214,25 @@ void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
         return result;
     }
 
-    g_loadedRevokers.emplace_back();
-    auto revoker = std::prev(g_loadedRevokers.end());
+    g_loadedRevokers->emplace_back();
+    auto revoker = std::prev(g_loadedRevokers->end());
     *revoker = taskbarFrame.Loaded(
         winrt::auto_revoke_t{},
         [revoker](IInspectable const& sender, RoutedEventArgs const&) {
-            g_loadedRevokers.erase(revoker);
+            if (!g_loadedRevokers) {
+                return;
+            }
+            g_loadedRevokers->erase(revoker);
             if (g_unloading) {
                 return;
             }
             try {
-                InjectWidget(sender.try_as<FrameworkElement>());
+                if (InjectWidget(sender.try_as<FrameworkElement>())) {
+                    HWND taskbarWindow = FindCurrentProcessTaskbarWindow();
+                    if (taskbarWindow) {
+                        RememberTaskbarWindow(taskbarWindow);
+                    }
+                }
             } catch (...) {
                 Wh_Log(L"Loaded injection failed: %08X", winrt::to_hresult());
             }
@@ -2077,8 +2308,6 @@ void CloseMetricSources() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    ReadCpuUsage();
-    EnsurePdhQuery();
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"taskbar.dll symbols unavailable; first injection may require an Explorer restart");
@@ -2124,17 +2353,24 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    WakeMetricsWorker();
     ApplyOnTaskbarThread();
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    HWND taskbarWindow = FindCurrentProcessTaskbarWindow();
-    if (taskbarWindow) {
-        RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar, nullptr);
+    StopMetricsWorker();
+
+    HWND taskbarWindow = FindRememberedTaskbarWindow();
+    if (!taskbarWindow) {
+        Wh_Log(L"Taskbar window unavailable during teardown");
+    } else if (!RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar,
+                                    nullptr)) {
+        Wh_Log(L"Taskbar UI teardown failed");
     }
 }
 
 void Wh_ModUninit() {
+    StopMetricsWorker();
     CloseMetricSources();
 }
