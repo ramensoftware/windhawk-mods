@@ -48,6 +48,7 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 - **No actual networking**: HomeGroup sharing/joining is non-functional because the backend services were removed/disabled by Microsoft in Windows 10 1803+ and the control panel page was removed from Windows 11
 - **Windows 11**: The page displays but some sub-features may show errors since the COM infrastructure is more heavily stripped
 - **Private resource copy**: The mod builds a private resource-only copy of the verified DLL and injects the embedded RT_STRING blocks without modifying Windows files or the verified executable DLL
+- **Do not enable HomeGroup in both mods at once**: This mod and the [Windows 7 Legacy Applet Restorer](https://windhawk.net/mods/win7-legacy-applet-restorer) both register the HomeGroup CLSID `{67CA7650-96E6-4FDD-BB43-A8E774F73A57}` in the Control Panel namespace. There is no reliable cross-mod handshake, and this mod's registry hooks make the CLSID look present to the other mod, so enabling both with HomeGroup active produces duplicate entries. Pick one: either disable HomeGroup in Windows 7 Legacy Applet Restorer, or disable this mod.
 
 ## Credits
 
@@ -7118,8 +7119,12 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 std::atomic<bool> g_yieldNamespaceInjection{false};
 static HANDLE g_modActiveEvent = nullptr;
 static const wchar_t* kModActiveEventName = L"WindhawkHomeGroupRestorerActive";
-static const wchar_t* kWin7LegacyActiveEventName =
-    L"WindhawkWin7LegacyAppletRestorerActive";
+// NOTE: We previously probed for a named event exported by the Win7 Legacy
+// Applet Restorer mod, but that mod does not publish one, so the probe was
+// dead code and (worse) the surviving CLSID probe below is spoofed by our
+// own registry hooks — enabling both mods produced duplicate namespace
+// entries. The check has been removed; coexistence is now documented in
+// the README as a "pick one" limitation.
 
 // Manual-reset stop event set by Wh_ModUninit.
 static HANDLE g_stopEvent = nullptr;
@@ -7452,6 +7457,15 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
             std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
             g_downloadHNet = hNet.get();
         }
+        // Re-check between publishing g_downloadHNet and the blocking
+        // InternetOpenUrlW call. If Wh_ModUninit ran CancelInFlightDownload
+        // before the publish it saw nothing to close and set g_shuttingDown,
+        // and without this check InternetOpenUrlW would still enter its
+        // 20 s connect/receive timeout with the unload blocked behind it.
+        if (g_shuttingDown.load(std::memory_order_acquire)) {
+            UnpublishDownloadHandle(hNet, g_downloadHNet);
+            return false;
+        }
 
         WinInetHandle hUrl(InternetOpenUrlW(hNet.get(), url.c_str(), nullptr, 0,
                                             INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0));
@@ -7464,6 +7478,14 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
         {
             std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
             g_downloadHUrl = hUrl.get();
+        }
+        // Same rationale as above: HttpQueryInfoW / InternetReadFile below
+        // both block on the network. Re-check right after publishing hUrl
+        // so a cancel that races the publish is honored immediately.
+        if (g_shuttingDown.load(std::memory_order_acquire)) {
+            UnpublishDownloadHandle(hUrl, g_downloadHUrl);
+            UnpublishDownloadHandle(hNet, g_downloadHNet);
+            return false;
         }
 
         // Check HTTP status.
@@ -7636,8 +7658,14 @@ static void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
 
 // Search a single directory for hgcpl.dll. Returns true if found and valid.
 static bool TryLoadLocalDll(const std::wstring& searchDir, const std::wstring& destPath) {
+    // Early cancellation: this function runs on the setup thread and each
+    // successful open triggers a full SHA-256 pass before the next probe,
+    // so a Wh_ModUninit issued mid-search should not force us through the
+    // remaining candidates.
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+
     std::wstring candidate = searchDir + L"\\" + kDllRelativeName;
-    
+
     WinHandle hFile(CreateFileW(candidate.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                 nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
     if (!hFile.valid()) return false;
@@ -7672,16 +7700,29 @@ static bool TryLoadLocalDll(const std::wstring& searchDir, const std::wstring& d
     return true;
 }
 
+// Only probe a fixed drive-letter path when the underlying volume is
+// actually a fixed local disk. On machines where D: (or any other letter
+// baked into the candidate list) is a spun-down, disconnected, removable
+// or network drive, CreateFileW there can stall for seconds and blocks
+// Wh_ModUninit behind it because the setup thread has no cancellation
+// inside CreateFileW.
+static bool IsFixedDrivePath(const wchar_t* path) {
+    if (!path || !path[0] || path[1] != L':') return true;  // not a drive path
+    wchar_t root[4] = { path[0], L':', L'\\', L'\0' };
+    return GetDriveTypeW(root) == DRIVE_FIXED;
+}
+
 // Search known locations for hgcpl.dll before attempting network download.
 static bool SearchLocalForDll(const std::wstring& destPath) {
     Wh_Log(L"HomeGroup: Searching local locations for hgcpl.dll...");
-    
+
     // 1. Already in storage directory (checked by caller, but verify again)
     {
         std::wstring storageDir = destPath.substr(0, destPath.rfind(L'\\'));
         if (TryLoadLocalDll(storageDir, destPath)) return true;
     }
-    
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+
     // 2. WinDbg local symbol cache directories
     wchar_t tempPath[MAX_PATH] = {};
     if (GetTempPathW(MAX_PATH, tempPath)) {
@@ -7690,8 +7731,11 @@ static bool SearchLocalForDll(const std::wstring& destPath) {
         // Try the flat cache directory
         if (TryLoadLocalDll(std::wstring(tempPath) + L"symbols", destPath)) return true;
     }
-    
-    // 3. Common WinDbg symbol cache locations
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+
+    // 3. Common WinDbg symbol cache locations. Each is behind a
+    //    GetDriveTypeW guard so a disconnected or removable D: (etc.)
+    //    doesn't hang CreateFileW for seconds during startup or unload.
     const wchar_t* cacheLocations[] = {
         L"C:\\symbols",
         L"C:\\localsymbols",
@@ -7699,25 +7743,33 @@ static bool SearchLocalForDll(const std::wstring& destPath) {
         L"D:\\symbols",
     };
     for (const wchar_t* loc : cacheLocations) {
+        if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+        if (!IsFixedDrivePath(loc)) {
+            Wh_Log(L"HomeGroup: Skipping non-fixed drive: %s", loc);
+            continue;
+        }
         if (TryLoadLocalDll(loc, destPath)) return true;
     }
-    
+
     // 4. Windows.old (from upgrade)
     const wchar_t* windowsOldLocations[] = {
         L"C:\\Windows.old\\System32",
         L"C:\\Windows.old\\SysWOW64",
     };
     for (const wchar_t* loc : windowsOldLocations) {
+        if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+        if (!IsFixedDrivePath(loc)) continue;
         if (TryLoadLocalDll(loc, destPath)) return true;
     }
-    
+
     // 5. User's Downloads folder
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
     wchar_t userProfile[MAX_PATH] = {};
     if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH)) {
         std::wstring downloads = std::wstring(userProfile) + L"\\Downloads";
         if (TryLoadLocalDll(downloads, destPath)) return true;
     }
-    
+
     Wh_Log(L"HomeGroup: No local hgcpl.dll found — will attempt download");
     return false;
 }
@@ -7899,9 +7951,21 @@ static bool ComputeFileSha256ByPath(const std::wstring& path, BYTE digest[32]) {
     return file.valid() && ComputeSha256OfHandle(file.get(), digest);
 }
 
+// Deterministic name derived only from the mod's format version and the
+// active language configuration. It intentionally has NO per-process/PID
+// component and NO sequence counter: on a disable→enable in the same
+// Explorer session (or a mod update that keeps the same language), the
+// second load must compute the same file name as the first so that the
+// MOVEFILE_REPLACE_EXISTING branch below can either replace the file or,
+// if it is still mapped by the earlier load, fall back to the
+// byte-identical acceptance path. The previous scheme mixed in the PID
+// plus a function-local static counter; the counter reset to 0 on reload
+// while the PID stayed the same, so the second load recomputed the same
+// name, then the file — still mapped LOAD_LIBRARY_AS_DATAFILE |
+// LOAD_LIBRARY_AS_IMAGE_RESOURCE — refused to be deleted or replaced,
+// BuildLocalizedResourceModuleLocked() returned false, and
+// g_localizedResourcePath stayed empty for the rest of the session.
 static std::wstring NewLocalizedResourceModuleName() {
-    static std::atomic<DWORD> sequence{0};
-    const DWORD number = sequence.fetch_add(1) + 1;
     const EmbeddedLanguage forced = static_cast<EmbeddedLanguage>(
         g_forcedLanguage.load(std::memory_order_acquire));
     const EmbeddedLanguagePack* pack = FindEmbeddedLanguagePack(forced);
@@ -7909,9 +7973,8 @@ static std::wstring NewLocalizedResourceModuleName() {
                              ? L"auto"
                              : (pack ? pack->tag : L"en-US");
     wchar_t name[160]{};
-    swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-%s-%lu-%lu.dll",
-               kLocalizedResourcePrefix, kLocalizedResourceFormatVersion, tag,
-               GetCurrentProcessId(), number);
+    swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-%s.dll",
+               kLocalizedResourcePrefix, kLocalizedResourceFormatVersion, tag);
     return name;
 }
 
@@ -8027,8 +8090,28 @@ static bool BuildLocalizedResourceModuleLocked(
     DeleteFileW(destination.c_str());
     if (!MoveFileExW(temporary.c_str(), destination.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        // The target may already be mapped by an earlier load of this mod
+        // (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE holds
+        // a file-image section that blocks both DeleteFileW and
+        // MoveFileExW+REPLACE_EXISTING), or it may have been built by
+        // another Explorer process using the same deterministic name.
+        // Accept it only if it is byte-identical to what we just built —
+        // then the still-mapped file is exactly what this rebuild would
+        // have produced, and the earlier HMODULE is safe to keep using.
+        const DWORD moveError = GetLastError();
+        BYTE destDigest[32]{};
+        if (!g_shuttingDown.load(std::memory_order_acquire) &&
+            ComputeFileSha256ByPath(destination, destDigest) &&
+            memcmp(builtDigest, destDigest, sizeof(builtDigest)) == 0) {
+            Wh_Log(L"HomeGroup translations: destination already mapped "
+                   L"and byte-identical; reusing it (move error was %lu)",
+                   moveError);
+            temporaryGuard.Commit();
+            g_localizedResourcePath = destination;
+            return true;
+        }
         Wh_Log(L"HomeGroup translations: activating resource module failed "
-               L"(%lu)", GetLastError());
+               L"(%lu)", moveError);
         return false;
     }
     temporaryGuard.Commit();
@@ -8585,12 +8668,30 @@ private:
 
     // Cheap keyword gate — avoids allocation for the vast majority of
     // registry accesses that are irrelevant to this mod.
+    //
+    // The previous version admitted any path containing "clsid",
+    // "controlpanel", "homegroup" or "shell extensions", which in
+    // explorer.exe is essentially every COM class lookup the shell
+    // performs. Each admitted call then constructed std::wstrings, ran
+    // ToLower(), and did up to 15 EndsWith comparisons in ClassifyPath —
+    // on the two hottest registry APIs (RegOpenKeyExW/RegGetValueW).
+    //
+    // The mod only ever virtualizes paths that are descendants of one of
+    // four fixed CLSID GUIDs, plus two fixed parent paths. Gate on those
+    // instead. Every path ClassifyPath / IsApprovedKey / IsTargetKey
+    // eventually accepts still matches one of these substrings (the
+    // GUIDs appear directly, the two parent-suffix strings match
+    // ControlPanel\Namespace and Shell Extensions\Approved), and the
+    // parent-tracking chain that RegOpenKeyVirtual relies on is
+    // preserved because parent CLSID keys always contain the GUID too.
     static bool ContainsKeyword(const wchar_t* s) {
         if (!s || !*s) return false;
-        return AsciiIContains(s, "clsid") ||
-               AsciiIContains(s, "controlpanel") ||
-               AsciiIContains(s, "homegroup") ||
-               AsciiIContains(s, "shell extensions");
+        return AsciiIContains(s, "67ca7650") ||
+               AsciiIContains(s, "24d568c5") ||
+               AsciiIContains(s, "006e61df") ||
+               AsciiIContains(s, "ffe1df5f") ||
+               AsciiIContains(s, "controlpanel\\namespace") ||
+               AsciiIContains(s, "shell extensions\\approved");
     }
 
     static bool AsciiIContains(const wchar_t* s, const char* needle) {
@@ -9003,13 +9104,27 @@ static bool IsWriteAccess(REGSAM sam) {
     return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
 
+// Same narrowing as KeyTracker::ContainsKeyword. wcsstr is case-sensitive,
+// so each token is checked in the two casings that Windows callers use in
+// practice (registry paths are case-insensitive but callers are consistent
+// within a component — SHCore/Shell32/OLE32 all use one canonical spelling).
+// The g_dllVerifiedOk check runs FIRST so that during the startup window
+// (before setup finishes) this function returns false without touching the
+// KeyTracker's shared_mutex at all — that keeps the pre-setup hot path
+// completely lock-free even for CLSID lookups that only happen to mention
+// one of the four target GUIDs.
 static bool MightNeedVirtualization(HKEY hk, LPCWSTR sub) {
-    if (g_keyTracker.IsTrackedOrFake(hk)) return true;
     if (!g_dllVerifiedOk.load(std::memory_order_acquire)) return false;
-    return sub && (wcsstr(sub, L"clsid") || wcsstr(sub, L"CLSID") ||
-                   wcsstr(sub, L"HomeGroup") || wcsstr(sub, L"homegroup") ||
-                   wcsstr(sub, L"ControlPanel") || wcsstr(sub, L"controlpanel") ||
-                   wcsstr(sub, L"Shell Extensions") || wcsstr(sub, L"shell extensions"));
+    if (g_keyTracker.IsTrackedOrFake(hk)) return true;
+    if (!sub) return false;
+    return wcsstr(sub, L"67ca7650") || wcsstr(sub, L"67CA7650") ||
+           wcsstr(sub, L"24d568c5") || wcsstr(sub, L"24D568C5") ||
+           wcsstr(sub, L"006e61df") || wcsstr(sub, L"006E61DF") ||
+           wcsstr(sub, L"ffe1df5f") || wcsstr(sub, L"FFE1DF5F") ||
+           wcsstr(sub, L"ControlPanel\\NameSpace") ||
+           wcsstr(sub, L"controlpanel\\namespace") ||
+           wcsstr(sub, L"Shell Extensions\\Approved") ||
+           wcsstr(sub, L"shell extensions\\approved");
 }
 
 static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
@@ -9495,7 +9610,12 @@ static LoadResource_t LoadResourceOriginalKernelBase = nullptr;
 static LoadResource_t LoadResourceOriginalKernel32 = nullptr;
 static SizeofResource_t SizeofResourceOriginalKernelBase = nullptr;
 static SizeofResource_t SizeofResourceOriginalKernel32 = nullptr;
-static std::mutex g_redirectedResourcesMutex;
+// Read-mostly map: LoadResource/SizeofResource are called constantly from
+// many Explorer window threads, but the map is only ever written the
+// handful of times FindResourceExW succeeds against the localized module.
+// Use a shared_mutex so the hot readers take a shared lock and don't
+// serialise the entire process on a single lock for a ~16-entry map.
+static std::shared_mutex g_redirectedResourcesMutex;
 static std::unordered_map<HRSRC, HMODULE> g_redirectedResources;
 
 static WORD CurrentEmbeddedLanguageId() {
@@ -9516,7 +9636,7 @@ static HRSRC HandleFindResourceExW(HMODULE module, LPCWSTR type, LPCWSTR name,
                 HRSRC resource = original(localized, type, name,
                                            CurrentEmbeddedLanguageId());
                 if (resource) {
-                    std::lock_guard<std::mutex> lock(
+                    std::unique_lock<std::shared_mutex> lock(
                         g_redirectedResourcesMutex);
                     g_redirectedResources[resource] = localized;
                     return resource;
@@ -9530,7 +9650,7 @@ static HRSRC HandleFindResourceExW(HMODULE module, LPCWSTR type, LPCWSTR name,
 
 static HMODULE RedirectedModuleForResource(HRSRC resource) {
     if (!g_hLocalizedResources.load(std::memory_order_acquire)) return nullptr;
-    std::lock_guard<std::mutex> lock(g_redirectedResourcesMutex);
+    std::shared_lock<std::shared_mutex> lock(g_redirectedResourcesMutex);
     auto found = g_redirectedResources.find(resource);
     return found == g_redirectedResources.end() ? nullptr : found->second;
 }
@@ -10269,9 +10389,9 @@ static void InstallComHook() {
 //   - A manual override setting (forceHomeGroupInjection) lets the user
 //     force injection even when coexistence is detected.
 
-// Note: g_yieldNamespaceInjection, g_modActiveEvent, kModActiveEventName,
-// and kWin7LegacyActiveEventName are declared in the Shared State section
-// above (before the registry hooks) so they are visible to all hooks.
+// Note: g_yieldNamespaceInjection, g_modActiveEvent, and kModActiveEventName
+// are declared in the Shared State section above (before the registry hooks)
+// so they are visible to all hooks.
 
 // Check if the HomeGroup CLSID is already registered in the real registry
 // (not through our hooks). This is the same check the Win7 Legacy mod
@@ -10294,23 +10414,20 @@ static bool IsHomeGroupClsidInRealRegistry() {
     return false;
 }
 
-// Detect the Win7 Legacy Applet Restorer mod by checking for its named
-// event. Returns true if the event exists (the other mod is active).
-static bool IsWin7LegacyModActive() {
-    // WinHandle (RAII) guarantees the handle is closed on every exit path,
-    // including if a future edit adds an early return or a throwing call
-    // between the open and the original manual CloseHandle.
-    WinHandle hEvent(OpenEventW(SYNCHRONIZE, FALSE, kWin7LegacyActiveEventName));
-    return hEvent.valid();
-}
-
-// Perform all conflict detection checks and decide whether to yield
-// namespace injection to the other mod. Returns a description of what
-// was detected for logging.
+// Perform conflict detection and decide whether to yield namespace
+// injection. Returns a description of what was detected for logging.
+//
+// We used to also probe for a named event exported by the Win7 Legacy
+// Applet Restorer mod, but that mod never published such an event, so
+// the check was dead code. Detecting the other mod through the registry
+// is also unreliable here: on Windows 11 the CLSID is absent from the
+// real registry, and once our own RegOpenKeyExW hook is installed a
+// direct probe would just see our fabricated key. Cross-mod coexistence
+// is therefore documented in the README as a "pick one" limitation
+// rather than handled here. The single check that remains still catches
+// the useful case of Windows < 1803 (where the CLSID really exists in
+// the real registry) or any other third-party registration.
 static bool DetectConflictsAndDecideYield(std::wstring& reason) {
-    // Check 1: Is the HomeGroup CLSID already in the real registry?
-    // This is the strongest signal — if it's there, injection is unnecessary
-    // regardless of which mod put it there.
     if (IsHomeGroupClsidInRealRegistry()) {
         reason = L"HomeGroup CLSID already exists in real registry "
                  L"(Windows < 1803 or another restoration); "
@@ -10318,15 +10435,7 @@ static bool DetectConflictsAndDecideYield(std::wstring& reason) {
         return true;
     }
 
-    // Check 2: Is the Win7 Legacy mod's named event present?
-    if (IsWin7LegacyModActive()) {
-        reason = L"Windows 7 Legacy Applet Restorer mod detected via "
-                 L"named event; yielding namespace injection to avoid "
-                 L"duplicate entries";
-        return true;
-    }
-
-    reason = L"No conflicting mods detected";
+    reason = L"No conflicting registration detected in real registry";
     return false;
 }
 
@@ -10518,7 +10627,7 @@ void Wh_ModUninit(void) {
         // or DirectUI pages may still reference vtables and resource handles.
         ReleaseLocalizedResourceModule();
         {
-            std::lock_guard<std::mutex> lock(g_redirectedResourcesMutex);
+            std::unique_lock<std::shared_mutex> lock(g_redirectedResourcesMutex);
             g_redirectedResources.clear();
         }
         g_hHomeGroup.store(nullptr);
