@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -64,18 +64,23 @@ matched to the selected DXGI adapter by LUID.
 
 ## Optional HWiNFO temperatures
 
-Temperatures are read from HWiNFO in this order:
+The **Temperature source** setting provides four modes:
 
-1. HWiNFO shared memory (`Global\\HWiNFO_SENS_SM2`).
-2. HWiNFO Gadget registry (`HKCU\\Software\\HWiNFO64\\VSB`).
+- **Automatic** reads HWiNFO shared memory first and fills missing values from
+  the HWiNFO Gadget registry.
+- **HWiNFO Shared Memory** uses only `Global\\HWiNFO_SENS_SM2`.
+- **HWiNFO Gadget Registry** uses only
+  `HKCU\\Software\\HWiNFO64\\VSB`.
+- **Disabled** skips temperature collection while keeping every other metric.
 
 HWiNFO is optional and is not bundled with this mod. Shared-memory integration
 targets HWiNFO 7.0 or newer, which permits full disclosure of the interface.
 The free HWiNFO64 edition disables shared memory after 12 hours of continuous
-use; HWiNFO64 Pro has no such limit. The Gadget fallback can be configured
-under **Sensor Settings > HWiNFO Gadget** by enabling **Report to Gadget** for
-the desired CPU and GPU temperature readings. If neither source is available,
-temperatures are shown as `--°C`; all other metrics continue to work.
+use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
+interface. Configure it under **Sensor Settings > HWiNFO Gadget** by enabling
+**Report to Gadget** for the desired CPU and GPU temperature readings. If the
+selected source is unavailable, temperatures are shown as `--°C`; all other
+metrics continue to work.
 
 ## Compatibility and placement
 
@@ -195,6 +200,22 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
   $description: "Optional partial adapter name. Empty selects the adapter with the most dedicated VRAM."
   $description:uk-UA: "Необовязкова частина назви. Порожнє значення вибирає адаптер з найбільшим обсягом VRAM."
 
+- temperatureSource: auto
+  $name: Temperature source
+  $name:uk-UA: Джерело температури
+  $description: "Automatic tries Shared Memory first and fills missing readings from Gadget Registry. Choose Gadget Registry when Shared Memory is disabled or unavailable."
+  $description:uk-UA: "Автоматичний режим спочатку читає Shared Memory, а відсутні значення добирає з Gadget Registry. Виберіть Gadget Registry, якщо Shared Memory вимкнено або недоступно."
+  $options:
+  - auto: Automatic
+  - sharedMemory: HWiNFO Shared Memory
+  - gadgetRegistry: HWiNFO Gadget Registry
+  - disabled: Disabled
+  $options:uk-UA:
+  - auto: Автоматично
+  - sharedMemory: HWiNFO Shared Memory
+  - gadgetRegistry: HWiNFO Gadget Registry
+  - disabled: Вимкнено
+
 - cpuTempSensor: ""
   $name: CPU temperature sensor filter
   $name:uk-UA: Датчик температури CPU
@@ -272,6 +293,13 @@ constexpr double kGraphHeight = 12.0;
 constexpr uint32_t kHwInfoSignature = 0x53695748;  // "HWiS"
 constexpr uint32_t kHwInfoTemperatureType = 1;
 
+enum class TemperatureSource {
+    Auto,
+    SharedMemory,
+    GadgetRegistry,
+    Disabled,
+};
+
 struct ModSettings {
     std::wstring fontFamily;
     std::wstring textColor;
@@ -281,6 +309,7 @@ struct ModSettings {
     std::wstring gpuAdapter;
     std::wstring cpuTempSensor;
     std::wstring gpuTempSensor;
+    TemperatureSource temperatureSource = TemperatureSource::Auto;
     int width = 410;
     int leftOffset = 10;
     bool reserveSpace = false;
@@ -376,6 +405,19 @@ std::wstring GetStringSetting(PCWSTR name) {
     return WindhawkUtils::StringSetting::make(name).get();
 }
 
+TemperatureSource ParseTemperatureSource(const std::wstring& value) {
+    if (value == L"sharedMemory") {
+        return TemperatureSource::SharedMemory;
+    }
+    if (value == L"gadgetRegistry") {
+        return TemperatureSource::GadgetRegistry;
+    }
+    if (value == L"disabled") {
+        return TemperatureSource::Disabled;
+    }
+    return TemperatureSource::Auto;
+}
+
 void LoadSettings() {
     ModSettings settings;
     settings.fontFamily = GetStringSetting(L"fontFamily");
@@ -384,6 +426,8 @@ void LoadSettings() {
     settings.warningColor = GetStringSetting(L"warningColor");
     settings.criticalColor = GetStringSetting(L"criticalColor");
     settings.gpuAdapter = GetStringSetting(L"gpuAdapter");
+    settings.temperatureSource =
+        ParseTemperatureSource(GetStringSetting(L"temperatureSource"));
     settings.cpuTempSensor = GetStringSetting(L"cpuTempSensor");
     settings.gpuTempSensor = GetStringSetting(L"gpuTempSensor");
     settings.width = std::clamp(Wh_GetIntSetting(L"width"), 330, 800);
@@ -477,8 +521,14 @@ int CpuTemperatureScore(const std::wstring& sensorName,
         return Contains(combined, preferredLower) ? 10000 : -1;
     }
 
-    if (!Contains(sensor, L"cpu") && !Contains(sensor, L"ryzen") &&
-        !Contains(sensor, L"processor")) {
+    bool gpuSensor = Contains(sensor, L"gpu") || Contains(sensor, L"nvidia") ||
+                     Contains(sensor, L"radeon");
+    bool cpuSensor =
+        Contains(sensor, L"cpu") || Contains(sensor, L"processor") ||
+        Contains(sensor, L"ryzen") || Contains(sensor, L"threadripper") ||
+        Contains(sensor, L"epyc") || Contains(sensor, L"xeon") ||
+        (Contains(sensor, L"intel") && !gpuSensor);
+    if (!cpuSensor) {
         return -1;
     }
 
@@ -488,7 +538,7 @@ int CpuTemperatureScore(const std::wstring& sensorName,
         return -1;
     }
 
-    if (Contains(reading, L"cpu (tctl/tdie)")) {
+    if (Contains(reading, L"tctl/tdie")) {
         return 1000;
     }
     if (Contains(reading, L"cpu die (average)")) {
@@ -509,7 +559,12 @@ int CpuTemperatureScore(const std::wstring& sensorName,
     if (Contains(reading, L"temperature")) {
         return 400;
     }
-    return -1;
+
+    // Gadget labels follow the selected HWiNFO UI language. A temperature
+    // unit check is applied by the registry reader, so a reading that belongs
+    // to a recognized CPU sensor remains a safe low-priority fallback even if
+    // words such as "temperature" or "package" are localized.
+    return 100;
 }
 
 int GpuTemperatureScore(const std::wstring& sensorName,
@@ -546,7 +601,18 @@ int GpuTemperatureScore(const std::wstring& sensorName,
     if (Contains(reading, L"temperature")) {
         return 500;
     }
-    return -1;
+
+    // Prefer the shortest localized label containing the stable GPU acronym.
+    // This normally selects labels such as "GPU Temperature" over longer
+    // hotspot, junction, or memory-temperature labels.
+    if (Contains(reading, L"gpu")) {
+        return 400 -
+               static_cast<int>(std::min<size_t>(reading.size(), 200));
+    }
+
+    // As with CPU readings, the registry path validates the temperature unit
+    // before this locale-independent fallback can be selected.
+    return 100;
 }
 
 // HWiNFO's published shared-memory layout explicitly uses one-byte packing.
@@ -744,6 +810,30 @@ std::optional<double> ParseLocalizedDouble(std::wstring value) {
     return result;
 }
 
+std::optional<double> NormalizeRegistryTemperature(
+    const std::wstring& rawValue,
+    const std::wstring& formattedValue) {
+    auto value = ParseLocalizedDouble(rawValue);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    std::wstring formatted = ToLower(formattedValue);
+    bool celsius = Contains(formatted, L"\u00B0c") ||
+                   Contains(formatted, L"\u2103");
+    bool fahrenheit = Contains(formatted, L"\u00B0f") ||
+                      Contains(formatted, L"\u2109");
+    if (!celsius && !fahrenheit) {
+        return std::nullopt;
+    }
+
+    double result = fahrenheit ? (*value - 32.0) * 5.0 / 9.0 : *value;
+    if (!std::isfinite(result) || result < -50.0 || result > 200.0) {
+        return std::nullopt;
+    }
+    return result;
+}
+
 bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                               const ModSettings& settings) {
     HKEY key = nullptr;
@@ -756,19 +846,26 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     int bestGpuScore = snapshot.gpuTemp ? 10000 : -1;
     bool foundAny = false;
 
+    int consecutiveMissing = 0;
     for (int i = 0; i < 1024; i++) {
         std::wstring suffix = std::to_wstring(i);
         auto sensor = ReadRegistryString(key, L"Sensor" + suffix);
         if (!sensor) {
-            break;
-        }
-        auto label = ReadRegistryString(key, L"Label" + suffix);
-        auto rawValue = ReadRegistryString(key, L"ValueRaw" + suffix);
-        if (!label || !rawValue) {
+            if (++consecutiveMissing >= 16) {
+                break;
+            }
             continue;
         }
-        auto value = ParseLocalizedDouble(*rawValue);
-        if (!value || *value < -50.0 || *value > 200.0) {
+        consecutiveMissing = 0;
+        auto label = ReadRegistryString(key, L"Label" + suffix);
+        auto rawValue = ReadRegistryString(key, L"ValueRaw" + suffix);
+        auto formattedValue = ReadRegistryString(key, L"Value" + suffix);
+        if (!label || !rawValue || !formattedValue) {
+            continue;
+        }
+        auto value =
+            NormalizeRegistryTemperature(*rawValue, *formattedValue);
+        if (!value) {
             continue;
         }
 
@@ -794,9 +891,25 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
 
 void ReadTemperatures(MetricsSnapshot& snapshot,
                       const ModSettings& settings) {
-    ReadHwInfoSharedMemory(snapshot, settings);
-    if (!snapshot.cpuTemp || !snapshot.gpuTemp) {
-        ReadHwInfoGadgetRegistry(snapshot, settings);
+    switch (settings.temperatureSource) {
+        case TemperatureSource::SharedMemory:
+            ReadHwInfoSharedMemory(snapshot, settings);
+            break;
+
+        case TemperatureSource::GadgetRegistry:
+            ReadHwInfoGadgetRegistry(snapshot, settings);
+            break;
+
+        case TemperatureSource::Disabled:
+            break;
+
+        case TemperatureSource::Auto:
+        default:
+            ReadHwInfoSharedMemory(snapshot, settings);
+            if (!snapshot.cpuTemp || !snapshot.gpuTemp) {
+                ReadHwInfoGadgetRegistry(snapshot, settings);
+            }
+            break;
     }
 }
 
