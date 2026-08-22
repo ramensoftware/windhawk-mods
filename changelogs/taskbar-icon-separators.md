@@ -1,3 +1,9 @@
+## 1.0.31 ([Aug 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/100b6facb46b006fcd0130731c41900695665eba/mods/taskbar-icon-separators.wh.cpp))
+
+* Added middle-click only add / remove logic for better compatibility in cases where context menu interaction isn't available (#5148)
+* Support for custom alpha & brightness values (#5156)
+* Optional `Icon Rotation` setting for vertical taskbar compatibility
+
 ## 1.0.13 ([Aug 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/97365b9596a9f59d13cd702ac18ac010a9b2f319/mods/taskbar-icon-separators.wh.cpp))
 
 - Added dynamic taskbar management: add separators from the taskbar menu, drag to reorder, and right-click to remove.
