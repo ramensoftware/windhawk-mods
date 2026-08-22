@@ -2,7 +2,7 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.0.4
+// @version       1.0.5
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
@@ -14,6 +14,8 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Scroll: Volume & Brightness
+
+![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/windhawk.gif)
 
 Scroll your mouse wheel over the taskbar to control volume and brightness,
 without leaving what you're doing.
@@ -43,15 +45,13 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 - splitPercent: 50
   $name: Split position (%)
   $description: >-
-    Percentage from the left edge of the taskbar where the volume/brightness
-    zones split. 0 means the whole taskbar controls volume, 100 means the
-    whole taskbar controls brightness.
+    Percentage from the edge of the taskbar where the volume/brightness
+    zones split.
 - invertSides: false
   $name: Invert zones
   $description: >-
     When enabled, the left side of the taskbar controls volume and the
-    right side controls brightness (default is left = brightness,
-    right = volume).
+    right side controls brightness.
 - reverseScrollDirection: false
   $name: Reverse scroll direction
   $description: >-
@@ -67,8 +67,7 @@ Issues and PRs welcome: https://github.com/NarayanChetri
   $name: Exclude system tray icons
   $description: >-
     Ignore scroll events over the system tray/notification area (clock,
-    network, volume icon, etc.) so this mod doesn't fight with icons that
-    already have their own scroll behavior.
+    network, volume icon, etc.).
 - showOverlay: true
   $name: Show overlay
   $description: Show a native-looking taskbar element with the current percentage.
@@ -170,13 +169,10 @@ void LoadSettings() {
     s.enableWmiFallback = Wh_GetIntSetting(L"enableWmiFallback") != 0;
 
     s.accentColor = Gdiplus::Color(255, 255, 190, 92);
-    PCWSTR accentColorStr = Wh_GetStringSetting(L"accentColor");
-    if (accentColorStr) {
-        BYTE r, g, b;
-        if (ParseHexColor(accentColorStr, r, g, b)) {
-            s.accentColor = Gdiplus::Color(255, r, g, b);
-        }
-        Wh_FreeStringSetting(accentColorStr);
+    WindhawkUtils::StringSetting accentColorStr = WindhawkUtils::StringSetting::make(L"accentColor");
+    BYTE r, g, b;
+    if (ParseHexColor(accentColorStr.get(), r, g, b)) {
+        s.accentColor = Gdiplus::Color(255, r, g, b);
     }
 
     if (s.splitPercent < 0) s.splitPercent = 0;
@@ -191,6 +187,13 @@ void LoadSettings() {
     EnterCriticalSection(&g_settingsLock);
     g_settings = s;
     LeaveCriticalSection(&g_settingsLock);
+}
+
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetCurrentModuleHandle, &hInst);
+    return hInst;
 }
 
 // -----------------------------------------------------------------------
@@ -287,7 +290,7 @@ void PaintOverlay(HWND hWnd, HDC hdc) {
     g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
     g.ScaleTransform(scale, scale);
 
-    g.Clear(Gdiplus::Color(240, 28, 28, 30));
+    g.Clear(Gdiplus::Color(255, 28, 28, 30));
 
     Gdiplus::Pen borderPen(Gdiplus::Color(255, 65, 65, 65), 1.0f);
     g.DrawRectangle(&borderPen, 0, 0, kOverlayWidth - 1, kOverlayHeight - 1);
@@ -329,6 +332,7 @@ void PaintOverlay(HWND hWnd, HDC hdc) {
     }
 
     Gdiplus::Graphics gScreen(hdc);
+    gScreen.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
     gScreen.DrawImage(&bmp, 0, 0);
 }
 
@@ -349,7 +353,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             } else if (wParam == kFrameTimerId) {
                 bool changed = false;
 
-                // 1. Animate Progress Bar
                 if (std::abs(g_animatedPercent - (float)g_targetPercent) > 0.1f) {
                     g_animatedPercent += ((float)g_targetPercent - g_animatedPercent) * 0.15f;
                     changed = true;
@@ -358,7 +361,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     changed = true;
                 }
 
-                // 2. Animate Opacity
                 if (std::abs(g_opacity - g_targetOpacity) > 1.0f) {
                     g_opacity += (g_targetOpacity - g_opacity) * 0.15f; 
                     SetLayeredWindowAttributes(hWnd, 0, (BYTE)g_opacity, LWA_ALPHA);
@@ -372,7 +374,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     }
                 }
 
-                // 3. Track cursor & taskbar boundaries
                 if (IsWindow(g_hTargetTaskbar)) {
                     RECT tbRect;
                     GetWindowRect(g_hTargetTaskbar, &tbRect);
@@ -417,11 +418,11 @@ void EnsureOverlayWindow() {
     if (g_hOverlayWnd) return;
 
     WNDCLASSEXW wc = {};
-    if (!GetClassInfoExW(GetModuleHandleW(nullptr), kOverlayClassName, &wc)) {
+    if (!GetClassInfoExW(GetCurrentModuleHandle(), kOverlayClassName, &wc)) {
         wc.cbSize = sizeof(wc);
         wc.style = CS_DROPSHADOW;
         wc.lpfnWndProc = OverlayWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kOverlayClassName;
         wc.hbrBackground = nullptr;
         RegisterClassExW(&wc);
@@ -430,7 +431,7 @@ void EnsureOverlayWindow() {
     g_hOverlayWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
         kOverlayClassName, L"", WS_POPUP, 0, 0, kOverlayWidth, kOverlayHeight,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        nullptr, nullptr, GetCurrentModuleHandle(), nullptr);
 
     if (g_hOverlayWnd) {
         DWORD pref = DWMWCP_ROUND;
@@ -462,7 +463,6 @@ void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, 
     if (!hTaskbar || !IsWindow(hTaskbar)) hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     g_hTargetTaskbar = hTaskbar;
 
-    // Instant snap if switching modes (Volume <-> Brightness) to avoid messy tweening
     if (g_currentMode != mode) {
         g_currentMode = mode;
         g_animatedPercent = (float)percent;
@@ -516,51 +516,6 @@ void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, 
 
     SetTimer(g_hOverlayWnd, kOverlayHideTimerId, (UINT)settings.overlayDurationMs, nullptr);
     SetTimer(g_hOverlayWnd, kFrameTimerId, 16, nullptr);
-}
-
-
-// -----------------------------------------------------------------------
-// Direct COM Volume Control (Bypasses Native OSD)
-// -----------------------------------------------------------------------
-
-int AdjustVolumeCOM(bool up, int notches, int step) {
-    static IMMDeviceEnumerator* pEnum = nullptr;
-    static IMMDevice* pDevice = nullptr;
-    static IAudioEndpointVolume* pVol = nullptr;
-    
-    if (!pEnum) CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
-    if (pEnum && !pDevice) pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
-    if (pDevice && !pVol) pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol);
-    
-    // Fallback if device disconnected/changed
-    if (pVol) {
-        float dummy;
-        if (FAILED(pVol->GetMasterVolumeLevelScalar(&dummy))) {
-            pVol->Release(); pVol = nullptr;
-            pDevice->Release(); pDevice = nullptr;
-            pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
-            if (pDevice) pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol);
-        }
-    }
-
-    if (!pVol) return -1;
-
-    float currentVol = 0.0f;
-    pVol->GetMasterVolumeLevelScalar(&currentVol);
-    
-    float newVol = currentVol + (up ? 1.0f : -1.0f) * (notches * step / 100.0f);
-    if (newVol < 0.0f) newVol = 0.0f;
-    if (newVol > 1.0f) newVol = 1.0f;
-    
-    pVol->SetMasterVolumeLevelScalar(newVol, NULL);
-    
-    // Auto unmute logic
-    BOOL isMuted = FALSE;
-    pVol->GetMute(&isMuted);
-    if (isMuted && newVol > 0.001f) pVol->SetMute(FALSE, NULL);
-    if (!isMuted && newVol <= 0.001f) pVol->SetMute(TRUE, NULL);
-    
-    return (int)(newVol * 100.0f + 0.5f);
 }
 
 // -----------------------------------------------------------------------
@@ -621,7 +576,7 @@ BOOL CALLBACK WarmUpMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
     return TRUE;
 }
 
-int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int stepPercent, bool* outDdcSupported) {
+int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int notches, int stepPercent, bool* outDdcSupported) {
     MonitorCacheEntry* entry = GetOrOpenMonitorCache(hMonitor);
     *outDdcSupported = entry->ddcSupported;
     if (!entry->ddcSupported) return -1;
@@ -633,8 +588,8 @@ int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int stepPercent, bool* outDd
         DWORD minB = 0, curB = 0, maxB = 0;
         if (GetMonitorBrightness(pm.hPhysicalMonitor, &minB, &curB, &maxB)) {
             int range = (maxB > minB) ? (int)(maxB - minB) : 100;
-            int step = (range * stepPercent) / 100;
-            if (step < 1) step = 1;
+            int step = (range * stepPercent * notches) / 100;
+            if (step < notches) step = notches;
 
             int newVal = (int)curB + (up ? step : -step);
             if (newVal < (int)minB) newVal = (int)minB;
@@ -779,12 +734,20 @@ bool HandleTaskbarScroll(HWND hTaskbar, POINT pt, short delta) {
     if (!GetWindowRect(hTaskbar, &rc)) return false;
     
     int width = rc.right - rc.left;
-    if (width <= 0) return false;
+    int height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0) return false;
 
-    int relativeX = pt.x - rc.left;
-    int splitX = (width * settings.splitPercent) / 100;
+    bool isHorizontal = width > height;
+    bool rightSide = false;
 
-    bool rightSide = relativeX >= splitX;
+    if (isHorizontal) {
+        int splitX = (width * settings.splitPercent) / 100;
+        rightSide = (pt.x - rc.left) >= splitX;
+    } else {
+        int splitY = (height * settings.splitPercent) / 100;
+        rightSide = (pt.y - rc.top) >= splitY;
+    }
+
     if (settings.invertSides) rightSide = !rightSide;
 
     static int s_volumeAccum = 0;
@@ -868,8 +831,21 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     HWND hWnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand);
     if (hWnd && ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff)) {
         if (_wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
-            HookInputSite(hWnd);
-            Wh_ApplyHookOperations();
+            HWND hParent = GetParent(hWnd);
+            if (hParent) {
+                WCHAR szParentClass[64];
+                if (GetClassNameW(hParent, szParentClass, ARRAYSIZE(szParentClass)) && _wcsicmp(szParentClass, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
+                    HWND hTaskbar = GetAncestor(hParent, GA_ROOT);
+                    if (hTaskbar) {
+                        WCHAR szTaskbarClass[64];
+                        if (GetClassNameW(hTaskbar, szTaskbarClass, ARRAYSIZE(szTaskbarClass)) && 
+                            (_wcsicmp(szTaskbarClass, L"Shell_TrayWnd") == 0 || _wcsicmp(szTaskbarClass, L"Shell_SecondaryTrayWnd") == 0)) {
+                            HookInputSite(hWnd);
+                            Wh_ApplyHookOperations();
+                        }
+                    }
+                }
+            }
         }
     }
     return hWnd;
@@ -897,7 +873,7 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
                         if (nextReq->hMonitor == req->hMonitor) {
                             if (nextReq->scrollUp == req->scrollUp) req->notches += nextReq->notches;
                             else req->notches -= nextReq->notches;
-                            req->cursorPt = nextReq->cursorPt; // Always track latest cursor
+                            req->cursorPt = nextReq->cursorPt; 
                         }
                         delete nextReq;
                     }
@@ -911,16 +887,10 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
                 if (req->notches > 0) {
                     Settings settings = GetSettingsSnapshot();
                     bool ddcSupported = false;
-                    int percent = -1;
-
-                    for (int i = 0; i < req->notches; i++) {
-                        int p = AdjustBrightnessDDC(req->hMonitor, req->scrollUp, settings.brightnessStep, &ddcSupported);
-                        if (p >= 0) percent = p;
-                    }
+                    int percent = AdjustBrightnessDDC(req->hMonitor, req->scrollUp, req->notches, settings.brightnessStep, &ddcSupported);
 
                     if (!ddcSupported && settings.enableWmiFallback) {
-                        int p = AdjustBrightnessWMI(req->scrollUp, req->notches, settings.brightnessStep);
-                        if (p >= 0) percent = p;
+                        percent = AdjustBrightnessWMI(req->scrollUp, req->notches, settings.brightnessStep);
                     }
 
                     if (g_workerThreadId) {
@@ -955,14 +925,44 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     if (g_hWorkerReadyEvent) SetEvent(g_hWorkerReadyEvent);
     
     HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IMMDeviceEnumerator* pEnum = nullptr;
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        // Direct Audio Control Request
         if (msg.hwnd == nullptr && msg.message == WM_APP_VOLUME_REQUEST) {
             ScrollRequest* req = (ScrollRequest*)msg.lParam;
             if (req) {
                 Settings settings = GetSettingsSnapshot();
-                int percent = AdjustVolumeCOM(req->scrollUp, req->notches, settings.volumeStep);
+                
+                if (!pEnum) CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+
+                int percent = -1;
+                if (pEnum) {
+                    IMMDevice* pDevice = nullptr;
+                    pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
+                    if (pDevice) {
+                        IAudioEndpointVolume* pVol = nullptr;
+                        pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol);
+                        if (pVol) {
+                            float currentVol = 0.0f;
+                            pVol->GetMasterVolumeLevelScalar(&currentVol);
+                            float newVol = currentVol + (req->scrollUp ? 1.0f : -1.0f) * (req->notches * settings.volumeStep / 100.0f);
+                            if (newVol < 0.0f) newVol = 0.0f;
+                            if (newVol > 1.0f) newVol = 1.0f;
+                            
+                            pVol->SetMasterVolumeLevelScalar(newVol, NULL);
+                            
+                            BOOL isMuted = FALSE;
+                            pVol->GetMute(&isMuted);
+                            if (isMuted && newVol > 0.001f) pVol->SetMute(FALSE, NULL);
+                            if (!isMuted && newVol <= 0.001f) pVol->SetMute(TRUE, NULL);
+                            
+                            percent = (int)(newVol * 100.0f + 0.5f);
+                            pVol->Release();
+                        }
+                        pDevice->Release();
+                    }
+                }
+
                 if (percent >= 0) {
                     ShowOverlay(req->hMonitor, req->hTaskbar, percent, req->cursorPt, OverlayMode::Volume);
                 }
@@ -971,7 +971,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             continue;
         }
 
-        // Display Brightness Output
         if (msg.hwnd == nullptr && msg.message == WM_APP_BRIGHTNESS_RESULT) {
             ScrollResult* res = (ScrollResult*)msg.lParam;
             if (res) {
@@ -984,6 +983,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    if (pEnum) pEnum->Release();
     if (g_hOverlayWnd) {
         DestroyWindow(g_hOverlayWnd);
         g_hOverlayWnd = nullptr;
@@ -994,6 +994,9 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 }
 
 BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM) {
+    DWORD dwProcessId = 0;
+    if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) return TRUE;
+
     WCHAR szClass[32];
     if (GetClassNameW(hWnd, szClass, 32)) {
         if (_wcsicmp(szClass, L"Shell_TrayWnd") == 0 || _wcsicmp(szClass, L"Shell_SecondaryTrayWnd") == 0) {
@@ -1010,6 +1013,9 @@ BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM) {
 }
 
 BOOL CALLBACK EnumWindowsUninitProc(HWND hWnd, LPARAM) {
+    DWORD dwProcessId = 0;
+    if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) return TRUE;
+
     WCHAR szClass[32];
     if (GetClassNameW(hWnd, szClass, 32)) {
         if (_wcsicmp(szClass, L"Shell_TrayWnd") == 0 || _wcsicmp(szClass, L"Shell_SecondaryTrayWnd") == 0) {
@@ -1022,6 +1028,10 @@ BOOL CALLBACK EnumWindowsUninitProc(HWND hWnd, LPARAM) {
 // -----------------------------------------------------------------------
 // Mod entry points
 // -----------------------------------------------------------------------
+
+void Wh_ModAfterInit() {
+    EnumWindows(EnumWindowsInitProc, 0);
+}
 
 BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_settingsLock);
@@ -1040,8 +1050,6 @@ BOOL Wh_ModInit() {
         auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) WindhawkUtils::SetFunctionHook(pCreateWindowInBand, CreateWindowInBand_Hook, &CreateWindowInBand_Original);
     }
-
-    EnumWindows(EnumWindowsInitProc, 0);
 
     g_hWorkerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
@@ -1066,7 +1074,7 @@ void Wh_ModUninit() {
 
     if (g_workerThreadId) PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
     if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, 5000);
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
     }
@@ -1077,7 +1085,7 @@ void Wh_ModUninit() {
 
     if (g_monitorThreadId) PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0);
     if (g_hMonitorThread) {
-        WaitForSingleObject(g_hMonitorThread, 5000);
+        WaitForSingleObject(g_hMonitorThread, INFINITE);
         CloseHandle(g_hMonitorThread);
         g_hMonitorThread = nullptr;
     }
@@ -1091,6 +1099,7 @@ void Wh_ModUninit() {
         g_gdiplusToken = 0;
     }
 
+    UnregisterClassW(kOverlayClassName, GetCurrentModuleHandle());
     DeleteCriticalSection(&g_settingsLock);
 }
 
