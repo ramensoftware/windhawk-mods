@@ -220,11 +220,13 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <deque>
+#include <iterator>
 #include <list>
 #include <mutex>
 #include <optional>
@@ -547,6 +549,7 @@ int GpuTemperatureScore(const std::wstring& sensorName,
     return -1;
 }
 
+// HWiNFO's published shared-memory layout explicitly uses one-byte packing.
 #pragma pack(push, 1)
 struct HwInfoHeader {
     uint32_t signature;
@@ -579,6 +582,13 @@ struct HwInfoReadingPrefix {
     double value;
 };
 #pragma pack(pop)
+
+static_assert(sizeof(HwInfoHeader) == 48);
+static_assert(offsetof(HwInfoHeader, pollTime) == 12);
+static_assert(offsetof(HwInfoHeader, sensorOffset) == 20);
+static_assert(sizeof(HwInfoSensorPrefix) == 264);
+static_assert(offsetof(HwInfoReadingPrefix, value) == 284);
+static_assert(sizeof(HwInfoReadingPrefix) == 292);
 
 bool IsRangeValid(size_t totalSize,
                   uint32_t offset,
@@ -2336,7 +2346,8 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"taskbar.dll symbols unavailable; first injection may require an Explorer restart");
+        Wh_Log(L"taskbar.dll symbols unavailable");
+        return FALSE;
     }
 
     if (HMODULE module = GetTaskbarViewModule()) {
