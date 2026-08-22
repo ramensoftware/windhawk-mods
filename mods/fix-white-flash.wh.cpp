@@ -1,10 +1,12 @@
 // ==WindhawkMod==
-// @id                fix-white-flash
+// @id              fix-white-flash
 // @name            Fix white flashes for all windows
-// @description     Fixes white flashes when opening new window.
+// @description     No more white flashes when opening new windows and dialogs!
 // @version         0.1
 // @author          Rafaello
 // @github          https://github.com/JoyHak
+// @homepage        https://github.com/JoyHak/windhawk
+// @license         MIT
 // @include *
 // @exclude csrss.exe
 // @exclude dwm.exe
@@ -34,15 +36,44 @@
 // @compilerOptions -lGdi32
 // ==/WindhawkMod==
 
+// Source code is published under the MIT license.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/JoyHak/windhawk
+
 // ==WindhawkModReadme==
 /*
-Fixes white flashes when opening new windows.
-
 ### Before
-![Before](https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-before.png)
+![Before](https://raw.githubusercontent.com/JoyHak/windhawk/main/images/before.gif)
 
 ### After
-![After](https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-after.png)
+![After](https://raw.githubusercontent.com/JoyHak/windhawk/main/images/after.gif)
+
+Even a custom dark theme can't fix the long-standing issue with white areas in Win32 applications. 
+This mod automatically detects and paints all white regions before you can even see them.
+
+### Features
+- Choose a color to paint over in white areas (`#191919` - dark gray by default)
+- Enable aggressive painting for all applications
+- Increase the duration during which the paint remains visible
+- Customize the color and modes for each process individually
+
+### Colors
+On the "Settings" tab, you can specify a color for each process. 
+For other processes not listed here, the global settings apply. 
+The color can be in one of the following formats:
+- `RGB(r, g, b)` or `rgb(r, g, b)` (e.g. `RGB(25, 25, 25)` or `rgb(17,0,0)`)
+- `#RRGGBB` or `0xRRGGBB` (e.g. `#191919` - default).
+- Decimal number (e.g. `1644825` = `0x191919` as hexadecimal)
+
+Use color picker from ShareX or PowerToys to quickly select color from screen.
+
+---
+
+Works on Windows 10 and 11 (starting from 21h1).
+
+Also you can install the [UxTheme mod](https://windhawk.net/mods/uxtheme-hook) and set up the [CakeOS theme](https://www.deviantart.com/niivu/art/cakeOS-2-0-for-Windows-11-953541433)
+by niivu to get best dark theme experience (works on Windows 10 too).
 
 */
 // ==/WindhawkModReadme==
