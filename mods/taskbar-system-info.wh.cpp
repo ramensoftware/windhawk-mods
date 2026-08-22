@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -54,6 +54,7 @@ stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 - GPU utilization and dedicated VRAM usage from Windows PDH counters.
 - Dedicated VRAM capacity and adapter identity from DXGI.
 - CPU and GPU temperatures from HWiNFO when available.
+- CPU fallback from Windows ACPI thermal zones exposed through PDH.
 
 Metric collection runs on a worker thread. The taskbar UI thread only renders
 the latest completed snapshot.
@@ -62,15 +63,23 @@ The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
 matched to the selected DXGI adapter by LUID.
 
-## Optional HWiNFO temperatures
+## Temperature providers
 
-The **Temperature source** setting provides four modes:
+The **Temperature source** setting provides these modes:
 
-- **Automatic** reads HWiNFO shared memory first and fills missing values from
-  the HWiNFO Gadget registry.
+- **Automatic** fills CPU and GPU independently: HWiNFO shared memory first,
+  then HWiNFO Gadget Registry, then Windows thermal zones for a still-missing
+  CPU reading.
+- **HWiNFO automatic** uses only the two HWiNFO interfaces.
 - **HWiNFO Shared Memory** uses only `Global\\HWiNFO_SENS_SM2`.
 - **HWiNFO Gadget Registry** uses only
   `HKCU\\Software\\HWiNFO64\\VSB`.
+- **Windows thermal zones** uses the same
+  `\\Thermal Zone Information(*)\\Temperature` PDH source as Taskbar Clock
+  Customization. It is dependency-free, but it exposes ACPI platform zones,
+  not necessarily the CPU package sensor, and does not provide a generic GPU
+  temperature. The optional zone filter and average/hottest setting make this
+  fallback explicit and controllable.
 - **Disabled** skips temperature collection while keeping every other metric.
 
 HWiNFO is optional and is not bundled with this mod. Shared-memory integration
@@ -80,7 +89,9 @@ use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
 interface. Configure it under **Sensor Settings > HWiNFO Gadget** by enabling
 **Report to Gadget** for the desired CPU and GPU temperature readings. If the
 selected source is unavailable, temperatures are shown as `--°C`; all other
-metrics continue to work.
+metrics continue to work. The active provider is written to the Windhawk log
+only when it changes, which makes fallback behavior diagnosable without adding
+noise every second.
 
 ## Compatibility and placement
 
@@ -203,18 +214,40 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 - temperatureSource: auto
   $name: Temperature source
   $name:uk-UA: Джерело температури
-  $description: "Automatic tries Shared Memory first and fills missing readings from Gadget Registry. Choose Gadget Registry when Shared Memory is disabled or unavailable."
-  $description:uk-UA: "Автоматичний режим спочатку читає Shared Memory, а відсутні значення добирає з Gadget Registry. Виберіть Gadget Registry, якщо Shared Memory вимкнено або недоступно."
+  $description: "Automatic tries HWiNFO Shared Memory, HWiNFO Gadget Registry, then Windows thermal zones for a missing CPU reading. Windows thermal zones don't provide a generic GPU temperature."
+  $description:uk-UA: "Автоматичний режим перевіряє HWiNFO Shared Memory, HWiNFO Gadget Registry, а потім системні термозони Windows для відсутньої температури CPU. Системні термозони не дають універсальної температури GPU."
   $options:
   - auto: Automatic
+  - hwinfoAuto: HWiNFO automatic
   - sharedMemory: HWiNFO Shared Memory
   - gadgetRegistry: HWiNFO Gadget Registry
+  - windowsThermalZones: Windows thermal zones (ACPI/PDH)
   - disabled: Disabled
   $options:uk-UA:
   - auto: Автоматично
+  - hwinfoAuto: HWiNFO автоматично
   - sharedMemory: HWiNFO Shared Memory
   - gadgetRegistry: HWiNFO Gadget Registry
+  - windowsThermalZones: Системні термозони Windows (ACPI/PDH)
   - disabled: Вимкнено
+
+- windowsThermalZoneFilter: ""
+  $name: Windows thermal zone filter
+  $name:uk-UA: Фільтр системної термозони Windows
+  $description: "Optional partial PDH instance name. Empty uses every valid ACPI thermal zone. Applies only to Windows thermal zones."
+  $description:uk-UA: "Необов'язкова частина назви екземпляра PDH. Порожнє значення використовує всі коректні термозони ACPI. Застосовується лише до системних термозон Windows."
+
+- windowsThermalZoneAggregation: average
+  $name: Windows thermal zone aggregation
+  $name:uk-UA: Об'єднання системних термозон Windows
+  $description: "Average matches Taskbar Clock Customization. Hottest is safer for alert-oriented monitoring."
+  $description:uk-UA: "Середня відповідає Taskbar Clock Customization. Найгарячіша краще підходить для моніторингу попереджень."
+  $options:
+  - average: Average
+  - hottest: Hottest
+  $options:uk-UA:
+  - average: Середня
+  - hottest: Найгарячіша
 
 - cpuTempSensor: ""
   $name: CPU temperature sensor filter
@@ -295,9 +328,23 @@ constexpr uint32_t kHwInfoTemperatureType = 1;
 
 enum class TemperatureSource {
     Auto,
+    HwInfoAuto,
     SharedMemory,
     GadgetRegistry,
+    WindowsThermalZones,
     Disabled,
+};
+
+enum class ThermalZoneAggregation {
+    Average,
+    Hottest,
+};
+
+enum class TemperatureProvider {
+    None,
+    HwInfoSharedMemory,
+    HwInfoGadgetRegistry,
+    WindowsThermalZones,
 };
 
 struct ModSettings {
@@ -309,7 +356,10 @@ struct ModSettings {
     std::wstring gpuAdapter;
     std::wstring cpuTempSensor;
     std::wstring gpuTempSensor;
+    std::wstring windowsThermalZoneFilter;
     TemperatureSource temperatureSource = TemperatureSource::Auto;
+    ThermalZoneAggregation windowsThermalZoneAggregation =
+        ThermalZoneAggregation::Average;
     int width = 410;
     int leftOffset = 10;
     bool reserveSpace = false;
@@ -375,6 +425,7 @@ int g_historyWindow = 0;
 PDH_HQUERY g_pdhQuery = nullptr;
 PDH_HCOUNTER g_gpuCounter = nullptr;
 PDH_HCOUNTER g_vramCounter = nullptr;
+PDH_HCOUNTER g_thermalZoneCounter = nullptr;
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -388,6 +439,8 @@ struct MetricsSnapshot {
     bool vramAvailable = false;
     std::optional<double> cpuTemp;
     std::optional<double> gpuTemp;
+    TemperatureProvider cpuTempProvider = TemperatureProvider::None;
+    TemperatureProvider gpuTempProvider = TemperatureProvider::None;
 };
 
 std::mutex g_metricsMutex;
@@ -406,16 +459,28 @@ std::wstring GetStringSetting(PCWSTR name) {
 }
 
 TemperatureSource ParseTemperatureSource(const std::wstring& value) {
+    if (value == L"hwinfoAuto") {
+        return TemperatureSource::HwInfoAuto;
+    }
     if (value == L"sharedMemory") {
         return TemperatureSource::SharedMemory;
     }
     if (value == L"gadgetRegistry") {
         return TemperatureSource::GadgetRegistry;
     }
+    if (value == L"windowsThermalZones") {
+        return TemperatureSource::WindowsThermalZones;
+    }
     if (value == L"disabled") {
         return TemperatureSource::Disabled;
     }
     return TemperatureSource::Auto;
+}
+
+ThermalZoneAggregation ParseThermalZoneAggregation(
+    const std::wstring& value) {
+    return value == L"hottest" ? ThermalZoneAggregation::Hottest
+                                : ThermalZoneAggregation::Average;
 }
 
 void LoadSettings() {
@@ -430,6 +495,10 @@ void LoadSettings() {
         ParseTemperatureSource(GetStringSetting(L"temperatureSource"));
     settings.cpuTempSensor = GetStringSetting(L"cpuTempSensor");
     settings.gpuTempSensor = GetStringSetting(L"gpuTempSensor");
+    settings.windowsThermalZoneFilter =
+        GetStringSetting(L"windowsThermalZoneFilter");
+    settings.windowsThermalZoneAggregation = ParseThermalZoneAggregation(
+        GetStringSetting(L"windowsThermalZoneAggregation"));
     settings.width = std::clamp(Wh_GetIntSetting(L"width"), 330, 800);
     settings.leftOffset = std::clamp(Wh_GetIntSetting(L"leftOffset"), 0, 1000);
     settings.reserveSpace = Wh_GetIntSetting(L"reserveSpace") != 0;
@@ -755,6 +824,8 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                 if (cpuScore > bestCpuScore) {
                     bestCpuScore = cpuScore;
                     snapshot.cpuTemp = reading.value;
+                    snapshot.cpuTempProvider =
+                        TemperatureProvider::HwInfoSharedMemory;
                 }
 
                 int gpuScore = GpuTemperatureScore(
@@ -762,6 +833,8 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                 if (gpuScore > bestGpuScore) {
                     bestGpuScore = gpuScore;
                     snapshot.gpuTemp = reading.value;
+                    snapshot.gpuTempProvider =
+                        TemperatureProvider::HwInfoSharedMemory;
                 }
             }
 
@@ -875,6 +948,8 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
         if (cpuScore > bestCpuScore) {
             bestCpuScore = cpuScore;
             snapshot.cpuTemp = *value;
+            snapshot.cpuTempProvider =
+                TemperatureProvider::HwInfoGadgetRegistry;
         }
 
         int gpuScore =
@@ -882,11 +957,24 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
         if (gpuScore > bestGpuScore) {
             bestGpuScore = gpuScore;
             snapshot.gpuTemp = *value;
+            snapshot.gpuTempProvider =
+                TemperatureProvider::HwInfoGadgetRegistry;
         }
     }
 
     RegCloseKey(key);
     return foundAny;
+}
+
+void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
+                             const ModSettings& settings);
+
+void ReadHwInfoTemperatures(MetricsSnapshot& snapshot,
+                            const ModSettings& settings) {
+    ReadHwInfoSharedMemory(snapshot, settings);
+    if (!snapshot.cpuTemp || !snapshot.gpuTemp) {
+        ReadHwInfoGadgetRegistry(snapshot, settings);
+    }
 }
 
 void ReadTemperatures(MetricsSnapshot& snapshot,
@@ -900,14 +988,22 @@ void ReadTemperatures(MetricsSnapshot& snapshot,
             ReadHwInfoGadgetRegistry(snapshot, settings);
             break;
 
+        case TemperatureSource::WindowsThermalZones:
+            ReadWindowsThermalZones(snapshot, settings);
+            break;
+
         case TemperatureSource::Disabled:
+            break;
+
+        case TemperatureSource::HwInfoAuto:
+            ReadHwInfoTemperatures(snapshot, settings);
             break;
 
         case TemperatureSource::Auto:
         default:
-            ReadHwInfoSharedMemory(snapshot, settings);
-            if (!snapshot.cpuTemp || !snapshot.gpuTemp) {
-                ReadHwInfoGadgetRegistry(snapshot, settings);
+            ReadHwInfoTemperatures(snapshot, settings);
+            if (!snapshot.cpuTemp) {
+                ReadWindowsThermalZones(snapshot, settings);
             }
             break;
     }
@@ -1077,7 +1173,16 @@ void EnsurePdhQuery() {
         Wh_Log(L"Adding the VRAM usage counter failed: %08X", vramStatus);
     }
 
-    if (!g_gpuCounter && !g_vramCounter) {
+    PDH_STATUS thermalStatus = PdhAddEnglishCounterW(
+        g_pdhQuery, L"\\Thermal Zone Information(*)\\Temperature", 0,
+        &g_thermalZoneCounter);
+    if (thermalStatus != ERROR_SUCCESS) {
+        g_thermalZoneCounter = nullptr;
+        Wh_Log(L"Adding the Windows thermal-zone counter failed: %08X",
+               thermalStatus);
+    }
+
+    if (!g_gpuCounter && !g_vramCounter && !g_thermalZoneCounter) {
         PdhCloseQuery(g_pdhQuery);
         g_pdhQuery = nullptr;
         return;
@@ -1106,6 +1211,66 @@ bool ReadPdhArray(PDH_HCOUNTER counter,
     auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
     return PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE, &bufferSize,
                                         &itemCount, items) == ERROR_SUCCESS;
+}
+
+void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
+                             const ModSettings& settings) {
+    if (snapshot.cpuTemp || !g_thermalZoneCounter) {
+        return;
+    }
+
+    std::vector<uint8_t> buffer;
+    DWORD itemCount = 0;
+    if (!ReadPdhArray(g_thermalZoneCounter, buffer, itemCount)) {
+        return;
+    }
+
+    std::wstring filter = ToLower(settings.windowsThermalZoneFilter);
+    auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
+    double aggregate = 0.0;
+    size_t validCount = 0;
+
+    for (DWORD i = 0; i < itemCount; i++) {
+        const auto& item = items[i];
+        const auto& value = item.FmtValue;
+        if (value.CStatus != PDH_CSTATUS_VALID_DATA &&
+            value.CStatus != PDH_CSTATUS_NEW_DATA) {
+            continue;
+        }
+
+        std::wstring instance = item.szName ? ToLower(item.szName) : L"";
+        if (!filter.empty() && !Contains(instance, filter)) {
+            continue;
+        }
+
+        // This counter is reported in Kelvin. Match Taskbar Clock
+        // Customization by rejecting dead zones below 200 K, and reject values
+        // above the module's supported 200 °C ceiling as corrupt data.
+        double kelvin = value.doubleValue;
+        if (!std::isfinite(kelvin) || kelvin < 200.0 || kelvin > 473.15) {
+            continue;
+        }
+
+        double celsius = kelvin - 273.15;
+        if (settings.windowsThermalZoneAggregation ==
+            ThermalZoneAggregation::Hottest) {
+            aggregate = validCount ? std::max(aggregate, celsius) : celsius;
+        } else {
+            aggregate += celsius;
+        }
+        validCount++;
+    }
+
+    if (!validCount) {
+        return;
+    }
+
+    if (settings.windowsThermalZoneAggregation ==
+        ThermalZoneAggregation::Average) {
+        aggregate /= validCount;
+    }
+    snapshot.cpuTemp = aggregate;
+    snapshot.cpuTempProvider = TemperatureProvider::WindowsThermalZones;
 }
 
 double ReadGpuUsage(const std::optional<DxgiAdapterInfo>& adapter) {
@@ -1200,6 +1365,20 @@ MetricsSnapshot CollectMetrics(const ModSettings& settings) {
     return snapshot;
 }
 
+PCWSTR TemperatureProviderName(TemperatureProvider provider) {
+    switch (provider) {
+        case TemperatureProvider::HwInfoSharedMemory:
+            return L"HWiNFO Shared Memory";
+        case TemperatureProvider::HwInfoGadgetRegistry:
+            return L"HWiNFO Gadget Registry";
+        case TemperatureProvider::WindowsThermalZones:
+            return L"Windows thermal zones";
+        case TemperatureProvider::None:
+        default:
+            return L"unavailable";
+    }
+}
+
 void PublishMetrics(MetricsSnapshot snapshot) {
     std::lock_guard lock(g_metricsMutex);
     g_latestMetrics = std::move(snapshot);
@@ -1222,6 +1401,9 @@ void MetricsWorkerProc() {
     EnsurePdhQuery();
 
     bool firstSample = true;
+    bool providersLogged = false;
+    TemperatureProvider lastCpuProvider = TemperatureProvider::None;
+    TemperatureProvider lastGpuProvider = TemperatureProvider::None;
     while (!g_stopMetricsWorker) {
         ModSettings settings = CurrentSettings();
         DWORD waitMilliseconds =
@@ -1239,7 +1421,18 @@ void MetricsWorkerProc() {
         }
 
         settings = CurrentSettings();
-        PublishMetrics(CollectMetrics(settings));
+        MetricsSnapshot snapshot = CollectMetrics(settings);
+        if (!providersLogged ||
+            snapshot.cpuTempProvider != lastCpuProvider ||
+            snapshot.gpuTempProvider != lastGpuProvider) {
+            Wh_Log(L"Temperature providers: CPU=%s, GPU=%s",
+                   TemperatureProviderName(snapshot.cpuTempProvider),
+                   TemperatureProviderName(snapshot.gpuTempProvider));
+            lastCpuProvider = snapshot.cpuTempProvider;
+            lastGpuProvider = snapshot.gpuTempProvider;
+            providersLogged = true;
+        }
+        PublishMetrics(std::move(snapshot));
     }
 
     CloseMetricSources();
@@ -2450,6 +2643,7 @@ void CloseMetricSources() {
         g_pdhQuery = nullptr;
         g_gpuCounter = nullptr;
         g_vramCounter = nullptr;
+        g_thermalZoneCounter = nullptr;
     }
 }
 
