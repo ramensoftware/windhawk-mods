@@ -12294,6 +12294,38 @@
         "version": "1.4.1"
       }
     },
+    "taskbar-count-badges": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787411960000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787411960000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "digART",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+        "description": "Show customizable per-taskbar-button window counts as badges or vertical dots on Windows 11.",
+        "github": "https://github.com/digart11",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Count Badges",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-desktop-indicator": {
       "details": {
         "defaultSorting": 9477,

@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-22T15:17:19.000Z</updated>
+    <updated>2026-08-22T15:19:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Count Badges 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-count-badges#defb1ad68056046e9b111ad07558d00ee878b9e4</id>
+        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
+        <updated>2026-08-22T15:19:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarcountbadges">Taskbar Count Badges</h1>
+<p>See how many windows are represented by each app button on the Windows 11 taskbar.</p>
+<p>Taskbar Count Badges adds a small customizable indicator when a taskbar app
+button represents multiple windows. The indicator can be shown as either a
+<strong>number badge</strong> or a compact stack of <strong>vertical dots</strong>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="customizationexamples">Customization examples</h3>
+<p><img src="https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/showcase.png" alt="Taskbar Count Badges examples" /></p>
+<h3 id="settings">Settings</h3>
+<p><img src="https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/settings.png" alt="Taskbar Count Badges settings" /></p>
+<h2 id="displaystyles">Display styles</h2>
+<h3 id="numberbadge">Number badge</h3>
+<p>Shows the number of windows represented by that taskbar button.</p>
+<p>The badge can be customized with:</p>
+<ul>
+<li>Circle, rounded-square, or square shape</li>
+<li>Badge size and position</li>
+<li>Horizontal and vertical offsets</li>
+<li>Background, text, and border colors</li>
+<li>Border thickness</li>
+<li>Font family, size, and weight</li>
+<li>Configurable maximum number, with larger values shown using <code>+</code></li>
+</ul>
+<h3 id="verticaldots">Vertical dots</h3>
+<p>Shows a minimal vertical stack of dots beside the app icon.</p>
+<ul>
+<li>Position the dots on the left or right</li>
+<li>Change dot size and color</li>
+<li>Up to five dots are shown; five dots means <strong>five or more windows</strong></li>
+</ul>
+<h2 id="behavior">Behavior</h2>
+<p>By default, no indicator is shown when a taskbar button represents a single
+window. The indicator appears when that button represents two or more windows.</p>
+<p>The minimum window count can be changed in the settings.</p>
+<p>Window counts update automatically as windows are opened and closed, and
+settings are applied live.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 only</li>
+<li>Supports x64 and ARM64 Windows</li>
+<li>Works with multiple monitors and secondary Windows taskbars</li>
+</ul>
+<p>On multi-monitor systems, the count follows each individual taskbar button.
+Depending on the Windows multi-monitor taskbar configuration, the same app can
+therefore show different counts on different monitors. Moving a window between
+monitors can change the count shown on each taskbar.</p>
+<p>The mod is designed primarily for grouped/combined taskbar app buttons. When
+taskbar buttons are configured to stay uncombined, Windows can expose multiple
+buttons for the same app group, so the same app count may appear on more than
+one button.</p>
+<p>Third-party taskbar replacements or tools that replace the native Windows 11
+taskbar may not be compatible.</p>
+<h2 id="notes">Notes</h2>
+<p>The mod uses the taskbar's own per-button grouping information instead of
+independently scanning all desktop windows. Counts therefore follow Windows
+taskbar grouping, including per-taskbar behavior on multi-monitor systems.</p>
+<p>The badge is visual only and doesn't change taskbar grouping, combining, window
+ordering, or application behavior.</p>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Vista/7 Open With Dialog Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-open-with-dialog#5e1bd29d18f28fbb37e339b7b4ae6504a9f74ecf</id>
@@ -495,25 +563,6 @@ not something the mod can work around.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.17.2]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#f863c7afea97a688a83ef22cc951a99b9d5111d0</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-08-17T19:06:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Say that the watched folder can be your own, in the mod description, the readme, and the folder setting itself</li>
-<li>Shorten the settings descriptions</li>
-<li>New readme screenshot showing the notification with renaming turned on</li>
-<li>Fix a colon in a setting description that broke the settings YAML</li>
-<li>Say what happens when SnapSentry's notifications are turned off in Windows</li>
-<li>Make clear the Recycle Bin covers automatic deletions, not just the popup buttons</li>
-<li>Name the Start Menu shortcut and registry entry the popup leaves, instead of describing them vaguely</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
