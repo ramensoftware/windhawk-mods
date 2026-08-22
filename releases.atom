@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-22T15:23:42.000Z</updated>
+    <updated>2026-08-22T15:37:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Search on Active Display 1.1.0]]></title>
+        <id>https://windhawk.net/mods/search-active-display#782f5af4ee10ffeefc60227ec7bc30c32c884236</id>
+        <link href="https://windhawk.net/mods/search-active-display"/>
+        <updated>2026-08-22T15:37:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="searchonactivedisplay">Search on Active Display</h1>
+<p>Opens the Windows Search (Win+S) on the monitor where the mouse cursor is
+located, or on a specific monitor of choice.</p>
+<p>Works for both Win+S shortcut and taskbar search icon click.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks MonitorFromWindow and MonitorFromRect inside SearchHost.exe.
+When SearchHost queries which monitor its CoreWindow is on, the mod returns
+the target monitor (where the cursor is, or a fixed monitor). It also
+physically repositions the CoreWindow to the correct monitor coordinates
+so the DWM compositor renders it there.</p>
+<h2 id="selectingamonitor">Selecting a monitor</h2>
+<p>Set the <strong>Monitor</strong> setting to 0 to follow the mouse cursor, or to a
+specific monitor number (1, 2, 3…). You can also use a monitor interface
+name for stable identification across reboots.</p>
+<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
+<ul>
+<li>Windows 11 22H2 and 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>ereinaimer</name>
+            <uri>https://github.com/ereinaimer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win-X Hot Corners 1.3.0]]></title>
         <id>https://windhawk.net/mods/win-x-hotcorners#ed0374400c1032da8ea5ea451ed094fa5a2cd4fa</id>
@@ -1202,36 +1230,6 @@ de host antes de abrir su propia ventana de Explorer.</li>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 "Please Wait" Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-please-wait-restorer#8f52521d39ea694fc4809a963808a6bfafcc2b5e</id>
-        <link href="https://windhawk.net/mods/win7-please-wait-restorer"/>
-        <updated>2026-08-07T15:30:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781pleasewaitrestorer">Windows 7/8.1 "Please Wait" Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod shows the small classic "Please wait" box from Windows 7/8.1 while the
-system changes the theme, instead of the modern full-screen overlay. The
-built-in text is localized for several common display languages while unsupported
-languages use English.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/PleaseWait.PNG" alt="screenshot" /></p>
-<h2 id="notes">Notes</h2>
-<p>The mod has been tested on Windows 10 1809 and Windows 10 21H2.
-Additionally, the mod only attaches when <code>themeui.dll</code> is actually loaded by one of the
-included processes. If the private themeui symbol is unavailable on a Windows
-build, the mod remains inactive in that process.
-For specific setups (such as unsupported language), it is recommended to apply the required changes using the mod's settings.</p>
-<h2 id="knownlimitations">Known Limitations</h2>
-<p>On legacy Windows 10 builds (particularly version 1809 and prior), altering the display DPI scaling while the mod is running can result in slight rendering anomalies. For instance, the captured backdrop or classic box may appear misaligned until a subsequent theme change occurs. To ensure full restoration of proper rendering, it is advisable to restart explorer.exe or perform a user logoff/logon cycle following any DPI modification.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Nex — Testing on Windows 10 21H2 and providing feedback</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
