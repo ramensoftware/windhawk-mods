@@ -1869,6 +1869,10 @@ RefCountBase_Decref_t RefCountBase_Decref_Original = nullptr;
 void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 
 XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
+#if !defined(_M_X64)
+    (void)taskbarWindow;
+    return nullptr;
+#else
     if (!CTaskBand_GetTaskbarHost_Original ||
         !TaskbarHost_FrameHeight_Original || !RefCountBase_Decref_Original ||
         !CTaskBand_ITaskListWndSite_vftable) {
@@ -1908,7 +1912,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     }
 
     size_t elementOffset = 0x10;
-#if defined(_M_X64)
     const BYTE* code =
         reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
@@ -1918,9 +1921,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     } else {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
     }
-#else
-#error Unsupported architecture
-#endif
 
     auto* elementUnknown = *reinterpret_cast<::IUnknown**>(
         static_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset);
@@ -1935,6 +1935,7 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
     RefCountBase_Decref_Original(taskbarHostSharedPtr[1]);
     return result;
+#endif
 }
 
 void ApplyToCurrentTaskbar(void*) {
