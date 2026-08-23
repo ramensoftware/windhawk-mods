@@ -100,8 +100,6 @@ template<typename F> void EnumBands(HWND rb, UINT mask, F f) {
 int GetSavedRank(const wchar_t* cls) { WCHAR ok[160]; swprintf(ok,160,L"OrderRank_%s",cls); return Wh_GetIntValue(ok, INT_MAX); }
 void SetSavedRank(const wchar_t* cls, int r) { WCHAR ok[160]; swprintf(ok,160,L"OrderRank_%s",cls); Wh_SetIntValue(ok, r); }
 
-// FIX #2: default-initialize so any accidental use-before-LoadBandState() is well-defined
-// instead of indeterminate (width/style must never end up random).
 struct BandState { UINT cx = 0; bool brk = false; };
 bool LoadBandState(const wchar_t* cls, BandState& out) {
     WCHAR ck[160], bk[160]; swprintf(ck,160,L"Cx_%s",cls); swprintf(bk,160,L"Break_%s",cls);
@@ -167,8 +165,6 @@ HWND FindByClass(HWND p, LPCWSTR c) { return FindWindowEx(p, NULL, c, NULL); }
 HWND GetCabinet(HWND h) { while(h){ WCHAR c[64]; if(GetClassName(h,c,64) && !wcscmp(c,L"CabinetWClass")) return h; h=GetParent(h); } return NULL; }
 HWND FindNavRb(HWND c) { for(HWND w=FindByClass(c,L"WorkerW"); w; w=FindWindowEx(c,w,L"WorkerW",NULL)) if(HWND r=FindByClass(w,L"ReBarWindow32")) return r; return NULL; }
 
-// FIX #3: enumerate only this process's CabinetWClass windows instead of HWND_BROADCAST,
-// which would hit every top-level window in every process on the desktop.
 BOOL CALLBACK EnumSyncCabinets_Proc(HWND w, LPARAM) {
     DWORD pid = 0; GetWindowThreadProcessId(w, &pid);
     if(pid == GetCurrentProcessId()) {
@@ -251,8 +247,6 @@ LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         return DefSubclassProc(h, m, w, l);
     }
     if(m == WM_CONTEXTMENU) {
-        // Tbar_Proc is only ever subclassed onto the mod's own bands
-        // (see ToggleBand / g_msgDoMove), so no extra hit-test is needed here.
         if(HWND rb = GetParent(h)) {
             POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
             if(pt.x==-1 && pt.y==-1) { RECT rc; GetWindowRect(h, &rc); pt.x=rc.left; pt.y=rc.bottom; }
@@ -311,12 +305,29 @@ void SyncMenu(HMENU m, HWND rb) {
     CheckMenuItem(m, 41484, MF_BYCOMMAND | (GetLockToolbarsState(rb) ? MF_CHECKED : MF_UNCHECKED));
 }
 
+BOOL CALLBACK EnumForLock_Proc(HWND w, LPARAM) {
+    DWORD pid = 0; GetWindowThreadProcessId(w, &pid);
+    if(pid == GetCurrentProcessId()) {
+        WCHAR c[64];
+        if(GetClassName(w, c, 64) && !wcscmp(c, L"CabinetWClass")) {
+            if(HWND ww = FindByClass(FindByClass(w,L"ShellTabWindowClass"),L"WorkerW"))
+                PostMessage(ww, WM_COMMAND, MAKEWPARAM(41484, 0), 0);
+        }
+    }
+    return TRUE;
+}
+
 BOOL HandleMenuResult(UINT cmd, bool isRet, HWND hw) {
     if(cmd>=CMD_TOGGLE_SEARCHBAND && cmd<=CMD_TOGGLE_UPBUTTON) {
         bool& s = (cmd==CMD_TOGGLE_SEARCHBAND)?g_set.s:(cmd==CMD_TOGGLE_BREADCRUMB)?g_set.b:g_set.u;
         s = !s;
         Wh_SetIntValue((cmd==CMD_TOGGLE_SEARCHBAND)?L"MoveSearchBand":(cmd==CMD_TOGGLE_BREADCRUMB)?L"MoveBreadcrumb":L"MoveUpButton", s?1:0);
-        PostSyncToAllCabinets(); // FIX #3
+        PostSyncToAllCabinets();
+        return isRet ? 0 : TRUE;
+    }
+    // Обработка команды Lock the Toolbars (41484) - рассылаем всем окнам
+    if(cmd == 41484) {
+        EnumWindows(EnumForLock_Proc, 0);
         return isRet ? 0 : TRUE;
     }
     if(!isRet && cmd && hw) PostMessage(hw, WM_COMMAND, MAKEWPARAM(LOWORD(cmd), 0), 0);
@@ -404,7 +415,6 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             ForceCabinetRelayout(cab);
             PostMessage(cab, g_msgFixContent, (WPARAM)ch, 0);
             
-            // ИСПРАВЛЕНИЕ: для Breadcrumb имитируем активацию без смены фокуса
             if(type == BandType::Breadcrumb) {
                 BOOL active = (GetForegroundWindow() == cab);
                 SendMessage(cab, WM_NCACTIVATE, !active, 0);
@@ -502,7 +512,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         if(GetPropW(h, L"FlexTbMoved")) { HWND mr=(HWND)GetPropW(h, L"FlexTbRb"); if(mr) SaveBandPositions(mr); }
     }
     
-    // НОВОЕ: обработка восстановления из свёрнутого состояния
     if(m==WM_SYSCOMMAND && (w == SC_RESTORE || w == SC_MAXIMIZE)) {
         LRESULT result = DefSubclassProc(h,m,w,l);
         if(GetPropW(h, L"FlexTbMoved")) {
@@ -526,8 +535,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     
     if(m==WM_SIZE && (w == SIZE_RESTORED || w == SIZE_MAXIMIZED)) {
         LRESULT result = DefSubclassProc(h,m,w,l);
-        // Проверяем, было ли окно свёрнуто
-        static HWND lastMinimized = NULL;
         if(GetPropW(h, L"FlexTbWasMinimized")) {
             RemovePropW(h, L"FlexTbWasMinimized");
             if(GetPropW(h, L"FlexTbMoved")) {
