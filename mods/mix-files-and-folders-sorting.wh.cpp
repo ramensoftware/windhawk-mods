@@ -78,7 +78,6 @@ depends on which mod's hook runs first.
 #include <comutil.h>
 #include <initguid.h>
 #include <propkey.h>
-#include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <shtypes.h>
@@ -158,23 +157,7 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
                                               itemid2);
     };
 
-    if (!itemid1 || !itemid2 || !g_settings.mixFoldersAndFiles) {
-        return original();
-    }
-
-    // Folders-first is the only rule this mod needs to override, so only
-    // step in when exactly one of the two items is a folder. Folder-vs-folder
-    // and file-vs-file pairs are left to the shell's own comparison: it's
-    // cheaper (no property-system round trips for the common case), and it
-    // guarantees the exact same ordering Explorer would otherwise use
-    // (numerical sorting, locale rules, and comparing the real file name
-    // rather than the display name with the extension hidden).
-    bool isFolder1, isFolder2;
-    if (FAILED(IsFolderItem(pCFSFolder, itemid1, &isFolder1)) ||
-        FAILED(IsFolderItem(pCFSFolder, itemid2, &isFolder2))) {
-        return original();
-    }
-    if (isFolder1 == isFolder2) {
+    if (!itemid1 || !itemid2) {
         return original();
     }
 
@@ -182,6 +165,10 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     // (SHCIDS_COLUMNMASK); the high bits carry flags such as
     // SHCIDS_ALLFIELDS (identity queries) or SHCIDS_CANONICALONLY. Only
     // handle plain column sorts and let the shell handle anything else.
+    // This must run before any property lookups below: CompareIDs is also
+    // called with SHCIDS_ALLFIELDS for item-identity lookups (locating a
+    // row after a rename, a change notification, a refresh), far more
+    // often than for actual sorting, and those calls should cost nothing.
     if (column & ~(LPARAM)SHCIDS_COLUMNMASK) {
         return original();
     }
@@ -190,6 +177,22 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     PROPERTYKEY columnSCID;
     if (FAILED(CFSFolder_MapColumnToSCID_Original(pCFSFolder, columnIndex,
                                                     &columnSCID))) {
+        return original();
+    }
+
+    // Folders-first is the only rule this mod needs to override, so only
+    // step in when exactly one of the two items is a folder. Folder-vs-folder
+    // and file-vs-file pairs are left to the shell's own comparison: it's
+    // cheaper (no extra property-system round trips for the common case),
+    // and it guarantees the exact same ordering Explorer would otherwise use
+    // (numerical sorting, locale rules, and comparing the real file name
+    // rather than the display name with the extension hidden).
+    bool isFolder1, isFolder2;
+    if (FAILED(IsFolderItem(pCFSFolder, itemid1, &isFolder1)) ||
+        FAILED(IsFolderItem(pCFSFolder, itemid2, &isFolder2))) {
+        return original();
+    }
+    if (isFolder1 == isFolder2) {
         return original();
     }
 
