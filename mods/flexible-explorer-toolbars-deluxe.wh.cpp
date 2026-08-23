@@ -406,8 +406,9 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             
             // ИСПРАВЛЕНИЕ: для Breadcrumb имитируем активацию без смены фокуса
             if(type == BandType::Breadcrumb) {
-                SendMessage(cab, WM_NCACTIVATE, FALSE, 0);
-                SendMessage(cab, WM_NCACTIVATE, TRUE, 0);
+                BOOL active = (GetForegroundWindow() == cab);
+                SendMessage(cab, WM_NCACTIVATE, !active, 0);
+                SendMessage(cab, WM_NCACTIVATE, active, 0);
                 RECT rc;
                 if(GetClientRect(ch, &rc)) {
                     int cw = rc.right - rc.left;
