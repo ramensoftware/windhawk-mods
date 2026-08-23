@@ -903,7 +903,8 @@ HMODULE GetTaskbarViewModule() {
 }
 
 bool HookTaskbarView(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::SystemTrayExtent(double))"},
             &TaskbarFrame_SystemTrayExtent_Original,
@@ -911,7 +912,8 @@ bool HookTaskbarView(HMODULE module) {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
+                                      ARRAYSIZE(taskbarViewDllHooks));
 }
 
 bool TryHookTaskbarView(HMODULE module, bool applyImmediately) {
@@ -933,7 +935,8 @@ bool TryHookTaskbarView(HMODULE module, bool applyImmediately) {
 }
 
 bool HookSystemTray(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
@@ -947,7 +950,8 @@ bool HookSystemTray(HMODULE module) {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
+                                      ARRAYSIZE(systemTrayDllHooks));
 }
 
 bool TryHookSystemTray(HMODULE module, bool applyImmediately) {
