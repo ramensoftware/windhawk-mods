@@ -702,12 +702,4 @@ void Wh_ModUninit() {
 
     Cfg::unload();
     Win::clear();
-<<<<<<< New base: Fix doxygen
-    Process::clear();
 }
-||||||| Common ancestor
-    Process::clear();
-}
-=======
-}
->>>>>>> Current commit: Fixed leaks and reduced mod size
