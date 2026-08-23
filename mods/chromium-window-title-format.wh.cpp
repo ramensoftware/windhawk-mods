@@ -1601,28 +1601,24 @@ std::wstring UserDataDir() {
 // The display names of the profiles this install has, from the browser's own
 // Local State.
 //
-// A narrow scan rather than a JSON parser, but a syntax-aware one: keys are
-// distinguished from values by requiring the ':' that follows a key, because
-// inferring it positionally let a field whose VALUE was the word "name" be taken
-// as a key - which both invented a profile called "name" and swallowed the real
-// one after it. A wrong name here is not cosmetic: it is what decides whether a
-// piece of the user's title gets discarded.
+// A narrow scan rather than a JSON parser, but a syntax-aware one. A key is
+// recognised only by the ':' that follows it AND a value that opens with a
+// quote; inferring position alone lets a field whose VALUE is the word "name" be
+// taken as a key, and a non-string value leaves the key armed so the NEXT key is
+// recorded as a name. A wrong name here is not cosmetic - it decides whether a
+// piece of the user's title is discarded.
 //
-// Two keys are collected rather than one, and which two is argued at the lambda
-// below - the short version is that it is what has been observed in a title,
-// not what a Chromium source reading suggests. Note that profile-in-title is an
-// Edge behaviour with no upstream equivalent: upstream Chrome puts the profile
-// on the avatar button and never in the window title, so there is no source to
-// read for it and observation is the only evidence available.
+// Profile-in-title is an Edge behaviour with no upstream equivalent: Chrome puts
+// the profile on the avatar button and never in the window title, so there is no
+// source to read and observation is the only evidence available.
 //
-// The profile COUNT is collected in the same pass, and it is a genuinely
-// different quantity: the profile objects are the depth 1 -> 2 transitions
-// inside info_cache, whereas the name list is several keys per profile flattened
-// together. Conflating the two is what made the profile slot fire on
-// single-profile installs - see the slot itself in Decompose.
+// The profile COUNT is collected in the same pass and is a genuinely different
+// quantity: profile objects are the depth 1 -> 2 transitions inside info_cache,
+// while the name list is several keys per profile flattened together. Conflating
+// them removes the gate entirely - see the slot itself in Decompose.
 //
-// Anything unexpected returns what was found so far, and an empty result means
-// "unknown", which the caller treats as "do not strip a profile".
+// Malformed input returns nothing at all rather than a partial answer; an empty
+// result means "unknown", which the caller treats as "do not strip a profile".
 struct ProfileInfo {
     std::vector<std::wstring> names;
     int                       count = 0;
@@ -1646,23 +1642,14 @@ ProfileInfo DiscoverProfiles() {
 
     // The two LOCAL name keys, and deliberately not the GAIA ones.
     //
-    // This list decides what may be deleted from a user's title, so it is kept
-    // to what has actually been observed in a title. On the install this was
-    // developed against, Edge renders `shortcut_name` - the profiles read
-    // name='Person 1' / shortcut_name='Personal' and name='Profile 1' /
-    // shortcut_name='Work', and the titles showed "Personal" and "Work".
-    //
-    // gaia_name and gaia_given_name were collected on the theory that a
-    // signed-in profile displays its account name. That same observation
-    // refutes it: the profile in question WAS signed in, with
-    // gaia_name='Tomas Cerny', and Edge still rendered the shortcut name. They
-    // are dropped because they cost real safety for a benefit never observed -
-    // gaia_given_name especially, which is a bare first name and so the entry
-    // in this list most likely to appear innocently at the end of a page title.
-    //
-    // `name` is kept: it is the other locally stored per-profile identifier, it
-    // is what a renamed profile writes, and its default values ("Person 1",
-    // "Profile 1") are not strings that collide with page titles.
+    // This list decides what may be deleted from a user's title, so it holds
+    // only what has been observed in one. Edge renders `shortcut_name`: measured
+    // against profiles reading name='Person 1' / shortcut_name='Personal', the
+    // titles showed "Personal". That measurement was taken on a SIGNED-IN
+    // profile, which is also why gaia_name and gaia_given_name are absent - the
+    // theory that a signed-in profile shows its account name is refuted by the
+    // same observation, and gaia_given_name is a bare first name, the entry most
+    // likely to appear innocently at the end of a page title.
     auto wanted = [](std::string_view k) {
         return k == "name" || k == "shortcut_name";
     };
@@ -2309,15 +2296,11 @@ void Wh_ModAfterInit() {
 // honoured in place.
 //
 // The browser-suffix override is consumed ONCE, by the worker, during grammar
-// discovery - and by the time a user reaches for it the worker has already
-// returned. Its own description tells them to set it after reading a discovery
-// failure in the log, so it was inert in precisely the situation it exists for,
-// and looked like a setting that does nothing at all.
-//
-// A reload is clean here: Wh_ModUninit restores every original title, and the
-// fresh instance re-runs discovery with the override in hand. Everything else is
-// still applied in place, because a reload drops the per-window state and with
-// it the remembered originals.
+// discovery - and by the time a user reaches for it the worker has returned, so
+// applying it in place would do nothing in exactly the situation its own
+// description tells them to use it for. A reload is clean: Wh_ModUninit restores
+// every original title and the fresh instance re-runs discovery with the
+// override in hand.
 //
 // Not gated on the browser: the suffix is what the parser anchors on, so this
 // applies to Chrome exactly as it does to Edge.
