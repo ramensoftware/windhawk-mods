@@ -386,6 +386,7 @@ struct ModSettings {
 ModSettings g_settings;
 std::mutex g_settingsMutex;
 std::atomic<bool> g_unloading;
+std::atomic<bool> g_uiTornDown;
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<HWND> g_taskbarWindow{nullptr};
 std::atomic<DWORD> g_taskbarThreadId{0};
@@ -433,6 +434,7 @@ PDH_HQUERY g_pdhQuery = nullptr;
 PDH_HCOUNTER g_gpuCounter = nullptr;
 PDH_HCOUNTER g_vramCounter = nullptr;
 PDH_HCOUNTER g_thermalZoneCounter = nullptr;
+std::chrono::steady_clock::time_point g_nextPdhCounterRetry{};
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -1143,9 +1145,10 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
     const std::wstring& adapterFilter) {
     static std::optional<std::wstring> cachedFilter;
     static std::optional<DxgiAdapterInfo> cachedInfo;
+    static bool cachedResolved = false;
 
     std::wstring filterLower = ToLower(adapterFilter);
-    if (cachedInfo && cachedFilter == filterLower) {
+    if (cachedResolved && cachedFilter == filterLower) {
         return cachedInfo;
     }
 
@@ -1184,15 +1187,22 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
         }
     }
 
+    cachedFilter = filterLower;
+    cachedInfo.reset();
+    cachedResolved = true;
     if (!found) {
-        return std::nullopt;
+        if (filterLower.empty()) {
+            Wh_Log(L"No DXGI GPU adapter found");
+        } else {
+            Wh_Log(L"No DXGI GPU adapter matched: %s", filterLower.c_str());
+        }
+        return cachedInfo;
     }
 
     wchar_t luid[32];
     swprintf(luid, std::size(luid), L"0x%08X_0x%08X",
              static_cast<DWORD>(selected.AdapterLuid.HighPart),
              selected.AdapterLuid.LowPart);
-    cachedFilter = filterLower;
     cachedInfo = DxgiAdapterInfo{selected.Description, ToLower(luid),
                                   selected.AdapterLuid,
                                   selected.DedicatedVideoMemory};
@@ -1251,50 +1261,76 @@ bool MatchesGpuAdapter(const std::wstring& instance,
 
 void CloseMetricSources();
 
+constexpr auto kPdhCounterRetryInterval = std::chrono::seconds(30);
+
+bool AddPdhCounter(PDH_HCOUNTER& counter,
+                   PCWSTR path,
+                   PCWSTR description) {
+    if (counter) {
+        return false;
+    }
+
+    PDH_HCOUNTER newCounter = nullptr;
+    PDH_STATUS status =
+        PdhAddEnglishCounterW(g_pdhQuery, path, 0, &newCounter);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Adding the %s counter failed: %08X", description, status);
+        return false;
+    }
+
+    counter = newCounter;
+    return true;
+}
+
 void EnsurePdhQuery() {
-    if (g_pdhQuery) {
+    auto now = std::chrono::steady_clock::now();
+    bool queryCreated = false;
+    if (!g_pdhQuery) {
+        if (now < g_nextPdhCounterRetry) {
+            return;
+        }
+        if (PdhOpenQueryW(nullptr, 0, &g_pdhQuery) != ERROR_SUCCESS) {
+            g_pdhQuery = nullptr;
+            g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
+            return;
+        }
+        queryCreated = true;
+    } else if (g_gpuCounter && g_vramCounter && g_thermalZoneCounter) {
         return;
     }
 
-    if (PdhOpenQueryW(nullptr, 0, &g_pdhQuery) != ERROR_SUCCESS) {
-        g_pdhQuery = nullptr;
+    if (!queryCreated && now < g_nextPdhCounterRetry) {
         return;
     }
 
-    PDH_STATUS gpuStatus = PdhAddEnglishCounterW(
-        g_pdhQuery, L"\\GPU Engine(*)\\Utilization Percentage", 0,
-        &g_gpuCounter);
-    if (gpuStatus != ERROR_SUCCESS) {
-        g_gpuCounter = nullptr;
-        Wh_Log(L"Adding the GPU usage counter failed: %08X", gpuStatus);
-    }
-
-    PDH_STATUS vramStatus = PdhAddEnglishCounterW(
-        g_pdhQuery, L"\\GPU Adapter Memory(*)\\Dedicated Usage", 0,
-        &g_vramCounter);
-    if (vramStatus != ERROR_SUCCESS) {
-        g_vramCounter = nullptr;
-        Wh_Log(L"Adding the VRAM usage counter failed: %08X", vramStatus);
-    }
-
-    PDH_STATUS thermalStatus = PdhAddEnglishCounterW(
-        g_pdhQuery, L"\\Thermal Zone Information(*)\\Temperature", 0,
-        &g_thermalZoneCounter);
-    if (thermalStatus != ERROR_SUCCESS) {
-        g_thermalZoneCounter = nullptr;
-        Wh_Log(L"Adding the Windows thermal-zone counter failed: %08X",
-               thermalStatus);
-    }
+    bool counterAdded = false;
+    counterAdded |= AddPdhCounter(
+        g_gpuCounter, L"\\GPU Engine(*)\\Utilization Percentage", L"GPU usage");
+    counterAdded |= AddPdhCounter(
+        g_vramCounter, L"\\GPU Adapter Memory(*)\\Dedicated Usage",
+        L"VRAM usage");
+    counterAdded |= AddPdhCounter(
+        g_thermalZoneCounter,
+        L"\\Thermal Zone Information(*)\\Temperature",
+        L"Windows thermal-zone");
 
     if (!g_gpuCounter && !g_vramCounter && !g_thermalZoneCounter) {
         PdhCloseQuery(g_pdhQuery);
         g_pdhQuery = nullptr;
+        g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
         return;
     }
 
-    PDH_STATUS collectStatus = PdhCollectQueryData(g_pdhQuery);
-    if (collectStatus != ERROR_SUCCESS) {
-        Wh_Log(L"Initial GPU counter collection failed: %08X", collectStatus);
+    if (!g_gpuCounter || !g_vramCounter || !g_thermalZoneCounter) {
+        g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
+    }
+
+    if (queryCreated || counterAdded) {
+        PDH_STATUS collectStatus = PdhCollectQueryData(g_pdhQuery);
+        if (collectStatus != ERROR_SUCCESS) {
+            Wh_Log(L"Initial metric counter collection failed: %08X",
+                   collectStatus);
+        }
     }
 }
 
@@ -2751,13 +2787,21 @@ void CloseMetricSources() {
         g_vramCounter = nullptr;
         g_thermalZoneCounter = nullptr;
     }
+    g_nextPdhCounterRetry = {};
+}
+
+bool TearDownTaskbarUi() {
+    HWND taskbarWindow = FindRememberedTaskbarWindow();
+    return taskbarWindow &&
+           RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar,
+                               nullptr);
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
-    if (HMODULE gdi32 = LoadLibraryExW(L"gdi32.dll", nullptr,
-                                       LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+    g_uiTornDown = false;
+    if (HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll")) {
         g_d3dkmtOpenAdapterFromLuid =
             reinterpret_cast<D3DKMTOpenAdapterFromLuid_t>(
                 GetProcAddress(gdi32, "D3DKMTOpenAdapterFromLuid"));
@@ -2823,16 +2867,19 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
     StopMetricsWorker();
 
-    HWND taskbarWindow = FindRememberedTaskbarWindow();
-    if (!taskbarWindow) {
-        Wh_Log(L"Taskbar window unavailable during teardown");
-    } else if (!RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar,
-                                    nullptr)) {
-        Wh_Log(L"Taskbar UI teardown failed");
+    g_uiTornDown = TearDownTaskbarUi();
+    if (!g_uiTornDown) {
+        Wh_Log(L"Initial taskbar UI teardown failed; will retry");
     }
 }
 
 void Wh_ModUninit() {
+    if (!g_uiTornDown) {
+        g_uiTornDown = TearDownTaskbarUi();
+        if (!g_uiTornDown) {
+            Wh_Log(L"Taskbar UI teardown retry failed");
+        }
+    }
     StopMetricsWorker();
     CloseMetricSources();
 }
