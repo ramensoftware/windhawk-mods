@@ -1391,9 +1391,11 @@ T ReadHotkeySetting(PCWSTR name, Parser parser, T defaultVal) {
   return result ? result : defaultVal;
 }
 
-LONG ReadClampedIntSetting(PCWSTR name, LONG minVal, LONG maxVal, LONG defaultVal) {
-  LONG value = Wh_GetIntSetting(name);
-  return value >= minVal && value <= maxVal ? value : defaultVal;
+UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
+  PCWSTR str = Wh_GetStringSetting(name);
+  UINT result = ParseModifiers(str);
+  Wh_FreeStringSetting(str);
+  return result ? result : defaultVal;
 }
 
 inline double ClampDouble(double value, double minVal, double maxVal) {
@@ -2071,10 +2073,6 @@ void LayoutGridWeighted(
     outRects[i] = horizontal ? RECT{area.left, position, area.right, end} : RECT{position, area.top, end, area.bottom};
     position = end + effectiveGap;
   }
-
-  std::vector<double> normalizedWeights = weights;
-  if (normalizedWeights.size() != count) normalizedWeights = DefaultWeights(count);
-  LayoutStripFromSizes(area, axis, ComputeWeightedSizes(totalSize, g_settings.tileGap, normalizedWeights), outRects);
 }
 
 void LayoutMasterStackWeighted(
@@ -8799,8 +8797,6 @@ static void DumpCpuUsage(
   } else {
     report.Line(L"Tool process CPU: <unavailable>");
   }
-  ReleaseSRWLockExclusive(&g_store.tilingStateLock);
-}
 
   if (snapshot.wmAvailable) {
     const uint64_t raw100ns = snapshot.WmTotal100ns();
@@ -9208,7 +9204,6 @@ static void WriteDiagnosticReport() {
     } else {
       report.Line(L"monitorInfo: <detached / currently unresolved>");
     }
-  }
 
     report.Line(
         L"layout=%ls (%d) masterRatio=%.9g",
