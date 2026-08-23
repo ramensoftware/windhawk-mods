@@ -2,7 +2,7 @@
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
-// @version         1.3.6
+// @version         1.4
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -382,7 +382,6 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
         RemovePropW(ch, L"FlexTbIsHidden");
         SetParent(ch, mr);
         WCHAR c[256]; GetEffClass(ch, c, 256);
-        // Always check LoadBandState's return value; never use bs uninitialized.
         BandState bs; bool hasSv = LoadBandState(c, bs);
         if(!hasSv) {
             RECT wr; GetWindowRect(ch, &wr);
@@ -404,6 +403,19 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             SyncGrippers(mr);
             ForceCabinetRelayout(cab);
             PostMessage(cab, g_msgFixContent, (WPARAM)ch, 0);
+            
+            // ИСПРАВЛЕНИЕ: для Breadcrumb имитируем активацию без смены фокуса
+            if(type == BandType::Breadcrumb) {
+                SendMessage(cab, WM_NCACTIVATE, FALSE, 0);
+                SendMessage(cab, WM_NCACTIVATE, TRUE, 0);
+                RECT rc;
+                if(GetClientRect(ch, &rc)) {
+                    int cw = rc.right - rc.left;
+                    int ch_h = rc.bottom - rc.top;
+                    SetWindowPos(ch, NULL, 0, 0, cw, ch_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                }
+            }
+            
             SaveBandPositions(mr, false);
         }
     }
