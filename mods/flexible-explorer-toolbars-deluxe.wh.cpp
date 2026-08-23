@@ -86,6 +86,21 @@ std::unordered_map<HWND, WindhawkUtils::WH_SUBCLASSPROC> g_hooks;
 thread_local bool g_inApply=false, g_inSync=false;
 thread_local int g_rbLayoutDepth=0;
 
+using SWP_t = BOOL(WINAPI*)(HWND,HWND,int,int,int,int,UINT);
+SWP_t origSWP = nullptr;
+
+using SW_t = BOOL(WINAPI*)(HWND,int);
+SW_t origSW = nullptr;
+
+BOOL WINAPI Hook_SW(HWND hWnd, int nCmdShow) {
+    if(hWnd && GetPropW(hWnd, L"FlexTbForceHidden")) {
+        if(nCmdShow != SW_HIDE && nCmdShow != SW_MINIMIZE) {
+            return origSW(hWnd, SW_HIDE);
+        }
+    }
+    return origSW(hWnd, nCmdShow);
+}
+
 void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC proc) {
     if(hwnd && IsWindow(hwnd)) { WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, proc, 0); Lock L; g_hooks[hwnd] = proc; }
 }
@@ -171,7 +186,6 @@ void RefreshBreadcrumb(HWND cab, HWND breadcrumb) {
     SendMessage(cab, WM_NCACTIVATE, !active, 0);
     SendMessage(cab, WM_NCACTIVATE, active, 0);
     
-    // Re-trigger the guard with a simple and honest call
     SetWindowPos(breadcrumb, NULL, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
@@ -201,10 +215,7 @@ bool ContainsClass(HWND root, LPCWSTR t) {
 
 void ForceHideWorker(HWND w) {
     if(!w || !IsWindow(w)) return;
-    bool alreadyHidden = GetPropW(w, L"FlexTbForceHidden") &&
-                         !(GetWindowLongPtr(w, GWL_STYLE) & WS_VISIBLE);
     SetPropW(w, L"FlexTbForceHidden", (HANDLE)1);
-    if(alreadyHidden) return;
     LONG_PTR style = GetWindowLongPtr(w, GWL_STYLE);
     if(style & WS_VISIBLE) SetWindowLongPtr(w, GWL_STYLE, style & ~WS_VISIBLE);
     ShowWindow(w, SW_HIDE);
@@ -655,13 +666,32 @@ LRESULT CALLBACK ShellTab_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
 }
 
 LRESULT CALLBACK WorkerW_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
-    if(mm==WM_NCDESTROY) { RemovePropW(hh,L"FlexTbForceHidden"); { Lock L; g_hooks.erase(hh); } return DefSubclassProc(hh,mm,ww,ll); }
+    if(mm==WM_NCDESTROY) { 
+        RemovePropW(hh,L"FlexTbForceHidden"); 
+        { Lock L; g_hooks.erase(hh); } 
+        return DefSubclassProc(hh,mm,ww,ll); 
+    }
     if(GetPropW(hh,L"FlexTbForceHidden")) {
-        if(mm==WM_STYLECHANGING && ww==GWL_STYLE) ((STYLESTRUCT*)ll)->styleNew&=~WS_VISIBLE;
-        else if(mm==WM_WINDOWPOSCHANGING) { auto*p=(WINDOWPOS*)ll; p->flags=(p->flags&~SWP_SHOWWINDOW)|SWP_HIDEWINDOW; p->cx=p->cy=0; }
-        else if(mm==WM_SHOWWINDOW && ww) ShowWindow(hh,SW_HIDE);
-        else if(mm==WM_SIZE||mm==WM_MOVE) return 0;
-    } return DefSubclassProc(hh,mm,ww,ll);
+        if(mm==WM_WINDOWPOSCHANGING) {
+            auto* p = (WINDOWPOS*)ll;
+            p->flags &= ~SWP_SHOWWINDOW;
+            p->cx = 0;
+            p->cy = 0;
+            p->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+        }
+        else if (mm == WM_STYLECHANGING && ww == GWL_STYLE) {
+            ((STYLESTRUCT*)ll)->styleNew &= ~WS_VISIBLE;
+        }
+        else if (mm == WM_PAINT || mm == WM_NCPAINT) {
+            PAINTSTRUCT ps;
+            BeginPaint(hh, &ps);
+            EndPaint(hh, &ps);
+            return 0;
+        }
+        else if (mm == WM_ERASEBKGND) return 1;
+        else if (mm == WM_NCHITTEST) return HTTRANSPARENT;
+    }
+    return DefSubclassProc(hh,mm,ww,ll);
 }
 
 LRESULT CALLBACK AddrBand_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
@@ -712,6 +742,7 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)TrackPopupMenu,(void*)Hook_TPM,(void**)&origTPM);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx,(void*)Hook_TPMEx,(void**)&origTPMEx);
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"NtSetValueKey"),(void*)Hook_NtSet,(void**)&origNtSet);
+    Wh_SetFunctionHook((void*)ShowWindow, (void*)Hook_SW, (void**)&origSW);
     for(HWND w=GetTopWindow(NULL); w; w=GetNextWindow(w,GW_HWNDNEXT)) {
         DWORD pid=0; GetWindowThreadProcessId(w,&pid);
         if(pid==GetCurrentProcessId()&&GetCabinet(w)) {
