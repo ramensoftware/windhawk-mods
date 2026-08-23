@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id            wobbly-windows
 // @name          Wobbly Windows 
-// @description   Adds interactive wobbly physics when moving or resizing windows.
+// @description   Adds KDE plasma inspired wobbly physics when moving or resizing windows 
 // @version       1.0
 // @author        potassiumuncher
 // @github        https://github.com/Potassiumuncher
@@ -14,10 +14,13 @@
 // ==WindhawkModReadme==
 /*
 # Wobbly Windows 
+(Please Configure Settings to your liking)
+
 ![Animation Preview](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/main/Desktop2026.08.16-18.17.43.03-ezgif.com-video-to-gif-converter.gif)
 
+Credit - KWin's Wobbly Windows for making this possible 
 ## Compatibility notes
-Dose not work as intended in File Explorer, excluded for now until its resolved.
+Dose not work as intended in File Explorer, excluded for the time being until its resolved.
 
 Added a setting to change corner radius so it is compatable with "Custom Window Corner Radius" mod (the default is 8 *windows default)
 
@@ -31,24 +34,36 @@ Added a setting to capture by Screen instead of printWindow so it is compatable 
   $name: Wobble While Dragging
   $description: Wobble the window while moving/dragging it.
 
-- wobble_while_resizing: true
-  $name: Wobble While Resizing
+- wobble_while_resizing: false
+  $name: Wobble While Resizing (Work In Progress)
   $description: Wobble the window while resizing it.
 
 - skip_backdrop_windows: false
-  $name: Compatibility with "Translucent windows" mod
+  $name: Compatibility with "Translucent windows" mod (Experimental)
   $description: >-
-    Capture Via Screen Instead Of PrintWindow
+    Capture Via Screen Instead Of PrintWindow (Turn this on if you really have to)
 
-- wobbly_preset: softWobble
-  $name: Wobbly Physics Preset
-  $description: Adjust the stiffness and elasticity of the window dragging physics.
-  $options:
-  - veryJelly: Very jelly / elastic
-  - softWobble: Soft wobble
-  - balancedSmooth: Balanced smooth
-  - kdeDefault: KDE Plasma-like default
-  - verySoft: Very soft / floaty
+- wobbliness_level: 0
+  $name: Wobbliness
+  $description: >-
+    0 is least wobbly, 4 is most wobbly
+- advanced:
+  - stiffness_pct: 15
+    $name: Stiffness
+    $description: >-
+      Range 1-50, KDE default 15.
+  - drag_pct: 80
+    $name: Drag
+    $description: >-
+      Range 50-100, KDE default 80.
+  - move_factor_pct: 10
+    $name: Move Factor
+    $description: >-
+      Range 1-25, KDE default 10.
+  $name: Advanced
+  $description: >-
+    Overrides stiffness, drag, and move factor on top of the Wobbliness
+    level above.
 
 - corner_radius: 8
   $name: Window Corner Radius (px)
@@ -139,7 +154,7 @@ static const ParameterSet set_2 = { 0.06f, 0.90f, 0.10f, 0.0f, 1000.0f, 0.5f, 0.
 static const ParameterSet set_3 = { 0.03f, 0.92f, 0.20f, 0.0f, 1000.0f, 0.5f, 0.0f, 1000.0f, 0.5f };
 static const ParameterSet set_4 = { 0.01f, 0.97f, 0.25f, 0.0f, 1000.0f, 0.5f, 0.0f, 1000.0f, 0.5f };
 
-static ParameterSet g_params = set_4;
+static ParameterSet g_params = set_0;
 std::atomic<bool> g_wobbleWhileDragging{true};
 std::atomic<bool> g_wobbleWhileResizing{true};
 std::atomic<int> g_cornerRadiusSetting{8};
@@ -157,6 +172,7 @@ static bool g_timerPeriodRaised = false;
 static LONG_PTR g_oldExStyle = 0;
 static int g_screenX, g_screenY, g_screenW, g_screenH;
 static Geometry g_currentRect = {};
+static Geometry g_resizeOriginRect = {};
 
 static int g_wobblyBmpW = 0, g_wobblyBmpH = 0;
 
@@ -175,20 +191,24 @@ void LoadSettings() {
     g_wobbleWhileDragging.store(Wh_GetIntSetting(L"wobble_while_dragging") != 0, std::memory_order_relaxed);
     g_wobbleWhileResizing.store(Wh_GetIntSetting(L"wobble_while_resizing") != 0, std::memory_order_relaxed);
 
-    PCWSTR preset = Wh_GetStringSetting(L"wobbly_preset");
-    if (wcscmp(preset, L"veryJelly") == 0) {
-        g_params = set_0;
-    } else if (wcscmp(preset, L"softWobble") == 0) {
-        g_params = set_1;
-    } else if (wcscmp(preset, L"balancedSmooth") == 0) {
-        g_params = set_2;
-    } else if (wcscmp(preset, L"verySoft") == 0) {
-        g_params = set_4;
-    } else {
+    int wobblynessLevel = Wh_GetIntSetting(L"wobbliness_level");
+    if (wobblynessLevel < 0) wobblynessLevel = 0;
+    if (wobblynessLevel > 4) wobblynessLevel = 4;
+    static const ParameterSet* levelSets[5] = { &set_0, &set_1, &set_2, &set_3, &set_4 };
+    g_params = *levelSets[wobblynessLevel];
 
-        g_params = set_3;
-    }
-    Wh_FreeStringSetting(preset);
+    int stiffness = Wh_GetIntSetting(L"advanced.stiffness_pct");
+    if (stiffness < 1) stiffness = 1;
+    if (stiffness > 50) stiffness = 50;
+    int drag = Wh_GetIntSetting(L"advanced.drag_pct");
+    if (drag < 50) drag = 50;
+    if (drag > 100) drag = 100;
+    int moveFactor = Wh_GetIntSetting(L"advanced.move_factor_pct");
+    if (moveFactor < 1) moveFactor = 1;
+    if (moveFactor > 25) moveFactor = 25;
+    g_params.stiffness = stiffness / 100.0f;
+    g_params.drag = drag / 100.0f;
+    g_params.moveFactor = moveFactor / 100.0f;
 
     int radius = Wh_GetIntSetting(L"corner_radius");
     if (radius < 0) radius = 0;
@@ -463,51 +483,81 @@ static void UpdateWobblyOrigin(float x, float y, float w, float h) {
     }
 }
 
-static void InitWobblyInfo(float x, float y, float w, float h) {
+static void InitWobblyInfo(float x, float y, float w, float h, bool isResize) {
     memset(&g_wwi, 0, sizeof(WobblyInfos));
     UpdateWobblyOrigin(x, y, w, h);
     for (int i = 0; i < 16; ++i) g_wwi.position[i] = g_wwi.origin[i];
-    g_wwi.can_wobble_top = true; g_wwi.can_wobble_bottom = true;
-    g_wwi.can_wobble_left = true; g_wwi.can_wobble_right = true;
+    if (isResize) {
+        g_wwi.can_wobble_top = false; g_wwi.can_wobble_bottom = false;
+        g_wwi.can_wobble_left = false; g_wwi.can_wobble_right = false;
+        g_resizeOriginRect.x = x; g_resizeOriginRect.y = y;
+        g_resizeOriginRect.width = w; g_resizeOriginRect.height = h;
+    } else {
+        g_wwi.can_wobble_top = true; g_wwi.can_wobble_bottom = true;
+        g_wwi.can_wobble_left = true; g_wwi.can_wobble_right = true;
+    }
     g_wwi.wobblying = true;
 }
 
 static void HeightRingLinearMean(Pair* data, Pair* buffer) {
-    for (int i = 0; i < 16; ++i) {
-        int x = i % 4, y = i / 4, weight = 0;
-        float sum_x = 0, sum_y = 0;
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                int nx = x + dx, ny = y + dy;
-                if (nx >= 0 && nx <= 3 && ny >= 0 && ny <= 3) {
-                    if (dx == 0 && dy == 0) continue;
-                    sum_x += data[ny * 4 + nx].x; sum_y += data[ny * 4 + nx].y; weight++;
-                }
-            }
-        }
-        sum_x += data[i].x * weight; sum_y += data[i].y * weight;
-        buffer[i].x = sum_x / (weight * 2.0f); buffer[i].y = sum_y / (weight * 2.0f);
-    }
+    auto corner = [&](int idx, int n0, int n1, int n2) {
+        buffer[idx].x = (data[n0].x + data[n1].x + data[n2].x + 3.0f * data[idx].x) / 6.0f;
+        buffer[idx].y = (data[n0].y + data[n1].y + data[n2].y + 3.0f * data[idx].y) / 6.0f;
+    };
+    corner(0, 1, 4, 5);
+    corner(3, 2, 7, 6);
+    corner(12, 13, 8, 9);
+    corner(15, 14, 11, 10);
+
+    auto edge5 = [&](int idx, int n0, int n1, int n2, int n3, int n4) {
+        buffer[idx].x = (data[n0].x + data[n1].x + data[n2].x + data[n3].x + data[n4].x + 5.0f * data[idx].x) / 10.0f;
+        buffer[idx].y = (data[n0].y + data[n1].y + data[n2].y + data[n3].y + data[n4].y + 5.0f * data[idx].y) / 10.0f;
+    };
+    edge5(1, 0, 2, 5, 4, 6);
+    edge5(2, 1, 3, 6, 5, 7);
+    edge5(13, 12, 14, 9, 8, 10);
+    edge5(14, 13, 15, 10, 9, 11);
+    edge5(4, 0, 8, 5, 1, 9);
+    edge5(8, 4, 12, 9, 5, 13);
+    edge5(7, 3, 11, 6, 2, 10);
+    edge5(11, 7, 15, 10, 6, 14);
+
+    auto interior8 = [&](int idx, int n0, int n1, int n2, int n3, int n4, int n5, int n6, int n7) {
+        buffer[idx].x = (data[n0].x + data[n1].x + data[n2].x + data[n3].x + data[n4].x + data[n5].x + data[n6].x + data[n7].x + 8.0f * data[idx].x) / 16.0f;
+        buffer[idx].y = (data[n0].y + data[n1].y + data[n2].y + data[n3].y + data[n4].y + data[n5].y + data[n6].y + data[n7].y + 8.0f * data[idx].y) / 16.0f;
+    };
+    interior8(5, 4, 6, 1, 9, 0, 2, 8, 10);
+    interior8(6, 5, 7, 2, 10, 1, 3, 9, 11);
+    interior8(9, 8, 10, 5, 13, 4, 6, 12, 14);
+    interior8(10, 9, 11, 6, 14, 5, 7, 13, 15);
+
     for (int i = 0; i < 16; ++i) data[i] = buffer[i];
 }
 
 static void StepPhysics(float time) {
     float x_length = g_currentRect.width / 3.0f, y_length = g_currentRect.height / 3.0f;
     float acc_sum = 0.0f, vel_sum = 0.0f;
+    float k = g_params.stiffness;
 
     for (int i = 0; i < 16; ++i) {
         if (g_wwi.constraint[i]) {
-            g_wwi.acceleration[i].x = (g_wwi.origin[i].x - g_wwi.position[i].x) * g_params.stiffness;
-            g_wwi.acceleration[i].y = (g_wwi.origin[i].y - g_wwi.position[i].y) * g_params.stiffness;
-        } else {
-            float ax = 0, ay = 0; int count = 0; int x = i % 4, y = i / 4;
-            if (x < 3) { ax += (g_wwi.position[i + 1].x - g_wwi.position[i].x - x_length) * g_params.stiffness; ay += (g_wwi.position[i + 1].y - g_wwi.position[i].y) * g_params.stiffness; count++; }
-            if (x > 0) { ax += (g_wwi.position[i - 1].x - g_wwi.position[i].x + x_length) * g_params.stiffness; ay += (g_wwi.position[i - 1].y - g_wwi.position[i].y) * g_params.stiffness; count++; }
-            if (y < 3) { ax += (g_wwi.position[i + 4].x - g_wwi.position[i].x) * g_params.stiffness; ay += (g_wwi.position[i + 4].y - g_wwi.position[i].y - y_length) * g_params.stiffness; count++; }
-            if (y > 0) { ax += (g_wwi.position[i - 4].x - g_wwi.position[i].x) * g_params.stiffness; ay += (g_wwi.position[i - 4].y - g_wwi.position[i].y + y_length) * g_params.stiffness; count++; }
-            g_wwi.acceleration[i].x = count > 0 ? ax / count : 0.0f; 
-            g_wwi.acceleration[i].y = count > 0 ? ay / count : 0.0f;
+            g_wwi.acceleration[i].x = (g_wwi.origin[i].x - g_wwi.position[i].x) * k;
+            g_wwi.acceleration[i].y = (g_wwi.origin[i].y - g_wwi.position[i].y) * k;
+            continue;
         }
+
+        int x = i % 4, y = i / 4;
+        Pair pos = g_wwi.position[i];
+        float ax = 0.0f, ay = 0.0f;
+        int n = 0;
+
+        if (x > 0) { Pair l = g_wwi.position[i - 1]; ax += (x_length - (pos.x - l.x)) * k; ay += (l.y - pos.y) * k; n++; }
+        if (x < 3) { Pair r = g_wwi.position[i + 1]; ax += ((r.x - pos.x) - x_length) * k; ay += (r.y - pos.y) * k; n++; }
+        if (y > 0) { Pair u = g_wwi.position[i - 4]; ax += (u.x - pos.x) * k; ay += (y_length - (pos.y - u.y)) * k; n++; }
+        if (y < 3) { Pair d = g_wwi.position[i + 4]; ax += (d.x - pos.x) * k; ay += ((d.y - pos.y) - y_length) * k; n++; }
+
+        g_wwi.acceleration[i].x = ax / n;
+        g_wwi.acceleration[i].y = ay / n;
     }
 
     HeightRingLinearMean(g_wwi.acceleration, g_wwi.buffer);
@@ -755,9 +805,15 @@ static void ReleaseTimerPeriodIfRaised() {
     }
 }
 
-static void FinishWobblyTrackingLocalPart(HWND* mainHwndOut, LONG_PTR* oldExStyleOut) {
+static void ReadAndClearWobblyTrackingState(HWND* mainHwndOut, LONG_PTR* oldExStyleOut) {
     g_isMoving = false;
     g_isSettling = false;
+    *mainHwndOut = g_mainHwnd;
+    *oldExStyleOut = g_oldExStyle;
+    g_mainHwnd = NULL;
+}
+
+static void TeardownWobblyResources() {
     if (g_overlayHwnd) {
         KillTimer(g_overlayHwnd, 1);
         ShowWindow(g_overlayHwnd, SW_HIDE);
@@ -771,9 +827,6 @@ static void FinishWobblyTrackingLocalPart(HWND* mainHwndOut, LONG_PTR* oldExStyl
         if (g_capturedBmp) { free(g_capturedBmp); g_capturedBmp = nullptr; g_capturedBmpCap = 0; }
     }
     ReleaseTimerPeriodIfRaised();
-    *mainHwndOut = g_mainHwnd;
-    *oldExStyleOut = g_oldExStyle;
-    g_mainHwnd = NULL;
 }
 
 static void RestoreWindowAfterWobbly(HWND mainHwnd, LONG_PTR oldExStyle) {
@@ -788,8 +841,9 @@ static void RestoreWindowAfterWobbly(HWND mainHwnd, LONG_PTR oldExStyle) {
 
 static void FinishWobblyTracking() {
     HWND mainHwnd; LONG_PTR oldExStyle;
-    FinishWobblyTrackingLocalPart(&mainHwnd, &oldExStyle);
+    ReadAndClearWobblyTrackingState(&mainHwnd, &oldExStyle);
     RestoreWindowAfterWobbly(mainHwnd, oldExStyle);
+    TeardownWobblyResources();
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -805,13 +859,18 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         if (g_overlayHwnd == hwnd) g_overlayHwnd = NULL;
         HWND mainHwndToRestore = NULL; LONG_PTR oldExStyleToRestore = 0;
+        bool wasTracking = false;
         {
             std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
             if (g_isMoving || g_isSettling) {
-                FinishWobblyTrackingLocalPart(&mainHwndToRestore, &oldExStyleToRestore);
+                wasTracking = true;
+                ReadAndClearWobblyTrackingState(&mainHwndToRestore, &oldExStyleToRestore);
             }
         }
-        RestoreWindowAfterWobbly(mainHwndToRestore, oldExStyleToRestore);
+        if (wasTracking) {
+            RestoreWindowAfterWobbly(mainHwndToRestore, oldExStyleToRestore);
+            TeardownWobblyResources();
+        }
         return DefWindowProc(hwnd, msg, wp, lp);
     } else if (msg == WM_TIMER) {
         if (g_isUnloading.load(std::memory_order_relaxed)) {
@@ -855,9 +914,10 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             
             if (g_isSettling && !g_wwi.wobblying) {
                 HWND mainHwnd; LONG_PTR oldExStyle;
-                FinishWobblyTrackingLocalPart(&mainHwnd, &oldExStyle);
+                ReadAndClearWobblyTrackingState(&mainHwnd, &oldExStyle);
                 lock.unlock();
                 RestoreWindowAfterWobbly(mainHwnd, oldExStyle);
+                TeardownWobblyResources();
                 return 0;
             }
         }
@@ -928,7 +988,8 @@ static void OnEnterSizeMove(HWND hwnd) {
 
     g_mainHwnd = hwnd;
 
-    if (!g_isSettling && !g_isMoving) {
+    bool isFreshGrab = !g_isSettling && !g_isMoving;
+    if (isFreshGrab) {
         g_oldExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         if (g_oldExStyle & WS_EX_LAYERED) {
 
@@ -943,19 +1004,28 @@ static void OnEnterSizeMove(HWND hwnd) {
             return;
         }
 
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED); 
-        SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA);
-        
         RECT rcExt; 
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)) != S_OK) GetWindowRect(hwnd, &rcExt);
 
-        InitWobblyInfo((float)rcExt.left, (float)rcExt.top, (float)(rcExt.right - rcExt.left), (float)(rcExt.bottom - rcExt.top));
+        InitWobblyInfo((float)rcExt.left, (float)rcExt.top, (float)(rcExt.right - rcExt.left), (float)(rcExt.bottom - rcExt.top), isResizeOp);
     } else {
 
         RECT rcExt; 
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)) != S_OK) GetWindowRect(hwnd, &rcExt);
-        UpdateWobblyOrigin((float)rcExt.left, (float)rcExt.top, (float)(rcExt.right - rcExt.left), (float)(rcExt.bottom - rcExt.top));
+        float x = (float)rcExt.left, y = (float)rcExt.top;
+        float w = (float)(rcExt.right - rcExt.left), h = (float)(rcExt.bottom - rcExt.top);
+        UpdateWobblyOrigin(x, y, w, h);
         for (int i = 0; i < 16; ++i) g_wwi.constraint[i] = false;
+
+        if (isResizeOp) {
+            g_wwi.can_wobble_top = false; g_wwi.can_wobble_bottom = false;
+            g_wwi.can_wobble_left = false; g_wwi.can_wobble_right = false;
+            g_resizeOriginRect.x = x; g_resizeOriginRect.y = y;
+            g_resizeOriginRect.width = w; g_resizeOriginRect.height = h;
+        } else {
+            g_wwi.can_wobble_top = true; g_wwi.can_wobble_bottom = true;
+            g_wwi.can_wobble_left = true; g_wwi.can_wobble_right = true;
+        }
     }
     
     RECT rcExt; 
@@ -984,6 +1054,11 @@ static void OnEnterSizeMove(HWND hwnd) {
     DrawOverlayFrameD2D();
     ShowWindow(g_overlayHwnd, SW_SHOWNOACTIVATE); 
     SetTimer(g_overlayHwnd, 1, 16, NULL);
+
+    if (isFreshGrab) {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED); 
+        SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA);
+    }
 }
 
 static void OnSizingMoving(HWND hwnd, LPRECT r) {
@@ -997,8 +1072,15 @@ static void OnSizingMoving(HWND hwnd, LPRECT r) {
         int dy = rExt.top - rWin.top;
         float w = (float)(r->right - r->left) - (rWin.right - rExt.right) - dx;
         float h = (float)(r->bottom - r->top) - (rWin.bottom - rExt.bottom) - dy;
+        float x = (float)r->left + dx;
+        float y = (float)r->top + dy;
         
-        UpdateWobblyOrigin((float)r->left + dx, (float)r->top + dy, w, h);
+        UpdateWobblyOrigin(x, y, w, h);
+
+        if (y != g_resizeOriginRect.y) g_wwi.can_wobble_top = true;
+        if (x != g_resizeOriginRect.x) g_wwi.can_wobble_left = true;
+        if (x + w != g_resizeOriginRect.x + g_resizeOriginRect.width) g_wwi.can_wobble_right = true;
+        if (y + h != g_resizeOriginRect.y + g_resizeOriginRect.height) g_wwi.can_wobble_bottom = true;
     }
 }
 
@@ -1031,7 +1113,14 @@ static void OnExitSizeMove(HWND hwnd) {
         
         RECT rcExt; 
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)) != S_OK) GetWindowRect(hwnd, &rcExt);
-        UpdateWobblyOrigin((float)rcExt.left, (float)rcExt.top, (float)(rcExt.right - rcExt.left), (float)(rcExt.bottom - rcExt.top));
+        float x = (float)rcExt.left, y = (float)rcExt.top;
+        float w = (float)(rcExt.right - rcExt.left), h = (float)(rcExt.bottom - rcExt.top);
+        UpdateWobblyOrigin(x, y, w, h);
+
+        if (y != g_resizeOriginRect.y) g_wwi.can_wobble_top = true;
+        if (x != g_resizeOriginRect.x) g_wwi.can_wobble_left = true;
+        if (x + w != g_resizeOriginRect.x + g_resizeOriginRect.width) g_wwi.can_wobble_right = true;
+        if (y + h != g_resizeOriginRect.y + g_resizeOriginRect.height) g_wwi.can_wobble_bottom = true;
     }
 }
 
@@ -1244,7 +1333,7 @@ void Wh_ModUninit() {
 
     if (g_overlayHwnd) {
         HWND overlayToClose = g_overlayHwnd;
-        while (IsWindow(overlayToClose)) {
+        if (IsWindow(overlayToClose)) {
             SendMessageW(overlayToClose, WM_CLOSE, 0, 0);
         }
         g_overlayHwnd = NULL;
