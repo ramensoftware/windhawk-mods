@@ -11461,7 +11461,7 @@
           9
         ],
         "ratingUsers": 9,
-        "updated": 1786993616000,
+        "updated": 1787507971000,
         "users": 108
       },
       "metadata": {
@@ -11474,7 +11474,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.17.2"
+        "version": "0.17.3"
       }
     },
     "spoof-light-dark-theme": {
@@ -15603,6 +15603,38 @@
           "*"
         ],
         "name": "Windows 11 Custom Title Bar Colours",
+        "version": "1.0.0"
+      }
+    },
+    "win11-home-group-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787507870000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787507870000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwininet -ladvapi32 -lole32 -luser32 -lshlwapi",
+        "description": "This mod restores the classic HomeGroup Control Panel page on Windows 11 (cosmetic only)",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "name": "Windows 11 HomeGroup Page Restorer",
         "version": "1.0.0"
       }
     },

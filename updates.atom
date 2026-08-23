@@ -2,12 +2,75 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-23T17:47:35.000Z</updated>
+    <updated>2026-08-23T17:59:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.17.3]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#fa893122b9e544bd3605075f8fed427f84e6141a</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-08-23T17:59:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Recognizes .tif, .tiff, and .jfif images in a watched folder, alongside the PNG, JPEG, BMP, GIF, and WebP it already handled.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 HomeGroup Page Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win11-home-group-restorer#8441db3ba3cc4eba8b9115efec5979b2356ddeea</id>
+        <link href="https://windhawk.net/mods/win11-home-group-restorer"/>
+        <updated>2026-08-23T17:57:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11homegrouppagerestorer">Windows 11 HomeGroup Page Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic <strong>HomeGroup</strong> page in Control Panel and Windows 11 (and Windows 10 1803+ if necessary). The HomeGroup feature was removed starting with Windows 10 version 1803 (April 2018). This mod restores the visual Control Panel page using the original <code>hgcpl.dll</code> downloaded and verified from Microsoft's symbol servers.</p>
+<p>Note: This mod is a fix for the <a href="https://windhawk.net/mods/win7-legacy-applet-restorer">Windows 7 Legacy Applet Restorer mod</a> because the HomeGroup page was removed from Windows 11 while on Windows 10 it is still present despite the service not being functional/hard to restore properly.
+The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
+<strong>IMPORTANT</strong>: This is a <strong>cosmetic restoration only</strong>. The underlying HomeGroup networking services (<code>HomeGroupListener</code>, <code>HomeGroupProvider</code>) were removed from Windows 10 1803+ and completely stripped from Windows 11. The page will display, but actual homegroup creation/joining/sharing will not work because the backend services no longer exist.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/homegroup.png" alt="homegroup" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Classic HomeGroup page</strong>: The mod restores the "HomeGroup" entry in the Control Panel</li>
+<li><strong>Automatic setup</strong>: The required <code>hgcpl.dll</code> is downloaded and SHA-256 verified automatically from Microsoft's symbol servers</li>
+<li><strong>Registry virtualization</strong>: All registry entries are provided through an in-memory virtualization layer and nothing is written to the real registry</li>
+<li><strong>Conservative resource handling</strong>: The mod is designed to be stable and user friendly using a conservative approach</li>
+<li><strong>100% reversible</strong>: Disabling the mod makes the Control Panel entry disappear immediately</li>
+<li><strong>25 embedded languages</strong>: Replacement text for all 249 HomeGroup resource IDs is embedded in 25 languages; no MUI files are copied, downloaded, or required (the wording was written for this mod and inevitably overlaps Microsoft's original UI text where there is little room for variation)</li>
+<li><strong>Language selector</strong>: The mod follows the Windows UI language automatically or allows a manual language override</li>
+<li><strong>Offline re-enable</strong>: Once downloaded, the base DLL is cached locally for offline use</li>
+</ul>
+<h2 id="designandsafetynotes">Design and safety notes</h2>
+<ul>
+<li>Setup runs on a background thread and it never blocks explorer.exe startup</li>
+<li>Download goes to a temporary file, SHA-256 checked against a pinned digest, then atomically moved into place</li>
+<li>After <code>LoadLibraryExW</code>, the loaded module is confirmed to map the same file object via <code>GetFileInformationByHandleEx(FileIdInfo)</code></li>
+<li>All registry values are provided through an in-memory virtualization layer backed by volatile (in-memory-only) registry keys</li>
+<li>The mod only stores files in its dedicated Windhawk mod-storage folder via <code>Wh_GetModStoragePath</code></li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>No actual networking</strong>: HomeGroup sharing/joining is non-functional because the backend services were removed/disabled by Microsoft in Windows 10 1803+ and the control panel page was removed from Windows 11</li>
+<li><strong>Windows 11</strong>: The page displays but some sub-features may show errors since the COM infrastructure is more heavily stripped</li>
+<li><strong>Private resource copy</strong>: The mod builds a private resource-only copy of the verified DLL and injects the embedded RT_STRING blocks without modifying Windows files or the verified executable DLL</li>
+<li><strong>Coexistence with Windows 7 Legacy Applet Restorer</strong>: This mod and the <a href="https://windhawk.net/mods/win7-legacy-applet-restorer">Windows 7 Legacy Applet Restorer</a> both provide the HomeGroup Control Panel entry (<code>{67CA7650-96E6-4FDD-BB43-A8E774F73A57}</code>). Duplicate entries are prevented automatically instead of relying on a "pick one" rule: before injecting the HomeGroup CLSID into the Control Panel namespace enumeration, this mod checks whether that name is already being provided — by the real registry (Windows versions that still have it, or a third-party registration) or by the other mod's hooks in the same enumeration — and yields if so. If you still see a duplicate entry with an old version of the other mod, update it (its side needs the same check) or disable its HomeGroup option.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>HomeGroup registry structure documented by <a href="https://strontic.github.io/xcyclopedia/">Strontic xCyclopedia</a></li>
+<li>WinClassic community for documenting the HomeGroup restoration approach</li>
+<li>Cips - Testing on Windows 11 25H2</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Display Control Panel Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-display-control-panel-restorer#743200bf8812751c4b474fc274fcfccb954cafa8</id>
@@ -1004,46 +1067,6 @@ not something the mod can work around.</li>
         <author>
             <name>Spartacus</name>
             <uri>https://github.com/spartaaacus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CJK Spacer 0.1.28]]></title>
-        <id>https://windhawk.net/mods/cjk-spacer#74549269a15a4e540dea200a961aa836b65f3714</id>
-        <link href="https://windhawk.net/mods/cjk-spacer"/>
-        <updated>2026-08-20T16:58:28.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix a confirmed startup race in the opt-in modern XAML path. When Explorer, Windhawk, and notification-area applications start concurrently, a diagnostics attempt can run before the corresponding XAML core is ready. The previous one-shot attempt then remains disabled until a mod reload.</p>
-<p>The modern diagnostics path now:</p>
-<ul>
-<li>reacts to matching XAML host-window creation through narrowly filtered <code>CreateWindowExW</code>, <code>CreateWindowInBand</code>, and <code>CreateWindowInBandEx</code> hooks instead of DLL-load timing or timed polling;</li>
-<li>scans existing top-level and child windows in the current Explorer process from <code>Wh_ModAfterInit</code>, stopping once both XAML flavors are already queued or no longer need a trigger;</li>
-<li>maps <code>XamlExplorerHostIslandWindow</code> and a taskbar-owned <code>Windows.UI.Composition.DesktopWindowContentBridge</code> to Windows.UI.Xaml, and maps <code>CabinetWClass</code> plus <code>XamlExplorerHostIslandWindow_WASDK</code> to Microsoft.UI.Xaml;</li>
-<li>only signals a managed worker from window hooks, keeping COM activation and XAML Diagnostics work outside window-creation call stacks;</li>
-<li>coalesces Windows.UI.Xaml and Microsoft.UI.Xaml requests independently;</li>
-<li>allows hard connection failures to be retried by later matching host-window notifications, with at most three attempts per flavor;</li>
-<li>suppresses further attempts when a diagnostics call succeeds without creating a watcher, avoiding repeated conflicts with another Diagnostics consumer;</li>
-<li>resets only the affected flavor's attempt budget when an established connection disconnects;</li>
-<li>stops and joins the worker before unload, preserving the existing thread-lifetime guarantees.</li>
-</ul>
-<p>The connection-name walk matches the range the reference mods use (up to 10,000 names), because the endpoint name embeds a process-lifetime core ordinal that is never reused and a live endpoint can sit at a high index. The cost of a failed walk is bounded by the walk count instead: after three empty walks in a session a flavor stops probing until an established connection disconnects. The walk runs only after a matching host-window or framework-module trigger indicates that the corresponding core should be ready.</p>]]></content>
-        <author>
-            <name>aenerv7</name>
-            <uri>https://github.com/aenerv7</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Keys Notifier 1.2.0]]></title>
-        <id>https://windhawk.net/mods/lock-keys-notifier#1bd07309c86154278e3a2df58acc948fcc9a8cba</id>
-        <link href="https://windhawk.net/mods/lock-keys-notifier"/>
-        <updated>2026-08-20T16:51:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add sound trigger condition and per-state WAVs</li>
-<li>Give Insert key its own sound toggle</li>
-<li>Move the keyboard hook off the render thread onto a dedicated thread</li>
-<li>Make the worker thread DPI<em>AWARENESS</em>CONTEXT<em>PER</em>MONITOR<em>AWARE</em>V2</li>
-</ul>]]></content>
-        <author>
-            <name>Havrlisan</name>
-            <uri>https://github.com/havrlisan</uri>
         </author>
     </entry>
 </feed>
