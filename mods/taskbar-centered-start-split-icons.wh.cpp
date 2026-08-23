@@ -1220,20 +1220,26 @@ HWND ResolveHwndFromTaskListButton(FrameworkElement element) {
 // failures (a pinned-but-not-running app's task group legitimately has
 // zero windows, so resolution fails until it's actually launched).
 //
-// consecutiveFailures drives capped exponential backoff (2s..32s) rather
-// than a fixed retry: the resolution chain ends in a synthetic click
-// against the taskbar's real click handler, and ItemsRepeater recycles
-// the same element/cache entry for a given index rather than creating a
-// new one, so a hard stop would permanently break side-following for a
-// pinned app that's later launched. Backing off keeps retrying (worst
-// case within 32s) without hammering the click handler forever.
+// consecutiveFailures drives capped exponential backoff (2s up to the
+// 30-minute kResolveBackoffCeilingMs) rather than a fixed retry: the
+// resolution chain ends in a synthetic click against the taskbar's real
+// click handler, and ItemsRepeater recycles the same element/cache entry
+// for a given index rather than creating a new one, so a hard stop would
+// permanently break side-following for a pinned app that's later
+// launched. A negatively-cached element's failures accumulate for as
+// long as its button exists, so a long-idle session's backoff can be
+// close to the ceiling by the time the app is actually launched -
+// g_forceResolveUnresolved exists specifically to bypass that when
+// there's real evidence (a window just appeared) that a retry is worth
+// trying regardless of the schedule.
 //
 // identity (the button's accessible name at resolve time) catches a
 // different case: ItemsRepeater can rebind an already-realized element
 // to a different item (e.g. a drag-reorder) without destroying it. The
 // old HWND stays valid, just no longer this element's, so an IsWindow()
 // check alone can't detect it - ResolvePendingButtonHwnds compares
-// identity on every check and forces a re-resolve on mismatch.
+// identity on every check (both the resolved and negatively-cached
+// branches) and forces a re-resolve on mismatch.
 struct ButtonHwndCacheEntry {
     HWND hwnd = nullptr;
     std::wstring identity;
@@ -1241,6 +1247,18 @@ struct ButtonHwndCacheEntry {
     int consecutiveFailures = 0;
 };
 std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
+
+// Set by WinEventProc's EVENT_OBJECT_SHOW branch and the ArrangeOverride
+// hook's button-count-change check - both call ArmButtonHwndResolveTimer(0)
+// to make the next resolve pass run immediately, but arming the timer
+// sooner doesn't by itself bypass a negatively-cached entry's own backoff
+// gate (see ButtonHwndCacheEntry's comment for why that backoff can be
+// long-lived). Consumed once per pass in ResolvePendingButtonHwnds to
+// force every negatively-cached entry to retry regardless of backoff.
+// Safe to force unconditionally: a still-not-running group bails at
+// ResolveHwndFromTaskGroup's IsRunning check before ever dispatching a
+// click, so this never risks an extra synthetic click.
+std::atomic<bool> g_forceResolveUnresolved;
 
 // The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end
 // of every successful ResolvePendingButtonHwnds pass (taskbar thread) and
@@ -2123,6 +2141,7 @@ void ResolvePendingButtonHwnds() {
 
         ULONGLONG now = GetTickCount64();
         bool anyChanged = false;
+        bool forceResolve = g_forceResolveUnresolved.exchange(false);
 
         std::unordered_set<void*> liveTaskListButtons;
 
@@ -2147,17 +2166,33 @@ void ResolvePendingButtonHwnds() {
                 anyChanged = true;
             }
             if (!needsResolve) {
+                // Identity mismatch means ItemsRepeater rebound this element
+                // to a different item since we last resolved it - see
+                // ButtonHwndCacheEntry's comment. Checked on both branches
+                // below, not just the resolved one: a rebind onto a
+                // negatively-cached element (e.g. drag-reordering a pinned-
+                // not-running app past a running one) is just as real a
+                // rebind, and without this check here it would inherit the
+                // old entry's accumulated backoff instead of resolving.
                 if (it->second.hwnd) {
-                    // Identity mismatch means ItemsRepeater rebound this
-                    // element to a different item since we last resolved it -
-                    // see ButtonHwndCacheEntry's comment. The old HWND is
-                    // still a perfectly valid window, just no longer this
-                    // element's, so IsWindow() alone can't catch this case.
+                    // The old HWND is still a perfectly valid window, just
+                    // no longer this element's, so IsWindow() alone can't
+                    // catch a rebind.
                     needsResolve = !IsWindow(it->second.hwnd) ||
                                    identity != it->second.identity;
                 } else {
-                    needsResolve = now - it->second.lastAttempt >=
-                                   ResolveBackoffMs(it->second.consecutiveFailures);
+                    // forceResolve: a negatively-cached element's own
+                    // consecutiveFailures keeps accumulating for as long as
+                    // its button exists (which, for a pinned-but-not-running
+                    // app, is the entire session) - by the time it's
+                    // actually launched, the backoff could be minutes away,
+                    // silently defeating EVENT_OBJECT_SHOW's whole purpose
+                    // of triggering an immediate resolve. See
+                    // g_forceResolveUnresolved's own comment.
+                    needsResolve = forceResolve ||
+                                   identity != it->second.identity ||
+                                   now - it->second.lastAttempt >=
+                                       ResolveBackoffMs(it->second.consecutiveFailures);
                 }
             }
 
@@ -2598,6 +2633,7 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
         lastPlanTaskListCount = currentTaskListCount;
         if (countChanged) {
             InvalidateTaskbarLayout();
+            g_forceResolveUnresolved = true;
             ArmButtonHwndResolveTimer(0);
         }
     }
@@ -2883,13 +2919,14 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     if (event == EVENT_OBJECT_SHOW) {
         // A real top-level window (per the filtering above) becoming
         // visible is what a pinned-but-not-running app launching looks
-        // like - nudge the resolve timer to run right away instead of
-        // leaving it to its own backoff schedule (which, for a button
-        // that's failed before, can be up to kResolveBackoffCeilingMs
-        // away). The backoff schedule itself is kept as a fallback -
-        // this is a fast path on top of it, not a replacement for it, in
-        // case a launch is ever reached through a code path that
-        // legitimately doesn't produce this event.
+        // like - nudge the resolve timer to run right away, and force it
+        // to ignore each negatively-cached entry's own backoff (see
+        // g_forceResolveUnresolved's comment for why arming the timer
+        // alone isn't enough), instead of leaving it to the backoff
+        // schedule. That schedule is kept as a fallback - this is a fast
+        // path on top of it, not a replacement for it, in case a launch
+        // is ever reached through a code path that legitimately doesn't
+        // produce this event.
         //
         // Leading-edge throttled the same way the location-change branch
         // below is: this event fires for every top-level window becoming
@@ -2907,6 +2944,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
             return;
         }
         g_lastShowEventArm = nowShow;
+        g_forceResolveUnresolved = true;
         ArmButtonHwndResolveTimer(0);
         return;
     }
