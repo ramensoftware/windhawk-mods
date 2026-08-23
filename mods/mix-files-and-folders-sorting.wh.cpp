@@ -223,7 +223,7 @@ bool HookWindowsStorageSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
         {
             {
 #ifdef _WIN64
@@ -257,8 +257,8 @@ bool HookWindowsStorageSymbols() {
         },
     };
 
-    return HookSymbols(windowsStorageModule, windowsStorageHooks,
-                        ARRAYSIZE(windowsStorageHooks));
+    return HookSymbols(windowsStorageModule, windowsStorageDllHooks,
+                        ARRAYSIZE(windowsStorageDllHooks));
 }
 
 void LoadSettings() {
