@@ -18,9 +18,8 @@
 ![Animation Preview](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/main/Desktop2026.08.16-18.17.43.03-ezgif.com-video-to-gif-converter.gif)
 
 Credit - KWin's Wobbly Windows for making this possible 
-## Compatibility notes
-Dose not work as intended in File Explorer, excluded for the time being until its resolved.
 
+## Compatibility notes
 Added a setting to change corner radius so it is compatable with "Custom Window Corner Radius" mod (the default is 8 *windows default)
 
 Added a setting to capture by Screen instead of printWindow so it is compatable with "Translucent windows" mod
