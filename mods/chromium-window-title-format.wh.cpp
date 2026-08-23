@@ -106,17 +106,26 @@ great in the taskbar but they are not plain letters, which has real costs:
 - They need a font that covers the range. Superscript and subscript digits live
   in Segoe UI itself and are safe; the mathematical letters come from Segoe UI
   Symbol, so on a trimmed Windows image they can render as boxes.
-- The italic, bold-italic, script and fraktur styles contain **no digits**, so
+- The italic, bold-italic, serif-italic, script and fraktur styles contain **no
+  digits**, so
   digits pass through unstyled.
 
 Style short prefixes like `{count}`, not `{title}`.
 
 ## Limits worth knowing
 
+- **If all you want is the browser name gone**, [text-replace](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/text-replace.wh.cpp)
+  does that with far less machinery. This mod earns its weight only if you want
+  the parts of the title separately.
 - **Edge and Chrome only.** The mod targets `msedge.exe` and `chrome.exe`. It
-  needs no symbols and no PDB, so nothing about it is specific to those two
-  builds, but other Chromium forks are not currently recognized and would each
+  needs no symbols and no PDB, so it is not pinned to a particular browser
+  build, but other Chromium forks are not currently recognized and would each
   need their own entry and browser-name hint.
+- **`{profile}` needs more than one profile to appear.** A browser with a single
+  profile can still put its name in the title, but with only one profile to
+  compare against there is no way to tell a real profile from a page title that
+  happens to end the same way - so the mod leaves that text inside `{title}`
+  rather than risk deleting part of a page title.
 - **The profile list is read once, at startup.** Add, rename or remove a profile
   and `{profile}` keeps working from the old list until the browser restarts or
   the mod is reloaded. This is deliberate: the list decides whether text is
@@ -128,11 +137,12 @@ Style short prefixes like `{count}`, not `{title}`.
   that moment keeps the rewritten title until it next sets it itself. A window
   that has changed its own title since is left alone rather than being handed a
   now-older one. Both counts are logged.
-- **The browser's UI language is taken from Windows' display-language list**,
-  not from the regional-format locale, and it is resolved against the packs the
-  browser actually ships - which are mostly bare language codes. If the wrong
-  language were picked the mod would appear to work and rewrite nothing, so the
-  discovered separator is logged to make that case visible.
+- **The language is resolved in the browser's own order**: `--lang`, then the
+  browser's stored UI language, then Windows' display-language list, then the
+  regional-format locale, then `en-US`. Each is matched against the packs the
+  browser actually ships, which are mostly bare language codes. Picking the
+  wrong one would make the mod appear to work and rewrite nothing, so the
+  discovered suffix is logged to make that visible.
 - **A `UserDataDir` group policy is not read.** On a machine that sets one, the
   profile list and the browser's UI language are looked for in the default
   location instead; both fail closed, so `{profile}` stays empty rather than
@@ -211,9 +221,8 @@ Style short prefixes like `{count}`, not `{title}`.
 #include <shlobj.h>    // SHGetKnownFolderPath, FOLDERID_LocalAppData
 
 #include <cstdint>   // uint32_t
-#include <cstdlib>   // _wtoi, _wgetenv
-#include <cwchar>    // wcsrchr, _wcsnicmp, wcsncmp
-#include <cwctype>   // iswalnum, towupper, towlower
+#include <cstdlib>   // _wtoi
+#include <cwchar>    // _wcsnicmp, _wcsicmp, wcsncmp
 #include <utility>   // std::pair, std::move
 
 
@@ -386,13 +395,46 @@ Kind FromName(std::wstring_view n) {
     return Kind::kNone;
 }
 
-// Truncate to `maxChars` UTF-16 units without splitting a surrogate pair, then
-// append an ellipsis.
+// Case-map through the OS, out of place.
+//
+// Not towupper/towlower: those follow the CRT's LC_CTYPE, this mod never calls
+// setlocale, and the default "C" locale leaves every non-ASCII letter unchanged.
+// Not CharUpperBuffW either: it maps in place, so it cannot represent a mapping
+// whose output length differs from its input, and it is documented as mapping
+// i/I unconditionally rather than linguistically.
+//
+// LOCALE_NAME_INVARIANT rather than the user's locale, deliberately: a title
+// token carries no reliable language tag, and the regional locale would make the
+// same template produce different text on different machines - the Turkish
+// dotted-I being the case everyone eventually hits.
+//
+// Returns the input unchanged if the OS declines, keeping a failure cosmetic.
+std::wstring MapCase(const std::wstring& s, bool upper) {
+    if (s.empty() || s.size() > static_cast<size_t>(INT_MAX)) return s;
+    const DWORD flags = upper ? LCMAP_UPPERCASE : LCMAP_LOWERCASE;
+    const int   n     = static_cast<int>(s.size());
+    const int   need  = LCMapStringEx(LOCALE_NAME_INVARIANT, flags, s.c_str(), n,
+                                      nullptr, 0, nullptr, nullptr, 0);
+    if (need <= 0) return s;
+    std::wstring out(static_cast<size_t>(need), L'\0');
+    const int got = LCMapStringEx(LOCALE_NAME_INVARIANT, flags, s.c_str(), n,
+                                  out.data(), need, nullptr, nullptr, 0);
+    if (got <= 0) return s;
+    out.resize(static_cast<size_t>(got));
+    return out;
+}
+
+// Bound the result to `maxChars` UTF-16 units, ellipsis included, without
+// splitting a surrogate pair. 0 means no bound.
+//
+// The ellipsis counts. `{title:max20}` promises at most twenty units, so cutting
+// to twenty and then appending would return twenty-one and break the one thing
+// the modifier states.
 std::wstring Clamp(std::wstring s, size_t maxChars) {
     if (maxChars == 0 || s.size() <= maxChars) {
         return s;
     }
-    size_t cut = maxChars;
+    size_t cut = maxChars - 1;  // room for the ellipsis
     if (cut > 0 && s[cut - 1] >= 0xD800 && s[cut - 1] <= 0xDBFF) {
         --cut;  // do not leave a dangling high surrogate
     }
@@ -426,10 +468,8 @@ struct Entry {
 };
 
 struct File {
-    bool                 ok = false;
     std::vector<Entry>   entries;
     const uint8_t*       base = nullptr;
-    size_t               size = 0;
 
     std::string_view At(size_t i) const {
         const Entry& e = entries[i];
@@ -493,10 +533,8 @@ bool TryLayout(const uint8_t* d, size_t n, bool edge, File& out) {
     if (!Validate(entries, tableEnd, n)) {
         return false;
     }
-    out.ok      = true;
     out.entries = std::move(entries);
     out.base    = d;
-    out.size    = n;
     return true;
 }
 
@@ -612,9 +650,13 @@ std::wstring StripEffectors(std::wstring_view s) {
 
 std::vector<uint8_t> ReadWholeFile(const std::wstring& path) {
     std::vector<uint8_t> buf;
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    // FILE_SHARE_DELETE as well as read and write. These files belong to the
+    // browser, which replaces Local State by rename; without delete sharing a
+    // read here can make the browser's own write fail.
+    HANDLE h = CreateFileW(
+        path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) return buf;
     LARGE_INTEGER sz{};
     if (GetFileSizeEx(h, &sz) && sz.QuadPart > 0 && sz.QuadPart < (64 << 20)) {
@@ -744,7 +786,7 @@ bool DiscoverGrammar(const pak::File& f, const std::wstring& hint, Grammar* g) {
                 // ": " and Lithuanian's opening quote.
                 size_t k = 0;
                 bool   punct = false;
-                while (k < tail.size() && !iswalnum(tail[k])) {
+                while (k < tail.size() && !IsCharAlphaNumericW(tail[k])) {
                     if (tail[k] != L' ' && !IsFormatEffector(tail[k])) punct = true;
                     ++k;
                 }
@@ -817,8 +859,16 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
             r1 = in.substr(0, in.size() - s.size());
             out->browser = TrimCopy(StripEffectors(s));
             // Drop a leading separator run from the display form.
+            //
+            // IsCharAlphaNumericW rather than iswalnum: in the CRT's default "C"
+            // locale iswalnum rejects every non-ASCII letter, so a localized
+            // product name was skipped through as if it were punctuation and
+            // "- Гугл Chrome" rendered as "Chrome".
             size_t k = 0;
-            while (k < out->browser.size() && !iswalnum(out->browser[k])) ++k;
+            while (k < out->browser.size() &&
+                   !IsCharAlphaNumericW(out->browser[k])) {
+                ++k;
+            }
             if (k < out->browser.size()) out->browser = out->browser.substr(k);
             matched = true;
             break;
@@ -900,6 +950,12 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
                 ++digits;
             }
             if (d == e) continue;  // no digits present
+            // A run longer than the cap is not a count. Without this, the scan
+            // keeps the last nine digits, leaves the rest in the title, and a
+            // form whose `pre` is empty then accepts the result.
+            if (digits == kMaxDigits && d > 0 && DigitValue(in[d - 1]) >= 0) {
+                continue;
+            }
             const std::wstring head = in.substr(0, d);
             if (!EndsWith(head, cf.pre)) continue;
             f->extra    = value;
@@ -929,10 +985,21 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // keep_profile then displays just "GitHub": silent truncation of the
         // user's own text, in the default configuration.
         //
-        // TWO conditions, and the count is the important one. The browser writes
-        // a profile into the title only when the install has MORE THAN ONE, so
-        // on a single-profile install any match here is false by construction -
-        // including a genuine name match.
+        // TWO conditions, and the count is the important one - but it is a
+        // deliberately CONSERVATIVE test, not a statement about the browser.
+        //
+        // Observed on a fresh single-profile install: Edge composed
+        // "Example Domain - Profile 1 - Microsoft Edge Canary" with exactly one
+        // entry in info_cache. So "the browser only writes a profile when there
+        // is more than one" is NOT true, and this gate does not claim it. What
+        // it claims is narrower: with one profile, a trailing segment that
+        // matches its name is not distinguishable from a page title that happens
+        // to end the same way, and there is no second profile whose absence
+        // would settle it. The cost of being wrong is asymmetric - a missing
+        // {profile} is a missing field, a wrong one is the user's own text
+        // deleted - so the tie goes to leaving the text alone. Such a title
+        // keeps the profile inside {title}, which is what that install above
+        // renders today.
         //
         // profileCount, NOT profileNames.size(). They are different quantities:
         // DiscoverProfiles reads two keys per profile and flattens them, so one
@@ -1044,22 +1111,37 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
         return {};
     }
 
+    // max<N> is collected here and applied LAST, whatever order it was written
+    // in. Applying it in sequence does not bound anything: the styling alphabets
+    // are non-BMP, so `{title:max20:bold}` clamps to twenty units and then
+    // doubles them. The smallest N wins if several are given.
+    size_t bound = 0;
     for (size_t i = 1; i < parts.size(); ++i) {
         const std::wstring_view m = parts[i];
         if (m == L"upper") {
-            for (auto& c : v) c = towupper(c);
+            v = style::MapCase(v, /*upper=*/true);
         } else if (m == L"lower") {
-            for (auto& c : v) c = towlower(c);
+            v = style::MapCase(v, /*upper=*/false);
         } else if (m == L"trim") {
             v = TrimCopy(v);
         } else if (m.rfind(L"max", 0) == 0 && m.size() > 3) {
-            v = style::Clamp(v, static_cast<size_t>(
-                                    _wtoi(std::wstring(m.substr(3)).c_str())));
+            // Strictly digits. _wtoi turns "maxbanana" and "max-1" into 0, which
+            // silently means "no bound" - a typo that reads as if it worked.
+            const std::wstring_view digits = m.substr(3);
+            size_t n = 0;
+            bool   good = true;
+            for (const wchar_t c : digits) {
+                if (c < L'0' || c > L'9') { good = false; break; }
+                n = n * 10 + static_cast<size_t>(c - L'0');
+                if (n > 4096) { good = false; break; }
+            }
+            if (good && n > 0 && (bound == 0 || n < bound)) bound = n;
         } else if (const style::Kind k = style::FromName(m);
                    k != style::Kind::kNone) {
             v = style::Apply(v, k);
         }
     }
+    if (bound) v = style::Clamp(std::move(v), bound);
     *empty = v.empty();
     return v;
 }
@@ -1217,6 +1299,13 @@ bool IsBrowserFrame(HWND hWnd) {
     if (!hWnd || GetAncestor(hWnd, GA_ROOT) != hWnd) return false;
     if (GetWindow(hWnd, GW_OWNER)) return false;
 
+    // Our own process only. The sweep and the restore loop already required
+    // this; folding it in here makes all three paths agree, so the hook cannot
+    // cache or rewrite a window belonging to someone else.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+
     WCHAR cls[40];
     if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
     if (wcsncmp(cls, L"Chrome_WidgetWin_", 17) != 0) return false;
@@ -1306,11 +1395,16 @@ std::wstring ComposeFor(const std::wstring& source) {
 // text, and a "restored" tally that includes those is the only evidence anyone
 // reads when a title is found still rewritten after an uninstall.
 bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
-    DWORD_PTR unused = 0;
-    return SendMessageTimeoutW(hWnd, WM_SETTEXT, 0,
-                               reinterpret_cast<LPARAM>(text.c_str()),
-                               SMTO_ABORTIFHUNG | SMTO_BLOCK, 250,
-                               &unused) != 0;
+    // BOTH results matter. SendMessageTimeoutW's return says the message was
+    // delivered and completed; `result` is what the window procedure returned,
+    // and WM_SETTEXT reports TRUE only when the text was actually set. Treating
+    // delivery alone as success is what makes a counter claim a title was
+    // restored when the window rejected it.
+    DWORD_PTR result = 0;
+    const LRESULT ok = SendMessageTimeoutW(
+        hWnd, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(text.c_str()),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT, 250, &result);
+    return ok != 0 && result != 0;
 }
 
 // The reading half, and bounded for the same reason.
@@ -1372,17 +1466,33 @@ bool StopRequested() {
 // A null handle is survivable - the waits fall back to plain Sleep.
 HANDLE g_stopEvent = nullptr;
 
+// Sleep in interruptible slices when there is no event to wait on.
+//
+// Teardown joins this thread with an INFINITE wait, so an uninterruptible sleep
+// here is an unload that hangs for its full duration - a minute, at the
+// maintenance period. The event makes that immediate when it exists; the slices
+// bound it to one tick when it does not.
+void SleepInSlices(DWORD ms) {
+    constexpr DWORD kSlice = 200;
+    while (ms) {
+        const DWORD slice = (ms < kSlice) ? ms : kSlice;
+        Sleep(slice);
+        if (StopRequested()) return;
+        ms -= slice;
+    }
+}
+
 // Sleep, unless teardown starts first. Returns true if we should stop.
 bool SleepOrStop(DWORD ms) {
     if (StopRequested()) return true;
     if (g_stopEvent) {
         const DWORD r = WaitForSingleObject(g_stopEvent, ms);
         if (r == WAIT_OBJECT_0) return true;
-        // WAIT_FAILED must not spin: fall back to sleeping so a broken handle
-        // costs latency rather than a busy loop on a browser's worker thread.
-        if (r == WAIT_FAILED) Sleep(ms);
+        // A broken handle must not spin, and must not become an unload that
+        // waits out the whole period either.
+        if (r == WAIT_FAILED) SleepInSlices(ms);
     } else {
-        Sleep(ms);
+        SleepInSlices(ms);
     }
     return StopRequested();
 }
@@ -1395,65 +1505,72 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         return SetWindowTextW_Original(hWnd, lpString);
     }
 
-    t_inHook = true;
     std::wstring out;
     bool         changed = false;
-    unsigned     gen = 0;
     {
-        AcquireSRWLockExclusive(&g_lock);
-        WindowState& st = g_states[hWnd];
-        const DWORD  tid = GetWindowThreadProcessId(hWnd, nullptr);
-        if (st.tid && st.tid != tid) {
-            // Reuse of this HWND by a window on a DIFFERENT thread. That is the
-            // only reuse this test can see - browser frames share one UI thread,
-            // so same-thread reuse keeps the id and is invisible here.
-            const unsigned prevGen = st.generation;
-            st = WindowState{};
-            st.generation = prevGen + 1;
-        }
-        st.tid = tid;
+        // Scoped so it ends BEFORE the single tail call below. The original has
+        // always run with the flag clear, and it must keep doing so - a return
+        // expression is evaluated before local destructors, so returning from
+        // inside this scope would call it with the flag still set and change
+        // which nested writes get composed. Scoping it here keeps the behaviour
+        // identical and still resets the flag if the string work throws.
+        struct Guard {
+            Guard() { t_inHook = true; }
+            ~Guard() { t_inHook = false; }
+            Guard(const Guard&) = delete;
+            Guard& operator=(const Guard&) = delete;
+        } guard;
 
-        if (st.applied == lpString) {
-            // Our own string coming back around. Keep `source` intact so a
-            // settings change can still recompose from the original.
+        unsigned gen   = 0;
+        bool     fresh = false;
+        {
+            AcquireSRWLockExclusive(&g_lock);
+            WindowState& st  = g_states[hWnd];
+            const DWORD  tid = GetWindowThreadProcessId(hWnd, nullptr);
+            if (st.tid && st.tid != tid) {
+                // Reuse of this HWND by a window on a DIFFERENT thread - the
+                // only reuse this test can see, since browser frames share one
+                // UI thread and same-thread reuse keeps the id.
+                const unsigned prevGen = st.generation;
+                st = WindowState{};
+                st.generation = prevGen + 1;
+            }
+            st.tid = tid;
+            // `applied` matching means our own string coming back around; leave
+            // `source` intact so a settings change still recomposes the original.
+            if (st.applied != lpString) {
+                st.source = lpString;
+                gen       = ++st.generation;
+                fresh     = true;
+            }
             ReleaseSRWLockExclusive(&g_lock);
-            t_inHook = false;
-            return SetWindowTextW_Original(hWnd, lpString);
         }
-        st.source = lpString;
-        gen       = ++st.generation;
-        ReleaseSRWLockExclusive(&g_lock);
-    }
 
-    // Compose with no lock held.
-    //
-    // Composition is pure string work, and it is deliberately kept outside the
-    // lock: the write below is outside it too, so "applied recorded" and "text
-    // on screen" are not atomic in any case, and holding a lock across work that
-    // does not need it is how a hook arms a deadlock against itself.
-    //
-    // The generation check is what makes that safe. It proves this result is
-    // still being committed against the state it was computed from - a check
-    // `tid` cannot provide, because every browser frame shares one UI thread and
-    // a recycled HWND keeps the same one.
-    out     = ComposeFor(lpString);
-    changed = (out != lpString);
+        if (fresh) {
+            // Composed with no lock held. The write below is outside the lock
+            // too, so "applied recorded" and "text on screen" are not atomic in
+            // any case, and holding a lock across work that does not need it is
+            // how a hook arms a deadlock against itself.
+            //
+            // The generation check is what makes that safe: it proves this
+            // result is still being committed against the state it was computed
+            // from, which `tid` cannot show, because every browser frame shares
+            // one UI thread and a recycled HWND keeps the same one.
+            out     = ComposeFor(lpString);
+            changed = (out != lpString);
 
-    {
-        AcquireSRWLockExclusive(&g_lock);
-        const auto it = g_states.find(hWnd);
-        if (it == g_states.end() || it->second.generation != gen) {
-            // The entry was reset, pruned, or overtaken while composing. Its
-            // newer owner will write its own title; ours is stale, so pass the
-            // browser's own string through untouched rather than fight it.
+            AcquireSRWLockExclusive(&g_lock);
+            const auto it = g_states.find(hWnd);
+            if (it == g_states.end() || it->second.generation != gen) {
+                // Reset, pruned or overtaken while composing. The newer owner
+                // will write its own title; pass the browser's string through.
+                changed = false;
+            } else {
+                it->second.applied = out;
+            }
             ReleaseSRWLockExclusive(&g_lock);
-            t_inHook = false;
-            return SetWindowTextW_Original(hWnd, lpString);
         }
-        it->second.applied = out;
-        ReleaseSRWLockExclusive(&g_lock);
     }
-    t_inHook = false;
 
     return SetWindowTextW_Original(hWnd, changed ? out.c_str() : lpString);
 }
@@ -1468,10 +1585,14 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 // directory instead. Named rather than reading %LOCALAPPDATA%, so the seam is
 // visible to whoever reads the function rather than implied by an environment
 // variable that production would then also depend on.
+#ifdef WH_EDITING
 std::wstring g_localAppDataOverride;
+#endif
 
 std::wstring LocalAppDataDir() {
+#ifdef WH_EDITING
     if (!g_localAppDataOverride.empty()) return g_localAppDataOverride;
+#endif
     PWSTR        p = nullptr;
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) &&
@@ -1934,9 +2055,7 @@ void PruneDeadWindows() {
 // simply does not compile. CALLBACK is __stdcall there and nothing everywhere
 // else, so this builds identically on all three.
 BOOL CALLBACK CollectBrowserFrames(HWND h, LPARAM lp) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    if (pid == GetCurrentProcessId() && IsBrowserFrame(h)) {
+    if (IsBrowserFrame(h)) {
         reinterpret_cast<std::vector<HWND>*>(lp)->push_back(h);
     }
     return TRUE;
@@ -2042,22 +2161,32 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         if (chromium) break;
         if (SleepOrStop(500)) break;
     }
-    if (!chromium) {
+    // Falls through to the maintenance loop rather than returning, for the same
+    // reason the discovery-failure path does: the title hook records a state per
+    // frame regardless, so an early return leaves nothing pruning that map for
+    // the life of the process.
+    bool haveBrowser = chromium != nullptr;
+    if (!haveBrowser) {
         Wh_Log(L"%s never loaded; nothing to do in this process", browserDll);
-        return 0;
     }
 
-    std::wstring dir = DirOfModule(browserDll);
-    if (dir.empty()) {
-        const std::wstring s = ModulePath(nullptr);
-        const size_t at = s.rfind(L'\\');
-        if (at != std::wstring::npos) dir = s.substr(0, at);
+    std::wstring dir;
+    if (haveBrowser) {
+        dir = DirOfModule(browserDll);
+        if (dir.empty()) {
+            const std::wstring s = ModulePath(nullptr);
+            const size_t at = s.rfind(L'\\');
+            if (at != std::wstring::npos) dir = s.substr(0, at);
+        }
     }
     const std::wstring hint = g_isChrome ? L"Chrome" : L"Edge";
 
+    std::vector<std::wstring> locales;
+    if (haveBrowser) locales = LocaleCandidates();
+
     Grammar g;
     bool    ok = false;
-    for (const std::wstring& loc : LocaleCandidates()) {
+    for (const std::wstring& loc : locales) {
         if (StopRequested()) return 0;
         const std::wstring path = dir + L"\\Locales\\" + loc + L".pak";
         const std::vector<uint8_t> buf = ReadWholeFile(path);
@@ -2101,8 +2230,10 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                        L"{profile} will stay empty rather than guess at a "
                        L"trailing segment of the page title");
             } else if (g.profileCount < 2) {
-                Wh_Log(L"this install has a single profile, so the browser never "
-                       L"puts one in a title and {profile} will stay empty");
+                Wh_Log(L"this install has a single profile; with only one name "
+                       L"to compare against, a trailing segment cannot be told "
+                       L"from a page title that ends the same way, so {profile} "
+                       L"will stay empty");
             }
             break;
         }
@@ -2114,14 +2245,16 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         suffixOverride = g_settings.suffixOverride;
         ReleaseSRWLockShared(&g_settingsLock);
     }
-    if (!suffixOverride.empty()) {
+    if (haveBrowser && !suffixOverride.empty()) {
         g.suffixes.insert(g.suffixes.begin(), suffixOverride);
         ok = true;
         Wh_Log(L"using suffix override");
     }
     if (!ok) {
-        Wh_Log(L"DISCOVERY FAILED - no titles will be changed. Set the browser "
-               L"suffix override in settings if this persists.");
+        if (haveBrowser) {
+            Wh_Log(L"DISCOVERY FAILED - no titles will be changed. Set the "
+                   L"browser suffix override in settings if this persists.");
+        }
         // NOT a return. Falling through to the maintenance loop below is the
         // whole point - see the comment on it.
     } else {
@@ -2275,11 +2408,11 @@ BOOL Wh_ModInit() {
     //
     // Manual-reset: once teardown starts it must stay signalled, so every wait
     // in the worker returns immediately rather than one of them consuming it.
-    // Failure is not fatal - SleepOrStop falls back to a plain Sleep.
+    // Failure costs latency only - the sleeps fall back to interruptible slices.
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
-        Wh_Log(L"could not create the stop event; teardown will wait for the "
-               L"maintenance sleep to expire, up to a minute");
+        Wh_Log(L"could not create the stop event; teardown will be up to a "
+               L"slice slower");
     }
 
     return TRUE;
