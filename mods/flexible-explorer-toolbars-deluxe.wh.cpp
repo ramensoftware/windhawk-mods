@@ -252,8 +252,6 @@ bool GetLockToolbarsState(HWND rb) {
     return false;
 }
 
-LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR);
-
 LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m == WM_NCDESTROY) {
         { Lock L; g_guards.erase(h); g_hooks.erase(h); }
