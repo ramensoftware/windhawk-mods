@@ -20,11 +20,12 @@ The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
 
 ## ⚠️ IMPORTANT ⚠️
 
-Since this mod hooks itself into `dwm.exe`, you have to add it globally in Windhawk:
+Since this mod runs in `dwm.exe`, add `dwm.exe` to Windhawk's
+**Settings > Advanced settings > More advanced settings > Process inclusion list**:
 
 ![Tutorial](https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/dwm.gif)
 
-This mod is currently in **beta** so things can break sometimes, and it may won't even work on some Windows 11 builds.
+This mod is currently in **beta**, so things can occasionally break and it might not work on every Windows 11 build.
 It was mostly tested and made on `Windows 11 23H2`, where it works great, and it was also tested on `25H2` and on `Insider Preview 26H2`.
 
 ## Features
@@ -32,7 +33,7 @@ It was mostly tested and made on `Windows 11 23H2`, where it works great, and it
 * Change the wobbliness of the windows from 5 presets
 * Enable advanced mode to change each parameter independently, instead of a preset
 * Fluid wobble animations for dragging, snapping and even resizing windows
-* Calculated as a 4x4 mesh for a nice movment
+* Calculated as a 4x4 mesh for smooth movement
 
 ## Known Issues
 
@@ -45,7 +46,11 @@ It was mostly tested and made on `Windows 11 23H2`, where it works great, and it
 
 ## Feedback
 
-If you found an issue and it's reproducible or need help, then open an issue at the [Github Repo](https://github.com/lalimatyus/Wobbly-Windows).
+If you found a reproducible issue or need help, open an issue in the [GitHub repository](https://github.com/lalimatyus/Wobbly-Windows).
+
+## Credits
+
+The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wobbly Windows effect.
 */
 // ==/WindhawkModReadme==
 
@@ -159,8 +164,6 @@ struct WobbleMesh
 
 struct MeshStepResult
 {
-    double accelerationSum;
-    double velocitySum;
     bool wobblying;
 };
 
@@ -220,6 +223,7 @@ ObservedWindowState g_observedWindows[MAX_OBSERVED_WINDOWS] = {};
 HANDLE g_eventThread = nullptr;
 DWORD g_eventThreadId = 0;
 HANDLE g_eventThreadReady = nullptr;
+HANDLE g_eventThreadStop = nullptr;
 std::atomic<DWORD> g_eventThreadMessageTarget = 0;
 std::atomic<HWND> g_pendingMaximizedStateWindow = nullptr;
 std::atomic_bool g_maximizedStateCheckQueued = false;
@@ -267,7 +271,7 @@ using WindowTransitionChange_t = long(__cdecl*)(void* pThis, void* dwmWindow, in
                                                 const RECT& rect5);
 WindowTransitionChange_t g_windowTransitionChangeOriginal = nullptr;
 POINT g_lastMousePosition = {};
-LARGE_INTEGER g_lastMouseCounter = {};
+bool g_hasLastMousePosition = false;
 POINT g_dragStartMousePosition = {};
 Vec2 g_dragStartLocalMouse = {0.0, 0.0};
 using CVisualGetVisualProxyForStructure_t = void*(__cdecl*)(void* pThis);
@@ -375,7 +379,9 @@ std::atomic<unsigned int> g_existingWindowBackfillMapped = 0;
 std::atomic<DWORD> g_dwmSceneThreadId = 0;
 std::atomic_bool g_dwmPrivateCallsDisabled = false;
 std::atomic_bool g_dwmThreadMismatchLogged = false;
-std::atomic_bool g_deferredDwmObjectDiscoveryAttempted = false;
+std::atomic<ULONGLONG> g_lastDwmSceneCallbackTimestamp = 0;
+std::atomic<ULONGLONG> g_nextDwmObjectDiscoveryAttempt = 0;
+std::atomic<unsigned int> g_dwmObjectDiscoveryFailureCount = 0;
 
 struct MilMatrix3x2D
 {
@@ -543,6 +549,8 @@ std::atomic<ULONGLONG> g_sceneWakeStallStartedAt = 0;
 std::atomic<unsigned int> g_sceneWakeRetryCount = 0;
 std::atomic_bool g_sceneWakeStalled = false;
 std::atomic<ULONGLONG> g_scenePassCounter = 0;
+std::atomic<ULONGLONG> g_lastFallbackInvalidationTimestamp = 0;
+std::atomic<unsigned int> g_abandonedProxyCount = 0;
 std::atomic<void*> g_windowListForSceneWake = nullptr;
 ULONGLONG g_lastObservedScenePassCounter = 0;
 ULONGLONG g_lastSceneProgressTimestamp = 0;
@@ -1725,33 +1733,6 @@ static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
             }
         }
     }
-    // Newer builds expose the reverse CTopLevelWindow -> CWindowData field.
-    // Use it to recover mappings for windows that predate mod initialization.
-    if (!*topLevelWindow && g_topLevelWindowWindowDataOffset != SIZE_MAX)
-    {
-        void* uniqueCandidate = nullptr;
-        for (size_t offset = 0x80; offset <= 0x400; offset += sizeof(void*))
-        {
-            BYTE* fieldAddress = static_cast<BYTE*>(windowData) + offset;
-            if (!IsReadableMemory(fieldAddress, sizeof(void*)))
-            {
-                break;
-            }
-            void* candidate = *reinterpret_cast<void**>(fieldAddress);
-            if (!IsTopLevelWindowForWindowData(candidate, windowData) ||
-                candidate == uniqueCandidate)
-            {
-                continue;
-            }
-            if (uniqueCandidate)
-            {
-                uniqueCandidate = nullptr;
-                break;
-            }
-            uniqueCandidate = candidate;
-        }
-        *topLevelWindow = uniqueCandidate;
-    }
     if (!*topLevelWindow3D && g_windowDataTopLevelWindow3DOffset != SIZE_MAX)
     {
         BYTE* fieldAddress = static_cast<BYTE*>(windowData) + g_windowDataTopLevelWindow3DOffset;
@@ -1795,7 +1776,11 @@ static void* __cdecl TopLevelWindowConstructorHook(void* pThis, void* windowData
 {
     void* result = g_topLevelWindowConstructorOriginal(pThis, windowData, unknown);
     void* constructedObject = result ? result : pThis;
-    if (IsDwmObjectPointerValid(constructedObject, g_topLevelWindowVtable))
+    void* constructorVtable = nullptr;
+    // A base constructor can temporarily expose its own vtable. Check the
+    // object structurally here and latch the final vtable on the scene thread.
+    if (windowData &&
+        IsDwmObjectPointerStructurallyValid(constructedObject, &constructorVtable))
     {
         RegisterDwmWindowMapping(windowData, constructedObject, nullptr);
         MarkAnimationSlotForDwmObjectRefresh(windowData);
@@ -1833,18 +1818,60 @@ static bool RegisterDwmSceneThread(bool authoritative)
         return false;
     }
     DWORD currentThreadId = GetCurrentThreadId();
-    DWORD expectedThreadId = 0;
-    if (g_dwmSceneThreadId.load(std::memory_order_acquire) == 0 && !authoritative)
+    DWORD ownerThreadId = g_dwmSceneThreadId.load(std::memory_order_acquire);
+    if (ownerThreadId == 0 && !authoritative)
     {
         // AdvanceTimelines authoritatively identifies uDWM's scene thread.
         return false;
     }
-    if (g_dwmSceneThreadId.compare_exchange_strong(expectedThreadId, currentThreadId,
+    if (ownerThreadId == 0 &&
+        g_dwmSceneThreadId.compare_exchange_strong(ownerThreadId, currentThreadId,
                                                    std::memory_order_acq_rel,
-                                                   std::memory_order_acquire) ||
-        expectedThreadId == currentThreadId)
+                                                   std::memory_order_acquire))
     {
+        g_lastDwmSceneCallbackTimestamp.store(GetTickCount64(), std::memory_order_release);
         return true;
+    }
+    if (ownerThreadId == currentThreadId)
+    {
+        if (authoritative)
+        {
+            g_lastDwmSceneCallbackTimestamp.store(GetTickCount64(), std::memory_order_release);
+        }
+        return true;
+    }
+    if (authoritative)
+    {
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG lastCallback =
+            g_lastDwmSceneCallbackTimestamp.load(std::memory_order_acquire);
+        bool previousOwnerStopped = false;
+        HANDLE previousThread = OpenThread(SYNCHRONIZE, FALSE, ownerThreadId);
+        if (previousThread)
+        {
+            previousOwnerStopped = WaitForSingleObject(previousThread, 0) == WAIT_OBJECT_0;
+            CloseHandle(previousThread);
+        }
+        else
+        {
+            previousOwnerStopped = GetLastError() == ERROR_INVALID_PARAMETER;
+        }
+        bool previousOwnerStale = lastCallback != 0 && now - lastCallback >= 1000;
+        if ((previousOwnerStopped || previousOwnerStale) &&
+            g_dwmSceneThreadId.compare_exchange_strong(ownerThreadId, currentThreadId,
+                                                       std::memory_order_acq_rel,
+                                                       std::memory_order_acquire))
+        {
+            g_lastDwmSceneCallbackTimestamp.store(now, std::memory_order_release);
+            g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
+            g_desktopManager.store(nullptr, std::memory_order_release);
+            g_dwmCompositor.store(nullptr, std::memory_order_release);
+            g_windowListForSceneWake.store(nullptr, std::memory_order_release);
+            g_nextDwmObjectDiscoveryAttempt.store(0, std::memory_order_release);
+            g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
+            Wh_Log(L"DWM scene thread changed; ownership re-armed");
+            return true;
+        }
     }
     if (!g_dwmThreadMismatchLogged.exchange(true, std::memory_order_acq_rel))
     {
@@ -2202,7 +2229,9 @@ static bool InitializeDwmHooks()
         {L"CTopLevelWindow::CTopLevelWindow",
          reinterpret_cast<void*>(g_topLevelWindowConstructorFunction)},
         {L"CWindowList::EnsureTopLevelWindow",
-         reinterpret_cast<void*>(g_ensureTopLevelWindowFunction)}};
+         reinterpret_cast<void*>(g_ensureTopLevelWindowFunction)},
+        {L"CDesktopManager::PostStartAnimations",
+         reinterpret_cast<void*>(g_desktopManagerPostStartAnimations)}};
     bool missingCoreFunction = false;
     for (const RequiredDwmFunction& function : requiredFunctions)
     {
@@ -2257,21 +2286,14 @@ static bool InitializeDwmHooks()
         Wh_Log(L"DWM compatibility: neither CWindowList scene hook is available");
         return false;
     }
-    bool nativeTimelinePostAvailable = IsDwmFunctionPointerValid(
-        reinterpret_cast<void*>(g_desktopManagerPostStartAnimations));
-    if (!nativeTimelinePostAvailable)
-    {
-        g_desktopManagerPostStartAnimations = nullptr;
-        Wh_Log(L"DWM compatibility: native timeline post unavailable; using window invalidation");
-    }
     bool timelineDirtyAvailable =
         IsDwmImageAddress(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
         IsReadableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
         IsWritableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE));
     if (!timelineDirtyAvailable)
     {
-        g_desktopManagerTimelineDirtyAddress = nullptr;
-        Wh_Log(L"DWM compatibility: scene-thread timeline-dirty assist unavailable");
+        Wh_Log(L"DWM compatibility: required timeline-dirty flag unavailable");
+        return false;
     }
     g_windowDataHwndOffset = FindOffsetFromFunction(
         reinterpret_cast<void*>(g_isGhostWindowOriginal), SIZE_MAX);
@@ -2339,9 +2361,9 @@ static bool InitializeDwmHooks()
            g_topLevelWindowWindowDataOffset,
            hasForceUpdateScene ? L"ForceUpdateScene " : L"",
            hasUpdateScene ? L"UpdateScene" : L"");
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(g_topLevelWindowConstructorFunction),
-                            reinterpret_cast<void*>(TopLevelWindowConstructorHook),
-                            reinterpret_cast<void**>(&g_topLevelWindowConstructorOriginal)))
+    if (!WindhawkUtils::SetFunctionHook(g_topLevelWindowConstructorFunction,
+                                        TopLevelWindowConstructorHook,
+                                        &g_topLevelWindowConstructorOriginal))
     {
         Wh_Log(L"DWM hooks: failed to register CTopLevelWindow constructor hook");
         return false;
@@ -2379,7 +2401,7 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
                          slot.transformRebindRevision != slot.submittedTransformRebindRevision;
         bool periodicValidation = validateCurrentVisuals && now >= slot.nextVisualValidation;
         if (slot.active && slot.hwnd && slot.matrixTransformProxy &&
-            (bindingPending || slot.windowStateThrob || periodicValidation))
+            (bindingPending || periodicValidation))
         {
             slot.hookUsers++;
             slot.nextVisualValidation = now + 250;
@@ -2425,7 +2447,8 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
                 }
             }
         }
-        bool forceNativeTransitionRebind = validateCurrentVisuals && windowStateThrob;
+        bool forceNativeTransitionRebind =
+            windowStateThrob && (bindingPending || periodicValidation);
         bool topLevelBindingAttempted =
             topLevelVisualProxy &&
             (bindingPending || topLevelVisualProxy != previouslyBoundVisualProxy ||
@@ -2634,19 +2657,45 @@ static long __cdecl UpdateSceneHook(void* pThis)
 
 static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime)
 {
-    if (!g_dwmCompositor.load(std::memory_order_acquire))
+    bool canSubmit = RegisterDwmSceneThread(true);
+    if (canSubmit && !g_dwmCompositor.load(std::memory_order_acquire))
     {
-        bool expected = false;
-        if (g_deferredDwmObjectDiscoveryAttempted.compare_exchange_strong(
-                expected, true, std::memory_order_acq_rel, std::memory_order_acquire) &&
-            !CacheDwmObjectsFromDesktopManager(pThis))
+        constexpr unsigned int maxDiscoveryFailures = 5;
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG nextAttempt =
+            g_nextDwmObjectDiscoveryAttempt.load(std::memory_order_acquire);
+        if (now >= nextAttempt &&
+            g_nextDwmObjectDiscoveryAttempt.compare_exchange_strong(
+                nextAttempt, now + 1000, std::memory_order_acq_rel,
+                std::memory_order_acquire))
         {
-            Wh_Log(L"DWM compatibility: deferred compositor discovery failed; "
-                   L"private calls disabled");
-            g_dwmPrivateCallsDisabled.store(true, std::memory_order_release);
+            if (CacheDwmObjectsFromDesktopManager(pThis))
+            {
+                g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
+            }
+            else
+            {
+                unsigned int failures =
+                    g_dwmObjectDiscoveryFailureCount.fetch_add(1,
+                                                               std::memory_order_acq_rel) +
+                    1;
+                if (failures >= maxDiscoveryFailures)
+                {
+                    Wh_Log(L"DWM compatibility: compositor discovery failed %u times; "
+                           L"private calls disabled for this session",
+                           failures);
+                    g_dwmPrivateCallsDisabled.store(true, std::memory_order_release);
+                    canSubmit = false;
+                }
+                else
+                {
+                    Wh_Log(L"DWM compatibility: compositor discovery failed; "
+                           L"retry %u/%u scheduled",
+                           failures, maxDiscoveryFailures);
+                }
+            }
         }
     }
-    bool canSubmit = RegisterDwmSceneThread(true);
     // Serial comparison prevents coalesced scene passes from stranding work.
     if (g_sceneRequestedSerial.load(std::memory_order_acquire) >
             g_sceneSubmittedSerial.load(std::memory_order_acquire) &&
@@ -2657,7 +2706,9 @@ static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime)
         void* windowList = g_windowListForSceneWake.load(std::memory_order_acquire);
         if (windowList && g_windowListForceUpdateSceneOriginal)
         {
-            // Commit before advancing native timelines on the same thread.
+            // This runs only on the verified scene owner. The original call is
+            // used directly so our scene hook can't recurse, and commits the
+            // just-published matrix before native timeline advancement.
             g_windowListForceUpdateSceneOriginal(windowList);
             BindAnimationTransformsAfterNativeScene();
         }
@@ -3054,8 +3105,7 @@ static MeshStepResult SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& s
         }
     }
     ApplyResizeConstraints(mesh);
-    MeshStepResult result = {accelerationSum, velocitySum,
-                             !(accelerationSum < 0.5 && velocitySum < 0.5)};
+    MeshStepResult result = {!(accelerationSum < 0.5 && velocitySum < 0.5)};
     mesh.active = result.wobblying;
     return result;
 }
@@ -3328,7 +3378,7 @@ static void ResetDragInputState()
     g_resizeCoordinateScale = 1.0;
     g_moveEventCounter = 0;
     g_dragAnimationSlot = -1;
-    g_lastMouseCounter = {};
+    g_hasLastMousePosition = false;
     g_lastMousePosition = {};
     g_dragStartMousePosition = {};
     g_dragStartLocalMouse = {};
@@ -3419,6 +3469,32 @@ static bool ResetMatrixTransformProxy(void* matrixTransformProxy)
     return UpdateMatrixTransformProxy(matrixTransformProxy, identityMatrix) >= 0;
 }
 
+static bool RequestFallbackWindowInvalidation(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return false;
+    }
+    constexpr ULONGLONG minimumIntervalMs = 100;
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG previous =
+        g_lastFallbackInvalidationTimestamp.load(std::memory_order_acquire);
+    for (;;)
+    {
+        if (previous != 0 && now - previous < minimumIntervalMs)
+        {
+            return true;
+        }
+        if (g_lastFallbackInvalidationTimestamp.compare_exchange_weak(
+                previous, now, std::memory_order_acq_rel,
+                std::memory_order_acquire))
+        {
+            break;
+        }
+    }
+    return RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE) != FALSE;
+}
+
 static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
 {
     if (!forceRepost)
@@ -3446,8 +3522,10 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
             __atomic_store_n(static_cast<BYTE*>(g_desktopManagerTimelineDirtyAddress), 1,
                              __ATOMIC_RELEASE);
         }
-        // Intentionally cross-thread: supported builds implement this public
-        // "Post" entry point with interlocked queueing/thread-message dispatch.
+        // Intentionally cross-thread. The 22621.6199 and 26100.9032 uDWM
+        // implementations were verified to wake the compositor through an
+        // interlocked queue/thread-message path. Initialization requires both
+        // this exact symbol and the writable timeline-dirty byte.
         long result = g_desktopManagerPostStartAnimations(desktopManager);
         if (result >= 0)
         {
@@ -3455,8 +3533,7 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
             return true;
         }
     }
-    if (hwnd && RedrawWindow(hwnd, nullptr, nullptr,
-                             RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN))
+    if (RequestFallbackWindowInvalidation(hwnd))
     {
         g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
         return true;
@@ -3569,8 +3646,12 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
     g_lastSceneProgressTimestamp = 0;
     SetAnimationThreadSchedulingActive(false);
     ResetDragInputState();
-    Wh_Log(L"DWM scene work abandoned (%s): slots=%u retainedProxies=%u busySlots=%u",
-           reason, abandonedSlots, retainedProxies, busySlots);
+    unsigned int totalRetainedProxies =
+        g_abandonedProxyCount.fetch_add(retainedProxies, std::memory_order_acq_rel) +
+        retainedProxies;
+    Wh_Log(L"DWM scene work abandoned (%s): slots=%u retainedProxies=%u "
+           L"totalRetainedProxies=%u busySlots=%u",
+           reason, abandonedSlots, retainedProxies, totalRetainedProxies, busySlots);
 }
 
 static void StopAnimationClockIfIdle()
@@ -4153,10 +4234,7 @@ static void HandleMoveSizeStart(HWND hwnd)
     g_interactiveWindowStateMaximizing = false;
     g_dragStartMousePosition = mousePosition;
     g_lastMousePosition = mousePosition;
-    if (!QueryPerformanceCounter(&g_lastMouseCounter))
-    {
-        g_lastMouseCounter = {};
-    }
+    g_hasLastMousePosition = true;
     g_dragStartLocalMouse = localMousePosition;
     g_realDragging = true;
     g_realResizing = operationTypeKnown && operationResizing;
@@ -4393,7 +4471,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
 static void StopAllAnimations()
 {
     int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
-    HWND windowsToInvalidate[MAX_ANIMATION_SLOTS] = {};
+    HWND initialSceneWakeWindow = nullptr;
     int retireCount = 0;
     AcquireSRWLockShared(&g_animationSlotsLock);
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
@@ -4401,7 +4479,10 @@ static void StopAllAnimations()
         if (g_animationSlots[i].active)
         {
             slotsToRetire[retireCount] = i;
-            windowsToInvalidate[retireCount] = g_animationSlots[i].hwnd;
+            if (!initialSceneWakeWindow)
+            {
+                initialSceneWakeWindow = g_animationSlots[i].hwnd;
+            }
             retireCount++;
         }
     }
@@ -4409,15 +4490,8 @@ static void StopAllAnimations()
     for (int i = 0; i < retireCount; i++)
     {
         RetireAnimationSlot(slotsToRetire[i]);
-        if (windowsToInvalidate[i])
-        {
-            // Restore identity and release proxies on the scene thread.
-            RedrawWindow(windowsToInvalidate[i], nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-        }
     }
     // Repost the existing cleanup serial instead of creating a moving target.
-    HWND initialSceneWakeWindow = retireCount > 0 ? windowsToInvalidate[0] : nullptr;
     if (initialSceneWakeWindow)
     {
         PostPendingDwmSceneWake(initialSceneWakeWindow, true);
@@ -4429,8 +4503,6 @@ static void StopAllAnimations()
     {
         bool cleanupPending = false;
         HWND sceneWakeWindow = nullptr;
-        HWND pendingWindows[MAX_ANIMATION_SLOTS] = {};
-        int pendingWindowCount = 0;
         AcquireSRWLockShared(&g_animationSlotsLock);
         for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
         {
@@ -4443,11 +4515,6 @@ static void StopAllAnimations()
                 g_animationSlots[i].matrixTransformProxy)
             {
                 sceneWakeWindow = g_animationSlots[i].hwnd;
-            }
-            if (g_animationSlots[i].retiring && g_animationSlots[i].matrixTransformProxy &&
-                g_animationSlots[i].hwnd)
-            {
-                pendingWindows[pendingWindowCount++] = g_animationSlots[i].hwnd;
             }
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
@@ -4469,15 +4536,6 @@ static void StopAllAnimations()
             if (cleanupWakeAttempts == 1 || cleanupWakeAttempts % 2 == 0)
             {
                 PostPendingDwmSceneWake(sceneWakeWindow, true);
-            }
-            // Invalidate every pending window if timeline wakes coalesce.
-            if (cleanupWakeAttempts % 4 == 0)
-            {
-                for (int i = 0; i < pendingWindowCount; i++)
-                {
-                    RedrawWindow(pendingWindows[i], nullptr, nullptr,
-                                 RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-                }
             }
         }
         Sleep(16);
@@ -4763,14 +4821,8 @@ static void UpdateAnimationFrame()
                        g_sceneRequestedSerial.load(std::memory_order_acquire),
                        g_sceneSubmittedSerial.load(std::memory_order_acquire));
             }
-            unsigned int retryCount =
-                g_sceneWakeRetryCount.fetch_add(1, std::memory_order_acq_rel) + 1;
-            bool reposted = PostPendingDwmSceneWake(sceneWakeWindow, true);
-            if (!reposted || retryCount % 4 == 0)
-            {
-                RedrawWindow(sceneWakeWindow, nullptr, nullptr,
-                             RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-            }
+            g_sceneWakeRetryCount.fetch_add(1, std::memory_order_acq_rel);
+            PostPendingDwmSceneWake(sceneWakeWindow, true);
         }
     }
     for (int i = 0; i < retireCount; i++)
@@ -4978,7 +5030,7 @@ static void HandleMoveSizeEnd(HWND hwnd)
     MonitorEdgeState releaseEdgeState = hasReleaseMousePosition
                                             ? GetPointMonitorEdgeState(releaseMousePosition)
                                             : MonitorEdgeState{};
-    if (g_lastMouseCounter.QuadPart != 0 && (!releaseEdgeState.top || !releaseEdgeState.side))
+    if (g_hasLastMousePosition && (!releaseEdgeState.top || !releaseEdgeState.side))
     {
         // MOVESIZEEND may arrive after the cursor leaves the edge.
         MonitorEdgeState lastDragEdgeState = GetPointMonitorEdgeState(g_lastMousePosition);
@@ -5646,6 +5698,11 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK hook, DWORD event, HWND hwnd
     UNREFERENCED_PARAMETER(hook);
     UNREFERENCED_PARAMETER(eventThread);
     UNREFERENCED_PARAMETER(eventTime);
+    if (event == EVENT_OBJECT_LOCATIONCHANGE &&
+        (idObject != OBJID_WINDOW || idChild != CHILDID_SELF))
+    {
+        return;
+    }
     switch (event)
     {
     case EVENT_SYSTEM_MOVESIZESTART:
@@ -5848,16 +5905,23 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
     }
     Wh_Log(L"Window event thread ready");
     bool running = true;
+    HANDLE waitHandles[] = {g_animationTimer, g_eventThreadStop};
     while (running)
     {
         bool frameDue = false;
-        DWORD waitResult = MsgWaitForMultipleObjectsEx(1, &g_animationTimer, INFINITE, QS_ALLINPUT,
-                                                       MWMO_INPUTAVAILABLE);
+        DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            ARRAYSIZE(waitHandles), waitHandles, INFINITE, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
         if (waitResult == WAIT_OBJECT_0)
         {
             frameDue = true;
         }
-        else if (waitResult != WAIT_OBJECT_0 + 1)
+        else if (waitResult == WAIT_OBJECT_0 + 1)
+        {
+            running = false;
+            continue;
+        }
+        else if (waitResult != WAIT_OBJECT_0 + ARRAYSIZE(waitHandles))
         {
             Wh_Log(L"Window event thread wait failed: %u", GetLastError());
             break;
@@ -5924,10 +5988,18 @@ static void StopWindowEventThread();
 
 static bool StartWindowEventThread()
 {
+    g_eventThreadStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_eventThreadStop)
+    {
+        Wh_Log(L"Failed to create event thread stop event");
+        return false;
+    }
     g_eventThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_eventThreadReady)
     {
         Wh_Log(L"Failed to create event thread ready event");
+        CloseHandle(g_eventThreadStop);
+        g_eventThreadStop = nullptr;
         return false;
     }
     g_eventThread = CreateThread(nullptr, 0, WindowEventThreadProc, nullptr, 0, &g_eventThreadId);
@@ -5936,6 +6008,8 @@ static bool StartWindowEventThread()
         Wh_Log(L"Failed to create window event thread");
         CloseHandle(g_eventThreadReady);
         g_eventThreadReady = nullptr;
+        CloseHandle(g_eventThreadStop);
+        g_eventThreadStop = nullptr;
         return false;
     }
     DWORD waitResult = WaitForSingleObject(g_eventThreadReady, 3000);
@@ -5954,9 +6028,9 @@ static void StopWindowEventThread()
     g_existingWindowBackfillIndex.store(0, std::memory_order_release);
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_eventThreadMessageTarget.store(0, std::memory_order_release);
-    if (g_eventThreadId != 0)
+    if (g_eventThreadStop)
     {
-        PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0);
+        SetEvent(g_eventThreadStop);
     }
     if (g_eventThread)
     {
@@ -5972,6 +6046,11 @@ static void StopWindowEventThread()
     {
         CloseHandle(g_eventThreadReady);
         g_eventThreadReady = nullptr;
+    }
+    if (g_eventThreadStop)
+    {
+        CloseHandle(g_eventThreadStop);
+        g_eventThreadStop = nullptr;
     }
     g_eventThreadId = 0;
 }
@@ -6053,7 +6132,9 @@ BOOL Wh_ModInit()
     g_desktopManager.store(nullptr, std::memory_order_release);
     g_dwmPrivateCallsDisabled.store(false, std::memory_order_release);
     g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
-    g_deferredDwmObjectDiscoveryAttempted.store(false, std::memory_order_release);
+    g_lastDwmSceneCallbackTimestamp.store(0, std::memory_order_release);
+    g_nextDwmObjectDiscoveryAttempt.store(0, std::memory_order_release);
+    g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneRequestedSerial.store(0, std::memory_order_release);
     g_sceneSubmittedSerial.store(0, std::memory_order_release);
@@ -6062,6 +6143,8 @@ BOOL Wh_ModInit()
     g_sceneWakeRetryCount.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
     g_scenePassCounter.store(0, std::memory_order_release);
+    g_lastFallbackInvalidationTimestamp.store(0, std::memory_order_release);
+    g_abandonedProxyCount.store(0, std::memory_order_release);
     g_existingWindowBackfillCount.store(0, std::memory_order_release);
     g_existingWindowBackfillIndex.store(0, std::memory_order_release);
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
