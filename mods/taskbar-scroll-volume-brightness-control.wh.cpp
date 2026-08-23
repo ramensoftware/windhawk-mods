@@ -2,13 +2,13 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.0.5
+// @version       1.0.7
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
 // @include       explorer.exe
 // @compilerOptions -ldxva2 -lgdi32 -lgdiplus -ldwmapi -lcomctl32 -lshcore -lole32 -loleaut32 -lwbemuuid
-// @license       MIT
+// @license       GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -104,6 +104,7 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #include <cmath>
 #include <cwchar>
 #include <algorithm>
+#include <atomic>
 #include <windhawk_utils.h>
 #include <commctrl.h>
 
@@ -116,6 +117,12 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #ifndef WM_POINTERWHEEL
 #define WM_POINTERWHEEL 0x024E
 #endif
+
+// -----------------------------------------------------------------------
+// Globals
+// -----------------------------------------------------------------------
+std::atomic<bool> g_initialized{false};
+bool g_classRegistered = false;
 
 // -----------------------------------------------------------------------
 // Settings
@@ -417,15 +424,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 void EnsureOverlayWindow() {
     if (g_hOverlayWnd) return;
 
-    WNDCLASSEXW wc = {};
-    if (!GetClassInfoExW(GetCurrentModuleHandle(), kOverlayClassName, &wc)) {
-        wc.cbSize = sizeof(wc);
+    if (!g_classRegistered) {
+        WNDCLASSEXW wc = {sizeof(wc)};
         wc.style = CS_DROPSHADOW;
         wc.lpfnWndProc = OverlayWndProc;
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kOverlayClassName;
-        wc.hbrBackground = nullptr;
-        RegisterClassExW(&wc);
+        if (!RegisterClassExW(&wc)) return;
+        g_classRegistered = true;
     }
 
     g_hOverlayWnd = CreateWindowExW(
@@ -519,6 +525,101 @@ void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, 
 }
 
 // -----------------------------------------------------------------------
+// WMI brightness fallback
+// -----------------------------------------------------------------------
+
+IWbemLocator* g_pWmiLocator = nullptr;
+IWbemServices* g_pWmiServices = nullptr;
+
+void InitWMI() {
+    if (FAILED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&g_pWmiLocator)) || !g_pWmiLocator) return;
+    if (FAILED(g_pWmiLocator->ConnectServer(_bstr_t(L"ROOT\\WMI"), nullptr, nullptr, 0, 0, 0, 0, &g_pWmiServices)) || !g_pWmiServices) {
+        g_pWmiLocator->Release();
+        g_pWmiLocator = nullptr;
+        return;
+    }
+    CoSetProxyBlanket(g_pWmiServices, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+}
+
+void CleanupWMI() {
+    if (g_pWmiServices) { g_pWmiServices->Release(); g_pWmiServices = nullptr; }
+    if (g_pWmiLocator) { g_pWmiLocator->Release(); g_pWmiLocator = nullptr; }
+}
+
+int AdjustBrightnessWMI(bool up, int notches, int stepPercent) {
+    if (!g_pWmiServices) return -1;
+
+    int resultPercent = -1;
+    IEnumWbemClassObject* pEnumBrightness = nullptr;
+    HRESULT hres = g_pWmiServices->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM WmiMonitorBrightness"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumBrightness);
+
+    if (SUCCEEDED(hres) && pEnumBrightness) {
+        IWbemClassObject* pObj = nullptr;
+        ULONG uReturned = 0;
+        if (pEnumBrightness->Next(WBEM_INFINITE, 1, &pObj, &uReturned) == S_OK && uReturned > 0) {
+            VARIANT vtCurrent; VariantInit(&vtCurrent);
+            VARIANT vtInstanceName; VariantInit(&vtInstanceName);
+
+            if (SUCCEEDED(pObj->Get(L"CurrentBrightness", 0, &vtCurrent, nullptr, nullptr)) &&
+                SUCCEEDED(pObj->Get(L"InstanceName", 0, &vtInstanceName, nullptr, nullptr)) &&
+                vtInstanceName.vt == VT_BSTR) {
+                
+                int current = 50;
+                if (vtCurrent.vt == VT_UI1) current = vtCurrent.bVal;
+                else if (vtCurrent.vt == VT_I4) current = vtCurrent.lVal;
+                else if (vtCurrent.vt == VT_UI4) current = (int)vtCurrent.ulVal;
+
+                int step = stepPercent;
+                if (step < 1) step = 1;
+                int newVal = current + (up ? step * notches : -step * notches);
+                if (newVal < 0) newVal = 0;
+                if (newVal > 100) newVal = 100;
+
+                std::wstring objectPath = L"WmiMonitorBrightnessMethods.InstanceName='";
+                objectPath += vtInstanceName.bstrVal;
+                objectPath += L"'";
+
+                IWbemClassObject* pClass = nullptr;
+                IWbemClassObject* pInParamsDef = nullptr;
+                IWbemClassObject* pInParams = nullptr;
+                IWbemClassObject* pOutParams = nullptr;
+
+                g_pWmiServices->GetObject(_bstr_t(L"WmiMonitorBrightnessMethods"), 0, nullptr, &pClass, nullptr);
+                if (pClass) pClass->GetMethod(L"WmiSetBrightness", 0, &pInParamsDef, nullptr);
+                if (pInParamsDef) pInParamsDef->SpawnInstance(0, &pInParams);
+
+                if (pInParams) {
+                    VARIANT vtTimeout; VariantInit(&vtTimeout);
+                    vtTimeout.vt = VT_I4; vtTimeout.lVal = 1;
+                    pInParams->Put(L"Timeout", 0, &vtTimeout, 0);
+
+                    VARIANT vtBrightness; VariantInit(&vtBrightness);
+                    vtBrightness.vt = VT_UI1; vtBrightness.bVal = (BYTE)newVal;
+                    pInParams->Put(L"Brightness", 0, &vtBrightness, 0);
+
+                    hres = g_pWmiServices->ExecMethod(_bstr_t(objectPath.c_str()), _bstr_t(L"WmiSetBrightness"), 0, nullptr, pInParams, &pOutParams, nullptr);
+                    if (SUCCEEDED(hres)) resultPercent = newVal;
+
+                    VariantClear(&vtTimeout);
+                    VariantClear(&vtBrightness);
+                }
+
+                if (pOutParams) pOutParams->Release();
+                if (pInParams) pInParams->Release();
+                if (pInParamsDef) pInParamsDef->Release();
+                if (pClass) pClass->Release();
+            }
+
+            VariantClear(&vtCurrent);
+            VariantClear(&vtInstanceName);
+            pObj->Release();
+        }
+        pEnumBrightness->Release();
+    }
+    return resultPercent;
+}
+
+// -----------------------------------------------------------------------
 // DDC/CI brightness
 // -----------------------------------------------------------------------
 
@@ -571,7 +672,9 @@ BOOL CALLBACK WarmUpMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
     MonitorCacheEntry* entry = GetOrOpenMonitorCache(hMon);
     if (entry->ddcSupported && !entry->physicalMonitors.empty()) {
         DWORD minB = 0, curB = 0, maxB = 0;
-        GetMonitorBrightness(entry->physicalMonitors[0].hPhysicalMonitor, &minB, &curB, &maxB);
+        if (!GetMonitorBrightness(entry->physicalMonitors[0].hPhysicalMonitor, &minB, &curB, &maxB)) {
+            entry->ddcSupported = false;
+        }
     }
     return TRUE;
 }
@@ -607,102 +710,12 @@ int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int notches, int stepPercent
         }
     }
 
+    // Do NOT set entry->ddcSupported to false here.
+    // Allow transient I2C failures during active scrolling to be absorbed naturally.
     if (anyFailure && resultPercent < 0) {
-        InvalidateMonitorCache(hMonitor);
-        MonitorCacheEntry* fresh = GetOrOpenMonitorCache(hMonitor);
-        *outDdcSupported = fresh->ddcSupported;
-    }
-
-    return resultPercent;
-}
-
-// -----------------------------------------------------------------------
-// WMI brightness fallback
-// -----------------------------------------------------------------------
-
-int AdjustBrightnessWMI(bool up, int notches, int stepPercent) {
-    IWbemLocator* pLoc = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc)) || !pLoc) return -1;
-
-    IWbemServices* pSvc = nullptr;
-    HRESULT hres = pLoc->ConnectServer(_bstr_t(L"ROOT\\WMI"), nullptr, nullptr, 0, 0, 0, 0, &pSvc);
-    if (FAILED(hres) || !pSvc) {
-        pLoc->Release();
         return -1;
     }
 
-    CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
-
-    int resultPercent = -1;
-    IEnumWbemClassObject* pEnumBrightness = nullptr;
-    hres = pSvc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM WmiMonitorBrightness"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumBrightness);
-
-    if (SUCCEEDED(hres) && pEnumBrightness) {
-        IWbemClassObject* pObj = nullptr;
-        ULONG uReturned = 0;
-        if (pEnumBrightness->Next(WBEM_INFINITE, 1, &pObj, &uReturned) == S_OK && uReturned > 0) {
-            VARIANT vtCurrent; VariantInit(&vtCurrent);
-            VARIANT vtInstanceName; VariantInit(&vtInstanceName);
-
-            if (SUCCEEDED(pObj->Get(L"CurrentBrightness", 0, &vtCurrent, nullptr, nullptr)) &&
-                SUCCEEDED(pObj->Get(L"InstanceName", 0, &vtInstanceName, nullptr, nullptr)) &&
-                vtInstanceName.vt == VT_BSTR) {
-                
-                int current = 50;
-                if (vtCurrent.vt == VT_UI1) current = vtCurrent.bVal;
-                else if (vtCurrent.vt == VT_I4) current = vtCurrent.lVal;
-                else if (vtCurrent.vt == VT_UI4) current = (int)vtCurrent.ulVal;
-
-                int step = stepPercent;
-                if (step < 1) step = 1;
-                int newVal = current + (up ? step * notches : -step * notches);
-                if (newVal < 0) newVal = 0;
-                if (newVal > 100) newVal = 100;
-
-                std::wstring objectPath = L"WmiMonitorBrightnessMethods.InstanceName='";
-                objectPath += vtInstanceName.bstrVal;
-                objectPath += L"'";
-
-                IWbemClassObject* pClass = nullptr;
-                IWbemClassObject* pInParamsDef = nullptr;
-                IWbemClassObject* pInParams = nullptr;
-                IWbemClassObject* pOutParams = nullptr;
-
-                pSvc->GetObject(_bstr_t(L"WmiMonitorBrightnessMethods"), 0, nullptr, &pClass, nullptr);
-                if (pClass) pClass->GetMethod(L"WmiSetBrightness", 0, &pInParamsDef, nullptr);
-                if (pInParamsDef) pInParamsDef->SpawnInstance(0, &pInParams);
-
-                if (pInParams) {
-                    VARIANT vtTimeout; VariantInit(&vtTimeout);
-                    vtTimeout.vt = VT_I4; vtTimeout.lVal = 1;
-                    pInParams->Put(L"Timeout", 0, &vtTimeout, 0);
-
-                    VARIANT vtBrightness; VariantInit(&vtBrightness);
-                    vtBrightness.vt = VT_UI1; vtBrightness.bVal = (BYTE)newVal;
-                    pInParams->Put(L"Brightness", 0, &vtBrightness, 0);
-
-                    hres = pSvc->ExecMethod(_bstr_t(objectPath.c_str()), _bstr_t(L"WmiSetBrightness"), 0, nullptr, pInParams, &pOutParams, nullptr);
-                    if (SUCCEEDED(hres)) resultPercent = newVal;
-
-                    VariantClear(&vtTimeout);
-                    VariantClear(&vtBrightness);
-                }
-
-                if (pOutParams) pOutParams->Release();
-                if (pInParams) pInParams->Release();
-                if (pInParamsDef) pInParamsDef->Release();
-                if (pClass) pClass->Release();
-            }
-
-            VariantClear(&vtCurrent);
-            VariantClear(&vtInstanceName);
-            pObj->Release();
-        }
-        pEnumBrightness->Release();
-    }
-
-    pSvc->Release();
-    pLoc->Release();
     return resultPercent;
 }
 
@@ -810,6 +823,9 @@ void HookInputSite(HWND hWnd) {
     auto wndProc = (WNDPROC)GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
     if (wndProc && wndProc != InputSiteWindowProc_Hook && !InputSiteWindowProc_Original) {
         WindhawkUtils::SetFunctionHook(wndProc, InputSiteWindowProc_Hook, &InputSiteWindowProc_Original);
+        if (g_initialized) {
+            Wh_ApplyHookOperations();
+        }
     }
 }
 
@@ -841,7 +857,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
                         if (GetClassNameW(hTaskbar, szTaskbarClass, ARRAYSIZE(szTaskbarClass)) && 
                             (_wcsicmp(szTaskbarClass, L"Shell_TrayWnd") == 0 || _wcsicmp(szTaskbarClass, L"Shell_SecondaryTrayWnd") == 0)) {
                             HookInputSite(hWnd);
-                            Wh_ApplyHookOperations();
                         }
                     }
                 }
@@ -861,6 +876,7 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
     if (g_hMonitorReadyEvent) SetEvent(g_hMonitorReadyEvent);
 
     HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    InitWMI();
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (msg.hwnd == nullptr && msg.message == WM_APP_BRIGHTNESS_REQUEST) {
@@ -893,7 +909,9 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
                         percent = AdjustBrightnessWMI(req->scrollUp, req->notches, settings.brightnessStep);
                     }
 
-                    if (g_workerThreadId) {
+                    // Explicitly guard against pushing negative percentages (transient timeout failures)
+                    // to the UI thread, which causes the overlay to instantly abort and hide.
+                    if (percent >= 0 && g_workerThreadId) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
                         if (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) delete res;
                     }
@@ -910,6 +928,7 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    CleanupWMI();
     CloseAllMonitorCaches();
     if (SUCCEEDED(comInit)) CoUninitialize();
     return 0;
@@ -1034,6 +1053,7 @@ void Wh_ModAfterInit() {
 }
 
 BOOL Wh_ModInit() {
+    g_initialized = false;
     InitializeCriticalSection(&g_settingsLock);
     LoadSettings();
 
@@ -1065,11 +1085,13 @@ BOOL Wh_ModInit() {
         WaitForSingleObject(g_hMonitorReadyEvent, 2000);
         PostThreadMessageW(g_monitorThreadId, WM_APP_WARMUP_MONITORS, 0, 0);
     }
-
+    
+    g_initialized = true;
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    g_initialized = false;
     EnumWindows(EnumWindowsUninitProc, 0);
 
     if (g_workerThreadId) PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
@@ -1100,6 +1122,7 @@ void Wh_ModUninit() {
     }
 
     UnregisterClassW(kOverlayClassName, GetCurrentModuleHandle());
+    g_classRegistered = false;
     DeleteCriticalSection(&g_settingsLock);
 }
 
