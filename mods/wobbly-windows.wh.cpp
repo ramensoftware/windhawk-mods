@@ -2,11 +2,11 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.55
+// @version         0.56
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @license         GPL-2.0-or-later
 // ==/WindhawkMod==
 
@@ -37,7 +37,9 @@ It was mostly tested and made on `Windows 11 23H2`, where it works great, and it
 ## Known Issues
 
 * Some windows act weird/jumpy on 25H2/26H2. (This happens on other builds too but it's less common)
-* Not working/completely breaking with multiple desktops
+* Virtual desktop switching isn't supported yet. The wobble can become missing or visually
+  incorrect after switching desktops; DWM itself should remain operational. Disable and re-enable
+  the mod to reset the effect if this happens.
 * Sometimes when dragging windows through multiple monitors, the window can have a weird offset
 
 ## Feedback
@@ -74,9 +76,6 @@ If you found an issue and it's reproducible or need help, then open an issue at 
   $name: Move Factor (advanced mode only)
   $description: Custom deformation amount. 1-25
 
-- DebugLogging: false
-  $name: Debug logging
-  $description: Write physics parameters to the Windhawk log.
 */
 // ==/WindhawkModSettings==
 
@@ -88,7 +87,7 @@ If you found an issue and it's reproducible or need help, then open an issue at 
 #include <climits>
 #include <cmath>
 #include <cstddef>
-#include <cstring>
+#include <cstdint>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -106,7 +105,6 @@ struct WobblySettings
     double stiffness;
     double drag;
     double moveFactor;
-    bool debugLogging;
 };
 
 WobblySettings g_settings = {};
@@ -226,7 +224,6 @@ static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_UP = 0x40;
 static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_DOWN = 0x80;
 std::atomic<HWND> g_pendingInteractiveSnapWindow = nullptr;
 std::atomic<LPARAM> g_pendingInteractiveSnapFlags = 0;
-static constexpr DWORD MAXIMIZED_STATE_POLL_INTERVAL_MS = 16;
 RECT g_realDraggedWindowRect = {};
 RECT g_lastDraggedWindowRect = {};
 bool g_lastDraggedWindowZoomed = false;
@@ -309,10 +306,7 @@ CDesktopManagerAdvanceTimelines_t g_desktopManagerAdvanceTimelinesOriginal = nul
 using CDesktopManagerPostStartAnimations_t = long(__cdecl*)(void* pThis);
 CDesktopManagerPostStartAnimations_t g_desktopManagerPostStartAnimations = nullptr;
 void* g_desktopManagerTimelineDirtyAddress = nullptr;
-using CProjectionBorderManagerSetCaptureControllerOffsetTransform_t =
-    long(__cdecl*)(void* pThis, void* captureControllerProxy, int x, int y);
-CProjectionBorderManagerSetCaptureControllerOffsetTransform_t
-    g_setCaptureControllerOffsetTransform = nullptr;
+void* g_desktopManagerInstanceAddress = nullptr;
 void* g_cCompositorAddRefFunction = nullptr;
 void* g_cCompositorReleaseFunction = nullptr;
 using CTopLevelWindow3DDestructor_t = void(__cdecl*)(void* pThis);
@@ -488,6 +482,8 @@ static void* GetTopLevelVisualProxy(void* topLevelWindow)
 }
 
 static constexpr int MAX_ANIMATION_SLOTS = 6;
+static constexpr ULONGLONG DWM_SCENE_STALL_TIMEOUT_MS = 3000;
+static constexpr ULONGLONG DWM_UNLOAD_CLEANUP_TIMEOUT_MS = 1000;
 
 struct WindowAnimationSlot
 {
@@ -556,8 +552,13 @@ struct AnimationThreadSchedulingState
 {
     HMODULE avrtModule;
     HANDLE mmcssHandle;
+    bool active;
+    AvSetMmThreadCharacteristicsW_t setMmcssCharacteristics;
+    AvSetMmThreadPriority_t setMmcssPriority;
     AvRevertMmThreadCharacteristics_t revertMmcss;
 };
+
+AnimationThreadSchedulingState g_animationThreadScheduling = {};
 
 static bool IsReadableMemory(const void* address, size_t size);
 static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
@@ -817,8 +818,7 @@ static long __cdecl WindowTransitionChangeHook(void* pThis, void* dwmWindow, int
     {
         void* windowData = nullptr;
         if (GetSyncedWindowDataCompat(pThis, dwmWindow, true, &windowData) &&
-            g_windowDataHwndOffset != SIZE_MAX &&
-            IsReadableMemory(static_cast<BYTE*>(windowData) + g_windowDataHwndOffset, sizeof(HWND)))
+            g_windowDataHwndOffset != SIZE_MAX)
         {
             hwnd = GetHwndFromWindowData(windowData);
         }
@@ -827,20 +827,17 @@ static long __cdecl WindowTransitionChangeHook(void* pThis, void* dwmWindow, int
     {
         RECT sourceRect = {};
         bool hasSourceRect = GetWindowRect(hwnd, &sourceRect) != FALSE;
-        if (IsReadableMemory(&targetRect, sizeof(targetRect)))
+        if (IsApproximatelyMonitorWorkArea(targetRect))
         {
-            if (IsApproximatelyMonitorWorkArea(targetRect))
-            {
-                transitionFlags |= NATIVE_TRANSITION_TARGET_IS_WORK_AREA;
-            }
-            else if (IsApproximatelySnapLayoutTarget(targetRect))
-            {
-                transitionFlags |= NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT;
-            }
-            if (hasSourceRect)
-            {
-                transitionFlags |= EncodeWindowTransitionDirection(sourceRect, targetRect);
-            }
+            transitionFlags |= NATIVE_TRANSITION_TARGET_IS_WORK_AREA;
+        }
+        else if (IsApproximatelySnapLayoutTarget(targetRect))
+        {
+            transitionFlags |= NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT;
+        }
+        if (hasSourceRect)
+        {
+            transitionFlags |= EncodeWindowTransitionDirection(sourceRect, targetRect);
         }
         if (hasSourceRect && IsApproximatelyMonitorWorkArea(sourceRect))
         {
@@ -862,11 +859,10 @@ static long __cdecl StartAnimationForMaximizeSnapTransitionHook(void* pThis, int
 {
     HWND hwnd = nullptr;
     LPARAM transitionFlags = 0;
-    if (pThis && IsReadableMemory(&targetRect, sizeof(targetRect)))
+    if (pThis)
     {
         void* windowData = FindWindowDataForTopLevelWindow3D(pThis);
-        if (windowData && g_windowDataHwndOffset != SIZE_MAX &&
-            IsReadableMemory(static_cast<BYTE*>(windowData) + g_windowDataHwndOffset, sizeof(HWND)))
+        if (windowData && g_windowDataHwndOffset != SIZE_MAX)
         {
             hwnd = GetHwndFromWindowData(windowData);
         }
@@ -1090,18 +1086,20 @@ static bool IsDwmExecutableAddress(const void* address)
 
 static bool IsDwmFunctionPointerValid(const void* function)
 {
-    return function && IsReadableMemory(function, 1) && IsDwmExecutableAddress(function);
+    return function && IsDwmExecutableAddress(function);
 }
 
 static bool IsDwmObjectPointerValid(void* object, std::atomic<void*>& expectedVtable)
 {
+    // This one coarse heap probe rejects obvious invalid pointers. Object
+    // lifetime hooks are the real guard; vtable/function checks below use the
+    // cached uDWM image ranges and don't issue more VirtualQuery calls.
     if (!object || !IsReadableMemory(object, sizeof(void*)))
     {
         return false;
     }
     void* actualVtable = *reinterpret_cast<void**>(object);
-    if (!actualVtable || !IsDwmImageAddress(actualVtable, sizeof(void*) * 3) ||
-        !IsReadableMemory(actualVtable, sizeof(void*) * 3))
+    if (!actualVtable || !IsDwmImageAddress(actualVtable, sizeof(void*) * 3))
     {
         return false;
     }
@@ -1132,8 +1130,7 @@ static bool IsDwmObjectPointerStructurallyValid(void* object, void** vtable)
         return false;
     }
     void* candidateVtable = *reinterpret_cast<void**>(object);
-    if (!candidateVtable || !IsDwmImageAddress(candidateVtable, sizeof(void*) * 3) ||
-        !IsReadableMemory(candidateVtable, sizeof(void*) * 3))
+    if (!candidateVtable || !IsDwmImageAddress(candidateVtable, sizeof(void*) * 3))
     {
         return false;
     }
@@ -1160,8 +1157,7 @@ static bool DwmObjectVtableContains(void* object, void* function)
     void** virtualFunctions = static_cast<void**>(vtable);
     for (int i = 0; i < 24; i++)
     {
-        if (!IsDwmImageAddress(&virtualFunctions[i], sizeof(void*)) ||
-            !IsReadableMemory(&virtualFunctions[i], sizeof(void*)))
+        if (!IsDwmImageAddress(&virtualFunctions[i], sizeof(void*)))
         {
             break;
         }
@@ -1180,7 +1176,7 @@ static size_t FindOffsetFromFunction(void* function, size_t defaultValue)
         return defaultValue;
     }
     BYTE* instruction = static_cast<BYTE*>(function);
-    std::regex pattern(R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]+)\])",
+    std::regex pattern(R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]{1,8})\])",
                        std::regex_constants::icase);
     size_t bytesRead = 0;
     for (int i = 0; i < 32 && bytesRead < 256; i++)
@@ -1217,7 +1213,7 @@ static size_t FindReturnedPointerOffset(void* function)
     {
         return SIZE_MAX;
     }
-    std::regex pattern(R"(mov rax, (?:qword ptr )?\[r[a-z0-9]+\+0x([0-9a-f]+)\])",
+    std::regex pattern(R"(mov rax, (?:qword ptr )?\[r[a-z0-9]+\+0x([0-9a-f]{1,8})\])",
                        std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     size_t candidate = SIZE_MAX;
@@ -1304,7 +1300,7 @@ static bool FindConstructorWindowDataOffsets(void* function, size_t* windowDataT
     std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
                            std::regex_constants::icase);
     std::regex storePattern(
-        R"(^mov (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]+)\], (r[a-z0-9]+)$)",
+        R"(^mov (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\], (r[a-z0-9]+)$)",
         std::regex_constants::icase);
     size_t forwardCandidate = SIZE_MAX;
     size_t reverseCandidate = SIZE_MAX;
@@ -1414,7 +1410,8 @@ static bool FindWindowDataTopLevelOffsets(void* function, size_t* topLevelWindow
     unsigned int aliasCount = 1;
     std::regex movePattern(R"(mov (r[a-z0-9]+), (r[a-z0-9]+))", std::regex_constants::icase);
     // Accept common compiler encodings when deriving these fields.
-    std::regex memoryPattern(R"(\[(r[a-z0-9]+)\+0x([0-9a-f]+)\])", std::regex_constants::icase);
+    std::regex memoryPattern(R"(\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\])",
+                             std::regex_constants::icase);
     std::regex zeroTestPattern(R"(^cmp (?:qword ptr )?\[[^\]]+\], (?:0x)?0$)",
                                std::regex_constants::icase);
     std::regex writePattern(R"(^mov (?:qword ptr )?\[[^\]]+\], )", std::regex_constants::icase);
@@ -1855,6 +1852,8 @@ static bool IsOnDwmSceneThread()
 
 static void* FindCompositorInDesktopManager(void* manager, size_t* compositorOffset)
 {
+    // No compositor accessor is published on the supported PDBs. Require one
+    // unique object whose vtable contains both CCompositor ref-count methods.
     *compositorOffset = SIZE_MAX;
     void* managerVtable = nullptr;
     if (!IsDwmObjectPointerStructurallyValid(manager, &managerVtable) ||
@@ -1915,70 +1914,19 @@ static bool CacheDwmObjectsFromDesktopManager(void* manager)
 static void* FindDwmCompositor()
 {
     g_desktopManager.store(nullptr, std::memory_order_release);
-    void* scanFunction = reinterpret_cast<void*>(g_setCaptureControllerOffsetTransform);
-    if (!IsDwmFunctionPointerValid(scanFunction))
+    if (!IsDwmImageAddress(g_desktopManagerInstanceAddress, sizeof(void*)) ||
+        !IsReadableMemory(g_desktopManagerInstanceAddress, sizeof(void*)))
     {
+        Wh_Log(L"DWM startup discovery: desktop manager singleton unavailable");
         return nullptr;
     }
-    void* discoveredManager = nullptr;
-    void* discoveredCompositor = nullptr;
-    size_t discoveredCompositorOffset = SIZE_MAX;
-    unsigned int discoveredPairs = 0;
-    BYTE* instruction = static_cast<BYTE*>(scanFunction);
-    size_t bytesRead = 0;
-    for (int instructionIndex = 0; instructionIndex < 128 && bytesRead < 512; instructionIndex++)
+    void* desktopManager = *static_cast<void**>(g_desktopManagerInstanceAddress);
+    if (!CacheDwmObjectsFromDesktopManager(desktopManager))
     {
-        WH_DISASM_RESULT result = {};
-        if (!IsDwmExecutableAddress(instruction) || !Wh_Disasm(instruction, &result) ||
-            result.length == 0)
-        {
-            break;
-        }
-        // x64 RIP-relative MOV locating the singleton without fixed addresses.
-        bool ripRelativePointerLoad = result.length == 7 && (instruction[0] & 0xF8) == 0x48 &&
-                                      instruction[1] == 0x8B && (instruction[2] & 0xC7) == 0x05;
-        if (ripRelativePointerLoad)
-        {
-            INT32 displacement = *reinterpret_cast<INT32*>(instruction + 3);
-            BYTE* globalAddress = instruction + result.length + displacement;
-            if (IsDwmImageAddress(globalAddress, sizeof(void*)) &&
-                IsReadableMemory(globalAddress, sizeof(void*)))
-            {
-                void* managerCandidate = *reinterpret_cast<void**>(globalAddress);
-                size_t compositorOffset = SIZE_MAX;
-                void* compositorCandidate =
-                    FindCompositorInDesktopManager(managerCandidate, &compositorOffset);
-                if (compositorCandidate &&
-                    (managerCandidate != discoveredManager ||
-                     compositorCandidate != discoveredCompositor))
-                {
-                    discoveredManager = managerCandidate;
-                    discoveredCompositor = compositorCandidate;
-                    discoveredCompositorOffset = compositorOffset;
-                    discoveredPairs++;
-                }
-            }
-        }
-        std::string_view text = result.text;
-        instruction += result.length;
-        bytesRead += result.length;
-        if (text == "ret")
-        {
-            break;
-        }
-    }
-    if (discoveredPairs != 1 ||
-        !IsDwmObjectPointerValid(discoveredManager, g_desktopManagerVtable) ||
-        !IsDwmObjectPointerValid(discoveredCompositor, g_compositorVtable))
-    {
-        Wh_Log(L"DWM startup discovery: compositor pair matches=%u", discoveredPairs);
+        Wh_Log(L"DWM startup discovery: singleton object validation failed");
         return nullptr;
     }
-    g_desktopManager.store(discoveredManager, std::memory_order_release);
-    Wh_Log(L"DWM objects verified automatically: CDesktopManager=%p "
-           L"CCompositor=%p compositorOffset=0x%zx",
-           discoveredManager, discoveredCompositor, discoveredCompositorOffset);
-    return discoveredCompositor;
+    return g_dwmCompositor.load(std::memory_order_acquire);
 }
 
 static bool InitializeDwmHooks()
@@ -2119,13 +2067,10 @@ static bool InitializeDwmHooks()
          reinterpret_cast<void**>(&g_cBaseObjectRelease),
          nullptr,
          true},
-        {{L"private: long __cdecl CProjectionBorderManager::"
-           L"_SetCaptureControllerOffsetTransform("
-           L"class CCaptureControllerProxy *,int,int)",
-          L"?_SetCaptureControllerOffsetTransform@"
-           L"CProjectionBorderManager@@"
-           L"AEAAJPEAVCCaptureControllerProxy@@HH@Z"},
-         reinterpret_cast<void**>(&g_setCaptureControllerOffsetTransform),
+        {{L"private: static class CDesktopManager * "
+           L"CDesktopManager::s_pDesktopManagerInstance",
+          L"?s_pDesktopManagerInstance@CDesktopManager@@0PEAV1@EA"},
+         &g_desktopManagerInstanceAddress,
          nullptr,
          true},
         {{L"public: virtual unsigned long __cdecl CCompositor::AddRef(void)",
@@ -2301,16 +2246,21 @@ static bool InitializeDwmHooks()
         Wh_Log(L"DWM compatibility: neither CWindowList scene hook is available");
         return false;
     }
-    bool nativeTimelineWakeAvailable =
-        IsDwmFunctionPointerValid(reinterpret_cast<void*>(g_desktopManagerPostStartAnimations)) &&
+    bool nativeTimelinePostAvailable = IsDwmFunctionPointerValid(
+        reinterpret_cast<void*>(g_desktopManagerPostStartAnimations));
+    if (!nativeTimelinePostAvailable)
+    {
+        g_desktopManagerPostStartAnimations = nullptr;
+        Wh_Log(L"DWM compatibility: native timeline post unavailable; using window invalidation");
+    }
+    bool timelineDirtyAvailable =
         IsDwmImageAddress(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
         IsReadableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
         IsWritableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE));
-    if (!nativeTimelineWakeAvailable)
+    if (!timelineDirtyAvailable)
     {
-        g_desktopManagerPostStartAnimations = nullptr;
         g_desktopManagerTimelineDirtyAddress = nullptr;
-        Wh_Log(L"DWM compatibility: native timeline wake unavailable; using window invalidation");
+        Wh_Log(L"DWM compatibility: scene-thread timeline-dirty assist unavailable");
     }
     g_windowDataHwndOffset = FindOffsetFromFunction(
         reinterpret_cast<void*>(g_isGhostWindowOriginal), SIZE_MAX);
@@ -2412,7 +2362,6 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         bool previouslyTransitionAttached = false;
         bool bindingPending = false;
         bool windowStateThrob = false;
-        bool debugLogging = false;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& slot = g_animationSlots[i];
         bindingPending = !slot.transformAttached ||
@@ -2432,7 +2381,6 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
             previouslyAttached = slot.transformAttached;
             previouslyTransitionAttached = slot.transitionTransformAttached;
             windowStateThrob = slot.windowStateThrob;
-            debugLogging = slot.settings.debugLogging;
         }
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (!matrixTransformProxy)
@@ -2506,8 +2454,8 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
                 currentSlot.transformAttached = true;
                 currentSlot.boundTopLevelVisualProxy = topLevelVisualProxy;
                 currentSlot.submittedTransformRebindRevision = rebindRevision;
-                logBinding = debugLogging && (!previouslyAttached ||
-                                               previouslyBoundVisualProxy != topLevelVisualProxy);
+                logBinding = !previouslyAttached ||
+                             previouslyBoundVisualProxy != topLevelVisualProxy;
             }
             else if (topLevelBindingAttempted)
             {
@@ -2518,9 +2466,8 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
             {
                 currentSlot.transitionTransformAttached = true;
                 currentSlot.boundTransitionVisualProxy = transitionVisualProxy;
-                logBinding = logBinding || (debugLogging && (!previouslyTransitionAttached ||
-                                                             previouslyBoundTransitionVisualProxy !=
-                                                                 transitionVisualProxy));
+                logBinding = logBinding || !previouslyTransitionAttached ||
+                             previouslyBoundTransitionVisualProxy != transitionVisualProxy;
             }
         }
         if (currentSlot.hookUsers > 0)
@@ -3122,6 +3069,10 @@ static void EndDrag(WobbleMesh& mesh)
     {
         return;
     }
+    if (mesh.dragPointIndex < GRID_POINT_COUNT)
+    {
+        mesh.points[mesh.dragPointIndex].fixed = false;
+    }
     mesh.dragging = false;
 }
 
@@ -3245,34 +3196,58 @@ static AnimationThreadSchedulingState InitializeAnimationThreadScheduling()
     {
         return state;
     }
-    auto setCharacteristics = reinterpret_cast<AvSetMmThreadCharacteristicsW_t>(
+    state.setMmcssCharacteristics = reinterpret_cast<AvSetMmThreadCharacteristicsW_t>(
         GetProcAddress(state.avrtModule, "AvSetMmThreadCharacteristicsW"));
-    auto setPriority = reinterpret_cast<AvSetMmThreadPriority_t>(
+    state.setMmcssPriority = reinterpret_cast<AvSetMmThreadPriority_t>(
         GetProcAddress(state.avrtModule, "AvSetMmThreadPriority"));
     state.revertMmcss = reinterpret_cast<AvRevertMmThreadCharacteristics_t>(
         GetProcAddress(state.avrtModule, "AvRevertMmThreadCharacteristics"));
-    if (!setCharacteristics || !setPriority || !state.revertMmcss)
+    if (!state.setMmcssCharacteristics || !state.setMmcssPriority || !state.revertMmcss)
     {
         FreeLibrary(state.avrtModule);
         state = {};
-        return state;
-    }
-    DWORD taskIndex = 0;
-    state.mmcssHandle = setCharacteristics(L"Window Manager", &taskIndex);
-    if (!state.mmcssHandle)
-    {
-        // Fall back when the Window Manager MMCSS profile is unavailable.
-        state.mmcssHandle = setCharacteristics(L"Games", &taskIndex);
-    }
-    if (state.mmcssHandle)
-    {
-        setPriority(state.mmcssHandle, AVRT_PRIORITY_HIGH);
     }
     return state;
 }
 
+static void SetAnimationThreadSchedulingActive(bool active)
+{
+    AnimationThreadSchedulingState& state = g_animationThreadScheduling;
+    if (active == state.active)
+    {
+        return;
+    }
+    state.active = active;
+    if (!active)
+    {
+        if (state.mmcssHandle && state.revertMmcss)
+        {
+            state.revertMmcss(state.mmcssHandle);
+            state.mmcssHandle = nullptr;
+        }
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+        return;
+    }
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+    if (!state.setMmcssCharacteristics || !state.setMmcssPriority)
+    {
+        return;
+    }
+    DWORD taskIndex = 0;
+    state.mmcssHandle = state.setMmcssCharacteristics(L"Window Manager", &taskIndex);
+    if (!state.mmcssHandle)
+    {
+        state.mmcssHandle = state.setMmcssCharacteristics(L"Games", &taskIndex);
+    }
+    if (state.mmcssHandle)
+    {
+        state.setMmcssPriority(state.mmcssHandle, AVRT_PRIORITY_HIGH);
+    }
+}
+
 static void UninitializeAnimationThreadScheduling(AnimationThreadSchedulingState& state)
 {
+    SetAnimationThreadSchedulingActive(false);
     if (state.mmcssHandle && state.revertMmcss)
     {
         state.revertMmcss(state.mmcssHandle);
@@ -3315,12 +3290,14 @@ static bool EnsureAnimationClockRunning(HWND hwnd)
         g_lastAnimationCounter = {};
     }
     g_animationClockArmed = true;
+    SetAnimationThreadSchedulingActive(true);
     if (!ArmNextAnimationTick())
     {
         g_animationClockArmed = false;
         g_animationTargetHz = 0.0;
         g_lastAnimationCounter = {};
         g_nextAnimationCounter = {};
+        SetAnimationThreadSchedulingActive(false);
         Wh_Log(L"Failed to arm animation timer: %u", GetLastError());
         return false;
     }
@@ -3434,10 +3411,6 @@ static bool ResetMatrixTransformProxy(void* matrixTransformProxy)
 
 static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
 {
-    if (g_dwmPrivateCallsDisabled.load(std::memory_order_acquire))
-    {
-        return false;
-    }
     if (!forceRepost)
     {
         bool expected = false;
@@ -3453,12 +3426,18 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
         g_sceneWakeScheduled.store(true, std::memory_order_release);
     }
     void* desktopManager = g_desktopManager.load(std::memory_order_acquire);
-    if (desktopManager && g_desktopManagerPostStartAnimations &&
-        g_desktopManagerTimelineDirtyAddress)
+    if (desktopManager && g_desktopManagerPostStartAnimations)
     {
-        // PostStartAnimations needs the PDB-resolved timeline-dirty flag.
-        *static_cast<volatile BYTE*>(g_desktopManagerTimelineDirtyAddress) = 1;
-        MemoryBarrier();
+        if (g_desktopManagerTimelineDirtyAddress)
+        {
+            // Publish the single-byte dirty flag atomically before posting the
+            // compositor work item. A plain cross-thread private-state write is
+            // deliberately avoided.
+            __atomic_store_n(static_cast<BYTE*>(g_desktopManagerTimelineDirtyAddress), 1,
+                             __ATOMIC_RELEASE);
+        }
+        // Intentionally cross-thread: supported builds implement this public
+        // "Post" entry point with interlocked queueing/thread-message dispatch.
         long result = g_desktopManagerPostStartAnimations(desktopManager);
         if (result >= 0)
         {
@@ -3466,13 +3445,14 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
             return true;
         }
     }
+    if (hwnd && RedrawWindow(hwnd, nullptr, nullptr,
+                             RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN))
+    {
+        g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
+        return true;
+    }
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
-    // Win32 invalidation is only a fallback for the native wake path.
-    if (hwnd)
-    {
-        RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-    }
     return false;
 }
 
@@ -3525,10 +3505,62 @@ static void FinalizeRetiringSlots()
             ResetMatrixTransformProxy(matrixTransformProxy);
             if (g_cBaseObjectRelease)
             {
+                // SetTransform(nullptr) isn't a valid detach operation on the
+                // supported uDWM builds: it dereferences the transform argument.
+                // Leave the retained transform at identity and release our ref.
                 g_cBaseObjectRelease(matrixTransformProxy);
             }
         }
     }
+}
+
+static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
+{
+    unsigned int abandonedSlots = 0;
+    unsigned int retainedProxies = 0;
+    unsigned int busySlots = 0;
+    AcquireSRWLockExclusive(&g_animationSlotsLock);
+    for (WindowAnimationSlot& slot : g_animationSlots)
+    {
+        if (!slot.active && !slot.retiring)
+        {
+            continue;
+        }
+        if (slot.hookUsers != 0)
+        {
+            busySlots++;
+            continue;
+        }
+        retainedProxies += slot.matrixTransformProxy != nullptr;
+        ULONGLONG nextGeneration = slot.generation + 1;
+        slot = {};
+        slot.generation = nextGeneration;
+        abandonedSlots++;
+    }
+    WakeAllConditionVariable(&g_animationSlotsCondition);
+    ReleaseSRWLockExclusive(&g_animationSlotsLock);
+
+    if (g_animationTimer)
+    {
+        CancelWaitableTimer(g_animationTimer);
+    }
+    g_animationClockArmed = false;
+    g_animationTargetHz = 0.0;
+    g_lastAnimationCounter = {};
+    g_nextAnimationCounter = {};
+    g_sceneWakeScheduled.store(false, std::memory_order_release);
+    g_sceneWakePostTimestamp.store(0, std::memory_order_release);
+    g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
+    g_sceneWakeRetryCount.store(0, std::memory_order_release);
+    g_sceneWakeStalled.store(false, std::memory_order_release);
+    g_sceneSubmittedSerial.store(g_sceneRequestedSerial.load(std::memory_order_acquire),
+                                 std::memory_order_release);
+    g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
+    g_lastSceneProgressTimestamp = 0;
+    SetAnimationThreadSchedulingActive(false);
+    ResetDragInputState();
+    Wh_Log(L"DWM scene work abandoned (%s): slots=%u retainedProxies=%u busySlots=%u",
+           reason, abandonedSlots, retainedProxies, busySlots);
 }
 
 static void StopAnimationClockIfIdle()
@@ -3546,6 +3578,7 @@ static void StopAnimationClockIfIdle()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
+    SetAnimationThreadSchedulingActive(false);
     g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
     g_lastSceneProgressTimestamp = 0;
 }
@@ -4126,25 +4159,22 @@ static void HandleMoveSizeStart(HWND hwnd)
         return;
     }
     RequestDwmScenePass(hwnd);
-    if (activeSettings.debugLogging)
+    int dragPointIndex = -1;
+    AcquireSRWLockShared(&g_animationSlotsLock);
+    if (g_animationSlots[slotIndex].active)
     {
-        int dragPointIndex = -1;
-        AcquireSRWLockShared(&g_animationSlotsLock);
-        if (g_animationSlots[slotIndex].active)
-        {
-            dragPointIndex = g_animationSlots[slotIndex].mesh.dragPointIndex;
-        }
-        ReleaseSRWLockShared(&g_animationSlotsLock);
-        Wh_Log(L"MOVE/SIZE START HWND=%p "
-               L"Type=%s "
-               L"Size=%dx%d "
-               L"ResizeCoordinateScale=%.4f "
-               L"MouseLocal=(%.2f,%.2f) "
-               L"MeshPoint=%d",
-               hwnd, g_moveTypeKnown ? (g_realResizing ? L"RESIZE" : L"MOVE") : L"PENDING", width,
-               height, g_resizeCoordinateScale, g_dragStartLocalMouse.x, g_dragStartLocalMouse.y,
-               dragPointIndex);
+        dragPointIndex = g_animationSlots[slotIndex].mesh.dragPointIndex;
     }
+    ReleaseSRWLockShared(&g_animationSlotsLock);
+    Wh_Log(L"MOVE/SIZE START HWND=%p "
+           L"Type=%s "
+           L"Size=%dx%d "
+           L"ResizeCoordinateScale=%.4f "
+           L"MouseLocal=(%.2f,%.2f) "
+           L"MeshPoint=%d",
+           hwnd, g_moveTypeKnown ? (g_realResizing ? L"RESIZE" : L"MOVE") : L"PENDING", width,
+           height, g_resizeCoordinateScale, g_dragStartLocalMouse.x, g_dragStartLocalMouse.y,
+           dragPointIndex);
 }
 
 static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha)
@@ -4382,8 +4412,9 @@ static void StopAllAnimations()
     {
         PostPendingDwmSceneWake(initialSceneWakeWindow, true);
     }
-    ULONGLONG hookWaitDeadline = GetTickCount64() + 5000;
+    ULONGLONG hookWaitDeadline = GetTickCount64() + DWM_UNLOAD_CLEANUP_TIMEOUT_MS;
     unsigned int cleanupWakeAttempts = 0;
+    bool cleanupTimedOut = false;
     for (;;)
     {
         bool cleanupPending = false;
@@ -4418,6 +4449,7 @@ static void StopAllAnimations()
         if (now >= hookWaitDeadline)
         {
             Wh_Log(L"Timed out waiting for DWM animation hooks");
+            cleanupTimedOut = true;
             break;
         }
         if (sceneWakeWindow)
@@ -4441,6 +4473,12 @@ static void StopAllAnimations()
         Sleep(16);
     }
     FinalizeRetiringSlots();
+    if (cleanupTimedOut)
+    {
+        // Off-scene private calls are unsafe. Drop bookkeeping and intentionally
+        // retain any unresolved DWM proxies instead of blocking unload forever.
+        AbandonAnimationSlotsAfterSceneStall(L"cleanup timeout");
+    }
     if (g_animationTimer)
     {
         CancelWaitableTimer(g_animationTimer);
@@ -4449,6 +4487,7 @@ static void StopAllAnimations()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
+    SetAnimationThreadSchedulingActive(false);
     ResetDragInputState();
 }
 
@@ -4504,11 +4543,29 @@ static void UpdateAnimationFrame()
     // Publish only fully integrated local mesh snapshots.
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
     {
-        WindowAnimationSlot snapshot = {};
+        struct PhysicsSnapshot
+        {
+            bool active;
+            bool dragging;
+            bool freeStepPending;
+            bool identityApplied;
+            ULONGLONG generation;
+            HWND hwnd;
+            WobblySettings settings;
+            WobbleMesh mesh;
+        } snapshot = {};
         AcquireSRWLockShared(&g_animationSlotsLock);
         if (g_animationSlots[i].active)
         {
-            snapshot = g_animationSlots[i];
+            const WindowAnimationSlot& slot = g_animationSlots[i];
+            snapshot.active = true;
+            snapshot.dragging = slot.dragging;
+            snapshot.freeStepPending = slot.freeStepPending;
+            snapshot.identityApplied = slot.identityApplied;
+            snapshot.generation = slot.generation;
+            snapshot.hwnd = slot.hwnd;
+            snapshot.settings = slot.settings;
+            snapshot.mesh = slot.mesh;
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
         if (!snapshot.active ||
@@ -4518,7 +4575,7 @@ static void UpdateAnimationFrame()
             continue;
         }
         WobbleMesh simulatedMesh = snapshot.mesh;
-        WobbleMesh previousMesh = snapshot.previousMesh;
+        WobbleMesh previousMesh = snapshot.mesh;
         double remainingMilliseconds = frameMilliseconds;
         bool simulated = false;
         bool freeStepPending = snapshot.freeStepPending;
@@ -4578,11 +4635,33 @@ static void UpdateAnimationFrame()
     int retireCount = 0;
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
     {
-        WindowAnimationSlot snapshot = {};
+        struct RetirementSnapshot
+        {
+            bool active;
+            bool dragging;
+            bool meshActive;
+            bool freeStepPending;
+            bool identityApplied;
+            bool proxyCreationPending;
+            ULONGLONG generation;
+            ULONGLONG nextWindowValidation;
+            HWND hwnd;
+            void* matrixTransformProxy;
+        } snapshot = {};
         AcquireSRWLockShared(&g_animationSlotsLock);
         if (g_animationSlots[i].active)
         {
-            snapshot = g_animationSlots[i];
+            const WindowAnimationSlot& slot = g_animationSlots[i];
+            snapshot.active = true;
+            snapshot.dragging = slot.dragging;
+            snapshot.meshActive = slot.mesh.active;
+            snapshot.freeStepPending = slot.freeStepPending;
+            snapshot.identityApplied = slot.identityApplied;
+            snapshot.proxyCreationPending = slot.proxyCreationPending;
+            snapshot.generation = slot.generation;
+            snapshot.nextWindowValidation = slot.nextWindowValidation;
+            snapshot.hwnd = slot.hwnd;
+            snapshot.matrixTransformProxy = slot.matrixTransformProxy;
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
         if (!snapshot.active)
@@ -4602,12 +4681,12 @@ static void UpdateAnimationFrame()
             ReleaseSRWLockExclusive(&g_animationSlotsLock);
         }
         if (invalidWindow ||
-            (!snapshot.dragging && !snapshot.mesh.active && !snapshot.freeStepPending))
+            (!snapshot.dragging && !snapshot.meshActive && !snapshot.freeStepPending))
         {
             slotsToRetire[retireCount++] = i;
             continue;
         }
-        if (!snapshot.mesh.active)
+        if (!snapshot.meshActive)
         {
             if (!snapshot.identityApplied)
             {
@@ -4619,7 +4698,7 @@ static void UpdateAnimationFrame()
                     currentSlot.meshIdentityPending = true;
                     currentSlot.identityApplied = false;
                     currentSlot.meshRevision++;
-                    if ((currentSlot.matrixTransformProxy || currentSlot.proxyCreationPending) &&
+                    if ((snapshot.matrixTransformProxy || snapshot.proxyCreationPending) &&
                         !sceneWakeWindow)
                     {
                         sceneWakeWindow = currentSlot.hwnd;
@@ -4651,6 +4730,15 @@ static void UpdateAnimationFrame()
         {
             g_lastObservedScenePassCounter = scenePassCounter;
             g_lastSceneProgressTimestamp = now;
+        }
+        if (g_dwmPrivateCallsDisabled.load(std::memory_order_acquire) ||
+            now - g_lastSceneProgressTimestamp >= DWM_SCENE_STALL_TIMEOUT_MS)
+        {
+            AbandonAnimationSlotsAfterSceneStall(
+                g_dwmPrivateCallsDisabled.load(std::memory_order_relaxed)
+                    ? L"private calls disabled"
+                    : L"no scene progress");
+            return;
         }
         RequestDwmScenePass(sceneWakeWindow);
         ULONGLONG lastWakePost = g_sceneWakePostTimestamp.load(std::memory_order_acquire);
@@ -4757,7 +4845,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         static_cast<double>(currentWidth) * (g_realResizing ? g_resizeCoordinateScale : 1.0);
     double currentMeshHeight =
         static_cast<double>(currentHeight) * (g_realResizing ? g_resizeCoordinateScale : 1.0);
-    bool debugLogging = false;
     WobbleMesh debugMesh = {};
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     WindowAnimationSlot& slot = g_animationSlots[slotIndex];
@@ -4846,11 +4933,7 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     slot.identityApplied = false;
     slot.meshIdentityPending = false;
     slot.meshRevision++;
-    debugLogging = slot.settings.debugLogging;
-    if (debugLogging)
-    {
-        debugMesh = slot.mesh;
-    }
+    debugMesh = slot.mesh;
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     g_lastDraggedWindowRect = rect;
     g_lastDraggedWindowZoomed = windowZoomed;
@@ -4858,11 +4941,11 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     g_moveEventCounter++;
     static ULONGLONG lastDebugLogTimestamp = 0;
     ULONGLONG debugLogTimestamp = GetTickCount64();
-    if (debugLogging && operationDetectedThisEvent)
+    if (operationDetectedThisEvent)
     {
         Wh_Log(L"Operation detected: %s", g_realResizing ? L"RESIZE" : L"MOVE");
     }
-    if (debugLogging && debugLogTimestamp - lastDebugLogTimestamp >= 250)
+    if (debugLogTimestamp - lastDebugLogTimestamp >= 250)
     {
         lastDebugLogTimestamp = debugLogTimestamp;
         Wh_Log(L"%s #%u Delta=(%.2f,%.2f)", g_realResizing ? L"RESIZE" : L"MOVE",
@@ -4915,7 +4998,6 @@ static void HandleMoveSizeEnd(HWND hwnd)
     LPARAM pendingInteractiveSnapFlags =
         g_pendingInteractiveSnapFlags.exchange(0, std::memory_order_relaxed);
     bool animate = false;
-    bool debugLogging = false;
     bool stateTransitionWobble = false;
     bool snapTransitionWobble = false;
     bool transitionExpectedZoomed = false;
@@ -5003,16 +5085,12 @@ static void HandleMoveSizeEnd(HWND hwnd)
         // Preserve restore pulses after release.
         stateTransitionWobble = slot.windowStateThrob;
         transitionExpectedZoomed = false;
-        if (stateTransitionWobble)
-        {
-        }
         if (wasDragging)
         {
             EndDrag(slot.mesh);
         }
         animate = wasDragging && slot.matrixTransformProxy;
     }
-    debugLogging = slot.settings.debugLogging;
     if (animate)
     {
         slot.dragging = false;
@@ -5030,22 +5108,19 @@ static void HandleMoveSizeEnd(HWND hwnd)
         MarkObservedSnapTransition(hwnd);
         RequestDwmScenePass(hwnd);
     }
-    if (debugLogging)
+    Wh_Log(L"%s END HWND=%p Events=%u", g_realResizing ? L"RESIZE" : L"MOVE", hwnd,
+           g_moveEventCounter);
+    if (stateTransitionWobble && transitionExpectedZoomed)
     {
-        Wh_Log(L"%s END HWND=%p Events=%u", g_realResizing ? L"RESIZE" : L"MOVE", hwnd,
-               g_moveEventCounter);
-        if (stateTransitionWobble && transitionExpectedZoomed)
-        {
-            Wh_Log(L"WINDOW STATE THROB HWND=%p State=MAXIMIZED "
-                   L"Source=INTERACTIVE_TOP_EDGE",
-                   hwnd);
-        }
-        else if (snapTransitionWobble)
-        {
-            Wh_Log(L"WINDOW STATE THROB HWND=%p State=SNAPPED "
-                   L"Source=INTERACTIVE_EDGE_OR_FINAL_GEOMETRY",
-                   hwnd);
-        }
+        Wh_Log(L"WINDOW STATE THROB HWND=%p State=MAXIMIZED "
+               L"Source=INTERACTIVE_TOP_EDGE",
+               hwnd);
+    }
+    else if (snapTransitionWobble)
+    {
+        Wh_Log(L"WINDOW STATE THROB HWND=%p State=SNAPPED "
+               L"Source=INTERACTIVE_EDGE_OR_FINAL_GEOMETRY",
+               hwnd);
     }
     if (!animate)
     {
@@ -5218,7 +5293,7 @@ static void HandleMinimizeLifecycle(HWND hwnd, bool minimizing)
     }
     // Cancel only a transition pulse racing taskbar restore.
     CancelWindowStateThrobForWindow(hwnd);
-    if (!minimizing && GetSettingsSnapshot().debugLogging)
+    if (!minimizing)
     {
         Wh_Log(L"TASKBAR RESTORE: window-state wobble suppressed "
                L"for HWND=%p",
@@ -5326,12 +5401,9 @@ static void StartWindowStateThrob(HWND hwnd, bool maximizing, bool snapTransitio
         return;
     }
     RequestDwmScenePass(hwnd);
-    if (settings.debugLogging)
-    {
-        Wh_Log(L"WINDOW STATE THROB HWND=%p State=%s Size=%dx%d", hwnd,
-               snapTransition ? L"SNAPPED" : (maximizing ? L"MAXIMIZED" : L"RESTORED"), width,
-               height);
-    }
+    Wh_Log(L"WINDOW STATE THROB HWND=%p State=%s Size=%dx%d", hwnd,
+           snapTransition ? L"SNAPPED" : (maximizing ? L"MAXIMIZED" : L"RESTORED"), width,
+           height);
 }
 
 static void HandleNativeWindowTransitionStart(HWND hwnd, LPARAM transitionFlags)
@@ -5619,7 +5691,8 @@ static bool InitializeWindowEventHooks()
         return false;
     }
     g_locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-                                     nullptr, WinEventCallback, 0, 0, WINEVENT_OUTOFCONTEXT);
+                                     nullptr, WinEventCallback, 0, 0,
+                                     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     if (!g_locationHook)
     {
         Wh_Log(L"Failed to create location WinEvent hook");
@@ -5717,7 +5790,6 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
 {
     UNREFERENCED_PARAMETER(parameter);
     Wh_Log(L"Window event thread starting");
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     // Force creation of this thread's message queue.
     MSG message = {};
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -5743,10 +5815,10 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
         g_eventThreadMessageTarget.store(0, std::memory_order_release);
         return 1;
     }
-    AnimationThreadSchedulingState schedulingState = InitializeAnimationThreadScheduling();
+    g_animationThreadScheduling = InitializeAnimationThreadScheduling();
     Wh_Log(L"Animation clock: refresh-synchronized high-resolution timer, "
-           L"MMCSS=%s",
-           schedulingState.mmcssHandle ? L"enabled" : L"unavailable");
+           L"dynamic MMCSS=%s",
+           g_animationThreadScheduling.avrtModule ? L"available" : L"unavailable");
     if (!InitializeWindowEventHooks())
     {
         Wh_Log(L"Window event thread: hook initialization failed");
@@ -5756,7 +5828,7 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
         }
         CloseHandle(g_animationTimer);
         g_animationTimer = nullptr;
-        UninitializeAnimationThreadScheduling(schedulingState);
+        UninitializeAnimationThreadScheduling(g_animationThreadScheduling);
         g_eventThreadMessageTarget.store(0, std::memory_order_release);
         return 1;
     }
@@ -5766,20 +5838,14 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
     }
     Wh_Log(L"Window event thread ready");
     bool running = true;
-    ULONGLONG nextMaximizedStatePoll = GetTickCount64();
     while (running)
     {
         bool frameDue = false;
-        DWORD waitResult =
-            MsgWaitForMultipleObjectsEx(1, &g_animationTimer, MAXIMIZED_STATE_POLL_INTERVAL_MS,
-                                        QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        DWORD waitResult = MsgWaitForMultipleObjectsEx(1, &g_animationTimer, INFINITE, QS_ALLINPUT,
+                                                       MWMO_INPUTAVAILABLE);
         if (waitResult == WAIT_OBJECT_0)
         {
             frameDue = true;
-        }
-        else if (waitResult == WAIT_TIMEOUT)
-        {
-            // Poll state changes missing from WinEvent/DWM hooks.
         }
         else if (waitResult != WAIT_OBJECT_0 + 1)
         {
@@ -5831,19 +5897,13 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
         {
             UpdateAnimationFrame();
         }
-        ULONGLONG now = GetTickCount64();
-        if (running && now >= nextMaximizedStatePoll)
-        {
-            HandleObservedWindowLocationChange(GetForegroundWindow(), OBJID_WINDOW, CHILDID_SELF);
-            nextMaximizedStatePoll = now + MAXIMIZED_STATE_POLL_INTERVAL_MS;
-        }
     }
     Wh_Log(L"Window event thread stopping");
     g_eventThreadMessageTarget.store(0, std::memory_order_release);
     g_pendingMaximizedStateWindow.store(nullptr, std::memory_order_release);
     g_maximizedStateCheckQueued.store(false, std::memory_order_release);
     UninitializeWindowEventHooks();
-    UninitializeAnimationThreadScheduling(schedulingState);
+    UninitializeAnimationThreadScheduling(g_animationThreadScheduling);
     CloseHandle(g_animationTimer);
     g_animationTimer = nullptr;
     g_animationFrequency = {};
@@ -5938,16 +5998,15 @@ static WobblySettings GetSettingsSnapshot()
 static void LoadSettings()
 {
     WobblySettings settings = {};
-    PCWSTR wobblinessPreset = Wh_GetStringSetting(L"WobblinessPreset");
+    auto wobblinessPresetSetting = WindhawkUtils::StringSetting::make(L"WobblinessPreset");
+    PCWSTR wobblinessPreset = wobblinessPresetSetting.get();
     settings.wobbliness = 2;
-    if (wobblinessPreset && wobblinessPreset[0] >= L'0' && wobblinessPreset[0] <= L'4' &&
+    if (wobblinessPreset[0] >= L'0' && wobblinessPreset[0] <= L'4' &&
         wobblinessPreset[1] == L'\0')
     {
         settings.wobbliness = wobblinessPreset[0] - L'0';
     }
-    Wh_FreeStringSetting(wobblinessPreset);
     settings.advancedMode = Wh_GetIntSetting(L"AdvancedMode") != 0;
-    settings.debugLogging = Wh_GetIntSetting(L"DebugLogging") != 0;
     if (settings.advancedMode)
     {
         settings.stiffness = static_cast<double>(Wh_GetIntSetting(L"Stiffness"));
@@ -5966,17 +6025,14 @@ static void LoadSettings()
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = settings;
     ReleaseSRWLockExclusive(&g_settingsLock);
-    if (settings.debugLogging)
-    {
-        Wh_Log(L"Wobbly Windows settings: "
-               L"WobblinessPreset=%d, "
-               L"Advanced=%d, "
-               L"Stiffness=%.2f, "
-               L"Drag=%.2f, "
-               L"MoveFactor=%.2f",
-               settings.wobbliness, settings.advancedMode, settings.stiffness, settings.drag,
-               settings.moveFactor);
-    }
+    Wh_Log(L"Wobbly Windows settings: "
+           L"WobblinessPreset=%d, "
+           L"Advanced=%d, "
+           L"Stiffness=%.2f, "
+           L"Drag=%.2f, "
+           L"MoveFactor=%.2f",
+           settings.wobbliness, settings.advancedMode, settings.stiffness, settings.drag,
+           settings.moveFactor);
 }
 
 BOOL Wh_ModInit()
@@ -6001,7 +6057,7 @@ BOOL Wh_ModInit()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
-    Wh_Log(L"Wobbly Windows 0.55: initializing");
+    Wh_Log(L"Wobbly Windows 0.56: initializing");
     InitializeDpiSupport();
     LoadSettings();
     if (!InitializeDwmHooks())
