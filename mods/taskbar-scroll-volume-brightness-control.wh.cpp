@@ -2,7 +2,7 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.0.7
+// @version       1.0.8
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
@@ -28,6 +28,10 @@ without leaving what you're doing.
   current percentage, completely replacing the bulky native Windows UI.
 - Works on both the primary and secondary taskbars, and with the modern
   Windows 11 taskbar (pointer/touchpad wheel events included).
+
+## Why this mod?
+While other mods offer separate volume or brightness control, this mod provides a unified experience out-of-the-box. It features a custom, DPI-aware GDI+ overlay that physically tracks your cursor across the taskbar and natively suppresses the bulky Windows OSD flyouts without conflicting with other UI elements. 
+*(Credit: The modern InputSite hooking scaffolding is derived from the Taskbar Scroll Actions mod by m417z).*
 
 ## Settings
 
@@ -88,7 +92,6 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #define NOMINMAX
 #include <windows.h>
 #include <windowsx.h>
-#include <shellapi.h>
 #include <shellscalingapi.h>
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
@@ -100,13 +103,11 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #include <endpointvolume.h>
 #include <vector>
 #include <unordered_map>
-#include <string>
 #include <cmath>
 #include <cwchar>
 #include <algorithm>
 #include <atomic>
 #include <windhawk_utils.h>
-#include <commctrl.h>
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
@@ -122,6 +123,7 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 // Globals
 // -----------------------------------------------------------------------
 std::atomic<bool> g_initialized{false};
+std::atomic<bool> g_stopping{false};
 bool g_classRegistered = false;
 
 // -----------------------------------------------------------------------
@@ -211,6 +213,7 @@ constexpr UINT WM_APP_BRIGHTNESS_REQUEST = WM_APP + 1;
 constexpr UINT WM_APP_BRIGHTNESS_RESULT  = WM_APP + 2;
 constexpr UINT WM_APP_WARMUP_MONITORS    = WM_APP + 3;
 constexpr UINT WM_APP_VOLUME_REQUEST     = WM_APP + 4;
+constexpr UINT WM_APP_CLEAR_MONITOR_CACHE = WM_APP + 5;
 
 enum class OverlayMode { Brightness, Volume };
 
@@ -320,7 +323,7 @@ void PaintOverlay(HWND hWnd, HDC hdc) {
     Gdiplus::StringFormat rightFormat;
     rightFormat.SetAlignment(Gdiplus::StringAlignmentFar);
     wchar_t percentText[8];
-    wsprintfW(percentText, L"%d%%", (int)(clamped + 0.5f));
+    swprintf_s(percentText, L"%d%%", (int)(clamped + 0.5f));
     g.DrawString(percentText, -1, &percentFont, headerRect, &rightFormat, &textBrush);
 
     float barX = (float)pad, barY = kOverlayHeight - 11.0f, barW = kOverlayWidth - pad * 2.0f, barH = 5.0f;
@@ -389,12 +392,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     
                     if (isHorizontal) {
                         g_targetX = g_lastCursorPt.x - (g_scaledW / 2);
-                        g_targetX = std::clamp((int)g_targetX, (int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                        int maxRight = std::max((int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                        g_targetX = std::clamp((int)g_targetX, (int)tbRect.left, maxRight);
                         g_targetY = tbRect.top + ((tbRect.bottom - tbRect.top) - g_scaledH) / 2;
                     } else {
                         g_targetX = tbRect.left + ((tbRect.right - tbRect.left) - g_scaledW) / 2;
                         g_targetY = g_lastCursorPt.y - (g_scaledH / 2);
-                        g_targetY = std::clamp((int)g_targetY, (int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                        int maxBottom = std::max((int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                        g_targetY = std::clamp((int)g_targetY, (int)tbRect.top, maxBottom);
                     }
 
                     if (g_currentX != g_targetX || g_currentY != g_targetY) {
@@ -445,15 +450,8 @@ void EnsureOverlayWindow() {
     }
 }
 
-void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
-    if (percent < 0) {
-        if (g_hOverlayWnd && IsWindowVisible(g_hOverlayWnd) && !g_isHiding) {
-            g_isHiding = true;
-            g_targetOpacity = 0.0f;
-            SetTimer(g_hOverlayWnd, kFrameTimerId, 16, nullptr);
-        }
-        return;
-    }
+void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
+    if (percent < 0) return;
 
     Settings settings = GetSettingsSnapshot();
     if (!settings.showOverlay) return;
@@ -478,11 +476,13 @@ void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, 
             GetWindowRect(g_hTargetTaskbar, &tbRect);
             bool isHorizontal = (tbRect.right - tbRect.left) > (tbRect.bottom - tbRect.top);
             if (isHorizontal) {
-                g_currentX = std::clamp((int)(g_lastCursorPt.x - (g_scaledW / 2)), (int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                int maxRight = std::max((int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                g_currentX = std::clamp((int)(g_lastCursorPt.x - (g_scaledW / 2)), (int)tbRect.left, maxRight);
                 g_currentY = tbRect.top + ((tbRect.bottom - tbRect.top) - g_scaledH) / 2;
             } else {
                 g_currentX = tbRect.left + ((tbRect.right - tbRect.left) - g_scaledW) / 2;
-                g_currentY = std::clamp((int)(g_lastCursorPt.y - (g_scaledH / 2)), (int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                int maxBottom = std::max((int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                g_currentY = std::clamp((int)(g_lastCursorPt.y - (g_scaledH / 2)), (int)tbRect.top, maxBottom);
             }
             SetWindowPos(g_hOverlayWnd, nullptr, g_currentX, g_currentY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
@@ -509,11 +509,13 @@ void ShowOverlay(HMONITOR hMonitor, HWND hTaskbar, int percent, POINT cursorPt, 
             GetWindowRect(g_hTargetTaskbar, &tbRect);
             bool isHorizontal = (tbRect.right - tbRect.left) > (tbRect.bottom - tbRect.top);
             if (isHorizontal) {
-                g_currentX = std::clamp((int)(g_lastCursorPt.x - (g_scaledW / 2)), (int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                int maxRight = std::max((int)tbRect.left, (int)(tbRect.right - g_scaledW));
+                g_currentX = std::clamp((int)(g_lastCursorPt.x - (g_scaledW / 2)), (int)tbRect.left, maxRight);
                 g_currentY = tbRect.top + ((tbRect.bottom - tbRect.top) - g_scaledH) / 2;
             } else {
                 g_currentX = tbRect.left + ((tbRect.right - tbRect.left) - g_scaledW) / 2;
-                g_currentY = std::clamp((int)(g_lastCursorPt.y - (g_scaledH / 2)), (int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                int maxBottom = std::max((int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
+                g_currentY = std::clamp((int)(g_lastCursorPt.y - (g_scaledH / 2)), (int)tbRect.top, maxBottom);
             }
             SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, g_currentX, g_currentY, g_scaledW, g_scaledH, SWP_NOACTIVATE);
         }
@@ -639,7 +641,12 @@ MonitorCacheEntry* GetOrOpenMonitorCache(HMONITOR hMonitor) {
     if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysical) && numPhysical > 0) {
         entry.physicalMonitors.resize(numPhysical);
         if (GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysical, entry.physicalMonitors.data())) {
-            entry.ddcSupported = true;
+            DWORD minB = 0, curB = 0, maxB = 0;
+            if (GetMonitorBrightness(entry.physicalMonitors[0].hPhysicalMonitor, &minB, &curB, &maxB)) {
+                entry.ddcSupported = true;
+            } else {
+                entry.ddcSupported = false;
+            }
         } else {
             entry.physicalMonitors.clear();
         }
@@ -647,16 +654,6 @@ MonitorCacheEntry* GetOrOpenMonitorCache(HMONITOR hMonitor) {
 
     auto inserted = g_monitorCache.emplace(hMonitor, std::move(entry));
     return &inserted.first->second;
-}
-
-void InvalidateMonitorCache(HMONITOR hMonitor) {
-    auto it = g_monitorCache.find(hMonitor);
-    if (it != g_monitorCache.end()) {
-        if (!it->second.physicalMonitors.empty()) {
-            DestroyPhysicalMonitors((DWORD)it->second.physicalMonitors.size(), it->second.physicalMonitors.data());
-        }
-        g_monitorCache.erase(it);
-    }
 }
 
 void CloseAllMonitorCaches() {
@@ -669,13 +666,8 @@ void CloseAllMonitorCaches() {
 }
 
 BOOL CALLBACK WarmUpMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
-    MonitorCacheEntry* entry = GetOrOpenMonitorCache(hMon);
-    if (entry->ddcSupported && !entry->physicalMonitors.empty()) {
-        DWORD minB = 0, curB = 0, maxB = 0;
-        if (!GetMonitorBrightness(entry->physicalMonitors[0].hPhysicalMonitor, &minB, &curB, &maxB)) {
-            entry->ddcSupported = false;
-        }
-    }
+    if (g_stopping) return FALSE;
+    GetOrOpenMonitorCache(hMon);
     return TRUE;
 }
 
@@ -688,6 +680,7 @@ int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int notches, int stepPercent
     bool anyFailure = false;
 
     for (auto& pm : entry->physicalMonitors) {
+        if (g_stopping) break;
         DWORD minB = 0, curB = 0, maxB = 0;
         if (GetMonitorBrightness(pm.hPhysicalMonitor, &minB, &curB, &maxB)) {
             int range = (maxB > minB) ? (int)(maxB - minB) : 100;
@@ -710,8 +703,6 @@ int AdjustBrightnessDDC(HMONITOR hMonitor, bool up, int notches, int stepPercent
         }
     }
 
-    // Do NOT set entry->ddcSupported to false here.
-    // Allow transient I2C failures during active scrolling to be absorbed naturally.
     if (anyFailure && resultPercent < 0) {
         return -1;
     }
@@ -735,6 +726,11 @@ bool HandleTaskbarScroll(HWND hTaskbar, POINT pt, short delta) {
 
     if (settings.excludeSystemTray) {
         HWND hTrayNotify = FindWindowExW(hTaskbar, nullptr, L"TrayNotifyWnd", nullptr);
+        if (!hTrayNotify) {
+            HWND hXamlIsland = FindWindowExW(hTaskbar, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+            if (hXamlIsland) hTrayNotify = hXamlIsland; 
+        }
+        
         if (hTrayNotify) {
             RECT trayRect;
             if (GetWindowRect(hTrayNotify, &trayRect) && PtInRect(&trayRect, pt)) {
@@ -792,6 +788,8 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         short delta = GET_WHEEL_DELTA_WPARAM(wParam);
         if (HandleTaskbarScroll(hWnd, pt, delta)) return 0;
+    } else if (uMsg == WM_DISPLAYCHANGE) {
+        if (g_monitorThreadId) PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0);
     } else if (uMsg == WM_NCDESTROY) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
     }
@@ -909,8 +907,6 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
                         percent = AdjustBrightnessWMI(req->scrollUp, req->notches, settings.brightnessStep);
                     }
 
-                    // Explicitly guard against pushing negative percentages (transient timeout failures)
-                    // to the UI thread, which causes the overlay to instantly abort and hide.
                     if (percent >= 0 && g_workerThreadId) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
                         if (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) delete res;
@@ -922,6 +918,10 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
         }
         if (msg.hwnd == nullptr && msg.message == WM_APP_WARMUP_MONITORS) {
             EnumDisplayMonitors(nullptr, nullptr, WarmUpMonitorProc, 0);
+            continue;
+        }
+        if (msg.hwnd == nullptr && msg.message == WM_APP_CLEAR_MONITOR_CACHE) {
+            CloseAllMonitorCaches();
             continue;
         }
         TranslateMessage(&msg);
@@ -950,12 +950,29 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         if (msg.hwnd == nullptr && msg.message == WM_APP_VOLUME_REQUEST) {
             ScrollRequest* req = (ScrollRequest*)msg.lParam;
             if (req) {
+                
+                MSG nextMsg;
+                while (PeekMessageW(&nextMsg, nullptr, WM_APP_VOLUME_REQUEST, WM_APP_VOLUME_REQUEST, PM_REMOVE)) {
+                    ScrollRequest* nextReq = (ScrollRequest*)nextMsg.lParam;
+                    if (nextReq) {
+                        if (nextReq->scrollUp == req->scrollUp) req->notches += nextReq->notches;
+                        else req->notches -= nextReq->notches;
+                        req->cursorPt = nextReq->cursorPt; 
+                        delete nextReq;
+                    }
+                }
+
+                if (req->notches < 0) {
+                    req->scrollUp = !req->scrollUp;
+                    req->notches = -req->notches;
+                }
+                
                 Settings settings = GetSettingsSnapshot();
                 
                 if (!pEnum) CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
 
                 int percent = -1;
-                if (pEnum) {
+                if (pEnum && req->notches > 0) {
                     IMMDevice* pDevice = nullptr;
                     pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
                     if (pDevice) {
@@ -983,7 +1000,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                 }
 
                 if (percent >= 0) {
-                    ShowOverlay(req->hMonitor, req->hTaskbar, percent, req->cursorPt, OverlayMode::Volume);
+                    ShowOverlay(req->hTaskbar, percent, req->cursorPt, OverlayMode::Volume);
                 }
                 delete req;
             }
@@ -993,7 +1010,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         if (msg.hwnd == nullptr && msg.message == WM_APP_BRIGHTNESS_RESULT) {
             ScrollResult* res = (ScrollResult*)msg.lParam;
             if (res) {
-                ShowOverlay(res->hMonitor, res->hTaskbar, res->percent, res->cursorPt, res->mode);
+                ShowOverlay(res->hTaskbar, res->percent, res->cursorPt, res->mode);
                 delete res;
             }
             continue;
@@ -1054,6 +1071,7 @@ void Wh_ModAfterInit() {
 
 BOOL Wh_ModInit() {
     g_initialized = false;
+    g_stopping = false;
     InitializeCriticalSection(&g_settingsLock);
     LoadSettings();
 
@@ -1061,6 +1079,7 @@ BOOL Wh_ModInit() {
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original)) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
@@ -1074,6 +1093,8 @@ BOOL Wh_ModInit() {
     g_hWorkerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
+        CloseHandle(g_hWorkerReadyEvent);
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
@@ -1084,6 +1105,8 @@ BOOL Wh_ModInit() {
     if (g_hMonitorThread) {
         WaitForSingleObject(g_hMonitorReadyEvent, 2000);
         PostThreadMessageW(g_monitorThreadId, WM_APP_WARMUP_MONITORS, 0, 0);
+    } else {
+        CloseHandle(g_hMonitorReadyEvent);
     }
     
     g_initialized = true;
@@ -1092,6 +1115,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     g_initialized = false;
+    g_stopping = true;
     EnumWindows(EnumWindowsUninitProc, 0);
 
     if (g_workerThreadId) PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
@@ -1099,6 +1123,7 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
+        g_workerThreadId = 0;
     }
     if (g_hWorkerReadyEvent) {
         CloseHandle(g_hWorkerReadyEvent);
@@ -1110,6 +1135,7 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_hMonitorThread, INFINITE);
         CloseHandle(g_hMonitorThread);
         g_hMonitorThread = nullptr;
+        g_monitorThreadId = 0;
     }
     if (g_hMonitorReadyEvent) {
         CloseHandle(g_hMonitorReadyEvent);
