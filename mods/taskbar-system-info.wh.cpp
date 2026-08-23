@@ -784,31 +784,35 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
     MEMORY_BASIC_INFORMATION memoryInfo{};
     if (VirtualQuery(view, &memoryInfo, sizeof(memoryInfo)) &&
         memoryInfo.RegionSize >= sizeof(HwInfoHeader)) {
-        const auto* header = static_cast<const HwInfoHeader*>(view);
+        // HWiNFO updates this mapping in place. Snapshot the range metadata so
+        // every address below uses the same values that passed validation even
+        // when the shared mutex isn't accessible from Explorer.
+        HwInfoHeader header{};
+        std::memcpy(&header, view, sizeof(header));
         size_t viewOffset = static_cast<const uint8_t*>(view) -
                             static_cast<const uint8_t*>(memoryInfo.BaseAddress);
         size_t mappedSize = memoryInfo.RegionSize - viewOffset;
 
-        if (header->signature == kHwInfoSignature &&
-            IsRangeValid(mappedSize, header->sensorOffset,
-                         header->sensorStride, header->sensorCount,
+        if (header.signature == kHwInfoSignature &&
+            IsRangeValid(mappedSize, header.sensorOffset,
+                         header.sensorStride, header.sensorCount,
                          sizeof(HwInfoSensorPrefix)) &&
-            IsRangeValid(mappedSize, header->readingOffset,
-                         header->readingStride, header->readingCount,
+            IsRangeValid(mappedSize, header.readingOffset,
+                         header.readingStride, header.readingCount,
                          sizeof(HwInfoReadingPrefix))) {
             int bestCpuScore = -1;
             int bestGpuScore = -1;
             const auto* bytes = static_cast<const uint8_t*>(view);
 
-            for (uint32_t i = 0; i < header->readingCount; i++) {
+            for (uint32_t i = 0; i < header.readingCount; i++) {
                 HwInfoReadingPrefix reading{};
                 const uint8_t* readingAddress =
-                    bytes + header->readingOffset +
-                    static_cast<size_t>(i) * header->readingStride;
+                    bytes + header.readingOffset +
+                    static_cast<size_t>(i) * header.readingStride;
                 std::memcpy(&reading, readingAddress, sizeof(reading));
 
                 if (reading.readingType != kHwInfoTemperatureType ||
-                    reading.sensorIndex >= header->sensorCount ||
+                    reading.sensorIndex >= header.sensorCount ||
                     !std::isfinite(reading.value) || reading.value < -50.0 ||
                     reading.value > 200.0) {
                     continue;
@@ -816,9 +820,9 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
 
                 HwInfoSensorPrefix sensor{};
                 const uint8_t* sensorAddress =
-                    bytes + header->sensorOffset +
+                    bytes + header.sensorOffset +
                     static_cast<size_t>(reading.sensorIndex) *
-                        header->sensorStride;
+                        header.sensorStride;
                 std::memcpy(&sensor, sensorAddress, sizeof(sensor));
 
                 std::wstring sensorName =
@@ -2532,6 +2536,33 @@ HWND FindRememberedTaskbarWindow() {
     return currentWindow;
 }
 
+HWND FindAnyWindowOnTaskbarThread(HWND excludedWindow) {
+    DWORD threadId = g_taskbarThreadId.load();
+    if (!threadId) {
+        return nullptr;
+    }
+
+    struct SearchContext {
+        HWND excludedWindow;
+        HWND result;
+    } context{excludedWindow, nullptr};
+    EnumThreadWindows(
+        threadId,
+        [](HWND window, LPARAM contextValue) -> BOOL {
+            auto* context = reinterpret_cast<SearchContext*>(contextValue);
+            DWORD processId = 0;
+            if (window != context->excludedWindow &&
+                GetWindowThreadProcessId(window, &processId) != 0 &&
+                processId == GetCurrentProcessId()) {
+                context->result = window;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+    return context.result;
+}
+
 using CTaskBand_GetTaskbarHost_t =
     void*(WINAPI*)(void* pThis, void* taskbarHostSharedPtr);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
@@ -2792,8 +2823,17 @@ void CloseMetricSources() {
 
 bool TearDownTaskbarUi() {
     HWND taskbarWindow = FindRememberedTaskbarWindow();
-    return taskbarWindow &&
-           RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar,
+    if (taskbarWindow &&
+        RunFromWindowThread(taskbarWindow, RemoveFromCurrentTaskbar, nullptr)) {
+        return true;
+    }
+
+    // The Shell_TrayWnd can disappear during Explorer teardown. Any surviving
+    // window on its UI thread is sufficient: the WH_CALLWNDPROC hook runs the
+    // callback, while SendMessage only wakes that thread.
+    HWND fallbackWindow = FindAnyWindowOnTaskbarThread(taskbarWindow);
+    return fallbackWindow &&
+           RunFromWindowThread(fallbackWindow, RemoveFromCurrentTaskbar,
                                nullptr);
 }
 
