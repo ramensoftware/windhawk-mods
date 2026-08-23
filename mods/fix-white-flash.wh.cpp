@@ -307,17 +307,6 @@ class Cfg {
         return name;
     }
 
-    // Helpers for color parsing
-
-    static UINT clamp(UINT value, UINT low, UINT high) {
-        if (value < low)
-            return low;
-        if (value > high)
-            return high;
-
-        return value;
-    }
-
     static COLORREF toColor(UINT rgb) {
         UINT r = (rgb >> 16) & 0xFF;
         UINT g = (rgb >> 8)  & 0xFF;
@@ -334,6 +323,10 @@ class Cfg {
     static UINT parseColor(PCWSTR valueName, Args... args) {
         UINT color = kInvalidColor;
         PCWSTR value = Wh_GetStringSetting(valueName, args...);
+        if (*value == L'\0') {
+            Wh_FreeStringSetting(value);
+            return kDefaultColor;
+        }
 
         defer [&] {
             if (color == kInvalidColor) {
@@ -343,10 +336,6 @@ class Cfg {
             }
             Wh_FreeStringSetting(value);
         };
-
-        if (*value == L'\0') {
-            return kDefaultColor;
-        }
 
         const wchar_t* p = value;
         while (*p && iswspace(*p)) {
@@ -375,7 +364,7 @@ class Cfg {
             UINT rgb[3] { 0, 0, 0 };
 
             for (int i = 0; i < 3; ++i) {
-                while (*p && iswspace(*p)) {
+                while (*p && (iswspace(*p) || (*p == L','))) {
                     ++p;
                 }
 
@@ -383,7 +372,13 @@ class Cfg {
                 UINT number   = 0;
                 while (*p >= L'0' && *p <= L'9') {
                     hasDigit = true;
-                    number   = number * 10 + (*p - L'0');
+                    UINT digit = *p - L'0';
+                    
+                    if (number > (255U - digit) / 10U) {
+                        return kDefaultColor;
+                    }
+                    
+                    number = number * 10U + digit;
                     ++p;
                 }
 
@@ -391,30 +386,26 @@ class Cfg {
                     return kDefaultColor;
 
                 rgb[i] = number;
-
-                while (*p == L',') {
-                    ++p;
-                }
             }
 
-            const UINT r = clamp(rgb[0], 0, 255);
-            const UINT g = clamp(rgb[1], 0, 255);
-            const UINT b = clamp(rgb[2], 0, 255);
+            const UINT r = std::clamp(rgb[0], 0U, 255U);
+            const UINT g = std::clamp(rgb[1], 0U, 255U);
+            const UINT b = std::clamp(rgb[2], 0U, 255U);
 
             color = (r << 16) | (g << 8) | b;
             return color;
         }
 
         // Determine number base (decimal/hexadecimal)
-        ULONG base = 10;
+        ULONG base = 10UL;
         if (p[0] == L'#') {
             // #RRGGBB
-            base = 16;
+            base = 16UL;
             p += 1;
         } else if (p[0] == L'0'
         && (p[1] == L'x' || p[1] == L'X')) {
             // 0xRRGGBB
-            base = 16;
+            base = 16UL;
             p += 2;
         } else {
             // A number
@@ -422,7 +413,7 @@ class Cfg {
             while (*t && !iswspace(*t)) {
                 if ((*t >= L'A' && *t <= L'F')
                  || (*t >= L'a' && *t <= L'f')) {
-                    base = 16;
+                    base = 16UL;
                     break;
                 }
                 ++t;
@@ -439,9 +430,9 @@ class Cfg {
             if (*p >= L'0' && *p <= L'9')
                 digit = *p - L'0';
             else if (*p >= L'A' && *p <= L'F')
-                digit = *p - L'A' + 10;
+                digit = *p - L'A' + 10UL;
             else if (*p >= L'a' && *p <= L'f')
-                digit = *p - L'a' + 10;
+                digit = *p - L'a' + 10UL;
             else
                 break;
 
@@ -449,14 +440,19 @@ class Cfg {
                 return kDefaultColor;
 
             hasDigit = true;
-            number   = number * base + digit;
+            
+            if (number > (kMaxColor - digit) / base) {
+                return kDefaultColor;
+            }
+
+            number = number * base + digit;
             ++p;
         }
 
         if (!hasDigit)
             return kDefaultColor;
 
-        color = static_cast<UINT>(number & 0xFFFFFFUL);
+        color = static_cast<UINT>(number & kMaxColor);
         return color;
     }
 
@@ -514,6 +510,7 @@ class Cfg {
     inline static HBRUSH s_brush = NULL;
     static constexpr UINT kDefaultColor = 0x191919;
     static constexpr UINT kInvalidColor = UINT_MAX;
+    static constexpr ULONG kMaxColor    = 0xFFFFFFUL;
 };
 
 // == Main ==
