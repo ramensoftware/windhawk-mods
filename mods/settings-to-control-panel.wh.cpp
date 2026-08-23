@@ -12,8 +12,11 @@
 // ==WindhawkModReadme==
 /*
 # Redirect Settings → Control Panel
+
 ## Screenshot
+
 ![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/Senza%20nome.png)
+
 ---
 ## About
 This mod intercepts modern `ms-settings:` links (the ones that open the
@@ -210,7 +213,8 @@ static std::atomic_bool g_unloading{false};
 // watchdog thread, tray recreation, or a settings change) needs an explicit
 // Wh_ApplyHookOperations() call, which this flag lets us gate on.
 static std::atomic_bool g_modInitComplete{false};
-static std::atomic<long> g_activeHookCalls{0};
+// static std::atomic<int> g_activeHookCalls{0};  
+
 
 class ScopedHandle {
 public:
@@ -335,38 +339,6 @@ public:
 
 private:
     T* value_ = nullptr;
-};
-
-// Keeps an unload from racing a hook that is already executing mod code.
-// The caller still invokes the original trampoline when this guard is inactive.
-class HookInvocationGuard {
-public:
-    HookInvocationGuard() noexcept {
-        if (g_unloading.load(std::memory_order_acquire)) {
-            return;
-        }
-
-        g_activeHookCalls.fetch_add(1, std::memory_order_acq_rel);
-        if (!g_unloading.load(std::memory_order_acquire)) {
-            active_ = true;
-        } else {
-            g_activeHookCalls.fetch_sub(1, std::memory_order_acq_rel);
-        }
-    }
-
-    ~HookInvocationGuard() {
-        if (active_) {
-            g_activeHookCalls.fetch_sub(1, std::memory_order_acq_rel);
-        }
-    }
-
-    bool AllowCustomBehavior() const noexcept { return active_; }
-
-    HookInvocationGuard(const HookInvocationGuard&) = delete;
-    HookInvocationGuard& operator=(const HookInvocationGuard&) = delete;
-
-private:
-    bool active_ = false;
 };
 
 static BOOL CallOriginalShellExecuteExW(SHELLEXECUTEINFOW* pei) {
@@ -665,24 +637,21 @@ static void LoadSettings() {
 }
 
 static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w) {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
+    if (g_unloading.load(std::memory_order_acquire) || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalSndVolSSO(m, w);
     // Nothing here can throw, so there's no exception to guard against.
     return false;
 }
 
 static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w) {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
+    if (g_unloading.load(std::memory_order_acquire) || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalPnidui(m, w);
     // Nothing here can throw, so there's no exception to guard against.
     return false;
 }
 
 static bool ICMH_CALL ICMH_hook_Shell32Devices(void* pThis, HMENU m, UINT u) {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
+    if (g_unloading.load(std::memory_order_acquire) || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalShell32Devices(pThis, m, u);
     // Nothing here can throw, so there's no exception to guard against.
     return false;
@@ -991,32 +960,25 @@ static void OpenClassicDevicesAndPrinters() {
 static LRESULT CALLBACK TrayToolbarSubclassProc(
     HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
-    HookInvocationGuard invocation;
-    try {
-        if (invocation.AllowCustomBehavior() && msg == WM_RBUTTONUP) {
-            POINT pt;
-            pt.x = (int)(short)LOWORD(lParam);
-            pt.y = (int)(short)HIWORD(lParam);
-            int hitIndex = (int)SendMessageW(hwnd, TB_HITTEST, 0, (LPARAM)&pt);
+    if (!g_unloading.load(std::memory_order_acquire) && msg == WM_RBUTTONUP) {
+        POINT pt;
+        pt.x = (int)(short)LOWORD(lParam);
+        pt.y = (int)(short)HIWORD(lParam);
+        int hitIndex = (int)SendMessageW(hwnd, TB_HITTEST, 0, (LPARAM)&pt);
 
-            if (hitIndex >= 0) {
-                int buttonType = GetTrayButtonType(hwnd, hitIndex);
-                if (buttonType == 1) {
-                    std::lock_guard<std::mutex> lk(g_trayContextMutex);
-                    g_trayContextType = 1;
-                    g_trayContextTick = GetTickCount();
-                }
-                else if (buttonType == 2) {
-                    std::lock_guard<std::mutex> lk(g_trayContextMutex);
-                    g_trayContextType = 2;
-                    g_trayContextTick = GetTickCount();
-                }
+        if (hitIndex >= 0) {
+            int buttonType = GetTrayButtonType(hwnd, hitIndex);
+            if (buttonType == 1) {
+                std::lock_guard<std::mutex> lk(g_trayContextMutex);
+                g_trayContextType = 1;
+                g_trayContextTick = GetTickCount();
+            }
+            else if (buttonType == 2) {
+                std::lock_guard<std::mutex> lk(g_trayContextMutex);
+                g_trayContextType = 2;
+                g_trayContextTick = GetTickCount();
             }
         }
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] Tray toolbar subclass caught std::exception");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] Tray toolbar subclass caught an unknown exception");
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
@@ -1105,8 +1067,7 @@ static BOOL WINAPI CommonTrackPopupMenuEx_Hook(
     BOOL (WINAPI* pOrig)(HMENU, UINT, int, int, HWND, const TPMPARAMS*),
     const wchar_t* logPrefix)
 {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !pOrig ||
+    if (g_unloading.load(std::memory_order_acquire) || !pOrig ||
         !RedirectSystemTrayEnabled() || !RedirectsEnabled()) {
         return CallOriginalTrackPopupMenuEx(pOrig, hMenu, uFlags, x, y, hWnd, lptpm);
     }
@@ -1114,8 +1075,6 @@ static BOOL WINAPI CommonTrackPopupMenuEx_Hook(
     HookGuard guard;
     if (guard.IsReentrant())
         return CallOriginalTrackPopupMenuEx(pOrig, hMenu, uFlags, x, y, hWnd, lptpm);
-
-    try {
 
     // --- Primary: subclass flag set on WM_RBUTTONUP ---
     int contextType = 0;
@@ -1217,12 +1176,6 @@ static BOOL WINAPI CommonTrackPopupMenuEx_Hook(
     }
 
     return result;
-    } catch (const std::exception&) {
-        Wh_Log(L"[%s] Stability fallback after std::exception", logPrefix ? logPrefix : L"TRAY-HOOK");
-    } catch (...) {
-        Wh_Log(L"[%s] Stability fallback after unknown exception", logPrefix ? logPrefix : L"TRAY-HOOK");
-    }
-    return CallOriginalTrackPopupMenuEx(pOrig, hMenu, uFlags, x, y, hWnd, lptpm);
 }
 
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
@@ -1622,13 +1575,16 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
 
     std::wstring mappedTarget;
     bool mappingFound = false;
-    if (!IsDisplayGroupUri(uri) || RedirectDisplayPagesEnabled()) {
-        std::lock_guard<std::mutex> lk(g_mappingsMutex);
-        auto it = g_mappings.find(uri);
-        if (it != g_mappings.end()) {
-            mappedTarget = it->second;
-            mappingFound = true;
-        }
+    if (IsDisplayGroupUri(uri) && !RedirectDisplayPagesEnabled()) {
+    return {L"", false};
+}
+if (true) {
+    std::lock_guard<std::mutex> lk(g_mappingsMutex);
+    auto it = g_mappings.find(uri);
+    if (it != g_mappings.end()) {
+        mappedTarget = it->second;
+        mappingFound = true;
+    }
     }
 
     if (mappingFound) {
@@ -1714,48 +1670,41 @@ HRESULT STDMETHODCALLTYPE AAM_ActivateApplication_hook(
     DWORD options,
     DWORD* processId)
 {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() ||
+    if (g_unloading.load(std::memory_order_acquire) || !RedirectsEnabled() ||
         !ComActivationRedirectEnabled()) {
         return CallOriginalActivateApplication(pThis, appUserModelId, arguments, options, processId);
     }
 
-    try {
-        Wh_Log(L"[AAM-HOOK] ActivateApplication: appId=%s, args=%s",
-               appUserModelId ? appUserModelId : L"(null)",
-               arguments ? arguments : L"(null)");
+    Wh_Log(L"[AAM-HOOK] ActivateApplication: appId=%s, args=%s",
+           appUserModelId ? appUserModelId : L"(null)",
+           arguments ? arguments : L"(null)");
 
-        // Is this the Settings app being activated?
-        if (appUserModelId && arguments &&
-            _wcsnicmp(appUserModelId, L"windows.immersivecontrolpanel", 29) == 0)
-        {
-            std::wstring uri = NormalizeUri(arguments);
-            Wh_Log(L"[AAM-HOOK] Settings activation intercepted: %s", uri.c_str());
+    // Is this the Settings app being activated?
+    if (appUserModelId && arguments &&
+        _wcsnicmp(appUserModelId, L"windows.immersivecontrolpanel", 29) == 0)
+    {
+        std::wstring uri = NormalizeUri(arguments);
+        Wh_Log(L"[AAM-HOOK] Settings activation intercepted: %s", uri.c_str());
 
-            auto result = ResolveUri(uri, nullptr);
-            if (result.intercept) {
-                if (!result.target.empty()) {
-                    LaunchTarget(result.target);
-                    Wh_Log(L"[AAM-HOOK] Redirected to: %s", result.target.c_str());
-                } else {
-                    Wh_Log(L"[AAM-HOOK] Activation handled by fallback mode");
-                }
-                if (processId) *processId = GetCurrentProcessId();
-                return S_OK;
+        auto result = ResolveUri(uri, nullptr);
+        if (result.intercept) {
+            if (!result.target.empty()) {
+                LaunchTarget(result.target);
+                Wh_Log(L"[AAM-HOOK] Redirected to: %s", result.target.c_str());
+            } else {
+                Wh_Log(L"[AAM-HOOK] Activation handled by fallback mode");
             }
-            Wh_Log(L"[AAM-HOOK] No mapping found, falling back to original");
+            if (processId) *processId = GetCurrentProcessId();
+            return S_OK;
         }
-    } catch (const std::exception&) {
-        Wh_Log(L"[AAM-HOOK] std::exception; passing activation through");
-    } catch (...) {
-        Wh_Log(L"[AAM-HOOK] Unknown exception; passing activation through");
+        Wh_Log(L"[AAM-HOOK] No mapping found, falling back to original");
     }
 
     return CallOriginalActivateApplication(pThis, appUserModelId, arguments, options, processId);
 }
 
 static void InstallAAMHook() {
-    if (g_unloading.load(std::memory_order_acquire)) return;
+    if (g_unloading.load(std::memory_order_acquire) || !ComActivationRedirectEnabled()) return;
     try {
         std::lock_guard<std::mutex> lk(g_aamHookMutex);
         if (g_aamHookInstalled || g_unloading.load(std::memory_order_acquire)) return;
@@ -1857,30 +1806,22 @@ bool COpenControlPanel__MapLegacyName_hook(
     UINT     uLen,
     bool    *nameChanged)
 {
-    HookInvocationGuard invocation;
-    if (!invocation.AllowCustomBehavior() || !LegacyNameMappingFixEnabled()) {
+    if (g_unloading.load(std::memory_order_acquire) || !LegacyNameMappingFixEnabled()) {
         return CallOriginalMapLegacyName(pThis, pszLegacyName, pszNewName, uLen, nameChanged);
     }
 
-    try {
-        if (!ShouldSuppressLegacyNameMapping(pszLegacyName)) {
-            return CallOriginalMapLegacyName(pThis, pszLegacyName, pszNewName, uLen, nameChanged);
-        }
-
-        // Tell the caller the name was NOT changed — this forces Explorer to use
-        // the original legacy Control Panel path, but only for the whitelisted
-        // legacy names above.
-        if (nameChanged) *nameChanged = false;
-        if (pszNewName && uLen > 0) *pszNewName = L'\0';
-        Wh_Log(L"[MAP-LEGACY] Suppressed mapping for: %s",
-               pszLegacyName ? pszLegacyName : L"(null)");
-        return false;
-    } catch (const std::exception&) {
-        Wh_Log(L"[MAP-LEGACY] std::exception; using original mapping");
-    } catch (...) {
-        Wh_Log(L"[MAP-LEGACY] Unknown exception; using original mapping");
+    if (!ShouldSuppressLegacyNameMapping(pszLegacyName)) {
+        return CallOriginalMapLegacyName(pThis, pszLegacyName, pszNewName, uLen, nameChanged);
     }
-    return CallOriginalMapLegacyName(pThis, pszLegacyName, pszNewName, uLen, nameChanged);
+
+    // Tell the caller the name was NOT changed — this forces Explorer to use
+    // the original legacy Control Panel path, but only for the whitelisted
+    // legacy names above.
+    if (nameChanged) *nameChanged = false;
+    if (pszNewName && uLen > 0) *pszNewName = L'\0';
+    Wh_Log(L"[MAP-LEGACY] Suppressed mapping for: %s",
+           pszLegacyName ? pszLegacyName : L"(null)");
+    return false;
 }
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
@@ -1945,83 +1886,69 @@ static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
 }
 
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
-    HookInvocationGuard invocation;
-    try {
-        if (!invocation.AllowCustomBehavior() || IsChildProcess() || !RedirectsEnabled() || !pei) {
-            return CallOriginalShellExecuteExW(pei);
-        }
+    if (g_unloading.load(std::memory_order_acquire) || IsChildProcess() || !RedirectsEnabled() || !pei) {
+        return CallOriginalShellExecuteExW(pei);
+    }
 
-        HookGuard guard;
-        if (guard.IsReentrant()) return CallOriginalShellExecuteExW(pei);
+    HookGuard guard;
+    if (guard.IsReentrant()) return CallOriginalShellExecuteExW(pei);
 
-        if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
-            LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+    if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
+        LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+        if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
+        return TRUE;
+    }
+
+    std::wstring uri;
+    const wchar_t* f = pei->lpFile;
+    const wchar_t* p = pei->lpParameters;
+
+    if (f && ToLower(f).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(f);
+    else if (p && ToLower(p).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(p);
+    else if (f && ToLower(f).find(L"shell:::") != std::wstring::npos) uri = ToLower(f);
+    else if (p && ToLower(p).find(L"shell:::") != std::wstring::npos) uri = ToLower(p);
+
+    if (uri == L"ms-settings:taskbar")
+        return CallOriginalShellExecuteExW(pei);
+
+    if (!uri.empty()) {
+        auto result = ResolveUri(uri, pei->hwnd);
+        if (result.intercept) {
+            if (!result.target.empty()) LaunchTarget(result.target);
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
             return TRUE;
         }
-
-        std::wstring uri;
-        const wchar_t* f = pei->lpFile;
-        const wchar_t* p = pei->lpParameters;
-
-        if (f && ToLower(f).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(f);
-        else if (p && ToLower(p).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(p);
-        else if (f && ToLower(f).find(L"shell:::") != std::wstring::npos) uri = ToLower(f);
-        else if (p && ToLower(p).find(L"shell:::") != std::wstring::npos) uri = ToLower(p);
-
-        if (uri == L"ms-settings:taskbar")
-            return CallOriginalShellExecuteExW(pei);
-
-        if (!uri.empty()) {
-            auto result = ResolveUri(uri, pei->hwnd);
-            if (result.intercept) {
-                if (!result.target.empty()) LaunchTarget(result.target);
-                if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
-                return TRUE;
-            }
-        }
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] ShellExecuteExW hook caught std::exception; passing through");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] ShellExecuteExW hook caught an unknown exception; passing through");
     }
     return CallOriginalShellExecuteExW(pei);
 }
 HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR params, LPCWSTR dir, INT show) {
-    HookInvocationGuard invocation;
-    try {
-        if (!invocation.AllowCustomBehavior() || IsChildProcess() || !RedirectsEnabled()) {
-            return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
-        }
+    if (g_unloading.load(std::memory_order_acquire) || IsChildProcess() || !RedirectsEnabled()) {
+        return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
+    }
 
-        HookGuard guard;
-        if (guard.IsReentrant()) return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
+    HookGuard guard;
+    if (guard.IsReentrant()) return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
 
-        if (IsControlSystemParams(file, params)) {
-            LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+    if (IsControlSystemParams(file, params)) {
+        LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+        return (HINSTANCE)33;
+    }
+
+    std::wstring uri;
+    if (file && ToLower(file).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(file);
+    else if (params && ToLower(params).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(params);
+    else if (file && ToLower(file).find(L"shell:::") != std::wstring::npos) uri = ToLower(file);
+    else if (params && ToLower(params).find(L"shell:::") != std::wstring::npos) uri = ToLower(params);
+
+    if (uri == L"ms-settings:taskbar")
+        return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
+
+    if (!uri.empty()) {
+        auto result = ResolveUri(uri, hwnd);
+        if (result.intercept) {
+            if (!result.target.empty()) LaunchTarget(result.target);
             return (HINSTANCE)33;
         }
-
-        std::wstring uri;
-        if (file && ToLower(file).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(file);
-        else if (params && ToLower(params).find(L"ms-settings:") != std::wstring::npos) uri = NormalizeUri(params);
-        else if (file && ToLower(file).find(L"shell:::") != std::wstring::npos) uri = ToLower(file);
-        else if (params && ToLower(params).find(L"shell:::") != std::wstring::npos) uri = ToLower(params);
-
-        if (uri == L"ms-settings:taskbar")
-            return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
-
-        if (!uri.empty()) {
-            auto result = ResolveUri(uri, hwnd);
-            if (result.intercept) {
-                if (!result.target.empty()) LaunchTarget(result.target);
-                return (HINSTANCE)33;
-            }
-        }
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] ShellExecuteW hook caught std::exception; passing through");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] ShellExecuteW hook caught an unknown exception; passing through");
     }
     return CallOriginalShellExecuteW(hwnd, op, file, params, dir, show);
 }
@@ -2030,46 +1957,39 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
                                  BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
                                  LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
                                  LPPROCESS_INFORMATION lpProcessInformation) {
-    HookInvocationGuard invocation;
-    try {
-        if (!invocation.AllowCustomBehavior() || IsChildProcess() || !RedirectsEnabled() ||
-            UiOnlyRedirectsEnabled()) {
-            return CallOriginalCreateProcessW(lpApplicationName, lpCommandLine,
-                lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
-                lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+    if (g_unloading.load(std::memory_order_acquire) || IsChildProcess() || !RedirectsEnabled() ||
+        UiOnlyRedirectsEnabled()) {
+        return CallOriginalCreateProcessW(lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
+            lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+    }
+
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        return CallOriginalCreateProcessW(lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
+            lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+    }
+
+    if (lpCommandLine) {
+        std::wstring cmdLine(lpCommandLine);
+        if (IsControlSystemCommand(cmdLine)) {
+            LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+            if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
+            SetLastError(ERROR_SUCCESS);
+            return TRUE;
         }
 
-        HookGuard guard;
-        if (guard.IsReentrant()) {
-            return CallOriginalCreateProcessW(lpApplicationName, lpCommandLine,
-                lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
-                lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
-        }
-
-        if (lpCommandLine) {
-            std::wstring cmdLine(lpCommandLine);
-            if (IsControlSystemCommand(cmdLine)) {
-                LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+        std::wstring uri = ExtractExplorerLaunchUri(cmdLine);
+        if (!uri.empty()) {
+            auto result = ResolveUri(uri, nullptr);
+            if (result.intercept) {
+                if (!result.target.empty()) LaunchTarget(result.target);
                 if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
                 SetLastError(ERROR_SUCCESS);
                 return TRUE;
             }
-
-            std::wstring uri = ExtractExplorerLaunchUri(cmdLine);
-            if (!uri.empty()) {
-                auto result = ResolveUri(uri, nullptr);
-                if (result.intercept) {
-                    if (!result.target.empty()) LaunchTarget(result.target);
-                    if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
-                    SetLastError(ERROR_SUCCESS);
-                    return TRUE;
-                }
-            }
         }
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] CreateProcessW hook caught std::exception; passing through");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] CreateProcessW hook caught an unknown exception; passing through");
     }
     return CallOriginalCreateProcessW(lpApplicationName, lpCommandLine,
         lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
@@ -2291,8 +2211,9 @@ static void ReinitializeTrayRedirect() {
             SetupTraySubclass();
         }
 
-        InstallImmersiveMenuHooks();
-        InstallShell32Hooks();
+if (RedirectSystemTrayEnabled()) {
+    InstallImmersiveMenuHooks();
+}        InstallShell32Hooks();
     } catch (const std::exception&) {
         Wh_Log(L"[STABILITY] ReinitializeTrayRedirect caught std::exception");
     } catch (...) {
@@ -2310,13 +2231,14 @@ static void PerformBackgroundInit(bool skipSleep = false) {
     }
 
     if (g_unloading.load(std::memory_order_acquire)) return;
+if (RedirectSystemTrayEnabled()) {
     InstallImmersiveMenuHooks();
-    if (g_unloading.load(std::memory_order_acquire)) return;
+}    if (g_unloading.load(std::memory_order_acquire)) return;
     InstallShell32Hooks();
 
-    if (!g_unloading.load(std::memory_order_acquire) && g_isWin11) {
-        InstallAAMHook();
-    }
+if (!g_unloading.load(std::memory_order_acquire) && g_isWin11 && ComActivationRedirectEnabled()) {
+    InstallAAMHook();
+}
 }
 
 static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
@@ -2377,47 +2299,38 @@ HWND WINAPI CreateWindowExW_Hook(
     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
 {
-    HWND hwnd = nullptr;
-    try {
-        if (!CreateWindowExW_Original) {
-            SetLastError(ERROR_PROC_NOT_FOUND);
-            return nullptr;
-        }
+    if (!CreateWindowExW_Original) {
+        SetLastError(ERROR_PROC_NOT_FOUND);
+        return nullptr;
+    }
 
-        hwnd = CreateWindowExW_Original(
-            dwExStyle, lpClassName, lpWindowName, dwStyle,
-            X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    HWND hwnd = CreateWindowExW_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle,
+        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-        HookInvocationGuard invocation;
-        if (!invocation.AllowCustomBehavior() || !RedirectSystemTrayEnabled() || !hwnd ||
-            !lpClassName || IS_INTRESOURCE(lpClassName) || lpClassName[0] != L'T') {
-            return hwnd;
-        }
+    if (g_unloading.load(std::memory_order_acquire) || !RedirectSystemTrayEnabled() || !hwnd ||
+        !lpClassName || IS_INTRESOURCE(lpClassName) || lpClassName[0] != L'T') {
+        return hwnd;
+    }
 
-        HookGuard guard;
-        if (guard.IsReentrant() || wcscmp(lpClassName, L"ToolbarWindow32") != 0) {
-            return hwnd;
-        }
+    HookGuard guard;
+    if (guard.IsReentrant() || wcscmp(lpClassName, L"ToolbarWindow32") != 0) {
+        return hwnd;
+    }
 
-        bool trayToolbarMissing = false;
-        {
-            std::lock_guard<std::mutex> lk(g_traySubclassMutex);
-            trayToolbarMissing = (g_hTrayToolbar == nullptr);
-        }
-        if (trayToolbarMissing) {
-            SetupTraySubclass();
-        }
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] CreateWindowExW hook caught std::exception; returning original window");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] CreateWindowExW hook caught an unknown exception; returning original window");
+    bool trayToolbarMissing = false;
+    {
+        std::lock_guard<std::mutex> lk(g_traySubclassMutex);
+        trayToolbarMissing = (g_hTrayToolbar == nullptr);
+    }
+    if (trayToolbarMissing) {
+        SetupTraySubclass();
     }
     return hwnd;
 }
 BOOL Wh_ModInit() {
     try {
         g_unloading.store(false, std::memory_order_release);
-        g_activeHookCalls.store(0, std::memory_order_release);
         g_shellExecuteExHookRegistered.store(false, std::memory_order_release);
         g_shellExecuteHookRegistered.store(false, std::memory_order_release);
         g_createProcessHookRegistered.store(false, std::memory_order_release);
@@ -2568,20 +2481,7 @@ void Wh_ModBeforeUninit() {
     }
 }
 
-static bool WaitForActiveHooksToDrain() noexcept {
-    constexpr DWORD kMaxWaitMs = 5000;
-    constexpr DWORD kSleepMs = 10;
-    DWORD waited = 0;
-    while (g_activeHookCalls.load(std::memory_order_acquire) > 0 && waited < kMaxWaitMs) {
-        Sleep(kSleepMs);
-        waited += kSleepMs;
-    }
-    const bool drained = g_activeHookCalls.load(std::memory_order_acquire) == 0;
-    if (!drained) {
-        Wh_Log(L"[STABILITY] Hook calls remained active after %lu ms; shared state will be retained for the engine unload guard", kMaxWaitMs);
-    }
-    return drained;
-}
+
 
 void Wh_ModUninit() {
     try {
@@ -2600,33 +2500,26 @@ void Wh_ModUninit() {
             CloseHandle(g_traySubclassWatchdogThread);
             g_traySubclassWatchdogThread = nullptr;
         }
+RemoveTraySubclass();
 
-        const bool hooksDrained = WaitForActiveHooksToDrain();
-        RemoveTraySubclass();
+if (g_stopEvent) {
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
+}
 
-        if (g_stopEvent) {
-            CloseHandle(g_stopEvent);
-            g_stopEvent = nullptr;
-        }
-
-        // Do not free state underneath a hook that did not finish within the
-        // diagnostic wait. Normal module destruction releases it after the
-        // engine completes its own in-flight hook synchronization.
-        if (hooksDrained) {
-            {
-                std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
-                g_bounceGuard.clear();
-            }
-            {
-                std::lock_guard<std::mutex> lk(g_loopGuardMtx);
-                g_loopGuard.clear();
-            }
-            {
-                std::lock_guard<std::mutex> lk(g_mappingsMutex);
-                g_mappings.clear();
-            }
-            g_childEnvBlock.clear();
-        }
+{
+    std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
+    g_bounceGuard.clear();
+}
+{
+    std::lock_guard<std::mutex> lk(g_loopGuardMtx);
+    g_loopGuard.clear();
+}
+{
+    std::lock_guard<std::mutex> lk(g_mappingsMutex);
+    g_mappings.clear();
+}
+g_childEnvBlock.clear();
     } catch (const std::exception&) {
         Wh_Log(L"[STABILITY] Wh_ModUninit caught std::exception");
     } catch (...) {
