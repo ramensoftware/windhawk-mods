@@ -500,6 +500,59 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m==WM_CLOSE||m==WM_DESTROY) {
         if(GetPropW(h, L"FlexTbMoved")) { HWND mr=(HWND)GetPropW(h, L"FlexTbRb"); if(mr) SaveBandPositions(mr); }
     }
+    
+    // НОВОЕ: обработка восстановления из свёрнутого состояния
+    if(m==WM_SYSCOMMAND && (w == SC_RESTORE || w == SC_MAXIMIZE)) {
+        LRESULT result = DefSubclassProc(h,m,w,l);
+        if(GetPropW(h, L"FlexTbMoved")) {
+            HWND mr = (HWND)GetPropW(h, L"FlexTbRb");
+            if(mr && IsWindow(mr)) {
+                HWND breadcrumb = GetBandChild(mr, CF_BREADCRUMB);
+                if(breadcrumb && IsWindow(breadcrumb) && !GetPropW(breadcrumb, L"FlexTbIsHidden")) {
+                    SendMessage(h, WM_NCACTIVATE, FALSE, 0);
+                    SendMessage(h, WM_NCACTIVATE, TRUE, 0);
+                    RECT rc;
+                    if(GetClientRect(breadcrumb, &rc)) {
+                        int cw = rc.right - rc.left;
+                        int ch_h = rc.bottom - rc.top;
+                        SetWindowPos(breadcrumb, NULL, 0, 0, cw, ch_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+    
+    if(m==WM_SIZE && (w == SIZE_RESTORED || w == SIZE_MAXIMIZED)) {
+        LRESULT result = DefSubclassProc(h,m,w,l);
+        // Проверяем, было ли окно свёрнуто
+        static HWND lastMinimized = NULL;
+        if(GetPropW(h, L"FlexTbWasMinimized")) {
+            RemovePropW(h, L"FlexTbWasMinimized");
+            if(GetPropW(h, L"FlexTbMoved")) {
+                HWND mr = (HWND)GetPropW(h, L"FlexTbRb");
+                if(mr && IsWindow(mr)) {
+                    HWND breadcrumb = GetBandChild(mr, CF_BREADCRUMB);
+                    if(breadcrumb && IsWindow(breadcrumb) && !GetPropW(breadcrumb, L"FlexTbIsHidden")) {
+                        SendMessage(h, WM_NCACTIVATE, FALSE, 0);
+                        SendMessage(h, WM_NCACTIVATE, TRUE, 0);
+                        RECT rc;
+                        if(GetClientRect(breadcrumb, &rc)) {
+                            int cw = rc.right - rc.left;
+                            int ch_h = rc.bottom - rc.top;
+                            SetWindowPos(breadcrumb, NULL, 0, 0, cw, ch_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+    
+    if(m==WM_SIZE && w == SIZE_MINIMIZED) {
+        SetPropW(h, L"FlexTbWasMinimized", (HANDLE)1);
+    }
+    
     if(m==g_msgSyncSettings) {
         LoadSettings();
         if(GetPropW(h, L"FlexTbMoved")) {
