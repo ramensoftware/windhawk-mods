@@ -7,7 +7,7 @@
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshlwapi -luuid
+// @compilerOptions -lole32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -297,74 +297,79 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
-#include <exdisp.h>
-#include <shlguid.h>
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
 #include <mutex>
 #include <windhawk_utils.h>
 
 // Thread-local storage for file paths
 thread_local std::vector<std::wstring> g_threadFilePaths;
 
-// Only true for real Explorer folder view windows (checks for a
-// SHELLDLL_DefView ancestor). Excludes the taskbar, tray, Start menu, etc.,
-// since TrackPopupMenu(Ex) is hooked process-wide.
-bool IsShellViewWindow(HWND hwnd) {
-    HWND hwndCurrent = hwnd;
-    while (hwndCurrent) {
+// Returns the SHELLDLL_DefView ancestor of hwnd (or hwnd itself if it is
+// one), else nullptr. This is the only window class CWM_GETISHELLBROWSER
+// (WM_USER+7) is meaningful to.
+HWND FindShellViewWindow(HWND hwnd) {
+    for (HWND h = hwnd; h; h = GetParent(h)) {
         wchar_t className[256] = {0};
-        GetClassNameW(hwndCurrent, className, 256);
+        GetClassNameW(h, className, 256);
         if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
+            return h;
+        }
+    }
+    return nullptr;
+}
+
+// True for any real file/folder context menu: the main list view
+// (SHELLDLL_DefView) or the left-hand navigation tree (NamespaceTreeControl/
+// SysTreeView32, a sibling of SHELLDLL_DefView, not a descendant of it).
+// Excludes the taskbar, tray, Start menu, etc., since TrackPopupMenu(Ex) is
+// hooked process-wide.
+bool IsShellViewWindow(HWND hwnd) {
+    if (FindShellViewWindow(hwnd)) {
+        return true;
+    }
+    for (HWND h = hwnd; h; h = GetParent(h)) {
+        wchar_t className[256] = {0};
+        GetClassNameW(h, className, 256);
+        if (wcscmp(className, L"NamespaceTreeControl") == 0 ||
+            wcscmp(className, L"SysTreeView32") == 0) {
             return true;
         }
-        hwndCurrent = GetParent(hwndCurrent);
     }
     return false;
 }
 
-// Gets IShellBrowser from the exact hWnd the popup menu hook received,
-// walking up the parent chain until a window answers WM_USER+7.
-// Callers must verify IsShellViewWindow(hwnd) first.
+// Gets IShellBrowser by climbing from hwnd via GetParent, sending
+// CWM_GETISHELLBROWSER (WM_USER+7) at each level until something answers.
+// Stops at a top-level frame class (CabinetWClass/ExploreWClass/Progman).
+// Callers must confirm hwnd is a real shell view first (see
+// FindShellViewWindow/IsShellViewWindow) so this stays within Explorer's
+// own window hierarchy.
 IShellBrowser* GetShellBrowser(HWND hwnd) {
-    IShellBrowser* pShellBrowser = nullptr;
-    
-    Wh_Log(L"GetShellBrowser: Trying to get IShellBrowser starting from window %p", hwnd);
-    
-    // Only these classes are ever a legitimate Explorer shell frame that can
-    // meaningfully answer WM_USER+7. Bound the upward walk to stop as soon
-    // as we reach one -- whether or not it actually answers -- rather than
-    // climbing past it into the desktop, shell chrome, or other unrelated
-    // top-level windows.
     static const wchar_t* kShellFrameClasses[] = {
         L"CabinetWClass",
         L"ExploreWClass",
         L"Progman",
     };
     
-    HWND hwndCurrent = hwnd;
-    while (hwndCurrent) {
-        LRESULT result = SendMessageTimeoutW(hwndCurrent, WM_USER + 7, 0, 0,
+    IShellBrowser* pShellBrowser = nullptr;
+    for (HWND h = hwnd; h; h = GetParent(h)) {
+        LRESULT result = SendMessageTimeoutW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0,
                                               SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&pShellBrowser);
         if (result && pShellBrowser) {
-            Wh_Log(L"GetShellBrowser: Got IShellBrowser from window %p", hwndCurrent);
             return pShellBrowser;
         }
         
         wchar_t className[256] = {0};
-        GetClassNameW(hwndCurrent, className, 256);
+        GetClassNameW(h, className, 256);
         for (const wchar_t* frameClass : kShellFrameClasses) {
             if (wcscmp(className, frameClass) == 0) {
-                Wh_Log(L"GetShellBrowser: Reached shell frame window (%s) with no answer, stopping", className);
                 return nullptr;
             }
         }
-        
-        hwndCurrent = GetParent(hwndCurrent);
     }
-    
-    Wh_Log(L"GetShellBrowser: Failed to get IShellBrowser");
     return nullptr;
 }
 
@@ -379,11 +384,11 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
         return files;
     }
     
-    if (!IsShellViewWindow(hwnd)) {
-        // Not a real folder view (e.g. taskbar, tray, Start menu, or other
-        // unrelated popup) -- don't walk or message this window's ancestor
-        // chain at all.
-        Wh_Log(L"GetSelectedFilesFromExplorer: hWnd is not a shell view window, skipping");
+    if (!FindShellViewWindow(hwnd)) {
+        // No SHELLDLL_DefView ancestor -- either not a shell view menu at
+        // all, or (e.g.) a right-click in the navigation pane, which has no
+        // IFolderView selection to read. Either way there's nothing to look up.
+        Wh_Log(L"GetSelectedFilesFromExplorer: no SHELLDLL_DefView ancestor, skipping");
         return files;
     }
     
@@ -405,14 +410,20 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
                 if (SUCCEEDED(pFolderView->Items(SVGIO_SELECTION, IID_IEnumIDList, (void**)&pEnum)) && pEnum) {
                     LPITEMIDLIST pidl = nullptr;
                     while (pEnum->Next(1, &pidl, nullptr) == S_OK) {
-                        // Get the full path
+                        // Get the full path. Use StrRetToStrW (heap-allocated,
+                        // no length cap) instead of StrRetToBufW into a fixed
+                        // MAX_PATH buffer, since a truncated deep path would
+                        // lose its extension and make extension filtering
+                        // decide wrong.
                         STRRET strret;
                         if (SUCCEEDED(pFolder->GetDisplayNameOf(pidl, SHGDN_FORPARSING, &strret))) {
-                            wchar_t szPath[MAX_PATH] = {0};
-                            StrRetToBufW(&strret, pidl, szPath, MAX_PATH);
-                            if (szPath[0]) {
-                                files.push_back(std::wstring(szPath));
-                                Wh_Log(L"Found selected file: %s", szPath);
+                            LPWSTR pszPath = nullptr;
+                            if (SUCCEEDED(StrRetToStrW(&strret, pidl, &pszPath)) && pszPath) {
+                                if (pszPath[0]) {
+                                    files.push_back(std::wstring(pszPath));
+                                    Wh_Log(L"Found selected file: %s", pszPath);
+                                }
+                                CoTaskMemFree(pszPath);
                             }
                         }
                         CoTaskMemFree(pidl);
@@ -420,26 +431,6 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
                     pEnum->Release();
                 }
                 pFolder->Release();
-            }
-            
-            // If nothing is selected (e.g. right-clicking on empty space),
-            // extension filtering would otherwise have no context at all
-            // and just silently not filter. Fall back to the current
-            // folder itself so filtering has something defined to check.
-            if (files.empty()) {
-                IPersistFolder2* pPersistFolder2 = nullptr;
-                if (SUCCEEDED(pFolderView->GetFolder(IID_IPersistFolder2, (void**)&pPersistFolder2)) && pPersistFolder2) {
-                    LPITEMIDLIST pidlFolder = nullptr;
-                    if (SUCCEEDED(pPersistFolder2->GetCurFolder(&pidlFolder)) && pidlFolder) {
-                        wchar_t szFolderPath[MAX_PATH] = {0};
-                        if (SHGetPathFromIDListW(pidlFolder, szFolderPath) && szFolderPath[0]) {
-                            files.push_back(std::wstring(szFolderPath));
-                            Wh_Log(L"No selection, falling back to current folder: %s", szFolderPath);
-                        }
-                        CoTaskMemFree(pidlFolder);
-                    }
-                    pPersistFolder2->Release();
-                }
             }
             
             pFolderView->Release();
@@ -559,6 +550,10 @@ struct MenuItem {
 // List of predefined menu items to check
 std::vector<MenuItem> g_menuItems;
 
+// Indexes g_menuItems by normalizedText for O(1) lookup, rebuilt alongside
+// it in InitializeMenuItems().
+std::unordered_map<std::wstring, const MenuItem*> g_menuItemsByText;
+
 // Guards g_settings and g_menuItems against concurrent access from
 // LoadSettings() (settings-change thread) and the popup menu hooks
 // (Explorer UI threads).
@@ -595,7 +590,7 @@ bool IsExtensionInList(const std::wstring& ext, const std::vector<std::wstring>&
 // Check if any of the current files has an extension in the list
 bool AnyFileHasExtensionInList(const std::vector<std::wstring>& extList) {
     Wh_Log(L"AnyFileHasExtensionInList: Checking %d files against %d extensions", 
-           g_threadFilePaths.size(), extList.size());
+           (int)g_threadFilePaths.size(), (int)extList.size());
     
     for (const auto& filePath : g_threadFilePaths) {
         std::wstring ext = GetFileExtension(filePath);
@@ -671,7 +666,7 @@ void InitializeMenuItems() {
         {L"Проверка с использованием Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // ru-RU
         
         {L"Create with Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // en-US, en-GB, en-AU
-        {L"Designeで作成", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // ja-JP
+        {L"Designerで作成", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // ja-JP
         {L"Criar com o Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // pt-BR, pt-PT
         {L"Crear con Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // es-MX
         {L"Vytvořit pomocí Designeru", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // cs-CZ
@@ -1212,7 +1207,7 @@ void InitializeMenuItems() {
         {L"Paint ile düzenle", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // tr-TR
         {L"Edytuj w Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // pl-PL
         {L"Modifier avec Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // fr-FR
-        {L"Редактирование с помощью  приложения Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // ru-RU
+        {L"Редактирование с помощью приложения Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // ru-RU
         
         {L"NVIDIA Control Panel", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // en-US, en-GB, en-AU
         {L"NVIDIA コントロールパネル", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // ja-JP
@@ -1240,10 +1235,12 @@ void InitializeMenuItems() {
     };
     
     // Precompute each entry's normalized text once here instead of on every
-    // ShouldRemoveMenuItem() lookup -- that function runs for every menu
-    // item, for every menu shown, against all ~564 entries.
+    // ShouldRemoveMenuItem() lookup, and index by it so that lookup is a
+    // single hash-map probe instead of a linear scan over all ~564 entries.
+    g_menuItemsByText.clear();
     for (auto& item : g_menuItems) {
         item.normalizedText = NormalizeString(RemoveAmpersands(item.text));
+        g_menuItemsByText.insert({item.normalizedText, &item});
     }
 }
 
@@ -1271,7 +1268,17 @@ std::wstring ToLower(const std::wstring& str) {
 
 // Utility function to normalize string for comparison
 std::wstring NormalizeString(const std::wstring& str) {
-    std::wstring result = ToLower(str);
+    // Menu items can render with a tab-separated accelerator suffix (e.g.
+    // "Copy\tCtrl+C") added by third-party context-menu handlers. Cut that
+    // off before comparing, so entries in the removal table (or custom
+    // items) still match on just the visible label.
+    std::wstring text = str;
+    size_t tabPos = text.find(L'\t');
+    if (tabPos != std::wstring::npos) {
+        text = text.substr(0, tabPos);
+    }
+    
+    std::wstring result = ToLower(text);
     // Remove leading/trailing whitespace
     size_t start = result.find_first_not_of(L" \t\r\n");
     if (start == std::wstring::npos) return L"";
@@ -1295,29 +1302,18 @@ bool MatchesCustomItem(const std::wstring& text, const std::wstring& pattern) {
 }
 
 // Function to check if a menu item should be removed based on extension filtering
+// Called only when the caller has already confirmed the relevant filter
+// toggle is on and item.requiresExtensionCheck is set -- no need to
+// re-check either here.
 bool ShouldRemoveByExtension(const MenuItem& item) {
-    // Determine which filter toggle applies to this item
-    bool filterEnabled = false;
-    if (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions) {
-        filterEnabled = g_settings.extensionFiltering.enableWinRARFiltering;
-    } else {
-        filterEnabled = g_settings.extensionFiltering.enableExtensionFiltering;
-    }
-    
-    // If the relevant filter is disabled, don't apply extension logic
-    if (!filterEnabled) {
-        return false;
-    }
-    
-    // If this item doesn't require extension check, don't filter it
-    if (!item.requiresExtensionCheck || !item.allowedExtensions) {
-        return false;
-    }
-    
-    // If no file paths are available (e.g., right-clicking on empty space), don't filter
+    // No file context at all (right-clicking empty space, whether in a
+    // regular folder or a virtual one like This PC/Recycle Bin/Libraries
+    // where there's no filesystem path to fall back to). Explicitly hide
+    // rather than show, so the behavior is the same everywhere instead of
+    // depending on whether a path happened to be available.
     if (g_threadFilePaths.empty()) {
-        Wh_Log(L"ShouldRemoveByExtension: No file paths available");
-        return false;
+        Wh_Log(L"ShouldRemoveByExtension: No file context, hiding");
+        return true;
     }
     
     // Check if ANY of the selected files has an extension in the whitelist
@@ -1334,59 +1330,57 @@ bool ShouldRemoveByExtension(const MenuItem& item) {
 bool ShouldRemoveMenuItem(const std::wstring& text, bool isGreyed) {
     std::wstring cleanText = NormalizeString(RemoveAmpersands(text));
     
-    // Check against predefined items
-    for (const auto& item : g_menuItems) {
-        if (cleanText == item.normalizedText) {
-            bool isEnabled = *(item.enabled);
-            
-            Wh_Log(L"ShouldRemoveMenuItem for '%s': isEnabled=%d, requiresExtCheck=%d, greyedOnly=%d, isGreyed=%d",
-                   item.text.c_str(), isEnabled, item.requiresExtensionCheck, item.greyedOnly, isGreyed);
-            
-            // If this item should only be removed when greyed out, check the state first
-            if (item.greyedOnly && !isGreyed) {
-                Wh_Log(L"  -> greyedOnly is set but item is not greyed, keeping item");
-                return false;
-            }
-            
-            // Special handling for extension-filtered items (Notepad and WinRAR)
-            if (item.requiresExtensionCheck) {
-                if (isEnabled) {
-                    // Check if the relevant filter toggle is on for this item
-                    bool filterOn = (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions)
-                        ? g_settings.extensionFiltering.enableWinRARFiltering
-                        : g_settings.extensionFiltering.enableExtensionFiltering;
-                    
-                    if (filterOn) {
-                        // Filter is on: only remove if extension is not in whitelist
-                        bool shouldRemove = ShouldRemoveByExtension(item);
-                        Wh_Log(L"  -> Extension filtering active, final decision: remove=%d", shouldRemove);
-                        return shouldRemove;
-                    } else {
-                        // Filter is off: removal toggle wins, hide globally
-                        Wh_Log(L"  -> Filter disabled, removing globally");
-                        return true;
-                    }
-                }
-                // If the removal setting is OFF, never remove this item
-                Wh_Log(L"  -> Setting is OFF, keeping item");
-                return false;
-            }
-            
-            // Normal behavior for non-extension-filtered items
-            Wh_Log(L"  -> Normal removal logic, remove=%d", isEnabled);
-            return isEnabled;
+    // Check against predefined items (single hash lookup instead of a
+    // linear scan over all ~564 entries)
+    auto it = g_menuItemsByText.find(cleanText);
+    if (it != g_menuItemsByText.end()) {
+        const MenuItem& item = *it->second;
+        bool isEnabled = *(item.enabled);
+        
+        Wh_Log(L"ShouldRemoveMenuItem for '%s': isEnabled=%d, requiresExtCheck=%d, greyedOnly=%d, isGreyed=%d",
+               item.text.c_str(), isEnabled, item.requiresExtensionCheck, item.greyedOnly, isGreyed);
+        
+        // If this item should only be removed when greyed out, check the state first
+        if (item.greyedOnly && !isGreyed) {
+            Wh_Log(L"  -> greyedOnly is set but item is not greyed, keeping item");
+            return false;
         }
+        
+        // Special handling for extension-filtered items (Notepad and WinRAR)
+        if (item.requiresExtensionCheck) {
+            if (isEnabled) {
+                // Check if the relevant filter toggle is on for this item
+                bool filterOn = (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions)
+                    ? g_settings.extensionFiltering.enableWinRARFiltering
+                    : g_settings.extensionFiltering.enableExtensionFiltering;
+                
+                if (filterOn) {
+                    // Filter is on: only remove if extension is not in whitelist
+                    bool shouldRemove = ShouldRemoveByExtension(item);
+                    Wh_Log(L"  -> Extension filtering active, final decision: remove=%d", shouldRemove);
+                    return shouldRemove;
+                } else {
+                    // Filter is off: removal toggle wins, hide globally
+                    Wh_Log(L"  -> Filter disabled, removing globally");
+                    return true;
+                }
+            }
+            // If the removal setting is OFF, never remove this item
+            Wh_Log(L"  -> Setting is OFF, keeping item");
+            return false;
+        }
+        
+        // Normal behavior for non-extension-filtered items
+        Wh_Log(L"  -> Normal removal logic, remove=%d", isEnabled);
+        return isEnabled;
     }
     
-    // Check custom items with exact/wildcard matching
-    for (const auto& customItem : g_settings.customItems) {
-        if (!customItem.empty()) {
-            std::wstring cleanCustomItem = NormalizeString(RemoveAmpersands(customItem));
-            
-            if (MatchesCustomItem(cleanText, cleanCustomItem)) {
-                Wh_Log(L"Removing custom item: %s (matched: %s)", cleanText.c_str(), cleanCustomItem.c_str());
-                return true;
-            }
+    // Check custom items with exact/wildcard matching (already normalized
+    // once in LoadSettings())
+    for (const auto& cleanCustomItem : g_settings.customItems) {
+        if (MatchesCustomItem(cleanText, cleanCustomItem)) {
+            Wh_Log(L"Removing custom item: %s (matched: %s)", cleanText.c_str(), cleanCustomItem.c_str());
+            return true;
         }
     }
     
@@ -1410,6 +1404,7 @@ void ProcessMenu(HMENU hMenu) {
     if (!hMenu) return;
     
     int itemCount = GetMenuItemCount(hMenu);
+    bool anyRemoved = false;
     
     // Iterate through menu items in reverse to safely remove items
     for (int i = itemCount - 1; i >= 0; i--) {
@@ -1446,6 +1441,7 @@ void ProcessMenu(HMENU hMenu) {
                         // dangling handle. Never recurse into it after this.
                         DeleteMenu(hMenu, i, MF_BYPOSITION);
                         deleted = true;
+                        anyRemoved = true;
                     }
                 }
             }
@@ -1456,6 +1452,13 @@ void ProcessMenu(HMENU hMenu) {
                 ProcessMenu(mii.hSubMenu);
             }
         }
+    }
+    
+    // Separator cleanup below only ever matters if something was actually
+    // removed from this menu -- an untouched menu's separators are already
+    // however Explorer built it, so skip mutating it at all in that case.
+    if (!anyRemoved) {
+        return;
     }
     
     // Remove consecutive separators
@@ -1515,32 +1518,54 @@ TrackPopupMenuEx_t TrackPopupMenuEx_Original;
 using TrackPopupMenu_t = decltype(&TrackPopupMenu);
 TrackPopupMenu_t TrackPopupMenu_Original;
 
-// Hook function for TrackPopupMenuEx
-BOOL WINAPI TrackPopupMenuEx_Hook(
-    HMENU hMenu,
-    UINT uFlags,
-    int x,
-    int y,
-    HWND hWnd,
-    LPTPMPARAMS lptpm
-) {
-    // Clear any stale file paths from previous calls
-    g_threadFilePaths.clear();
+using DispatchMessageW_t = decltype(&DispatchMessageW);
+DispatchMessageW_t DispatchMessageW_Original;
+
+// Shell submenus like "Send to", "New" and "Open with" are populated lazily
+// on WM_INITMENUPOPUP, not at TrackPopupMenu(Ex) time -- so ProcessMenu's
+// recursion in the hooks below typically sees them still empty. Hooking
+// DispatchMessageW lets us process a submenu right after Explorer's own
+// handler has populated it (i.e. after the original dispatch returns).
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    LRESULT result = DispatchMessageW_Original(lpMsg);
     
-    // Check modifier key bypass - if active, skip menu processing entirely
-    // (checked first, before any COM work, so the bypass path is actually cheap)
-    // Reads only g_settings.modifierKeyOverride, so a brief lock is enough.
-    {
-        std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-        if (IsModifierKeyBypassActive()) {
-            Wh_Log(L"TrackPopupMenuEx: Modifier key bypass active, skipping menu processing");
-            return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
+    if (lpMsg && lpMsg->message == WM_INITMENUPOPUP) {
+        HMENU hSubMenu = (HMENU)lpMsg->wParam;
+        HWND hWnd = lpMsg->hwnd;
+        if (hSubMenu && IsShellViewWindow(hWnd)) {
+            std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+            ProcessMenu(hSubMenu);
         }
     }
     
-    // Only look up the current selection if extension-based filtering actually
-    // needs it. Every other feature (bloatware/basic/app-specific/custom item
-    // removal) works purely off menu item text and doesn't touch file paths.
+    return result;
+}
+
+// Shared logic for both TrackPopupMenu(Ex) hooks: bypass check, file lookup,
+// and menu filtering. logPrefix is used only to keep the existing per-hook
+// log messages distinguishable.
+void ProcessPopupMenu(HMENU hMenu, HWND hWnd, const wchar_t* logPrefix) {
+    g_threadFilePaths.clear();
+    
+    // Bail out early for non-shell-view menus (taskbar, tray, Start menu,
+    // etc.) before doing any of the more expensive work below.
+    if (!IsShellViewWindow(hWnd)) {
+        Wh_Log(L"%s: hWnd is not a shell view window, skipping menu filtering", logPrefix);
+        return;
+    }
+    
+    // Modifier key bypass - reads only g_settings.modifierKeyOverride.
+    {
+        std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+        if (IsModifierKeyBypassActive()) {
+            Wh_Log(L"%s: Modifier key bypass active, skipping menu processing", logPrefix);
+            return;
+        }
+    }
+    
+    // Only look up the current selection if extension-based filtering
+    // actually needs it -- every other feature works purely off menu item
+    // text and doesn't touch file paths.
     bool needFiles;
     {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
@@ -1550,51 +1575,48 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
     
     bool comInitialized = false;
     if (needFiles) {
-        // NOTE: g_settingsMutex deliberately NOT held here -- this call can
-        // block on a cross-thread SendMessageTimeoutW, and holding the lock
+        // g_settingsMutex deliberately NOT held here -- this call can block
+        // on a cross-thread SendMessageTimeoutW, and holding the lock
         // across it risks a deadlock with another Explorer thread.
-        
-        // Initialize COM on this thread (hook runs on different thread than Wh_ModInit)
         HRESULT hrCom = CoInitialize(NULL);
         comInitialized = SUCCEEDED(hrCom);
         
-        // Get selected files from Explorer
         g_threadFilePaths = GetSelectedFilesFromExplorer(hWnd);
         
-        // Log current file paths
         if (!g_threadFilePaths.empty()) {
-            Wh_Log(L"TrackPopupMenuEx called with %d files:", g_threadFilePaths.size());
+            Wh_Log(L"%s called with %d files:", logPrefix, (int)g_threadFilePaths.size());
             for (const auto& path : g_threadFilePaths) {
                 Wh_Log(L"  - %s (ext: %s)", path.c_str(), GetFileExtension(path).c_str());
             }
         } else {
-            Wh_Log(L"TrackPopupMenuEx called with no file context");
+            Wh_Log(L"%s called with no file context", logPrefix);
         }
     }
     
-    // Only filter genuine file/folder context menus. TrackPopupMenuEx is
-    // hooked process-wide, so hWnd can also belong to the taskbar, tray
-    // icons, or the Start menu -- filtering those wasn't the intended scope
-    // of this mod, and a broad custom rule (e.g. a wildcard) could
-    // otherwise strip items from menus that have nothing to do with files.
-    // ProcessMenu only touches hMenu (owned by this thread) and reads
-    // g_settings/g_menuItems -- it never blocks on another thread, so it's
-    // safe to hold the lock across it.
-    if (IsShellViewWindow(hWnd)) {
+    // Safe to hold the lock across ProcessMenu -- it never blocks on
+    // another thread.
+    {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
         ProcessMenu(hMenu);
-    } else {
-        Wh_Log(L"TrackPopupMenuEx: hWnd is not a shell view window, skipping menu filtering");
     }
     
-    // Clear file paths after processing
     g_threadFilePaths.clear();
     
-    // Uninitialize COM on this thread
     if (comInitialized) {
         CoUninitialize();
     }
-    
+}
+
+// Hook function for TrackPopupMenuEx
+BOOL WINAPI TrackPopupMenuEx_Hook(
+    HMENU hMenu,
+    UINT uFlags,
+    int x,
+    int y,
+    HWND hWnd,
+    LPTPMPARAMS lptpm
+) {
+    ProcessPopupMenu(hMenu, hWnd, L"TrackPopupMenuEx");
     return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
 }
 
@@ -1608,72 +1630,7 @@ BOOL WINAPI TrackPopupMenu_Hook(
     HWND hWnd,
     const RECT* prcRect
 ) {
-    // Clear any stale file paths from previous calls
-    g_threadFilePaths.clear();
-    
-    // Check modifier key bypass - if active, skip menu processing entirely
-    // (checked first, before any COM work, so the bypass path is actually cheap)
-    // Reads only g_settings.modifierKeyOverride, so a brief lock is enough.
-    {
-        std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-        if (IsModifierKeyBypassActive()) {
-            Wh_Log(L"TrackPopupMenu: Modifier key bypass active, skipping menu processing");
-            return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
-        }
-    }
-    
-    // Only look up the current selection if extension-based filtering actually
-    // needs it. Every other feature (bloatware/basic/app-specific/custom item
-    // removal) works purely off menu item text and doesn't touch file paths.
-    bool needFiles;
-    {
-        std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-        needFiles = g_settings.extensionFiltering.enableExtensionFiltering ||
-                    g_settings.extensionFiltering.enableWinRARFiltering;
-    }
-    
-    bool comInitialized = false;
-    if (needFiles) {
-        // NOTE: g_settingsMutex is deliberately NOT held here (see comment
-        // in TrackPopupMenuEx_Hook above -- this caused an AppHangB1
-        // explorer.exe hang).
-        
-        // Initialize COM on this thread (hook runs on different thread than Wh_ModInit)
-        HRESULT hrCom = CoInitialize(NULL);
-        comInitialized = SUCCEEDED(hrCom);
-        
-        // Get selected files from Explorer
-        g_threadFilePaths = GetSelectedFilesFromExplorer(hWnd);
-        
-        // Log current file paths
-        if (!g_threadFilePaths.empty()) {
-            Wh_Log(L"TrackPopupMenu called with %d files:", g_threadFilePaths.size());
-            for (const auto& path : g_threadFilePaths) {
-                Wh_Log(L"  - %s (ext: %s)", path.c_str(), GetFileExtension(path).c_str());
-            }
-        } else {
-            Wh_Log(L"TrackPopupMenu called with no file context");
-        }
-    }
-    
-    // Only filter genuine file/folder context menus (see comment in
-    // TrackPopupMenuEx_Hook above). Safe to hold the lock across
-    // ProcessMenu -- it never blocks on another thread.
-    if (IsShellViewWindow(hWnd)) {
-        std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-        ProcessMenu(hMenu);
-    } else {
-        Wh_Log(L"TrackPopupMenu: hWnd is not a shell view window, skipping menu filtering");
-    }
-    
-    // Clear file paths after processing
-    g_threadFilePaths.clear();
-    
-    // Uninitialize COM on this thread
-    if (comInitialized) {
-        CoUninitialize();
-    }
-    
+    ProcessPopupMenu(hMenu, hWnd, L"TrackPopupMenu");
     return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
 }
 
@@ -1762,7 +1719,8 @@ void LoadSettings() {
         g_settings.extensionFiltering.notepadExtensions.push_back(extension);
     }
     
-    // Load custom items
+    // Load custom items (normalized once here instead of on every
+    // ShouldRemoveMenuItem() comparison)
     g_settings.customItems.clear();
     for (int i = 0; i < maxItems; i++) {
         PCWSTR customItem = Wh_GetStringSetting(L"customItems[%d]", i);
@@ -1771,8 +1729,27 @@ void LoadSettings() {
         Wh_FreeStringSetting(customItem);
         if (isUnset) break;
         
-        g_settings.customItems.push_back(item);
+        std::wstring cleanItem = NormalizeString(RemoveAmpersands(item));
+        
+        // A bare "*" matches every menu item (empty prefix matches
+        // anything) and would empty the whole context menu -- almost
+        // certainly a mistake, so refuse to load it rather than let a
+        // stray keystroke leave someone with no right-click menu at all.
+        if (cleanItem == L"*") {
+            Wh_Log(L"Ignoring custom item %d: a bare '*' would remove every menu item", i);
+            continue;
+        }
+        
+        g_settings.customItems.push_back(cleanItem);
         Wh_Log(L"Loaded custom item %d: %s", i, item.c_str());
+    }
+    
+    if (maxItems > 0) {
+        PCWSTR overflowCheck = Wh_GetStringSetting(L"customItems[%d]", maxItems);
+        if (*overflowCheck) {
+            Wh_Log(L"WARNING: More than %d custom items are configured; entries beyond the first %d are ignored", maxItems, maxItems);
+        }
+        Wh_FreeStringSetting(overflowCheck);
     }
     
     // WinRAR filtering settings (nested under extensionFiltering)
@@ -1823,6 +1800,15 @@ BOOL Wh_ModInit() {
         &TrackPopupMenu_Original
     )) {
         Wh_Log(L"Failed to hook TrackPopupMenu");
+        return FALSE;
+    }
+    
+    if (!WindhawkUtils::SetFunctionHook(
+        DispatchMessageW,
+        DispatchMessageW_Hook,
+        &DispatchMessageW_Original
+    )) {
+        Wh_Log(L"Failed to hook DispatchMessageW");
         return FALSE;
     }
     
