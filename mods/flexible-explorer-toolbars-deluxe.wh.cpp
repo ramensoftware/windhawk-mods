@@ -170,12 +170,7 @@ void RefreshBreadcrumb(HWND cab, HWND breadcrumb) {
     BOOL active = (GetForegroundWindow() == cab);
     SendMessage(cab, WM_NCACTIVATE, !active, 0);
     SendMessage(cab, WM_NCACTIVATE, active, 0);
-    RECT rc;
-    if(GetClientRect(breadcrumb, &rc)) {
-        int cw = rc.right - rc.left;
-        int ch_h = rc.bottom - rc.top;
-        SetWindowPos(breadcrumb, NULL, 0, 0, cw, ch_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    }
+    SetWindowPos(breadcrumb, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
 BOOL CALLBACK EnumSyncCabinets_Proc(HWND w, LPARAM) {
@@ -253,6 +248,8 @@ bool GetLockToolbarsState(HWND rb) {
         return !(rbi.fStyle & RBBS_GRIPPERALWAYS);
     return false;
 }
+
+LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR);
 
 LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m == WM_NCDESTROY) {
@@ -340,8 +337,11 @@ BOOL HandleMenuResult(UINT cmd, bool isRet, HWND hw) {
     if(cmd == 41484) {
         HWND cab = GetCabinet(hw);
         HWND rb  = cab ? (HWND)GetPropW(cab, L"FlexTbRb") : NULL;
-        bool wantLocked = rb ? !GetLockToolbarsState(rb) : true;
-        EnumWindows(EnumForLock_Proc, (LPARAM)wantLocked);
+        if(!rb || !IsWindow(rb)) {
+            if(!isRet && hw) PostMessage(hw, WM_COMMAND, MAKEWPARAM(LOWORD(cmd), 0), 0);
+            return isRet ? cmd : TRUE;
+        }
+        EnumWindows(EnumForLock_Proc, (LPARAM)!GetLockToolbarsState(rb));
         return isRet ? 0 : TRUE;
     }
     if(!isRet && cmd && hw) PostMessage(hw, WM_COMMAND, MAKEWPARAM(LOWORD(cmd), 0), 0);
@@ -476,11 +476,33 @@ LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         }
         return shown ? 0 : DefSubclassProc(h,m,w,l);
     }
-    if(m==RB_SETBANDINFO) {
-        auto* inf=(REBARBANDINFO*)l;
-        if(inf && (inf->fMask&RBBIM_CHILDSIZE)) {
+    if(m == RB_SETBANDINFO) {
+        auto* inf = (REBARBANDINFO*)l;
+        if(inf && (inf->fMask & RBBIM_CHILDSIZE)) {
             HWND ch = (inf->fMask&RBBIM_CHILD) ? inf->hwndChild : [&](){ REBARBANDINFO q={sizeof(q)}; q.fMask=RBBIM_CHILD; return SendMessage(h,RB_GETBANDINFO,w,(LPARAM)&q)?q.hwndChild:NULL; }();
-            if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) { inf->cyMinChild=inf->cyChild=inf->cyMaxChild=GetSystemMetrics(SM_CYSIZE)+GetSystemMetrics(SM_CYBORDER)*2+2; inf->cyIntegral=1; }
+            if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) {
+                REBARBANDINFO local = *inf;
+                local.cyMinChild = local.cyChild = local.cyMaxChild =
+                    GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER)*2 + 2;
+                local.cyIntegral = 1;
+                g_rbLayoutDepth++;
+                LRESULT r = DefSubclassProc(h, m, w, (LPARAM)&local);
+                g_rbLayoutDepth--;
+                if(m==WM_SIZE && GetPropW(h, L"FlexTbPendApply") && !g_inApply) {
+                    int a = (int)(INT_PTR)GetPropW(h, L"FlexTbApplyAtm");
+                    if(a<5) { SetPropW(h, L"FlexTbApplyAtm", (HANDLE)(INT_PTR)(a+1)); ReapplyCx(h); }
+                    else RemovePropW(h, L"FlexTbPendApply");
+                }
+                if(m==RB_INSERTBAND) if(HWND cab=GetCabinet(h)) if(!GetPropW(cab, L"FlexTbMoved")) PostMessage(cab,g_msgDoMove,0,0);
+                if(m==RB_SETBANDINFO && !g_inSync) if(HWND cab=GetCabinet(h)) if(GetPropW(cab, L"FlexTbMoved")) SyncGrippers(h);
+                if(m==WM_MOUSEMOVE || m==WM_LBUTTONUP) {
+                    HWND cab=(HWND)GetPropW(h, L"FlexTbCab"); if(!cab) cab = GetCabinet(h);
+                    if(cab && GetPropW(cab, L"FlexTbMoved") && !g_inApply) {
+                        static DWORD ls=0; DWORD n=GetTickCount(); if(m==WM_LBUTTONUP || (n-ls>1000)) { SaveBandPositions(h); ls=n; }
+                    }
+                }
+                return r;
+            }
         }
     }
     g_rbLayoutDepth++; LRESULT r=DefSubclassProc(h,m,w,l); g_rbLayoutDepth--;
@@ -579,7 +601,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         return 0;
     }
     if(m==g_msgDoMove) {
-        if(GetPropW(h, L"FlexTbMoved")) return 1;
         HWND st = FindByClass(h, L"ShellTabWindowClass");
         if(!st) return 0;
         HWND ww = FindByClass(st, L"WorkerW");
