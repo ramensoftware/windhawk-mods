@@ -33,7 +33,7 @@ It was mostly tested and made on `Windows 11 23H2`, where it works great, and it
 * Change the wobbliness of the windows from 5 presets
 * Enable advanced mode to change each parameter independently, instead of a preset
 * Fluid wobble animations for dragging, snapping and even resizing windows
-* Calculated as a 4x4 mesh for smooth movement
+* Uses a 4x4 spring simulation fitted to a smooth whole-window transform
 
 ## Known Issues
 
@@ -86,7 +86,6 @@ The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wob
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <avrt.h>
 #include <algorithm>
 #include <atomic>
 #include <cfloat>
@@ -197,6 +196,17 @@ static HWND GetHwndFromWindowData(void* windowData)
     return hwnd;
 }
 
+static HWND GetHwndFromTrustedWindowData(void* windowData)
+{
+    if (!windowData || g_windowDataHwndOffset == SIZE_MAX)
+    {
+        return nullptr;
+    }
+    // Hook arguments are live CWindowData objects for the duration of the call.
+    return *reinterpret_cast<HWND*>(static_cast<BYTE*>(windowData) +
+                                    g_windowDataHwndOffset);
+}
+
 HWINEVENTHOOK g_moveSizeHook = nullptr;
 HWINEVENTHOOK g_locationHook = nullptr;
 HWINEVENTHOOK g_foregroundHook = nullptr;
@@ -229,6 +239,7 @@ std::atomic<HWND> g_pendingMaximizedStateWindow = nullptr;
 std::atomic_bool g_maximizedStateCheckQueued = false;
 static constexpr UINT WM_WOBBLY_MAXIMIZED_CHANGE = WM_APP + 0x31A;
 static constexpr UINT WM_WOBBLY_NATIVE_WINDOW_TRANSITION = WM_APP + 0x31B;
+static constexpr UINT WM_WOBBLY_DWM_SCENE_WAKE = WM_APP + 0x31C;
 static constexpr LPARAM NATIVE_TRANSITION_TARGET_IS_WORK_AREA = 0x01;
 static constexpr LPARAM NATIVE_TRANSITION_SOURCE_IS_WORK_AREA = 0x02;
 static constexpr LPARAM NATIVE_TRANSITION_WINDOW_IS_ZOOMED = 0x04;
@@ -318,14 +329,16 @@ using CWindowListUpdateScene_t = long(__cdecl*)(void* pThis);
 CWindowListUpdateScene_t g_windowListUpdateSceneOriginal = nullptr;
 using CDesktopManagerAdvanceTimelines_t = void(__cdecl*)(void* pThis, double currentTime);
 CDesktopManagerAdvanceTimelines_t g_desktopManagerAdvanceTimelinesOriginal = nullptr;
-using CDesktopManagerPostStartAnimations_t = long(__cdecl*)(void* pThis);
-CDesktopManagerPostStartAnimations_t g_desktopManagerPostStartAnimations = nullptr;
-void* g_desktopManagerTimelineDirtyAddress = nullptr;
+using CDesktopManagerHandleThreadMessage_t =
+    void(__cdecl*)(UINT message, UINT_PTR wParam, INT_PTR lParam);
+CDesktopManagerHandleThreadMessage_t g_desktopManagerHandleThreadMessageOriginal = nullptr;
 void* g_desktopManagerInstanceAddress = nullptr;
 void* g_cCompositorAddRefFunction = nullptr;
 void* g_cCompositorReleaseFunction = nullptr;
 using CTopLevelWindow3DDestructor_t = void(__cdecl*)(void* pThis);
 CTopLevelWindow3DDestructor_t g_topLevelWindow3DDestructorOriginal = nullptr;
+using CTopLevelWindowDestructor_t = void(__cdecl*)(void* pThis);
+CTopLevelWindowDestructor_t g_topLevelWindowDestructorOriginal = nullptr;
 using EnsureTopLevelWindow_t = long(__cdecl*)(void* pThis, void* windowData);
 EnsureTopLevelWindow_t g_ensureTopLevelWindowFunction = nullptr;
 // Learn vftables from verified live objects when DIA omits uDWM data symbols.
@@ -368,6 +381,7 @@ struct DwmWindowObjectMapping
     void* topLevelWindow;
     void* topLevelWindow3D;
     ULONGLONG lastSeen;
+    bool topLevelWindowDestroyed;
 };
 
 DwmWindowObjectMapping g_dwmWindowMappings[MAX_DWM_WINDOW_MAPPINGS] = {};
@@ -379,7 +393,6 @@ std::atomic<unsigned int> g_existingWindowBackfillMapped = 0;
 std::atomic<DWORD> g_dwmSceneThreadId = 0;
 std::atomic_bool g_dwmPrivateCallsDisabled = false;
 std::atomic_bool g_dwmThreadMismatchLogged = false;
-std::atomic<ULONGLONG> g_lastDwmSceneCallbackTimestamp = 0;
 std::atomic<ULONGLONG> g_nextDwmObjectDiscoveryAttempt = 0;
 std::atomic<unsigned int> g_dwmObjectDiscoveryFailureCount = 0;
 
@@ -500,7 +513,7 @@ static void* GetTopLevelVisualProxy(void* topLevelWindow)
 
 static constexpr int MAX_ANIMATION_SLOTS = 6;
 static constexpr ULONGLONG DWM_SCENE_STALL_TIMEOUT_MS = 3000;
-static constexpr ULONGLONG DWM_UNLOAD_CLEANUP_TIMEOUT_MS = 1000;
+static constexpr ULONGLONG DWM_UNLOAD_CLEANUP_TIMEOUT_MS = 3000;
 
 struct WindowAnimationSlot
 {
@@ -548,10 +561,12 @@ std::atomic<ULONGLONG> g_sceneWakePostTimestamp = 0;
 std::atomic<ULONGLONG> g_sceneWakeStallStartedAt = 0;
 std::atomic<unsigned int> g_sceneWakeRetryCount = 0;
 std::atomic_bool g_sceneWakeStalled = false;
+std::atomic_bool g_sceneRecoveryCleanupPending = false;
 std::atomic<ULONGLONG> g_scenePassCounter = 0;
 std::atomic<ULONGLONG> g_lastFallbackInvalidationTimestamp = 0;
 std::atomic<unsigned int> g_abandonedProxyCount = 0;
 std::atomic<void*> g_windowListForSceneWake = nullptr;
+std::atomic_bool g_sceneOwnershipResetPending = false;
 ULONGLONG g_lastObservedScenePassCounter = 0;
 ULONGLONG g_lastSceneProgressTimestamp = 0;
 HANDLE g_animationTimer = nullptr;
@@ -560,24 +575,10 @@ LARGE_INTEGER g_lastAnimationCounter = {};
 LARGE_INTEGER g_nextAnimationCounter = {};
 double g_animationTargetHz = 0.0;
 bool g_animationClockArmed = false;
-using AvSetMmThreadCharacteristicsW_t = HANDLE(WINAPI*)(LPCWSTR taskName, LPDWORD taskIndex);
-using AvSetMmThreadPriority_t = BOOL(WINAPI*)(HANDLE avrtHandle, AVRT_PRIORITY priority);
-using AvRevertMmThreadCharacteristics_t = BOOL(WINAPI*)(HANDLE avrtHandle);
+bool g_animationPriorityElevated = false;
 using SetThreadInformation_t = BOOL(WINAPI*)(HANDLE thread,
                                              THREAD_INFORMATION_CLASS informationClass,
                                              void* information, DWORD informationSize);
-
-struct AnimationThreadSchedulingState
-{
-    HMODULE avrtModule;
-    HANDLE mmcssHandle;
-    bool active;
-    AvSetMmThreadCharacteristicsW_t setMmcssCharacteristics;
-    AvSetMmThreadPriority_t setMmcssPriority;
-    AvRevertMmThreadCharacteristics_t revertMmcss;
-};
-
-AnimationThreadSchedulingState g_animationThreadScheduling = {};
 
 static bool IsReadableMemory(const void* address, size_t size);
 static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
@@ -586,6 +587,9 @@ static void* FindWindowDataForTopLevelWindow3D(void* topLevelWindow3D);
 static long __cdecl ForceUpdateSceneHook(void* pThis);
 static long __cdecl UpdateSceneHook(void* pThis);
 static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime);
+static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message, UINT_PTR wParam,
+                                                          INT_PTR lParam);
+static void __cdecl TopLevelWindowDestructorHook(void* pThis);
 static void __cdecl TopLevelWindow3DDestructorHook(void* pThis);
 static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha);
 static void FinalizeRetiringSlots();
@@ -930,7 +934,7 @@ static void __cdecl OnPositionChangeHook(void* pThis, void* pWindowData, bool un
     {
         return;
     }
-    HWND hwnd = GetHwndFromWindowData(pWindowData);
+    HWND hwnd = GetHwndFromTrustedWindowData(pWindowData);
     if (!hwnd)
     {
         return;
@@ -945,7 +949,7 @@ static void __cdecl CheckForMaximizedChangeHook(void* pThis, void* pWindowData)
     {
         return;
     }
-    HWND hwnd = GetHwndFromWindowData(pWindowData);
+    HWND hwnd = GetHwndFromTrustedWindowData(pWindowData);
     QueueMaximizedStateCheck(hwnd);
 }
 
@@ -1004,22 +1008,6 @@ static bool IsReadableMemory(const void* address, size_t size)
         current = std::min(regionEnd, finish);
     }
     return true;
-}
-
-static bool IsWritableMemory(const void* address, size_t size)
-{
-    if (!IsReadableMemory(address, size))
-    {
-        return false;
-    }
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (!VirtualQuery(address, &mbi, sizeof(mbi)))
-    {
-        return false;
-    }
-    DWORD protection = mbi.Protect & 0xFF;
-    return protection == PAGE_READWRITE || protection == PAGE_WRITECOPY ||
-           protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
 }
 
 static bool InitializeDwmModuleLayout(HMODULE module)
@@ -1195,8 +1183,9 @@ static size_t FindOffsetFromFunction(void* function, size_t defaultValue)
         return defaultValue;
     }
     BYTE* instruction = static_cast<BYTE*>(function);
-    std::regex pattern(R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]{1,8})\])",
-                       std::regex_constants::icase);
+    static const std::regex pattern(
+        R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]{1,8})\])",
+        std::regex_constants::icase);
     size_t bytesRead = 0;
     for (int i = 0; i < 32 && bytesRead < 256; i++)
     {
@@ -1232,8 +1221,9 @@ static size_t FindReturnedPointerOffset(void* function)
     {
         return SIZE_MAX;
     }
-    std::regex pattern(R"(mov rax, (?:qword ptr )?\[r[a-z0-9]+\+0x([0-9a-f]{1,8})\])",
-                       std::regex_constants::icase);
+    static const std::regex pattern(
+        R"(mov rax, (?:qword ptr )?\[r[a-z0-9]+\+0x([0-9a-f]{1,8})\])",
+        std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     size_t candidate = SIZE_MAX;
     size_t bytesRead = 0;
@@ -1316,9 +1306,9 @@ static bool FindConstructorWindowDataOffsets(void* function, size_t* windowDataT
             remove(aliases, count, reg);
         }
     };
-    std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
-                           std::regex_constants::icase);
-    std::regex storePattern(
+    static const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
+                                        std::regex_constants::icase);
+    static const std::regex storePattern(
         R"(^mov (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\], (r[a-z0-9]+)$)",
         std::regex_constants::icase);
     size_t forwardCandidate = SIZE_MAX;
@@ -1427,13 +1417,15 @@ static bool FindWindowDataTopLevelOffsets(void* function, size_t* topLevelWindow
     unsigned int candidateCount = 0;
     std::string aliases[8] = {"rdx"};
     unsigned int aliasCount = 1;
-    std::regex movePattern(R"(mov (r[a-z0-9]+), (r[a-z0-9]+))", std::regex_constants::icase);
+    static const std::regex movePattern(R"(mov (r[a-z0-9]+), (r[a-z0-9]+))",
+                                        std::regex_constants::icase);
     // Accept common compiler encodings when deriving these fields.
-    std::regex memoryPattern(R"(\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\])",
-                             std::regex_constants::icase);
-    std::regex zeroTestPattern(R"(^cmp (?:qword ptr )?\[[^\]]+\], (?:0x)?0$)",
-                               std::regex_constants::icase);
-    std::regex writePattern(R"(^mov (?:qword ptr )?\[[^\]]+\], )", std::regex_constants::icase);
+    static const std::regex memoryPattern(
+        R"(\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\])", std::regex_constants::icase);
+    static const std::regex zeroTestPattern(
+        R"(^cmp (?:qword ptr )?\[[^\]]+\], (?:0x)?0$)", std::regex_constants::icase);
+    static const std::regex writePattern(
+        R"(^mov (?:qword ptr )?\[[^\]]+\], )", std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     size_t bytesRead = 0;
     for (int i = 0; i < 192 && bytesRead < 768; i++)
@@ -1576,6 +1568,29 @@ static void ClearDwmWindowMappingByWindowData(void* windowData)
     ReleaseSRWLockExclusive(&g_dwmWindowMappingsLock);
 }
 
+static void* ClearDwmWindowMappingByTopLevelWindow(void* topLevelWindow)
+{
+    if (!topLevelWindow)
+    {
+        return nullptr;
+    }
+    void* windowData = nullptr;
+    AcquireSRWLockExclusive(&g_dwmWindowMappingsLock);
+    for (DwmWindowObjectMapping& mapping : g_dwmWindowMappings)
+    {
+        if (mapping.topLevelWindow == topLevelWindow)
+        {
+            windowData = mapping.windowData;
+            mapping.topLevelWindow = nullptr;
+            mapping.topLevelWindowDestroyed = true;
+            mapping.lastSeen = GetTickCount64();
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_dwmWindowMappingsLock);
+    return windowData;
+}
+
 static void ClearDwmWindowMappingByTopLevelWindow3D(void* topLevelWindow3D)
 {
     if (!topLevelWindow3D)
@@ -1589,7 +1604,7 @@ static void ClearDwmWindowMappingByTopLevelWindow3D(void* topLevelWindow3D)
         if (mapping.topLevelWindow3D == topLevelWindow3D)
         {
             mapping.topLevelWindow3D = nullptr;
-            if (!mapping.topLevelWindow)
+            if (!mapping.topLevelWindow && !mapping.topLevelWindowDestroyed)
             {
                 mapping = {};
             }
@@ -1638,6 +1653,7 @@ static void RegisterDwmWindowMapping(void* windowData, void* topLevelWindow, voi
     if (topLevelWindow)
     {
         mapping.topLevelWindow = topLevelWindow;
+        mapping.topLevelWindowDestroyed = false;
     }
     if (topLevelWindow3D)
     {
@@ -1701,6 +1717,7 @@ static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
     {
         return false;
     }
+    bool topLevelWindowDestroyed = false;
     AcquireSRWLockShared(&g_dwmWindowMappingsLock);
     for (int i = 0; i < MAX_DWM_WINDOW_MAPPINGS; i++)
     {
@@ -1709,6 +1726,7 @@ static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
         {
             *topLevelWindow = mapping.topLevelWindow;
             *topLevelWindow3D = mapping.topLevelWindow3D;
+            topLevelWindowDestroyed = mapping.topLevelWindowDestroyed;
             break;
         }
     }
@@ -1721,7 +1739,8 @@ static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
     {
         *topLevelWindow3D = nullptr;
     }
-    if (!*topLevelWindow && g_windowDataTopLevelWindowOffset != SIZE_MAX)
+    if (!*topLevelWindow && !topLevelWindowDestroyed &&
+        g_windowDataTopLevelWindowOffset != SIZE_MAX)
     {
         BYTE* fieldAddress = static_cast<BYTE*>(windowData) + g_windowDataTopLevelWindowOffset;
         if (IsReadableMemory(fieldAddress, sizeof(void*)))
@@ -1733,7 +1752,9 @@ static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
             }
         }
     }
-    if (!*topLevelWindow3D && g_windowDataTopLevelWindow3DOffset != SIZE_MAX)
+    if (!*topLevelWindow3D &&
+        g_topLevelWindow3DVtable.load(std::memory_order_acquire) &&
+        g_windowDataTopLevelWindow3DOffset != SIZE_MAX)
     {
         BYTE* fieldAddress = static_cast<BYTE*>(windowData) + g_windowDataTopLevelWindow3DOffset;
         if (IsReadableMemory(fieldAddress, sizeof(void*)))
@@ -1805,10 +1826,49 @@ static void __cdecl WindowDataDestructorHook(void* pThis)
     g_windowDataDestructorOriginal(pThis);
 }
 
+static void __cdecl TopLevelWindowDestructorHook(void* pThis)
+{
+    void* windowData = ClearDwmWindowMappingByTopLevelWindow(pThis);
+    if (windowData && !g_unloading.load(std::memory_order_acquire))
+    {
+        MarkAnimationSlotForDwmObjectRefresh(windowData);
+    }
+    g_topLevelWindowDestructorOriginal(pThis);
+}
+
 static void __cdecl TopLevelWindow3DDestructorHook(void* pThis)
 {
     ClearDwmWindowMappingByTopLevelWindow3D(pThis);
     g_topLevelWindow3DDestructorOriginal(pThis);
+}
+
+static void DropAnimationSlotsForSceneChange()
+{
+    unsigned int droppedSlots = 0;
+    unsigned int retainedProxies = 0;
+    AcquireSRWLockExclusive(&g_animationSlotsLock);
+    for (WindowAnimationSlot& slot : g_animationSlots)
+    {
+        if (!slot.active && !slot.retiring)
+        {
+            continue;
+        }
+        retainedProxies += slot.matrixTransformProxy != nullptr;
+        ULONGLONG nextGeneration = slot.generation + 1;
+        slot = {};
+        slot.generation = nextGeneration;
+        droppedSlots++;
+    }
+    WakeAllConditionVariable(&g_animationSlotsCondition);
+    ReleaseSRWLockExclusive(&g_animationSlotsLock);
+    if (droppedSlots)
+    {
+        g_abandonedProxyCount.fetch_add(retainedProxies, std::memory_order_acq_rel);
+        g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
+        g_sceneOwnershipResetPending.store(true, std::memory_order_release);
+        Wh_Log(L"DWM scene owner changed: droppedSlots=%u retainedOldProxies=%u",
+               droppedSlots, retainedProxies);
+    }
 }
 
 static bool RegisterDwmSceneThread(bool authoritative)
@@ -1829,22 +1889,14 @@ static bool RegisterDwmSceneThread(bool authoritative)
                                                    std::memory_order_acq_rel,
                                                    std::memory_order_acquire))
     {
-        g_lastDwmSceneCallbackTimestamp.store(GetTickCount64(), std::memory_order_release);
         return true;
     }
     if (ownerThreadId == currentThreadId)
     {
-        if (authoritative)
-        {
-            g_lastDwmSceneCallbackTimestamp.store(GetTickCount64(), std::memory_order_release);
-        }
         return true;
     }
     if (authoritative)
     {
-        ULONGLONG now = GetTickCount64();
-        ULONGLONG lastCallback =
-            g_lastDwmSceneCallbackTimestamp.load(std::memory_order_acquire);
         bool previousOwnerStopped = false;
         HANDLE previousThread = OpenThread(SYNCHRONIZE, FALSE, ownerThreadId);
         if (previousThread)
@@ -1856,19 +1908,27 @@ static bool RegisterDwmSceneThread(bool authoritative)
         {
             previousOwnerStopped = GetLastError() == ERROR_INVALID_PARAMETER;
         }
-        bool previousOwnerStale = lastCallback != 0 && now - lastCallback >= 1000;
-        if ((previousOwnerStopped || previousOwnerStale) &&
+        if (previousOwnerStopped &&
             g_dwmSceneThreadId.compare_exchange_strong(ownerThreadId, currentThreadId,
                                                        std::memory_order_acq_rel,
                                                        std::memory_order_acquire))
         {
-            g_lastDwmSceneCallbackTimestamp.store(now, std::memory_order_release);
+            DropAnimationSlotsForSceneChange();
+            AcquireSRWLockExclusive(&g_dwmWindowMappingsLock);
+            for (DwmWindowObjectMapping& mapping : g_dwmWindowMappings)
+            {
+                mapping = {};
+            }
+            ReleaseSRWLockExclusive(&g_dwmWindowMappingsLock);
             g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
             g_desktopManager.store(nullptr, std::memory_order_release);
             g_dwmCompositor.store(nullptr, std::memory_order_release);
             g_windowListForSceneWake.store(nullptr, std::memory_order_release);
             g_nextDwmObjectDiscoveryAttempt.store(0, std::memory_order_release);
             g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
+            g_sceneSubmittedSerial.store(
+                g_sceneRequestedSerial.load(std::memory_order_acquire),
+                std::memory_order_release);
             Wh_Log(L"DWM scene thread changed; ownership re-armed");
             return true;
         }
@@ -2122,9 +2182,16 @@ static bool InitializeDwmHooks()
          nullptr,
          true},
         {{L"private: __cdecl CTopLevelWindow::CTopLevelWindow(class CWindowData *,bool)",
-          L"??0CTopLevelWindow@@AEAA@PEAVCWindowData@@_N@Z"},
+           L"??0CTopLevelWindow@@AEAA@PEAVCWindowData@@_N@Z"},
          reinterpret_cast<void**>(&g_topLevelWindowConstructorFunction),
          nullptr,
+         true},
+        {{L"protected: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
+          L"public: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
+          L"private: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
+          L"??1CTopLevelWindow@@EEAA@XZ"},
+         reinterpret_cast<void**>(&g_topLevelWindowDestructorOriginal),
+         reinterpret_cast<void*>(TopLevelWindowDestructorHook),
          true},
         {{L"public: void __cdecl CTopLevelWindow3D::SetWindowData(class CWindowData *)",
           L"?SetWindowData@CTopLevelWindow3D@@"
@@ -2164,15 +2231,11 @@ static bool InitializeDwmHooks()
          reinterpret_cast<void**>(&g_desktopManagerAdvanceTimelinesOriginal),
          reinterpret_cast<void*>(AdvanceTimelinesHook),
          true},
-        {{L"public: long __cdecl CDesktopManager::PostStartAnimations(void)",
-          L"?PostStartAnimations@CDesktopManager@@QEAAJXZ"},
-         reinterpret_cast<void**>(&g_desktopManagerPostStartAnimations),
-         nullptr,
-         true},
-        {{L"private: static bool CDesktopManager::s_fTimelineDirty",
-          L"?s_fTimelineDirty@CDesktopManager@@0_NA"},
-         &g_desktopManagerTimelineDirtyAddress,
-         nullptr,
+        {{L"private: static void __cdecl CDesktopManager::HandleThreadMessage("
+           L"unsigned int,unsigned __int64,__int64)",
+          L"?HandleThreadMessage@CDesktopManager@@CAXI_K_J@Z"},
+         reinterpret_cast<void**>(&g_desktopManagerHandleThreadMessageOriginal),
+         reinterpret_cast<void*>(DesktopManagerHandleThreadMessageHook),
          true}};
     if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks)))
     {
@@ -2228,10 +2291,12 @@ static bool InitializeDwmHooks()
         {L"CCompositor::Release", g_cCompositorReleaseFunction},
         {L"CTopLevelWindow::CTopLevelWindow",
          reinterpret_cast<void*>(g_topLevelWindowConstructorFunction)},
+        {L"CTopLevelWindow::~CTopLevelWindow",
+         reinterpret_cast<void*>(g_topLevelWindowDestructorOriginal)},
         {L"CWindowList::EnsureTopLevelWindow",
          reinterpret_cast<void*>(g_ensureTopLevelWindowFunction)},
-        {L"CDesktopManager::PostStartAnimations",
-         reinterpret_cast<void*>(g_desktopManagerPostStartAnimations)}};
+        {L"CDesktopManager::HandleThreadMessage",
+         reinterpret_cast<void*>(g_desktopManagerHandleThreadMessageOriginal)}};
     bool missingCoreFunction = false;
     for (const RequiredDwmFunction& function : requiredFunctions)
     {
@@ -2284,15 +2349,6 @@ static bool InitializeDwmHooks()
     if (!hasForceUpdateScene && !hasUpdateScene)
     {
         Wh_Log(L"DWM compatibility: neither CWindowList scene hook is available");
-        return false;
-    }
-    bool timelineDirtyAvailable =
-        IsDwmImageAddress(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
-        IsReadableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE)) &&
-        IsWritableMemory(g_desktopManagerTimelineDirtyAddress, sizeof(BYTE));
-    if (!timelineDirtyAvailable)
-    {
-        Wh_Log(L"DWM compatibility: required timeline-dirty flag unavailable");
         return false;
     }
     g_windowDataHwndOffset = FindOffsetFromFunction(
@@ -2703,15 +2759,6 @@ static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime)
     {
         g_insideWobblyScenePass = true;
         SubmitPendingWobblySceneWork();
-        void* windowList = g_windowListForSceneWake.load(std::memory_order_acquire);
-        if (windowList && g_windowListForceUpdateSceneOriginal)
-        {
-            // This runs only on the verified scene owner. The original call is
-            // used directly so our scene hook can't recurse, and commits the
-            // just-published matrix before native timeline advancement.
-            g_windowListForceUpdateSceneOriginal(windowList);
-            BindAnimationTransformsAfterNativeScene();
-        }
         g_insideWobblyScenePass = false;
     }
     g_desktopManagerAdvanceTimelinesOriginal(pThis, currentTime);
@@ -2721,6 +2768,39 @@ static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime)
         BindAnimationTransformsAfterNativeScene();
         g_insideWobblyScenePass = false;
     }
+}
+
+static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message, UINT_PTR wParam,
+                                                          INT_PTR lParam)
+{
+    if (message != WM_WOBBLY_DWM_SCENE_WAKE)
+    {
+        g_desktopManagerHandleThreadMessageOriginal(message, wParam, lParam);
+        return;
+    }
+
+    if (!RegisterDwmSceneThread(false) || g_insideWobblyScenePass)
+    {
+        g_sceneWakeScheduled.store(false, std::memory_order_release);
+        return;
+    }
+
+    g_insideWobblyScenePass = true;
+    SubmitPendingWobblySceneWork();
+    void* windowList = g_windowListForSceneWake.load(std::memory_order_acquire);
+    if (windowList)
+    {
+        if (g_windowListForceUpdateSceneOriginal)
+        {
+            g_windowListForceUpdateSceneOriginal(windowList);
+        }
+        else if (g_windowListUpdateSceneOriginal)
+        {
+            g_windowListUpdateSceneOriginal(windowList);
+        }
+        BindAnimationTransformsAfterNativeScene();
+    }
+    g_insideWobblyScenePass = false;
 }
 
 static double Lerp(double a, double b, double t)
@@ -3234,9 +3314,8 @@ static bool ArmNextAnimationTick()
     return SetWaitableTimer(g_animationTimer, &dueTime, 0, nullptr, nullptr, FALSE) != FALSE;
 }
 
-static AnimationThreadSchedulingState InitializeAnimationThreadScheduling()
+static void DisableAnimationThreadPowerThrottling()
 {
-    AnimationThreadSchedulingState state = {};
     // Keep free decay out of EcoQoS throttling.
     THREAD_POWER_THROTTLING_STATE powerThrottling = {};
     powerThrottling.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
@@ -3251,72 +3330,23 @@ static AnimationThreadSchedulingState InitializeAnimationThreadScheduling()
         setThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &powerThrottling,
                              sizeof(powerThrottling));
     }
-    state.avrtModule = LoadLibraryExW(L"avrt.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!state.avrtModule)
-    {
-        return state;
-    }
-    state.setMmcssCharacteristics = reinterpret_cast<AvSetMmThreadCharacteristicsW_t>(
-        GetProcAddress(state.avrtModule, "AvSetMmThreadCharacteristicsW"));
-    state.setMmcssPriority = reinterpret_cast<AvSetMmThreadPriority_t>(
-        GetProcAddress(state.avrtModule, "AvSetMmThreadPriority"));
-    state.revertMmcss = reinterpret_cast<AvRevertMmThreadCharacteristics_t>(
-        GetProcAddress(state.avrtModule, "AvRevertMmThreadCharacteristics"));
-    if (!state.setMmcssCharacteristics || !state.setMmcssPriority || !state.revertMmcss)
-    {
-        FreeLibrary(state.avrtModule);
-        state = {};
-    }
-    return state;
 }
 
-static void SetAnimationThreadSchedulingActive(bool active)
+static void SetAnimationThreadActive(bool active)
 {
-    AnimationThreadSchedulingState& state = g_animationThreadScheduling;
-    if (active == state.active)
+    if (g_animationPriorityElevated == active)
     {
         return;
     }
-    state.active = active;
-    if (!active)
+    int priority = active ? THREAD_PRIORITY_ABOVE_NORMAL : THREAD_PRIORITY_NORMAL;
+    if (SetThreadPriority(GetCurrentThread(), priority))
     {
-        if (state.mmcssHandle && state.revertMmcss)
-        {
-            state.revertMmcss(state.mmcssHandle);
-            state.mmcssHandle = nullptr;
-        }
-        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-        return;
+        g_animationPriorityElevated = active;
     }
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-    if (!state.setMmcssCharacteristics || !state.setMmcssPriority)
+    else
     {
-        return;
+        Wh_Log(L"Failed to set animation thread priority: %u", GetLastError());
     }
-    DWORD taskIndex = 0;
-    state.mmcssHandle = state.setMmcssCharacteristics(L"Window Manager", &taskIndex);
-    if (!state.mmcssHandle)
-    {
-        state.mmcssHandle = state.setMmcssCharacteristics(L"Games", &taskIndex);
-    }
-    if (state.mmcssHandle)
-    {
-        state.setMmcssPriority(state.mmcssHandle, AVRT_PRIORITY_HIGH);
-    }
-}
-
-static void UninitializeAnimationThreadScheduling(AnimationThreadSchedulingState& state)
-{
-    SetAnimationThreadSchedulingActive(false);
-    if (state.mmcssHandle && state.revertMmcss)
-    {
-        state.revertMmcss(state.mmcssHandle);
-    }
-    if (state.avrtModule)
-    {
-        FreeLibrary(state.avrtModule);
-    }
-    state = {};
 }
 
 static bool EnsureAnimationClockRunning(HWND hwnd)
@@ -3343,6 +3373,7 @@ static bool EnsureAnimationClockRunning(HWND hwnd)
         }
         return true;
     }
+    SetAnimationThreadActive(true);
     g_animationTargetHz = preferredRate;
     g_nextAnimationCounter = {};
     if (!QueryPerformanceCounter(&g_lastAnimationCounter))
@@ -3350,15 +3381,15 @@ static bool EnsureAnimationClockRunning(HWND hwnd)
         g_lastAnimationCounter = {};
     }
     g_animationClockArmed = true;
-    SetAnimationThreadSchedulingActive(true);
     if (!ArmNextAnimationTick())
     {
+        DWORD timerError = GetLastError();
         g_animationClockArmed = false;
         g_animationTargetHz = 0.0;
         g_lastAnimationCounter = {};
         g_nextAnimationCounter = {};
-        SetAnimationThreadSchedulingActive(false);
-        Wh_Log(L"Failed to arm animation timer: %u", GetLastError());
+        SetAnimationThreadActive(false);
+        Wh_Log(L"Failed to arm animation timer: %u", timerError);
         return false;
     }
     return true;
@@ -3511,27 +3542,13 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
         // Serial numbers make watchdog reposts idempotent.
         g_sceneWakeScheduled.store(true, std::memory_order_release);
     }
-    void* desktopManager = g_desktopManager.load(std::memory_order_acquire);
-    if (desktopManager && g_desktopManagerPostStartAnimations)
+    DWORD sceneThreadId = g_dwmSceneThreadId.load(std::memory_order_acquire);
+    if (sceneThreadId != 0 &&
+        PostThreadMessageW(sceneThreadId, WM_WOBBLY_DWM_SCENE_WAKE,
+                           reinterpret_cast<WPARAM>(hwnd), 0))
     {
-        if (g_desktopManagerTimelineDirtyAddress)
-        {
-            // Publish the single-byte dirty flag atomically before posting the
-            // compositor work item. A plain cross-thread private-state write is
-            // deliberately avoided.
-            __atomic_store_n(static_cast<BYTE*>(g_desktopManagerTimelineDirtyAddress), 1,
-                             __ATOMIC_RELEASE);
-        }
-        // Intentionally cross-thread. The 22621.6199 and 26100.9032 uDWM
-        // implementations were verified to wake the compositor through an
-        // interlocked queue/thread-message path. Initialization requires both
-        // this exact symbol and the writable timeline-dirty byte.
-        long result = g_desktopManagerPostStartAnimations(desktopManager);
-        if (result >= 0)
-        {
-            g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
-            return true;
-        }
+        g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
+        return true;
     }
     if (RequestFallbackWindowInvalidation(hwnd))
     {
@@ -3560,31 +3577,9 @@ static void FinalizeRetiringSlots()
             (!slot.matrixTransformProxy || IsOnDwmSceneThread()))
         {
             matrixTransformProxy = slot.matrixTransformProxy;
-            slot.active = false;
-            slot.retiring = false;
-            slot.dragging = false;
-            slot.freeStepPending = false;
-            slot.hwnd = nullptr;
-            slot.settings = {};
-            slot.previousMesh = {};
-            slot.mesh = {};
-            slot.matrixTransformProxy = nullptr;
-            slot.boundTopLevelVisualProxy = nullptr;
-            slot.boundTransitionVisualProxy = nullptr;
-            slot.transformAttached = false;
-            slot.transitionTransformAttached = false;
-            slot.transformRebindRevision = 0;
-            slot.submittedTransformRebindRevision = 0;
-            slot.meshRevision = 0;
-            slot.submittedMeshRevision = 0;
-            slot.meshIdentityPending = false;
-            slot.proxyCreationPending = false;
-            slot.nextWindowValidation = 0;
-            slot.nextVisualValidation = 0;
-            slot.identityApplied = false;
-            slot.lastMatrixErrorLog = 0;
-            slot.privateCallFailureCount = 0;
-            slot.order = 0;
+            ULONGLONG generation = slot.generation;
+            slot = {};
+            slot.generation = generation;
         }
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (matrixTransformProxy && IsOnDwmSceneThread())
@@ -3635,16 +3630,17 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
+    SetAnimationThreadActive(false);
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
     g_sceneWakeRetryCount.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
+    g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
     g_sceneSubmittedSerial.store(g_sceneRequestedSerial.load(std::memory_order_acquire),
                                  std::memory_order_release);
     g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
     g_lastSceneProgressTimestamp = 0;
-    SetAnimationThreadSchedulingActive(false);
     ResetDragInputState();
     unsigned int totalRetainedProxies =
         g_abandonedProxyCount.fetch_add(retainedProxies, std::memory_order_acq_rel) +
@@ -3652,6 +3648,34 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
     Wh_Log(L"DWM scene work abandoned (%s): slots=%u retainedProxies=%u "
            L"totalRetainedProxies=%u busySlots=%u",
            reason, abandonedSlots, retainedProxies, totalRetainedProxies, busySlots);
+}
+
+static void BeginSceneStallCleanup(const wchar_t* reason)
+{
+    if (g_sceneRecoveryCleanupPending.exchange(true, std::memory_order_acq_rel))
+    {
+        return;
+    }
+    int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
+    int retireCount = 0;
+    AcquireSRWLockShared(&g_animationSlotsLock);
+    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
+    {
+        if (g_animationSlots[i].active)
+        {
+            slotsToRetire[retireCount++] = i;
+        }
+    }
+    ReleaseSRWLockShared(&g_animationSlotsLock);
+    for (int i = 0; i < retireCount; i++)
+    {
+        RetireAnimationSlot(slotsToRetire[i]);
+    }
+    // Keep only a low-rate identity retry alive until a scene pass recovers.
+    g_animationTargetHz = 10.0;
+    g_nextAnimationCounter = {};
+    Wh_Log(L"DWM scene stalled (%s): retiring %d slots for identity cleanup",
+           reason, retireCount);
 }
 
 static void StopAnimationClockIfIdle()
@@ -3669,9 +3693,10 @@ static void StopAnimationClockIfIdle()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
-    SetAnimationThreadSchedulingActive(false);
+    SetAnimationThreadActive(false);
     g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
     g_lastSceneProgressTimestamp = 0;
+    g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
 }
 
 static void RetireAnimationSlot(int slotIndex)
@@ -3767,8 +3792,9 @@ static bool WaitForRetiringSlotForWindow(HWND hwnd)
         DWORD remaining = static_cast<DWORD>(deadline - now);
         BOOL awakened = SleepConditionVariableSRW(&g_animationSlotsCondition, &g_animationSlotsLock,
                                                   remaining, 0);
+        DWORD waitError = awakened ? ERROR_SUCCESS : GetLastError();
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
-        if (!awakened && GetLastError() == ERROR_TIMEOUT)
+        if (!awakened && waitError == ERROR_TIMEOUT)
         {
             return false;
         }
@@ -4555,12 +4581,16 @@ static void StopAllAnimations()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
-    SetAnimationThreadSchedulingActive(false);
+    SetAnimationThreadActive(false);
     ResetDragInputState();
 }
 
 static void UpdateAnimationFrame()
 {
+    if (g_sceneOwnershipResetPending.exchange(false, std::memory_order_acq_rel))
+    {
+        ResetDragInputState();
+    }
     FinalizeRetiringSlots();
     if (!HasAnyAnimationSlots())
     {
@@ -4799,14 +4829,15 @@ static void UpdateAnimationFrame()
             g_lastObservedScenePassCounter = scenePassCounter;
             g_lastSceneProgressTimestamp = now;
         }
-        if (g_dwmPrivateCallsDisabled.load(std::memory_order_acquire) ||
-            now - g_lastSceneProgressTimestamp >= DWM_SCENE_STALL_TIMEOUT_MS)
+        if (g_dwmPrivateCallsDisabled.load(std::memory_order_acquire))
         {
-            AbandonAnimationSlotsAfterSceneStall(
-                g_dwmPrivateCallsDisabled.load(std::memory_order_relaxed)
-                    ? L"private calls disabled"
-                    : L"no scene progress");
+            // A rejected private ABI must never be called again.
+            AbandonAnimationSlotsAfterSceneStall(L"private calls disabled");
             return;
+        }
+        if (now - g_lastSceneProgressTimestamp >= DWM_SCENE_STALL_TIMEOUT_MS)
+        {
+            BeginSceneStallCleanup(L"no scene progress");
         }
         RequestDwmScenePass(sceneWakeWindow);
         ULONGLONG lastWakePost = g_sceneWakePostTimestamp.load(std::memory_order_acquire);
@@ -5882,10 +5913,8 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
         g_eventThreadMessageTarget.store(0, std::memory_order_release);
         return 1;
     }
-    g_animationThreadScheduling = InitializeAnimationThreadScheduling();
-    Wh_Log(L"Animation clock: refresh-synchronized high-resolution timer, "
-           L"dynamic MMCSS=%s",
-           g_animationThreadScheduling.avrtModule ? L"available" : L"unavailable");
+    DisableAnimationThreadPowerThrottling();
+    Wh_Log(L"Animation clock: refresh-synchronized high-resolution timer, EcoQoS disabled");
     if (!InitializeWindowEventHooks())
     {
         Wh_Log(L"Window event thread: hook initialization failed");
@@ -5895,7 +5924,6 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
         }
         CloseHandle(g_animationTimer);
         g_animationTimer = nullptr;
-        UninitializeAnimationThreadScheduling(g_animationThreadScheduling);
         g_eventThreadMessageTarget.store(0, std::memory_order_release);
         return 1;
     }
@@ -5977,7 +6005,6 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
     g_pendingMaximizedStateWindow.store(nullptr, std::memory_order_release);
     g_maximizedStateCheckQueued.store(false, std::memory_order_release);
     UninitializeWindowEventHooks();
-    UninitializeAnimationThreadScheduling(g_animationThreadScheduling);
     CloseHandle(g_animationTimer);
     g_animationTimer = nullptr;
     g_animationFrequency = {};
@@ -6132,7 +6159,6 @@ BOOL Wh_ModInit()
     g_desktopManager.store(nullptr, std::memory_order_release);
     g_dwmPrivateCallsDisabled.store(false, std::memory_order_release);
     g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
-    g_lastDwmSceneCallbackTimestamp.store(0, std::memory_order_release);
     g_nextDwmObjectDiscoveryAttempt.store(0, std::memory_order_release);
     g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
     g_sceneWakeScheduled.store(false, std::memory_order_release);
@@ -6142,9 +6168,11 @@ BOOL Wh_ModInit()
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
     g_sceneWakeRetryCount.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
+    g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
     g_scenePassCounter.store(0, std::memory_order_release);
     g_lastFallbackInvalidationTimestamp.store(0, std::memory_order_release);
     g_abandonedProxyCount.store(0, std::memory_order_release);
+    g_sceneOwnershipResetPending.store(false, std::memory_order_release);
     g_existingWindowBackfillCount.store(0, std::memory_order_release);
     g_existingWindowBackfillIndex.store(0, std::memory_order_release);
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
