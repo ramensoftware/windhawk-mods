@@ -19,6 +19,8 @@
 
 Credit - KWin's Wobbly Windows for making this possible 
 ## Compatibility notes
+Dose not work as intended in File Explorer, excluded for the time being until its resolved.
+
 Added a setting to change corner radius so it is compatable with "Custom Window Corner Radius" mod (the default is 8 *windows default)
 
 Added a setting to capture by Screen instead of printWindow so it is compatable with "Translucent windows" mod
@@ -45,6 +47,8 @@ Added a setting to capture by Screen instead of printWindow so it is compatable 
   $description: >-
     0 is least wobbly, 4 is most wobbly
 - advanced:
+  - enable: false
+    $name: Use advanced values
   - stiffness_pct: 15
     $name: Stiffness
     $description: >-
@@ -59,8 +63,8 @@ Added a setting to capture by Screen instead of printWindow so it is compatable 
       Range 1-25, KDE default 10.
   $name: Advanced
   $description: >-
-    Overrides stiffness, drag, and move factor on top of the Wobbliness
-    level above.
+    When enabled, overrides stiffness, drag, and move factor on top of the
+    Wobbliness level above.
 
 - corner_radius: 8
   $name: Window Corner Radius (px)
@@ -194,18 +198,20 @@ void LoadSettings() {
     static const ParameterSet* levelSets[5] = { &set_0, &set_1, &set_2, &set_3, &set_4 };
     g_params = *levelSets[wobblynessLevel];
 
-    int stiffness = Wh_GetIntSetting(L"advanced.stiffness_pct");
-    if (stiffness < 1) stiffness = 1;
-    if (stiffness > 50) stiffness = 50;
-    int drag = Wh_GetIntSetting(L"advanced.drag_pct");
-    if (drag < 50) drag = 50;
-    if (drag > 100) drag = 100;
-    int moveFactor = Wh_GetIntSetting(L"advanced.move_factor_pct");
-    if (moveFactor < 1) moveFactor = 1;
-    if (moveFactor > 25) moveFactor = 25;
-    g_params.stiffness = stiffness / 100.0f;
-    g_params.drag = drag / 100.0f;
-    g_params.moveFactor = moveFactor / 100.0f;
+    if (Wh_GetIntSetting(L"advanced.enable") != 0) {
+        int stiffness = Wh_GetIntSetting(L"advanced.stiffness_pct");
+        if (stiffness < 1) stiffness = 1;
+        if (stiffness > 50) stiffness = 50;
+        int drag = Wh_GetIntSetting(L"advanced.drag_pct");
+        if (drag < 50) drag = 50;
+        if (drag > 100) drag = 100;
+        int moveFactor = Wh_GetIntSetting(L"advanced.move_factor_pct");
+        if (moveFactor < 1) moveFactor = 1;
+        if (moveFactor > 25) moveFactor = 25;
+        g_params.stiffness = stiffness / 100.0f;
+        g_params.drag = drag / 100.0f;
+        g_params.moveFactor = moveFactor / 100.0f;
+    }
 
     int radius = Wh_GetIntSetting(L"corner_radius");
     if (radius < 0) radius = 0;
@@ -994,7 +1000,9 @@ static void OnEnterSizeMove(HWND hwnd) {
             return;
         }
 
+        lock.unlock();
         CaptureWindowForWobbly(hwnd);
+        lock.lock();
 
         if (!g_wobblyRT || !g_wobblyBrush) {
             g_mainHwnd = NULL;
@@ -1308,10 +1316,12 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
+void Wh_ModBeforeUninit() {
+    g_isUnloading.store(true, std::memory_order_relaxed);
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Wobbly Windows Mod Unloading...");
-
-    g_isUnloading.store(true, std::memory_order_relaxed);
 
     std::vector<HWND> subclassedSnapshot;
     {
@@ -1333,7 +1343,9 @@ void Wh_ModUninit() {
         if (IsWindow(overlayToClose)) {
             SendMessageW(overlayToClose, WM_CLOSE, 0, 0);
         }
-        g_overlayHwnd = NULL;
+        if (!IsWindow(overlayToClose)) {
+            g_overlayHwnd = NULL;
+        }
     }
 
     {
