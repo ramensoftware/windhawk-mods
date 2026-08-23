@@ -2,13 +2,13 @@
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
 // @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         1.0.0
+// @version         2.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lshlwapi -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,18 +21,25 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Network Connections
 * Printers and Faxes
 * HomeGroup (legacy, partially functional)
+* BitLocker Drive Encryption
+* Tablet PC Settings
 
 Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
 ## Screenshot of the Restored Applets
-![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/RestoredApplets.png)
+
+![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
 
 ## Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809.
+The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
+
+BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
+
+If the automatic detection is wrong on your edition, each of the two applets has an **Always add** / **Never add** override in the settings. "Always add" still does nothing when the applet is genuinely not installed (e.g. Windows Home), since the entry would have no name, icon or target.
 
 **⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.
 
@@ -62,6 +69,20 @@ Credits to m417z for the code review and enhancing the mod.
 - enableHomeGroup: true
   $name: HomeGroup
   $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
+- bitLockerMode: auto
+  $name: BitLocker Drive Encryption
+  $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
+  $options:
+  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - always: Always add
+  - never: Never add
+- tabletPcMode: auto
+  $name: Tablet PC Settings
+  $description: Adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your device, force it with "Always add" or "Never add".
+  $options:
+  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - always: Always add
+  - never: Never add
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
   $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
@@ -118,6 +139,7 @@ runs with stock applet ordering.
 #include <regex>
 #include <unordered_map>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <atomic>
 #include <fstream>
@@ -125,7 +147,11 @@ runs with stock applet ordering.
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <optional>
+#include <thread>
 #include <shellapi.h>
+#include <shobjidl.h>   // IOpenControlPanel, CLSID_OpenControlPanel
+#include <shlwapi.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
 
@@ -135,6 +161,11 @@ struct Settings {
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
     std::atomic<bool> enableHomeGroup;
+    // Tri-state (AppletMode): the user can override the automatic detection in
+    // both directions, because "does Control Panel already show this applet?"
+    // cannot be answered with total confidence on every edition.
+    std::atomic<int> bitLockerMode;
+    std::atomic<int> tabletPcMode;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -173,6 +204,77 @@ std::wstring g_personalizationName;
 // projects without claiming that the removed networking service itself works. If
 // Windows no longer exposes the CLSID, no virtual replacement is made.
 static std::atomic<bool> g_homeGroupClsidAvailable{ false };
+// BitLocker and Tablet PC Settings are real, unmodified Windows CLSIDs; they
+// are simply not always *registered* (BitLocker needs Pro/Enterprise+TPM,
+// Tablet PC Settings needs a touch/pen-capable device). Unlike HomeGroup,
+// these two are injected through a *virtual* CLSID that mirrors the real
+// applet, so "the CLSID is registered" is not a sufficient condition: on the
+// machines where Windows lists the applet itself (BitLocker under System and
+// Security on Pro/Enterprise, Tablet PC Settings under Hardware and Sound on
+// pen/touch devices), a virtual twin would show up as a second,
+// identical-looking entry in the same category.
+//
+// Detecting "Control Panel already shows this" purely from the registry turned
+// out to be wrong in practice: on Windows 10 LTSC 2021 (Enterprise) the
+// ControlPanel\\NameSpace registration for BitLocker is present while the
+// applet is not displayed anywhere, so a registry-only check silently dropped
+// an applet the user did want. The authoritative answer comes from the shell
+// itself (IOpenControlPanel::GetPath), with the registry only as a fallback -
+// and the user can override the verdict in either direction, see AppletMode.
+enum class AppletMode { Auto = 0, Always = 1, Never = 2 };
+
+// Result of the automatic detection, computed once in Wh_ModInit: "the applet
+// is launchable here AND Control Panel doesn't already show it".
+static std::atomic<bool> g_bitlockerAutoDetected{ false };
+static std::atomic<bool> g_tabletPcAutoDetected{ false };
+// Whether the real applet exists at all on this machine. Even "Always add"
+// cannot conjure an applet that isn't installed - the entry would open nothing
+// and its name/icon couldn't be copied - so this gates the override too.
+static std::atomic<bool> g_bitlockerClsidRegistered{ false };
+static std::atomic<bool> g_tabletPcClsidRegistered{ false };
+// Effective verdict (auto detection combined with the user's override). This
+// is what every injection site gates on, and it is recomputed whenever the
+// settings change.
+static std::atomic<bool> g_injectBitlockerApplet{ false };
+static std::atomic<bool> g_injectTabletPcApplet{ false };
+
+// --- Lazy/virtual-applet probe state (fixes startup-path cost) ---
+static std::atomic<bool> g_lazyDetectionDone{ false };
+static std::mutex g_lazyDetectionMutex;
+static thread_local bool g_inShellProbeBypass{ false };
+static std::atomic<int> g_prevBitLockerMode{ -1 };
+static std::atomic<int> g_prevTabletPcMode{ -1 };
+
+// RAII guard covering an ENTIRE critical section that performs our own
+// registry/engine calls, not just a single API call. Every registry read
+// made while this is alive - including any the shell itself issues on our
+// behalf during a COM activation - must be let straight through by the
+// registry hooks instead of re-entering EnsureLazyVirtualAppletDetection.
+struct ShellProbeBypass {
+    bool prev_ = g_inShellProbeBypass;
+    ShellProbeBypass() { g_inShellProbeBypass = true; }
+    ~ShellProbeBypass() { g_inShellProbeBypass = prev_; }
+};
+
+// The one-time virtual-applet probe (CoCreateInstance + up to three
+// IOpenControlPanel::GetPath calls) never runs on a hook's caller thread.
+// It runs exclusively on this dedicated worker, started from
+// Wh_ModAfterInit (hooks are already active, but we're on our own
+// controlled stack, not an arbitrary caller's) and re-armed from
+// Wh_ModSettingsChanged. Registry hooks only ever *request* the probe via
+// RequestLazyVirtualAppletDetection(), which is non-blocking.
+static HANDLE g_lazyDetectionWakeEvent = nullptr;
+static HANDLE g_lazyDetectionStopEvent = nullptr;
+// Must be signalled + joined + reset in Wh_ModUninit, or ~thread() calls
+// std::terminate() at Explorer shutdown. See
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] static std::optional<std::thread> g_lazyDetectionThread;
+
+bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered, const wchar_t* logName);
+void InvalidateClassicTaskLinksFile();
+bool EnsureClassicTaskLinksFile();
+void RunLazyVirtualAppletDetection();
+void RequestLazyVirtualAppletDetection();
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -184,22 +286,28 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path);
 
 // Tracks the "virtual path" behind every HKEY the mod cares about (both real
 // keys opened through the hooked Reg* APIs, and fully synthetic/fake keys we
-// hand back for injected CLSIDs). A single mutex guards all state so the
+// hand back for injected CLSIDs). A single lock guards all state so the
 // "is this fake?" check and the "what's its path?" lookup can never observe
 // two different snapshots of the data. Fake-handle memory is owned via
 // unique_ptr, so it is always freed exactly once, from exactly one place —
 // no manual new/delete pairing to get wrong.
+//
+// The lock is a shared_mutex, not a plain mutex: these hooks sit on every
+// registry call made by explorer.exe from many threads at once, and lookups
+// (GetPath/IsFake/IsFakeAndGetPath) outnumber mutations (Track/Untrack/
+// CreateFake/FreeFake) by orders of magnitude. An exclusive mutex here turned
+// the whole process's registry traffic into a single serialization point.
 class KeyTracker {
 public:
     std::wstring GetPath(HKEY hKey) const {
         if (std::wstring special = SpecialRootPath(hKey); !special.empty()) return special;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         auto it = paths_.find(hKey);
         return it != paths_.end() ? it->second : std::wstring();
     }
 
     bool IsFake(HKEY hKey) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         return fakeOwners_.count(hKey) != 0;
     }
 
@@ -211,7 +319,7 @@ public:
             outPath = special;
             return false;
         }
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         bool isFake = fakeOwners_.count(hKey) != 0;
         auto it = paths_.find(hKey);
         outPath = it != paths_.end() ? it->second : std::wstring();
@@ -221,13 +329,13 @@ public:
     void Track(HKEY hKey, const std::wstring& path) {
         if (!hKey || IsSpecialRoot(hKey)) return;
         if (!ContainsRelevantKeywordInsensitive(path)) return;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_[hKey] = path;
     }
 
     void Untrack(HKEY hKey) {
         if (!hKey || IsSpecialRoot(hKey)) return;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_.erase(hKey);
     }
 
@@ -239,16 +347,19 @@ public:
         std::unique_ptr<int> owned(new (std::nothrow) int(1));
         if (!owned) return nullptr;
         HKEY fake = reinterpret_cast<HKEY>(owned.get());
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_[fake] = path;
         fakeOwners_[fake] = std::move(owned);
         return fake;
     }
 
-    void FreeFake(HKEY hKey) {
-        std::lock_guard<std::mutex> lock(mutex_);
+    // Returns true if the handle was one of ours (and has now been released),
+    // so callers don't need a separate IsFake() acquisition first.
+    bool FreeFake(HKEY hKey) {
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+        if (fakeOwners_.erase(hKey) == 0) return false;  // unique_ptr frees the memory
         paths_.erase(hKey);
-        fakeOwners_.erase(hKey); // unique_ptr destructor frees the memory
+        return true;
     }
 
     // Called once from Wh_ModUninit. Deliberately does NOT delete the
@@ -259,7 +370,7 @@ public:
     // strictly safer than that use-after-free, so we only release ownership
     // (no delete) and drop our own bookkeeping.
     void ClearWithoutFreeing() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_.clear();
         for (auto& kv : fakeOwners_) {
             int* intentionallyLeakedHandle = kv.second.release();
@@ -284,7 +395,7 @@ private:
         }
     }
 
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
     std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
 };
@@ -338,10 +449,29 @@ static const std::wstring kSuppressedGuid          = L"{98f2ab62-0e29-4e4c-8ee7-
 static const std::wstring kWindowsToGoGuid          = L"{8e0c279d-0bd1-43c3-9ebd-31c3dc5b8a77}";
 static const std::wstring kInfraredGuid             = L"{a0275511-0e86-4eca-97c2-ecd8f1221d08}";
 static const std::wstring kWorkFoldersGuid          = L"{ecdb0924-4208-451e-8ee0-373c0956de16}";
+static const std::wstring kBitLockerGuid            = L"{d9ef8727-cac2-4e60-809e-86f80a666c91}";
+static const std::wstring kTabletPcSettingsGuid     = L"{80f3f1d5-feca-45f3-bc32-752c152e456e}";
+// Documented canonical names for the two applets above; this is the form
+// IOpenControlPanel::GetPath resolves most reliably (see IsShownByControlPanel).
+static const std::wstring kBitLockerCanonicalName   = L"Microsoft.BitLockerDriveEncryption";
+static const std::wstring kTabletPcCanonicalName    = L"Microsoft.TabletPCSettings";
+// Own, made-up CLSIDs for the *virtual* Control Panel entries that mirror the
+// two real applets above. We don't inject the real GUIDs directly (Explorer's
+// Category View never asks about them at all on Win10/11 - confirmed by
+// tracing: no open/query hits either way, unlike Network Connections/Printers/
+// HomeGroup, whose real CLSIDs Explorer does probe for category data even
+// though it doesn't list them by default). So instead we register brand-new
+// CLSIDs, exactly like the Personalization entry above, whose name/icon are
+// copied at runtime from the real applet and whose command re-launches the
+// real applet via "explorer shell:::{realGuid}" - same command form already
+// used for the HomeGroup task links.
+static const std::wstring kBitLockerVirtualGuid     = L"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}";
+static const std::wstring kTabletPcVirtualGuid      = L"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}";
 
-static const DWORD kCategoryAppearance = 1;
-static const DWORD kCategoryHardware   = 2;
-static const DWORD kCategoryNetwork    = 3;
+static const DWORD kCategoryAppearance      = 1;
+static const DWORD kCategoryHardware        = 2;
+static const DWORD kCategoryNetwork         = 3;
+static const DWORD kCategorySystemSecurity  = 5; // Matches the id used by the System-and-Security task group further below
 
 std::wstring ToLower(const std::wstring& str) {
     std::wstring res = str;
@@ -354,17 +484,500 @@ bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+// Minimal RAII wrapper around HKEY: closes the key on scope exit no matter
+// how the scope is left (early return, thrown exception from a caller up the
+// stack, etc.), so callers never need a manual RegCloseKey to remember.
+class ScopedHKey {
+public:
+    ScopedHKey() = default;
+    explicit ScopedHKey(HKEY key) : key_(key) {}
+    ScopedHKey(const ScopedHKey&) = delete;
+    ScopedHKey& operator=(const ScopedHKey&) = delete;
+    ScopedHKey(ScopedHKey&& other) noexcept : key_(other.key_) { other.key_ = nullptr; }
+    ScopedHKey& operator=(ScopedHKey&& other) noexcept {
+        if (this != &other) { Close(); key_ = other.key_; other.key_ = nullptr; }
+        return *this;
+    }
+    ~ScopedHKey() { Close(); }
+
+    HKEY* AddressOf() { Close(); return &key_; }
+    // Returns the currently held HKEY WITHOUT closing it. AddressOf() closes
+    // the key first (it's meant for output parameters like RegOpenKeyExW), so
+    // using it to read an already-open handle would silently close that key
+    // and hand nullptr to the next registry call.
+    HKEY Get() const { return key_; }
+    explicit operator bool() const { return key_ != nullptr; }
+
+private:
+    void Close() { if (key_) { RegCloseKey(key_); key_ = nullptr; } }
+    HKEY key_ = nullptr;
+};
+
 bool IsRegisteredClsid(const std::wstring& guid) {
-    HKEY key = nullptr;
+    ScopedHKey key;
     const std::wstring path = L"CLSID\\" + guid;
-    const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, path.c_str(), 0, KEY_READ, &key);
-    if (status != ERROR_SUCCESS) return false;
-    RegCloseKey(key);
-    return true;
+    const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, path.c_str(), 0, KEY_READ, key.AddressOf());
+    return status == ERROR_SUCCESS && key;
+}
+
+// True when Windows itself already lists this CLSID as a Control Panel item.
+// Control Panel enumerates CLSID-based items from
+// ...\\Explorer\\ControlPanel\\NameSpace (HKLM for machine-wide items, HKCU for
+// per-user ones), which is exactly the registration that makes BitLocker Drive
+// Encryption or Tablet PC Settings appear on their supported configurations.
+// If the entry is there, this mod must NOT inject a virtual twin for it, or the
+// user ends up with two identical entries in the same category.
+bool IsListedInControlPanelNameSpace(const std::wstring& guid) {
+    static const wchar_t kNameSpacePrefix[] =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\";
+    const std::wstring subKey = std::wstring(kNameSpacePrefix) + guid;
+    for (HKEY root : { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER }) {
+        ScopedHKey key;
+        // This mod is x86-64 only, so there is no WOW64 view to worry about.
+        if (RegOpenKeyExW(root, subKey.c_str(), 0, KEY_READ, key.AddressOf()) == ERROR_SUCCESS)
+            return true;
+    }
+    return false;
+}
+
+// Asks the shell whether Control Panel actually displays this item, instead of
+// inferring it from the registry. IOpenControlPanel::GetPath resolves a Control
+// Panel item to its path and fails when the item is not part of the current
+// item list - which is exactly the question this mod needs answered. This is
+// the case the registry check got wrong on LTSC 2021, where the NameSpace key
+// exists but the applet is not shown.
+//
+// pszName is documented as "the item's canonical name or its GUID", but the
+// GUID form is the unreliable one: shell32 runs the string through
+// COpenControlPanel::_MapLegacyName and a canonical-name lookup, and namespace
+// items are addressed with the ::{GUID} moniker form rather than a bare
+// {GUID}. So each candidate spelling is tried in turn - canonical name first,
+// then ::{GUID}, then the bare GUID - and the first one the shell can parse
+// wins. If none of them parse, the probe reports "no answer" instead of
+// guessing, and the caller falls back to the registry hint.
+//
+// Returns true only when the shell gave a usable verdict, with outListed set.
+// Called from Wh_ModInit's synchronous startup probe AND from the dedicated
+// lazy-detection worker thread (see RunLazyVirtualAppletDetection /
+// Wh_ModAfterInit) - never from a registry hook's caller thread. Both
+// callers wrap their own registry/engine calls in a ShellProbeBypass (or run
+// before hooks are installed at all), so the shell's own registry reads
+// during CoCreateInstance/GetPath are let straight through instead of
+// re-entering our hooks.
+bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring& guid,
+                           bool& outListed) {
+    // Defined locally rather than pulled from the SDK's CLSID_OpenControlPanel /
+    // IID_IOpenControlPanel: those symbols live in uuid.lib, which Windhawk's
+    // clang toolchain does not link by default, so referencing them fails at
+    // link time with "undefined symbol: CLSID_OpenControlPanel". The values are
+    // fixed, documented interface identifiers, so defining them here costs
+    // nothing and avoids adding a library dependency just for two GUIDs.
+    static const CLSID kClsidOpenControlPanel =
+        { 0x06622d85, 0x6856, 0x4460, { 0x8d, 0xe1, 0xa8, 0x19, 0x21, 0xb4, 0x1c, 0x4b } };
+    static const IID kIidOpenControlPanel =
+        { 0xd11ad862, 0x66de, 0x4df4, { 0xbf, 0x6c, 0x1f, 0x56, 0x21, 0x99, 0x6a, 0xf1 } };
+
+    // The shell's Control Panel object is apartment-threaded; initialize an STA
+    // for the duration of the probe and undo it only if we created it.
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (initHr == RPC_E_CHANGED_MODE) {
+        Wh_Log(L"  COM already initialized in a different mode; skipping shell probe");
+        return false;
+    }
+    const bool weInitialized = SUCCEEDED(initHr);
+
+    bool answered = false;
+    IOpenControlPanel* openControlPanel = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidOpenControlPanel, nullptr, CLSCTX_INPROC_SERVER,
+                                  kIidOpenControlPanel, (void**)&openControlPanel);
+    if (SUCCEEDED(hr) && openControlPanel) {
+        const std::wstring monikerForm = L"::" + guid;
+        const std::wstring* candidates[] = { &canonicalName, &monikerForm, &guid };
+
+        for (const std::wstring* candidate : candidates) {
+            if (candidate->empty()) continue;
+
+            wchar_t path[MAX_PATH] = {};
+            hr = openControlPanel->GetPath(candidate->c_str(), path, ARRAYSIZE(path));
+            if (SUCCEEDED(hr)) {
+                outListed = true;
+                answered = true;
+                Wh_Log(L"  GetPath(\"%s\") -> \"%s\" (item IS shown)", candidate->c_str(), path);
+                break;
+            }
+            if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+                // The shell understood the name and says the item isn't there.
+                outListed = false;
+                answered = true;
+                Wh_Log(L"  GetPath(\"%s\") -> ERROR_FILE_NOT_FOUND (item is NOT shown)", candidate->c_str());
+                break;
+            }
+            // E_INVALIDARG and friends mean "shell couldn't parse this name",
+            // NOT "the item is absent" - never treat it as a verdict. Try the
+            // next spelling instead.
+            Wh_Log(L"  GetPath(\"%s\") not understood, hr=0x%08lX; trying next form",
+                candidate->c_str(), (unsigned long)hr);
+        }
+
+        if (!answered)
+            Wh_Log(L"  No spelling of the item name was understood by the shell; no verdict");
+
+        openControlPanel->Release();
+    } else {
+        Wh_Log(L"  CoCreateInstance(CLSID_OpenControlPanel) failed, hr=0x%08lX", (unsigned long)hr);
+    }
+
+    if (weInitialized) CoUninitialize();
+    return answered;
+}
+
+// The verdict only changes when the machine's configuration changes (an edition
+// upgrade, a digitizer being attached), so it is persisted in the mod's local
+// storage and the shell probe is skipped entirely on subsequent starts. This
+// matters because Wh_ModInit runs on the target's main thread *before* the
+// process executes a single instruction of its own, and GetPath forces the
+// shell to build its whole Control Panel item list - a cost that would
+// otherwise be paid at every logon, every Explorer restart and every
+// control.exe launch.
+//
+// The cache is keyed by Windows build so a feature update re-probes once, and
+// stores a tri-state (unknown / not-shown / shown) plus the CLSID-registered
+// bit. Users who suspect a stale verdict have two escape hatches: the
+// "Always add"/"Never add" override, or simply saving the mod settings, which
+// discards the cache and re-probes once (see Wh_ModSettingsChanged). The cache
+// is deliberately NOT cleared in Wh_ModUninit, which also runs on every normal
+// process exit and would defeat the caching entirely.
+enum class CachedVerdict { Unknown = 0, NotShown = 1, Shown = 2 };
+
+std::wstring MakeVerdictValueName(const wchar_t* key) {
+    return std::wstring(L"appletVerdict_") + key;
+}
+std::wstring MakeVerdictBuildValueName(const wchar_t* key) {
+    return std::wstring(L"appletVerdictBuild_") + key;
+}
+
+// Runs the shell probe at most once per Windows build and remembers the answer.
+// Returns the "inject the virtual applet" verdict.
+bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
+                                     const std::wstring& canonicalName,
+                                     const wchar_t* storageKey, const wchar_t* logName,
+                                     std::atomic<bool>& outClsidRegistered,
+                                     AppletMode mode) {
+    // Wh_ModInit already probed and cached whether the CLSID is registered
+    // (g_bitlockerClsidRegistered / g_tabletPcClsidRegistered), so read that
+    // instead of hitting the registry again from here - this function now
+    // only ever runs on the dedicated lazy-detection worker thread, but
+    // there's still no reason to repeat a registry read we already have the
+    // answer to.
+    const bool registeredClsid = outClsidRegistered.load();
+    if (!registeredClsid) {
+        Wh_Log(L"%s: CLSID is absent on this edition/device; applet will not be injected", logName);
+        return false;
+    }
+    if (mode != AppletMode::Auto) {
+        Wh_Log(L"%s: mode is %s, skipping shell probe entirely", logName,
+               mode == AppletMode::Always ? L"Always" : L"Never");
+        return false;
+    }
+    const std::wstring verdictName = MakeVerdictValueName(storageKey);
+    const std::wstring buildName   = MakeVerdictBuildValueName(storageKey);
+    const int cachedVerdict = Wh_GetIntValue(verdictName.c_str(), (int)CachedVerdict::Unknown);
+    const int cachedBuild   = Wh_GetIntValue(buildName.c_str(), 0);
+    if (cachedVerdict != (int)CachedVerdict::Unknown && cachedBuild == (int)g_winBuild) {
+        const bool shown = (cachedVerdict == (int)CachedVerdict::Shown);
+        Wh_Log(L"%s: using cached verdict from build %d (applet is %s); shell not probed",
+            logName, cachedBuild, shown ? L"already shown" : L"not shown");
+        return !shown;
+    }
+    Wh_Log(L"%s: no cached verdict for build %u; probing the shell once", logName, g_winBuild);
+    // No per-call bypass toggling here: RunLazyVirtualAppletDetection() holds
+    // a ShellProbeBypass for the whole detection pass, and this always runs
+    // on the dedicated lazy-detection worker thread, never on a hook's
+    // caller thread.
+    bool listed = false;
+    bool answered = IsShownByControlPanel(canonicalName, realGuid, listed);
+    if (answered) {
+        Wh_Log(L"%s: shell reports the applet is %s", logName,
+            listed ? L"already shown; virtual entry skipped to avoid a duplicate"
+                   : L"not shown; virtual entry will be injected");
+        Wh_SetIntValue(verdictName.c_str(),
+            (int)(listed ? CachedVerdict::Shown : CachedVerdict::NotShown));
+        Wh_SetIntValue(buildName.c_str(), (int)g_winBuild);
+        return !listed;
+    }
+    const bool registered = IsListedInControlPanelNameSpace(realGuid);
+    Wh_Log(L"%s: shell gave no verdict, falling back to the registry hint (%s) and caching it. Use the \"Always add\"/\"Never add\" setting if this is wrong.",
+        logName, registered ? L"registered, assuming already shown" : L"not registered, injecting");
+    Wh_SetIntValue(verdictName.c_str(),
+        (int)(registered ? CachedVerdict::Shown : CachedVerdict::NotShown));
+    Wh_SetIntValue(buildName.c_str(), (int)g_winBuild);
+    return !registered;
+}
+
+// Registry-hook entry point: NEVER does any work itself. It only wakes the
+// dedicated lazy-detection worker thread and returns immediately, so a
+// registry hook can never block on - or re-enter - the shell probe.
+void RequestLazyVirtualAppletDetection() {
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    if (g_inShellProbeBypass) return;
+    if (g_lazyDetectionWakeEvent) SetEvent(g_lazyDetectionWakeEvent);
+}
+
+// Runs the actual one-time probe. Only ever called from the dedicated
+// lazy-detection worker thread (see Wh_ModAfterInit / LazyDetectionThreadProc),
+// never directly from a registry hook - that's what made the previous
+// version re-entrant and deadlock-prone.
+void RunLazyVirtualAppletDetection() {
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    // Don't block every other Explorer thread while we probe: if some other
+    // caller already grabbed the mutex, just bail - RequestLazyVirtualAppletDetection
+    // will be called again by the next registry access and there's only
+    // ever one worker thread doing the real work anyway.
+    std::unique_lock<std::mutex> lock(g_lazyDetectionMutex, std::try_to_lock);
+    if (!lock.owns_lock()) return;
+    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+
+    // Every registry / engine call made below - including any the shell
+    // issues on our behalf while activating CLSID_OpenControlPanel - is ours
+    // and must be let straight through by the registry hooks.
+    ShellProbeBypass bypass;
+
+    AppletMode bitMode = (AppletMode)g_settings.bitLockerMode.load();
+    AppletMode tabMode = (AppletMode)g_settings.tabletPcMode.load();
+    bool needBit = (bitMode == AppletMode::Auto) && g_bitlockerClsidRegistered.load();
+    bool needTab = (tabMode == AppletMode::Auto) && g_tabletPcClsidRegistered.load();
+    if (!needBit && !needTab) {
+        g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
+            g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+        g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
+            g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+        g_lazyDetectionDone.store(true, std::memory_order_release);
+        return;
+    }
+    bool bitAuto = g_bitlockerAutoDetected.load();
+    bool tabAuto = g_tabletPcAutoDetected.load();
+    if (needBit) {
+        bitAuto = DetectVirtualAppletNeededCached(kBitLockerGuid, kBitLockerCanonicalName,
+            L"bitlocker", L"BitLocker Drive Encryption", g_bitlockerClsidRegistered, bitMode);
+        g_bitlockerAutoDetected.store(bitAuto);
+    }
+    if (needTab) {
+        tabAuto = DetectVirtualAppletNeededCached(kTabletPcSettingsGuid, kTabletPcCanonicalName,
+            L"tabletpc", L"Tablet PC Settings", g_tabletPcClsidRegistered, tabMode);
+        g_tabletPcAutoDetected.store(tabAuto);
+    }
+    g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
+        g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+    g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
+        g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_lazyDetectionDone.store(true, std::memory_order_release);
+    InvalidateClassicTaskLinksFile();
+    EnsureClassicTaskLinksFile();
+    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d",
+        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load());
+}
+
+// Combines the automatic detection with the user's explicit override.
+bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered,
+                            const wchar_t* logName) {
+    switch (mode) {
+        case AppletMode::Always:
+            if (!clsidRegistered) {
+                Wh_Log(L"%s: \"Always add\" requested, but the applet is not installed here; ignoring", logName);
+                return false;
+            }
+            Wh_Log(L"%s: forced ON by settings (auto detection said %d)", logName, (int)autoDetected);
+            return true;
+        case AppletMode::Never:
+            Wh_Log(L"%s: forced OFF by settings", logName);
+            return false;
+        case AppletMode::Auto:
+        default:
+            return autoDetected;
+    }
 }
 
 bool IsHomeGroupAvailable() {
     return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
+}
+
+// Reads a REG_SZ/REG_EXPAND_SZ value from an already-open key via the plain,
+// unhooked registry API (only ever called from InitDisplayNames, before this
+// mod's own hooks are installed - see call site).
+bool ReadStringValue(HKEY key, const wchar_t* valueName, std::wstring& out) {
+    DWORD type = 0, size = 0;
+    if (RegQueryValueExW(key, valueName, nullptr, &type, nullptr, &size) != ERROR_SUCCESS || size == 0)
+        return false;
+    if (type != REG_SZ && type != REG_EXPAND_SZ) return false;
+    std::wstring buffer(size / sizeof(wchar_t) + 1, L'\0');
+    if (RegQueryValueExW(key, valueName, nullptr, &type, (LPBYTE)buffer.data(), &size) != ERROR_SUCCESS)
+        return false;
+    buffer.resize(wcslen(buffer.c_str()));
+    out = std::move(buffer);
+    return true;
+}
+
+// Copies the display name and icon of a REAL, already-registered CLSID, so a
+// virtual entry mirroring it always matches whatever this Windows build
+// actually ships - no hardcoded resource indices to go stale between builds.
+// Name resolution follows the same "LocalizedString wins, indirect strings
+// get resolved, plain (Default) value is the fallback" rule Explorer itself
+// uses for CLSID display names.
+bool ReadRealClsidNameAndIcon(const std::wstring& realGuid, std::wstring& outName, std::wstring& outIcon) {
+    ScopedHKey clsidKey;
+    const std::wstring clsidPath = L"CLSID\\" + realGuid;
+    LSTATUS openStatus = RegOpenKeyExW(HKEY_CLASSES_ROOT, clsidPath.c_str(), 0, KEY_READ, clsidKey.AddressOf());
+    if (openStatus != ERROR_SUCCESS) {
+        Wh_Log(L"  [%s] RegOpenKeyExW failed, status=%ld", realGuid.c_str(), openStatus);
+        return false;
+    }
+
+    std::wstring rawName;
+    bool gotLocalized = ReadStringValue(clsidKey.Get(), L"LocalizedString", rawName);
+    Wh_Log(L"  [%s] LocalizedString: %s (raw=\"%s\")", realGuid.c_str(),
+        gotLocalized ? L"found" : L"absent", rawName.c_str());
+    if (!gotLocalized) {
+        bool gotDefault = ReadStringValue(clsidKey.Get(), nullptr, rawName);
+        Wh_Log(L"  [%s] (Default): %s (raw=\"%s\")", realGuid.c_str(),
+            gotDefault ? L"found" : L"absent", rawName.c_str());
+    }
+
+    if (rawName.empty()) {
+        Wh_Log(L"  [%s] No usable name value at all", realGuid.c_str());
+        return false;
+    }
+
+    if (rawName[0] == L'@') {
+        wchar_t resolved[512] = { 0 };
+        HRESULT hr = SHLoadIndirectString(rawName.c_str(), resolved, ARRAYSIZE(resolved), nullptr);
+        Wh_Log(L"  [%s] SHLoadIndirectString(\"%s\") -> hr=0x%08lX, result=\"%s\"",
+            realGuid.c_str(), rawName.c_str(), (unsigned long)hr, resolved);
+        if (SUCCEEDED(hr) && resolved[0]) {
+            outName = resolved;
+        } else {
+            return false;
+        }
+    } else {
+        outName = rawName;
+    }
+
+    ScopedHKey iconKey;
+    const std::wstring iconPath = clsidPath + L"\\DefaultIcon";
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, iconPath.c_str(), 0, KEY_READ, iconKey.AddressOf()) == ERROR_SUCCESS) {
+        bool gotIcon = ReadStringValue(iconKey.Get(), nullptr, outIcon);
+        Wh_Log(L"  [%s] DefaultIcon: %s (raw=\"%s\")", realGuid.c_str(),
+            gotIcon ? L"found" : L"absent", outIcon.c_str());
+    } else {
+        Wh_Log(L"  [%s] DefaultIcon subkey missing", realGuid.c_str());
+    }
+    return true;
+}
+
+// A Control Panel entry this mod registers from scratch under its own CLSID
+// (same technique as Personalization above), whose identity (name/icon) is
+// copied at runtime from a real applet and whose command re-launches that
+// real applet. Used for applets Explorer's Category View never queries on
+// its own (see the long comment by kBitLockerVirtualGuid).
+struct VirtualApplet {
+    std::wstring guidLower;
+    std::wstring clsidSuffix, defaultIconSuffix, shellSuffix, shellOpenSuffix, openCommandSuffix, nsSuffix;
+    std::wstring displayName;
+    std::wstring iconValue;
+    std::wstring infoTip;       // Indirect-string resource shown as the Win7-style description tooltip
+    std::wstring openCommand;
+    DWORD category = 0;
+    std::atomic<bool>* enabledSetting = nullptr;
+};
+
+static std::vector<VirtualApplet> g_virtualApplets;
+
+// Resolves an indirect-string resource reference ("@dll,-id") to its actual
+// localized text using the same API Explorer uses. Returns an empty string on
+// failure.
+std::wstring ResolveIndirectString(const std::wstring& indirect) {
+    if (indirect.empty() || indirect[0] != L'@') return indirect;
+    wchar_t resolved[512] = { 0 };
+    HRESULT hr = SHLoadIndirectString(indirect.c_str(), resolved, ARRAYSIZE(resolved), nullptr);
+    if (SUCCEEDED(hr) && resolved[0]) {
+        Wh_Log(L"  SHLoadIndirectString(\"%s\") -> \"%s\"", indirect.c_str(), resolved);
+        return resolved;
+    }
+    Wh_Log(L"  SHLoadIndirectString(\"%s\") failed, hr=0x%08lX", indirect.c_str(), (unsigned long)hr);
+    return L"";
+}
+
+// Builds one VirtualApplet entry by copying the real applet's name/icon.
+// On Windows 10/11 the legacy CLSID keys are often mere COM stubs: the key
+// exists (so IsRegisteredClsid succeeds) but carries no LocalizedString or
+// (Default) value, because Windows now resolves these applets through their
+// canonical name straight from the resource DLL. When the registry read comes
+// up empty, we fall back to the well-known resource references for that
+// applet (same technique Personalization already uses with themecpl.dll).
+// The infotip fallback is the resource reference Explorer shows as the
+// Win7-style description ("white text") under the applet link; Windows
+// localizes it automatically for every installed UI language.
+// Returns false only if both paths fail.
+bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realGuid,
+                      DWORD category, std::atomic<bool>* enabledSetting,
+                      const std::wstring& fallbackNameIndirect = L"",
+                      const std::wstring& fallbackIcon = L"",
+                      const std::wstring& fallbackInfoTip = L"") {
+    std::wstring name, icon;
+    bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
+    if (!gotFromRegistry || name.empty()) {
+        if (!fallbackNameIndirect.empty()) {
+            Wh_Log(L"  [%s] registry name unavailable, using resource fallback \"%s\"",
+                realGuid.c_str(), fallbackNameIndirect.c_str());
+            name = ResolveIndirectString(fallbackNameIndirect);
+        }
+    }
+
+    // Independent of how the name was obtained: ReadRealClsidNameAndIcon treats
+    // a missing DefaultIcon subkey as non-fatal (returns true with an empty
+    // icon), which is the common case for the Win10/11 stub CLSID keys. Nesting
+    // this inside the name-failure branch above meant that a CLSID with a
+    // LocalizedString but no DefaultIcon produced an entry with no icon at all,
+    // because TryProvideValue refuses to serve an empty DefaultIcon value.
+    if (icon.empty() && !fallbackIcon.empty()) {
+        Wh_Log(L"  [%s] no DefaultIcon in the registry, using resource fallback \"%s\"",
+            realGuid.c_str(), fallbackIcon.c_str());
+        icon = fallbackIcon;
+    }
+
+    if (name.empty()) {
+        Wh_Log(L"  [%s] no usable name from registry or fallback", realGuid.c_str());
+        return false;
+    }
+
+    // InfoTip: the Win7-style description that appears below the applet name
+    // in Control Panel category view and in the hover tooltip. We pre-resolve
+    // the "@dll,-id" indirect string here so Explorer receives plain, already
+    // localized text regardless of whether it resolves indirect strings for
+    // synthetic CLSIDs. The original indirect reference is kept too as a
+    // secondary value (infoTipIndirect) for parity with real applets.
+    std::wstring infoTipResolved;
+    if (!fallbackInfoTip.empty()) {
+        infoTipResolved = ResolveIndirectString(fallbackInfoTip);
+        Wh_Log(L"  [%s] InfoTip resolved: \"%s\"", realGuid.c_str(),
+            infoTipResolved.empty() ? L"(empty)" : infoTipResolved.c_str());
+    }
+
+    VirtualApplet applet;
+    applet.guidLower = ToLower(virtualGuid);
+    applet.clsidSuffix       = L"clsid\\" + applet.guidLower;
+    applet.defaultIconSuffix = applet.clsidSuffix + L"\\defaulticon";
+    applet.shellSuffix       = applet.clsidSuffix + L"\\shell";
+    applet.shellOpenSuffix   = applet.shellSuffix + L"\\open";
+    applet.openCommandSuffix = applet.shellOpenSuffix + L"\\command";
+    applet.nsSuffix          = L"controlpanel\\namespace\\" + applet.guidLower;
+    applet.displayName = name;
+    applet.iconValue = icon;
+    applet.infoTip = infoTipResolved.empty() ? fallbackInfoTip : infoTipResolved;
+    applet.openCommand = L"explorer.exe shell:::" + realGuid;
+    applet.category = category;
+    applet.enabledSetting = enabledSetting;
+    g_virtualApplets.push_back(std::move(applet));
+    return true;
 }
 
 // Allocation-free case-insensitive check for the registry-hook hot path.
@@ -392,12 +1005,13 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
     return false;
 }
 
-// Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is normally
-// only called once, eagerly, from Wh_ModInit before any hook is installed —
-// but TryProvideValue() also calls it lazily as a fallback, and that runs
-// from the registry hooks on arbitrary explorer.exe threads. Without this
-// lock, two threads could race on the check-then-write below, or one thread
-// could read a half-written path while another is (re)generating the file.
+// Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is called
+// eagerly from Wh_ModInit (before any hook is installed) and from
+// Wh_ModSettingsChanged, but also lazily from the registry hooks by way of
+// GetOrCreateClassicTaskLinksFilePath(), i.e. on arbitrary explorer.exe
+// threads. Without this lock, two threads could race on the check-then-write
+// below, or one thread could read a half-written path while another is
+// (re)generating the file.
 static std::mutex g_taskLinksMutex;
 
 // Thread-safe accessor for readers (TryProvideValue and friends) that just
@@ -462,6 +1076,9 @@ bool EnsureClassicTaskLinksFile() {
         const char* changeHomePage;
         const char* manageBrowserAddons;
         const char* deleteBrowsingHistory;
+        const char* bitlockerManage;
+        const char* tabletCalibrate;
+        const char* tabletPenTouch;
     };
 
     // Hard-coded localized Windows 7-style labels. The selected entry follows
@@ -470,36 +1087,36 @@ bool EnsureClassicTaskLinksFile() {
     // MUI/resource dependency; English remains the fallback for other locales.
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
-        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie" },
-        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies" },
-        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies" },
-        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen" },
-        { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies" },
-        { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies" },
-        { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen" },
-        { L"pl", "Zmień motyw", "Zmień tło pulpitu", "Zmień kolory szyb okiennych", "Zmień efekty dźwiękowe", "Zmień wygaszacz ekranu", "Włącz lub wyłącz ikony systemowe", "Przywróć domyślne zachowanie ikon", "Wyświetl stan sieci i zadania", "Połącz się z siecią", "Wyświetl komputery i urządzenia sieciowe", "Dodaj urządzenie bezprzewodowe do sieci", "Dodaj drukarkę", "Skonfiguruj drukarki domyślne", "Zmień ustawienia drukarki", "Wyświetl urządzenia i drukarki", "Wybierz grupę domową i opcje udostępniania", "Udostępnij drukarki", "Dostosuj rozdzielczość ekranu", "Sprawdź stan swojego komputera", "Utwórz kopię zapasową komputera", "Znajdź i rozwiąż problemy", "Sprawdź stan zapory", "Odinstaluj program", "Włącz lub wyłącz funkcje systemu Windows", "Zmień zdjęcie konta", "Dodaj lub usuń konta użytkowników", "Skonfiguruj kontrolę rodzicielską dla dowolnego użytkownika", "Zmień datę i godzinę", "Zmień metody wprowadzania", "Pozwól systemowi Windows zasugerować ustawienia", "Zmień stronę główną", "Zarządzaj dodatkami przeglądarki", "Usuń historię przeglądania i pliki cookie" },
-        { L"ru", "Изменить тему", "Изменить фон рабочего стола", "Изменить цвет оконного стекла", "Изменить звуковые эффекты", "Изменить заставку", "Включить или выключить системные значки", "Восстановить поведение значков по умолчанию", "Просмотреть состояние сети и задачи", "Подключиться к сети", "Просмотреть сетевые компьютеры и устройства", "Добавить беспроводное устройство в сеть", "Добавить принтер", "Настроить принтеры по умолчанию", "Изменить настройки принтера", "Просмотреть устройства и принтеры", "Выбрать домашнюю группу и параметры общего доступа", "Предоставить общий доступ к принтерам", "Настроить разрешение экрана", "Проверить состояние компьютера", "Создать резервную копию компьютера", "Найти и устранить проблемы", "Проверить состояние брандмауэра", "Удалить программу", "Включить или выключить компоненты Windows", "Изменить изображение аккаунта", "Добавить или удалить учетные записи пользователей", "Настроить родительский контроль для любого пользователя", "Изменить дату и время", "Изменить методы ввода", "Разрешить Windows предлагать параметры", "Изменить домашнюю страницу", "Управление надстройками браузера", "Удаление журнала браузера и файлов cookie" },
-        { L"uk", "Змінити тему", "Змінити фон робочого столу", "Змінити колір віконного скла", "Змінити звукові ефекти", "Змінити заставку", "Увімкнути або вимкнути системні значки", "Відновити поведінку піктограм за замовчуванням", "Переглянути стан мережі та завдання", "Підключитися до мережі", "Переглянути мережеві комп'ютери й пристрої", "Додати бездротовий пристрій до мережі", "Додати принтер", "Налаштувати принтери за замовчуванням", "Змінити налаштування принтера", "Переглянути пристрої та принтери", "Вибрати домашню групу та параметри спільного доступу", "Спільно використовувати принтери", "Налаштувати роздільну здатність екрана", "Перевірити стан комп'ютера", "Створити резервну копію комп'ютера", "Знайти й усунути проблеми", "Перевірити стан брандмауера", "Видалити програму", "Увімкнути або вимкнути компоненти Windows", "Змінити зображення облікового запису", "Додати або видалити облікові записи користувачів", "Налаштувати батьківський контроль для будь-якого користувача", "Змінити дату й час", "Змінити методи введення", "Дозволити Windows пропонувати параметри", "Змінити домашню сторінку", "Керування надбудовами браузера", "Видалити журнал браузера та файли cookie" },
-        { L"tr", "Temayı değiştir", "Masaüstü arka planını değiştir", "Pencere camı renklerini değiştirme", "Ses efektlerini değiştir", "Ekran koruyucuyu değiştir", "Sistem simgelerini açma veya kapatma", "Varsayılan simge davranışlarını geri yükle", "Ağ durumunu ve görevlerini görüntüleyin", "Bir ağa bağlanma", "Ağ bilgisayarlarını ve cihazlarını görüntüleyin", "Ağa kablosuz cihaz ekleme", "Yazıcı ekle", "Varsayılan yazıcıları ayarlama", "Yazıcı ayarlarını değiştirin", "Cihazları ve yazıcıları görüntüleyin", "Ev grubu ve paylaşım seçeneklerini seçin", "Yazıcıları paylaş", "Ekran çözünürlüğünü ayarlayın", "Bilgisayarınızın durumunu inceleyin", "Bilgisayarınızı yedekleyin", "Sorunları bulun ve düzeltin", "Güvenlik duvarı durumunu kontrol edin", "Bir programı kaldırma", "Windows özelliklerini açma veya kapatma", "Hesap resmini değiştir", "Kullanıcı hesaplarını ekleme veya kaldırma", "Herhangi bir kullanıcı için ebeveyn denetimlerini ayarlayın", "Tarihi ve saati değiştirme", "Giriş yöntemlerini değiştirin", "Windows'un sizin için ayarlar önermesine izin verin", "Giriş sayfasını değiştir", "Tarayıcı eklentilerini yönet", "Göz atma geçmişini ve tanımlama bilgilerini sil" },
-        { L"ar", "تغيير الموضوع", "تغيير خلفية سطح المكتب", "تغيير ألوان زجاج النوافذ", "تغيير المؤثرات الصوتية", "تغيير شاشة التوقف", "تشغيل أيقونات النظام أو إيقاف تشغيلها", "استعادة سلوكيات الأيقونة الافتراضية", "عرض حالة الشبكة والمهام", "الاتصال بالشبكة", "عرض أجهزة الكمبيوتر والأجهزة المتصلة بالشبكة", "إضافة جهاز لاسلكي إلى الشبكة", "إضافة طابعة", "إعداد الطابعات الافتراضية", "تغيير إعدادات الطابعة", "عرض الأجهزة والطابعات", "اختيار مجموعة المشاركة المنزلية وخيارات المشاركة", "مشاركة الطابعات", "ضبط دقة الشاشة", "مراجعة حالة الكمبيوتر", "إنشاء نسخة احتياطية للكمبيوتر", "البحث عن المشاكل وإصلاحها", "التحقق من حالة جدار الحماية", "إلغاء تثبيت برنامج", "تشغيل ميزات Windows أو إيقاف تشغيلها", "تغيير صورة الحساب", "إضافة أو إزالة حسابات المستخدمين", "إعداد الضوابط الأبوية لأي مستخدم", "تغيير التاريخ والوقت", "تغيير طرق الإدخال", "السماح لـ Windows باقتراح الإعدادات", "تغيير الصفحة الرئيسية", "إدارة الوظائف الإضافية للمتصفح", "حذف محفوظات الاستعراض وملفات تعريف الارتباط" },
-        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "הפעל או כבה את סמלי המערכת", "שחזר את התנהגויות ברירת המחדל של סמלים", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "בחר קבוצה ביתית ואפשרויות שיתוף", "שתף מדפסות", "התאם את רזולוציית המסך", "בדוק את מצב המחשב שלך", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "הפעל או כבה את תכונות Windows", "שנה את תמונת החשבון", "הוסף או הסר חשבונות משתמש", "הגדר בקרת הורים עבור כל משתמש", "שנה את התאריך והשעה", "שנה שיטות קלט", "תן ל-Windows להציע עבורך הגדרות", "שנה דף בית", "נהל תוספות דפדפן", "מחק היסטוריית גלישה וקובצי Cookie" },
-        { L"ja", "テーマを変更する", "デスクトップの背景を変更する", "窓ガラスの色を変更する", "効果音を変更する", "スクリーンセーバーを変更する", "システムアイコンをオンまたはオフにする", "デフォルトのアイコン動作を復元する", "ネットワークのステータスとタスクを表示する", "ネットワークに接続する", "ネットワークのコンピュータとデバイスを表示する", "ワイヤレスデバイスをネットワークに追加する", "プリンターを追加する", "デフォルトのプリンターを設定する", "プリンターの設定を変更する", "デバイスとプリンターを表示する", "ホームグループと共有オプションを選択する", "プリンターを共有する", "画面解像度を調整する", "コンピュータのステータスを確認する", "コンピュータをバックアップする", "問題を見つけて解決する", "ファイアウォールのステータスを確認する", "プログラムをアンインストールする", "Windows の機能をオンまたはオフにする", "アカウントの写真を変更する", "ユーザーアカウントの追加または削除", "任意のユーザーに対してペアレントコントロールを設定する", "日付と時刻を変更する", "入力方法を変更する", "Windows が設定を提案してくれるようにする", "ホーム ページの変更", "ブラウザーのアドオンの管理", "閲覧の履歴と Cookie の削除" },
-        { L"ko", "테마 변경", "데스크탑 배경 변경", "창유리 색상 변경", "음향 효과 변경", "화면 보호기 변경", "시스템 아이콘 켜기 또는 끄기", "기본 아이콘 동작 복원", "네트워크 상태 및 작업 보기", "네트워크에 연결", "네트워크 컴퓨터 및 장치 보기", "네트워크에 무선 장치 추가", "프린터 추가", "기본 프린터 설정", "프린터 설정 변경", "장치 및 프린터 보기", "홈 그룹 및 공유 옵션 선택", "프린터 공유", "화면 해상도 조정", "컴퓨터 상태 검토", "컴퓨터 백업", "문제 찾기 및 수정", "방화벽 상태 확인", "프로그램 제거", "Windows 기능 켜기 또는 끄기", "계정 사진 변경", "사용자 계정 추가 또는 제거", "모든 사용자에 대해 자녀 보호 기능 설정", "날짜 및 시간 변경", "입력 방법 변경", "Windows에서 설정을 제안하도록 허용", "홈 페이지 변경", "브라우저 추가 기능 관리", "검색 기록 및 쿠키 삭제" },
-        { L"zh-CN", "更改主题", "更改桌面背景", "改变窗玻璃颜色", "改变音效", "更改屏幕保护程序", "打开或关闭系统图标", "恢复默认图标行为", "查看网络状态和任务", "连接到网络", "查看网络计算机和设备", "将无线设备添加到网络", "添加打印机", "设置默认打印机", "更改打印机设置", "查看设备和打印机", "选择家庭组和共享选项", "共享打印机", "调整屏幕分辨率", "查看计算机的状态", "备份您的计算机", "发现并解决问题", "检查防火墙状态", "卸载程序", "打开或关闭 Windows 功能", "更改账户图片", "添加或删除用户帐户", "为任何用户设置家长控制", "更改日期和时间", "更改输入法", "让 Windows 为您建议设置", "更改主页", "管理浏览器加载项", "删除浏览历史记录和 Cookie" },
-        { L"zh-TW", "更改主題", "更改桌面背景", "改變窗玻璃顏色", "改變音效", "更改螢幕保護程式", "開啟或關閉系統圖標", "恢復預設圖示行為", "查看網路狀態和任務", "連接網路", "查看網路電腦和設備", "將無線設備新增至網絡", "新增印表機", "設定預設印表機", "變更印表機設定", "查看設備和印表機", "選擇家庭群組和共享選項", "共用印表機", "調整螢幕解析度", "查看計算機的狀態", "備份您的計算機", "發現並解決問題", "檢查防火牆狀態", "解除安裝程式", "開啟或關閉 Windows 功能", "更改帳戶圖片", "新增或刪除使用者帳戶", "為任何使用者設定家長監護", "更改日期和時間", "更改輸入法", "讓 Windows 為您建議設定", "變更首頁", "管理瀏覽器附加元件", "刪除瀏覽歷程記錄和 Cookie" },
-        { L"cs", "Změnit téma", "Změnit pozadí plochy", "Změnit barvu okenního skla", "Změnit zvukové efekty", "Změnit spořič obrazovky", "Zapnout nebo vypnout systémové ikony", "Obnovit výchozí chování ikon", "Zobrazit stav sítě a úlohy", "Připojit se k síti", "Zobrazit síťové počítače a zařízení", "Přidat bezdrátové zařízení do sítě", "Přidat tiskárnu", "Nastavit výchozí tiskárny", "Změnit nastavení tiskárny", "Zobrazit zařízení a tiskárny", "Vybrat domácí skupinu a možnosti sdílení", "Sdílet tiskárny", "Upravit rozlišení obrazovky", "Zkontrolovat stav počítače", "Zálohovat počítač", "Najít a opravit problémy", "Zkontrolovat stav brány firewall", "Odinstalovat program", "Zapnout nebo vypnout funkce systému Windows", "Změnit obrázek účtu", "Přidat nebo odebrat uživatelské účty", "Nastavit rodičovskou kontrolu pro libovolného uživatele", "Změnit datum a čas", "Změnit metody zadávání", "Nechat Windows navrhnout nastavení", "Změnit domovskou stránku", "Spravovat doplňky prohlížeče", "Odstranit historii procházení a soubory cookie" },
-        { L"da", "Skift tema", "Skift skrivebordsbaggrund", "Skift vinduesglasfarver", "Skift lydeffekter", "Skift pauseskærm", "Slå systemikoner til eller fra", "Gendan standard ikonadfærd", "Se netværksstatus og opgaver", "Opret forbindelse til et netværk", "Se netværkscomputere og -enheder", "Tilføj en trådløs enhed til netværket", "Tilføj en printer", "Konfigurer standardprintere", "Skift printerindstillinger", "Se enheder og printere", "Vælg hjemmegruppe og delingsmuligheder", "Del printere", "Juster skærmopløsningen", "Gennemgå din computers status", "Sikkerhedskopier din computer", "Find og ret problemer", "Tjek firewall-status", "Afinstaller et program", "Slå Windows-funktioner til eller fra", "Skift kontobillede", "Tilføj eller fjern brugerkonti", "Konfigurer forældrekontrol for enhver bruger", "Skift dato og klokkeslæt", "Skift indtastningsmetoder", "Lad Windows foreslå indstillinger for dig", "Skift startside", "Administrer browser-tilføjelser", "Slet browserhistorik og cookies" },
-        { L"fi", "Vaihda teemaa", "Vaihda työpöydän tausta", "Vaihda ikkunalasien väriä", "Muuta äänitehosteita", "Vaihda näytönsäästäjä", "Ota järjestelmäkuvakkeet käyttöön tai poista ne käytöstä", "Palauta oletuskuvakkeiden toimintatavat", "Tarkastele verkon tilaa ja tehtäviä", "Yhdistä verkkoon", "Tarkastele verkon tietokoneita ja laitteita", "Lisää langaton laite verkkoon", "Lisää tulostin", "Aseta oletustulostimet", "Muuta tulostimen asetuksia", "Tarkastele laitteita ja tulostimia", "Valitse kotiryhmä- ja jakamisasetukset", "Jaa tulostimia", "Säädä näytön resoluutiota", "Tarkista tietokoneesi tila", "Varmuuskopioi tietokoneesi", "Etsi ja korjaa ongelmat", "Tarkista palomuurin tila", "Poista ohjelman asennus", "Ota Windowsin ominaisuudet käyttöön tai poista ne käytöstä", "Vaihda tilikuvaa", "Lisää tai poista käyttäjätilejä", "Määritä lapsilukko kaikille käyttäjille", "Muuta päivämäärää ja kellonaikaa", "Muuta syöttötapoja", "Anna Windowsin ehdottaa asetuksia puolestasi", "Vaihda aloitussivua", "Hallinnoi selaimen apuohjelmia", "Poista selaushistoria ja evästeet" },
-        { L"el", "Αλλαγή θέματος", "Αλλαγή φόντου επιφάνειας εργασίας", "Αλλαγή χρωμάτων τζαμιών παραθύρων", "Αλλαγή ηχητικών εφέ", "Αλλαγή προφύλαξης οθόνης", "Ενεργοποίηση ή απενεργοποίηση εικονιδίων συστήματος", "Επαναφορά προεπιλεγμένων συμπεριφορών εικονιδίων", "Προβολή κατάστασης και εργασιών δικτύου", "Σύνδεση σε δίκτυο", "Προβολή υπολογιστών και συσκευών δικτύου", "Προσθήκη ασύρματης συσκευής στο δίκτυο", "Προσθήκη εκτυπωτή", "Ρύθμιση προεπιλεγμένων εκτυπωτών", "Αλλαγή ρυθμίσεων εκτυπωτή", "Προβολή συσκευών και εκτυπωτών", "Επιλογή οικιακής ομάδας και επιλογών κοινής χρήσης", "Κοινή χρήση εκτυπωτών", "Προσαρμογή ανάλυσης οθόνης", "Έλεγχος κατάστασης υπολογιστή", "Δημιουργία αντιγράφου ασφαλείας υπολογιστή", "Εύρεση και επιδιόρθωση προβλημάτων", "Έλεγχος κατάστασης τείχους προστασίας", "Απεγκατάσταση προγράμματος", "Ενεργοποίηση ή απενεργοποίηση δυνατοτήτων των Windows", "Αλλαγή εικόνας λογαριασμού", "Προσθήκη ή κατάργηση λογαριασμών χρηστών", "Ρύθμιση γονικού ελέγχου για οποιονδήποτε χρήστη", "Αλλαγή ημερομηνίας και ώρας", "Αλλαγή μεθόδων εισαγωγής", "Να επιτρέπεται στα Windows να προτείνουν ρυθμίσεις", "Αλλαγή αρχικής σελίδας", "Διαχείριση προσθηκών προγράμματος περιήγησης", "Διαγραφή ιστορικού περιήγησης και cookies" },
-        { L"hu", "Változtasd meg a témát", "Az asztal hátterének módosítása", "Az ablaküveg színének megváltoztatása", "Hanghatások módosítása", "Képernyővédő módosítása", "A rendszerikonok be- és kikapcsolása", "Az alapértelmezett ikonviselkedés visszaállítása", "Megtekintheti a hálózat állapotát és a feladatokat", "Csatlakozzon egy hálózathoz", "Tekintse meg a hálózati számítógépeket és eszközöket", "Adjon hozzá egy vezeték nélküli eszközt a hálózathoz", "Nyomtató hozzáadása", "Állítsa be az alapértelmezett nyomtatókat", "A nyomtató beállításainak módosítása", "Eszközök és nyomtatók megtekintése", "Válassza ki az otthoni csoportot és a megosztási beállításokat", "Nyomtatók megosztása", "Állítsa be a képernyő felbontását", "Tekintse át számítógépe állapotát", "Készítsen biztonsági másolatot a számítógépről", "Keresse meg és javítsa ki a problémákat", "Ellenőrizze a tűzfal állapotát", "Távolítson el egy programot", "Kapcsolja be vagy ki a Windows szolgáltatásait", "Fiókkép módosítása", "Felhasználói fiókok hozzáadása vagy eltávolítása", "Szülői felügyelet beállítása bármely felhasználó számára", "Módosítsa a dátumot és az időt", "Beviteli módszerek módosítása", "Hagyja, hogy a Windows beállításokat javasoljon Önnek", "Kezdőlap módosítása", "Böngésző-bővítmények kezelése", "Böngészési előzmények és cookie-k törlése" },
-        { L"nb", "Endre tema", "Endre skrivebordsbakgrunn", "Endre fargene på vinduets glass", "Endre lydeffekter", "Bytt skjermsparer", "Slå systemikoner på eller av", "Gjenopprett standard ikonatferd", "Se nettverksstatus og oppgaver", "Koble til et nettverk", "Se nettverksdatamaskiner og enheter", "Legg til en trådløs enhet i nettverket", "Legg til en skriver", "Sett opp standardskrivere", "Endre skriverinnstillinger", "Se enheter og skrivere", "Velg hjemmegruppe og delingsalternativer", "Del skrivere", "Juster skjermoppløsningen", "Se gjennom datamaskinens status", "Sikkerhetskopier datamaskinen", "Finn og fiks problemer", "Sjekk brannmurstatus", "Avinstaller et program", "Slå Windows-funksjoner på eller av", "Endre kontobilde", "Legg til eller fjern brukerkontoer", "Sett opp foreldrekontroll for alle brukere", "Endre dato og klokkeslett", "Endre inndatametoder", "La Windows foreslå innstillinger for deg", "Endre startside", "Administrer nettlesertillegg", "Slett nettleserhistorikk og informasjonskapsler" },
-        { L"ro", "Schimbați tema", "Schimbați fundalul desktopului", "Schimbați culorile geamului", "Schimbați efectele sonore", "Schimbați economizorul de ecran", "Activați sau dezactivați pictogramele de sistem", "Restabiliți comportamentul implicit al pictogramelor", "Vizualizați starea rețelei și sarcinile", "Conectați-vă la o rețea", "Vizualizați computerele și dispozitivele din rețea", "Adăugați un dispozitiv fără fir în rețea", "Adăugați o imprimantă", "Configurați imprimante implicite", "Modificați setările imprimantei", "Vizualizați dispozitivele și imprimantele", "Alegeți grupul de acasă și opțiunile de partajare", "Partajați imprimante", "Reglați rezoluția ecranului", "Examinați starea computerului dvs", "Faceți o copie de rezervă a computerului", "Găsiți și rezolvați problemele", "Verificați starea firewallului", "Dezinstalează un program", "Activați sau dezactivați funcțiile Windows", "Schimbați imaginea contului", "Adăugați sau eliminați conturi de utilizator", "Configurați controale parentale pentru orice utilizator", "Schimbați data și ora", "Schimbați metodele de introducere", "Lăsați Windows să vă sugereze setări", "Modificare pagina de pornire", "Gestionați suplimentele browserului", "Ștergeți istoricul de navigare și modulele cookie" },
-        { L"sv", "Ändra temat", "Ändra skrivbordsbakgrund", "Ändra fönsterglasfärger", "Ändra ljudeffekter", "Byt skärmsläckare", "Slå på eller av systemikoner", "Återställ standardikonbeteenden", "Visa nätverksstatus och uppgifter", "Anslut till ett nätverk", "Visa nätverksdatorer och enheter", "Lägg till en trådlös enhet i nätverket", "Lägg till en skrivare", "Konfigurera standardskrivare", "Ändra skrivarinställningar", "Visa enheter och skrivare", "Välj hemgrupp och delningsalternativ", "Dela skrivare", "Justera skärmupplösningen", "Granska din dators status", "Säkerhetskopiera din dator", "Hitta och åtgärda problem", "Kontrollera brandväggens status", "Avinstallera ett program", "Slå på eller av Windows-funktioner", "Byt kontobild", "Lägg till eller ta bort användarkonton", "Ställ in föräldrakontroll för alla användare", "Ändra datum och tid", "Ändra inmatningsmetoder", "Låt Windows föreslå inställningar åt dig", "Ändra startsida", "Hantera webbläsartillägg", "Ta bort webbhistorik och cookies" },
-        { L"vi", "Thay đổi chủ đề", "Thay đổi hình nền máy tính", "Thay đổi màu kính cửa sổ", "Thay đổi hiệu ứng âm thanh", "Thay đổi trình bảo vệ màn hình", "Bật hoặc tắt biểu tượng hệ thống", "Khôi phục hành vi biểu tượng mặc định", "Xem trạng thái và nhiệm vụ mạng", "Kết nối với mạng", "Xem máy tính và thiết bị mạng", "Thêm thiết bị không dây vào mạng", "Thêm máy in", "Thiết lập máy in mặc định", "Thay đổi cài đặt máy in", "Xem thiết bị và máy in", "Chọn nhóm nhà và tùy chọn chia sẻ", "Chia sẻ máy in", "Điều chỉnh độ phân giải màn hình", "Xem lại trạng thái máy tính của bạn", "Sao lưu máy tính của bạn", "Tìm và khắc phục sự cố", "Kiểm tra trạng thái tường lửa", "Gỡ cài đặt một chương trình", "Bật hoặc tắt các tính năng của Windows", "Thay đổi ảnh tài khoản", "Thêm hoặc xóa tài khoản người dùng", "Thiết lập quyền kiểm soát của phụ huynh cho bất kỳ người dùng nào", "Thay đổi ngày và giờ", "Thay đổi phương thức nhập", "Hãy để Windows đề xuất cài đặt cho bạn", "Thay đổi trang chủ", "Quản lý tiện ích bổ sung của trình duyệt", "Xóa lịch sử duyệt web và cookie" },
-        { L"id", "Ubah temanya", "Ubah latar belakang desktop", "Mengubah warna kaca jendela", "Ubah efek suara", "Ubah screen saver", "Mengaktifkan atau menonaktifkan ikon sistem", "Pulihkan perilaku ikon default", "Lihat status dan tugas jaringan", "Hubungkan ke jaringan", "Lihat komputer dan perangkat jaringan", "Tambahkan perangkat nirkabel ke jaringan", "Tambahkan pencetak", "Siapkan printer default", "Ubah pengaturan pencetak", "Lihat perangkat dan printer", "Pilih homegroup dan opsi berbagi", "Bagikan printer", "Sesuaikan resolusi layar", "Tinjau status komputer Anda", "Cadangkan komputer Anda", "Temukan dan perbaiki masalah", "Periksa status firewall", "Copot pemasangan suatu program", "Mengaktifkan atau menonaktifkan fitur Windows", "Ubah gambar akun", "Menambah atau menghapus akun pengguna", "Siapkan kontrol orang tua untuk pengguna mana pun", "Ubah tanggal dan waktu", "Ubah metode masukan", "Biarkan Windows menyarankan pengaturan untuk Anda", "Ubah beranda", "Kelola pengaya browser", "Hapus riwayat penjelajahan dan cookie" },
-        { L"th", "เปลี่ยนธีม", "เปลี่ยนพื้นหลังเดสก์ท็อป", "เปลี่ยนสีกระจกหน้าต่าง", "เปลี่ยนเอฟเฟกต์เสียง", "เปลี่ยนภาพพักหน้าจอ", "เปิดหรือปิดไอคอนระบบ", "คืนค่าลักษณะการทำงานของไอคอนเริ่มต้น", "ดูสถานะเครือข่ายและงาน", "เชื่อมต่อกับเครือข่าย", "ดูคอมพิวเตอร์และอุปกรณ์เครือข่าย", "เพิ่มอุปกรณ์ไร้สายเข้ากับเครือข่าย", "เพิ่มเครื่องพิมพ์", "ตั้งค่าเครื่องพิมพ์เริ่มต้น", "เปลี่ยนการตั้งค่าเครื่องพิมพ์", "ดูอุปกรณ์และเครื่องพิมพ์", "เลือกโฮมกรุ๊ปและตัวเลือกการแชร์", "แบ่งปันเครื่องพิมพ์", "ปรับความละเอียดหน้าจอ", "ตรวจสอบสถานะของคอมพิวเตอร์ของคุณ", "สำรองข้อมูลคอมพิวเตอร์ของคุณ", "ค้นหาและแก้ไขปัญหา", "ตรวจสอบสถานะไฟร์วอลล์", "ถอนการติดตั้งโปรแกรม", "เปิดหรือปิดคุณสมบัติ Windows", "เปลี่ยนรูปบัญชี", "เพิ่มหรือลบบัญชีผู้ใช้", "ตั้งค่าการควบคุมโดยผู้ปกครองสำหรับผู้ใช้ทุกคน", "เปลี่ยนวันที่และเวลา", "เปลี่ยนวิธีการป้อนข้อมูล", "ให้ Windows แนะนำการตั้งค่าให้กับคุณ", "เปลี่ยนโฮมเพจ", "จัดการส่วนเสริมของเบราว์เซอร์", "ลบประวัติการเรียกดูและคุกกี้" },
-        { L"hi", "थीम बदलें", "डेस्कटॉप पृष्ठभूमि बदलें", "खिड़की के शीशे का रंग बदलें", "ध्वनि प्रभाव बदलें", "स्क्रीन सेवर बदलें", "सिस्टम आइकन चालू या बंद करें", "डिफ़ॉल्ट आइकन व्यवहार पुनर्स्थापित करें", "नेटवर्क स्थिति और कार्य देखें", "किसी नेटवर्क से कनेक्ट करें", "नेटवर्क कंप्यूटर और डिवाइस देखें", "नेटवर्क में एक वायरलेस डिवाइस जोड़ें", "एक प्रिंटर जोड़ें", "डिफ़ॉल्ट प्रिंटर सेट करें", "प्रिंटर सेटिंग बदलें", "डिवाइस और प्रिंटर देखें", "होमग्रुप और साझाकरण विकल्प चुनें", "प्रिंटर साझा करें", "स्क्रीन रिज़ॉल्यूशन समायोजित करें", "अपने कंप्यूटर की स्थिति की समीक्षा करें", "अपने कंप्यूटर का बैकअप लें", "समस्याएं ढूंढें और ठीक करें", "फ़ायरवॉल स्थिति जाँचें", "किसी प्रोग्राम को अनइंस्टॉल करें", "विंडोज़ सुविधाओं को चालू या बंद करें", "खाता चित्र बदलें", "उपयोगकर्ता खाते जोड़ें या हटाएँ", "किसी भी उपयोगकर्ता के लिए अभिभावकीय नियंत्रण सेट करें", "दिनांक और समय बदलें", "इनपुट पद्धतियाँ बदलें", "विंडोज़ को आपके लिए सेटिंग्स सुझाने दें", "मुख पृष्ठ बदलें", "ब्राउज़र ऐड-ऑन प्रबंधित करें", "ब्राउज़िंग इतिहास और कुकीज़ हटाएं" },
+        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings" },
+        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco" },
+        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil" },
+        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile" },
+        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen" },
+        { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies", "Gerenciar BitLocker", "Calibrar a tela para entrada por caneta ou toque", "Configurações de Caneta e Toque" },
+        { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies", "Gerir o BitLocker", "Calibrar o ecrã para entrada de caneta ou toque", "Definições de Caneta e Toque" },
+        { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen", "BitLocker beheren", "Scherm kalibreren voor pen- of aanraakinvoer", "Instellingen voor pen en aanraking" },
+        { L"pl", "Zmień motyw", "Zmień tło pulpitu", "Zmień kolory szyb okiennych", "Zmień efekty dźwiękowe", "Zmień wygaszacz ekranu", "Włącz lub wyłącz ikony systemowe", "Przywróć domyślne zachowanie ikon", "Wyświetl stan sieci i zadania", "Połącz się z siecią", "Wyświetl komputery i urządzenia sieciowe", "Dodaj urządzenie bezprzewodowe do sieci", "Dodaj drukarkę", "Skonfiguruj drukarki domyślne", "Zmień ustawienia drukarki", "Wyświetl urządzenia i drukarki", "Wybierz grupę domową i opcje udostępniania", "Udostępnij drukarki", "Dostosuj rozdzielczość ekranu", "Sprawdź stan swojego komputera", "Utwórz kopię zapasową komputera", "Znajdź i rozwiąż problemy", "Sprawdź stan zapory", "Odinstaluj program", "Włącz lub wyłącz funkcje systemu Windows", "Zmień zdjęcie konta", "Dodaj lub usuń konta użytkowników", "Skonfiguruj kontrolę rodzicielską dla dowolnego użytkownika", "Zmień datę i godzinę", "Zmień metody wprowadzania", "Pozwól systemowi Windows zasugerować ustawienia", "Zmień stronę główną", "Zarządzaj dodatkami przeglądarki", "Usuń historię przeglądania i pliki cookie", "Zarządzaj funkcją BitLocker", "Skalibruj ekran pod kątem wprowadzania piórem lub dotykiem", "Ustawienia pióra i dotyku" },
+        { L"ru", "Изменить тему", "Изменить фон рабочего стола", "Изменить цвет оконного стекла", "Изменить звуковые эффекты", "Изменить заставку", "Включить или выключить системные значки", "Восстановить поведение значков по умолчанию", "Просмотреть состояние сети и задачи", "Подключиться к сети", "Просмотреть сетевые компьютеры и устройства", "Добавить беспроводное устройство в сеть", "Добавить принтер", "Настроить принтеры по умолчанию", "Изменить настройки принтера", "Просмотреть устройства и принтеры", "Выбрать домашнюю группу и параметры общего доступа", "Предоставить общий доступ к принтерам", "Настроить разрешение экрана", "Проверить состояние компьютера", "Создать резервную копию компьютера", "Найти и устранить проблемы", "Проверить состояние брандмауэра", "Удалить программу", "Включить или выключить компоненты Windows", "Изменить изображение аккаунта", "Добавить или удалить учетные записи пользователей", "Настроить родительский контроль для любого пользователя", "Изменить дату и время", "Изменить методы ввода", "Разрешить Windows предлагать параметры", "Изменить домашнюю страницу", "Управление надстройками браузера", "Удаление журнала браузера и файлов cookie", "Управление BitLocker", "Калибровка экрана для пера или сенсорного ввода", "Параметры пера и сенсорного ввода" },
+        { L"uk", "Змінити тему", "Змінити фон робочого столу", "Змінити колір віконного скла", "Змінити звукові ефекти", "Змінити заставку", "Увімкнути або вимкнути системні значки", "Відновити поведінку піктограм за замовчуванням", "Переглянути стан мережі та завдання", "Підключитися до мережі", "Переглянути мережеві комп'ютери й пристрої", "Додати бездротовий пристрій до мережі", "Додати принтер", "Налаштувати принтери за замовчуванням", "Змінити налаштування принтера", "Переглянути пристрої та принтери", "Вибрати домашню групу та параметри спільного доступу", "Спільно використовувати принтери", "Налаштувати роздільну здатність екрана", "Перевірити стан комп'ютера", "Створити резервну копію комп'ютера", "Знайти й усунути проблеми", "Перевірити стан брандмауера", "Видалити програму", "Увімкнути або вимкнути компоненти Windows", "Змінити зображення облікового запису", "Додати або видалити облікові записи користувачів", "Налаштувати батьківський контроль для будь-якого користувача", "Змінити дату й час", "Змінити методи введення", "Дозволити Windows пропонувати параметри", "Змінити домашню сторінку", "Керування надбудовами браузера", "Видалити журнал браузера та файли cookie", "Керування BitLocker", "Калібрування екрана для пера або сенсорного введення", "Параметри пера та сенсорного введення" },
+        { L"tr", "Temayı değiştir", "Masaüstü arka planını değiştir", "Pencere camı renklerini değiştirme", "Ses efektlerini değiştir", "Ekran koruyucuyu değiştir", "Sistem simgelerini açma veya kapatma", "Varsayılan simge davranışlarını geri yükle", "Ağ durumunu ve görevlerini görüntüleyin", "Bir ağa bağlanma", "Ağ bilgisayarlarını ve cihazlarını görüntüleyin", "Ağa kablosuz cihaz ekleme", "Yazıcı ekle", "Varsayılan yazıcıları ayarlama", "Yazıcı ayarlarını değiştirin", "Cihazları ve yazıcıları görüntüleyin", "Ev grubu ve paylaşım seçeneklerini seçin", "Yazıcıları paylaş", "Ekran çözünürlüğünü ayarlayın", "Bilgisayarınızın durumunu inceleyin", "Bilgisayarınızı yedekleyin", "Sorunları bulun ve düzeltin", "Güvenlik duvarı durumunu kontrol edin", "Bir programı kaldırma", "Windows özelliklerini açma veya kapatma", "Hesap resmini değiştir", "Kullanıcı hesaplarını ekleme veya kaldırma", "Herhangi bir kullanıcı için ebeveyn denetimlerini ayarlayın", "Tarihi ve saati değiştirme", "Giriş yöntemlerini değiştirin", "Windows'un sizin için ayarlar önermesine izin verin", "Giriş sayfasını değiştir", "Tarayıcı eklentilerini yönet", "Göz atma geçmişini ve tanımlama bilgilerini sil", "BitLocker'ı Yönet", "Ekranı kalem veya dokunmatik giriş için kalibre et", "Kalem ve dokunmatik ayarları" },
+        { L"ar", "تغيير الموضوع", "تغيير خلفية سطح المكتب", "تغيير ألوان زجاج النوافذ", "تغيير المؤثرات الصوتية", "تغيير شاشة التوقف", "تشغيل أيقونات النظام أو إيقاف تشغيلها", "استعادة سلوكيات الأيقونة الافتراضية", "عرض حالة الشبكة والمهام", "الاتصال بالشبكة", "عرض أجهزة الكمبيوتر والأجهزة المتصلة بالشبكة", "إضافة جهاز لاسلكي إلى الشبكة", "إضافة طابعة", "إعداد الطابعات الافتراضية", "تغيير إعدادات الطابعة", "عرض الأجهزة والطابعات", "اختيار مجموعة المشاركة المنزلية وخيارات المشاركة", "مشاركة الطابعات", "ضبط دقة الشاشة", "مراجعة حالة الكمبيوتر", "إنشاء نسخة احتياطية للكمبيوتر", "البحث عن المشاكل وإصلاحها", "التحقق من حالة جدار الحماية", "إلغاء تثبيت برنامج", "تشغيل ميزات Windows أو إيقاف تشغيلها", "تغيير صورة الحساب", "إضافة أو إزالة حسابات المستخدمين", "إعداد الضوابط الأبوية لأي مستخدم", "تغيير التاريخ والوقت", "تغيير طرق الإدخال", "السماح لـ Windows باقتراح الإعدادات", "تغيير الصفحة الرئيسية", "إدارة الوظائف الإضافية للمتصفح", "حذف محفوظات الاستعراض وملفات تعريف الارتباط", "إدارة BitLocker", "معايرة الشاشة لإدخال القلم أو اللمس", "إعدادات القلم واللمس" },
+        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "הפעל או כבה את סמלי המערכת", "שחזר את התנהגויות ברירת המחדל של סמלים", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "בחר קבוצה ביתית ואפשרויות שיתוף", "שתף מדפסות", "התאם את רזולוציית המסך", "בדוק את מצב המחשב שלך", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "הפעל או כבה את תכונות Windows", "שנה את תמונת החשבון", "הוסף או הסר חשבונות משתמש", "הגדר בקרת הורים עבור כל משתמש", "שנה את התאריך והשעה", "שנה שיטות קלט", "תן ל-Windows להציע עבורך הגדרות", "שנה דף בית", "נהל תוספות דפדפן", "מחק היסטוריית גלישה וקובצי Cookie", "נהל את BitLocker", "כייל את המסך עבור קלט עט או מגע", "הגדרות עט ומגע" },
+        { L"ja", "テーマを変更する", "デスクトップの背景を変更する", "窓ガラスの色を変更する", "効果音を変更する", "スクリーンセーバーを変更する", "システムアイコンをオンまたはオフにする", "デフォルトのアイコン動作を復元する", "ネットワークのステータスとタスクを表示する", "ネットワークに接続する", "ネットワークのコンピュータとデバイスを表示する", "ワイヤレスデバイスをネットワークに追加する", "プリンターを追加する", "デフォルトのプリンターを設定する", "プリンターの設定を変更する", "デバイスとプリンターを表示する", "ホームグループと共有オプションを選択する", "プリンターを共有する", "画面解像度を調整する", "コンピュータのステータスを確認する", "コンピュータをバックアップする", "問題を見つけて解決する", "ファイアウォールのステータスを確認する", "プログラムをアンインストールする", "Windows の機能をオンまたはオフにする", "アカウントの写真を変更する", "ユーザーアカウントの追加または削除", "任意のユーザーに対してペアレントコントロールを設定する", "日付と時刻を変更する", "入力方法を変更する", "Windows が設定を提案してくれるようにする", "ホーム ページの変更", "ブラウザーのアドオンの管理", "閲覧の履歴と Cookie の削除", "BitLocker の管理", "ペンまたはタッチ入力用に画面を調整する", "ペンとタッチの設定" },
+        { L"ko", "테마 변경", "데스크탑 배경 변경", "창유리 색상 변경", "음향 효과 변경", "화면 보호기 변경", "시스템 아이콘 켜기 또는 끄기", "기본 아이콘 동작 복원", "네트워크 상태 및 작업 보기", "네트워크에 연결", "네트워크 컴퓨터 및 장치 보기", "네트워크에 무선 장치 추가", "프린터 추가", "기본 프린터 설정", "프린터 설정 변경", "장치 및 프린터 보기", "홈 그룹 및 공유 옵션 선택", "프린터 공유", "화면 해상도 조정", "컴퓨터 상태 검토", "컴퓨터 백업", "문제 찾기 및 수정", "방화벽 상태 확인", "프로그램 제거", "Windows 기능 켜기 또는 끄기", "계정 사진 변경", "사용자 계정 추가 또는 제거", "모든 사용자에 대해 자녀 보호 기능 설정", "날짜 및 시간 변경", "입력 방법 변경", "Windows에서 설정을 제안하도록 허용", "홈 페이지 변경", "브라우저 추가 기능 관리", "검색 기록 및 쿠키 삭제", "BitLocker 관리", "펜 또는 터치 입력용 화면 보정", "펜 및 터치 설정" },
+        { L"zh-CN", "更改主题", "更改桌面背景", "改变窗玻璃颜色", "改变音效", "更改屏幕保护程序", "打开或关闭系统图标", "恢复默认图标行为", "查看网络状态和任务", "连接到网络", "查看网络计算机和设备", "将无线设备添加到网络", "添加打印机", "设置默认打印机", "更改打印机设置", "查看设备和打印机", "选择家庭组和共享选项", "共享打印机", "调整屏幕分辨率", "查看计算机的状态", "备份您的计算机", "发现并解决问题", "检查防火墙状态", "卸载程序", "打开或关闭 Windows 功能", "更改账户图片", "添加或删除用户帐户", "为任何用户设置家长控制", "更改日期和时间", "更改输入法", "让 Windows 为您建议设置", "更改主页", "管理浏览器加载项", "删除浏览历史记录和 Cookie", "管理 BitLocker", "校准笔和触摸输入的屏幕", "笔和触摸设置" },
+        { L"zh-TW", "更改主題", "更改桌面背景", "改變窗玻璃顏色", "改變音效", "更改螢幕保護程式", "開啟或關閉系統圖標", "恢復預設圖示行為", "查看網路狀態和任務", "連接網路", "查看網路電腦和設備", "將無線設備新增至網絡", "新增印表機", "設定預設印表機", "變更印表機設定", "查看設備和印表機", "選擇家庭群組和共享選項", "共用印表機", "調整螢幕解析度", "查看計算機的狀態", "備份您的計算機", "發現並解決問題", "檢查防火牆狀態", "解除安裝程式", "開啟或關閉 Windows 功能", "更改帳戶圖片", "新增或刪除使用者帳戶", "為任何使用者設定家長監護", "更改日期和時間", "更改輸入法", "讓 Windows 為您建議設定", "變更首頁", "管理瀏覽器附加元件", "刪除瀏覽歷程記錄和 Cookie", "管理 BitLocker", "校正手寫筆或觸控輸入的畫面", "手寫筆與觸控設定" },
+        { L"cs", "Změnit téma", "Změnit pozadí plochy", "Změnit barvu okenního skla", "Změnit zvukové efekty", "Změnit spořič obrazovky", "Zapnout nebo vypnout systémové ikony", "Obnovit výchozí chování ikon", "Zobrazit stav sítě a úlohy", "Připojit se k síti", "Zobrazit síťové počítače a zařízení", "Přidat bezdrátové zařízení do sítě", "Přidat tiskárnu", "Nastavit výchozí tiskárny", "Změnit nastavení tiskárny", "Zobrazit zařízení a tiskárny", "Vybrat domácí skupinu a možnosti sdílení", "Sdílet tiskárny", "Upravit rozlišení obrazovky", "Zkontrolovat stav počítače", "Zálohovat počítač", "Najít a opravit problémy", "Zkontrolovat stav brány firewall", "Odinstalovat program", "Zapnout nebo vypnout funkce systému Windows", "Změnit obrázek účtu", "Přidat nebo odebrat uživatelské účty", "Nastavit rodičovskou kontrolu pro libovolného uživatele", "Změnit datum a čas", "Změnit metody zadávání", "Nechat Windows navrhnout nastavení", "Změnit domovskou stránku", "Spravovat doplňky prohlížeče", "Odstranit historii procházení a soubory cookie", "Spravovat BitLocker", "Kalibrovat obrazovku pro pero nebo dotykové zadávání", "Nastavení pera a dotyku" },
+        { L"da", "Skift tema", "Skift skrivebordsbaggrund", "Skift vinduesglasfarver", "Skift lydeffekter", "Skift pauseskærm", "Slå systemikoner til eller fra", "Gendan standard ikonadfærd", "Se netværksstatus og opgaver", "Opret forbindelse til et netværk", "Se netværkscomputere og -enheder", "Tilføj en trådløs enhed til netværket", "Tilføj en printer", "Konfigurer standardprintere", "Skift printerindstillinger", "Se enheder og printere", "Vælg hjemmegruppe og delingsmuligheder", "Del printere", "Juster skærmopløsningen", "Gennemgå din computers status", "Sikkerhedskopier din computer", "Find og ret problemer", "Tjek firewall-status", "Afinstaller et program", "Slå Windows-funktioner til eller fra", "Skift kontobillede", "Tilføj eller fjern brugerkonti", "Konfigurer forældrekontrol for enhver bruger", "Skift dato og klokkeslæt", "Skift indtastningsmetoder", "Lad Windows foreslå indstillinger for dig", "Skift startside", "Administrer browser-tilføjelser", "Slet browserhistorik og cookies", "Administrer BitLocker", "Kalibrér skærmen til pen- eller trykindtastning", "Indstillinger for pen og tryk" },
+        { L"fi", "Vaihda teemaa", "Vaihda työpöydän tausta", "Vaihda ikkunalasien väriä", "Muuta äänitehosteita", "Vaihda näytönsäästäjä", "Ota järjestelmäkuvakkeet käyttöön tai poista ne käytöstä", "Palauta oletuskuvakkeiden toimintatavat", "Tarkastele verkon tilaa ja tehtäviä", "Yhdistä verkkoon", "Tarkastele verkon tietokoneita ja laitteita", "Lisää langaton laite verkkoon", "Lisää tulostin", "Aseta oletustulostimet", "Muuta tulostimen asetuksia", "Tarkastele laitteita ja tulostimia", "Valitse kotiryhmä- ja jakamisasetukset", "Jaa tulostimia", "Säädä näytön resoluutiota", "Tarkista tietokoneesi tila", "Varmuuskopioi tietokoneesi", "Etsi ja korjaa ongelmat", "Tarkista palomuurin tila", "Poista ohjelman asennus", "Ota Windowsin ominaisuudet käyttöön tai poista ne käytöstä", "Vaihda tilikuvaa", "Lisää tai poista käyttäjätilejä", "Määritä lapsilukko kaikille käyttäjille", "Muuta päivämäärää ja kellonaikaa", "Muuta syöttötapoja", "Anna Windowsin ehdottaa asetuksia puolestasi", "Vaihda aloitussivua", "Hallinnoi selaimen apuohjelmia", "Poista selaushistoria ja evästeet", "Hallitse BitLockeria", "Kalibroi näyttö kynä- tai kosketussyöttöä varten", "Kynä- ja kosketusasetukset" },
+        { L"el", "Αλλαγή θέματος", "Αλλαγή φόντου επιφάνειας εργασίας", "Αλλαγή χρωμάτων τζαμιών παραθύρων", "Αλλαγή ηχητικών εφέ", "Αλλαγή προφύλαξης οθόνης", "Ενεργοποίηση ή απενεργοποίηση εικονιδίων συστήματος", "Επαναφορά προεπιλεγμένων συμπεριφορών εικονιδίων", "Προβολή κατάστασης και εργασιών δικτύου", "Σύνδεση σε δίκτυο", "Προβολή υπολογιστών και συσκευών δικτύου", "Προσθήκη ασύρματης συσκευής στο δίκτυο", "Προσθήκη εκτυπωτή", "Ρύθμιση προεπιλεγμένων εκτυπωτών", "Αλλαγή ρυθμίσεων εκτυπωτή", "Προβολή συσκευών και εκτυπωτών", "Επιλογή οικιακής ομάδας και επιλογών κοινής χρήσης", "Κοινή χρήση εκτυπωτών", "Προσαρμογή ανάλυσης οθόνης", "Έλεγχος κατάστασης υπολογιστή", "Δημιουργία αντιγράφου ασφαλείας υπολογιστή", "Εύρεση και επιδιόρθωση προβλημάτων", "Έλεγχος κατάστασης τείχους προστασίας", "Απεγκατάσταση προγράμματος", "Ενεργοποίηση ή απενεργοποίηση δυνατοτήτων των Windows", "Αλλαγή εικόνας λογαριασμού", "Προσθήκη ή κατάργηση λογαριασμών χρηστών", "Ρύθμιση γονικού ελέγχου για οποιονδήποτε χρήστη", "Αλλαγή ημερομηνίας και ώρας", "Αλλαγή μεθόδων εισαγωγής", "Να επιτρέπεται στα Windows να προτείνουν ρυθμίσεις", "Αλλαγή αρχικής σελίδας", "Διαχείριση προσθηκών προγράμματος περιήγησης", "Διαγραφή ιστορικού περιήγησης και cookies", "Διαχείριση BitLocker", "Βαθμονόμηση της οθόνης για είσοδο με πένα ή αφή", "Ρυθμίσεις πένας και αφής" },
+        { L"hu", "Változtasd meg a témát", "Az asztal hátterének módosítása", "Az ablaküveg színének megváltoztatása", "Hanghatások módosítása", "Képernyővédő módosítása", "A rendszerikonok be- és kikapcsolása", "Az alapértelmezett ikonviselkedés visszaállítása", "Megtekintheti a hálózat állapotát és a feladatokat", "Csatlakozzon egy hálózathoz", "Tekintse meg a hálózati számítógépeket és eszközöket", "Adjon hozzá egy vezeték nélküli eszközt a hálózathoz", "Nyomtató hozzáadása", "Állítsa be az alapértelmezett nyomtatókat", "A nyomtató beállításainak módosítása", "Eszközök és nyomtatók megtekintése", "Válassza ki az otthoni csoportot és a megosztási beállításokat", "Nyomtatók megosztása", "Állítsa be a képernyő felbontását", "Tekintse át számítógépe állapotát", "Készítsen biztonsági másolatot a számítógépről", "Keresse meg és javítsa ki a problémákat", "Ellenőrizze a tűzfal állapotát", "Távolítson el egy programot", "Kapcsolja be vagy ki a Windows szolgáltatásait", "Fiókkép módosítása", "Felhasználói fiókok hozzáadása vagy eltávolítása", "Szülői felügyelet beállítása bármely felhasználó számára", "Módosítsa a dátumot és az időt", "Beviteli módszerek módosítása", "Hagyja, hogy a Windows beállításokat javasoljon Önnek", "Kezdőlap módosítása", "Böngésző-bővítmények kezelése", "Böngészési előzmények és cookie-k törlése", "BitLocker kezelése", "A képernyő kalibrálása toll- vagy érintéses bevitelhez", "Toll- és érintésbeállítások" },
+        { L"nb", "Endre tema", "Endre skrivebordsbakgrunn", "Endre fargene på vinduets glass", "Endre lydeffekter", "Bytt skjermsparer", "Slå systemikoner på eller av", "Gjenopprett standard ikonatferd", "Se nettverksstatus og oppgaver", "Koble til et nettverk", "Se nettverksdatamaskiner og enheter", "Legg til en trådløs enhet i nettverket", "Legg til en skriver", "Sett opp standardskrivere", "Endre skriverinnstillinger", "Se enheter og skrivere", "Velg hjemmegruppe og delingsalternativer", "Del skrivere", "Juster skjermoppløsningen", "Se gjennom datamaskinens status", "Sikkerhetskopier datamaskinen", "Finn og fiks problemer", "Sjekk brannmurstatus", "Avinstaller et program", "Slå Windows-funksjoner på eller av", "Endre kontobilde", "Legg til eller fjern brukerkontoer", "Sett opp foreldrekontroll for alle brukere", "Endre dato og klokkeslett", "Endre inndatametoder", "La Windows foreslå innstillinger for deg", "Endre startside", "Administrer nettlesertillegg", "Slett nettleserhistorikk og informasjonskapsler", "Behandle BitLocker", "Kalibrer skjermen for penn- eller berøringsinndata", "Innstillinger for penn og berøring" },
+        { L"ro", "Schimbați tema", "Schimbați fundalul desktopului", "Schimbați culorile geamului", "Schimbați efectele sonore", "Schimbați economizorul de ecran", "Activați sau dezactivați pictogramele de sistem", "Restabiliți comportamentul implicit al pictogramelor", "Vizualizați starea rețelei și sarcinile", "Conectați-vă la o rețea", "Vizualizați computerele și dispozitivele din rețea", "Adăugați un dispozitiv fără fir în rețea", "Adăugați o imprimantă", "Configurați imprimante implicite", "Modificați setările imprimantei", "Vizualizați dispozitivele și imprimantele", "Alegeți grupul de acasă și opțiunile de partajare", "Partajați imprimante", "Reglați rezoluția ecranului", "Examinați starea computerului dvs", "Faceți o copie de rezervă a computerului", "Găsiți și rezolvați problemele", "Verificați starea firewallului", "Dezinstalează un program", "Activați sau dezactivați funcțiile Windows", "Schimbați imaginea contului", "Adăugați sau eliminați conturi de utilizator", "Configurați controale parentale pentru orice utilizator", "Schimbați data și ora", "Schimbați metodele de introducere", "Lăsați Windows să vă sugereze setări", "Modificare pagina de pornire", "Gestionați suplimentele browserului", "Ștergeți istoricul de navigare și modulele cookie", "Gestionați BitLocker", "Calibrați ecranul pentru introducerea cu stiloul sau atingerea", "Setări pentru stilou și atingere" },
+        { L"sv", "Ändra temat", "Ändra skrivbordsbakgrund", "Ändra fönsterglasfärger", "Ändra ljudeffekter", "Byt skärmsläckare", "Slå på eller av systemikoner", "Återställ standardikonbeteenden", "Visa nätverksstatus och uppgifter", "Anslut till ett nätverk", "Visa nätverksdatorer och enheter", "Lägg till en trådlös enhet i nätverket", "Lägg till en skrivare", "Konfigurera standardskrivare", "Ändra skrivarinställningar", "Visa enheter och skrivare", "Välj hemgrupp och delningsalternativ", "Dela skrivare", "Justera skärmupplösningen", "Granska din dators status", "Säkerhetskopiera din dator", "Hitta och åtgärda problem", "Kontrollera brandväggens status", "Avinstallera ett program", "Slå på eller av Windows-funktioner", "Byt kontobild", "Lägg till eller ta bort användarkonton", "Ställ in föräldrakontroll för alla användare", "Ändra datum och tid", "Ändra inmatningsmetoder", "Låt Windows föreslå inställningar åt dig", "Ändra startsida", "Hantera webbläsartillägg", "Ta bort webbhistorik och cookies", "Hantera BitLocker", "Kalibrera skärmen för penn- eller pekindata", "Inställningar för penna och pekning" },
+        { L"vi", "Thay đổi chủ đề", "Thay đổi hình nền máy tính", "Thay đổi màu kính cửa sổ", "Thay đổi hiệu ứng âm thanh", "Thay đổi trình bảo vệ màn hình", "Bật hoặc tắt biểu tượng hệ thống", "Khôi phục hành vi biểu tượng mặc định", "Xem trạng thái và nhiệm vụ mạng", "Kết nối với mạng", "Xem máy tính và thiết bị mạng", "Thêm thiết bị không dây vào mạng", "Thêm máy in", "Thiết lập máy in mặc định", "Thay đổi cài đặt máy in", "Xem thiết bị và máy in", "Chọn nhóm nhà và tùy chọn chia sẻ", "Chia sẻ máy in", "Điều chỉnh độ phân giải màn hình", "Xem lại trạng thái máy tính của bạn", "Sao lưu máy tính của bạn", "Tìm và khắc phục sự cố", "Kiểm tra trạng thái tường lửa", "Gỡ cài đặt một chương trình", "Bật hoặc tắt các tính năng của Windows", "Thay đổi ảnh tài khoản", "Thêm hoặc xóa tài khoản người dùng", "Thiết lập quyền kiểm soát của phụ huynh cho bất kỳ người dùng nào", "Thay đổi ngày và giờ", "Thay đổi phương thức nhập", "Hãy để Windows đề xuất cài đặt cho bạn", "Thay đổi trang chủ", "Quản lý tiện ích bổ sung của trình duyệt", "Xóa lịch sử duyệt web và cookie", "Quản lý BitLocker", "Hiệu chỉnh màn hình cho nhập bằng bút hoặc cảm ứng", "Cài đặt bút và cảm ứng" },
+        { L"id", "Ubah temanya", "Ubah latar belakang desktop", "Mengubah warna kaca jendela", "Ubah efek suara", "Ubah screen saver", "Mengaktifkan atau menonaktifkan ikon sistem", "Pulihkan perilaku ikon default", "Lihat status dan tugas jaringan", "Hubungkan ke jaringan", "Lihat komputer dan perangkat jaringan", "Tambahkan perangkat nirkabel ke jaringan", "Tambahkan pencetak", "Siapkan printer default", "Ubah pengaturan pencetak", "Lihat perangkat dan printer", "Pilih homegroup dan opsi berbagi", "Bagikan printer", "Sesuaikan resolusi layar", "Tinjau status komputer Anda", "Cadangkan komputer Anda", "Temukan dan perbaiki masalah", "Periksa status firewall", "Copot pemasangan suatu program", "Mengaktifkan atau menonaktifkan fitur Windows", "Ubah gambar akun", "Menambah atau menghapus akun pengguna", "Siapkan kontrol orang tua untuk pengguna mana pun", "Ubah tanggal dan waktu", "Ubah metode masukan", "Biarkan Windows menyarankan pengaturan untuk Anda", "Ubah beranda", "Kelola pengaya browser", "Hapus riwayat penjelajahan dan cookie", "Kelola BitLocker", "Kalibrasi layar untuk input pena atau sentuhan", "Pengaturan pena dan sentuhan" },
+        { L"th", "เปลี่ยนธีม", "เปลี่ยนพื้นหลังเดสก์ท็อป", "เปลี่ยนสีกระจกหน้าต่าง", "เปลี่ยนเอฟเฟกต์เสียง", "เปลี่ยนภาพพักหน้าจอ", "เปิดหรือปิดไอคอนระบบ", "คืนค่าลักษณะการทำงานของไอคอนเริ่มต้น", "ดูสถานะเครือข่ายและงาน", "เชื่อมต่อกับเครือข่าย", "ดูคอมพิวเตอร์และอุปกรณ์เครือข่าย", "เพิ่มอุปกรณ์ไร้สายเข้ากับเครือข่าย", "เพิ่มเครื่องพิมพ์", "ตั้งค่าเครื่องพิมพ์เริ่มต้น", "เปลี่ยนการตั้งค่าเครื่องพิมพ์", "ดูอุปกรณ์และเครื่องพิมพ์", "เลือกโฮมกรุ๊ปและตัวเลือกการแชร์", "แบ่งปันเครื่องพิมพ์", "ปรับความละเอียดหน้าจอ", "ตรวจสอบสถานะของคอมพิวเตอร์ของคุณ", "สำรองข้อมูลคอมพิวเตอร์ของคุณ", "ค้นหาและแก้ไขปัญหา", "ตรวจสอบสถานะไฟร์วอลล์", "ถอนการติดตั้งโปรแกรม", "เปิดหรือปิดคุณสมบัติ Windows", "เปลี่ยนรูปบัญชี", "เพิ่มหรือลบบัญชีผู้ใช้", "ตั้งค่าการควบคุมโดยผู้ปกครองสำหรับผู้ใช้ทุกคน", "เปลี่ยนวันที่และเวลา", "เปลี่ยนวิธีการป้อนข้อมูล", "ให้ Windows แนะนำการตั้งค่าให้กับคุณ", "เปลี่ยนโฮมเพจ", "จัดการส่วนเสริมของเบราว์เซอร์", "ลบประวัติการเรียกดูและคุกกี้", "จัดการ BitLocker", "ปรับเทียบหน้าจอสำหรับการป้อนด้วยปากกาหรือการสัมผัส", "การตั้งค่าปากกาและการสัมผัส" },
+        { L"hi", "थीम बदलें", "डेस्कटॉप पृष्ठभूमि बदलें", "खिड़की के शीशे का रंग बदलें", "ध्वनि प्रभाव बदलें", "स्क्रीन सेवर बदलें", "सिस्टम आइकन चालू या बंद करें", "डिफ़ॉल्ट आइकन व्यवहार पुनर्स्थापित करें", "नेटवर्क स्थिति और कार्य देखें", "किसी नेटवर्क से कनेक्ट करें", "नेटवर्क कंप्यूटर और डिवाइस देखें", "नेटवर्क में एक वायरलेस डिवाइस जोड़ें", "एक प्रिंटर जोड़ें", "डिफ़ॉल्ट प्रिंटर सेट करें", "प्रिंटर सेटिंग बदलें", "डिवाइस और प्रिंटर देखें", "होमग्रुप और साझाकरण विकल्प चुनें", "प्रिंटर साझा करें", "स्क्रीन रिज़ॉल्यूशन समायोजित करें", "अपने कंप्यूटर की स्थिति की समीक्षा करें", "अपने कंप्यूटर का बैकअप लें", "समस्याएं ढूंढें और ठीक करें", "फ़ायरवॉल स्थिति जाँचें", "किसी प्रोग्राम को अनइंस्टॉल करें", "विंडोज़ सुविधाओं को चालू या बंद करें", "खाता चित्र बदलें", "उपयोगकर्ता खाते जोड़ें या हटाएँ", "किसी भी उपयोगकर्ता के लिए अभिभावकीय नियंत्रण सेट करें", "दिनांक और समय बदलें", "इनपुट पद्धतियाँ बदलें", "विंडोज़ को आपके लिए सेटिंग्स सुझाने दें", "मुख पृष्ठ बदलें", "ब्राउज़र ऐड-ऑन प्रबंधित करें", "ब्राउज़िंग इतिहास और कुकीज़ हटाएं", "BitLocker प्रबंधित करें", "पेन या स्पर्श इनपुट के लिए स्क्रीन कैलिब्रेट करें", "पेन और स्पर्श सेटिंग्स" },
     };
 
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
@@ -519,9 +1136,7 @@ bool EnsureClassicTaskLinksFile() {
     }
 
 
-    static const char kTaskListTemplate[] = R"xml(<?xml version="1.0" encoding="utf-8"?>
-<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
-  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
+    static const char kClassicTaskLinks[] = R"xml(  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
     <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
     <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
@@ -564,9 +1179,14 @@ bool EnsureClassicTaskLinksFile() {
     <sh:task id="{D4F4E001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{CHOOSEHOMEGROUP}</sh:name><sh:command>explorer.exe shell:::{67ca7650-96e6-4fdd-bb43-a8e774f73a57}</sh:command></sh:task>
     <sh:task id="{D4F4E002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{SHAREPRINTERS}</sh:name><sh:command>explorer.exe shell:::{67ca7650-96e6-4fdd-bb43-a8e774f73a57}</sh:command></sh:task>
     <category id="3"><sh:task idref="{D4F4E001-0D35-4CB6-A21F-BC1661200001}"/><sh:task idref="{D4F4E002-0D35-4CB6-A21F-BC1661200002}"/></category>
-  </application>
+  </application>\n)xml";
+
+    static const char kTaskListTemplate[] = R"xml(<?xml version="1.0" encoding="utf-8"?>
+<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
+{CLASSIC_TASK_LINKS_BLOCK}
 {CATEGORY_TASK_LINKS_BLOCK}
 {DISPLAY_APPLICATION_BLOCK}
+{VIRTUAL_APPLET_TASKS_BLOCK}
 </applications>
 )xml";
 
@@ -579,6 +1199,9 @@ bool EnsureClassicTaskLinksFile() {
         }
     };
     
+    replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
+               g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+
     // Windows 7 Category Task Links
     if (g_settings.restoreWin7CategoryTaskLinks.load()) {
         replaceAll("{CATEGORY_TASK_LINKS_BLOCK}",
@@ -652,6 +1275,40 @@ bool EnsureClassicTaskLinksFile() {
         replaceAll("{CATEGORY_TASK_LINKS_BLOCK}", "");
     }
 
+    // Classic Win7 "blue task links" for the two virtual applets. The block is
+    // only emitted when the corresponding applet is both available on this
+    // machine and enabled in settings, mirroring how GetNamespaceClsids()
+    // gates the icon itself. Application ids are the virtual CLSIDs, so the
+    // tasks attach to exactly the entries this mod injects.
+    std::string virtualTaskBlock;
+    if (g_settings.restoreClassicTaskLinks.load()) {
+        if (g_injectBitlockerApplet.load()) {
+            virtualTaskBlock +=
+                "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
+                "  <application id=\"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}\">\n"
+                "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
+                "<sh:keywords>bitlocker;encryption</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                "  </application>\n";
+        }
+        if (g_injectTabletPcApplet.load()) {
+            virtualTaskBlock +=
+                "  <!-- Tablet PC Settings (Hardware and Sound, Category 2) -->\n"
+                "  <application id=\"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}\">\n"
+                "    <sh:task id=\"{D4F4A011-0D35-4CB6-A21F-BC1661200011}\"><sh:name>{TABLETCALIBRATE}</sh:name>"
+                "<sh:keywords>tablet;calibrate;touch;pen</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"><sh:name>{TABLETPENTOUCH}</sh:name>"
+                "<sh:keywords>pen;touch;tablet</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{F82DF8F7-8B9F-442E-A48C-818EA735FF9B}</sh:command></sh:task>\n"
+                "    <category id=\"2\"><sh:task idref=\"{D4F4A011-0D35-4CB6-A21F-BC1661200011}\"/>"
+                "<sh:task idref=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"/></category>\n"
+                "  </application>\n";
+        }
+    }
+    replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
+
     if (g_settings.enableCategoryAppearanceLinks.load()) {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", 
             "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
@@ -705,6 +1362,9 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{CHANGEHOMEPAGE}", texts->changeHomePage);
     replaceAll("{MANAGEBROWSERADDONS}", texts->manageBrowserAddons);
     replaceAll("{DELETEBROWSINGHISTORY}", texts->deleteBrowsingHistory);
+    replaceAll("{BITLOCKERMANAGE}", texts->bitlockerManage);
+    replaceAll("{TABLETCALIBRATE}", texts->tabletCalibrate);
+    replaceAll("{TABLETPENTOUCH}", texts->tabletPenTouch);
 
 
     const std::wstring targetPath = g_classicTaskLinksFilePath;
@@ -732,12 +1392,87 @@ bool EnsureClassicTaskLinksFile() {
     return ok;
 }
 
+// Timestamp (GetTickCount64) of the last time the cached path was validated or
+// a (re)generation was attempted. Used to throttle the filesystem check below.
+// 0 is a sentinel meaning "never checked, or explicitly invalidated"; it always
+// forces a check, which matters in the first few seconds after boot when
+// GetTickCount64() is itself smaller than the recheck interval.
+static std::atomic<ULONGLONG> g_taskLinksLastCheckTick{ 0 };
+static constexpr ULONGLONG kTaskLinksRecheckIntervalMs = 5000;
+
+// Accessor used by the registry hooks. Unlike GetClassicTaskLinksFilePath(),
+// this one heals two failure modes instead of silently serving nothing:
+//   * the initial write failed (path cleared, feature dead for the process);
+//   * the XML was deleted under us while Explorer was running (Disk Cleanup,
+//     Storage Sense, a temp cleaner), which would make every classic task link
+//     disappear until a settings change or an Explorer restart.
+// It runs on Explorer's registry hot path, so the filesystem is touched at most
+// once every kTaskLinksRecheckIntervalMs; in between, the cached path is
+// returned with no syscall at all. A missing path is always retried, but the
+// same throttle keeps a permanently failing regeneration from being hammered.
+std::wstring GetOrCreateClassicTaskLinksFilePath() {
+    std::wstring cached = GetClassicTaskLinksFilePath();
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG last = g_taskLinksLastCheckTick.load(std::memory_order_relaxed);
+    // Applies whether or not a path is cached. Skipping the throttle for an
+    // empty path meant that when the XML could not be written at all (%TEMP%
+    // not writable, a security product blocking it, disk full) every single
+    // Control-Panel-related registry query rebuilt the multi-KB template and
+    // re-attempted the file I/O, on Explorer's registry hot path.
+    if (last != 0 && now - last < kTaskLinksRecheckIntervalMs)
+        return cached;
+
+    // Only one thread per interval performs the check; the others keep using
+    // the cached value (or an empty string, retried on the next interval).
+    if (!g_taskLinksLastCheckTick.compare_exchange_strong(last, now, std::memory_order_relaxed))
+        return cached;
+
+    if (!cached.empty()) {
+        const DWORD attributes = GetFileAttributesW(cached.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return cached;
+        Wh_Log(L"Task links file missing (%s); regenerating", cached.c_str());
+    }
+
+    // EnsureClassicTaskLinksFile() takes g_taskLinksMutex itself, so it must be
+    // called without holding it here; it re-checks the cached path under the
+    // lock, so a concurrent regeneration costs nothing but the lock.
+    if (!EnsureClassicTaskLinksFile()) {
+        Wh_Log(L"Task links file could not be (re)generated; will retry later");
+        return std::wstring();
+    }
+    return GetClassicTaskLinksFilePath();
+}
+
+// Reads a tri-state applet setting. Unknown/missing values fall back to Auto,
+// which is the documented default.
+AppletMode ReadAppletMode(const wchar_t* settingName) {
+    AppletMode mode = AppletMode::Auto;
+    if (PCWSTR value = Wh_GetStringSetting(settingName)) {
+        if (wcscmp(value, L"always") == 0)     mode = AppletMode::Always;
+        else if (wcscmp(value, L"never") == 0) mode = AppletMode::Never;
+        Wh_FreeStringSetting(value);
+    }
+    return mode;
+}
+
 void LoadSettings() {
     g_settings.enablePersonalization.store(Wh_GetIntSetting(L"enablePersonalization"));
     g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
+    g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
+    g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
+    // The effective verdicts depend on both the (fixed) auto detection and the
+    // (changeable) override, so they are refreshed on every settings load.
+    g_injectBitlockerApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.bitLockerMode.load(), g_bitlockerAutoDetected.load(),
+        g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+    g_injectTabletPcApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.tabletPcMode.load(), g_tabletPcAutoDetected.load(),
+        g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
@@ -800,6 +1535,36 @@ void InitDisplayNames() {
     g_networkConnectionsClsidSuffix = L"clsid\\" + g_networkConnectionsGuidLower;
     g_printersAndFaxesClsidSuffix   = L"clsid\\" + g_printersAndFaxesGuidLower;
     g_homeGroupClsidSuffix          = L"clsid\\" + g_homeGroupGuidLower;
+
+    g_virtualApplets.clear();
+    // Built whenever the real applet exists, not only when it is currently
+    // being injected: the entry's visibility is gated per query through
+    // enabledSetting below, so flipping the Auto/Always/Never setting takes
+    // effect without restarting Explorer.
+    if (g_bitlockerClsidRegistered.load()) {
+        // On Win10 19044 the CLSID key is a stub; fall back to the well-known
+        // fvecpl.dll resources that carry the "BitLocker Drive Encryption"
+        // localized name, icon and description (InfoTip, string id -2). The
+        // "@dll,-id" references are resolved and localized by Explorer itself
+        // for every installed UI language.
+        if (!AddVirtualApplet(kBitLockerVirtualGuid, kBitLockerGuid, kCategorySystemSecurity,
+                              &g_injectBitlockerApplet,
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
+                              L"%SystemRoot%\\System32\\fvecpl.dll,-1",
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2"))
+            Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
+    }
+    if (g_tabletPcClsidRegistered.load()) {
+        // Tablet PC Settings name/infotip/icon live in tabletpc.cpl as string
+        // resources 10100 (name), 10102 (infotip) and icon group 10200.
+        if (!AddVirtualApplet(kTabletPcVirtualGuid, kTabletPcSettingsGuid, kCategoryHardware,
+                              &g_injectTabletPcApplet,
+                              L"@%SystemRoot%\\System32\\tabletpc.cpl,-10100",
+                              L"%SystemRoot%\\System32\\tabletpc.cpl,-10200",
+                              L"@%SystemRoot%\\System32\\tabletpc.cpl,-10102"))
+            Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
+    }
+    Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
 
 // GetTrackedPath/TrackKey/UntrackKey/CreateFakeHandle/FreeFakeHandle now live
@@ -813,12 +1578,13 @@ enum class VNode {
     Suppressed
 };
 
-enum class ItemKind { None, Personalization, CategoryOnly, Suppressed, RealCplTaskUrl };
+enum class ItemKind { None, Personalization, CategoryOnly, Suppressed, RealCplTaskUrl, VirtualApplet };
 
 struct ClassifyResult {
     VNode    node;
     ItemKind kind;
     DWORD    category;
+    int      virtualIndex = -1;
 };
 
 bool IsSuppressedGuid(const std::wstring& guidLower) {
@@ -868,6 +1634,20 @@ ClassifyResult ClassifyPersonalizationVirtual(const std::wstring& lower) {
     return { VNode::None, ItemKind::None, 0 };
 }
 
+ClassifyResult ClassifyVirtualApplets(const std::wstring& lower) {
+    for (size_t i = 0; i < g_virtualApplets.size(); ++i) {
+        const VirtualApplet& a = g_virtualApplets[i];
+        if (!a.enabledSetting->load()) continue;
+        if (EndsWith(lower, a.clsidSuffix))       return { VNode::ClsidRoot,     ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.defaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.shellSuffix))       return { VNode::Shell,        ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.shellOpenSuffix))   return { VNode::ShellOpen,    ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.openCommandSuffix)) return { VNode::OpenCommand,  ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.nsSuffix))          return { VNode::NameSpaceEntry, ItemKind::VirtualApplet, a.category, (int)i };
+    }
+    return { VNode::None, ItemKind::None, 0 };
+}
+
 ClassifyResult ClassifyPath(const std::wstring& path) {
     // Early out before allocating/copying a lowercase path. This function runs
     // for many unrelated registry calls in Explorer.
@@ -893,21 +1673,30 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         if (cr.node != VNode::None) return cr;
     }
 
+    if (!g_virtualApplets.empty()) {
+        auto cr = ClassifyVirtualApplets(lower);
+        if (cr.node != VNode::None) return cr;
+    }
+
     if (g_settings.enableCategoryAppearanceLinks.load()) {
         if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
             EndsWith(lower, g_displayClsidSuffix)) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
         }
     }
-    struct { std::atomic<bool>* enabled; const std::wstring* clsidSuffix; DWORD cat; bool isHomeGroup; } categoryItems[] = {
-        { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                false }, // Keep it outside category view; search still exposes its tasks
-        { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,  false },
-        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware, false },
-        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,  true  },
+    // availability is nullptr for items that are always considered present
+    // (they're stock CLSIDs on every supported build); it points at a
+    // per-item atomic for items this mod only injects when Windows itself
+    // still registers the real CLSID (HomeGroup, BitLocker, Tablet PC).
+    struct { std::atomic<bool>* enabled; const std::wstring* clsidSuffix; DWORD cat; std::atomic<bool>* availability; } categoryItems[] = {
+        { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                       nullptr },  // Keep it outside category view; search still exposes its tasks
+        { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,        nullptr },
+        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware,       nullptr },
+        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupClsidAvailable },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
-        if (item.isHomeGroup && !g_homeGroupClsidAvailable.load()) continue;
+        if (item.availability && !item.availability->load()) continue;
         if (EndsWith(lower, *item.clsidSuffix))
             return { VNode::ClsidRootCategoryOnly, ItemKind::CategoryOnly, item.cat };
     }
@@ -962,6 +1751,18 @@ LSTATUS ProvideDwordValue(LPBYTE lpData, LPDWORD lpcbData, DWORD value) {
     return ERROR_SUCCESS;
 }
 
+// restoreWin7CategoryTaskLinks and enableCategoryAppearanceLinks only affect
+// the *content* of the generated task-links XML; the XML itself is only ever
+// served when restoreClassicTaskLinks is on. Gate the four TasksFileUrl query
+// sites below on this instead of on restoreClassicTaskLinks alone, so turning
+// off just "Restore Classic Task Links" doesn't silently disable the other
+// two settings as well.
+static bool AnyTaskLinksEnabled() {
+    return g_settings.restoreClassicTaskLinks.load() ||
+           g_settings.restoreWin7CategoryTaskLinks.load() ||
+           g_settings.enableCategoryAppearanceLinks.load();
+}
+
 bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                      LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData, LSTATUS& outStatus) {
     ClassifyResult cr = ClassifyPath(path);
@@ -976,8 +1777,8 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     if (cr.kind == ItemKind::RealCplTaskUrl) {
         Wh_Log(L"Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load()) {
-            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            AnyTaskLinksEnabled()) {
+            std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
                 outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
@@ -1007,8 +1808,8 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             return true;
         }
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load()) {
-            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            AnyTaskLinksEnabled()) {
+            std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
                 outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
@@ -1045,9 +1846,9 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 return true;
             } else if (valueName == L"System.Software.TasksFileUrl") {
                 if (lpType) *lpType = REG_SZ;
-                std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+                std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
                 std::wstring taskFileUrl =
-                    (g_settings.restoreClassicTaskLinks.load() && !taskLinksPath.empty())
+                    (AnyTaskLinksEnabled() && !taskLinksPath.empty())
                         ? taskLinksPath
                         : std::wstring(L"Internal");
                 outStatus = ProvideStringValue(lpData, lpcbData, taskFileUrl);
@@ -1071,17 +1872,89 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             }
         }
     }
+
+    if (cr.kind == ItemKind::VirtualApplet) {
+        if (cr.virtualIndex < 0 || (size_t)cr.virtualIndex >= g_virtualApplets.size()) return false;
+        const VirtualApplet& a = g_virtualApplets[cr.virtualIndex];
+        Wh_Log(L"Providing value for: %s (value=%s, node=%d, applet=%s)", path.c_str(), valueName.c_str(), (int)cr.node, a.displayName.c_str());
+
+        if (cr.node == VNode::ClsidRoot || cr.node == VNode::NameSpaceEntry) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.displayName);
+                return true;
+            }
+            // InfoTip (Win7-style description under the link). Served on BOTH
+            // the CLSID root and the ControlPanel\\NameSpace entry because
+            // Explorer's property store has been observed to query it from
+            // either path. REG_SZ matches how real applets (e.g. Personalization)
+            // expose it; the text is already localized by the time we reach here.
+            if (valueName == L"InfoTip" && !a.infoTip.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.infoTip);
+                return true;
+            }
+            if (cr.node == VNode::ClsidRoot && valueName == L"System.ControlPanel.Category") {
+                if (lpType) *lpType = REG_DWORD;
+                outStatus = ProvideDwordValue(lpData, lpcbData, a.category);
+                return true;
+            }
+            // Point the virtual applet at the generated tasks XML so Explorer
+            // displays the classic blue task links beneath it (same mechanism
+            // as Personalization).
+            if (cr.node == VNode::ClsidRoot && valueName == L"System.Software.TasksFileUrl" &&
+                AnyTaskLinksEnabled()) {
+                std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
+                if (!taskLinksPath.empty()) {
+                    if (lpType) *lpType = REG_SZ;
+                    outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
+                    return true;
+                }
+            }
+        } else if (cr.node == VNode::DefaultIcon) {
+            if (valueName.empty() && !a.iconValue.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.iconValue);
+                return true;
+            }
+        } else if (cr.node == VNode::OpenCommand) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.openCommand);
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+// g_injectBitlockerApplet / g_injectTabletPcApplet only say the setting wants
+// the applet; the applet's CLSID data (name, icon, etc.) is only actually
+// built by AddVirtualApplet() when it found a name to use, and it may have
+// failed to (see InitDisplayNames()). Enumerating the CLSID into
+// ControlPanel\NameSpace without the backing entry existing gives Explorer a
+// namespace item whose CLSID lookup falls through to the real registry and
+// fails - a nameless/iconless Control Panel entry. Check that the applet was
+// actually built before advertising it.
+static bool VirtualAppletPresent(const std::wstring& guidLower) {
+    for (const auto& a : g_virtualApplets)
+        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load()) return true;
     return false;
 }
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    result.reserve(5);
+    result.reserve(7);
     if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
     if (IsHomeGroupAvailable())                     result.push_back(kHomeGroupGuid);
+    if (g_injectBitlockerApplet.load() && VirtualAppletPresent(kBitLockerVirtualGuid))
+        result.push_back(kBitLockerVirtualGuid);
+    if (g_injectTabletPcApplet.load() && VirtualAppletPresent(kTabletPcVirtualGuid))
+        result.push_back(kTabletPcVirtualGuid);
     return result;
 }
 
@@ -1106,6 +1979,8 @@ using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
 RegOpenKeyExW_t RegOpenKeyExWOriginal;
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
                                  REGSAM samDesired, PHKEY phkResult) {
+    if (g_inShellProbeBypass) return RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    RequestLazyVirtualAppletDetection();
     std::wstring fullPath;
     if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
         if (lpSubKey && *lpSubKey) {
@@ -1122,14 +1997,14 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
         return ERROR_FILE_NOT_FOUND;
     }
     if (HasActiveSuppression() && lpSubKey) {
-        std::wstring basePath = g_keyTracker.GetPath(hKey);
-        // Cheap bail-out: if the parent key isn't one we're tracking and the
-        // subkey text itself doesn't contain "clsid"/"controlpanel", this
-        // call cannot possibly be a suppressed namespace/CLSID key, so skip
-        // the concatenation, ToLower copy, and rfind entirely. This matters
-        // because HasActiveSuppression() is true out of the box, so every
+        // HasActiveSuppression() is true out of the box, so every
         // RegOpenKeyExW call in explorer.exe — not just shell32's — reaches
-        // this branch.
+        // this branch. The lookup can't be skipped (the parent path is needed
+        // both to decide relevance and to build the full path), but it now
+        // takes the tracker's *shared* lock, so these calls no longer
+        // serialize against each other; the string test still saves the
+        // concatenation, the ToLower copy and the rfind for the vast majority.
+        std::wstring basePath = g_keyTracker.GetPath(hKey);
         if (!basePath.empty() || ContainsRelevantKeywordInsensitive(lpSubKey)) {
             std::wstring fullPath = basePath;
             if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
@@ -1174,10 +2049,10 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
 using RegCloseKey_t = decltype(&RegCloseKey);
 RegCloseKey_t RegCloseKeyOriginal;
 LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
-    if (g_keyTracker.IsFake(hKey)) {
-        g_keyTracker.FreeFake(hKey);
-        return ERROR_SUCCESS;
-    }
+    if (g_inShellProbeBypass) return RegCloseKeyOriginal(hKey);
+    // FreeFake reports whether the handle was ours, so this is one lock
+    // acquisition instead of IsFake() followed by FreeFake().
+    if (g_keyTracker.FreeFake(hKey)) return ERROR_SUCCESS;
     LSTATUS status = RegCloseKeyOriginal(hKey);
     g_keyTracker.Untrack(hKey);
     return status;
@@ -1187,6 +2062,8 @@ using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExWOriginal;
 LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                     LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
+    if (g_inShellProbeBypass) return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    RequestLazyVirtualAppletDetection();
     // Unlike RegOpenKeyExW/RegCloseKey/ShellExecuteExW (whose blanket
     // try/catch was removed — see those hooks), this catch is kept
     // deliberately. Everything above the fallback call is a read: it only
@@ -1198,14 +2075,17 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpRe
     // re-invoking the original here is safe and prevents a C++ exception
     // from unwinding into shell32/Explorer, which isn't exception-aware.
     try {
-        std::wstring path = g_keyTracker.GetPath(hKey);
+        // One lookup instead of GetPath() + IsFake(): both answers come from
+        // the same snapshot, and the shared lock is taken once per call.
+        std::wstring path;
+        const bool isFake = g_keyTracker.IsFakeAndGetPath(hKey, path);
         if (!path.empty()) {
             std::wstring valueName = lpValueName ? lpValueName : L"";
             LSTATUS outStatus;
             if (TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
         }
 
-        if (g_keyTracker.IsFake(hKey)) return ERROR_FILE_NOT_FOUND;
+        if (isFake) return ERROR_FILE_NOT_FOUND;
 
         return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     } catch (...) {
@@ -1218,12 +2098,16 @@ using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueWOriginal;
 LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    if (g_inShellProbeBypass) return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    RequestLazyVirtualAppletDetection();
     // Same reasoning as RegQueryValueExWHook above: everything here only
     // writes into the caller's output buffer, so a fallback call after an
     // exception overwrites that buffer once with the real value instead of
     // duplicating any external side effect. Kept intentionally.
     try {
-        std::wstring path = g_keyTracker.GetPath(hkey);
+        // Single lookup for both "is it fake?" and "what's its path?".
+        std::wstring path;
+        const bool isFake = g_keyTracker.IsFakeAndGetPath(hkey, path);
         if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
         if (!path.empty()) {
             std::wstring valueName = lpValue ? lpValue : L"";
@@ -1233,7 +2117,7 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
 
         // Only bail out with FILE_NOT_FOUND after TryProvideValue has had a
         // chance to serve a virtual value on this fake handle.
-        if (g_keyTracker.IsFake(hkey)) return ERROR_FILE_NOT_FOUND;
+        if (isFake) return ERROR_FILE_NOT_FOUND;
 
         return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     } catch (...) {
@@ -1247,6 +2131,8 @@ RegEnumKeyExW_t RegEnumKeyExWOriginal;
 LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
                                  LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
                                  PFILETIME lpftLastWriteTime) {
+    if (g_inShellProbeBypass) return RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName, lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
+    RequestLazyVirtualAppletDetection();
     // RegEnumKeyExW is not a cursor-based iterator with hidden progression —
     // dwIndex is an explicit caller-supplied parameter, and the API always
     // returns the same entry for the same (hKey, dwIndex) pair. The scan
@@ -1260,9 +2146,9 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
     // ShellExecuteExW, which have real external side effects to avoid
     // re-invoking).
     try {
-        if (g_keyTracker.IsFake(hKey)) {
-            std::wstring path = g_keyTracker.GetPath(hKey);
-            ClassifyResult cr = ClassifyPath(path);
+        std::wstring fakePath;
+        if (g_keyTracker.IsFakeAndGetPath(hKey, fakePath)) {
+            ClassifyResult cr = ClassifyPath(fakePath);
             std::wstring subName;
             if (!GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
             if (!lpcchName || !lpName) return ERROR_INVALID_PARAMETER;
@@ -1349,15 +2235,17 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
 using RegEnumKeyW_t = decltype(&RegEnumKeyW);
 RegEnumKeyW_t RegEnumKeyWOriginal;
 LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
+    if (g_inShellProbeBypass) return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
+    RequestLazyVirtualAppletDetection();
     // Same reasoning as RegEnumKeyExWHook above: dwIndex is an explicit,
     // caller-supplied parameter, not a hidden cursor, and every call here is
     // a pure read. Re-issuing the original in the catch after an exception
     // is the same call the caller would get without this mod, with no
     // external side effect duplicated — kept intentionally.
     try {
-        if (g_keyTracker.IsFake(hKey)) {
-            std::wstring path = g_keyTracker.GetPath(hKey);
-            ClassifyResult cr = ClassifyPath(path);
+        std::wstring fakePath;
+        if (g_keyTracker.IsFakeAndGetPath(hKey, fakePath)) {
+            ClassifyResult cr = ClassifyPath(fakePath);
             std::wstring subName;
             if (!GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
             if (!lpName) return ERROR_INVALID_PARAMETER;
@@ -1713,20 +2601,54 @@ void* GetRegFunc(const char* name) {
 }
 
 void InvalidateClassicTaskLinksFile() {
-    std::lock_guard<std::mutex> lock(g_taskLinksMutex);
-    g_classicTaskLinksFilePath.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+        g_classicTaskLinksFilePath.clear();
+    }
+    // Let the next hook-side lookup regenerate immediately instead of waiting
+    // out the throttle interval in GetOrCreateClassicTaskLinksFilePath().
+    g_taskLinksLastCheckTick.store(0, std::memory_order_relaxed);
 }
 
 void Wh_ModSettingsChanged() {
   try {
+    AppletMode oldBitMode = (AppletMode)g_prevBitLockerMode.load();
+    AppletMode oldTabMode = (AppletMode)g_prevTabletPcMode.load();
+    AppletMode newBitMode = ReadAppletMode(L"bitLockerMode");
+    AppletMode newTabMode = ReadAppletMode(L"tabletPcMode");
+    bool bitChanged = (oldBitMode != newBitMode);
+    bool tabChanged = (oldTabMode != newTabMode);
+    if (bitChanged) {
+        Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"bitlocker").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_bitlockerAutoDetected.store(false);
+    }
+    if (tabChanged) {
+        Wh_Log(L"tabletPcMode changed %d -> %d, clearing cached verdict", (int)oldTabMode, (int)newTabMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"tabletpc").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"tabletpc").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_tabletPcAutoDetected.store(false);
+    }
     LoadSettings();
+    g_prevBitLockerMode.store((int)newBitMode);
+    g_prevTabletPcMode.store((int)newTabMode);
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
+    // Re-arm the lazy-detection worker if a mode change invalidated the
+    // cached verdict, instead of waiting for the next incidental registry
+    // access to request it.
+    if ((bitChanged || tabChanged) && g_lazyDetectionWakeEvent) {
+        SetEvent(g_lazyDetectionWakeEvent);
+    }
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
+        g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
+        g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
         g_settings.restoreWin7CategoryTaskLinks.load());
@@ -1743,15 +2665,63 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
+    g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
+    g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
+    g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
+    g_prevTabletPcMode.store(g_settings.tabletPcMode.load());
+    {
+        auto tryLoadCachedVerdict = [&](const wchar_t* key, std::atomic<bool>& outAutoDetected) -> bool {
+            const std::wstring verdictName = MakeVerdictValueName(key);
+            const std::wstring buildName   = MakeVerdictBuildValueName(key);
+            int cachedVerdict = Wh_GetIntValue(verdictName.c_str(), (int)CachedVerdict::Unknown);
+            int cachedBuild   = Wh_GetIntValue(buildName.c_str(), 0);
+            if (cachedVerdict != (int)CachedVerdict::Unknown && cachedBuild == (int)g_winBuild) {
+                bool shown = (cachedVerdict == (int)CachedVerdict::Shown);
+                outAutoDetected.store(!shown);
+                Wh_Log(L"%s: using cached verdict from build %d (applet is %s); shell not probed in Wh_ModInit",
+                    key, cachedBuild, shown ? L"already shown" : L"not shown");
+                return true;
+            }
+            outAutoDetected.store(false);
+            return false;
+        };
+        bool bitCached = false, tabCached = false;
+        if ((AppletMode)g_settings.bitLockerMode.load() == AppletMode::Auto && g_bitlockerClsidRegistered.load()) {
+            bitCached = tryLoadCachedVerdict(L"bitlocker", g_bitlockerAutoDetected);
+            if (!bitCached) Wh_Log(L"BitLocker: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_bitlockerAutoDetected.store(false);
+            bitCached = true;
+        }
+        if ((AppletMode)g_settings.tabletPcMode.load() == AppletMode::Auto && g_tabletPcClsidRegistered.load()) {
+            tabCached = tryLoadCachedVerdict(L"tabletpc", g_tabletPcAutoDetected);
+            if (!tabCached) Wh_Log(L"Tablet PC: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_tabletPcAutoDetected.store(false);
+            tabCached = true;
+        }
+        bool needLazy = !bitCached || !tabCached;
+        g_lazyDetectionDone.store(!needLazy, std::memory_order_release);
+    }
+    LoadSettings();
+
+    // Build display names / virtual applets first: EnsureClassicTaskLinksFile()
+    // generates the task links XML, and its virtual-applet task block depends
+    // on knowing which virtual applets actually got built (see
+    // VirtualAppletPresent()). InitDisplayNames() itself doesn't depend on the
+    // XML, so this ordering doesn't cost anything.
+    InitDisplayNames();
+
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
+        g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
+        g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
         g_settings.restoreWin7CategoryTaskLinks.load());
 
@@ -1767,8 +2737,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to get one or more registry functions");
         return FALSE;
     }
-
-    InitDisplayNames();
 
     if (!WindhawkUtils::SetFunctionHook((RegOpenKeyExW_t)pRegOpenKeyExW,       RegOpenKeyExWHook,    &RegOpenKeyExWOriginal))    { Wh_Log(L"Failed to hook RegOpenKeyExW");    return FALSE; }
     if (!WindhawkUtils::SetFunctionHook((RegCloseKey_t)pRegCloseKey,           RegCloseKeyHook,      &RegCloseKeyOriginal))      { Wh_Log(L"Failed to hook RegCloseKey");      return FALSE; }
@@ -1837,6 +2805,43 @@ BOOL Wh_ModInit() {
   }
 }
 
+// Body of the dedicated lazy-detection worker thread. Waits on either the
+// wake event (probe requested/re-armed) or the stop event (mod unloading).
+static void LazyDetectionThreadProc() {
+    HANDLE waitHandles[2] = { g_lazyDetectionWakeEvent, g_lazyDetectionStopEvent };
+    for (;;) {
+        DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+        if (wait != WAIT_OBJECT_0) {
+            // Stop event, or a wait failure - either way, exit the thread.
+            return;
+        }
+        ResetEvent(g_lazyDetectionWakeEvent);
+        try {
+            RunLazyVirtualAppletDetection();
+        } catch (...) {
+            Wh_Log(L"Exception in lazy-detection worker thread");
+        }
+    }
+}
+
+// Runs once Wh_ModInit has returned TRUE and hooks are fully active. This is
+// still a controlled Windhawk callback, not an arbitrary caller's stack, so
+// starting our own worker thread here is safe.
+void Wh_ModAfterInit() {
+    g_lazyDetectionWakeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_lazyDetectionStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_lazyDetectionWakeEvent || !g_lazyDetectionStopEvent) {
+        Wh_Log(L"Failed to create lazy-detection events; virtual applets will stay un-injected");
+        return;
+    }
+    g_lazyDetectionThread.emplace(LazyDetectionThreadProc);
+    if (!g_lazyDetectionDone.load(std::memory_order_acquire)) {
+        // Kick off the initial probe right away instead of waiting for the
+        // first incidental registry access to request it.
+        SetEvent(g_lazyDetectionWakeEvent);
+    }
+}
+
 static void CleanupTempFiles() {
     // Delete the temp task-links file
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
@@ -1846,8 +2851,32 @@ static void CleanupTempFiles() {
     }
 }
 
+// Signal + join + reset the worker thread, per the required shutdown
+// pattern for a global std::thread (see the no_destroy comment on
+// g_lazyDetectionThread above) - must happen before Wh_ModUninit returns.
+static void StopLazyDetectionThread() {
+    if (g_lazyDetectionStopEvent) {
+        SetEvent(g_lazyDetectionStopEvent);
+    }
+    if (g_lazyDetectionThread.has_value()) {
+        if (g_lazyDetectionThread->joinable()) {
+            g_lazyDetectionThread->join();
+        }
+        g_lazyDetectionThread.reset();
+    }
+    if (g_lazyDetectionWakeEvent) {
+        CloseHandle(g_lazyDetectionWakeEvent);
+        g_lazyDetectionWakeEvent = nullptr;
+    }
+    if (g_lazyDetectionStopEvent) {
+        CloseHandle(g_lazyDetectionStopEvent);
+        g_lazyDetectionStopEvent = nullptr;
+    }
+}
+
 void Wh_ModUninit() {
     try {
+        StopLazyDetectionThread();
         CleanupTempFiles();
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
