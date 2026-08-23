@@ -1996,7 +1996,7 @@ static bool InitializeDwmHooks()
     }
     // Windhawk resolves demangled names; decorated ABI names are exact fallbacks.
     // Every candidate is optional here and the selected core is validated below.
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {{L"public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const ",
           L"?IsGhostWindow@CWindowData@@QEBA_NPEAPEAUHWND__@@@Z"},
          reinterpret_cast<void**>(&g_isGhostWindowOriginal),
@@ -2191,7 +2191,7 @@ static bool InitializeDwmHooks()
          &g_desktopManagerTimelineDirtyAddress,
          nullptr,
          true}};
-    if (!WindhawkUtils::HookSymbols(udwm, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks)))
     {
         Wh_Log(L"DWM hooks: symbol resolver failed");
         return false;
