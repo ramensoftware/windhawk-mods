@@ -1068,7 +1068,18 @@ HWND GetWindowFromNativeTaskItem(void* nativeTaskItem) {
 }
 
 HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
-    if (!TryGetItemFromContainer_TaskListWindowViewModel_Original ||
+    // CTaskListWnd_HandleClick_Original is what proves the interception
+    // hook is actually installed - it's optional in HookTaskbarDllSymbols
+    // (see that symbol table's comment), so on a build where it didn't
+    // resolve, CTaskListWnd_HandleClick_Hook never gets installed and the
+    // ReportClicked call below would be a genuine click on a live window
+    // rather than an intercepted sentinel. Checked here specifically
+    // (not just implied by the other symbols below) since this is the one
+    // way the probe can be unsafe that's knowable up front, rather than
+    // only discoverable via NoteUnconfirmedClickSentinelMiss's runtime
+    // miss-counting.
+    if (!CTaskListWnd_HandleClick_Original ||
+        !TryGetItemFromContainer_TaskListWindowViewModel_Original ||
         !TaskListWindowViewModel_get_TaskItem_Original ||
         !TaskItem_ReportClicked_Original) {
         return nullptr;
@@ -1113,7 +1124,11 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
 // e.g. "Combine taskbar buttons" set to Always) - see the resolution
 // overview comment above this section for the full chain.
 HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
-    if (!TryGetItemFromContainer_TaskListGroupViewModel_Original ||
+    // See ResolveHwndFromIndividualTaskItem's comment - same reasoning,
+    // same interception hook (CTaskListWnd::HandleClick handles both the
+    // item and group ReportClicked paths).
+    if (!CTaskListWnd_HandleClick_Original ||
+        !TryGetItemFromContainer_TaskListGroupViewModel_Original ||
         !TaskListGroupViewModel_IsMultiWindow_Original ||
         !TaskGroup_ReportClicked_Original || !CTaskGroup_GetNumItems_Original) {
         return nullptr;
@@ -2407,19 +2422,38 @@ void RecomputeLayoutPlan() {
         bool planCoversLiveTaskListButtons = true;
         try {
             if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
+                int liveTaskListCount = 0;
                 for (auto& child : GetRepeaterChildElements(repeater)) {
                     // Map lookup first: every element the plan covers is
                     // already a key in g_lastArrangedX, so this is a plain
                     // hash lookup for the common case. IsTaskListButton
                     // (winrt::get_class_name - a GetRuntimeClassName round
-                    // trip plus an HSTRING allocation) then only runs for
-                    // the rare child that isn't in the plan yet, which is
-                    // exactly the case this check exists to catch.
-                    if (!g_lastArrangedX.count(winrt::get_abi(child)) &&
-                        IsTaskListButton(child)) {
+                    // trip plus an HSTRING allocation) only runs once per
+                    // child, hoisted into a local rather than called twice.
+                    bool isTaskListButton = IsTaskListButton(child);
+                    if (!isTaskListButton) {
+                        continue;
+                    }
+                    liveTaskListCount++;
+                    if (!g_lastArrangedX.count(winrt::get_abi(child))) {
+                        // A live button the plan doesn't cover yet (just
+                        // realized after the last recompute) - the case
+                        // this check was originally added for.
                         planCoversLiveTaskListButtons = false;
                         break;
                     }
+                }
+                // A button *disappearing* (unpin, app closed) adds nothing
+                // new to g_lastArrangedX's coverage - every remaining live
+                // button is still a key in it - so the loop above alone
+                // can't catch it, and it would otherwise sit at its old X
+                // (a visible hole) until the resolve timer's own prune
+                // eventually invalidates, up to kIdleResolveTickMs or the
+                // backoff schedule away. This count comparison catches
+                // that direction too.
+                if (planCoversLiveTaskListButtons &&
+                    liveTaskListCount != g_planStats.taskListTotal) {
+                    planCoversLiveTaskListButtons = false;
                 }
             }
         } catch (...) {
