@@ -582,9 +582,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         if(GetClientRect(ch,&rc)) {
             int cw=rc.right-rc.left, ch_h=rc.bottom-rc.top;
             if(cw>0 && ch_h>0) {
-                SendMessage(ch,WM_SIZE,SIZE_RESTORED,MAKELPARAM(cw,ch_h>4?ch_h-2:ch_h+2));
-                SendMessage(ch,TB_AUTOSIZE,0,0);
-                SendMessage(ch,WM_SIZE,SIZE_RESTORED,MAKELPARAM(cw,ch_h));
                 SendMessage(ch,TB_AUTOSIZE,0,0);
                 InvalidateRect(ch,NULL,TRUE); RedrawWindow(ch,NULL,NULL,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ERASE);
             }
