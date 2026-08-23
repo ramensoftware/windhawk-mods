@@ -2,17 +2,18 @@
 // @id              mix-files-and-folders-sorting
 // @name            Mix Files and Folders When Sorting in Windows Explorer
 // @description     Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files
-// @version         1.0
+// @version         1.1
 // @author          Extremenis
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -loleaut32 -lshlwapi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
+![MixFilesAndFolders](https://i.imgur.com/XVMBh65.png)
+
 # Mix files and folders when sorting
 
 Windows Explorer always lists all folders before (or after, when sorting
@@ -20,10 +21,11 @@ descending) all files, regardless of which column is sorted by. This is
 hardcoded shell behavior, not a UI setting, and it's independent from
 "Group by".
 
-This mod removes that separation: with it enabled, files and folders are
-interleaved purely according to the selected column's value (name, size,
-type, date, ...), the same way they would be if folders were just regular
-rows.
+This mod removes that separation: with it enabled, a folder and a file are
+compared purely according to the selected column's value (name, size, type,
+date, ...), instead of the folder automatically winning. Folder-vs-folder
+and file-vs-file comparisons are left untouched, so Explorer's own ordering
+(including numerical sorting and locale rules) still applies there.
 
 ## Scope
 
@@ -36,6 +38,11 @@ grouped first there.
 The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
 other applications — which use the same `CFSFolder` implementation, just in
 a different process — keep the default folders-first ordering.
+
+Sorting by Size does not actually interleave: folders always report an empty
+size, so a folder-vs-file comparison on that column ends up in the same
+order as stock Explorer. Real size-based mixing needs folders to have a
+computed size, which this mod doesn't provide.
 
 ## Credit / related mod
 
@@ -56,9 +63,10 @@ depends on which mod's hook runs first.
 - mixFoldersAndFiles: true
   $name: Mix Files and Folders
   $description: >-
-    When enabled, folders and files are interleaved when sorting by any
-    column. When disabled, Explorer's default folders-first behavior is
-    restored without needing to reload the mod.
+    When enabled, a folder and a file are interleaved when sorting by any
+    column, instead of the folder always coming first. When disabled, the
+    hook isn't installed at all and Explorer's default folders-first
+    behavior applies.
 */
 // ==/WindhawkModSettings==
 
@@ -68,13 +76,15 @@ depends on which mod's hook runs first.
 #include <memory>
 
 #include <comutil.h>
+#include <initguid.h>
+#include <propkey.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <shtypes.h>
 
 struct {
-    bool mixFoldersAndFiles;
+    std::atomic<bool> mixFoldersAndFiles;
 } g_settings;
 
 std::atomic<int> g_hookRefCount;
@@ -117,6 +127,26 @@ HRESULT CompareResultFromInt(int cmp) {
     return 0;
 }
 
+// Fetches PKEY_FileAttributes for the item and reports whether
+// FILE_ATTRIBUTE_DIRECTORY is set. Returns false (via the HRESULT) if the
+// attribute couldn't be read, so the caller can fall back to the default
+// behavior instead of guessing.
+HRESULT IsFolderItem(void* pCFSFolder,
+                      const ITEMIDLIST_RELATIVE* itemid,
+                      bool* isFolder) {
+    _variant_t attrValue;
+    HRESULT hr = CFSFolder_GetDetailsEx_Original(
+        pCFSFolder, itemid, &PKEY_FileAttributes, attrValue.GetAddress());
+    if (FAILED(hr)) {
+        return hr;
+    }
+    if (attrValue.vt != VT_UI4) {
+        return E_UNEXPECTED;
+    }
+    *isFolder = (attrValue.ulVal & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    return S_OK;
+}
+
 HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
                                           LPARAM column,
                                           const ITEMIDLIST_RELATIVE* itemid1,
@@ -129,6 +159,22 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     };
 
     if (!itemid1 || !itemid2 || !g_settings.mixFoldersAndFiles) {
+        return original();
+    }
+
+    // Folders-first is the only rule this mod needs to override, so only
+    // step in when exactly one of the two items is a folder. Folder-vs-folder
+    // and file-vs-file pairs are left to the shell's own comparison: it's
+    // cheaper (no property-system round trips for the common case), and it
+    // guarantees the exact same ordering Explorer would otherwise use
+    // (numerical sorting, locale rules, and comparing the real file name
+    // rather than the display name with the extension hidden).
+    bool isFolder1, isFolder2;
+    if (FAILED(IsFolderItem(pCFSFolder, itemid1, &isFolder1)) ||
+        FAILED(IsFolderItem(pCFSFolder, itemid2, &isFolder2))) {
+        return original();
+    }
+    if (isFolder1 == isFolder2) {
         return original();
     }
 
@@ -161,11 +207,11 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     };
 
     if (value1.vt != value2.vt) {
-        // Columns like Size are left blank (VT_EMPTY) for folders in stock
-        // Explorer, which would otherwise make every folder-vs-file pair
-        // fall through to the default folders-first behavior even with
-        // this mod enabled. Treat a blank value as sorting before any
-        // present value instead.
+        // A folder commonly leaves a column blank (VT_EMPTY) where a file
+        // has a real value (Size, Dimensions, Length, ...). Treat a blank
+        // value as sorting before any present value, rather than falling
+        // back to folders-first. This still leaves Size itself effectively
+        // unmixed, since a folder's size is always blank -- see the README.
         bool empty1 = isEmpty(value1);
         bool empty2 = isEmpty(value2);
         if (empty1 != empty2) {
@@ -231,7 +277,9 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
             break;
 
         case VT_BOOL:
-            cmp = (int)value1.boolVal - (int)value2.boolVal;
+            // VARIANT_TRUE is -1, so comparing boolVal directly would sort
+            // true before false. Normalize to 0/1 first.
+            cmp = (int)(!!value1.boolVal) - (int)(!!value2.boolVal);
             break;
 
         default:
@@ -244,9 +292,8 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         // CompareIDs returning 0 means "these are the same item" to the
         // shell (used for locating a row after a rename/change
         // notification), not just "sorts equal". Two distinct items with
-        // equal values in this column (e.g. two .txt files compared by
-        // Type) must not be reported as identical, so delegate the tiebreak
-        // to the original implementation instead.
+        // equal values in this column must not be reported as identical,
+        // so delegate the tiebreak to the original implementation instead.
         return original();
     }
 
@@ -254,9 +301,16 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
 }
 
 bool HookWindowsStorageSymbols() {
-    HMODULE windowsStorageModule = GetModuleHandleW(L"windows.storage.dll");
+    // Wh_ModInit runs before explorer.exe has necessarily loaded
+    // windows.storage.dll (e.g. right after sign-in or an Explorer
+    // restart), so GetModuleHandle can't be relied on here -- load it
+    // explicitly instead. LOAD_LIBRARY_SEARCH_SYSTEM32 restricts the search
+    // to the system directory, which is also what prevents this from being
+    // a DLL-hijacking vector.
+    HMODULE windowsStorageModule = LoadLibraryExW(
+        L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!windowsStorageModule) {
-        Wh_Log(L"Failed to get windows.storage.dll module handle");
+        Wh_Log(L"Failed to load windows.storage.dll");
         return false;
     }
 
@@ -264,19 +318,31 @@ bool HookWindowsStorageSymbols() {
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
+#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
+#else
+                LR"(public: virtual long __stdcall CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
+#endif
             },
             &CFSFolder_MapColumnToSCID_Original,
         },
         {
             {
+#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const __unaligned *,struct _tagpropertykey const *,struct tagVARIANT *))",
+#else
+                LR"(public: virtual long __stdcall CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const *,struct _tagpropertykey const *,struct tagVARIANT *))",
+#endif
             },
             &CFSFolder_GetDetailsEx_Original,
         },
         {
             {
+#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::CompareIDs(__int64,struct _ITEMIDLIST_RELATIVE const __unaligned *,struct _ITEMIDLIST_RELATIVE const __unaligned *))",
+#else
+                LR"(public: virtual long __stdcall CFSFolder::CompareIDs(long,struct _ITEMIDLIST_RELATIVE const *,struct _ITEMIDLIST_RELATIVE const *))",
+#endif
             },
             &CFSFolder_CompareIDs_Original,
             CFSFolder_CompareIDs_Hook,
@@ -295,6 +361,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    if (!g_settings.mixFoldersAndFiles) {
+        // Nothing to do: don't install the hooks at all rather than
+        // installing them inert. Toggling the setting back on reloads the
+        // mod (see Wh_ModSettingsChanged), which gives Wh_ModInit another
+        // chance to hook.
+        return TRUE;
+    }
+
     if (!HookWindowsStorageSymbols()) {
         Wh_Log(L"Failed hooking windows.storage.dll symbols");
         return FALSE;
@@ -311,7 +385,8 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
-    LoadSettings();
+    *bReload = TRUE;
+    return TRUE;
 }
