@@ -37,7 +37,7 @@ Panel pages, using only native Windows components.
 - The mod includes an anti-loop protection (stops windows from reopening endlessly)
 - The mod includes a configurable fallback behavior for unmapped links
 - The mod includes an experimental tray menu detection (which works on some builds)
-- The mod includes a defensive handling: guarded hooks, RAII cleanup for handles/COM/environment blocks, and safe fallbacks when an optional hook or launch fails
+- The mod includes defensive handling around its own logic: guarded hook installers, RAII cleanup for handles/COM/environment blocks, and safe fallbacks when an optional hook or launch fails. This guards against failed initialization and allocation failures inside the mod's own code, not against Explorer crashes in general (an access violation elsewhere in the process is not something a C++ `try`/`catch` can intercept)
 
 
 **Note**: This mod is a best-effort implementation. It aims to intercept and redirect as many `ms-settings:` links as possible, but due to differences between Windows 10 and Windows 11, as well as changes introduced by Microsoft in each build, some redirects may not work perfectly in all environments.
@@ -49,6 +49,7 @@ Panel pages, using only native Windows components.
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some Windows 11 configurations if explorer is restarted the network system tray redirect might not work.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
 - The mod is not compatible with 32 bit based operating systems. It requires a 64-bit version of Windows (x64 or ARM64).
+- The `ms-settings:display` group (Display, display-advanced, display-advanced-graphics, display-adapter-properties, display-resolution, screenrotation) all map to the same classic Display/Screen Resolution applet that the **Classic Display Control Panel Restorer** mod also restores. If you use that mod, turn off the "Redirect Display Pages" setting here to avoid the two mods fighting over the same pages.
 
 ---
 
@@ -108,6 +109,9 @@ All of these mods are **reversible** and help make Windows 10 and 11 look more l
 - LegacyNameMappingFix: true
   $name: Fix Legacy Name Mapping
   $description: "This option fixes a shell issue where certain classic Control Panel pages show up blank or silently redirect to the modern Settings app. Recommended on both Windows 10 and 11."
+- RedirectDisplayPages: true
+  $name: Redirect Display Pages
+  $description: "Controls the ms-settings:display group (Display, display-advanced, display-advanced-graphics, display-adapter-properties, display-resolution, screenrotation). Turn this off if you also use the Classic Display Control Panel Restorer mod, since both mods target the same classic Display/Screen Resolution pages."
 */
 // ==/WindhawkModSettings==
 
@@ -168,6 +172,9 @@ static HANDLE g_stopEvent = nullptr;
 static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w);
 static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w);
 static bool ICMH_CALL ICMH_hook_Shell32Devices(void* pThis, HMENU m, UINT u);
+// Applies a hook operation queued after Wh_ModInit already returned; see the
+// definition further down for details.
+static bool ApplyLateHookIfNeeded();
 
 // Constants
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
@@ -197,6 +204,12 @@ static std::atomic_bool g_createProcessHookRegistered{false};
 // infrastructure: a failed optional path must not leave a live handle, a thread, or
 // an exception crossing an Explorer/COM/Win32 boundary.
 static std::atomic_bool g_unloading{false};
+// Set once after the initial in-Wh_ModInit hook batch has been queued.
+// Windhawk applies hook operations registered during Wh_ModInit
+// automatically once it returns; anything registered afterwards (from the
+// watchdog thread, tray recreation, or a settings change) needs an explicit
+// Wh_ApplyHookOperations() call, which this flag lets us gate on.
+static std::atomic_bool g_modInitComplete{false};
 static std::atomic<long> g_activeHookCalls{0};
 
 class ScopedHandle {
@@ -566,6 +579,7 @@ struct ModSettings {
     std::atomic_int maxLaunchesPerUri{3};
     std::atomic_bool comActivationRedirect{false};
     std::atomic_bool legacyNameMappingFix{true};
+    std::atomic_bool redirectDisplayPages{true};
 };
 
 static ModSettings g_settings;
@@ -594,6 +608,9 @@ static bool ComActivationRedirectEnabled() noexcept {
 static bool LegacyNameMappingFixEnabled() noexcept {
     return g_settings.legacyNameMappingFix.load(std::memory_order_acquire);
 }
+static bool RedirectDisplayPagesEnabled() noexcept {
+    return g_settings.redirectDisplayPages.load(std::memory_order_acquire);
+}
 
 static void DisableRedirectsAfterSettingsFailure() noexcept {
     g_settings.enableRedirects.store(false, std::memory_order_release);
@@ -604,6 +621,7 @@ static void DisableRedirectsAfterSettingsFailure() noexcept {
     g_settings.maxLaunchesPerUri.store(3, std::memory_order_release);
     g_settings.comActivationRedirect.store(false, std::memory_order_release);
     g_settings.legacyNameMappingFix.store(true, std::memory_order_release);
+    g_settings.redirectDisplayPages.store(true, std::memory_order_release);
 }
 
 static void LoadSettings() {
@@ -626,6 +644,7 @@ static void LoadSettings() {
             ? configuredMaxLaunches : 3;
         const bool comActivationRedirect = Wh_GetIntSetting(L"ComActivationRedirect") != 0;
         const bool legacyNameMappingFix = Wh_GetIntSetting(L"LegacyNameMappingFix") != 0;
+        const bool redirectDisplayPages = Wh_GetIntSetting(L"RedirectDisplayPages") != 0;
 
         g_settings.enableRedirects.store(enableRedirects, std::memory_order_release);
         g_settings.redirectSystemTray.store(redirectSystemTray, std::memory_order_release);
@@ -635,6 +654,7 @@ static void LoadSettings() {
         g_settings.maxLaunchesPerUri.store(maxLaunchesPerUri, std::memory_order_release);
         g_settings.comActivationRedirect.store(comActivationRedirect, std::memory_order_release);
         g_settings.legacyNameMappingFix.store(legacyNameMappingFix, std::memory_order_release);
+        g_settings.redirectDisplayPages.store(redirectDisplayPages, std::memory_order_release);
     } catch (const std::exception&) {
         DisableRedirectsAfterSettingsFailure();
         Wh_Log(L"[STABILITY] LoadSettings caught std::exception; redirects are disabled for safety");
@@ -648,42 +668,24 @@ static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w) {
     HookInvocationGuard invocation;
     if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalSndVolSSO(m, w);
-    try {
-        return false;
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] SndVolSSO context hook caught std::exception");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] SndVolSSO context hook caught an unknown exception");
-    }
-    return CallOriginalSndVolSSO(m, w);
+    // Nothing here can throw, so there's no exception to guard against.
+    return false;
 }
 
 static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w) {
     HookInvocationGuard invocation;
     if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalPnidui(m, w);
-    try {
-        return false;
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] pnidui context hook caught std::exception");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] pnidui context hook caught an unknown exception");
-    }
-    return CallOriginalPnidui(m, w);
+    // Nothing here can throw, so there's no exception to guard against.
+    return false;
 }
 
 static bool ICMH_CALL ICMH_hook_Shell32Devices(void* pThis, HMENU m, UINT u) {
     HookInvocationGuard invocation;
     if (!invocation.AllowCustomBehavior() || !RedirectsEnabled() || !RedirectSystemTrayEnabled())
         return CallOriginalShell32Devices(pThis, m, u);
-    try {
-        return false;
-    } catch (const std::exception&) {
-        Wh_Log(L"[STABILITY] shell32 devices context hook caught std::exception");
-    } catch (...) {
-        Wh_Log(L"[STABILITY] shell32 devices context hook caught an unknown exception");
-    }
-    return CallOriginalShell32Devices(pThis, m, u);
+    // Nothing here can throw, so there's no exception to guard against.
+    return false;
 }
 
 static bool g_isWin11 = false;
@@ -1251,7 +1253,7 @@ static bool InitMappings() {
         {L"ms-settings:fonts", L"shell:::{BD84B380-8CA2-1069-AB1D-08000948F534}"},
         {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
         {L"ms-settings:colorcpl", L"colorcpl.exe"},
-        // {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"}, <- This has been removed because a restoration mod for the legacy page has been created
+        {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-adapter-properties", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
@@ -1591,6 +1593,25 @@ static bool ShouldApplyBounceGuard(const std::wstring& uri) {
     return uri.find(L"personalization") != std::wstring::npos;
 }
 
+// The classic Display / Screen Resolution pages this group maps to are also
+// what the companion "Classic Display Control Panel Restorer" mod restores.
+// Gated behind RedirectDisplayPages so the two mods can coexist: when off,
+// these URIs fall through to HandleFallback instead of being redirected here.
+static bool IsDisplayGroupUri(const std::wstring& uri) {
+    static const std::wstring_view kDisplayGroupUris[] = {
+        L"ms-settings:display",
+        L"ms-settings:display-advanced",
+        L"ms-settings:display-advanced-graphics",
+        L"ms-settings:display-adapter-properties",
+        L"ms-settings:display-resolution",
+        L"ms-settings:screenrotation",
+    };
+    for (const auto& candidate : kDisplayGroupUris) {
+        if (uri == candidate) return true;
+    }
+    return false;
+}
+
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     if (uri == L"ms-settings:personalization-background") {
         if (BounceGuardIsBounce(uri)) return {L"", true};
@@ -1601,7 +1622,7 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
 
     std::wstring mappedTarget;
     bool mappingFound = false;
-    {
+    if (!IsDisplayGroupUri(uri) || RedirectDisplayPagesEnabled()) {
         std::lock_guard<std::mutex> lk(g_mappingsMutex);
         auto it = g_mappings.find(uri);
         if (it != g_mappings.end()) {
@@ -1777,8 +1798,12 @@ static void InstallAAMHook() {
 
         if (WindhawkUtils::SetFunctionHook(target, AAM_ActivateApplication_hook,
                                             &g_origActivateApplication)) {
-            g_aamHookInstalled = true;
-            Wh_Log(L"[AAM-HOOK] Successfully installed");
+            if (ApplyLateHookIfNeeded()) {
+                g_aamHookInstalled = true;
+                Wh_Log(L"[AAM-HOOK] Successfully installed");
+            } else {
+                Wh_Log(L"[AAM-HOOK] Registered but Wh_ApplyHookOperations failed; will retry later");
+            }
         } else {
             Wh_Log(L"[AAM-HOOK] SetFunctionHook failed; COM redirect remains disabled");
         }
@@ -2050,6 +2075,25 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
         lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
+// If a late (post-Wh_ModInit) registration succeeds, the operation still
+// needs to be applied explicitly - Windhawk only auto-applies the batch that
+// was queued while Wh_ModInit was running. Returns whether the hook is
+// actually active and safe to mark "installed".
+static bool ApplyLateHookIfNeeded() {
+    if (!g_modInitComplete.load(std::memory_order_acquire)) {
+        // Still inside the initial Wh_ModInit batch; Windhawk will apply it
+        // automatically once Wh_ModInit returns.
+        return true;
+    }
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"[STABILITY] Wh_ApplyHookOperations failed for a late hook batch");
+        return false;
+    }
+    return true;
+}
+
+static std::atomic_bool g_pniduiHookFailed{false};
+
 static bool TryInstallPniduiHook() {
     if (g_unloading.load(std::memory_order_acquire)) return false;
     try {
@@ -2058,6 +2102,12 @@ static bool TryInstallPniduiHook() {
 
         if (g_pniduiHookInstalled.load(std::memory_order_acquire)) {
             return true;
+        }
+        // Only retry module/symbol resolution if we haven't already tried
+        // and failed - repeated HookSymbols calls against the same module
+        // invalidate its symbol cache and force a slow re-resolution.
+        if (g_pniduiHookFailed.load(std::memory_order_acquire)) {
+            return false;
         }
 
         HMODULE hMod = GetModuleHandleW(L"pnidui.dll");
@@ -2079,6 +2129,11 @@ static bool TryInstallPniduiHook() {
         }};
 
         bool result = WindhawkUtils::HookSymbols(hMod, pnidui_dll_hooks, 1);
+        if (!result) {
+            g_pniduiHookFailed.store(true, std::memory_order_release);
+            return false;
+        }
+        result = ApplyLateHookIfNeeded();
         if (result) {
             g_pniduiHookInstalled.store(true, std::memory_order_release);
         }
@@ -2092,7 +2147,9 @@ static bool TryInstallPniduiHook() {
 }
 
 static std::atomic_bool g_sndVolSSOHookInstalled{false};
+static std::atomic_bool g_sndVolSSOHookFailed{false};
 static std::atomic_bool g_shell32HooksInstalled{false};
+static std::atomic_bool g_shell32HooksFailed{false};
 static std::mutex g_immersiveMenuHookMutex;
 static std::mutex g_shell32HookMutex;
 
@@ -2101,7 +2158,8 @@ static void InstallImmersiveMenuHooks() {
     try {
         std::lock_guard<std::mutex> installLock(g_immersiveMenuHookMutex);
         if (g_unloading.load(std::memory_order_acquire)) return;
-        if (!g_sndVolSSOHookInstalled.load(std::memory_order_acquire)) {
+        if (!g_sndVolSSOHookInstalled.load(std::memory_order_acquire) &&
+            !g_sndVolSSOHookFailed.load(std::memory_order_acquire)) {
             HMODULE hMod = GetModuleHandleW(L"SndVolSSO.dll");
             if (!hMod) hMod = LoadLibraryExW(L"SndVolSSO.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
@@ -2117,7 +2175,11 @@ static void InstallImmersiveMenuHooks() {
                 }};
 
                 if (WindhawkUtils::HookSymbols(hMod, sndVolSSO_dll_hooks, 1)) {
-                    g_sndVolSSOHookInstalled.store(true, std::memory_order_release);
+                    if (ApplyLateHookIfNeeded()) {
+                        g_sndVolSSOHookInstalled.store(true, std::memory_order_release);
+                    }
+                } else {
+                    g_sndVolSSOHookFailed.store(true, std::memory_order_release);
                 }
             }
         }
@@ -2141,6 +2203,9 @@ static void InstallShell32Hooks() {
     std::lock_guard<std::mutex> lk(g_shell32HookMutex);
     if (g_unloading.load(std::memory_order_acquire)) return;
     if (g_shell32HooksInstalled.load(std::memory_order_acquire)) return;
+    // Already tried and the symbols weren't hookable - don't keep re-resolving
+    // the module on every settings change / tray recreation.
+    if (g_shell32HooksFailed.load(std::memory_order_acquire)) return;
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) return;
@@ -2175,8 +2240,12 @@ static void InstallShell32Hooks() {
             shell32_dll_hooks,
             ARRAYSIZE(shell32_dll_hooks)))
     {
-        g_shell32HooksInstalled.store(true, std::memory_order_release);
-        Wh_Log(L"[SHELL32-HOOKS] Installed shell32 hook set");
+        if (ApplyLateHookIfNeeded()) {
+            g_shell32HooksInstalled.store(true, std::memory_order_release);
+            Wh_Log(L"[SHELL32-HOOKS] Installed shell32 hook set");
+        }
+    } else {
+        g_shell32HooksFailed.store(true, std::memory_order_release);
     }
     } catch (const std::exception&) {
         Wh_Log(L"[STABILITY] shell32 hook setup caught std::exception");
@@ -2437,6 +2506,10 @@ BOOL Wh_ModInit() {
             // returns, so Windhawk can apply them as part of normal initialization
             // without explicit Wh_ApplyHookOperations calls later.
             PerformBackgroundInit(true);
+            // Everything queued above rides along with Windhawk's automatic
+            // post-Wh_ModInit apply. Anything installed after this point is a
+            // late registration and must call Wh_ApplyHookOperations() itself.
+            g_modInitComplete.store(true, std::memory_order_release);
 
             {
                 std::lock_guard<std::mutex> lk(g_shellTrayWndMutex);
