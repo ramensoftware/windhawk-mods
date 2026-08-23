@@ -6,7 +6,6 @@
 // @author        potassiumuncher
 // @github        https://github.com/Potassiumuncher
 // @include       *
-// @exclude       explorer.exe
 // @license       GPL-2.0-or-later
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1 -luser32 -lcomctl32 -lwinmm
 // ==/WindhawkMod==
@@ -20,8 +19,6 @@
 
 Credit - KWin's Wobbly Windows for making this possible 
 ## Compatibility notes
-Dose not work as intended in File Explorer, excluded for the time being until its resolved.
-
 Added a setting to change corner radius so it is compatable with "Custom Window Corner Radius" mod (the default is 8 *windows default)
 
 Added a setting to capture by Screen instead of printWindow so it is compatable with "Translucent windows" mod
