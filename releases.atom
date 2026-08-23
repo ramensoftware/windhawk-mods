@@ -2,12 +2,199 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-22T15:37:38.000Z</updated>
+    <updated>2026-08-23T17:47:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Display Control Panel Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-display-control-panel-restorer#743200bf8812751c4b474fc274fcfccb954cafa8</id>
+        <link href="https://windhawk.net/mods/win7-display-control-panel-restorer"/>
+        <updated>2026-08-23T17:47:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicdisplaycontrolpanelrestorer">Classic Display Control Panel Restorer</h1>
+<p>This mod restores the classic <strong>Display</strong> and <strong>Screen Resolution</strong> Control Panel pages on Windows 10 and 11.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h1 id="changeresolutionpage">Change Resolution Page</h1>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display1.PNG" alt="Display" /> </p>
+<h1 id="changedpipage">Change DPI Page</h1>
+<h2 id="display2httpsrawgithubusercontentcombabamohammed2022babamohammed2022maindisplay2png"><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display2.PNG" alt="Display 2" /></h2>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>No File Replacement:</strong> The mod is designed to be stable and user-friendly, and does not require replacing any Windows system files.</li>
+<li><strong>Complete Classic UI:</strong> The mod restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.</li>
+<li><strong>Full Breadcrumb & Sidebar:</strong> The mod shows the original <strong>Display > Screen Resolution</strong> breadcrumb title and the classic Control Panel sidebar task links.</li>
+<li><strong>Working classic DPI presets:</strong> The 100/125/150/200% radio choices use the existing Apply button and the classic Please Wait transition.</li>
+<li><strong>Classic Icon & Localized Text:</strong> The mod uses the classic Display icon and localized strings for all supported languages.</li>
+<li><strong>Optional Redirects:</strong> The mod can redirect <code>desk.cpl</code>, related legacy commands, and even <code>ms-settings:display</code> to the restored classic page.</li>
+<li><strong>Offline Caching:</strong> The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use. After the load, the module the loader actually mapped is confirmed to be the very same file object that passed verification (<code>GetFileInformationByHandleEx(FileIdInfo)</code>), and is unloaded and refused otherwise.</li>
+<li><strong>No permanent background work:</strong> The hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks. While no Display page is open the worker thread is blocked on its wait handles with no timeout, so there is neither a window-tree enumeration nor a periodic wake-up.</li>
+<li><strong>Safe Fallback:</strong> If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.</li>
+<li><strong>Instant Toggle:</strong> Disabling the mod immediately restores normal Windows behavior for newly opened pages.</li>
+</ul>
+<hr />
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Page language:</strong> Follow Windows automatically or choose a supported language.</li>
+<li><strong>Show sidebar task links:</strong> Show or hide the complete classic task list.</li>
+<li><strong>Screen Resolution compatibility adaptation:</strong> Keep enabled for the normal recommended layout.</li>
+<li><strong>Redirect classic Display launch routes:</strong> Restore <code>desk.cpl</code> and other classic commands.</li>
+<li><strong>Redirect Display settings:</strong> Open the restored classic page instead of the Settings app.</li>
+<li><strong>Working orientation:</strong> Landscape / Portrait / flipped are applied with the documented <code>ChangeDisplaySettingsExW</code> and <code>SetDisplayConfig</code> APIs (width/height are swapped when the mode requires it). The native Orientation row is used; the optional setting only unhides it when the 1511 provider would hide it.</li>
+<li><strong>Keep classic DPI presets selectable:</strong> Keep the classic scaling choices enabled on the Display page.</li>
+<li><strong>Keep downloaded files:</strong> Retain the verified component for faster re-enabling.</li>
+</ul>
+<hr />
+<h2 id="howitworks">How It Works</h2>
+<p>The mod hooks into <code>explorer.exe</code>, <code>control.exe</code>, and <code>rundll32.exe</code> to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component (the Windows 10 1511 DLL which is the last version to have the classic page in the Control Panel) and it is also verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.</p>
+<p>The mod has been tested on <strong>Windows 10 1809</strong>, <strong>Windows 10 21H2</strong>, <strong>Windows 11 24H2</strong> and <strong>Windows 11 25H2</strong>, and works with the native 64‑bit Control Panel environment.</p>
+<hr />
+<h2 id="supportedlanguages">Supported Languages</h2>
+<p>The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German, Brazilian Portuguese, and Polish. The page content and the complete breadcrumb follow the selected language.</p>
+<hr />
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod runs inside <code>explorer.exe</code> and requires <strong>64‑bit Windows 10 or Windows 11</strong>. It is <strong>x64-only and is not supported on ARM64</strong> (on an ARM64 device the mod has no effect; see Known Limitations).</li>
+<li>On first use, wait a few seconds for the setup to finish, then reopen Control Panel.</li>
+<li>After changing a setting or language, close any already open Display page and reopen it.</li>
+<li>If the page does not appear, check the Windhawk log for download or hash verification errors.</li>
+<li>Keep <strong>Screen Resolution compatibility adaptation</strong> enabled for the normal recommended configuration.</li>
+</ul>
+<hr />
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li><strong>Combobox inside the screen preview:</strong> The combobox that appears inside the screen preview area does not function correctly.</li>
+<li><strong>Magnifier link:</strong> The help text on the Display page renders the Magnifier reference as a blue link in every supported language. The link is kept for its original text and appearance only; clicking it does nothing.</li>
+<li><strong>Orientation:</strong> By default the Orientation row is hidden because the provider list is empty on current adapters. Enable the <strong>Show the classic Orientation row</strong> setting to restore the provider's untouched Orientation markup (screen rotation is still applied when you change the selection and press Apply).</li>
+<li>The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.</li>
+<li>The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.</li>
+<li>Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.</li>
+<li><strong>ARM64 (x64-only):</strong> The mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.</li>
+</ul>
+<hr />
+<h2 id="directshellroutes">Direct shell routes</h2>
+<p>While the mod is active, the restored pages are also reachable directly, without going through the Control Panel UI (paste into Win+R or a shortcut):</p>
+<ul>
+<li><code>shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}</code> - the restored classic <strong>Display</strong> hub page.</li>
+<li><code>shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\Settings</code> - the restored classic <strong>Screen Resolution</strong> page.</li>
+</ul>
+<p>These are useful as an alternative entry point if a Control Panel task link ever misbehaves on a particular Windows build.</p>
+<hr />
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>Cips</strong> — testing on Windows 11 25H2</li>
+</ul>
+<hr />]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Update Control Panel Page Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-update-control-panel-restorer#e10588c8b0101b4ab1e8b525bcc00a0aa1d2bf5b</id>
+        <link href="https://windhawk.net/mods/windows-update-control-panel-restorer"/>
+        <updated>2026-08-23T17:46:46.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="windowsupdatecontrolpanelrestorer">Windows Update Control Panel Restorer</h2>
+<p>This mod adds a best-effort classic Windows Update page back to Control Panel on
+Windows 10 and Windows 11 by reimplementing it where possible and by partially recreating the legacy interface. The mod utilizes a Windows 8.1 UI dll with the modern
+Windows Update backend/status layer, without replacing system files or writing
+real Control Panel registration keys.</p>
+<p>This is a reimplementation, not the original Windows Update client. Some buttons
+and small visual details are limited due to modern Windows versions' architecture, and more details may be
+improved in future versions.</p>
+<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<h2 id="screenshot"><strong>Screenshot</strong></h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsupdate.PNG" alt="Windows Update Control Panel Restorer" /></p>
+<h2 id="keyfeatures"><strong>Key Features</strong></h2>
+<ul>
+<li>Classic Windows Update interface with real-time status.</li>
+<li>Option to choose between Windows 7 or Windows 8.1 visual style.</li>
+<li>Clear notification when Windows Update is unavailable.</li>
+<li>Optional banner for available updates and link to settings.</li>
+<li>Option to hide outdated "Check for updates" box when the service is disabled.</li>
+<li>Read-only view of classic update settings; changes must be made via the modern Settings app.</li>
+<li><strong>Multilingual UI</strong>: English, Italian, Spanish, French, Turkish, Russian, Portuguese, Chinese, Polish, Dutch, or auto-detect.</li>
+<li><strong>"Check for updates" feature</strong>: click the sidebar link to run a REAL online search against Windows Update/Microsoft Update in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
+The result is deliberately conservative and matches what the Settings app would offer: definition (antimalware) updates, optional/browse-only items, preview and beta packages and non-installable entries are filtered out, and an update that cannot be positively identified as offered is not counted. If Windows says your PC is up to date, so does this page.</li>
+<li><strong>"Updates FAQ" link</strong>: opens a compact window with ten common questions and answers about Windows updates.</li>
+<li><strong>Native sidebar</strong>: preserves the original Windows Control Panel sidebar without adding or modifying external elements.</li>
+</ul>
+<h2 id="notes"><strong>Notes</strong></h2>
+<ul>
+<li><strong>The Control Panel entry appears immediately.</strong> Registration is published
+when the mod is enabled and is completely independent of the payload
+download, so "Windows Update" is in Control Panel right away - on first run,
+with no internet connection, and even if the download fails. Only the classic
+page's own content needs the payload; if it is not ready yet, opening the item
+shows a translated explanation and offers to open Windows Update in Settings.</li>
+<li>After the first successful setup the verified payload is cached and reused
+with no network access at all, so the page works fully offline afterwards.</li>
+<li>Installing updates is still handled by the modern Settings app.</li>
+<li>The "last checked" and "updates were installed" times come from Windows
+Update's recorded registry timestamps when those values are available.</li>
+<li><strong>Why the mod downloads a DLL:</strong> The restored page is the real Windows 8.1
+Windows Update Control Panel UI (wucltux.dll), loaded privately from a
+verified copy obtained from the Microsoft Symbol Server. That DLL is a
+<strong>necessary dependency</strong>: it is what renders the classic page, and the whole
+point of this mod is to bring that original page back. Without it there is
+nothing to show, so the mod cannot function offline or without this payload.
+The download is a one-time fetch (retried up to a few times), the file is
+pinned to a known SHA-256 and its PE machine type is validated before it is
+ever loaded, and it is kept as a private copy outside System32 and nothing is
+installed to or replaced in the operating system. The Microsoft Symbol Server
+URL is tied to this exact historical build; if Microsoft removes that file,
+first-time setup will no longer work unless the verified payload was cached.
+This is therefore a hard dependency on a single remote file, not a
+convenience: the mod is not self-contained. Only the localization is - the
+matching MUI satellite files are never downloaded, because every string the
+restored page needs is embedded in the mod's own source.</li>
+</ul>
+<h2 id="stabilityandsafetydesign"><strong>Stability and safety design</strong></h2>
+<ul>
+<li><strong>Nothing is written to the real registry or to system files.</strong> Every key and
+value is served from an in-memory virtualization layer, and each synthetic
+handle is backed by a genuine per-process <em>volatile</em> key that is deleted on
+unload, so no trace remains.</li>
+<li><strong>Setup never blocks the shell.</strong> The download runs on a background thread,
+is serialized across processes with a named mutex, is bounded per call, per
+attempt and by an overall deadline, and aborts immediately on shutdown, so a
+slow or captive-portal network can never hang Explorer or delay sign-out.</li>
+<li><strong>Every failure is contained.</strong> The setup worker, the language rebuild worker
+and both mod entry points have hard exception boundaries, so no failure can
+reach <code>std::terminate</code> and take Explorer down. Any step that fails degrades to
+a working fallback instead of an error.</li>
+<li><strong>Payload integrity is pinned.</strong> The download goes to a private temporary file
+that is size-, PE-machine- and SHA-256-checked against a pinned digest before
+it is atomically moved into place and loaded from outside System32.</li>
+<li><strong>Clean teardown.</strong> Disabling the mod hides the entry immediately, stops the
+workers, unloads the private payload and the generated resource modules it
+mapped, and then removes the files it created. A file still mapped by another
+process is left alone and retried on a later load or unload - never
+force-deleted and never scheduled machine-wide. In the rare case where a
+generated file is still locked when the mod unloads (for example because a
+Control Panel page created from it is still alive), the file is left on disk
+and deleted by the cleanup pass of a later load or unload.</li>
+</ul>
+<h2 id="knownlimitations"><strong>Known Limitations</strong></h2>
+<ul>
+<li><strong>Update installation</strong>: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.</li>
+<li><strong>Visual differences</strong>: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.</li>
+<li><strong>Classic Settings page</strong>: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible and it's currently a decorative page. However, if proper documentation to improve it is found, a better implementation will be done.</li>
+</ul>
+<h2 id="credits"><strong>Credits</strong></h2>
+<ul>
+<li><strong>Yvor</strong> - Testing on Windows 10 21H2.</li>
+<li><strong>Cips</strong> - Testing on Windows 11 25H2.</li>
+<li><strong>Allison</strong> - Suggestions for the implementation of the native Control Panel navigation links.</li>
+</ul>
+<p>If any issues are encountered, please report them to the author of the mod.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Search on Active Display 1.1.0]]></title>
         <id>https://windhawk.net/mods/search-active-display#782f5af4ee10ffeefc60227ec7bc30c32c884236</id>
@@ -1100,136 +1287,6 @@ already published by the playing application to Windows.</p>]]></content>
         <author>
             <name>Spartacus</name>
             <uri>https://github.com/spartaaacus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Widget Board Size and Position 0.1]]></title>
-        <id>https://windhawk.net/mods/widget-board-size-position#3464f4b275a5b6b7c1f34c94244904f631142a0e</id>
-        <link href="https://windhawk.net/mods/widget-board-size-position"/>
-        <updated>2026-08-08T13:02:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="widgetboardsizeandposition">Widget Board Size and Position</h1>
-<p>Set a custom size and position for the new Widget Board on Windows 11.</p>
-<p>Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (<code>WidgetBoard.exe</code>).</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/widget-board-size-position/wboard-size.png" alt="Screenshot" />
-<em>Example for making the Widget Board smaller</em></p>
-<p>Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
-700x600 setting becomes 1400x1200 native pixels on a 200% display.</p>
-<p><code>horizontalAnchor</code> accepts: <code>system</code>, <code>left</code>, <code>center</code>, <code>right</code>.
-<code>verticalAnchor</code> accepts: <code>system</code>, <code>top</code>, <code>center</code>, <code>bottom</code>.</p>
-<p>When an anchor is <code>system</code>, Windows' requested position is preserved on that
-axis. Positive offsets move inward from left/top/right/bottom; for <code>center</code>,
-they move right/down from center.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel in Modern File Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/control-panel-in-modern-file-explorer#f619cf783ed8630d4973aaa7b10dd5ecf0bddf9f</id>
-        <link href="https://windhawk.net/mods/control-panel-in-modern-file-explorer"/>
-        <updated>2026-08-08T11:26:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="controlpanelinmodernfileexplorer">Control Panel in Modern File Explorer</h1>
-<p>Windows 11 normally routes the Control Panel namespace to a dedicated legacy
-Explorer window. This mod disables only that special host-selection rule, so
-Control Panel opens in the regular modern File Explorer.</p>
-<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Painel%20de%20Controle.jpg" alt="Control Panel in modern File Explorer" /></p>
-<p>The Control Panel contents remain unchanged, but they are hosted by the modern
-Explorer frame with its current address bar, command bar, and tab interface.
-Its window also keeps File Explorer's taskbar identity instead of appearing as
-a separately pinned application.</p>
-<p>The mod allows normal File Explorer behavior and compatible tab-management mods
-and programs to handle Control Panel like other File Explorer locations.
-Separate-process behavior for regular folders is not changed, and there
-are no settings or background tasks.</p>
-<p>Unlike <code>aerexplorer</code>, this mod changes host selection only for Control Panel
-items and also removes their separate taskbar identity. It doesn't modify the
-host selection of other File Explorer locations or include legacy Explorer
-customizations. <code>cpl-classic-view-lite</code> is complementary rather than
-overlapping — it changes how the Control Panel folder's contents are
-presented, not which frame hosts the window.</p>
-<h2 id="knownbehavior">Known behavior</h2>
-<ul>
-<li>Control Panel is intentionally kept in the modern File Explorer even when
-"Launch folder windows in a separate process" is enabled. Regular folders
-continue to follow that setting.</li>
-<li>Pinning a Control Panel window pins File Explorer because the window shares
-File Explorer's taskbar identity.</li>
-<li>Control Panel launched via Run (<code>Win+R</code> → <code>control</code>) or <code>control.exe</code>
-directly is also covered — the mod hooks <code>control.exe</code> too, since it goes
-through the same host-selection functions before launching its own
-Explorer window.</li>
-</ul>
-<hr />
-<h1 id="paineldecontrolenoexploradormoderno">Painel de Controle no Explorador moderno</h1>
-<p>Normalmente, o Windows 11 encaminha o namespace do Painel de Controle para uma
-janela legada dedicada do Explorer. Este mod desativa somente essa regra especial
-de seleção de host, fazendo o Painel de Controle abrir no Explorador de Arquivos
-moderno normal.</p>
-<p>O conteúdo do Painel de Controle não é alterado, mas passa a ser hospedado pelo
-frame moderno do Explorer, com a barra de endereços, a barra de comandos e a
-interface de abas atuais.
-A janela também mantém a identidade do Explorador de Arquivos na barra de
-tarefas, em vez de aparecer como um aplicativo fixado separado.</p>
-<p>O mod permite que o comportamento normal do Explorador de Arquivos e mods e
-programas compatíveis de gerenciamento de abas tratem o Painel de Controle como
-outras localizações do Explorador de Arquivos. O comportamento de processo separado
-das pastas comuns não é alterado, e não há configurações nem tarefas em segundo plano.</p>
-<p>Ao contrário do <code>aerexplorer</code>, este mod altera a seleção de host somente para
-itens do Painel de Controle e também remove sua identidade separada na barra de
-tarefas. Ele não altera o host de outras localizações nem inclui personalizações
-do Explorador legado. O <code>cpl-classic-view-lite</code> é complementar, não
-concorrente — ele muda como o conteúdo da pasta do Painel de Controle é
-apresentado, não qual frame hospeda a janela.</p>
-<h2 id="comportamentoconhecido">Comportamento conhecido</h2>
-<ul>
-<li>O Painel de Controle é mantido intencionalmente no Explorador moderno mesmo
-quando "Iniciar as janelas de pastas em um processo separado" está ativado.
-As pastas comuns continuam seguindo essa configuração.</li>
-<li>Fixar uma janela do Painel de Controle fixa o Explorador de Arquivos, pois a
-janela compartilha a identidade do Explorador na barra de tarefas.</li>
-<li>O Painel de Controle aberto pelo Executar (<code>Win+R</code> → <code>control</code>) ou
-diretamente pelo <code>control.exe</code> também é coberto — o mod também intercepta
-o <code>control.exe</code>, pois ele passa pelas mesmas funções de seleção de host
-antes de abrir sua própria janela do Explorer.</li>
-</ul>
-<hr />
-<h1 id="paneldecontrolenelexploradormoderno">Panel de control en el Explorador moderno</h1>
-<p>Windows 11 normalmente dirige el espacio de nombres del Panel de control a una
-ventana heredada dedicada de Explorer. Este mod desactiva solamente esa regla
-especial de selección de host, haciendo que el Panel de control se abra en el
-Explorador de archivos moderno normal.</p>
-<p>El contenido del Panel de control no cambia, pero pasa a estar alojado en el
-marco moderno de Explorer, con la barra de direcciones, la barra de comandos y
-la interfaz de pestañas actuales.
-La ventana también conserva la identidad del Explorador de archivos en la barra
-de tareas, en vez de aparecer como una aplicación anclada independiente.</p>
-<p>Este mod permite que el Explorador de archivos funcione con normalidad y que los
-mods y programas compatibles de gestión de pestañas traten el Panel de control como
-cualquier otra ubicación del Explorador de archivos. El comportamiento de los procesos
-independientes de las carpetas comunes no se ve alterado, y no hay configuraciones ni
-tareas en segundo plano.</p>
-<p>A diferencia de <code>aerexplorer</code>, este mod cambia la selección del host solamente
-para los elementos del Panel de control y también elimina su identidad separada
-en la barra de tareas. No cambia el host de otras ubicaciones ni incluye las
-personalizaciones heredadas de Explorer. <code>cpl-classic-view-lite</code> es
-complementario, no competidor — cambia cómo se presenta el contenido de la
-carpeta del Panel de control, no qué marco aloja la ventana.</p>
-<h2 id="comportamientoconocido">Comportamiento conocido</h2>
-<ul>
-<li>El Panel de control se mantiene intencionadamente en el Explorador moderno
-incluso cuando está activada la opción de iniciar ventanas de carpeta en un
-proceso independiente. Las carpetas normales siguen respetando esa opción.</li>
-<li>Anclar una ventana del Panel de control ancla el Explorador de archivos porque
-la ventana comparte su identidad en la barra de tareas.</li>
-<li>El Panel de control abierto mediante Ejecutar (<code>Win+R</code> → <code>control</code>) o
-directamente con <code>control.exe</code> también está cubierto — el mod también
-engancha <code>control.exe</code>, ya que pasa por las mismas funciones de selección
-de host antes de abrir su propia ventana de Explorer.</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

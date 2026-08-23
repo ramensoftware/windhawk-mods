@@ -15854,6 +15854,39 @@
         "version": "1.0.0"
       }
     },
+    "win7-display-control-panel-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787507255000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787507255000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwininet -ladvapi32 -lole32 -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32 -lmsimg32",
+        "description": "This mod restores the classic Display and Screen Resolution Control Panel pages on Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe",
+          "rundll32.exe"
+        ],
+        "name": "Classic Display Control Panel Restorer",
+        "version": "1.0.0"
+      }
+    },
     "win7-dwm-disable": {
       "details": {
         "defaultSorting": 216,
@@ -16579,6 +16612,38 @@
         "license": "MIT",
         "name": "Windows Animations",
         "version": "1.2.0"
+      }
+    },
+    "windows-update-control-panel-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787507206000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787507206000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwininet -ladvapi32 -lole32 -luuid -loleaut32 -lgdi32 -lcomctl32 -luser32 -lshell32",
+        "description": "This mod restores the Windows Update Control Panel page in Windows 10 and Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "name": "Windows Update Control Panel Page Restorer",
+        "version": "1.0.0"
       }
     },
     "winui-context-menu-animation": {
