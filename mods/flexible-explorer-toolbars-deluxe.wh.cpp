@@ -230,8 +230,6 @@ void ForceHideWorker(HWND w) {
     if (HWND rb = FindByClass(w, L"ReBarWindow32")) {
         SetPropW(rb, L"FlexTbForceHidden", (HANDLE)1);
         HookWindow(rb, WorkerW_Proc);
-        HRGN hrgn2 = CreateRectRgn(0,0,0,0);
-        SetWindowRgn(rb, hrgn2, FALSE);
     }
 
     HRGN hrgn = CreateRectRgn(0,0,0,0);
