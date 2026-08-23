@@ -2044,7 +2044,34 @@ FrameworkElement GetCachedTaskbarRepeater() {
 //
 // Also guarded against running while nested inside an active Arrange
 // pass on this thread - defense in depth, not the primary protection.
+// Reentrancy guard: this function is reachable from two independent
+// dispatch paths on the taskbar thread (the posted ResolveButtonHwndsMsg
+// via TaskbarWndSubclassProc, and RunFromWindowThread's sent message via
+// its WH_CALLWNDPROC hook), and it mutates g_buttonHwndCache/
+// g_lastKnownWindowClassification with erase-while-iterating prune loops.
+// If a cross-thread SendMessage gets pumped while a call is already in
+// progress here (it calls into taskbar.dll and WinRT, either of which
+// could pump), a nested call's inserts would invalidate the outer loop's
+// iterator - undefined behavior, not just wasted work. RAII rather than a
+// plain set/clear, same reasoning as ScopedArrangeOverrideFlag: this
+// function has several early returns a plain clear at the end would never
+// reach.
+thread_local bool g_inResolvePendingButtonHwnds;
+struct ScopedResolvePendingButtonHwndsFlag {
+    ScopedResolvePendingButtonHwndsFlag() {
+        g_inResolvePendingButtonHwnds = true;
+    }
+    ~ScopedResolvePendingButtonHwndsFlag() {
+        g_inResolvePendingButtonHwnds = false;
+    }
+};
+
 void ResolvePendingButtonHwnds() {
+    if (g_inResolvePendingButtonHwnds) {
+        return;
+    }
+    ScopedResolvePendingButtonHwndsFlag scopedReentrancyFlag;
+
     // Computes and arms this function's own next tick on destruction, on
     // every return path, always on this thread right after this pass's
     // own cache reads/writes are done - computing it from
@@ -2947,21 +2974,36 @@ bool HookTaskbarDllSymbols() {
             &std__Ref_count_base__Decref_Original,
         },
         {
+            // Optional, like everything below: these four only power the
+            // button->HWND resolution chain (icons following windows), not
+            // the mod's core centering/split positioning - a future Windows
+            // build renaming one of them should degrade to
+            // unresolvedAppsDefaultSide classification, not refuse to load
+            // the whole mod. The null checks already present in
+            // GetWindowFromNativeTaskItem/ResolveHwndFromIndividualTaskItem
+            // exist specifically to handle that.
             {LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
             &CTaskListWnd_HandleClick_Original,
             CTaskListWnd_HandleClick_Hook,
+            true,
         },
         {
             {LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))"},
             &CWindowTaskItem_GetWindow_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual struct HWND__ * __cdecl CImmersiveTaskItem::GetWindow(void))"},
             &CImmersiveTaskItem_GetWindow_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'})"},
             &CImmersiveTaskItem_vftable,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskItem,struct winrt::WindowsUdk::UI::Shell::ITaskItem>::ReportClicked(void *))"},
