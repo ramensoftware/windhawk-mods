@@ -2,7 +2,7 @@
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
-// @version         1.3.6
+// @version         1.5
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -58,7 +58,6 @@ By default, only the Search Bar is shown; the Location (breadcrumb) bar and the 
 #include <commctrl.h>
 #include <unordered_map>
 #include <vector>
-#include <string>
 #include <algorithm>
 #include <windowsx.h>
 
@@ -67,7 +66,7 @@ constexpr UINT STR_ID_SEARCHBAR = 34304, STR_ID_BREADCRUMB = 49952, STR_ID_UPBUT
 enum class BandType { Search, Breadcrumb, UpButton };
 enum ChildFlag { CF_MOVED=1, CF_UPBUTTON=2, CF_BREADCRUMB=4, CF_SEARCH=8 };
 
-UINT g_msgDoMove = 0, g_msgFixContent = 0, g_msgSyncSettings = 0;
+UINT g_msgDoMove = 0, g_msgFixContent = 0, g_msgSyncSettings = 0, g_msgSyncLock = 0, g_msgFixBreadcrumb = 0;
 struct { bool s=true, b=true, u=true; } g_set;
 
 void LoadSettings() {
@@ -100,8 +99,6 @@ template<typename F> void EnumBands(HWND rb, UINT mask, F f) {
 int GetSavedRank(const wchar_t* cls) { WCHAR ok[160]; swprintf(ok,160,L"OrderRank_%s",cls); return Wh_GetIntValue(ok, INT_MAX); }
 void SetSavedRank(const wchar_t* cls, int r) { WCHAR ok[160]; swprintf(ok,160,L"OrderRank_%s",cls); Wh_SetIntValue(ok, r); }
 
-// FIX #2: default-initialize so any accidental use-before-LoadBandState() is well-defined
-// instead of indeterminate (width/style must never end up random).
 struct BandState { UINT cx = 0; bool brk = false; };
 bool LoadBandState(const wchar_t* cls, BandState& out) {
     WCHAR ck[160], bk[160]; swprintf(ck,160,L"Cx_%s",cls); swprintf(bk,160,L"Break_%s",cls);
@@ -167,8 +164,14 @@ HWND FindByClass(HWND p, LPCWSTR c) { return FindWindowEx(p, NULL, c, NULL); }
 HWND GetCabinet(HWND h) { while(h){ WCHAR c[64]; if(GetClassName(h,c,64) && !wcscmp(c,L"CabinetWClass")) return h; h=GetParent(h); } return NULL; }
 HWND FindNavRb(HWND c) { for(HWND w=FindByClass(c,L"WorkerW"); w; w=FindWindowEx(c,w,L"WorkerW",NULL)) if(HWND r=FindByClass(w,L"ReBarWindow32")) return r; return NULL; }
 
-// FIX #3: enumerate only this process's CabinetWClass windows instead of HWND_BROADCAST,
-// which would hit every top-level window in every process on the desktop.
+void RefreshBreadcrumb(HWND cab, HWND breadcrumb) {
+    if(!cab || !IsWindow(cab) || !breadcrumb || !IsWindow(breadcrumb)) return;
+    BOOL active = (GetForegroundWindow() == cab);
+    SendMessage(cab, WM_NCACTIVATE, !active, 0);
+    SendMessage(cab, WM_NCACTIVATE, active, 0);
+    SetWindowPos(breadcrumb, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
 BOOL CALLBACK EnumSyncCabinets_Proc(HWND w, LPARAM) {
     DWORD pid = 0; GetWindowThreadProcessId(w, &pid);
     if(pid == GetCurrentProcessId()) {
@@ -192,29 +195,12 @@ bool ContainsClass(HWND root, LPCWSTR t) {
     return f;
 }
 
-void ForceHideWorker(HWND w) {
-    if(!w || !IsWindow(w)) return;
-    bool alreadyHidden = GetPropW(w, L"FlexTbForceHidden") &&
-                         !(GetWindowLongPtr(w, GWL_STYLE) & WS_VISIBLE);
-    SetPropW(w, L"FlexTbForceHidden", (HANDLE)1);
-    if(alreadyHidden) return;
-    LONG_PTR style = GetWindowLongPtr(w, GWL_STYLE);
-    if(style & WS_VISIBLE) SetWindowLongPtr(w, GWL_STYLE, style & ~WS_VISIBLE);
-    ShowWindow(w, SW_HIDE);
-    SetWindowPos(w, NULL, 0, 0, 0, 0,
-        SWP_HIDEWINDOW | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE | SWP_FRAMECHANGED);
-}
-
 void ForceCabinetRelayout(HWND cab) {
     if(!cab || !IsWindow(cab)) return;
     HWND s = FindByClass(cab, L"ShellTabWindowClass");
     if(s) { RECT rc; GetClientRect(cab, &rc); SetWindowPos(s, NULL, 0, 0, rc.right, rc.bottom, SWP_NOZORDER | SWP_NOACTIVATE); }
-    for(HWND w = FindByClass(cab, L"WorkerW"); w; w = FindWindowEx(cab, w, L"WorkerW", NULL))
-        if(FindByClass(w, L"ReBarWindow32")) ForceHideWorker(w);
     RECT rc; GetClientRect(cab, &rc);
     SendMessage(cab, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
-    RedrawWindow(cab, NULL, NULL,
-        RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_ERASENOW | RDW_FRAME);
 }
 
 DWORD GetRefGripper(HWND rb) {
@@ -251,24 +237,22 @@ LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         return DefSubclassProc(h, m, w, l);
     }
     if(m == WM_CONTEXTMENU) {
-        // Tbar_Proc is only ever subclassed onto the mod's own bands
-        // (see ToggleBand / g_msgDoMove), so no extra hit-test is needed here.
-        if(HWND rb = GetParent(h)) {
-            POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
-            if(pt.x==-1 && pt.y==-1) { RECT rc; GetWindowRect(h, &rc); pt.x=rc.left; pt.y=rc.bottom; }
-            bool shown = false;
-            if(HWND cab = GetCabinet(rb))
-                if(HWND ww = FindByClass(FindByClass(cab,L"ShellTabWindowClass"),L"WorkerW")) {
-                    if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
-                        if(HMENU sub = GetSubMenu(hM, 0)) {
-                            TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, pt.x, pt.y, ww, NULL);
-                            PostMessage(ww, WM_NULL, 0, 0);
-                            shown = true;
-                        } DestroyMenu(hM);
-                    }
+        HWND rb = GetParent(h);
+        POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
+        if(pt.x==-1 && pt.y==-1) { RECT rc; GetWindowRect(h, &rc); pt.x=rc.left; pt.y=rc.bottom; }
+        if(HWND cab = GetCabinet(rb)) {
+            HWND st = FindByClass(cab, L"ShellTabWindowClass");
+            if(st) if(HWND ww = FindByClass(st, L"WorkerW")) {
+                if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
+                    if(HMENU sub = GetSubMenu(hM, 0)) {
+                        TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, pt.x, pt.y, ww, NULL);
+                        PostMessage(ww, WM_NULL, 0, 0);
+                    } 
+                    DestroyMenu(hM);
                 }
-            return shown ? 0 : DefSubclassProc(h,m,w,l);
+            }
         }
+        return 0;
     }
     if(GetPropW(h, L"FlexTbIsHidden")) return DefSubclassProc(h,m,w,l);
     int flag = (int)(INT_PTR)GetPropW(h, L"FlexTbFlag");
@@ -311,12 +295,31 @@ void SyncMenu(HMENU m, HWND rb) {
     CheckMenuItem(m, 41484, MF_BYCOMMAND | (GetLockToolbarsState(rb) ? MF_CHECKED : MF_UNCHECKED));
 }
 
+BOOL CALLBACK EnumForLock_Proc(HWND w, LPARAM lp) {
+    DWORD pid = 0; GetWindowThreadProcessId(w, &pid);
+    if(pid != GetCurrentProcessId()) return TRUE;
+    WCHAR c[64];
+    if(GetClassName(w, c, 64) && !wcscmp(c, L"CabinetWClass"))
+        PostMessage(w, g_msgSyncLock, (WPARAM)lp, 0);
+    return TRUE;
+}
+
 BOOL HandleMenuResult(UINT cmd, bool isRet, HWND hw) {
     if(cmd>=CMD_TOGGLE_SEARCHBAND && cmd<=CMD_TOGGLE_UPBUTTON) {
         bool& s = (cmd==CMD_TOGGLE_SEARCHBAND)?g_set.s:(cmd==CMD_TOGGLE_BREADCRUMB)?g_set.b:g_set.u;
         s = !s;
         Wh_SetIntValue((cmd==CMD_TOGGLE_SEARCHBAND)?L"MoveSearchBand":(cmd==CMD_TOGGLE_BREADCRUMB)?L"MoveBreadcrumb":L"MoveUpButton", s?1:0);
-        PostSyncToAllCabinets(); // FIX #3
+        PostSyncToAllCabinets();
+        return isRet ? 0 : TRUE;
+    }
+    if(cmd == 41484) {
+        HWND cab = GetCabinet(hw);
+        HWND rb  = cab ? (HWND)GetPropW(cab, L"FlexTbRb") : NULL;
+        if(!rb || !IsWindow(rb)) {
+            if(!isRet && hw) PostMessage(hw, WM_COMMAND, MAKEWPARAM(LOWORD(cmd), 0), 0);
+            return isRet ? cmd : TRUE;
+        }
+        EnumWindows(EnumForLock_Proc, (LPARAM)!GetLockToolbarsState(rb));
         return isRet ? 0 : TRUE;
     }
     if(!isRet && cmd && hw) PostMessage(hw, WM_COMMAND, MAKEWPARAM(LOWORD(cmd), 0), 0);
@@ -382,7 +385,6 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
         RemovePropW(ch, L"FlexTbIsHidden");
         SetParent(ch, mr);
         WCHAR c[256]; GetEffClass(ch, c, 256);
-        // Always check LoadBandState's return value; never use bs uninitialized.
         BandState bs; bool hasSv = LoadBandState(c, bs);
         if(!hasSv) {
             RECT wr; GetWindowRect(ch, &wr);
@@ -404,6 +406,7 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             SyncGrippers(mr);
             ForceCabinetRelayout(cab);
             PostMessage(cab, g_msgFixContent, (WPARAM)ch, 0);
+            if(type == BandType::Breadcrumb) RefreshBreadcrumb(cab, ch);
             SaveBandPositions(mr, false);
         }
     }
@@ -414,43 +417,47 @@ LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m == WM_CONTEXTMENU) {
         HWND cab = GetCabinet(h);
         if(!cab) return DefSubclassProc(h,m,w,l);
-
         POINT ptScreen = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
         if(ptScreen.x==-1 && ptScreen.y==-1) { RECT rc; GetWindowRect(h,&rc); ptScreen.x=rc.left; ptScreen.y=rc.bottom; }
-
         POINT ptClient = ptScreen; ScreenToClient(h, &ptClient);
         RBHITTESTINFO rbht = {0}; rbht.pt = ptClient;
         int idx = (int)SendMessage(h, RB_HITTEST, 0, (LPARAM)&rbht);
-
-        bool takeOver = true; 
+        bool takeOver = true;
         if(idx >= 0) {
             REBARBANDINFO rbi = {sizeof(rbi)}; rbi.fMask = RBBIM_CHILD;
             if(SendMessage(h, RB_GETBANDINFO, idx, (LPARAM)&rbi) && rbi.hwndChild) {
                 int flag = (int)(INT_PTR)GetPropW(rbi.hwndChild, L"FlexTbFlag");
                 takeOver = (flag & CF_MOVED) != 0;
-            } else {
-                takeOver = false;
-            }
+            } else takeOver = false;
         }
         if(!takeOver) return DefSubclassProc(h,m,w,l);
-
-        bool shown = false;
-        if(HWND ww = FindByClass(FindByClass(cab,L"ShellTabWindowClass"),L"WorkerW")) {
+        HWND st = FindByClass(cab, L"ShellTabWindowClass");
+        if(st) if(HWND ww = FindByClass(st, L"WorkerW")) {
             if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
                 if(HMENU sub = GetSubMenu(hM, 0)) {
                     TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, ptScreen.x, ptScreen.y, ww, NULL);
                     PostMessage(ww, WM_NULL, 0, 0);
-                    shown = true;
-                } DestroyMenu(hM);
+                } 
+                DestroyMenu(hM);
             }
         }
-        return shown ? 0 : DefSubclassProc(h,m,w,l);
+        return 0;
     }
-    if(m==RB_SETBANDINFO) {
-        auto* inf=(REBARBANDINFO*)l;
-        if(inf && (inf->fMask&RBBIM_CHILDSIZE)) {
+    if(m == RB_SETBANDINFO) {
+        auto* inf = (REBARBANDINFO*)l;
+        if(inf && (inf->fMask & RBBIM_CHILDSIZE)) {
             HWND ch = (inf->fMask&RBBIM_CHILD) ? inf->hwndChild : [&](){ REBARBANDINFO q={sizeof(q)}; q.fMask=RBBIM_CHILD; return SendMessage(h,RB_GETBANDINFO,w,(LPARAM)&q)?q.hwndChild:NULL; }();
-            if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) { inf->cyMinChild=inf->cyChild=inf->cyMaxChild=GetSystemMetrics(SM_CYSIZE)+GetSystemMetrics(SM_CYBORDER)*2+2; inf->cyIntegral=1; }
+            if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) {
+                REBARBANDINFO local = *inf;
+                local.cyMinChild = local.cyChild = local.cyMaxChild =
+                    GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER)*2 + 2;
+                local.cyIntegral = 1;
+                g_rbLayoutDepth++;
+                LRESULT r = DefSubclassProc(h, m, w, (LPARAM)&local);
+                g_rbLayoutDepth--;
+                if(!g_inSync) if(HWND cab=GetCabinet(h)) if(GetPropW(cab, L"FlexTbMoved")) SyncGrippers(h);
+                return r;
+            }
         }
     }
     g_rbLayoutDepth++; LRESULT r=DefSubclassProc(h,m,w,l); g_rbLayoutDepth--;
@@ -488,6 +495,36 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m==WM_CLOSE||m==WM_DESTROY) {
         if(GetPropW(h, L"FlexTbMoved")) { HWND mr=(HWND)GetPropW(h, L"FlexTbRb"); if(mr) SaveBandPositions(mr); }
     }
+    if(m == g_msgSyncLock) {
+        HWND mr = (HWND)GetPropW(h, L"FlexTbRb");
+        if(mr && IsWindow(mr) && GetLockToolbarsState(mr) != (bool)w) {
+            HWND st = FindByClass(h, L"ShellTabWindowClass");
+            if(st) if(HWND ww = FindByClass(st, L"WorkerW"))
+                PostMessage(ww, WM_COMMAND, MAKEWPARAM(41484, 0), 0);
+        }
+        return 0;
+    }
+    if(m == g_msgFixBreadcrumb) {
+        if(GetPropW(h, L"FlexTbMoved")) {
+            HWND mr = (HWND)GetPropW(h, L"FlexTbRb");
+            if(mr && IsWindow(mr)) {
+                HWND breadcrumb = GetBandChild(mr, CF_BREADCRUMB);
+                if(breadcrumb && IsWindow(breadcrumb) && !GetPropW(breadcrumb, L"FlexTbIsHidden"))
+                    RefreshBreadcrumb(h, breadcrumb);
+            }
+        }
+        return 0;
+    }
+    if(m == WM_SIZE && w == SIZE_MINIMIZED)
+        SetPropW(h, L"FlexTbWasMinimized", (HANDLE)1);
+    if(m == WM_SIZE && (w == SIZE_RESTORED || w == SIZE_MAXIMIZED) && !IsIconic(h)) {
+        LRESULT result = DefSubclassProc(h, m, w, l);
+        if(GetPropW(h, L"FlexTbWasMinimized")) {
+            RemovePropW(h, L"FlexTbWasMinimized");
+            PostMessage(h, g_msgFixBreadcrumb, 0, 0);
+        }
+        return result;
+    }
     if(m==g_msgSyncSettings) {
         LoadSettings();
         if(GetPropW(h, L"FlexTbMoved")) {
@@ -498,23 +535,20 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         return 0;
     }
     if(m==g_msgFixContent) {
-        HWND ch=(HWND)w; RECT rc;
-        if(GetClientRect(ch,&rc)) {
-            int cw=rc.right-rc.left, ch_h=rc.bottom-rc.top;
-            if(cw>0 && ch_h>0) {
-                SendMessage(ch,WM_SIZE,SIZE_RESTORED,MAKELPARAM(cw,ch_h>4?ch_h-2:ch_h+2));
-                SendMessage(ch,TB_AUTOSIZE,0,0);
-                SendMessage(ch,WM_SIZE,SIZE_RESTORED,MAKELPARAM(cw,ch_h));
-                SendMessage(ch,TB_AUTOSIZE,0,0);
-                InvalidateRect(ch,NULL,TRUE); RedrawWindow(ch,NULL,NULL,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ERASE);
-            }
-        }
+        HWND ch=(HWND)w;
+        SendMessage(ch,TB_AUTOSIZE,0,0);
+        InvalidateRect(ch,NULL,TRUE); 
         return 0;
     }
     if(m==g_msgDoMove) {
         if(GetPropW(h, L"FlexTbMoved")) return 1;
-        HWND mRb = FindByClass(FindByClass(FindByClass(h,L"ShellTabWindowClass"),L"WorkerW"),L"ReBarWindow32");
-        HWND nRb = FindNavRb(h); if(!mRb || !nRb) return 0;
+        HWND st = FindByClass(h, L"ShellTabWindowClass");
+        if(!st) return 0;
+        HWND ww = FindByClass(st, L"WorkerW");
+        if(!ww) return 0;
+        HWND mRb = FindByClass(ww, L"ReBarWindow32");
+        HWND nRb = FindNavRb(h);
+        if(!mRb || !nRb) return 0;
         SetWindowLongPtr(mRb,GWL_STYLE,(GetWindowLongPtr(mRb,GWL_STYLE)&~RBS_FIXEDORDER)|RBS_VARHEIGHT);
         HookWindow(GetParent(mRb), ParentRb_Proc);
         SetPropW(mRb, L"FlexTbCab", (HANDLE)h); SetPropW(h, L"FlexTbRb", (HANDLE)mRb);
@@ -557,7 +591,10 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
             }
             ApplySavedLayout(mRb); SyncGrippers(mRb);
         }
-        ForceHideWorker(GetParent(nRb)); SetPropW(h,L"FlexTbMoved",(HANDLE)1); ForceCabinetRelayout(h);
+        HWND navWorker = GetParent(nRb);
+        SetPropW(h, L"FlexTbMoved", (HANDLE)1);
+        if(navWorker && IsWindow(navWorker)) DestroyWindow(navWorker);
+        ForceCabinetRelayout(h);
         for(auto& b : mv) PostMessage(h,g_msgFixContent,(WPARAM)b.c,0);
         if(!g_set.s) ToggleBand(h,BandType::Search,false);
         if(!g_set.b) ToggleBand(h,BandType::Breadcrumb,false);
@@ -575,17 +612,8 @@ LRESULT CALLBACK ShellTab_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
         auto*p=(WINDOWPOS*)ll; RECT rc; GetClientRect(GetParent(hh),&rc);
         p->x=p->y=0; p->cx=rc.right; p->cy=rc.bottom;
         p->flags=(p->flags&~(SWP_NOMOVE|SWP_NOSIZE|SWP_HIDEWINDOW))|SWP_NOZORDER|SWP_NOACTIVATE;
-    } return DefSubclassProc(hh,mm,ww,ll);
-}
-
-LRESULT CALLBACK WorkerW_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
-    if(mm==WM_NCDESTROY) { RemovePropW(hh,L"FlexTbForceHidden"); { Lock L; g_hooks.erase(hh); } return DefSubclassProc(hh,mm,ww,ll); }
-    if(GetPropW(hh,L"FlexTbForceHidden")) {
-        if(mm==WM_STYLECHANGING && ww==GWL_STYLE) ((STYLESTRUCT*)ll)->styleNew&=~WS_VISIBLE;
-        else if(mm==WM_WINDOWPOSCHANGING) { auto*p=(WINDOWPOS*)ll; p->flags=(p->flags&~SWP_SHOWWINDOW)|SWP_HIDEWINDOW; p->cx=p->cy=0; }
-        else if(mm==WM_SHOWWINDOW && ww) ShowWindow(hh,SW_HIDE);
-        else if(mm==WM_SIZE||mm==WM_MOVE) return 0;
-    } return DefSubclassProc(hh,mm,ww,ll);
+    } 
+    return DefSubclassProc(hh,mm,ww,ll);
 }
 
 LRESULT CALLBACK AddrBand_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
@@ -594,14 +622,16 @@ LRESULT CALLBACK AddrBand_Proc(HWND hh,UINT mm,WPARAM ww,LPARAM ll,DWORD_PTR) {
 }
 
 void ProcessWnd(HWND h) {
-    if(!h || !IsWindow(h)) return; WCHAR c[256]; if(!GetClassName(h,c,256)) return;
+    if(!h || !IsWindow(h)) return; 
+    WCHAR c[256]; 
+    if(!GetClassName(h,c,256)) return;
     if(!wcscmp(c,L"CabinetWClass")) HookWindow(h,Cab_Proc);
     else if(!wcscmp(c,L"ShellTabWindowClass") && GetCabinet(h)) HookWindow(h,ShellTab_Proc);
     else if(!wcscmp(c,L"WorkerW")) {
-        HWND p = GetParent(h); WCHAR pc[64];
-        if(p && GetClassName(p,pc,64) && !wcscmp(pc,L"CabinetWClass")) {
-            HookWindow(h,WorkerW_Proc); ForceHideWorker(h);
-        }
+        HWND p = GetParent(h); 
+        WCHAR pc[64];
+        if(p && GetClassName(p,pc,64) && !wcscmp(pc,L"CabinetWClass")) 
+            ShowWindow(h, SW_HIDE);
     }
     else if(!wcscmp(c,L"ReBarWindow32") && GetCabinet(h)) HookWindow(h,Rb_Proc);
     else if(!wcscmp(c,L"Address Band Root") && GetCabinet(h)) HookWindow(h,AddrBand_Proc);
@@ -622,14 +652,17 @@ NTSTATUS NTAPI Hook_NtSet(HANDLE k,PUNICODE_STRING v,ULONG ti,ULONG t,PVOID d,UL
         bool match=true; LPCWSTR tgt=L"ITBar7Layout";
         for(int i=0;i<12;i++) if(towlower(v->Buffer[i])!=towlower(tgt[i])) match=false;
         if(match) return 0;
-    } return origNtSet(k,v,ti,t,d,ds);
+    } 
+    return origNtSet(k,v,ti,t,d,ds);
 }
 
 BOOL Wh_ModInit() {
     LoadSettings(); InitializeCriticalSection(&g_cs);
-    g_msgDoMove      = RegisterWindowMessage(L"FlexExpTb_DoMove");
-    g_msgFixContent  = RegisterWindowMessage(L"FlexExpTb_Fix");
-    g_msgSyncSettings= RegisterWindowMessage(L"FlexExpTb_SyncSettings");
+    g_msgDoMove       = RegisterWindowMessage(L"FlexExpTb_DoMove");
+    g_msgFixContent   = RegisterWindowMessage(L"FlexExpTb_Fix");
+    g_msgSyncSettings = RegisterWindowMessage(L"FlexExpTb_SyncSettings");
+    g_msgSyncLock     = RegisterWindowMessage(L"FlexExpTb_SyncLock");
+    g_msgFixBreadcrumb= RegisterWindowMessage(L"FlexExpTb_FixBreadcrumb");
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)Hook_CWExW,(void**)&origCWExW);
     Wh_SetFunctionHook((void*)TrackPopupMenu,(void*)Hook_TPM,(void**)&origTPM);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx,(void*)Hook_TPMEx,(void**)&origTPMEx);
@@ -639,7 +672,8 @@ BOOL Wh_ModInit() {
         if(pid==GetCurrentProcessId()&&GetCabinet(w)) {
             ProcessWnd(w); EnumChildWindows(w,EnumProcessWnd_Proc,0); PostMessage(w,g_msgDoMove,0,0);
         }
-    } return TRUE;
+    } 
+    return TRUE;
 }
 
 void Wh_ModUninit() {
