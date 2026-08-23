@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -17,6 +17,9 @@
 // Taskbar XAML discovery and window-thread marshaling are based on techniques
 // from "Multirow taskbar for Windows 11" by Michael Maltsev (m417z):
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multirow.wh.cpp
+// Native GPU temperature collection via D3DKMT follows Taskbar Clock
+// Customization by Michael Maltsev (m417z):
+// https://github.com/m417z/my-windhawk-mods/commit/861920df6380f4c13abec5d9226362c4725e8362
 // Both projects are distributed under the GNU General Public License v3.0.
 
 // ==WindhawkModReadme==
@@ -54,6 +57,7 @@ stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 - GPU utilization and dedicated VRAM usage from Windows PDH counters.
 - Dedicated VRAM capacity and adapter identity from DXGI.
 - CPU and GPU temperatures from HWiNFO when available.
+- GPU fallback from the Windows display-driver interface (D3DKMT).
 - CPU fallback from Windows ACPI thermal zones exposed through PDH.
 
 Metric collection runs on a worker thread. The taskbar UI thread only renders
@@ -68,18 +72,18 @@ matched to the selected DXGI adapter by LUID.
 The **Temperature source** setting provides these modes:
 
 - **Automatic** fills CPU and GPU independently: HWiNFO shared memory first,
-  then HWiNFO Gadget Registry, then Windows thermal zones for a still-missing
-  CPU reading.
+  then HWiNFO Gadget Registry, then Windows D3DKMT for a still-missing GPU
+  reading and Windows thermal zones for a still-missing CPU reading.
 - **HWiNFO automatic** uses only the two HWiNFO interfaces.
 - **HWiNFO Shared Memory** uses only `Global\\HWiNFO_SENS_SM2`.
 - **HWiNFO Gadget Registry** uses only
   `HKCU\\Software\\HWiNFO64\\VSB`.
-- **Windows thermal zones** uses the same
+- **Windows native** reads GPU temperature from the selected display driver via
+  D3DKMT and CPU temperature from the same
   `\\Thermal Zone Information(*)\\Temperature` PDH source as Taskbar Clock
-  Customization. It is dependency-free, but it exposes ACPI platform zones,
-  not necessarily the CPU package sensor, and does not provide a generic GPU
-  temperature. The optional zone filter and average/hottest setting make this
-  fallback explicit and controllable.
+  Customization. It needs no third-party monitor. ACPI platform zones don't
+  necessarily represent the CPU package sensor; the optional zone filter and
+  average/hottest setting make this fallback explicit and controllable.
 - **Disabled** skips temperature collection while keeping every other metric.
 
 HWiNFO is optional and is not bundled with this mod. Shared-memory integration
@@ -107,7 +111,9 @@ noise every second.
 
 Taskbar discovery and window-thread marshaling follow techniques from
 [Multirow taskbar for Windows 11](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multirow.wh.cpp)
-by Michael Maltsev (`m417z`). Released under GPL-3.0.
+by Michael Maltsev (`m417z`). Native GPU temperature collection follows his
+[Taskbar Clock Customization implementation](https://github.com/m417z/my-windhawk-mods/commit/861920df6380f4c13abec5d9226362c4725e8362).
+Released under GPL-3.0.
 */
 // ==/WindhawkModReadme==
 
@@ -214,28 +220,28 @@ by Michael Maltsev (`m417z`). Released under GPL-3.0.
 - temperatureSource: auto
   $name: Temperature source
   $name:uk-UA: Джерело температури
-  $description: "Automatic tries HWiNFO Shared Memory, HWiNFO Gadget Registry, then Windows thermal zones for a missing CPU reading. Windows thermal zones don't provide a generic GPU temperature."
-  $description:uk-UA: "Автоматичний режим перевіряє HWiNFO Shared Memory, HWiNFO Gadget Registry, а потім системні термозони Windows для відсутньої температури CPU. Системні термозони не дають універсальної температури GPU."
+  $description: "Automatic tries both HWiNFO interfaces, then Windows D3DKMT for a missing GPU reading and Windows thermal zones for a missing CPU reading."
+  $description:uk-UA: "Автоматичний режим перевіряє обидва інтерфейси HWiNFO, а потім Windows D3DKMT для відсутньої температури GPU та системні термозони Windows для відсутньої температури CPU."
   $options:
   - auto: Automatic
   - hwinfoAuto: HWiNFO automatic
   - sharedMemory: HWiNFO Shared Memory
   - gadgetRegistry: HWiNFO Gadget Registry
-  - windowsThermalZones: Windows thermal zones (ACPI/PDH)
+  - windowsNative: Windows native (ACPI CPU + D3DKMT GPU)
   - disabled: Disabled
   $options:uk-UA:
   - auto: Автоматично
   - hwinfoAuto: HWiNFO автоматично
   - sharedMemory: HWiNFO Shared Memory
   - gadgetRegistry: HWiNFO Gadget Registry
-  - windowsThermalZones: Системні термозони Windows (ACPI/PDH)
+  - windowsNative: Системні датчики Windows (ACPI CPU + D3DKMT GPU)
   - disabled: Вимкнено
 
 - windowsThermalZoneFilter: ""
   $name: Windows thermal zone filter
   $name:uk-UA: Фільтр системної термозони Windows
-  $description: "Optional partial PDH instance name. Empty uses every valid ACPI thermal zone. Applies only to Windows thermal zones."
-  $description:uk-UA: "Необов'язкова частина назви екземпляра PDH. Порожнє значення використовує всі коректні термозони ACPI. Застосовується лише до системних термозон Windows."
+  $description: "Optional partial PDH instance name. Empty uses every valid ACPI thermal zone. Applies to the CPU part of Windows native temperature collection."
+  $description:uk-UA: "Необов'язкова частина назви екземпляра PDH. Порожнє значення використовує всі коректні термозони ACPI. Застосовується до CPU у системному режимі Windows."
 
 - windowsThermalZoneAggregation: average
   $name: Windows thermal zone aggregation
@@ -331,7 +337,7 @@ enum class TemperatureSource {
     HwInfoAuto,
     SharedMemory,
     GadgetRegistry,
-    WindowsThermalZones,
+    WindowsNative,
     Disabled,
 };
 
@@ -344,6 +350,7 @@ enum class TemperatureProvider {
     None,
     HwInfoSharedMemory,
     HwInfoGadgetRegistry,
+    WindowsD3dkmt,
     WindowsThermalZones,
 };
 
@@ -468,8 +475,8 @@ TemperatureSource ParseTemperatureSource(const std::wstring& value) {
     if (value == L"gadgetRegistry") {
         return TemperatureSource::GadgetRegistry;
     }
-    if (value == L"windowsThermalZones") {
-        return TemperatureSource::WindowsThermalZones;
+    if (value == L"windowsNative" || value == L"windowsThermalZones") {
+        return TemperatureSource::WindowsNative;
     }
     if (value == L"disabled") {
         return TemperatureSource::Disabled;
@@ -968,6 +975,8 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
 
 void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
                              const ModSettings& settings);
+void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
+                               const ModSettings& settings);
 
 void ReadHwInfoTemperatures(MetricsSnapshot& snapshot,
                             const ModSettings& settings) {
@@ -988,7 +997,8 @@ void ReadTemperatures(MetricsSnapshot& snapshot,
             ReadHwInfoGadgetRegistry(snapshot, settings);
             break;
 
-        case TemperatureSource::WindowsThermalZones:
+        case TemperatureSource::WindowsNative:
+            ReadWindowsGpuTemperature(snapshot, settings);
             ReadWindowsThermalZones(snapshot, settings);
             break;
 
@@ -1002,6 +1012,9 @@ void ReadTemperatures(MetricsSnapshot& snapshot,
         case TemperatureSource::Auto:
         default:
             ReadHwInfoTemperatures(snapshot, settings);
+            if (!snapshot.gpuTemp) {
+                ReadWindowsGpuTemperature(snapshot, settings);
+            }
             if (!snapshot.cpuTemp) {
                 ReadWindowsThermalZones(snapshot, settings);
             }
@@ -1072,9 +1085,57 @@ void ReadMemory(MetricsSnapshot& snapshot) {
 
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 
+// D3DKMT exposes display-adapter performance data, including temperature,
+// without requiring a third-party monitoring application. The declarations are
+// kept local so the mod can build in Windhawk environments without d3dkmthk.h.
+using D3DKMT_HANDLE = UINT32;
+
+struct D3DKMT_OPENADAPTERFROMLUID {
+    LUID AdapterLuid;
+    D3DKMT_HANDLE hAdapter;
+};
+
+struct D3DKMT_CLOSEADAPTER {
+    D3DKMT_HANDLE hAdapter;
+};
+
+struct D3DKMT_QUERYADAPTERINFO {
+    D3DKMT_HANDLE hAdapter;
+    UINT Type;
+    void* pPrivateDriverData;
+    UINT PrivateDriverDataSize;
+};
+
+struct D3DKMT_ADAPTER_PERFDATA {
+    UINT PhysicalAdapterIndex;
+    ULONGLONG MemoryFrequency;
+    ULONGLONG MaxMemoryFrequency;
+    ULONGLONG MaxMemoryFrequencyOC;
+    ULONGLONG MemoryBandwidth;
+    ULONGLONG PCIEBandwidth;
+    ULONG FanRPM;
+    ULONG Power;
+    ULONG Temperature;
+    UCHAR PowerStateOverride;
+};
+
+constexpr UINT kAdapterPerfDataQueryType = 62;  // KMTQAITYPE_ADAPTERPERFDATA
+
+using D3DKMTOpenAdapterFromLuid_t =
+    LONG(WINAPI*)(D3DKMT_OPENADAPTERFROMLUID*);
+using D3DKMTQueryAdapterInfo_t =
+    LONG(WINAPI*)(D3DKMT_QUERYADAPTERINFO*);
+using D3DKMTCloseAdapter_t =
+    LONG(WINAPI*)(const D3DKMT_CLOSEADAPTER*);
+
+D3DKMTOpenAdapterFromLuid_t g_d3dkmtOpenAdapterFromLuid = nullptr;
+D3DKMTQueryAdapterInfo_t g_d3dkmtQueryAdapterInfo = nullptr;
+D3DKMTCloseAdapter_t g_d3dkmtCloseAdapter = nullptr;
+
 struct DxgiAdapterInfo {
     std::wstring description;
     std::wstring luid;
+    LUID luidValue{};
     uint64_t dedicatedVideoMemory = 0;
 };
 
@@ -1133,11 +1194,54 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
              selected.AdapterLuid.LowPart);
     cachedFilter = filterLower;
     cachedInfo = DxgiAdapterInfo{selected.Description, ToLower(luid),
+                                  selected.AdapterLuid,
                                   selected.DedicatedVideoMemory};
     Wh_Log(L"Selected GPU: %s, LUID %s, VRAM %.1f GiB",
            cachedInfo->description.c_str(), cachedInfo->luid.c_str(),
            static_cast<double>(cachedInfo->dedicatedVideoMemory) / kGiB);
     return cachedInfo;
+}
+
+void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
+                               const ModSettings& settings) {
+    if (snapshot.gpuTemp || !g_d3dkmtOpenAdapterFromLuid ||
+        !g_d3dkmtQueryAdapterInfo || !g_d3dkmtCloseAdapter) {
+        return;
+    }
+
+    auto adapter = GetDxgiAdapterInfo(settings.gpuAdapter);
+    if (!adapter) {
+        return;
+    }
+
+    D3DKMT_OPENADAPTERFROMLUID openAdapter{};
+    openAdapter.AdapterLuid = adapter->luidValue;
+    if (g_d3dkmtOpenAdapterFromLuid(&openAdapter) != 0) {
+        return;
+    }
+
+    D3DKMT_ADAPTER_PERFDATA perfData{};
+    D3DKMT_QUERYADAPTERINFO queryInfo{};
+    queryInfo.hAdapter = openAdapter.hAdapter;
+    queryInfo.Type = kAdapterPerfDataQueryType;
+    queryInfo.pPrivateDriverData = &perfData;
+    queryInfo.PrivateDriverDataSize = sizeof(perfData);
+
+    LONG status = g_d3dkmtQueryAdapterInfo(&queryInfo);
+
+    D3DKMT_CLOSEADAPTER closeAdapter{};
+    closeAdapter.hAdapter = openAdapter.hAdapter;
+    g_d3dkmtCloseAdapter(&closeAdapter);
+
+    // The driver reports tenths of a degree Celsius. Zero means unavailable;
+    // reject values above 200 C as invalid driver data.
+    if (status != 0 || perfData.Temperature == 0 ||
+        perfData.Temperature > 2000) {
+        return;
+    }
+
+    snapshot.gpuTemp = perfData.Temperature / 10.0;
+    snapshot.gpuTempProvider = TemperatureProvider::WindowsD3dkmt;
 }
 
 bool MatchesGpuAdapter(const std::wstring& instance,
@@ -1371,6 +1475,8 @@ PCWSTR TemperatureProviderName(TemperatureProvider provider) {
             return L"HWiNFO Shared Memory";
         case TemperatureProvider::HwInfoGadgetRegistry:
             return L"HWiNFO Gadget Registry";
+        case TemperatureProvider::WindowsD3dkmt:
+            return L"Windows D3DKMT";
         case TemperatureProvider::WindowsThermalZones:
             return L"Windows thermal zones";
         case TemperatureProvider::None:
@@ -2650,6 +2756,18 @@ void CloseMetricSources() {
 }  // namespace
 
 BOOL Wh_ModInit() {
+    if (HMODULE gdi32 = LoadLibraryExW(L"gdi32.dll", nullptr,
+                                       LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        g_d3dkmtOpenAdapterFromLuid =
+            reinterpret_cast<D3DKMTOpenAdapterFromLuid_t>(
+                GetProcAddress(gdi32, "D3DKMTOpenAdapterFromLuid"));
+        g_d3dkmtQueryAdapterInfo =
+            reinterpret_cast<D3DKMTQueryAdapterInfo_t>(
+                GetProcAddress(gdi32, "D3DKMTQueryAdapterInfo"));
+        g_d3dkmtCloseAdapter = reinterpret_cast<D3DKMTCloseAdapter_t>(
+            GetProcAddress(gdi32, "D3DKMTCloseAdapter"));
+    }
+
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
