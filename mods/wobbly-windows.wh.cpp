@@ -6,7 +6,7 @@
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @license         GPL-2.0-or-later
 // ==/WindhawkMod==
 
@@ -41,6 +41,7 @@ It was mostly tested and made on `Windows 11 23H2`, where it works great, and it
   incorrect after switching desktops; DWM itself should remain operational. Disable and re-enable
   the mod to reset the effect if this happens.
 * Sometimes when dragging windows through multiple monitors, the window can have a weird offset
+* ARM64 isn't supported yet; the mod safely refuses to initialize on ARM64 systems.
 
 ## Feedback
 
@@ -93,6 +94,16 @@ If you found an issue and it's reproducible or need help, then open an issue at 
 #include <string_view>
 
 #include <windhawk_utils.h>
+
+#if defined(_M_ARM64)
+
+BOOL Wh_ModInit()
+{
+    Wh_Log(L"Wobbly Windows: ARM64 isn't supported");
+    return FALSE;
+}
+
+#else
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
@@ -3069,10 +3080,9 @@ static void EndDrag(WobbleMesh& mesh)
     {
         return;
     }
-    if (mesh.dragPointIndex < GRID_POINT_COUNT)
-    {
-        mesh.points[mesh.dragPointIndex].fixed = false;
-    }
+    // Keep the release point anchored to the real window position while the
+    // remaining mesh decays. Unpinning it makes the visual coast away from the
+    // HWND and snap back when the identity transform is restored.
     mesh.dragging = false;
 }
 
@@ -6096,3 +6106,5 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Wobbly Windows: unloaded");
 }
+
+#endif
