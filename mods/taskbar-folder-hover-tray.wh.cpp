@@ -9550,8 +9550,8 @@ bool HookTaskbarViewDllSymbols() {
         return false;
     }
 
-    // Taskbar.View.dll / ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(struct winrt::Taskbar::TaskListWindowViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListWindowViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
             &TryGetItemFromContainer_TaskListWindowViewModel_Original,
@@ -9566,8 +9566,8 @@ bool HookTaskbarViewDllSymbols() {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                      ARRAYSIZE(taskbarViewDllHooks));
+    return WindhawkUtils::HookSymbols(module, taskbarViewHooks,
+                                      ARRAYSIZE(taskbarViewHooks));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
