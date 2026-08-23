@@ -4,6 +4,7 @@
 // @description     Applies 7 custom modern window closing animations with multi-process protection.
 // @version         1.0.0
 // @author          TheSerphh (Sourav Gope)
+// @github          TheSerphh
 // @include         *
 // @exclude         dwm.exe
 // @exclude         windhawk.exe
