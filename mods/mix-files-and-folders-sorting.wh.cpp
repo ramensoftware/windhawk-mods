@@ -7,8 +7,8 @@
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lpropsys -lshlwapi
-// @license         MIT
+// @compilerOptions -loleaut32 -lshlwapi
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,6 +32,22 @@ i.e. anything you'd browse to on disk). Special views such as the Desktop,
 Libraries, "This PC", and search results use different, independent shell
 folder implementations that this mod doesn't touch, so folders may still be
 grouped first there.
+
+The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
+other applications — which use the same `CFSFolder` implementation, just in
+a different process — keep the default folders-first ordering.
+
+## Credit / related mod
+
+The `CFSFolder` hooking scaffolding (symbol hooks, hook lifetime tracking,
+`CompareIDs` hook skeleton) is derived from m417z's
+[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp),
+which is licensed under GPLv3; this mod is licensed under GPLv3 as well for
+that reason. That mod already has a "Mix files and folders when sorting by
+size" setting implemented via the same hook. This mod generalizes the same
+idea to every column, at the cost of overlapping functionality: both mods
+hook `CFSFolder::CompareIDs`, so if both are enabled at once the result
+depends on which mod's hook runs first.
 */
 // ==/WindhawkModReadme==
 
@@ -52,9 +68,6 @@ grouped first there.
 #include <memory>
 
 #include <comutil.h>
-#include <initguid.h>
-#include <propkey.h>
-#include <propsys.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -86,7 +99,7 @@ CFSFolder_GetDetailsEx_t CFSFolder_GetDetailsEx_Original;
 
 using CFSFolder_CompareIDs_t =
     HRESULT(WINAPI*)(void* pCFSFolder,
-                      int column,
+                      LPARAM column,
                       const ITEMIDLIST_RELATIVE* itemid1,
                       const ITEMIDLIST_RELATIVE* itemid2);
 CFSFolder_CompareIDs_t CFSFolder_CompareIDs_Original;
@@ -105,7 +118,7 @@ HRESULT CompareResultFromInt(int cmp) {
 }
 
 HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
-                                          int column,
+                                          LPARAM column,
                                           const ITEMIDLIST_RELATIVE* itemid1,
                                           const ITEMIDLIST_RELATIVE* itemid2) {
     auto hookScope = hookRefCountScope();
@@ -119,8 +132,17 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
+    // The low word of `column` is the actual column index
+    // (SHCIDS_COLUMNMASK); the high bits carry flags such as
+    // SHCIDS_ALLFIELDS (identity queries) or SHCIDS_CANONICALONLY. Only
+    // handle plain column sorts and let the shell handle anything else.
+    if (column & ~(LPARAM)SHCIDS_COLUMNMASK) {
+        return original();
+    }
+    int columnIndex = (int)(column & SHCIDS_COLUMNMASK);
+
     PROPERTYKEY columnSCID;
-    if (FAILED(CFSFolder_MapColumnToSCID_Original(pCFSFolder, column,
+    if (FAILED(CFSFolder_MapColumnToSCID_Original(pCFSFolder, columnIndex,
                                                     &columnSCID))) {
         return original();
     }
@@ -134,7 +156,21 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
+    auto isEmpty = [](const _variant_t& v) {
+        return v.vt == VT_EMPTY || v.vt == VT_NULL;
+    };
+
     if (value1.vt != value2.vt) {
+        // Columns like Size are left blank (VT_EMPTY) for folders in stock
+        // Explorer, which would otherwise make every folder-vs-file pair
+        // fall through to the default folders-first behavior even with
+        // this mod enabled. Treat a blank value as sorting before any
+        // present value instead.
+        bool empty1 = isEmpty(value1);
+        bool empty2 = isEmpty(value2);
+        if (empty1 != empty2) {
+            return CompareResultFromInt(empty1 ? -1 : 1);
+        }
         return original();
     }
 
@@ -145,22 +181,14 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
             cmp = 0;
             break;
 
-        // BSTR and LPWSTR share the same pointer-sized union slot, so the
-        // raw pointer can be read the same way regardless of which of the
-        // two tags GetDetailsEx used for a text column.
-        case VT_BSTR:
-        case VT_LPWSTR: {
+        case VT_BSTR: {
             LPCWSTR s1 = (LPCWSTR)value1.bstrVal;
             LPCWSTR s2 = (LPCWSTR)value2.bstrVal;
             cmp = StrCmpLogicalW(s1 ? s1 : L"", s2 ? s2 : L"");
             break;
         }
 
-        // FILETIME is a monotonically increasing 64-bit tick count, so it
-        // sorts correctly as a plain unsigned compare, same union slot as
-        // VT_UI8.
         case VT_UI8:
-        case VT_FILETIME:
             cmp = (value1.ullVal > value2.ullVal) -
                   (value1.ullVal < value2.ullVal);
             break;
@@ -212,14 +240,23 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
             return original();
     }
 
+    if (cmp == 0) {
+        // CompareIDs returning 0 means "these are the same item" to the
+        // shell (used for locating a row after a rename/change
+        // notification), not just "sorts equal". Two distinct items with
+        // equal values in this column (e.g. two .txt files compared by
+        // Type) must not be reported as identical, so delegate the tiebreak
+        // to the original implementation instead.
+        return original();
+    }
+
     return CompareResultFromInt(cmp);
 }
 
 bool HookWindowsStorageSymbols() {
-    HMODULE windowsStorageModule = LoadLibraryEx(
-        L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE windowsStorageModule = GetModuleHandleW(L"windows.storage.dll");
     if (!windowsStorageModule) {
-        Wh_Log(L"Failed to load windows.storage.dll");
+        Wh_Log(L"Failed to get windows.storage.dll module handle");
         return false;
     }
 
@@ -227,31 +264,19 @@ bool HookWindowsStorageSymbols() {
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
-#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
-#else
-                LR"(public: virtual long __stdcall CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
-#endif
             },
             &CFSFolder_MapColumnToSCID_Original,
         },
         {
             {
-#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const __unaligned *,struct _tagpropertykey const *,struct tagVARIANT *))",
-#else
-                LR"(public: virtual long __stdcall CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const *,struct _tagpropertykey const *,struct tagVARIANT *))",
-#endif
             },
             &CFSFolder_GetDetailsEx_Original,
         },
         {
             {
-#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::CompareIDs(__int64,struct _ITEMIDLIST_RELATIVE const __unaligned *,struct _ITEMIDLIST_RELATIVE const __unaligned *))",
-#else
-                LR"(public: virtual long __stdcall CFSFolder::CompareIDs(long,struct _ITEMIDLIST_RELATIVE const *,struct _ITEMIDLIST_RELATIVE const *))",
-#endif
             },
             &CFSFolder_CompareIDs_Original,
             CFSFolder_CompareIDs_Hook,
@@ -286,8 +311,7 @@ void Wh_ModUninit() {
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-    *bReload = TRUE;
-    return TRUE;
+    LoadSettings();
 }
