@@ -240,19 +240,20 @@ LRESULT CALLBACK Tbar_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         HWND rb = GetParent(h);
         POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
         if(pt.x==-1 && pt.y==-1) { RECT rc; GetWindowRect(h, &rc); pt.x=rc.left; pt.y=rc.bottom; }
+        bool shown = false;
         if(HWND cab = GetCabinet(rb)) {
             HWND st = FindByClass(cab, L"ShellTabWindowClass");
             if(st) if(HWND ww = FindByClass(st, L"WorkerW")) {
                 if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
                     if(HMENU sub = GetSubMenu(hM, 0)) {
                         TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, pt.x, pt.y, ww, NULL);
-                        PostMessage(ww, WM_NULL, 0, 0);
+                        PostMessage(ww, WM_NULL, 0, 0); shown = true;
                     } 
                     DestroyMenu(hM);
                 }
             }
         }
-        return 0;
+        return shown ? 0 : DefSubclassProc(h,m,w,l);;
     }
     if(GetPropW(h, L"FlexTbIsHidden")) return DefSubclassProc(h,m,w,l);
     int flag = (int)(INT_PTR)GetPropW(h, L"FlexTbFlag");
@@ -394,7 +395,8 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             bs.brk = true;
         }
         if(type==BandType::UpButton) { SendMessage(ch, TB_SETBITMAPSIZE, 0, MAKELONG(16,16)); SendMessage(ch, TB_SETPADDING, 0, MAKELONG(4,4)); SendMessage(ch, TB_AUTOSIZE, 0, 0); }
-        int h = GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER)*2 + 2;
+        UINT dpi = GetDpiForWindow(cab);
+        int h = GetSystemMetricsForDpi(SM_CYSIZE, dpi) + GetSystemMetricsForDpi(SM_CYBORDER, dpi) * 2 + 2;
         REBARBANDINFO rbi={sizeof(rbi)}; rbi.fMask = RBBIM_STYLE|RBBIM_CHILD|RBBIM_CHILDSIZE|RBBIM_SIZE|RBBIM_IDEALSIZE;
         rbi.fStyle = GetRefGripper(mr) | (bs.brk ? RBBS_BREAK : 0);
         rbi.hwndChild=ch; rbi.cyMinChild=rbi.cyMaxChild=rbi.cyChild=h; rbi.cx=rbi.cxIdeal=bs.cx; rbi.cyIntegral=1;
@@ -449,8 +451,8 @@ LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
             HWND ch = (inf->fMask&RBBIM_CHILD) ? inf->hwndChild : [&](){ REBARBANDINFO q={sizeof(q)}; q.fMask=RBBIM_CHILD; return SendMessage(h,RB_GETBANDINFO,w,(LPARAM)&q)?q.hwndChild:NULL; }();
             if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) {
                 REBARBANDINFO local = *inf;
-                local.cyMinChild = local.cyChild = local.cyMaxChild =
-                    GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER)*2 + 2;
+                UINT dpi = GetDpiForWindow(h);
+                local.cyMinChild = local.cyChild = local.cyMaxChild = GetSystemMetricsForDpi(SM_CYSIZE, dpi) +  GetSystemMetricsForDpi(SM_CYBORDER, dpi) * 2 + 2;
                 local.cyIntegral = 1;
                 g_rbLayoutDepth++;
                 LRESULT r = DefSubclassProc(h, m, w, (LPARAM)&local);
@@ -571,7 +573,8 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
                 SendMessage(nRb,RB_DELETEBAND,it->idx,0);
                 if(it->left && IsWindow(it->left)) { SetPropW(it->left,L"FlexTbNeutered",(HANDLE)1); ShowWindow(it->left,SW_HIDE); }
             }
-            int h2=GetSystemMetrics(SM_CYSIZE)+GetSystemMetrics(SM_CYBORDER)*2+2;
+            UINT dpi = GetDpiForWindow(h);
+            int h2=GetSystemMetricsForDpi(SM_CYSIZE, dpi) +  GetSystemMetricsForDpi(SM_CYBORDER, dpi) * 2 + 2;;
             for(auto& b : mv) {
                 SetParent(b.c,mRb);
                 WCHAR c2[256]=L"";
