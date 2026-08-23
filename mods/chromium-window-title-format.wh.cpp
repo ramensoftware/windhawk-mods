@@ -7,6 +7,7 @@
 // @github          https://github.com/mazany
 // @twitter         https://x.com/tomazany
 // @donateUrl       https://ko-fi.com/mazany
+// @compilerOptions -lshell32 -lole32 -luuid
 // @include         msedge.exe
 // @include         chrome.exe
 // @license         MIT
@@ -124,8 +125,14 @@ Style short prefixes like `{count}`, not `{title}`.
 - **Titles are restored on unload on a best-effort budget.** Each window gets
   250 ms to acknowledge the restoring write, because the alternative is letting
   one unresponsive window hang the uninstall. A window whose thread is busy at
-  that moment keeps the rewritten title until it next sets it itself. The count
-  of unacknowledged writes is logged.
+  that moment keeps the rewritten title until it next sets it itself. A window
+  that has changed its own title since is left alone rather than being handed a
+  now-older one. Both counts are logged.
+- **The browser's UI language is taken from Windows' display-language list**,
+  not from the regional-format locale, and it is resolved against the packs the
+  browser actually ships - which are mostly bare language codes. If the wrong
+  language were picked the mod would appear to work and rewrite nothing, so the
+  discovered separator is logged to make that case visible.
 - **A `UserDataDir` group policy is not read.** On a machine that sets one, the
   profile list and the browser's UI language are looked for in the default
   location instead; both fail closed, so `{profile}` stays empty rather than
@@ -201,6 +208,7 @@ Style short prefixes like `{count}`, not `{title}`.
 // windhawk_utils.h. A translation unit that compiles because of what its
 // dependencies happen to include is one compiler update away from not.
 #include <shellapi.h>  // CommandLineToArgvW
+#include <shlobj.h>    // SHGetKnownFolderPath, FOLDERID_LocalAppData
 
 #include <cstdint>   // uint32_t
 #include <cstdlib>   // _wtoi, _wgetenv
@@ -828,18 +836,13 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         if (EndsWith(r1, m)) {
             // FROM THE BRACKET, not the whole tail. The discovered marker
             // carries its own leading separator - the resource is "$1 - [In
-            // Private]", so the tail stored is " - [InPrivate]" - and assigning
-            // that straight to {profile} put the separator INSIDE the field.
-            // The default preset supplies its own, so every InPrivate and Guest
-            // window rendered "Page and 3 more pages - - [InPrivate]".
+            // Private]", so the stored tail is " - [InPrivate]" - and assigning
+            // that whole tail to {profile} puts a separator inside the field,
+            // which the template then doubles.
             //
-            // Do NOT reuse the browser-suffix branch's strip-leading-non-
-            // alphanumeric loop instead: '[' is not alphanumeric, so that eats
-            // the bracket too and yields "InPrivate]".
-            //
-            // Ordinary named profiles are unaffected - they are matched by the
-            // separator loop further down, which already stores only what
-            // follows the separator.
+            // Do NOT substitute the browser-suffix branch's strip-leading-non-
+            // alphanumeric loop: '[' is not alphanumeric, so it eats the bracket
+            // and yields "InPrivate]".
             const size_t lb = m.find(L'[');
             const size_t rb = m.rfind(L']');
             out->profile =
@@ -854,23 +857,17 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
     // 4. page-count clause, and the generic profile - in the order that resolves
     //    the ambiguity between them.
     //
-    // These cannot be stripped in a fixed order. The generic profile rule is
-    // "whatever follows the last separator", and a page title containing that
-    // same separator is indistinguishable from a real profile. Edge only puts a
-    // profile in the title when more than one profile exists, so on a
-    // single-profile install
+    // THE COUNT IS TRIED FIRST, and that ordering carries real weight. The
+    // generic profile rule is "whatever follows the last separator", and a page
+    // title containing that separator is indistinguishable from a real profile:
     //
     //     "Foo - Bar and 16 more pages - Microsoft Edge"
     //
-    // was read as profile="Bar and 16 more pages", title="Foo", hasCount=false -
-    // losing the count and half the title on a string the mod believed it had
-    // parsed.
-    //
-    // Resolved in favour of the reading that finds a count: try the count clause
-    // against the whole remainder first, and strip a profile only on the branch
-    // where that failed. A plain swap would NOT be enough - after removing the
-    // count from "Foo - Bar and 16 more pages" the tail "Bar" would still be
-    // taken as a profile.
+    // reads as profile="Bar and 16 more pages", title="Foo", no count. Trying
+    // the count against the whole remainder first and stripping a profile only
+    // where that failed resolves it in favour of the reading that finds a count.
+    // Merely swapping the two is NOT enough - after removing the count from
+    // "Foo - Bar and 16 more pages" the tail "Bar" is still taken as a profile.
     //
     // Nothing is written to `out` until an attempt succeeds, so a failed attempt
     // leaves no partial state behind.
@@ -921,41 +918,33 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         //
         // MATCH A REAL PROFILE NAME, never just a trailing segment.
         //
-        // Reached when no count clause matched at this level - typically a
-        // one-tab window, but also a multi-profile title whose count sits BEHIND
-        // the profile, which is why the count is retried below after stripping.
         // Position is not evidence. slot2Seps is always {" - "} on Edge,
         // discovered from the InPrivate resource, even on an install with a
         // single profile that never puts a profile in a title at all - so
-        // "stripping whatever follows the last separator" turns
+        // "strip whatever follows the last separator" turns
         //
         //     "GitHub - Some Repo - Microsoft Edge"
         //
         // into title "GitHub", profile "Some Repo", and every preset except
-        // keep_profile then displays just "GitHub". That is silent truncation of
-        // the user's own text, in the default configuration.
+        // keep_profile then displays just "GitHub": silent truncation of the
+        // user's own text, in the default configuration.
         //
-        // TWO conditions, and the count is the important one. The browser only
-        // writes a profile into the title when the install has MORE THAN ONE
-        // profile, so on a single-profile install any match here is false by
-        // construction - including a genuine name match, on an install whose one
-        // profile happens to be called Personal.
+        // TWO conditions, and the count is the important one. The browser writes
+        // a profile into the title only when the install has MORE THAN ONE, so
+        // on a single-profile install any match here is false by construction -
+        // including a genuine name match.
         //
         // profileCount, NOT profileNames.size(). They are different quantities:
         // DiscoverProfiles reads two keys per profile and flattens them, so one
-        // profile routinely yields two or three names and a size test silently
-        // degenerates into no gate at all.
+        // profile routinely yields two or three names and a size test degenerates
+        // into no gate at all.
         //
-        // What this does NOT establish. On a multi-profile install the browser
-        // appends the profile to the window's own title, so a page called
-        // "How to go on vacation - Work" arrives as
-        // "How to go on vacation - Work - Personal - Microsoft Edge" and the
-        // rightmost segment - the real profile - is the one taken. The residual
-        // is narrower than "any title ending in a profile name": it needs a
-        // window on a multi-profile install where the browser did NOT append a
-        // profile, AND a page title whose last segment exactly equals one of
-        // the names. Position and identity agree there and the text alone
-        // cannot separate them.
+        // What this does NOT establish: on a multi-profile install the browser
+        // appends the real profile after the page's own text, so the rightmost
+        // segment is the one taken. The residual needs a window where the browser
+        // did NOT append a profile AND a page title whose last segment exactly
+        // equals one of the names; there, position and identity agree and the
+        // text alone cannot separate them.
         //
         // When the names cannot be read the slot is skipped entirely: losing
         // {profile} is a missing field, while guessing is a mangled title, and
@@ -1169,10 +1158,8 @@ struct Settings {
     std::wstring suffixOverride;
 };
 
-// Was a setting, and should not have been. It is a safety clamp against a
-// pathological template rather than a preference: there is no symptom a user
-// could tune it against, and a template that wants a shorter field already has
-// the per-token `max<N>` modifier, which is the right granularity for it.
+// A safety clamp against a pathological template, not a preference - a template
+// that wants a shorter field uses the per-token `max<N>` modifier instead.
 constexpr size_t kMaxTitleChars = 512;
 
 struct WindowState {
@@ -1234,8 +1221,25 @@ bool IsBrowserFrame(HWND hWnd) {
     if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
     if (wcsncmp(cls, L"Chrome_WidgetWin_", 17) != 0) return false;
 
+    // WS_CAPTION is deliberately NOT required, and that is a fullscreen fix.
+    //
+    // Chromium's Windows fullscreen handler re-applies the frame's style as
+    // `saved & ~(WS_CAPTION | WS_THICKFRAME)`, so an F11 or video-fullscreen
+    // browser window loses exactly those two bits and keeps everything else.
+    // Requiring WS_CAPTION therefore rejected the real browser frame for as long
+    // as it was fullscreen: its title writes passed straight through, the sweep
+    // skipped it, and its remembered state went stale. Measured on Edge 153, the
+    // same window before and after F11:
+    //
+    //     0x1ECF0000  ->  0x1E0B0000     (CAPTION and THICKFRAME cleared)
+    //
+    // WS_SYSMENU and WS_MINIMIZEBOX survive fullscreen, so they still carry the
+    // filter. Only that one bit was dropped, rather than falling back on class
+    // and ownership alone: a census of 305 top-level Chrome_WidgetWin_ windows
+    // found ZERO admitted by this widening that were not admitted before, which
+    // is the intended result - it changes nothing except fullscreen frames.
     const LONG_PTR st = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    constexpr LONG_PTR need = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    constexpr LONG_PTR need = WS_SYSMENU | WS_MINIMIZEBOX;
     if ((st & need) != need) return false;
 
     if (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return false;
@@ -1309,6 +1313,49 @@ bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
                                &unused) != 0;
 }
 
+// The reading half, and bounded for the same reason.
+//
+// GetWindowTextW and GetWindowTextLengthW look like local calls and are not: for
+// a window owned by THIS process but another thread - which is every window
+// either caller visits - they are SendMessage(WM_GETTEXT) and
+// SendMessage(WM_GETTEXTLENGTH), and a cross-thread SendMessage has no timeout.
+// It returns when the owning thread pumps, and not before, so a browser UI
+// thread blocked on a wedged renderer parks the caller indefinitely - fatal on
+// the worker, which teardown joins with INFINITE, and on the engine thread that
+// applies a settings change.
+//
+// Two sends rather than one into a fixed buffer, because the buffer size is not
+// a detail here: a truncated read loses the browser suffix, Decompose then
+// refuses the string, and that window is silently never retitled.
+//
+// Returns false only for a window that did not answer. An empty title answers
+// successfully with an empty string.
+bool ReadTitleFromOtherThread(HWND hWnd, std::wstring* out) {
+    out->clear();
+    DWORD_PTR len = 0;
+    if (!SendMessageTimeoutW(hWnd, WM_GETTEXTLENGTH, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &len)) {
+        return false;
+    }
+    if (len == 0) return true;
+    if (len > 0x10000) return false;  // too large to be a real title
+
+    // WM_GETTEXT's wParam counts the terminator; its result does not.
+    std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
+    DWORD_PTR copied = 0;
+    if (!SendMessageTimeoutW(hWnd, WM_GETTEXT, static_cast<WPARAM>(buf.size()),
+                             reinterpret_cast<LPARAM>(buf.data()),
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &copied)) {
+        return false;
+    }
+    // WM_GETTEXTLENGTH is allowed to overestimate, so the copied count is the
+    // authoritative one; a conforming handler never exceeds capacity - 1.
+    if (copied >= buf.size()) return false;
+    buf.resize(static_cast<size_t>(copied));
+    *out = std::move(buf);
+    return true;
+}
+
 bool StopRequested() {
     // DELIBERATELY still the flag, not the event.
     //
@@ -1357,7 +1404,9 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         WindowState& st = g_states[hWnd];
         const DWORD  tid = GetWindowThreadProcessId(hWnd, nullptr);
         if (st.tid && st.tid != tid) {
-            // HWND was recycled; discard stale state.
+            // Reuse of this HWND by a window on a DIFFERENT thread. That is the
+            // only reuse this test can see - browser frames share one UI thread,
+            // so same-thread reuse keeps the id and is invisible here.
             const unsigned prevGen = st.generation;
             st = WindowState{};
             st.generation = prevGen + 1;
@@ -1411,12 +1460,53 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 
 // ---- discovery --------------------------------------------------------------
 
+// The ONE seam the test harness replaces, and it is named rather than ambient.
+//
+// Production always resolves through the shell's known-folder store, which does
+// not depend on the process having inherited an intact environment block. The
+// suite - which compiles this same translation unit - points this at a fixture
+// directory instead. Named rather than reading %LOCALAPPDATA%, so the seam is
+// visible to whoever reads the function rather than implied by an environment
+// variable that production would then also depend on.
+std::wstring g_localAppDataOverride;
+
+std::wstring LocalAppDataDir() {
+    if (!g_localAppDataOverride.empty()) return g_localAppDataOverride;
+    PWSTR        p = nullptr;
+    std::wstring out;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) &&
+        p) {
+        out = p;
+    }
+    if (p) CoTaskMemFree(p);
+    return out;
+}
+
+// GetModuleFileNameW into a buffer that grows until it fits.
+//
+// MAX_PATH is a guess, not a limit, and this API TRUNCATES rather than failing -
+// it reports the characters written and sets ERROR_INSUFFICIENT_BUFFER, which is
+// easy to ignore because the call still "succeeds". Every use here reads the
+// result structurally: a truncated path costs the browser module's directory
+// (discovery then looks for a Locales folder that does not exist and fails
+// silently) or the executable's basename (Chrome is then treated as Edge). Both
+// failures are quiet, which is the kind this file exists to avoid.
+std::wstring ModulePath(HMODULE m) {
+    std::wstring s(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD n = GetModuleFileNameW(m, s.data(),
+                                           static_cast<DWORD>(s.size()));
+        if (n == 0) return {};
+        if (n < s.size()) { s.resize(n); return s; }
+        if (s.size() > 32768) return {};  // past any real Windows path
+        s.resize(s.size() * 2);
+    }
+}
+
 std::wstring DirOfModule(const wchar_t* name) {
     HMODULE m = GetModuleHandleW(name);
     if (!m) return {};
-    WCHAR p[MAX_PATH];
-    if (!GetModuleFileNameW(m, p, ARRAYSIZE(p))) return {};
-    std::wstring s(p);
+    const std::wstring s = ModulePath(m);
     const size_t at = s.rfind(L'\\');
     return (at == std::wstring::npos) ? std::wstring() : s.substr(0, at);
 }
@@ -1427,15 +1517,13 @@ std::wstring DirOfModule(const wchar_t* name) {
 // from somewhere else means answering about the wrong install. Then the
 // per-channel default, derived below.
 //
-// NOT authoritative, and the previous version of this comment claimed it was.
-// A `UserDataDir` group policy outranks even the command-line switch, and this
-// does not read it - resolving it properly means HKLM-over-HKCU precedence plus
-// expanding ${local_app_data}-style variables, which is more machinery than a
-// title parser should carry. On a policy-managed machine this therefore answers
-// about the default location instead. The consequence is bounded by the callers:
-// both treat a miss as "unknown", so {profile} stays empty and the locale falls
-// back to the OS default. Wrong-and-silent is the failure this whole function
-// exists to avoid, so it is worth being explicit that one case remains.
+// NOT authoritative. A `UserDataDir` group policy outranks even the command-line
+// switch, and this does not read it - resolving it properly means HKLM-over-HKCU
+// precedence plus expanding ${local_app_data}-style variables, which is more
+// machinery than a title parser should carry. On a policy-managed machine this
+// answers about the default location instead. The consequence is bounded by the
+// callers: both treat a miss as "unknown", so {profile} stays empty and the
+// locale falls back to the UI language.
 std::wstring UserDataDir() {
     int     argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -1455,8 +1543,9 @@ std::wstring UserDataDir() {
     }
     if (!fromArgs.empty()) return fromArgs;
 
-    const wchar_t* la = _wgetenv(L"LOCALAPPDATA");
-    if (!la) return {};
+    const std::wstring laStr = LocalAppDataDir();
+    if (laStr.empty()) return {};
+    const wchar_t* la = laStr.c_str();
 
     // The CHANNEL, taken from the running executable's own path.
     //
@@ -1474,16 +1563,7 @@ std::wstring UserDataDir() {
     // on nervously: it is the same install-mode constant on both sides. The
     // install itself can live anywhere - Program Files or LOCALAPPDATA - and
     // only the two names are used, never the install path itself.
-    std::wstring exe(MAX_PATH, L'\0');
-    for (;;) {
-        const DWORD n =
-            GetModuleFileNameW(nullptr, exe.data(),
-                               static_cast<DWORD>(exe.size()));
-        if (n == 0) break;
-        if (n < exe.size()) { exe.resize(n); break; }
-        if (exe.size() > 32768) { exe.clear(); break; }
-        exe.resize(exe.size() * 2);  // MAX_PATH is not a limit, it is a guess
-    }
+    const std::wstring exe = ModulePath(nullptr);
     const size_t appAt = exe.rfind(L"\\Application\\");
     if (appAt != std::wstring::npos) {
         const std::wstring head = exe.substr(0, appAt);   // ...\Vendor\Product
@@ -1588,6 +1668,7 @@ ProfileInfo DiscoverProfiles() {
     };
 
     int    depth  = 0;
+    bool   closed = false;
     bool   inStr  = false;
     bool   esc    = false;
     size_t strAt  = 0;
@@ -1648,29 +1729,119 @@ ProfileInfo DiscoverProfiles() {
         // inside a profile go to 3 and are not counted, and a brace inside a
         // string never reaches here because inStr is tested first.
         if (c == '{')  { if (++depth == 2) ++info.count; continue; }
-        if (c == '}')  { if (--depth == 0) break; key.clear(); continue; }
+        if (c == '}')  { if (--depth == 0) { closed = true; break; } key.clear(); continue; }
     }
+
+    // ALL OR NOTHING. Returning what was found so far is wrong for this
+    // particular result: a truncated or malformed Local State - a torn write, a
+    // half-flushed file, an unterminated string - would otherwise yield a short
+    // name list and a low profile count, and BOTH of those feed the gate that
+    // decides whether text is deleted from a user's title. A partial count is
+    // the worse half: fewer profiles than the install really has silently turns
+    // the profile slot off, and more would turn it on. Unknown is a state this
+    // parser already handles correctly, so say unknown.
+    if (!closed || inStr) return {};
     return info;
 }
 
-// Locale candidates, best first. A wrong guess is safe: the discovered suffix
-// then fails to match real titles and nothing is rewritten.
+bool SameLocale(std::wstring_view a, std::wstring_view b) {
+    return a.size() == b.size() && _wcsnicmp(a.data(), b.data(), a.size()) == 0;
+}
+
+// One locale tag -> every pak name that could serve it, most specific first.
+//
+// Windows hands out full tags; Chromium's Locales folder is mostly BARE language
+// codes. Measured on Edge 153: of 84 packs, only en-GB, en-US, es-419, fr-CA,
+// pt-BR, pt-PT, zh-CN, zh-TW, bn-IN, sr-Cyrl-BA, sr-Latn-RS and ca-Es-VALENCIA
+// carry a region or variant; the rest are bare. So "cs-CZ" alone finds nothing,
+// discovery falls through to en-US.pak - which DOES yield a suffix, so it
+// reports success - and then no Czech title ever matches. Silent, and it looks
+// healthy in the log.
+//
+// The obvious repair, "also try the language part", is not enough and is not
+// safe on its own:
+//
+//   * Bare `zh`, `pt` and `en` DO NOT EXIST. Chinese is reachable only as
+//     zh-CN / zh-TW, so a parent chain alone leaves every Chinese install on
+//     English. That is what the alias table below is for.
+//   * Truncating to the last subtag corrupts tags whose last subtag is a script
+//     or a variant: sr-Latn-BA is not sr-BA, and ca-ES-valencia is not
+//     ca-valencia. Parents are formed by dropping subtags from the END.
+//   * es-MX must reach es-419 BEFORE bare es, because bare es is Spain Spanish.
+//     This is the case where a careless truncation does not merely fail to
+//     match - it matches the WRONG pack, which is the failure this whole
+//     function exists to avoid.
+void ExpandLocale(std::wstring_view tag, std::vector<std::wstring>* out) {
+    auto add = [out](std::wstring v) {
+        if (v.empty()) return;
+        for (const std::wstring& e : *out) {
+            if (SameLocale(e, v)) return;
+        }
+        out->push_back(std::move(v));
+    };
+    if (tag.empty() || tag.size() > 64) return;
+
+    add(std::wstring(tag));
+
+    // Language and region, for the alias rules. Subtags are ASCII by definition.
+    const size_t dash = tag.find(L'-');
+    const std::wstring_view lang = tag.substr(0, dash);
+    std::wstring_view last;
+    if (dash != std::wstring_view::npos) {
+        const size_t at = tag.rfind(L'-');
+        last = tag.substr(at + 1);
+    }
+
+    // Chinese is script-based and ships only as two regional packs.
+    if (SameLocale(lang, L"zh")) {
+        const bool hant = tag.find(L"Hant") != std::wstring_view::npos ||
+                          SameLocale(last, L"TW") || SameLocale(last, L"HK") ||
+                          SameLocale(last, L"MO");
+        add(hant ? L"zh-TW" : L"zh-CN");
+    }
+    // Spanish outside Spain is served by the Latin-American pack, and bare `es`
+    // is Spain's - so it must not be reached first.
+    if (SameLocale(lang, L"es") && !last.empty() && !SameLocale(last, L"ES")) {
+        add(L"es-419");
+    }
+    // Portuguese ships only as the two regional packs; there is no bare `pt`.
+    if (SameLocale(lang, L"pt") && !SameLocale(last, L"BR") &&
+        !SameLocale(last, L"PT")) {
+        add(L"pt-PT");
+    }
+
+    // Then the proper parents, dropping one subtag at a time from the end:
+    // zh-Hans-CN -> zh-Hans -> zh, ca-ES-valencia -> ca-ES -> ca.
+    std::wstring parent(tag);
+    for (;;) {
+        const size_t at = parent.rfind(L'-');
+        if (at == std::wstring::npos) break;
+        parent.resize(at);
+        add(parent);
+    }
+}
+
+// Locale candidates, best first. A wrong guess is safe only in the sense that a
+// missing pak is skipped; a wrong pak that EXISTS is accepted, which is why the
+// expansion above is ordered rather than merely generous.
 std::vector<std::wstring> LocaleCandidates() {
     std::vector<std::wstring> out;
-    auto add = [&out](std::wstring v) {
-        if (!v.empty() && std::find(out.begin(), out.end(), v) == out.end()) {
-            out.push_back(std::move(v));
-        }
-    };
+    auto add = [&out](std::wstring_view v) { ExpandLocale(v, &out); };
 
-    int     argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    // LAST --lang wins, which is what the browser does with a repeated switch -
+    // and what UserDataDir already does with a repeated --user-data-dir. Adding
+    // each occurrence in turn made the FIRST one win here, so the two functions
+    // disagreed about the same command line.
+    int          argc = 0;
+    LPWSTR*      argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    std::wstring fromLang;
     if (argv) {
         for (int i = 1; i < argc; ++i) {
-            if (_wcsnicmp(argv[i], L"--lang=", 7) == 0) add(argv[i] + 7);
+            if (_wcsnicmp(argv[i], L"--lang=", 7) == 0) fromLang = argv[i] + 7;
         }
         LocalFree(argv);
     }
+    if (!fromLang.empty()) add(fromLang);
 
     // The browser's own UI language, which need not match the OS.
     //
@@ -1697,9 +1868,35 @@ std::vector<std::wstring> LocaleCandidates() {
         }
     }
 
+    // The preferred UI LANGUAGES, in the user's own order - not
+    // GetUserDefaultLocaleName, which is the regional-format locale and answers
+    // a different question. Someone running an English Windows with Czech dates
+    // has cs-CZ as their format locale and en-US as their UI language, and it is
+    // the UI language the browser follows.
+    ULONG  num = 0, chars = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num, nullptr, &chars) &&
+        chars > 0 && chars < 4096) {
+        std::wstring buf(chars, L'\0');
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num, buf.data(),
+                                        &chars)) {
+            // Double-null-terminated list of null-separated names.
+            for (size_t at = 0; at < buf.size() && buf[at];) {
+                const std::wstring_view one(buf.data() + at);
+                add(one);
+                at += one.size() + 1;
+            }
+        }
+    }
+
+    // Still consulted, after the UI languages: on a machine with no UI language
+    // pack installed the two agree, and it costs nothing when they do not.
     WCHAR loc[LOCALE_NAME_MAX_LENGTH];
     if (GetUserDefaultLocaleName(loc, ARRAYSIZE(loc))) add(loc);
-    add(L"en-US");
+
+    // Last, and deliberately unexpanded - it is the pack that always exists.
+    if (std::find(out.begin(), out.end(), L"en-US") == out.end()) {
+        out.push_back(L"en-US");
+    }
     return out;
 }
 
@@ -1710,8 +1907,13 @@ std::vector<std::wstring> LocaleCandidates() {
 // An entry holding two title strings is created for every frame swept and every
 // title written, so a long session otherwise accumulates one per window ever
 // opened - and a recycled HWND inherits the dead window's remembered original.
-// The hook's own tid check catches that second case at the moment of reuse; this
-// keeps the map from growing in the first place.
+//
+// This bounds the map. It is NOT an identity check, and nothing here is: the
+// hook's tid comparison catches only reuse on a DIFFERENT thread, and browser
+// frames share one UI thread, so same-thread reuse between two prunes is not
+// detected by anything. What limits the damage is that a reused HWND's first
+// title write does not match the remembered `applied`, so the entry is
+// overwritten rather than trusted.
 void PruneDeadWindows() {
     // The dead entries are MOVED out rather than counted, so their two strings
     // are freed after g_lock is released rather than during erase() while a
@@ -1781,56 +1983,23 @@ void SweepAllWindows() {
         }
         const DWORD owner = GetWindowThreadProcessId(h, nullptr);
         if (std::find(mute.begin(), mute.end(), owner) != mute.end()) continue;
-        // BOTH reads are bounded, for the same reason the write below is.
-        //
-        // GetWindowTextW and GetWindowTextLengthW look like local calls and are
-        // not: for a window owned by THIS process but another thread - which is
-        // every window this loop visits - they are SendMessage(WM_GETTEXT) and
-        // SendMessage(WM_GETTEXTLENGTH), and a cross-thread SendMessage has no
-        // timeout. It returns when the owning thread pumps, and not before. A
-        // browser UI thread blocked on a sync IPC to a wedged renderer therefore
-        // parked this loop indefinitely, and the StopRequested() check above is
-        // no help because the flag is never re-read from inside a send. Both
-        // callers made that fatal rather than slow: Wh_ModBeforeUninit joins the
-        // worker with INFINITE, so the mod could not be unloaded or updated,
-        // and Wh_ModSettingsChanged runs this on the Windhawk engine thread.
-        //
-        // Still sized from the window rather than a fixed buffer, because a
-        // truncated read is not merely a shorter string: it loses the browser
-        // suffix, so Decompose refuses it and the window is silently never
-        // retitled by any sweep. That costs a second bounded send, which is only
-        // ever paid in full by a window that is not answering anyway.
-        DWORD_PTR len = 0;
-        if (!SendMessageTimeoutW(h, WM_GETTEXTLENGTH, 0, 0,
-                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &len)) {
+        // Bounded, and shared with the restore path - see the helper for why
+        // these reads cannot be the plain GetWindowTextW form.
+        std::wstring cur;
+        if (!ReadTitleFromOtherThread(h, &cur)) {
             mute.push_back(owner);
             continue;
         }
-        if (len == 0 || len > 0x10000) {
-            continue;  // empty, or an answer too large to be a real title
-        }
-        // WM_GETTEXT's wParam counts the terminator; its result does not.
-        std::wstring cur(static_cast<size_t>(len) + 1, L'\0');
-        DWORD_PTR copied = 0;
-        if (!SendMessageTimeoutW(h, WM_GETTEXT, static_cast<WPARAM>(cur.size()),
-                                 reinterpret_cast<LPARAM>(cur.data()),
-                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &copied)) {
-            mute.push_back(owner);
-            continue;
-        }
-        // WM_GETTEXTLENGTH is allowed to overestimate, so the copied count is
-        // the authoritative one. A conforming handler never exceeds capacity-1.
-        if (copied == 0 || copied >= cur.size()) continue;
-        cur.resize(static_cast<size_t>(copied));
+        if (cur.empty()) continue;
 
         // Capture the generation with the source, validate it on commit.
         //
-        // The sweep used to commit unconditionally, which let it write a stale
-        // pair over state a concurrent title write had just refreshed: the
-        // remembered `source` then belonged to the PREVIOUS page, and a settings
-        // change before the next browser write recomposed from it and put that
-        // older title on the window. This is the same capture/validate/commit
-        // the hook already performs, so it adds no new invariant.
+        // Committing unconditionally would write a stale pair over state a
+        // concurrent title write had just refreshed: the remembered `source`
+        // would then belong to the PREVIOUS page, and a settings change before
+        // the next browser write would recompose from it and put that older
+        // title on the window. This is the same capture/validate/commit the hook
+        // performs, so it adds no new invariant.
         //
         // It makes the STATE MAP coherent and nothing more. The final write
         // below is still outside the lock, so a title write that lands between
@@ -1893,12 +2062,9 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
 
     std::wstring dir = DirOfModule(browserDll);
     if (dir.empty()) {
-        WCHAR p[MAX_PATH];
-        if (GetModuleFileNameW(nullptr, p, ARRAYSIZE(p))) {
-            std::wstring s(p);
-            const size_t at = s.rfind(L'\\');
-            if (at != std::wstring::npos) dir = s.substr(0, at);
-        }
+        const std::wstring s = ModulePath(nullptr);
+        const size_t at = s.rfind(L'\\');
+        if (at != std::wstring::npos) dir = s.substr(0, at);
     }
     const std::wstring hint = g_isChrome ? L"Chrome" : L"Edge";
 
@@ -1932,6 +2098,17 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                    path.c_str(), g.suffixes.size(), g.markerTails.size(),
                    g.slot2Seps.size(), g.countForms.size(), g.profileCount,
                    g.profileNames.size());
+            // The literals themselves, not just how many. Counts alone cannot
+            // distinguish "found the right language" from "found English on a
+            // German install" - both print a healthy-looking line - and that is
+            // the one discovery failure that produces no other symptom.
+            if (!g.suffixes.empty()) {
+                Wh_Log(L"  suffix: '%s'", g.suffixes.front().c_str());
+            }
+            if (!g.countForms.empty()) {
+                Wh_Log(L"  count:  '%s' # '%s'", g.countForms.front().pre.c_str(),
+                       g.countForms.front().post.c_str());
+            }
             if (g.profileNames.empty()) {
                 Wh_Log(L"could not read this install's profile names, so "
                        L"{profile} will stay empty rather than guess at a "
@@ -2055,11 +2232,11 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    WCHAR exe[MAX_PATH] = L"";
-    GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
-    const WCHAR* base = wcsrchr(exe, L'\\');
-    base = base ? base + 1 : exe;
-    g_isChrome = (_wcsicmp(base, L"chrome.exe") == 0);
+    const std::wstring exe = ModulePath(nullptr);
+    const size_t baseAt = exe.rfind(L'\\');
+    const std::wstring base =
+        (baseAt == std::wstring::npos) ? exe : exe.substr(baseAt + 1);
+    g_isChrome = (_wcsicmp(base.c_str(), L"chrome.exe") == 0);
 
     // The mod is injected into every browser process - renderers, GPU, network,
     // utility - and only the browser process owns frame windows. Match the
@@ -2072,6 +2249,20 @@ BOOL Wh_ModInit() {
     if (argv) {
         for (int i = 1; i < argc; ++i) {
             if (_wcsnicmp(argv[i], L"--type=", 7) == 0) {
+                isChild = true;
+                break;
+            }
+            // A WebView2 host owns no browser frames either, so there is nothing
+            // here for it to do. This is NOT the ordinary WebView2 runtime: that
+            // ships as msedgewebview2.exe, which this mod's @include does not
+            // name and which it is therefore never injected into. It is for the
+            // one configuration that does reach us - an app pointed at a full
+            // Edge INSTALL through browserExecutableFolder, which then launches
+            // msedge.exe with this switch and no --type=.
+            //
+            // The '=' is optional on purpose; the switch is also accepted bare.
+            if (_wcsnicmp(argv[i], L"--embedded-browser-webview", 26) == 0 &&
+                (argv[i][26] == L'\0' || argv[i][26] == L'=')) {
                 isChild = true;
                 break;
             }
@@ -2198,19 +2389,48 @@ void Wh_ModUninit() {
 
     int restored = 0;
     int failed   = 0;
+    int skipped  = 0;
+    // Threads that have already failed to answer, exactly as the sweep does:
+    // every browser frame shares a UI thread, so one timeout is all the evidence
+    // needed not to spend another 250 ms per window on an unresponsive one.
+    std::vector<DWORD> mute;
     for (const auto& [hWnd, st] : snapshot) {
         if (st.source.empty() || st.source == st.applied) continue;
-        if (!IsWindow(hWnd)) continue;
+
+        // IsWindow ALONE IS NOT ENOUGH, and this is the dangerous case. An HWND
+        // is only unique while its window lives; once ours is destroyed the
+        // handle can be recycled by ANY process on the desktop. IsWindow would
+        // then be true of a stranger's window, and this loop would set that
+        // window's title to a browser title it never had. Requiring the window
+        // to still belong to this process makes the restore self-limiting.
+        DWORD pid = 0;
+        const DWORD tid = GetWindowThreadProcessId(hWnd, &pid);
+        if (!pid || pid != GetCurrentProcessId()) { ++skipped; continue; }
+        // The frame must also still be showing what we wrote. A title that
+        // arrived while the mod was already in passthrough - between
+        // Wh_ModBeforeUninit and here - is NEWER than our remembered original,
+        // and restoring over it would replace a current title with a stale one
+        // on a window that may never write its own title again.
+        if (std::find(mute.begin(), mute.end(), tid) != mute.end()) {
+            ++skipped;
+            continue;
+        }
+        std::wstring cur;
+        if (!ReadTitleFromOtherThread(hWnd, &cur)) { mute.push_back(tid); ++failed; continue; }
+        if (cur != st.applied) { ++skipped; continue; }
+
         if (WriteTitleFromOtherThread(hWnd, st.source)) {
             ++restored;
         } else {
+            mute.push_back(tid);
             ++failed;
         }
     }
-    // Both numbers, because the second one is the interesting one: a window
-    // whose thread did not answer within the budget keeps our title after the
-    // mod is gone, and this log line is the only place that says so.
-    Wh_Log(L"restored %d title(s), %d not acknowledged", restored, failed);
+    // All three, because the ones that are not "restored" are the interesting
+    // ones: a window whose thread did not answer keeps our title after the mod
+    // is gone, and this log line is the only place that says so.
+    Wh_Log(L"restored %d title(s), %d not acknowledged, %d skipped", restored,
+           failed, skipped);
 
     // Last, and only here. Wh_ModBeforeUninit has already joined the worker, so
     // nothing can still be waiting on this handle - closing it while a wait was
