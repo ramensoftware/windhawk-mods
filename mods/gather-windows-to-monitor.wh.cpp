@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              gather-windows-to-monitor
-// @name            Gather Windows To Display
-// @description     Move one window or gather eligible open windows to a chosen display with global hotkeys
+// @name            Move and Gather Windows
+// @description     Move or gather windows with global hotkeys and remap numbered shortcuts to the intended displays
 // @version         0.1.2
 // @author          Fred
 // @github          https://github.com/fjdiazt
@@ -11,42 +11,102 @@
 
 // ==WindhawkModReadme==
 /*
-# Gather Windows To Display
+# Move and Gather Windows
 
-Global hotkeys move the foreground window or gather visible application windows
-to a selected display work area.
+Move the active window, or gather eligible open windows, to a chosen display with
+global shortcuts. Windows are placed inside the usable desktop area so taskbars
+remain clear. Windows already on the destination display are left unchanged.
 
-By default, `Ctrl+Alt+Shift+W` moves the foreground window to the primary display,
-and `Ctrl+Alt+Shift+1` through `Ctrl+Alt+Shift+5` move it to a numbered display.
-`Ctrl+Alt+Shift+P` gathers to the primary display, `Ctrl+Alt+Shift+M` gathers to
-the display under the mouse, and `Ctrl+Alt+Shift+A` gathers to the active window's
-display. Numbered gather actions are available but disabled by default.
+Numbered shortcuts can be remapped to the displays you intend without changing
+the shortcuts themselves. This is useful when Windows and Windhawk number displays
+differently or when reconnecting a display changes their order.
 
-If a numbered display is unavailable, the primary display is used. After an update,
-an existing gather shortcut keeps priority over a conflicting new move shortcut;
-change either shortcut in settings to enable both actions.
+## Move foreground window shortcuts
 
-Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
-`Ctrl+Win+M`, `F9`, or `None`.
+These settings move only the window you are currently using.
 
-Window size behavior can preserve dimensions or scale them proportionally between
-the source and target display work areas.
+* **Move foreground window to primary display** defaults to
+  `Ctrl+Alt+Shift+W`.
+* **Move foreground window to display 1-5** default to
+  `Ctrl+Alt+Shift+1` through `Ctrl+Alt+Shift+5`.
 
-Skipped by default: minimized windows, hidden windows, tool windows,
-desktop/taskbar/shell UI, cloaked UWP/helper windows, and untitled windows.
+## Gather shortcuts
 
-The foreground-window action ignores the owned-window and untitled-window filters.
-The fullscreen setting applies to every action. Windows already on the target display
-are left unchanged. Gather actions restore maximized windows before moving them and
-leave them restored for arranging; the foreground-window action re-maximizes them on
-the target display. Moved windows are raised above existing target-display windows
-without taking focus.
+These settings move all eligible open windows.
 
-Enable logging in Windhawk to see per-window skip reasons.
+* **Gather to primary display** defaults to `Ctrl+Alt+Shift+P`.
+* **Gather to display under mouse** defaults to `Ctrl+Alt+Shift+M`.
+* **Gather to foreground window display** defaults to `Ctrl+Alt+Shift+A`.
+  The active window chooses the destination; all eligible windows are gathered
+  there.
+* **Gather to display 1-5** are disabled by default. Set any of them to a
+  shortcut when needed.
 
-Known limitations: numbered display actions use detection order, which can differ
-from the display numbers in Windows Settings. Moving minimized windows without restoring is
-not attempted because it is not reliable for all apps.
+Hotkeys accept values such as `Ctrl+Alt+Shift+1`, `Ctrl+Win+M`, `F9`, or `None`.
+If two actions use the same shortcut, the older action keeps it and the conflict
+is logged. This protects existing shortcuts after an update.
+
+## Display order override
+
+Numbered move and gather actions normally use the order in which Windhawk detects
+your displays. That order can differ from the numbers in Windows Settings and can
+change after displays are connected or disconnected. **Display order override**
+changes what "display 1", "display 2", and so on mean while keeping every hotkey
+unchanged.
+
+Enter a comma-separated list containing `primary` or detected display numbers:
+
+* `primary,3` keeps display 1 tied to whichever display is currently primary and
+  makes detected display 3 become display 2.
+* `4,3` makes detected display 4 become display 1 and detected display 3 become
+  display 2.
+
+Displays not listed keep their detected order after the listed displays. For
+example, if the detected order is `1,2,3,4`, the override `4,3` produces
+`4,3,1,2`. The override affects numbered move and gather actions only. Primary,
+mouse, and active-window destinations are unchanged.
+
+Leave the setting empty to use detection order. An invalid value rejects the
+whole override and safely returns to detection order. Enable Windhawk logging to
+see both the detected order and the final numbered order. These lines appear when
+the mod starts, settings change, or the display layout changes.
+
+If a numbered destination is unavailable, the primary display is used.
+
+## Window handling settings
+
+* **Skip minimized windows** ignores minimized windows immediately.
+* **Restore minimized windows before moving** applies when skipping is off.
+  When both settings are off, minimized windows remain skipped because moving
+  them without restoring is unreliable.
+* **Skip fullscreen windows** avoids disturbing fullscreen apps and games. It
+  applies to both single-window moves and gather actions.
+* **Window size behavior** controls resizing at the destination. **Fit** shrinks
+  only windows that are too large, **Preserve** never resizes, and **Scale**
+  adjusts size in proportion to the destination display.
+* **Cascade windows** offsets gathered windows so they do not completely overlap.
+* **Cascade offset in pixels** controls the distance between cascaded windows.
+* **Window anchor** chooses the starting position: center, top left, or mouse
+  cursor.
+* **Include owned windows/popups** includes dialogs and secondary windows attached
+  to another app window during gather actions.
+* **Debug logging** records why individual windows were skipped. Leave it off
+  unless troubleshooting.
+
+## Behavior and limitations
+
+Hidden windows, desktop and taskbar windows, system interface windows, helper
+windows, and tool windows are intentionally skipped. Gather actions also skip
+untitled windows. Active-window actions can still move a window with no title or
+a window attached to another app window.
+
+Moved windows are raised above windows already on the destination display without
+taking keyboard focus. A moved maximized active window is maximized again on the
+destination. Gathered maximized windows are restored so they can be arranged.
+
+Detected display numbers are Windhawk's numbers, not necessarily the numbers shown
+in Windows Settings. Moving a minimized window without restoring it is not
+supported because applications handle that inconsistently.
 */
 // ==/WindhawkModReadme==
 
@@ -56,19 +116,19 @@ not attempted because it is not reliable for all apps.
   $name: Move foreground window to primary display
 - HotkeyForegroundMonitor1: "Ctrl+Alt+Shift+1"
   $name: Move foreground window to display 1
-  $description: Uses the first display detected by Windhawk, which may not be display 1 in Windows Settings.
+  $description: Uses display 1 after applying Display order override.
 - HotkeyForegroundMonitor2: "Ctrl+Alt+Shift+2"
   $name: Move foreground window to display 2
-  $description: Uses the second display detected by Windhawk, which may not be display 2 in Windows Settings.
+  $description: Uses display 2 after applying Display order override.
 - HotkeyForegroundMonitor3: "Ctrl+Alt+Shift+3"
   $name: Move foreground window to display 3
-  $description: Uses the third display detected by Windhawk, which may not be display 3 in Windows Settings.
+  $description: Uses display 3 after applying Display order override.
 - HotkeyForegroundMonitor4: "Ctrl+Alt+Shift+4"
   $name: Move foreground window to display 4
-  $description: Uses the fourth display detected by Windhawk, which may not be display 4 in Windows Settings.
+  $description: Uses display 4 after applying Display order override.
 - HotkeyForegroundMonitor5: "Ctrl+Alt+Shift+5"
   $name: Move foreground window to display 5
-  $description: Uses the fifth display detected by Windhawk, which may not be display 5 in Windows Settings.
+  $description: Uses display 5 after applying Display order override.
 - HotkeyPrimary: "Ctrl+Alt+Shift+P"
   $name: Gather to primary display
 - HotkeyMouse: "Ctrl+Alt+Shift+M"
@@ -78,19 +138,28 @@ not attempted because it is not reliable for all apps.
   $description: Moves all eligible windows to the display containing the active window.
 - HotkeyMonitor1: "None"
   $name: Gather to display 1
-  $description: Uses the first display detected by Windhawk, which may not be display 1 in Windows Settings.
+  $description: Uses display 1 after applying Display order override.
 - HotkeyMonitor2: "None"
   $name: Gather to display 2
-  $description: Uses the second display detected by Windhawk, which may not be display 2 in Windows Settings.
+  $description: Uses display 2 after applying Display order override.
 - HotkeyMonitor3: "None"
   $name: Gather to display 3
-  $description: Uses the third display detected by Windhawk, which may not be display 3 in Windows Settings.
+  $description: Uses display 3 after applying Display order override.
 - HotkeyMonitor4: "None"
   $name: Gather to display 4
-  $description: Uses the fourth display detected by Windhawk, which may not be display 4 in Windows Settings.
+  $description: Uses display 4 after applying Display order override.
 - HotkeyMonitor5: "None"
   $name: Gather to display 5
-  $description: Uses the fifth display detected by Windhawk, which may not be display 5 in Windows Settings.
+  $description: Uses display 5 after applying Display order override.
+- DisplayOrder: ""
+  $name: Display order override
+  $description: >-
+    Remaps what numbered move and gather shortcuts target without rebinding them.
+    Enter comma-separated primary or detected display numbers. Example: primary,3
+    keeps display 1 tied to the current primary display after reconnects and makes
+    detected display 3 become display 2. Unlisted displays keep detected order.
+    Enable Windhawk logging to see detected numbers. Invalid values are ignored;
+    leave empty for detection order.
 - SkipMinimized: false
   $name: Skip minimized windows
 - RestoreMinimized: false
@@ -121,6 +190,9 @@ not attempted because it is not reliable for all apps.
 - IncludeOwnedWindows: true
   $name: Include owned windows/popups
   $description: Also moves dialogs and secondary windows attached to another app window.
+- DebugLogging: false
+  $name: Debug logging
+  $description: Logs why individual windows were skipped. Enable only while troubleshooting.
 */
 // ==/WindhawkModSettings==
 
@@ -132,6 +204,7 @@ not attempted because it is not reliable for all apps.
 #include <atomic>
 #include <cwctype>
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum class TargetMode {
@@ -180,6 +253,12 @@ enum class SizeMode {
     Scale,
 };
 
+struct DisplayOrderOverride {
+    bool valid;
+    int entries[5];  // -1 is the current primary display; 0-4 are detected indices.
+    size_t count;
+};
+
 struct Settings {
     bool skipMinimized;
     bool restoreMinimized;
@@ -189,6 +268,8 @@ struct Settings {
     int cascadeOffset;
     AnchorMode anchor;
     bool includeOwnedWindows;
+    bool debugLogging;
+    DisplayOrderOverride displayOrder;
     std::wstring hotkeys[(int)TargetMode::Count];
 };
 
@@ -197,6 +278,7 @@ struct MonitorInfo {
     RECT monitor;
     RECT work;
     bool primary;
+    size_t detectedIndex;
 };
 
 struct Hotkey {
@@ -247,11 +329,83 @@ static_assert(!IsForegroundOnlyAction(TargetMode::Monitor5));
 static_assert(NumberedDisplayIndex(TargetMode::ForegroundMonitor2) == 1);
 static_assert(NumberedDisplayIndex(TargetMode::Monitor5) == 4);
 
+constexpr bool IsDisplayOrderSpace(wchar_t c) {
+    return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n';
+}
+
+constexpr std::wstring_view TrimDisplayOrderToken(std::wstring_view text) {
+    while (!text.empty() && IsDisplayOrderSpace(text.front())) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && IsDisplayOrderSpace(text.back())) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+constexpr bool IsPrimaryDisplayOrderToken(std::wstring_view text) {
+    constexpr std::wstring_view primary = L"primary";
+    if (text.size() != primary.size()) return false;
+    for (size_t i = 0; i < primary.size(); i++) {
+        wchar_t c = text[i];
+        if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
+        if (c != primary[i]) return false;
+    }
+    return true;
+}
+
+constexpr DisplayOrderOverride ParseDisplayOrder(std::wstring_view text) {
+    DisplayOrderOverride result{ true, {}, 0 };
+    text = TrimDisplayOrderToken(text);
+    while (!text.empty()) {
+        size_t comma = text.find(L',');
+        std::wstring_view token =
+            TrimDisplayOrderToken(text.substr(0, comma));
+        int entry;
+        if (IsPrimaryDisplayOrderToken(token)) {
+            entry = -1;
+        } else if (token.size() == 1 && token[0] >= L'1' &&
+                   token[0] <= L'5') {
+            entry = token[0] - L'1';
+        } else {
+            return { false, {}, 0 };
+        }
+
+        if (result.count == ARRAYSIZE(result.entries)) {
+            return { false, {}, 0 };
+        }
+        for (size_t i = 0; i < result.count; i++) {
+            if (result.entries[i] == entry) return { false, {}, 0 };
+        }
+        result.entries[result.count++] = entry;
+
+        if (comma == std::wstring_view::npos) break;
+        text.remove_prefix(comma + 1);
+        if (TrimDisplayOrderToken(text).empty()) return { false, {}, 0 };
+    }
+    return result;
+}
+
+constexpr auto kDisplayOrderPrimaryTest = ParseDisplayOrder(L"primary, 3");
+static_assert(kDisplayOrderPrimaryTest.valid &&
+              kDisplayOrderPrimaryTest.count == 2 &&
+              kDisplayOrderPrimaryTest.entries[0] == -1 &&
+              kDisplayOrderPrimaryTest.entries[1] == 2);
+constexpr auto kDisplayOrderNumericTest = ParseDisplayOrder(L"4,3");
+static_assert(kDisplayOrderNumericTest.valid &&
+              kDisplayOrderNumericTest.entries[0] == 3 &&
+              kDisplayOrderNumericTest.entries[1] == 2);
+static_assert(ParseDisplayOrder(L"").valid);
+static_assert(ParseDisplayOrder(L"3,3").valid == false);
+static_assert(ParseDisplayOrder(L"primary,").valid == false);
+static_assert(ParseDisplayOrder(L"leftmost").valid == false);
+
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_STOP = WM_APP + 2;
 
 Settings g_settings{};
 std::vector<Hotkey> g_hotkeys;
+std::wstring g_lastDisplayTopology;
 HANDLE g_worker;
 std::atomic<DWORD> g_workerThreadId{};
 HANDLE g_workerReady;
@@ -289,6 +443,14 @@ void LoadSettings() {
     g_settings.hotkeys[(int)TargetMode::Monitor5] = GetStringSetting(L"HotkeyMonitor5");
     g_settings.hotkeys[(int)TargetMode::Mouse] = GetStringSetting(L"HotkeyMouse");
     g_settings.hotkeys[(int)TargetMode::Foreground] = GetStringSetting(L"HotkeyForeground");
+    std::wstring displayOrderText = GetStringSetting(L"DisplayOrder");
+    g_settings.displayOrder = ParseDisplayOrder(displayOrderText);
+    if (!g_settings.displayOrder.valid) {
+        Wh_Log(L"Invalid display order override: %s. Using detected order; "
+               L"expected primary or numbers 1-5 separated by commas",
+               displayOrderText.c_str());
+        g_settings.displayOrder = ParseDisplayOrder(L"");
+    }
     g_settings.skipMinimized = Wh_GetIntSetting(L"SkipMinimized") != 0;
     g_settings.restoreMinimized = Wh_GetIntSetting(L"RestoreMinimized") != 0;
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
@@ -297,6 +459,8 @@ void LoadSettings() {
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
     g_settings.anchor = ParseAnchorMode(GetStringSetting(L"Anchor"));
     g_settings.includeOwnedWindows = Wh_GetIntSetting(L"IncludeOwnedWindows") != 0;
+    g_settings.debugLogging = Wh_GetIntSetting(L"DebugLogging") != 0;
+    g_lastDisplayTopology.clear();
 }
 
 std::wstring TrimUpper(std::wstring s) {
@@ -422,6 +586,8 @@ void UnregisterConfiguredHotkeys() {
 
 void RegisterConfiguredHotkeys() {
     UnregisterConfiguredHotkeys();
+    int registered = 0;
+    int disabled = 0;
 
     // Existing actions register first so an update never changes what an
     // already-configured shortcut does when a new default uses the same keys.
@@ -448,7 +614,7 @@ void RegisterConfiguredHotkeys() {
         const std::wstring& configured = g_settings.hotkeys[(int)modes[i]];
         HotkeyParseResult parseResult = ParseHotkey(configured, &modifiers, &vk);
         if (parseResult == HotkeyParseResult::Disabled) {
-            Wh_Log(L"Hotkey disabled: %s", names[i]);
+            disabled++;
             continue;
         }
         if (parseResult == HotkeyParseResult::Invalid) {
@@ -472,13 +638,13 @@ void RegisterConfiguredHotkeys() {
         int id = 100 + i;
         if (RegisterHotKey(nullptr, id, modifiers, vk)) {
             g_hotkeys.push_back({ id, modifiers, vk, modes[i], names[i] });
-            Wh_Log(L"Hotkey registered: %s = %s", names[i],
-                   configured.c_str());
+            registered++;
         } else {
             Wh_Log(L"Hotkey register failed: %s = %s, error=%u", names[i],
                    configured.c_str(), GetLastError());
         }
     }
+    Wh_Log(L"Hotkeys ready: registered=%d disabled=%d", registered, disabled);
 }
 
 BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
@@ -487,23 +653,85 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
     mi.cbSize = sizeof(mi);
     if (GetMonitorInfo(monitor, &mi)) {
         monitors->push_back({ monitor, mi.rcMonitor, mi.rcWork,
-                              (mi.dwFlags & MONITORINFOF_PRIMARY) != 0 });
+                              (mi.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                              monitors->size() + 1 });
     }
     return TRUE;
 }
 
-std::vector<MonitorInfo> GetMonitors() {
-    std::vector<MonitorInfo> monitors;
-    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, (LPARAM)&monitors);
-    Wh_Log(L"Displays: %zu", monitors.size());
-    for (size_t i = 0; i < monitors.size(); i++) {
-        const RECT& m = monitors[i].monitor;
-        const RECT& w = monitors[i].work;
-        Wh_Log(L"Display %zu%s: bounds=(%ld,%ld,%ld,%ld) work=(%ld,%ld,%ld,%ld)",
-               i + 1, monitors[i].primary ? L" primary" : L"", m.left, m.top,
-               m.right, m.bottom, w.left, w.top, w.right, w.bottom);
+std::vector<MonitorInfo> ApplyDisplayOrder(
+    const std::vector<MonitorInfo>& detected) {
+    std::vector<MonitorInfo> ordered;
+    ordered.reserve(detected.size());
+    std::vector<bool> used(detected.size());
+
+    for (size_t i = 0; i < g_settings.displayOrder.count; i++) {
+        int entry = g_settings.displayOrder.entries[i];
+        size_t detectedIndex = detected.size();
+        if (entry == -1) {
+            for (size_t j = 0; j < detected.size(); j++) {
+                if (detected[j].primary) {
+                    detectedIndex = j;
+                    break;
+                }
+            }
+        } else {
+            detectedIndex = (size_t)entry;
+        }
+
+        if (detectedIndex < detected.size() && !used[detectedIndex]) {
+            ordered.push_back(detected[detectedIndex]);
+            used[detectedIndex] = true;
+        }
     }
-    return monitors;
+
+    for (size_t i = 0; i < detected.size(); i++) {
+        if (!used[i]) ordered.push_back(detected[i]);
+    }
+    return ordered;
+}
+
+void LogDisplayTopology(const std::vector<MonitorInfo>& detected,
+                        const std::vector<MonitorInfo>& ordered) {
+    std::wstring detectedText = L"Detected displays:";
+    for (const MonitorInfo& display : detected) {
+        LONG width = display.monitor.right - display.monitor.left;
+        LONG height = display.monitor.bottom - display.monitor.top;
+        detectedText += L" " + std::to_wstring(display.detectedIndex) + L"=" +
+                        std::to_wstring(width) + L"x" +
+                        std::to_wstring(height) + L"@(" +
+                        std::to_wstring(display.monitor.left) + L"," +
+                        std::to_wstring(display.monitor.top) + L")";
+        if (display.primary) detectedText += L" primary";
+        detectedText += L";";
+    }
+    if (detected.empty()) detectedText += L" none";
+
+    std::wstring orderText = L"Numbered display order:";
+    for (size_t i = 0; i < ordered.size(); i++) {
+        orderText += L" " + std::to_wstring(i + 1) + L"=detected " +
+                     std::to_wstring(ordered[i].detectedIndex);
+        if (ordered[i].primary) orderText += L" primary";
+        orderText += L";";
+    }
+    if (ordered.empty()) orderText += L" none";
+
+    std::wstring topology = detectedText + L"|" + orderText;
+    if (topology == g_lastDisplayTopology) return;
+    g_lastDisplayTopology = topology;
+    Wh_Log(L"%s", detectedText.c_str());
+    Wh_Log(L"%s", orderText.c_str());
+}
+
+std::vector<MonitorInfo> GetMonitors() {
+    std::vector<MonitorInfo> detected;
+    if (!EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc,
+                             (LPARAM)&detected)) {
+        Wh_Log(L"Display enumeration failed: error=%u", GetLastError());
+    }
+    std::vector<MonitorInfo> ordered = ApplyDisplayOrder(detected);
+    LogDisplayTopology(detected, ordered);
+    return ordered;
 }
 
 const MonitorInfo* PrimaryMonitor(const std::vector<MonitorInfo>& monitors) {
@@ -644,6 +872,7 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
 }
 
 void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
+    if (!g_settings.debugLogging) return;
     wchar_t title[128]{};
     wchar_t className[128]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
@@ -729,10 +958,11 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         UINT demoteFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                            SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
         if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, demoteFlags)) {
-            Wh_Log(L"Failed to clear topmost for hwnd=%p, retrying", hwnd);
+            DWORD firstError = GetLastError();
             if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
                               demoteFlags)) {
-                Wh_Log(L"Failed to clear topmost for hwnd=%p", hwnd);
+                Wh_Log(L"Failed to restore normal window level: hwnd=%p "
+                       L"errors=%u,%u", hwnd, firstError, GetLastError());
             }
         }
     }
@@ -779,8 +1009,12 @@ void GatherWindows(TargetMode mode) {
         return;
     }
 
-    Wh_Log(L"Target work area: (%ld,%ld,%ld,%ld)", target->work.left, target->work.top,
-           target->work.right, target->work.bottom);
+    if (g_settings.debugLogging) {
+        Wh_Log(L"Target: detected display %zu%s work=(%ld,%ld,%ld,%ld)",
+               target->detectedIndex, target->primary ? L" primary" : L"",
+               target->work.left, target->work.top, target->work.right,
+               target->work.bottom);
+    }
     bool foregroundOnly = IsForegroundOnlyAction(mode);
     GatherState state{ target,
                        !foregroundOnly,
@@ -813,12 +1047,13 @@ DWORD WINAPI WorkerMain(LPVOID) {
 
     LoadSettings();
     RegisterConfiguredHotkeys();
+    GetMonitors();
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (msg.message == WM_HOTKEY) {
             for (const Hotkey& hotkey : g_hotkeys) {
                 if (hotkey.id == (int)msg.wParam) {
-                    Wh_Log(L"Hotkey pressed: %s", hotkey.name);
+                    Wh_Log(L"Action: %s", hotkey.name);
                     GatherWindows(hotkey.mode);
                     break;
                 }
@@ -826,6 +1061,7 @@ DWORD WINAPI WorkerMain(LPVOID) {
         } else if (msg.message == WM_APP_RELOAD) {
             LoadSettings();
             RegisterConfiguredHotkeys();
+            GetMonitors();
         } else if (msg.message == WM_APP_STOP) {
             break;
         }
@@ -893,7 +1129,6 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
     ExitThread(0);
 }
 
