@@ -5660,7 +5660,14 @@ void CycleCurrentWorkspaceLayout(HMONITOR monitor = nullptr) {
 
   Workspace state;
   if (!g_workspaces.Load(key, &state)) {
-    if (!Reconcile::EnsureWorkspaceFromSnapshot(monitor, false) || !g_workspaces.Load(key, &state)) return;
+    if (IsAutomaticMode()) {
+      if (!Reconcile::EnsureWorkspaceFromSnapshot(monitor, false) ||
+          !g_workspaces.Load(key, &state)) {
+        return;
+      }
+    } else {
+      state = Reconcile::MakeDefaultWorkspace();
+    }
   }
 
   const TileLayout previousLayout = state.Layout();
@@ -5692,15 +5699,22 @@ void SetCurrentWorkspaceLayout(TileLayout layout, HMONITOR monitor = nullptr) {
   if (!GetCurrentWorkspaceKey(monitor, &key)) return;
 
   Workspace state;
+  bool workspaceCreated = false;
   if (!g_workspaces.Load(key, &state)) {
-    if (!Reconcile::EnsureWorkspaceFromSnapshot(monitor, false) ||
-        !g_workspaces.Load(key, &state)) {
-      return;
+    if (IsAutomaticMode()) {
+      if (!Reconcile::EnsureWorkspaceFromSnapshot(monitor, false) ||
+          !g_workspaces.Load(key, &state)) {
+        return;
+      }
+    } else {
+      state = Reconcile::MakeDefaultWorkspace();
+      workspaceCreated = true;
     }
   }
 
   const TileLayout previousLayout = state.Layout();
   if (previousLayout == layout) {
+    if (workspaceCreated) g_workspaces.Save(key, state);
     // Keep the tray view coherent even if the selected item was already active.
     TrayUi::UpdateIcon(layout, monitor);
     return;
