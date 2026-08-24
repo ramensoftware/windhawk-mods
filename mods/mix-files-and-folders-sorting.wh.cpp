@@ -2,7 +2,7 @@
 // @id              mix-files-and-folders-sorting
 // @name            Mix Files and Folders When Sorting in Windows Explorer
 // @description     Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files
-// @version         1.1
+// @version         1.2
 // @author          Extremenis
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
@@ -21,11 +21,22 @@ descending) all files, regardless of which column is sorted by. This is
 hardcoded shell behavior, not a UI setting, and it's independent from
 "Group by".
 
-This mod removes that separation: with it enabled, a folder and a file are
-compared purely according to the selected column's value (name, size, type,
-date, ...), instead of the folder automatically winning. Folder-vs-folder
-and file-vs-file comparisons are left untouched, so Explorer's own ordering
-(including numerical sorting and locale rules) still applies there.
+This mod removes that separation: a folder and a file are compared according
+to the selected column's value (name, type, date, ...) instead of the folder
+automatically winning. Folder-vs-folder and file-vs-file comparisons are left
+to the shell untouched, so Explorer's own ordering still applies there.
+
+## ⚠ Conflicts with `explorer-details-better-file-sizes`
+
+**Do not enable both mods at once.**
+[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp)
+hooks the very same `CFSFolder::CompareIDs` function and ships a
+"Mix files and folders when sorting by size" setting (`sortSizesMixFolders`)
+that is **on by default**. Each hook returns a result without calling through
+to the other for the cases it handles, so with both installed the resulting
+sort order depends on which mod loaded first — which isn't something you can
+observe or control. If you want size-based mixing, use that mod; this one
+covers the other columns.
 
 ## Scope
 
@@ -39,36 +50,30 @@ The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
 other applications — which use the same `CFSFolder` implementation, just in
 a different process — keep the default folders-first ordering.
 
-Sorting by Size does not actually interleave: folders always report an empty
-size, so a folder-vs-file comparison on that column ends up in the same
-order as stock Explorer. Real size-based mixing needs folders to have a
-computed size, which this mod doesn't provide.
+Sorting by Size does not interleave: folders report an empty size, so a
+folder-vs-file comparison on that column ends up in the same order as stock
+Explorer. Real size mixing needs folders to have a computed size, which this
+mod doesn't provide — `explorer-details-better-file-sizes` does, via its
+`calculateFolderSizes` feature.
+
+## Known limitations
+
+The shell's own file-vs-file comparison and this mod's folder-vs-file
+comparison are separate pieces of code, so they can disagree at the margins
+and place a folder in a spot that looks slightly off relative to nearby
+files. Known cases: date columns are compared as `VT_DATE` (a double, ~ms
+resolution) where the shell compares `FILETIME` at 100 ns; and locale
+collation of punctuation or accented characters may differ from the shell's.
 
 ## Credit / related mod
 
 The `CFSFolder` hooking scaffolding (symbol hooks, hook lifetime tracking,
 `CompareIDs` hook skeleton) is derived from m417z's
 [`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp),
-which is licensed under GPLv3; this mod is licensed under GPLv3 as well for
-that reason. That mod already has a "Mix files and folders when sorting by
-size" setting implemented via the same hook. This mod generalizes the same
-idea to every column, at the cost of overlapping functionality: both mods
-hook `CFSFolder::CompareIDs`, so if both are enabled at once the result
-depends on which mod's hook runs first.
+which is licensed under GPLv3; this mod is licensed under GPLv3 for that
+reason.
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- mixFoldersAndFiles: true
-  $name: Mix Files and Folders
-  $description: >-
-    When enabled, a folder and a file are interleaved when sorting by any
-    column, instead of the folder always coming first. When disabled, the
-    hook isn't installed at all and Explorer's default folders-first
-    behavior applies.
-*/
-// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
@@ -82,10 +87,6 @@ depends on which mod's hook runs first.
 #include <shobjidl.h>
 #include <shtypes.h>
 
-struct {
-    std::atomic<bool> mixFoldersAndFiles;
-} g_settings;
-
 std::atomic<int> g_hookRefCount;
 
 auto hookRefCountScope() {
@@ -93,6 +94,27 @@ auto hookRefCountScope() {
     return std::unique_ptr<decltype(g_hookRefCount),
                             void (*)(decltype(g_hookRefCount)*)>{
         &g_hookRefCount, [](auto hookRefCount) { (*hookRefCount)--; }};
+}
+
+// Explorer honors the NoStrCmpLogical policy under
+// HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer: when it's
+// set, "numerical sorting" is off and the shell stops comparing names
+// logically. This hook's folder-vs-file comparison has to follow the same
+// rule as the shell's file-vs-file comparison, or the two orderings disagree
+// (e.g. the shell puts a10.txt before a2.txt while a folder named a5 lands
+// between them). Read once -- it's a policy value, not something that
+// changes while Explorer runs.
+bool NumericalSortEnabled() {
+    static const bool enabled = [] {
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        LSTATUS status = RegGetValueW(
+            HKEY_CURRENT_USER,
+            LR"(Software\Microsoft\Windows\CurrentVersion\Policies\Explorer)",
+            L"NoStrCmpLogical", RRF_RT_REG_DWORD, nullptr, &value, &size);
+        return status != ERROR_SUCCESS || value == 0;
+    }();
+    return enabled;
 }
 
 using CFSFolder_MapColumnToSCID_t = HRESULT(WINAPI*)(void* pCFSFolder,
@@ -126,23 +148,24 @@ HRESULT CompareResultFromInt(int cmp) {
     return 0;
 }
 
-// Fetches PKEY_FileAttributes for the item and reports whether
-// FILE_ATTRIBUTE_DIRECTORY is set. Returns false (via the HRESULT) if the
-// attribute couldn't be read, so the caller can fall back to the default
-// behavior instead of guessing.
+// Asks the shell folder itself whether an item is a folder. pCFSFolder is the
+// IShellFolder2 this-pointer that CompareIDs/MapColumnToSCID/GetDetailsEx are
+// all being called on, and IShellFolder2 single-inherits IShellFolder, so it
+// can be used as one. For CFSFolder this reads SFGAO_FOLDER out of the pidl
+// instead of going through the property store, which matters because this
+// runs on every comparison of an O(N log N) sort.
 HRESULT IsFolderItem(void* pCFSFolder,
                       const ITEMIDLIST_RELATIVE* itemid,
                       bool* isFolder) {
-    _variant_t attrValue;
-    HRESULT hr = CFSFolder_GetDetailsEx_Original(
-        pCFSFolder, itemid, &PKEY_FileAttributes, attrValue.GetAddress());
+    SFGAOF attrs = SFGAO_FOLDER;
+    HRESULT hr = ((IShellFolder*)pCFSFolder)
+                     ->GetAttributesOf(1, (PCUITEMID_CHILD_ARRAY)&itemid,
+                                        &attrs);
     if (FAILED(hr)) {
+        Wh_Log(L"GetAttributesOf failed: 0x%08X", hr);
         return hr;
     }
-    if (attrValue.vt != VT_UI4) {
-        return E_UNEXPECTED;
-    }
-    *isFolder = (attrValue.ulVal & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    *isFolder = (attrs & SFGAO_FOLDER) != 0;
     return S_OK;
 }
 
@@ -165,10 +188,10 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     // (SHCIDS_COLUMNMASK); the high bits carry flags such as
     // SHCIDS_ALLFIELDS (identity queries) or SHCIDS_CANONICALONLY. Only
     // handle plain column sorts and let the shell handle anything else.
-    // This must run before any property lookups below: CompareIDs is also
-    // called with SHCIDS_ALLFIELDS for item-identity lookups (locating a
-    // row after a rename, a change notification, a refresh), far more
-    // often than for actual sorting, and those calls should cost nothing.
+    // This runs before any lookups below: CompareIDs is also called with
+    // SHCIDS_ALLFIELDS for item-identity lookups (locating a row after a
+    // rename, a change notification, a refresh), far more often than for
+    // actual sorting, and those calls should cost nothing.
     if (column & ~(LPARAM)SHCIDS_COLUMNMASK) {
         return original();
     }
@@ -180,13 +203,11 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
-    // Folders-first is the only rule this mod needs to override, so only
-    // step in when exactly one of the two items is a folder. Folder-vs-folder
-    // and file-vs-file pairs are left to the shell's own comparison: it's
-    // cheaper (no extra property-system round trips for the common case),
-    // and it guarantees the exact same ordering Explorer would otherwise use
-    // (numerical sorting, locale rules, and comparing the real file name
-    // rather than the display name with the extension hidden).
+    // Folders-first is the only rule this mod needs to override, so only step
+    // in when exactly one of the two items is a folder. Folder-vs-folder and
+    // file-vs-file pairs go to the shell's own comparison: it's cheaper (no
+    // property lookups at all for the common case), and it guarantees the
+    // exact ordering Explorer would otherwise use.
     bool isFolder1, isFolder2;
     if (FAILED(IsFolderItem(pCFSFolder, itemid1, &isFolder1)) ||
         FAILED(IsFolderItem(pCFSFolder, itemid2, &isFolder2))) {
@@ -197,15 +218,12 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     }
 
     // PKEY_ItemNameDisplay (the Name column) resolves to
-    // ISF::GetDisplayNameOf(SHGDN_NORMAL), which honors "Hide extensions
-    // for known file types" and so can omit a file's extension. The
-    // shell's own file-vs-file CompareIDs for Name instead compares the
-    // real underlying file/folder name (PKEY_FileName), extension included.
-    // Match that here: using the display name for one comparison key and
-    // the real name for another would make the overall ordering
-    // non-transitive (e.g. folder "report" could tie with file
-    // "report.txt" on display name while "report.txt" sorts against other
-    // files by their real, extended names).
+    // ISF::GetDisplayNameOf(SHGDN_NORMAL), which honors "Hide extensions for
+    // known file types" and so can omit a file's extension. The shell's own
+    // file-vs-file CompareIDs for Name instead compares the real underlying
+    // file/folder name (PKEY_FileName), extension included. Match that here:
+    // using the display name for one comparison key and the real name for
+    // another would make the overall ordering non-transitive.
     const PROPERTYKEY& valueSCID =
         columnSCID == PKEY_ItemNameDisplay ? PKEY_FileName : columnSCID;
 
@@ -244,9 +262,10 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
             break;
 
         case VT_BSTR: {
-            LPCWSTR s1 = (LPCWSTR)value1.bstrVal;
-            LPCWSTR s2 = (LPCWSTR)value2.bstrVal;
-            cmp = StrCmpLogicalW(s1 ? s1 : L"", s2 ? s2 : L"");
+            LPCWSTR s1 = value1.bstrVal ? (LPCWSTR)value1.bstrVal : L"";
+            LPCWSTR s2 = value2.bstrVal ? (LPCWSTR)value2.bstrVal : L"";
+            cmp = NumericalSortEnabled() ? StrCmpLogicalW(s1, s2)
+                                          : lstrcmpiW(s1, s2);
             break;
         }
 
@@ -368,22 +387,8 @@ bool HookWindowsStorageSymbols() {
     return HookSymbols(windowsStorageModule, hooks, ARRAYSIZE(hooks));
 }
 
-void LoadSettings() {
-    g_settings.mixFoldersAndFiles = Wh_GetIntSetting(L"mixFoldersAndFiles");
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-
-    LoadSettings();
-
-    if (!g_settings.mixFoldersAndFiles) {
-        // Nothing to do: don't install the hooks at all rather than
-        // installing them inert. Toggling the setting back on reloads the
-        // mod (see Wh_ModSettingsChanged), which gives Wh_ModInit another
-        // chance to hook.
-        return TRUE;
-    }
 
     if (!HookWindowsStorageSymbols()) {
         Wh_Log(L"Failed hooking windows.storage.dll symbols");
@@ -399,10 +404,4 @@ void Wh_ModUninit() {
     while (g_hookRefCount > 0) {
         Sleep(200);
     }
-}
-
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L">");
-    *bReload = TRUE;
-    return TRUE;
 }
