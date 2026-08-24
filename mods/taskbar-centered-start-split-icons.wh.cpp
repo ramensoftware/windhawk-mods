@@ -1155,6 +1155,22 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
         return nullptr;
     }
 
+    // GetTaskItemsArrayOffset() is a memoized, side-effect-free probe -
+    // safe to validate up front rather than only after the fact. Without
+    // this, a build where CTaskGroup::GetNumItems stopped being the
+    // trivial form the offset probe relies on would still dispatch a
+    // click below on every single group probe (the sentinel interception
+    // itself is unaffected, so the click-sentinel latch never trips -
+    // it's GetTaskItemsArray's own bounds check further down that always
+    // fails instead), turning every group resolution attempt into a
+    // pure-waste ReportClicked into the taskbar's click machinery,
+    // forever, with nothing to bound it.
+    size_t taskItemsOffset = GetTaskItemsArrayOffset();
+    if (taskItemsOffset == 0 || taskItemsOffset >= kTaskItemsArrayProbeSize) {
+        g_resolveStats.failure++;
+        return nullptr;
+    }
+
     IUnknown* elementAbi = (IUnknown*)winrt::get_abi(element);
 
     winrt::com_ptr<IUnknown> groupViewModel;
@@ -1290,11 +1306,29 @@ std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 // sooner doesn't by itself bypass a negatively-cached entry's own backoff
 // gate (see ButtonHwndCacheEntry's comment for why that backoff can be
 // long-lived). Consumed once per pass in ResolvePendingButtonHwnds to
-// force every negatively-cached entry to retry regardless of backoff.
-// Safe to force unconditionally: a still-not-running group bails at
-// ResolveHwndFromTaskGroup's IsRunning check before ever dispatching a
-// click, so this never risks an extra synthetic click.
+// force a negatively-cached entry to retry regardless of backoff - but
+// only up to kMaxForcedRetryFailures consecutive failures (see there for
+// why this is capped, not unconditional).
 std::atomic<bool> g_forceResolveUnresolved;
+
+// A group with no running windows can never yield an HWND and bails at
+// ResolveHwndFromTaskGroup's IsRunning check before ever dispatching a
+// click - g_forceResolveUnresolved's whole justification for bypassing
+// backoff assumes THAT is the only reason a negatively-cached entry keeps
+// failing (a pinned app that just launched, still catching up to its own
+// EVENT_OBJECT_SHOW). But a RUNNING app's button can also fail to resolve
+// for reasons that don't bail out early - ReportClicked failing
+// internally, a task item mid-teardown, GetTaskItemsArray coming back
+// empty - and for those, forcing every retry unconditionally means
+// dispatching a real ReportClicked on both paths on every forced pass,
+// indefinitely, at up to the ~7Hz EVENT_OBJECT_SHOW can arm this at -
+// exactly the runaway-real-clicks scenario the backoff schedule exists to
+// bound. Capping the force-bypass to entries that have only failed a few
+// times keeps the "pinned app just launched" fast path intact (that case
+// is still failing 0 times when EVENT_OBJECT_SHOW first fires) while
+// letting the normal backoff schedule take back over for an entry that's
+// failed repeatedly, the same way it already would with no force at all.
+constexpr int kMaxForcedRetryFailures = 3;
 
 // The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end
 // of every successful ResolvePendingButtonHwnds pass (taskbar thread) and
@@ -2250,12 +2284,17 @@ void ResolvePendingButtonHwnds() {
                     // app, is the entire session) - by the time it's
                     // actually launched, the backoff could be minutes away,
                     // silently defeating EVENT_OBJECT_SHOW's whole purpose
-                    // of triggering an immediate resolve. See
-                    // g_forceResolveUnresolved's own comment.
-                    needsResolve = forceResolve ||
-                                   identity != it->second.identity ||
-                                   now - it->second.lastAttempt >=
-                                       ResolveBackoffMs(it->second.consecutiveFailures);
+                    // of triggering an immediate resolve. Bounded to
+                    // consecutiveFailures < kMaxForcedRetryFailures - see
+                    // its own comment for why an unconditional force here
+                    // was a real bug, not just belt-and-suspenders.
+                    bool backoffElapsed =
+                        now - it->second.lastAttempt >=
+                        ResolveBackoffMs(it->second.consecutiveFailures);
+                    needsResolve =
+                        identity != it->second.identity || backoffElapsed ||
+                        (forceResolve && it->second.consecutiveFailures <
+                                             kMaxForcedRetryFailures);
                 }
             }
 
@@ -3256,9 +3295,17 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
+        // Applied unconditionally, not gated on HookTaskbarViewDllSymbols'
+        // own return value: that value reflects whether EVERY symbol in
+        // its table resolved, optional ones included, so a single missing
+        // optional HWND-resolution symbol - exactly the case that table's
+        // `optional = true` entries exist to tolerate - would otherwise
+        // skip applying hooks for every symbol that DID resolve, ArrangeOverride
+        // included. The per-symbol resolved/MISSING logging already
+        // reports what to investigate; there's nothing to gain from also
+        // discarding the hooks that succeeded.
+        HookTaskbarViewDllSymbols(module);
+        Wh_ApplyHookOperations();
     }
 }
 
@@ -3637,7 +3684,21 @@ BOOL Wh_ModInit() {
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         Wh_Log(L"Taskbar view module already loaded at init time");
         g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+        // Deliberately NOT checking HookTaskbarViewDllSymbols' own return
+        // value here: it reflects whether EVERY symbol in its table
+        // resolved, optional ones included, so a single missing optional
+        // HWND-resolution symbol would fail this ENTIRE mod's load -
+        // exactly the outcome `optional = true` on those entries exists
+        // to prevent (see that table's own comment, and
+        // HandleLoadedModuleIfTaskbarView's identical reasoning for why
+        // its hook-apply call isn't gated on this return value either).
+        // ArrangeOverride is the one truly required symbol in that table
+        // - the mod's entire function depends on it - so that's checked
+        // directly below instead, matching HookTaskbarDllSymbols' own
+        // check above (safe to trust as-is, since every symbol load-
+        // gating that check is genuinely required, not optional).
+        HookTaskbarViewDllSymbols(taskbarViewModule);
+        if (!TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original) {
             return FALSE;
         }
     } else {
@@ -3667,9 +3728,11 @@ void Wh_ModAfterInit() {
     if (!g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-                    Wh_ApplyHookOperations();
-                }
+                // See HandleLoadedModuleIfTaskbarView's identical comment -
+                // applied unconditionally so a missing optional symbol
+                // doesn't also discard the hooks that did resolve.
+                HookTaskbarViewDllSymbols(taskbarViewModule);
+                Wh_ApplyHookOperations();
             }
         }
     }
