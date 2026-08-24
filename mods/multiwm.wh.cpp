@@ -1008,6 +1008,19 @@ using Model::Workspace;
 using Model::WorkspaceGeometryItem;
 using Model::WorkspaceRepository;
 
+struct MonitorIdentityCacheEntry {
+  HMONITOR monitor = nullptr;
+  Model::MonitorId id;
+};
+
+// HMONITOR <-> stable monitor identity is valid for one display-topology
+// generation. DPI and work-area observations deliberately aren't cached here.
+static std::vector<MonitorIdentityCacheEntry> g_monitorIdentityCache;
+
+static void ClearMonitorIdentityCache() {
+  g_monitorIdentityCache.clear();
+}
+
 struct MoveSizeTracker {
   std::unordered_map<HWND, RECT> startRects;
   std::unordered_map<HWND, RECT> endRects;
@@ -1438,6 +1451,16 @@ static void NormalizeMonitorIdentityToken(std::wstring* value) {
 bool Model::MonitorId::FromHMonitor(HMONITOR monitor, MonitorId* out) {
   if (!out || !IsLiveMonitorHandle(monitor)) return false;
 
+  auto cached = std::find_if(
+      g_monitorIdentityCache.begin(), g_monitorIdentityCache.end(),
+      [&](const MonitorIdentityCacheEntry& entry) {
+        return entry.monitor == monitor;
+      });
+  if (cached != g_monitorIdentityCache.end()) {
+    *out = cached->id;
+    return true;
+  }
+
   MONITORINFOEXW monitorInfo{};
   monitorInfo.cbSize = sizeof(monitorInfo);
   if (!GetMonitorInfoW(
@@ -1468,11 +1491,18 @@ bool Model::MonitorId::FromHMonitor(HMONITOR monitor, MonitorId* out) {
 
   NormalizeMonitorIdentityToken(&identity);
   out->deviceId = std::move(identity);
+  g_monitorIdentityCache.push_back({monitor, *out});
   return true;
 }
 
 HMONITOR Model::MonitorId::Resolve() const {
   if (deviceId.empty()) return nullptr;
+
+  for (const auto& entry : g_monitorIdentityCache) {
+    if (entry.id == *this && IsLiveMonitorHandle(entry.monitor)) {
+      return entry.monitor;
+    }
+  }
 
   struct ResolveContext {
     const MonitorId* target = nullptr;
@@ -1505,7 +1535,7 @@ bool GetMonitorWorkArea(HMONITOR monitor, RECT* outRect) {
 }
 
 static UINT GetMonitorEffectiveDpi(HMONITOR monitor) {
-  if (!monitor) return 96;
+  if (!monitor || !IsLiveMonitorHandle(monitor)) return 96;
 
   using GetDpiForMonitorFn = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
   using GetScaleFactorForMonitorFn = HRESULT(WINAPI*)(HMONITOR, int*);
@@ -1529,11 +1559,12 @@ static UINT GetMonitorEffectiveDpi(HMONITOR monitor) {
   UINT dpiX = 96;
   UINT dpiY = 96;
   // MDT_EFFECTIVE_DPI == 0. Keep the enum types local so no Shcore import
-  // library is required. GetScaleFactorForMonitor also guards against hosts
-  // whose DPI-awareness context makes GetDpiForMonitor report 96.
+  // library is required. DPI is observed fresh at the operation boundary.
   const bool haveDpi = apis.getDpi &&
       SUCCEEDED(apis.getDpi(monitor, 0, &dpiX, &dpiY)) && dpiX;
 
+  // Also correct a virtualized 96-DPI result when the host process awareness
+  // differs from this per-monitor-aware WM thread.
   int scalePercent = 100;
   const bool haveScale = apis.getScale &&
       SUCCEEDED(apis.getScale(monitor, &scalePercent)) && scalePercent > 0;
@@ -2543,32 +2574,45 @@ static HMONITOR GetWorkspaceCommandMonitor() {
   return monitor ? monitor : GetForegroundMonitor();
 }
 
-static LONG GetWorkspaceGapPixels(HMONITOR monitor) {
-  return ScaleDip(g_settings.gapDip, GetMonitorEffectiveDpi(monitor));
-}
+struct WorkspaceMetrics {
+  RECT workArea{};
+  UINT dpi = 96;
+  LONG gap = 0;
+};
 
-static WorkspaceInsets GetWorkspaceInsetsPixels(HMONITOR monitor) {
+static bool GetWorkspaceMetrics(HMONITOR monitor, WorkspaceMetrics* out) {
+  if (!monitor || !out) return false;
+
+  RECT monitorWork{};
+  if (!GetMonitorWorkArea(monitor, &monitorWork)) return false;
+
   const UINT dpi = GetMonitorEffectiveDpi(monitor);
-  return {
+  const WorkspaceInsets insets{
       ScaleDip(g_settings.insetsDip.left, dpi),
       ScaleDip(g_settings.insetsDip.top, dpi),
       ScaleDip(g_settings.insetsDip.right, dpi),
       ScaleDip(g_settings.insetsDip.bottom, dpi)};
-}
-
-static bool GetWorkspaceWorkArea(HMONITOR monitor, RECT* outWorkArea) {
-  if (!monitor || !outWorkArea) return false;
-  RECT monitorWork{};
-  if (!GetMonitorWorkArea(monitor, &monitorWork)) return false;
-  const WorkspaceInsets insets = GetWorkspaceInsetsPixels(monitor);
-
-  *outWorkArea = {
+  const RECT workArea{
       monitorWork.left + insets.left,
       monitorWork.top + insets.top,
       monitorWork.right - insets.right,
       monitorWork.bottom - insets.bottom};
-  return outWorkArea->right > outWorkArea->left &&
-         outWorkArea->bottom > outWorkArea->top;
+  if (workArea.right <= workArea.left || workArea.bottom <= workArea.top) {
+    return false;
+  }
+
+  out->workArea = workArea;
+  out->dpi = dpi;
+  out->gap = ScaleDip(g_settings.gapDip, dpi);
+  return true;
+}
+
+static bool GetWorkspaceWorkArea(HMONITOR monitor, RECT* outWorkArea) {
+  if (!outWorkArea) return false;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return false;
+  *outWorkArea = metrics.workArea;
+  return true;
 }
 
 enum class FloatingPlacementIntent {
@@ -2660,14 +2704,15 @@ static bool RepairFloatingGeometry(
   HMONITOR monitor = key.ResolveMonitor();
   if (!monitor) return false;
 
-  RECT workArea{};
-  if (!GetWorkspaceWorkArea(monitor, &workArea)) return false;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return false;
+  const RECT& workArea = metrics.workArea;
+  const UINT targetDpi = metrics.dpi;
 
   RECT current{};
   const bool haveCurrent = GetWindowFrameRect(hwnd, &current) &&
                            current.right > current.left &&
                            current.bottom > current.top;
-  const UINT targetDpi = GetMonitorEffectiveDpi(monitor);
 
   const bool useNewWindowDefault =
       hint.intent == FloatingPlacementIntent::NewWindowDefault;
@@ -2758,9 +2803,9 @@ static void RestoreWorkspaceFloatingGeometry(
   }
 }
 
-// Resolves a monitor on the current virtual desktop to its workspace key and,
-// when requested, returns the configured workspace-inset work area.
-static bool GetCurrentWorkspaceKey(HMONITOR monitor, DesktopMonitorKey* outKey, RECT* outWorkArea = nullptr) {
+// Resolves a monitor on the current virtual desktop to its workspace key.
+static bool GetCurrentWorkspaceKey(
+    HMONITOR monitor, DesktopMonitorKey* outKey) {
   if (!outKey || !IsLiveMonitorHandle(monitor)) return false;
   GUID desktopId{};
   // Never collapse separate desktops into a zero-GUID workspace when the
@@ -2768,10 +2813,7 @@ static bool GetCurrentWorkspaceKey(HMONITOR monitor, DesktopMonitorKey* outKey, 
   if (!InitializeVirtualDesktopAPI() || !GetCurrentDesktopId(&desktopId)) {
     return false;
   }
-  if (!DesktopMonitorKey::FromHMonitor(desktopId, monitor, outKey)) return false;
-
-  if (outWorkArea && !GetWorkspaceWorkArea(monitor, outWorkArea)) return false;
-  return true;
+  return DesktopMonitorKey::FromHMonitor(desktopId, monitor, outKey);
 }
 
 bool Workspace::Validate(
@@ -3921,11 +3963,12 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
   HMONITOR monitor = key.ResolveMonitor();
   if (!monitor) return;  // Detached monitor: keep workspace state dormant.
 
-  RECT workArea{};
-  if (!GetWorkspaceWorkArea(monitor, &workArea)) return;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return;
+  const RECT& workArea = metrics.workArea;
+  const LONG gap = metrics.gap;
 
   ObserveAndRepairWorkspaceForArrangement(workspace);
-  const LONG gap = GetWorkspaceGapPixels(monitor);
   const size_t maxPasses = workspace.ActiveCount() + 1;
   for (size_t pass = 0; pass < maxPasses; ++pass) {
     ++Diagnostics::g_runtime.counters.arrangePasses;
@@ -4045,12 +4088,12 @@ static bool GetCurrentAuthoritativeTiledRect(
 
   HMONITOR monitor = key.ResolveMonitor();
   if (!monitor) return false;
-  RECT workArea{};
-  if (!GetWorkspaceWorkArea(monitor, &workArea)) return false;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return false;
 
   std::vector<RECT> rects;
   if (!BuildWorkspaceLayoutPlan(
-          workspace, workArea, GetWorkspaceGapPixels(monitor), &rects) ||
+          workspace, metrics.workArea, metrics.gap, &rects) ||
       tiledIndex >= rects.size()) {
     return false;
   }
@@ -4481,7 +4524,7 @@ static bool AdmitUntrackedSuspendedSnapshot(
 
 static bool AdoptSnapshotGeometryIfEligible(
     Workspace& workspace, const std::vector<HWND>& snapshot,
-    const RECT& workArea, HMONITOR monitor) {
+    const RECT& workArea, LONG gap, HMONITOR monitor) {
   if (workspace.Layout() == TileLayout::Floating || workspace.HasSuspended() ||
       !workspace.AllTiledVisible(snapshot) ||
       !SnapshotLooksTiled(workspace.TiledWindows(), workArea)) {
@@ -4493,8 +4536,8 @@ static bool AdoptSnapshotGeometryIfEligible(
   std::vector<WorkspaceGeometryItem> geometry = CaptureWorkspaceGeometry(
       workspace.TiledWindows(), monitor, workArea);
   Workspace captured = Workspace::AdoptGeometry(
-      workspace.Layout(), workArea, GetWorkspaceGapPixels(monitor),
-      g_settings.masterPercent / 100.0, geometry, preferredMaster);
+      workspace.Layout(), workArea, gap, g_settings.masterPercent / 100.0,
+      geometry, preferredMaster);
   const HWND retainedFocus = workspace.LastFocusedWindow();
   captured.MergeRememberedFloatingGeometryFrom(workspace);
   captured.MergeNonTiledRecordsFrom(workspace);
@@ -4510,8 +4553,9 @@ static bool EnsureWorkspaceFromSnapshot(
     HMONITOR monitor, bool adoptCurrentGeometry,
     std::vector<DesktopMonitorKey>* ownershipChangedKeys = nullptr) {
   DesktopMonitorKey key{};
-  RECT workArea{};
-  if (!GetCurrentWorkspaceKey(monitor, &key, &workArea)) return false;
+  if (!GetCurrentWorkspaceKey(monitor, &key)) return false;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return false;
 
   const std::vector<HWND> snapshot = CollectTileWindows(monitor);
   Workspace workspace;
@@ -4531,7 +4575,8 @@ static bool EnsureWorkspaceFromSnapshot(
   AdmitUntrackedSnapshot(workspace, snapshot, true, false);
 
   if (adoptCurrentGeometry) {
-    AdoptSnapshotGeometryIfEligible(workspace, snapshot, workArea, monitor);
+    AdoptSnapshotGeometryIfEligible(
+        workspace, snapshot, metrics.workArea, metrics.gap, monitor);
   }
 
   g_workspaces.Save(key, workspace);
@@ -5778,7 +5823,7 @@ static void HandleUserMove(
 
 static void HandleUserResize(
     const DesktopMonitorKey& key, Workspace& workspace, HWND hwnd,
-    const RECT& workArea, const MoveSizeGesture& gesture) {
+    const RECT& workArea, LONG gap, const MoveSizeGesture& gesture) {
   if (!gesture.hasRects) {
     ArrangeWorkspace(key);
     return;
@@ -5790,21 +5835,18 @@ static void HandleUserResize(
     return;
   }
 
-  HMONITOR monitor = key.ResolveMonitor();
-  if (!monitor) return;
-
   bool changed = false;
   switch (workspace.Layout()) {
     case TileLayout::MasterStack:
     case TileLayout::MasterStackH:
       changed = workspace.LearnMasterStackResize(
-          workArea, GetWorkspaceGapPixels(monitor), resizedIndex, gesture);
+          workArea, gap, resizedIndex, gesture);
       break;
 
     case TileLayout::Columns:
     case TileLayout::Rows:
       changed = workspace.LearnGridResize(
-          workArea, GetWorkspaceGapPixels(monitor), resizedIndex, gesture);
+          workArea, gap, resizedIndex, gesture);
       break;
 
     case TileLayout::COUNT:
@@ -5879,8 +5921,8 @@ void ApplyUserMoveSize(HWND hwnd) {
     return;
   }
 
-  RECT workArea{};
-  if (!GetWorkspaceWorkArea(monitor, &workArea)) return;
+  WorkspaceMetrics metrics;
+  if (!GetWorkspaceMetrics(monitor, &metrics)) return;
 
   HWND tiledHwnd = state.IsTiled(hwnd)
       ? hwnd
@@ -5900,7 +5942,8 @@ void ApplyUserMoveSize(HWND hwnd) {
       break;
 
     case MoveSizeIntent::Resize:
-      HandleUserResize(key, state, tiledHwnd, workArea, gesture);
+      HandleUserResize(
+          key, state, tiledHwnd, metrics.workArea, metrics.gap, gesture);
       break;
   }
 }
@@ -6963,6 +7006,7 @@ void NotifyDisplayTopologyChanged() {
   AssertWmThread(L"RuntimeLifecycle::NotifyDisplayTopologyChanged");
   ++Diagnostics::g_runtime.counters.displayTopologySignals;
   Diagnostics::RecordEvent(L"display/work-area topology changed");
+  ClearMonitorIdentityCache();
 
   // Every existing lease was computed against the old work-area/monitor topology.
   // Cancel it before Windows' own topology-induced LOCATIONCHANGE burst arrives.
@@ -9932,6 +9976,7 @@ static void CleanupWmThread() {
   g_wm.pendingDesktopSwitchFlyouts = false;
   ClearAllConformanceLeases();
   ClearAllMoveSizeSamples();
+  ClearMonitorIdentityCache();
   InterlockedExchange(&g_vd.changeQueued, 0);
 }
 
