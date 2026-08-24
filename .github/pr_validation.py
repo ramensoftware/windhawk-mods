@@ -468,8 +468,10 @@ class ModMetadataValidator:
             '@@ must contain only lowercase letters, numbers and dashes',
         )
 
-        if len(prop.value) < 8 or len(prop.value) > 50:
-            prop.warn('@@ must be between 8 and 50 characters')
+        min_len = 6
+        max_len = 48
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_version(self):
         """Validate version format."""
@@ -524,6 +526,11 @@ class ModMetadataValidator:
                         f'Author name "{prop.value}" is already used by {other_github}.'
                     )
                     break
+
+        min_len = 3
+        max_len = 28
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_twitter(self):
         """Validate Twitter handle."""
@@ -653,8 +660,10 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        if len(prop.value) < 8 or len(prop.value) > 80:
-            prop.warn('@@ must be between 8 and 80 characters')
+        min_len = 6
+        max_len = 68
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
         # Check for duplicate names across existing mods
         filename_mod_id = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
@@ -676,8 +685,10 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        if len(prop.value) < 30 or len(prop.value) > 250:
-            prop.warn('@@ must be between 30 and 250 characters')
+        min_len = 30
+        max_len = 250
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_architecture(self):
         """Validate architecture values."""
