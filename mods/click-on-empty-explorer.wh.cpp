@@ -1204,9 +1204,17 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
         return;
     }
 
+    // Hold an owning reference across BrowseObject: it navigates and pumps
+    // messages, so a nested WM_NCDESTROY / g_msgTeardown on this thread could
+    // call ReleasePendingNavForThread() mid-call and drop g_pendingNavBrowser's
+    // reference. Holding our own keeps the object alive for the call; the nested
+    // null-out still does the right thing for the next duplicate.
+    winrt::com_ptr<IShellBrowser> browser;
+    browser.copy_from(g_pendingNavBrowser);
+
     PIDLIST_ABSOLUTE pidl = nullptr;
     if (SUCCEEDED(SHParseDisplayName(g_pendingNavPath, NULL, &pidl, 0, NULL)) && pidl) {
-        g_pendingNavBrowser->BrowseObject(pidl, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
+        browser->BrowseObject(pidl, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
         CoTaskMemFree(pidl);
     }
 
