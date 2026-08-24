@@ -2886,7 +2886,7 @@ bool Workspace::Validate(
 }
 
 void Workspace::DebugValidateMutation(const wchar_t* operation) const {
-#ifdef WH_EDITING
+#ifdef MULTIWM_DEBUG_VALIDATE
   DesktopMonitorKey unknownKey{};
   const bool valid = Validate(unknownKey, operation ? operation : L"mutation");
   assert(valid);
