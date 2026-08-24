@@ -214,7 +214,7 @@ MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop 
   $name: '[Diagnostics] Output Directory'
   $description: 'Directory for timestamped UTF-8 .txt diagnostic reports. Environment variables such as %USERPROFILE% are supported and missing directories are created. Reports include window titles and executable paths, so review them before sharing.'
 
-- DiagnosticDumpKey: "I"
+- DiagnosticDumpKey: ""
   $name: '[Hotkeys - General] Write Diagnostic Report'
   $description: 'Write a formatted state, health, churn, and invariant report to the configured output directory. Uses the configured modifier. Leave blank to disable.'
 */
@@ -443,7 +443,7 @@ struct SettingsState {
   UINT demoteWindowKey = VK_OEM_PERIOD;
   UINT managementModeToggleKey = 'R';
   UINT floatFocusedKey = 'F';
-  UINT diagnosticDumpKey = 'I';
+  UINT diagnosticDumpKey = 0;
 
   // User-facing pixel values are logical pixels at 96 DPI; scale only at a
   // concrete monitor/window boundary so stored screen geometry remains physical.
