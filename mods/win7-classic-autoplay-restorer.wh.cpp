@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              win7-classic-autoplay-restorer
-// @name            Windows 7 Classic AutoPlay Dialog Restorer
+// @name            Windows 7 Classic AutoPlay Dialog
 // @description     This mod restores the classic Windows 7 AutoPlay dialog for removable drives and optical media
 // @version         1.0.0
 // @author          babamohammed
@@ -12,7 +12,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 Classic AutoPlay Dialog Restorer
+# Windows 7 Classic AutoPlay Dialog
+
+## About 
 
 This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.
 
@@ -24,9 +26,17 @@ volume.
 The "Always do this" choice is remembered by the mod, not by Windows policy.
 A privacy setting can hide the volume or device name in this window only.
 
+
+
+## Screenshot 
+
+![autoplay.png](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/autoplay.png)
+
+## Notes  
+
 The mod has been tested on Windows 10 21H2.
 
-Note: while the mod is enabled it briefly writes two values under
+While the mod is enabled it briefly writes two values under
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID`
 to suppress native AutoPlay. These are removed when the mod unloads and are
 also cleaned up unconditionally every time the mod starts, so a crash or a
@@ -129,6 +139,7 @@ public:
     T** put() { reset(); return &p; }
     T* get() const { return p; }
     T* operator->() const { return p; }
+    T* release() { T* q = p; p = nullptr; return q; }  // relinquish ownership
     explicit operator bool() const { return p != nullptr; }
 };
 
@@ -139,12 +150,97 @@ struct ApRegKey {
     ApRegKey(const ApRegKey&) = delete;
 };
 
+struct ApScopedHandle {
+    HANDLE h = nullptr;
+    ApScopedHandle() = default;
+    explicit ApScopedHandle(HANDLE value) : h(value) {}
+    ~ApScopedHandle() { reset(); }
+    ApScopedHandle(const ApScopedHandle&) = delete;
+    ApScopedHandle& operator=(const ApScopedHandle&) = delete;
+    ApScopedHandle(ApScopedHandle&& other) noexcept : h(other.h) { other.h = nullptr; }
+    ApScopedHandle& operator=(ApScopedHandle&& other) noexcept {
+        if (this != &other) { reset(); h = other.h; other.h = nullptr; }
+        return *this;
+    }
+    void reset(HANDLE value = nullptr) {
+        if (h && h != INVALID_HANDLE_VALUE) CloseHandle(h);
+        h = value;
+    }
+    HANDLE get() const { return h; }
+    explicit operator bool() const { return h && h != INVALID_HANDLE_VALUE; }
+};
+
+struct ApScopedCoInit {
+    HRESULT hr = E_FAIL;
+    explicit ApScopedCoInit(DWORD model = COINIT_APARTMENTTHREADED) {
+        hr = CoInitializeEx(nullptr, model);
+    }
+    ~ApScopedCoInit() {
+        if (SUCCEEDED(hr)) CoUninitialize();
+    }
+    ApScopedCoInit(const ApScopedCoInit&) = delete;
+    ApScopedCoInit& operator=(const ApScopedCoInit&) = delete;
+    bool available() const { return SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE; }
+};
+
 struct ApCoTaskStrs {
     std::vector<LPWSTR> ids;
     ~ApCoTaskStrs() {
         for (LPWSTR s : ids)
             if (s) CoTaskMemFree(s);
     }
+};
+
+// RAII for GDI objects that must be released with DeleteObject (HBITMAP,
+// HBRUSH, HPEN, HFONT, HGDIOBJ). Prevents leaks when an allocating call
+// (e.g. std::vector::push_back -> bad_alloc) throws mid-way through a
+// function that holds several such objects.
+struct ApScopedGdiObj {
+    HGDIOBJ h = nullptr;
+    ApScopedGdiObj() = default;
+    explicit ApScopedGdiObj(HGDIOBJ value) : h(value) {}
+    ~ApScopedGdiObj() { reset(); }
+    ApScopedGdiObj(const ApScopedGdiObj&) = delete;
+    ApScopedGdiObj& operator=(const ApScopedGdiObj&) = delete;
+    void reset(HGDIOBJ value = nullptr) {
+        if (h && h != HGDI_ERROR) DeleteObject(h);
+        h = value;
+    }
+    HGDIOBJ get() const { return h; }
+    HGDIOBJ release() { HGDIOBJ o = h; h = nullptr; return o; }
+    explicit operator bool() const { return h != nullptr; }
+};
+
+// RAII for a GDI device context obtained from CreateCompatibleDC / GetDC,
+// released with DeleteDC / ReleaseDC.
+struct ApScopedDc {
+    HDC h = nullptr;
+    explicit ApScopedDc(HDC value = nullptr) : h(value) {}
+    ~ApScopedDc() { reset(); }
+    ApScopedDc(const ApScopedDc&) = delete;
+    ApScopedDc& operator=(const ApScopedDc&) = delete;
+    void reset(HDC value = nullptr) {
+        if (h) DeleteDC(h);
+        h = value;
+    }
+    HDC get() const { return h; }
+    HDC release() { HDC o = h; h = nullptr; return o; }
+    explicit operator bool() const { return h != nullptr; }
+};
+
+// RAII lock for a CRITICAL_SECTION: always releases on scope exit, so an
+// exception thrown while the section is held (e.g. std::vector::push_back ->
+// bad_alloc) cannot leave it locked forever and deadlock the mod.
+struct ApScopedCriticalSection {
+    LPCRITICAL_SECTION cs = nullptr;
+    explicit ApScopedCriticalSection(LPCRITICAL_SECTION p) : cs(p) {
+        if (cs) EnterCriticalSection(cs);
+    }
+    ~ApScopedCriticalSection() {
+        if (cs) LeaveCriticalSection(cs);
+    }
+    ApScopedCriticalSection(const ApScopedCriticalSection&) = delete;
+    ApScopedCriticalSection& operator=(const ApScopedCriticalSection&) = delete;
 };
 
 LRESULT CALLBACK AutoPlayDialogProc(HWND, UINT, WPARAM, LPARAM);
@@ -155,6 +251,8 @@ LRESULT CALLBACK ListenerWndProc(HWND, UINT, WPARAM, LPARAM);
 #define WMU_SELF_REBUILD  (WM_APP  + 0x033) // dialogo -> posta WMU_REBUILD
 #define WMU_PROCESS_QUEUE (WM_USER + 0x603) // processa coda volumi in attesa
 #define WMU_APPLY_SUPPRESS (WM_USER + 0x604) // applica/rimuove IQueryCancelAutoPlay
+#define WMU_CONTEXT_AUTOPLAY (WM_USER + 0x605) // clic destro: Apri AutoPlay...
+#define WMU_ACTION_DONE     (WM_USER + 0x606) // worker azione terminata
 #define IDT_READY         1                 // timer attesa prontezza volume
 #define IDC_ALWAYS        1005
 
@@ -194,6 +292,8 @@ static HBITMAP g_bmpDrive48 = nullptr;     // disco rimovibile      (48, fallbac
 static HBITMAP g_bmpDisc48 = nullptr;      // disco ottico          (48, fallback header)
 static HICON   g_hicoDrive48 = nullptr;    // header rimovibile (DrawIconEx)
 static HICON   g_hicoDisc48 = nullptr;     // header ottico
+static HBITMAP g_bmpLocal48 = nullptr;     // disco locale/fisso    (48, header)
+static HICON   g_hicoLocal48 = nullptr;    // header disco locale (DrawIconEx)
 static HBITMAP g_bmpPhone48 = nullptr;     // telefono MTP/WPD      (48)
 static HICON   g_hicoPhone48 = nullptr;
 static HBITMAP g_bmpPlay = nullptr;        // fallback Play         (32)
@@ -1328,6 +1428,116 @@ static const WCHAR* USER_REMOVABLE_ICON_BASE64 =
     L"8U5MwXoe1LZtiqSNiSiKeJjsvulHiO5z9rxngHZTG/mQvPeuu7f0MAW5gp4wHzCcqm+lop3Njakdv9kj/sMEgKupMnp1RC8w"
     L"yBVmIeb9dIDL77DZB8BNljrM++fTd7kGG83mP5Bt3D4AbixTbBTZEn37yILhI2H/HwoRXA3Ui9WIAAAAAElFTkSuQmCC";
 
+static const WCHAR* USER_LOCALDISK_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAXo0lEQVR4nO17eYwc153e9+p8dXRV"
+    L"XzO8KVIyKVKWZdkWpKUpWz7kZL0O1kvHshZY2AT8nwHvGkiwChYwrHCRdQA7iBAkBpwEkQ/KBkwd"
+    L"tEhJCCFzYVmWacqhdfDSkJ4Zcs6e7pme6equ7q6uqvfyRx3TMxySQ4r22El9nGZ3VR9V7/t+73e9"
+    L"KiBDhgwZMmTIkCFDhgwZMmTIkCFDhgwZMmTIkCFDhgwZMmTIkCFDhgz/r4Gs9QncLB555BHxM5/5"
+    L"zC7OuRwEQctxnA6AzsTEROeJJ57oAQjX+hxXgz81AYSnnnrqHtM0/5WuaX9pmMb7JVEUAdILGesF"
+    L"QdD2PK8dBEGz1/Mavh/Ufd+f9TxvzvO8iu/71W63W/UYq7kLC3OVSsV58sknWwD4Wg3oT0EAcujQ"
+    L"obt1Xf+MptHPGobxwYFyWdE0DZxzLCws4OLFi3CcJgqFPCzLgmEY0DQNiqJAlCSwkKHrdeF1PbQ7"
+    L"HbRdN+j2PNfreg3P86qe5013Op0Jz/MueZ53yXXdsVarNTUyMjL7wgsvtH+vg/t9/vi7wdNPP/1e"
+    L"0zT/QqP0s7qh3zdQLquqqoJzDkIIJiYmcOToURw//s84e/YsHMdJvyvLMnRdh2VZsCwLu3ftwr7P"
+    L"7cPeD+8FkJg7B+cA5wxhyOD7PrrdLlzXRaPRgOu6TrvdrnU6nfF2u32x1Wq90263L3S73ZGRkZHp"
+    L"F198cf5WjPOPSoAjR47sUlX1LzRN+6yh6/eXyyUakc7AGANjHOAcIARBEKDX66HX68F1XdTn51Gr"
+    L"1lCZqWBqcgqTU5OYn1/Ah/fswcOfehibNm4CIQScc3BwRH/Jc4J4gxCAczDOEYZheoyG42Bhfr7X"
+    L"arVmW63WaLPZPNdqtc40m82zjUZj+Cc/+ckUgN6NjHnNBTh69OgOSumndV3/K13XHigVizqNLZ1x"
+    L"BoCAEAIiCNEzISBEACEAIQIEQkCExf0giMhjDEEQAgTwez5830fIWPoe4xycRcLyeB/nHDyaFuDp"
+    L"DLkyPHDOEQQBPM9Ds9lEvV7H/Px803GcsWazedZxnDdardYbjuO889xzz00B8K82/jUR4KWXXrqD"
+    L"Uvrnuqb9lUbpnlK5ZGgaBSEEIAJEQYAgShBFAYIgQhCE9Lv9ZCUk9r9e8rzsdT/Jy4lnIQPjIcKA"
+    L"gXEGFoaLgiw7bv/+/vPqny31eh31er25sLBwqdFovNVsNk/Ozs7+1vO8i1/+8pfrjz76aMg5/8MJ"
+    L"cOzYse2U0n+paXSfRrU9pVIxp+s6REmCIIgQxYjoxMr7B5aSdg3Cr9i3CtKvEHPZb4ZhiDAMwcIw"
+    L"cn+IHoyt/PsA0vNPjIZzDs/z0Gg0UKlUUK/XZxqNxkVBEP7tt771rdd/rwK8cPz4bUVN+5Sqqvs0"
+    L"je4tFgq2RilESYIkyRBEMXItWHmqJwNg1yP6Rix+tb+z7PthGCIMAoRBcIVhXA+JQVFKMTg4iF6v"
+    L"h+9+97s/tSzrX0u3jO0Y//uVV7bYivIwpXSfptGPlAqFvKZRhIyBc0DVNIiSvEg65ysm4TdN3K0S"
+    L"YJkYhBDIigJRFNHtdsEZWxUfjDHIsoxisYhisQhJkiDLMt7znvd88vDhw3feEgF+9rOfbbJt+5OU"
+    L"0n2Uqh8t5PNFXaNRFhGECIIAIQdMMwdRFONM5Non/cciQD845xBEEbIsw2k4kCQJkiRedQySJKFU"
+    L"KqFYLEJRFHDO4ftRQrBz586cbdufumkBTp48uV6W5U+oqvo5jaoP5fP5sq7RaLrGpEeDB4KQQVLU"
+    L"lPyr4Zp+ew1c0IogEbmVmRkosozBwcElInDOIQgCCoUCyuUyKKVp1tTr9RAEAQghGBwcRLlc/ugN"
+    L"CXDixIl1pml+TJLEz1FKP5a3rEFd1wAAjPWTvnjyhEShK/ADMMYgCMJVU7s18fUr/M7VQAQCHnJU"
+    L"KjPodDrotNsoFguQZQmMMRBCYFkWyuUyNC3iJcmMfN+PAnr8OVVVkc/n77quAL/4xS8GisXiQ4qi"
+    L"fE6j6sdt216vaxScMQRhRDqwrJkSB504JQcBQRAGcJwmDEOHLMsp6Wtt6ddKLReHEo3HbbVRma6k"
+    L"VbdpGlAUBYwx6LqOgYEBmKYZGyRbYvXJdiJCXK2vW1GAX505UzQZe4hSdZ+iKJ+0c7mNhmnAaTQw"
+    L"OjoCzjkK+QKKxcJijs6TE46qyP6xiKIAxjl6foBew4EiK6BUhSSJIH1p3VrMgJWsfjEN5giCEK7b"
+    L"QaPRgOM0EQRRTWXlclg3OABd11EqlWBZFgRBuIL4JJX1fT+t3DnnoJRCEAQzFeDVV18tFAqFjyiK"
+    L"sk9VlIdzOXOzaejxSYYIfB/1+QVYuRw4AFmR4fsBKFWj6h0cnBPwpYU9OKJiQxIFAAxByNHtemh3"
+    L"PYiCAFEUIUsiBIFAiMcdkcbAWfSc5t3XIXEl0q8nADhPJiw4R9QXCgJ43R7anS46nQ56Xg8hi9wr"
+    L"VVVYlolyqYRSqQTbtiFJkQtKSPZ9HyyuI5J9nueh2+2i1+ulLZEwDAUJAE6fPv1x0zS/J4ribTnT"
+    L"gEAiIjudLoS0zCfYunlT3IcJIYqLvpwA6E/K+LIXiSiiQEAAhAQIGEcYMvR8hjbvpfNdIEjFEAhS"
+    L"PxZZ+LLq9SrPKenx5yMh+91dtM1Y0rJg0ezsBfD9Hnw/yvcZC8A4gySL0GUVmqoglzNRLpeRz+ch"
+    L"y/KSANvv55cT73kePM9DEAQQRRGSJKHT6XjSoUOHFEVR/sOWLVtuc10X8/Pz6Ha7AABJFCHJMqS4"
+    L"ShUEElmtJEJkYtQyEISIuJhoHheMPPkXu6NFH8shEA5Z4Ajj2cE4EDICxjgCzsGiFlD6+yQ+dmQM"
+    L"gEAIAI4r/CfnCFmIkLGotcBChCFPrTEIoxZDwMI4fvnwA4agF8TuIgBnHIJAIKkSJFGGLEUzVJZl"
+    L"5PN5FItFJF3ZfgtPXE0iRkJ4Qn6/QJRSdLtdNJvNOenOO+98wLbtB6anp3Hs2DEwxqEocpqvcs4h"
+    L"SRJ0XYdtWbBsG1YuB6ppUGQZoiRGQsU5sShKEGNRFolhqQX3l/HgHAI4CCI3wDhHGPtgzkniwwCI"
+    L"AARAEKPqWYyEiXpGfQIB8IMQflyxBn4A3w8QBD64H0CAj5AB0WJZcnwGSeAQZYDIIgQiQhBikTkH"
+    L"EQTkcrk0pQSwxML7A6zv+1dYfD/5vh/FD0opHMfBwsLCRUmW5T/P5XLiM888g7vuei+2b789mfeR"
+    L"i+h5cN0W6vU6ZmdrGBoaQqvVQhiGUBUFOctCPp+HHS+EqJRCkWVIsgRZkqEoMiRJioP1YnC7wjez"
+    L"SCBwDhK/ZgFHmLaLo0YdIRHhJJ0Z8b5Y8DCMBGBhLEIQtxDC6BH1dUJwxkA4hwQOiMmZkUjz2EBM"
+    L"M3I3hmGkselqAXa5xS8nPokLmqaBEIJKpYJGo/GKRCl9YG5uDqIo4bbbtqNanUtbu0IcJDXNwvbt"
+    L"JezceRdEUUAYBmi3o47fzEwFMzMVjAwPo93pgBACTdNg5XKwbTtdoaKUglIKRVGgKDJEUYosHbEI"
+    L"SwJu/MzYYjCOX0frAn3vL9m/OLPS4JRiMTXu+29J3EpimqZpKJfLyOVy/QHzqgG22+1ek/gwjJan"
+    L"VVWFruvodDoYHh5u1+v1w5Isy9trtRrK5RK63V4cCxc7ksl0830/tTRBECBJKjZs2IKtW2+HKIoA"
+    L"GLrdNhYWFlCrVTE9PY3pSgXn33kHXteDJIkwTRP5fB6lUgmFQgE5y4JGaTpDeOzHWRpQl5EdC5OI"
+    L"wPu204QgXjtILDYZx2oqcEppmtkkVfv1/Hw/+cuJT9xTskJHKYXneRgdHcX4+Pj3T5w4cUYSRbHo"
+    L"ui503YiLqpUbpIuLIYtTnTEGzwtiUQgEQUKxuAHr1m3GvfeKIATw/R6aTQe1WhWTkxOYnJzE26dP"
+    L"o+26ECUJhUIB6wYHMbhuHYqFAnRdhyCKSJYKGQv7SF4uwMrFU6/XQ7vdBmMhRFECpTQNnMvBGIOi"
+    L"KCgWiygUCpAkadXE9/v5/hQ0IZ4QAl3Xoes6RFFEu93G0NAQzp49e3B4ePjfAQCZmprqDg0NqZRq"
+    L"yOfL6PX8ONsQlpB+5fZq94mQpMiVRQsskSitloOZmQrGxi5jfHwM1WoV3W4XhmFg/bp12LhpEwYH"
+    L"B2EaBkDIFUGvf83gClLDEHfcsR2e50HTNFy+PA4/7sH0Ey/FBtDfLEv8fJIy9hdWK2U2CfkJ8WG8"
+    L"kKMoShQTVRWMMdTrdZw+fdodGRn5xrFjx55AHNrI1NRU98KFC6qqUth2Cb4fvAsBrv2Zfgh9qSXA"
+    L"4PseGo0FTE5N4NLoCMbGxrCwsABJkrBu3Tps27YNGzZsgGEY8cyLCGBxW7j/9wkhsVsEkmQisf6k"
+    L"WWZbFkrlMlRVTfeHYZgSvzzArpTZ9LucxCMkGaOu6yCEoNvtYnJyEmfOnHljcnLyb3/+85+/tsSz"
+    L"TExMNEZHRy1BEFEoDMQC3Ky1r16AZNCRO0maVIgDPwEhHJ1OG9XqDEZGhjE8PIzZ2RpEUcTmzZux"
+    L"Y8cObNy4EaqqpsuASdocHYskf+mxCCFpZqPr+pJzSAhNLD6ZBStlNv3EJ2IJggBKKQwj6g8FQQDH"
+    L"cXD+/Hl26dKl74yOjn7jrbfeWljOARkbGxurVCpbul0P5fL6uF26NgIkryOLZQAia5XlqFXh+z3U"
+    L"alVcvHgBFy9eQL0+D8vKYffu3di1axeKxSK63S4ajUZaTCbHNQwD5XI5bZYl7iYhdLmfT0jvdzdX"
+    L"y24Sd5N0QLvdLiqVCs6dO/e7ycnJf/Pyyy8fvWLwiQAjIyO/6nQ6e6amprF587Yl2c679/+rEaCf"
+    L"/KViREE3TKc35xyiKMS1hYhut4OJyXGcO3sWIyOjUFUFH/jAB3DffffBtm3UajW0220UCgXYtr0k"
+    L"I0pcy0p+Pslsku2VspukQNU0DYZhQJIk+L6PZrOJCxcu8EuXLj05Njb29d/85jeVq5EPAFKv1ztj"
+    L"Wdae0dFRELJmV+itiDSdjwVMiOt2u6nvz6+z8C82fxqc+JieruCt376NJ554Alu2bMH+/fuxY8eO"
+    L"tH28PMAmVr+azGa5u9F1HaZpQlVVBEGAZrOJarWKCxcuDFcqlcdeeuml51YzRvLmm29+acP69T84"
+    L"9dvfYtOmrRAEecmgb5X7uZkZ0L+9WBP0v8/RlmbBAwIuBtC5DVO1wRHi9ddfx+uvn8Q3v/lNKIoC"
+    L"13WX+Pl+4q9XwS53N7lcLo0h3W4XjuNgeHgYExMTT05PT3/91VdfnV6tkUmu677S7nTm169fX5ib"
+    L"q2HDhs0Igv7e5h/y0qHrzcCl7wtEQGPWwYX6KeRzJQyEd8DQOlAUCQ888Gfw/R6eeuopfPWrX0Wt"
+    L"Vkst+GqdykSgJN1dKbvJ5XKpu3FdF7VaDb/73e9GZmZmHnvhhReevdERS3v37r389ttv/2z79m2P"
+    L"/OpXJ9DpuKDUQHQdzNWwXJSbFWn1hPd3GNKjCkB92sFss4b56gKGp6qgVEOxWMSuXbtx//0P4Pvf"
+    L"/x5qtRokSUpnwbWIT1zN8mLKNE1omgbGGFzXheM4GB0d5ZOTk/9ramrqGzdi9f2QAMBxnCcaDWff"
+    L"7t27pXPnzmFwcD1M0wIh/Q20W4+E1Gt0Ca76neg1R7PRwoZdebQmQzQZR6/n4cyZ05iensajj/41"
+    L"Nm/ejDfffBMf+tCHMDExsSTDuRrxibuRZRmmacI0TQiCkKa71WoVo6OjQ9Vq9bEjR44ceTccCADw"
+    L"4IMPnqhWq/9R13W87+670Wo5GBsbQb1ehe934vw88eOrFSRufq1avxtPAJKCbHBHDvYmDaIgotFo"
+    L"4Pnnn8fRo0fRarWwbds2DA0NQVVVNJtNOI6DVqsF13XRbrfRbrfR6XRSUYIgqoOSesGyLHDO0Wq1"
+    L"UKvVcO7cueDtt9/+zsWLFx98t+QDWFzTePHFF//9ww8/XC0UCn93++237wjDENVqFVNT4wAIcjkL"
+    L"uZwFVdUhCNJVWwEr7V69CNfCCldSMA7GA1CqYcOGIt6qvYHnjxzB3NwsOOeo1+soFks4c+ZMasGt"
+    L"VuuKlDJJKwkhoJSmQTapZBNfPzo6enp2dvbvn3/++WO3YkRAnwAHDhxgBw4c+G8HDx784datWz+l"
+    L"adrf6Lr+ULlcKvZ6Pupzc5gYvwwOwDBMWJYNXTehKBSELO2gXqtPszL4MleUrsT0bV9jEIKEOX8e"
+    L"zzzzDJxmlHK6rotms4lisZAGU845XNdNC67E3RBCIEkSDMNALpeDLMtpkHUcB5cvX/ZmZmb+69TU"
+    L"1D+98sorCzc4uGuf+/IdX/ziFx0AzwJ49vDhw1ssy3pYUZTPqqr6YTufHwDnaDgOpqcnEAQBFIXC"
+    L"smxYVh66bkKWFUQLYjfirhaxupiw2O9XJBULQRVnvZMp+QDg+z7abReCIILEzTxCCDqdzpJuqiiK"
+    L"oJTCsqz0IirXddFqtVCtVjE+Pn5yfn7+seeee+4XNzyYVeCa1wXt27dvHMD3AHzv0KFD603TfFBR"
+    L"lE/LsvzRfD7/Hkopup0OGo06KpUpCIIAwzBh20XYdh66bkCWlTSYR8TeWKp51U9xDlmWcfnSOEaG"
+    L"TkIrixAkAhZE30/vDwCHKEpp68HzvLTXpaoqcrkcDMOAKIrwPC+9Q2ZsbKw5Ozv7raGhof986tSp"
+    L"39ttSqu+Mu4LX/hCBcAzAJ754Q9/aOi6fq+iKJ+UZfkTiiy/38rl8gDQbrcxOTGKS5cCyLKCXM5G"
+    L"oVCEbRegaQYkSY4FAW4uw1oUSBRF1OcW4F6Yw46B9Us+laxRMBa1LwghaWqpKEqa06uqijAM0Ww2"
+    L"U6ufnJw8vrCw8PfPPvvsGzdxgjeEm7o29Etf+pIL4LX48Y8/+MEPtsqy/GeU0k+IorhXpXSnTanC"
+    L"whBt18HsbAUs5FBUCtvOo1AowbbzoDRaqFiMH/33BeC6M4Zzhl137saxC8ex9f1Bav0AIElSTG50"
+    L"GUji13VdRz6fT4Nsp9NJrX5iYqJWr9f/8fz58//91KlTV72r5VbillwdvX///jEAYwAOPf7448qW"
+    L"LVt2Ukr3iKL4cVEU71cVdRvVNJEAaLsO5uZmEAQsLutt5PMF5HI2KNXidYLkmiNyzZgQBCHe+767"
+    L"cOh/AO+8PAMiADwu4lWVQtcNeJ4HVVXjBSERAwMDaf+m1Wqh1WphZmYG1Wr1udnZ2X/46U9/euFW"
+    L"cLJa3PL7Aw4cONADcCZ+/M9vf/vbhmVZdwqC8GFJkj6iqup9VFVvK5VyokAIPM/DxPgovF4PgiBC"
+    L"03TYdh65nAVN0+PFexGMIW5RLyIMQ2zctBEPvO9jOHHqZdCChM5cdK2qaUYZTafTRj6fBxAVVoQQ"
+    L"tNvttCaYnJwcW1hY+PrBgwcP3mouVoM/+D1ijz/+uGnb9k5VVe9XFOVBSumHDF2/3bJtRZHlKFeP"
+    L"s5AgCCFJcpweWjAME4oSBXXOoyAbsgANehkz7cuovtPCpf8zi3eGzsO2bXzta1/D6OgI1q9fj3vv"
+    L"vRfHjx9Hp9NBq9VCpVLhc3Nz35+bm/vG4cOHJ/7QPCRY87sk9+/fT7dt23a7YRgf1DRtj2EY95mm"
+    L"udO27XzONMERBfb43l2EYbTQrmk6DMOEbBKElgNZUAGZIeduRNjj8HpdiKKA118/iUceeQRjY2M4"
+    L"deoUXNfF9PT0+Xq9/g8//vGPn1/r8a+5ACtA+MpXvrKpWCzuNk3zPtM077dt+27LsjaXikVV0/W4"
+    L"IdZCo+Gg2ZlHp+OB9Qi44kOVNKiiBkmSUa/PgVIVn//853Hw4EGMjIx48/Pz33Ec55+efvrp+loP"
+    L"FPjjFOAK3HPPPcaePXtus237btu2P2jb9r25XG6nbdsbSqUStXIWRElEGIRod6L+juu6UBQFe/fu"
+    L"xS9/+UscPnz4167rPvajH/3o1bUeTz/+JARYCQ899JB5xx13bNI0bYeu63cahrHTsqw78vn8ZtM0"
+    L"S7quG6qqquPj4/Ovvfbafzp79ux/+fWvf91Z6/Nejj9ZAa4Bes8991gDAwN5WZaNZrM599prr42t"
+    L"9UllyJAhQ4YMGTJkyJAhQ4YMGTJkyJAhQ4YMGTJkyJAhQ4YMGTJkyJDh/x/8XwRt0+HdMdROAAAA"
+    L"AElFTkSuQmCC"
+    ;
 static const WCHAR* USER_DRIVE_ICON_BASE64 =
     L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACx"
     L"jwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAdmSURBVFhH7ZR5VJNXGsZxrMfOcMaRRqVahVpQ"
@@ -3135,79 +3345,78 @@ static bool DecodePngToPremul(const BYTE* png, size_t pngSize,
                               int w, int h, std::vector<BYTE>& outPixels) {
     if (!g_wic || !png || !pngSize || w <= 0 || h <= 0) return false;
 
-    IWICStream* pStream = nullptr;
-    if (FAILED(g_wic->CreateStream(&pStream)) || !pStream) return false;
-    HRESULT hr = pStream->InitializeFromMemory(
-        const_cast<BYTE*>(png), (DWORD)pngSize);
-    if (FAILED(hr)) { pStream->Release(); return false; }
+    // All COM objects are wrapped in ApComPtr so they are released on every
+    // exit path (including an outPixels.resize() -> bad_alloc exception),
+    // instead of the previous hand-rolled Release() chains with early returns.
+    try {
+        ApComPtr<IWICStream> pStream;
+        if (FAILED(g_wic->CreateStream(pStream.put())) || !pStream) return false;
+        HRESULT hr = pStream->InitializeFromMemory(
+            const_cast<BYTE*>(png), (DWORD)pngSize);
+        if (FAILED(hr)) return false;
 
-    IWICBitmapDecoder* pDecoder = nullptr;
-    hr = g_wic->CreateDecoderFromStream(pStream, nullptr,
-                                        WICDecodeMetadataCacheOnLoad, &pDecoder);
-    pStream->Release();
-    if (FAILED(hr) || !pDecoder) return false;
+        ApComPtr<IWICBitmapDecoder> pDecoder;
+        hr = g_wic->CreateDecoderFromStream(pStream.get(), nullptr,
+                                            WICDecodeMetadataCacheOnLoad,
+                                            pDecoder.put());
+        if (FAILED(hr) || !pDecoder) return false;
 
-    IWICBitmapFrameDecode* pFrame = nullptr;
-    hr = pDecoder->GetFrame(0, &pFrame);
-    pDecoder->Release();
-    if (FAILED(hr) || !pFrame) return false;
+        ApComPtr<IWICBitmapFrameDecode> pFrame;
+        hr = pDecoder->GetFrame(0, pFrame.put());
+        if (FAILED(hr) || !pFrame) return false;
 
-    IWICFormatConverter* pConv = nullptr;
-    hr = g_wic->CreateFormatConverter(&pConv);
-    if (SUCCEEDED(hr) && pConv) {
-        hr = pConv->Initialize((IWICBitmapSource*)pFrame,
-                               GUID_WICPixelFormat32bppBGRA,
-                               WICBitmapDitherTypeNone, nullptr, 0.0,
-                               WICBitmapPaletteTypeMedianCut);
-    }
-    pFrame->Release();
-    if (FAILED(hr) || !pConv) { if (pConv) pConv->Release(); return false; }
-
-    IWICBitmapSource* src = (IWICBitmapSource*)pConv;
-    IWICBitmap* owned = nullptr;
-    UINT cw = 0, ch = 0;
-    src->GetSize(&cw, &ch);
-    while (cw != (UINT)w || ch != (UINT)h) {
-        UINT nw = cw, nh = ch;
-        if (cw > (UINT)w * 2) nw = (std::max)((UINT)w, (cw + 1) / 2);
-        else nw = (UINT)w;
-        if (ch > (UINT)h * 2) nh = (std::max)((UINT)h, (ch + 1) / 2);
-        else nh = (UINT)h;
-        IWICBitmap* next = nullptr;
-        hr = WicScaleToBitmap(g_wic, src, nw, nh, &next);
-        if (FAILED(hr) || !next) {
-            if (owned) owned->Release();
-            pConv->Release();
-            return false;
+        ApComPtr<IWICFormatConverter> pConv;
+        hr = g_wic->CreateFormatConverter(pConv.put());
+        if (SUCCEEDED(hr) && pConv) {
+            hr = pConv->Initialize((IWICBitmapSource*)pFrame.get(),
+                                   GUID_WICPixelFormat32bppBGRA,
+                                   WICBitmapDitherTypeNone, nullptr, 0.0,
+                                   WICBitmapPaletteTypeMedianCut);
         }
-        if (owned) owned->Release();
-        owned = next;
-        src = (IWICBitmapSource*)owned;
+        if (FAILED(hr) || !pConv) return false;
+
+        IWICBitmapSource* src = (IWICBitmapSource*)pConv.get();
+        ApComPtr<IWICBitmap> owned;   // chain of scaled bitmaps
+        UINT cw = 0, ch = 0;
         src->GetSize(&cw, &ch);
-    }
-
-    outPixels.resize((size_t)w * h * 4);
-    hr = src->CopyPixels(nullptr, (UINT)w * 4, (UINT)outPixels.size(),
-                         outPixels.data());
-    if (owned) owned->Release();
-    pConv->Release();
-    if (FAILED(hr)) return false;
-
-    BYTE maxA = 0;
-    for (size_t i = 3; i < outPixels.size(); i += 4)
-        if (outPixels[i] > maxA) maxA = outPixels[i];
-    if (maxA == 0) {
-        for (size_t i = 3; i < outPixels.size(); i += 4)
-            outPixels[i] = 255;
-    } else {
-        for (size_t i = 0; i + 3 < outPixels.size(); i += 4) {
-            BYTE a = outPixels[i + 3];
-            outPixels[i + 0] = (BYTE)((outPixels[i + 0] * a + 127) / 255);
-            outPixels[i + 1] = (BYTE)((outPixels[i + 1] * a + 127) / 255);
-            outPixels[i + 2] = (BYTE)((outPixels[i + 2] * a + 127) / 255);
+        while (cw != (UINT)w || ch != (UINT)h) {
+            UINT nw = cw, nh = ch;
+            if (cw > (UINT)w * 2) nw = (std::max)((UINT)w, (cw + 1) / 2);
+            else nw = (UINT)w;
+            if (ch > (UINT)h * 2) nh = (std::max)((UINT)h, (ch + 1) / 2);
+            else nh = (UINT)h;
+            ApComPtr<IWICBitmap> next;
+            hr = WicScaleToBitmap(g_wic, src, nw, nh, next.put());
+            if (FAILED(hr) || !next) return false;
+            owned.reset(next.release());   // releases the previous one
+            src = (IWICBitmapSource*)owned.get();
+            src->GetSize(&cw, &ch);
         }
+
+        outPixels.resize((size_t)w * h * 4);
+        hr = src->CopyPixels(nullptr, (UINT)w * 4, (UINT)outPixels.size(),
+                             outPixels.data());
+        if (FAILED(hr)) return false;
+
+        BYTE maxA = 0;
+        for (size_t i = 3; i < outPixels.size(); i += 4)
+            if (outPixels[i] > maxA) maxA = outPixels[i];
+        if (maxA == 0) {
+            for (size_t i = 3; i < outPixels.size(); i += 4)
+                outPixels[i] = 255;
+        } else {
+            for (size_t i = 0; i + 3 < outPixels.size(); i += 4) {
+                BYTE a = outPixels[i + 3];
+                outPixels[i + 0] = (BYTE)((outPixels[i + 0] * a + 127) / 255);
+                outPixels[i + 1] = (BYTE)((outPixels[i + 1] * a + 127) / 255);
+                outPixels[i + 2] = (BYTE)((outPixels[i + 2] * a + 127) / 255);
+            }
+        }
+        return true;
+    } catch (...) {
+        Wh_Log(L"DecodePngToPremul: exception");
+        return false;
     }
-    return true;
 }
 
 static HBITMAP CreateDib32(int w, int h, const void* pixels) {
@@ -3241,6 +3450,11 @@ static HICON CreateIconFromBase64PNG(const WCHAR* b64, int w, int h) {
     HBITMAP color = CreateDib32(w, h, pixels.data());
     if (!color) return NULL;
 
+    // RAII: both bitmaps are owned here and freed on every exit path,
+    // including if the mask vector allocation throws below.
+    ApScopedGdiObj colorGuard((HGDIOBJ)color);
+    ApScopedGdiObj maskGuard;
+
     int stride = ((w + 15) & ~15) / 8;
     std::vector<BYTE> mask((size_t)stride * h, 0xFF);
     for (int y = 0; y < h; y++)
@@ -3250,14 +3464,14 @@ static HICON CreateIconFromBase64PNG(const WCHAR* b64, int w, int h) {
                 mask[(size_t)y * stride + x / 8] &= ~(0x80 >> (x % 8));
         }
     HBITMAP maskBmp = CreateBitmap(w, h, 1, 1, mask.data());
+    if (maskBmp) maskGuard.reset((HGDIOBJ)maskBmp);
 
     ICONINFO ii = {};
     ii.fIcon = TRUE;
-    ii.hbmMask = maskBmp;
-    ii.hbmColor = color;
+    ii.hbmMask = (HBITMAP)maskGuard.get();
+    ii.hbmColor = (HBITMAP)colorGuard.get();
     HICON hi = CreateIconIndirect(&ii);
-    if (maskBmp) DeleteObject(maskBmp);
-    DeleteObject(color);
+    // Guards release maskBmp and color on scope exit.
     return hi;
 }
 
@@ -3265,6 +3479,8 @@ static void DrawAlphaBitmap(HDC hdc, HBITMAP hb, int x, int y, int w, int h) {
     BITMAP bm = {};
     if (!hb || !GetObject(hb, sizeof(bm), &bm) || bm.bmWidth <= 0) return;
     HDC mem = CreateCompatibleDC(hdc);
+    if (!mem) return;
+    ApScopedDc memGuard(mem);               // Deletes the DC on scope exit
     HBITMAP old = (HBITMAP)SelectObject(mem, hb);
     BLENDFUNCTION bf = {};
     bf.BlendOp = AC_SRC_OVER;
@@ -3273,8 +3489,9 @@ static void DrawAlphaBitmap(HDC hdc, HBITMAP hb, int x, int y, int w, int h) {
     BOOL ok = AlphaBlend(hdc, x, y, w, h, mem, 0, 0, bm.bmWidth, bm.bmHeight, bf);
     if (!ok)
         StretchBlt(hdc, x, y, w, h, mem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
-    SelectObject(mem, old);
-    DeleteDC(mem);
+    // Restore the caller's bitmap before the DC is destroyed. `old` is not
+    // owned here, so it must not be deleted. The memGuard frees the DC.
+    if (old) SelectObject(mem, old);
 }
 
 // ============================================================================
@@ -3293,6 +3510,8 @@ static void FreeDpiResources() {
     if (g_bmpDisc48) DeleteObject(g_bmpDisc48), g_bmpDisc48 = nullptr;
     if (g_hicoDrive48) DestroyIcon(g_hicoDrive48), g_hicoDrive48 = nullptr;
     if (g_hicoDisc48) DestroyIcon(g_hicoDisc48), g_hicoDisc48 = nullptr;
+    if (g_bmpLocal48) DeleteObject(g_bmpLocal48), g_bmpLocal48 = nullptr;
+    if (g_hicoLocal48) DestroyIcon(g_hicoLocal48), g_hicoLocal48 = nullptr;
     if (g_bmpPhone48) DeleteObject(g_bmpPhone48), g_bmpPhone48 = nullptr;
     if (g_hicoPhone48) DestroyIcon(g_hicoPhone48), g_hicoPhone48 = nullptr;
     if (g_bmpPlay) DeleteObject(g_bmpPlay), g_bmpPlay = nullptr;
@@ -3350,6 +3569,15 @@ static void EnsureDpiResources() {
     if (!g_bmpDrive48) g_bmpDrive48 = CreateBitmapFromBase64PNG(WIN7_NATIVE_FLOPPY_BASE64, s48, s48);
     g_hicoDrive48 = CreateIconFromBase64PNG(USER_REMOVABLE_ICON_BASE64, s48, s48);
     if (!g_hicoDrive48) g_hicoDrive48 = CreateIconFromBase64PNG(USER_DRIVE_ICON_BASE64, s48, s48);
+    // Local (fixed) disk icon: silver external/HDD image, independent of the
+    // removable-drive icon so a fixed disk (e.g. Z: = host OS partition) is
+    // shown distinctly while removable drives keep the current one.
+    g_hicoLocal48 = CreateIconFromBase64PNG(USER_LOCALDISK_ICON_BASE64, s48, s48);
+    if (!g_hicoLocal48)
+        g_hicoLocal48 = CreateIconFromBase64PNG(USER_DRIVE_ICON_BASE64, s48, s48);
+    g_bmpLocal48 = CreateBitmapFromBase64PNG(USER_LOCALDISK_ICON_BASE64, s48, s48);
+    if (!g_bmpLocal48)
+        g_bmpLocal48 = CreateBitmapFromBase64PNG(USER_DRIVE_ICON_BASE64, s48, s48);
     // Optional-list fix: the old fallback here called CreateIconIndirect with
     // hbmColor == hbmMask, passing the 32-bpp g_bmpDrive48 DIB as the mask.
     // ICONINFO::hbmMask must be a 1-bpp monochrome bitmap, so that call either
@@ -3393,7 +3621,9 @@ struct DialogIcon {
     }
 };
 
-enum class ActionType { RunProgram, OpenFolder, ReadyBoost, PlayMedia, ViewPictures };
+enum class ActionType { RunProgram, OpenFolder, ReadyBoost, PlayMedia, ViewPictures,
+                         BurnDisc, ImportPictures, ImportMusic, SyncDevice,
+                         ViewSlideshow };
 enum class OptionGroup { Program, Content, General };
 enum class ContentKind { General, Empty, Pictures, Music, Mixed, Software, AudioCD, DataDisc, Portable, Video, DvdMovie, BlankDisc };
 
@@ -3427,6 +3657,7 @@ static UINT    g_msgQueryCancelAP = 0;
 // build/test cycle) - back to explorer.exe injection with the original
 // single-instance mutex.
 static HANDLE  g_hOwnerMutex = nullptr;
+static HANDLE  g_hActionWorker = nullptr;
 
 struct HotRect { RECT rc; int kind; int idx; }; // 0=option 1=link 2=checkbox
 static std::vector<HotRect> g_hotRects;
@@ -3912,6 +4143,605 @@ public:
     HRESULT STDMETHODCALLTYPE LockServer(BOOL) override { return S_OK; }
 };
 
+// Intercept only the shell verb used by Explorer's "Open AutoPlay..."
+// context-menu command. Device-arrival handling remains unchanged.
+static decltype(&ShellExecuteExW) g_ShellExecuteExW_Original = nullptr;
+static decltype(&ShellExecuteW) g_ShellExecuteW_Original = nullptr;
+static decltype(&ShellExecuteExA) g_ShellExecuteExA_Original = nullptr;
+static decltype(&ShellExecuteA) g_ShellExecuteA_Original = nullptr;
+static decltype(&CreateProcessW) g_CreateProcessW_Original = nullptr;
+static decltype(&CreateProcessA) g_CreateProcessA_Original = nullptr;
+
+static bool GetAutoPlayVerbDrive(PCWSTR verb, PCWSTR file, int* letter) {
+    // lpVerb may legally be an ordinal resource (MAKEINTRESOURCE).
+    if (!verb || (ULONG_PTR)verb <= 0xFFFF ||
+        _wcsicmp(verb, L"autoplay") != 0 || !file || !file[0])
+        return false;
+    if (!(((file[0] >= L'A' && file[0] <= L'Z') ||
+           (file[0] >= L'a' && file[0] <= L'z')) && file[1] == L':'))
+        return false;
+    if (file[2] != L'\0' && file[2] != L'\\') return false;
+    *letter = (int)towupper((wint_t)file[0]);
+    return true;
+}
+
+static bool QueueContextAutoPlay(PCWSTR verb, PCWSTR file) {
+    int letter = 0;
+    if (!GetAutoPlayVerbDrive(verb, file, &letter) || !g_hwndListener)
+        return false;
+    // Manual invocation must ignore a remembered automatic action.
+    if (!PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
+                      (WPARAM)letter, 0))
+        return false;
+    Wh_Log(L"Context AutoPlay: intercepted %c:", letter);
+    return true;
+}
+
+static int FindAutoplayDriveInText(PCWSTR text) {
+    if (!text) return 0;
+    for (const wchar_t* p = text; *p; ++p) {
+        if (((*p >= L'A' && *p <= L'Z') || (*p >= L'a' && *p <= L'z')) &&
+            p[1] == L':' && p[2] == L'\\')
+            return (int)towupper((wint_t)*p);
+    }
+    return 0;
+}
+
+static bool IsAutoplayLaunchText(PCWSTR text) {
+    if (!text) return false;
+    return StrStrIW(text, L"autoplay") ||
+           StrStrIW(text, L"9C60DE1E-E5FC-40F4-A487-460851A8D915") ||
+           StrStrIW(text, L"ms-settings:autoplay") ||
+           StrStrIW(text, L"Microsoft.AutoPlay");
+}
+
+static bool RedirectAutoplayLaunch(PCWSTR file, PCWSTR parameters) {
+    if (!IsAutoplayLaunchText(file) && !IsAutoplayLaunchText(parameters))
+        return false;
+    int letter = FindAutoplayDriveInText(file);
+    if (!letter) letter = FindAutoplayDriveInText(parameters);
+    if (!letter) letter = g_driveLetter;
+    if (!letter || !g_hwndListener) return false;
+    if (!PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
+                      (WPARAM)letter, 0)) return false;
+    Wh_Log(L"AutoPlay launch redirected to classic dialog: %c:", letter);
+    return true;
+}
+
+static BOOL WINAPI CreateProcessWHook(LPCWSTR app, LPWSTR cmd, LPSECURITY_ATTRIBUTES pa,
+                                      LPSECURITY_ATTRIBUTES ta, BOOL inherit, DWORD flags,
+                                      LPVOID env, LPCWSTR dir, LPSTARTUPINFOW si,
+                                      LPPROCESS_INFORMATION pi) {
+    if (RedirectAutoplayLaunch(app, cmd)) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+    }
+    return g_CreateProcessW_Original(app, cmd, pa, ta, inherit, flags, env, dir, si, pi);
+}
+
+static BOOL WINAPI CreateProcessAHook(LPCSTR app, LPSTR cmd, LPSECURITY_ATTRIBUTES pa,
+                                      LPSECURITY_ATTRIBUTES ta, BOOL inherit, DWORD flags,
+                                      LPVOID env, LPCSTR dir, LPSTARTUPINFOA si,
+                                      LPPROCESS_INFORMATION pi) {
+    WCHAR wapp[MAX_PATH] = {}, wcmd[2048] = {};
+    if (app) MultiByteToWideChar(CP_ACP, 0, app, -1, wapp, ARRAYSIZE(wapp));
+    if (cmd) MultiByteToWideChar(CP_ACP, 0, cmd, -1, wcmd, ARRAYSIZE(wcmd));
+    if (RedirectAutoplayLaunch(wapp, wcmd)) {
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+    }
+    return g_CreateProcessA_Original(app, cmd, pa, ta, inherit, flags, env, dir, si, pi);
+}
+
+static bool QueueContextAutoPlayA(LPCSTR verb, LPCSTR file) {
+    if (!verb || !file) return false;
+    WCHAR wverb[64] = {}, wfile[MAX_PATH] = {};
+    MultiByteToWideChar(CP_ACP, 0, verb, -1, wverb, ARRAYSIZE(wverb));
+    MultiByteToWideChar(CP_ACP, 0, file, -1, wfile, ARRAYSIZE(wfile));
+    return QueueContextAutoPlay(wverb, wfile);
+}
+
+static BOOL WINAPI ShellExecuteExAHook(SHELLEXECUTEINFOA* sei) {
+    if (sei && QueueContextAutoPlayA(sei->lpVerb, sei->lpFile))
+        return TRUE;
+    return g_ShellExecuteExA_Original(sei);
+}
+
+static HINSTANCE WINAPI ShellExecuteAHook(HWND hwnd, LPCSTR verb,
+                                           LPCSTR file, LPCSTR parameters,
+                                           LPCSTR directory, INT show) {
+    if (QueueContextAutoPlayA(verb, file))
+        return (HINSTANCE)(INT_PTR)33;
+    return g_ShellExecuteA_Original(hwnd, verb, file, parameters,
+                                    directory, show);
+}
+
+static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* sei) {
+    if (sei && QueueContextAutoPlay(sei->lpVerb,
+                                    sei->lpFile ? sei->lpFile : sei->lpDirectory))
+        return TRUE;
+    return g_ShellExecuteExW_Original(sei);
+}
+
+static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR verb,
+                                           LPCWSTR file, LPCWSTR parameters,
+                                           LPCWSTR directory, INT show) {
+    if (QueueContextAutoPlay(verb, file))
+        return (HINSTANCE)(INT_PTR)33;
+    return g_ShellExecuteW_Original(hwnd, verb, file, parameters,
+                                    directory, show);
+}
+
+// Some Explorer builds invoke the drive context-menu verb directly through
+// TrackPopupMenuEx, without calling ShellExecute(Ex) at all. Catch the command
+// returned by that menu only when it contains an AutoPlay item.
+static decltype(&TrackPopupMenuEx) g_TrackPopupMenuEx_Original = nullptr;
+static decltype(&TrackPopupMenu) g_TrackPopupMenu_Original = nullptr;
+
+static bool MenuTextIsAutoPlay(HMENU menu, UINT pos) {
+    WCHAR text[256] = {};
+    if (!GetMenuStringW(menu, pos, text, ARRAYSIZE(text), MF_BYPOSITION))
+        return false;
+    return StrStrIW(text, L"autoplay") != nullptr ||
+           StrStrIW(text, L"auto play") != nullptr ||
+           StrStrIW(text, L"riproduzione automatica") != nullptr;
+}
+
+static bool MenuContainsAutoPlay(HMENU menu, UINT* commandId, int depth = 0) {
+    if (!menu || depth > 4) return false;
+    int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; ++i) {
+        UINT id = GetMenuItemID(menu, i);
+        HMENU sub = GetSubMenu(menu, i);
+        if (sub) {
+            if (MenuContainsAutoPlay(sub, commandId, depth + 1)) return true;
+        } else if (id != (UINT)-1 && MenuTextIsAutoPlay(menu, (UINT)i)) {
+            *commandId = id;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ContextTargetIsEligible(int letter, bool allowFixed) {
+    if (letter < L'A' || letter > L'Z' || IsSystemDriveLetter(letter))
+        return false;
+    std::wstring root = GetDriveRootForLetter(letter);
+    UINT type = GetDriveTypeW(root.c_str());
+    if (!DrivePresent(letter)) return false;
+    if (!VolumeAllowedByPolicy(letter, type)) return false;
+    // Normal AutoPlay targets follow DriveTypeWeHandle(). But the manual
+    // "Open AutoPlay..." action was explicitly requested for the *clicked*
+    // drive, so a fixed disk (e.g. Z: = host OS partition) must be honored
+    // even when includeFixedDrives is off, otherwise the mod cannot show it.
+    if (DriveTypeWeHandle(type, root.c_str())) return true;
+    return allowFixed && type == DRIVE_FIXED;
+}
+
+static int FindContextAutoPlayDrive(int preferredLetter = 0) {
+    // A drive supplied by the context-menu object always wins, even a fixed
+    // one (the user explicitly asked to open AutoPlay for that drive).
+    if (preferredLetter && ContextTargetIsEligible(preferredLetter, true))
+        return preferredLetter;
+
+    int found = 0;
+    int autorun = 0;
+    for (int i = 0; i < 26; ++i) {
+        int letter = L'A' + i;
+        if (letter == preferredLetter || !ContextTargetIsEligible(letter, false))
+            continue;
+        std::wstring root = GetDriveRootForLetter(letter);
+        if (GetFileAttributesW((root + L"autorun.inf").c_str()) != INVALID_FILE_ATTRIBUTES)
+            autorun = letter;
+        if (found) {
+            // The context entry is normally created by autorun.inf. Prefer
+            // that volume over an unrelated removable drive.
+            if (autorun) return autorun;
+            return 0;
+        }
+        found = letter;
+    }
+    return autorun ? autorun : found;
+}
+
+static BOOL WINAPI TrackPopupMenuExHook(HMENU menu, UINT flags, int x, int y,
+                                        HWND owner, LPTPMPARAMS params) {
+    UINT autoplayId = 0;
+    bool hasAutoPlay = MenuContainsAutoPlay(menu, &autoplayId);
+    BOOL result = g_TrackPopupMenuEx_Original(menu, flags, x, y, owner, params);
+    if (hasAutoPlay && (flags & TPM_RETURNCMD) &&
+        (UINT)result == autoplayId) {
+        int letter = FindContextAutoPlayDrive();
+        if (letter && g_hwndListener) {
+            PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
+                         (WPARAM)letter, 0);
+            Wh_Log(L"Context AutoPlay: intercepted menu command %u for %c:",
+                   autoplayId, letter);
+            // TPM_RETURNCMD returns the command ID through the BOOL return
+            // value. Return zero so Explorer does not execute the modern verb.
+            return FALSE;
+        }
+    }
+    return result;
+}
+
+static BOOL WINAPI TrackPopupMenuHook(HMENU menu, UINT flags, int x, int y,
+                                      int reserved, HWND owner, const RECT* exclude) {
+    UINT autoplayId = 0;
+    bool hasAutoPlay = MenuContainsAutoPlay(menu, &autoplayId);
+    BOOL result = g_TrackPopupMenu_Original(menu, flags, x, y, reserved,
+                                            owner, exclude);
+    if (hasAutoPlay && (flags & TPM_RETURNCMD) &&
+        (UINT)result == autoplayId) {
+        int letter = FindContextAutoPlayDrive();
+        if (letter && g_hwndListener) {
+            PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
+                         (WPARAM)letter, 0);
+            Wh_Log(L"Context AutoPlay: intercepted menu command %u for %c:",
+                   autoplayId, letter);
+            return FALSE;
+        }
+    }
+    return result;
+}
+
+// The drive menu is a CDefFolderMenu and recent Explorer versions invoke
+// IContextMenu::InvokeCommand directly. Track its AutoPlay command ID instead
+// of relying on ShellExecute or TrackPopupMenu.
+struct ContextMenuInfo { IContextMenu* menu; int letter; UINT autoPlayOffset; };
+static const UINT kNoAutoPlayCommand = UINT_MAX;
+static std::vector<ContextMenuInfo> g_contextMenus;
+// Menus obtained during the startup warm-up are kept alive for the whole
+// session so the letter->menu association stays valid even if Explorer reuses
+// a cached drive-menu object (created before the mod loaded).
+static std::vector<IContextMenu*> g_warmupMenus;
+static CRITICAL_SECTION g_csContextMenus;
+static bool g_csContextMenusInit = false;
+static void EnsureContextMenusCS() {
+    if (!g_csContextMenusInit) { InitializeCriticalSection(&g_csContextMenus); g_csContextMenusInit = true; }
+}
+static HRESULT (STDMETHODCALLTYPE* g_ContextQueryOriginal)(IContextMenu*, HMENU, UINT, UINT, UINT, UINT) = nullptr;
+static HRESULT (STDMETHODCALLTYPE* g_ContextInvokeOriginal)(IContextMenu*, LPCMINVOKECOMMANDINFO) = nullptr;
+static HRESULT (STDMETHODCALLTYPE* g_GetUIObjectOf_Original)(IShellFolder*, HWND, UINT, PCUITEMID_CHILD_ARRAY, REFIID, UINT*, void**) = nullptr;
+
+static ContextMenuInfo* FindContextMenu(IContextMenu* menu) {
+    EnsureContextMenusCS();
+    ApScopedCriticalSection lock(&g_csContextMenus);
+    ContextMenuInfo* r = nullptr;
+    for (auto& i : g_contextMenus) if (i.menu == menu) { r = &i; break; }
+    return r;
+}
+
+// Derive a "X:\" path from a shell folder child item. This is the reliable
+// boundary at which a drive's identity is still known, unlike the vtable-only
+// IContextMenu path (whose CDefFolderMenu_Create2 hook does not fire in some
+// Win10/11 builds - which is exactly why "mapped=0" and the mod guessed the
+// wrong drive / showed the native AutoPlay).
+static std::wstring GetPathFromChild(IShellFolder* parent, PCUITEMID_CHILD child) {
+    if (!parent || !child) return L"";
+    STRRET sr = {};
+    if (FAILED(parent->GetDisplayNameOf(child, SHGDN_FORPARSING, &sr)))
+        return L"";
+    WCHAR buf[MAX_PATH] = {};
+    if (FAILED(StrRetToBufW(&sr, child, buf, ARRAYSIZE(buf))))
+        return L"";
+    return buf;
+}
+
+// IShellFolder::GetUIObjectOf is what Explorer calls on the enclosing folder to
+// obtain each drive's IContextMenu. We capture the real drive here so the map is
+// populated on every build, then InvokeCommand never has to guess.
+static HRESULT STDMETHODCALLTYPE GetUIObjectOfHook(
+    IShellFolder* parent, HWND hwnd, UINT cidl, PCUITEMID_CHILD_ARRAY items,
+    REFIID riid, UINT* reserved, void** ppv) {
+    HRESULT hr = S_OK;
+    try {
+        hr = g_GetUIObjectOf_Original(parent, hwnd, cidl, items, riid, reserved, ppv);
+        if (SUCCEEDED(hr) && ppv && *ppv && riid == IID_IContextMenu &&
+            cidl == 1 && items && items[0]) {
+            std::wstring path = GetPathFromChild(parent, items[0]);
+            if (path.size() >= 2 && path[1] == L':') {
+                int letter = (int)towupper((wint_t)path[0]);
+                EnsureContextMenusCS();
+                {
+                    ApScopedCriticalSection lock(&g_csContextMenus);
+                    bool found = false;
+                    for (auto& e : g_contextMenus)
+                        if (e.menu == *ppv) { e.letter = letter; found = true; break; }
+                    if (!found)
+                        g_contextMenus.push_back({ (IContextMenu*)*ppv, letter, kNoAutoPlayCommand });
+                }
+                Wh_Log(L"GetUIObjectOfHook: menu=%p -> %s -> %c:",
+                       *ppv, path.c_str(), letter);
+            } else {
+                Wh_Log(L"GetUIObjectOfHook: menu=%p no drive path (path='%s')",
+                       *ppv, path.c_str());
+            }
+        }
+    } catch (...) {
+        // A shell hook must never let a C++ exception cross back into Explorer.
+        // If the CSi section is left held by an exception, we guard the leak
+        // message but the mapping just won't be added.
+        Wh_Log(L"GetUIObjectOfHook: exception");
+    }
+    return hr;
+}
+
+// Startup warm-up: enumerate the drives that are already mounted and pre-build
+// their context menus so every letter is associated before the user right-clicks.
+// Nothing is shown; the menus are kept alive for the session. This makes the
+// mapping robust even if Explorer had cached the drive menus before the mod
+// loaded (otherwise the first right-click could hit an unmapped object and the
+// mod would fall back to guessing or let native AutoPlay run).
+static void WarmUpDriveContextMenus() {
+    // RAII for COM: the CoUninitialize() runs on every exit path. Failure is
+    // tolerated (RPC_E_CHANGED_MODE means COM is already initialised).
+    ApScopedCoInit coInit;
+    if (!coInit.available()) return;
+
+    try {
+        int associated = 0;
+        WCHAR drives[512] = {};
+        if (GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) {
+            for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
+                UINT dt = GetDriveTypeW(p);
+                int letter = (int)towupper((wint_t)p[0]);
+                if (p[1] != L':' || !DrivePresent(letter) || IsSystemDriveLetter(letter))
+                    continue;
+                if (!DriveTypeWeHandle(dt, p)) continue;
+
+                PIDLIST_ABSOLUTE pidl = nullptr;
+                ApComPtr<IShellFolder> parent;   // released automatically
+                PCUITEMID_CHILD child = nullptr;
+                ApComPtr<IContextMenu> menu;     // released, unless adopted
+                HRESULT hr = SHParseDisplayName(p, nullptr, &pidl, 0, nullptr);
+                if (SUCCEEDED(hr))
+                    hr = SHBindToParent(pidl, IID_IShellFolder,
+                                        (void**)parent.put(), &child);
+                if (SUCCEEDED(hr) && parent)
+                    hr = parent->GetUIObjectOf(nullptr, 1, &child, IID_IContextMenu,
+                                               nullptr, (void**)menu.put());
+                if (SUCCEEDED(hr) && menu) {
+                    // The hooked GetUIObjectOf already associated this menu; ensure
+                    // the map entry too, in case the path was used without the hook.
+                    EnsureContextMenusCS();
+                    {
+                        ApScopedCriticalSection lock(&g_csContextMenus);
+                        bool found = false;
+                        for (auto& e : g_contextMenus)
+                            if (e.menu == menu.get()) { e.letter = letter; found = true; break; }
+                        if (!found)
+                            g_contextMenus.push_back({ menu.get(), letter, kNoAutoPlayCommand });
+                    }
+                    // Transfer ownership to the session-lifetime list so the menu
+                    // stays alive and the letter mapping remains valid.
+                    IContextMenu* rawMenu = menu.get();
+                    g_warmupMenus.push_back(menu.release());
+                    ++associated;
+                    Wh_Log(L"WarmUpDriveContextMenus: associated %s menu=%p",
+                           p, rawMenu);
+                }
+                if (pidl) CoTaskMemFree(pidl);
+            }
+        }
+        Wh_Log(L"WarmUpDriveContextMenus: completed, associated=%d", associated);
+    } catch (...) {
+        Wh_Log(L"WarmUpDriveContextMenus: exception");
+    }
+}
+
+static HRESULT STDMETHODCALLTYPE ContextQueryHook(IContextMenu* menu, HMENU hmenu,
+                                                    UINT index, UINT first, UINT last,
+                                                    UINT flags) {
+    HRESULT hr = g_ContextQueryOriginal(menu, hmenu, index, first, last, flags);
+    ContextMenuInfo* info = FindContextMenu(menu);
+    Wh_Log(L"Context menu QueryContextMenu self=%p first=%u last=%u mapped=%d",
+           menu, first, last, info ? 1 : 0);
+    if (SUCCEEDED(hr) && info) {
+        int n = GetMenuItemCount(hmenu);
+        for (int i = 0; i < n; ++i) {
+            WCHAR text[256] = {};
+            GetMenuStringW(hmenu, i, text, ARRAYSIZE(text), MF_BYPOSITION);
+            if (StrStrIW(text, L"autoplay") || StrStrIW(text, L"auto play") ||
+                StrStrIW(text, L"riproduzione automatica")) {
+                UINT id = GetMenuItemID(hmenu, i);
+                if (id != (UINT)-1 && id >= first && id <= last)
+                    info->autoPlayOffset = id - first;
+            }
+        }
+    }
+    return hr;
+}
+
+static bool ContextInvocationIsAutoPlay(IContextMenu* menu,
+                                             LPCMINVOKECOMMANDINFO ci) {
+    if (!menu || !ci) return false;
+    if (!IS_INTRESOURCE(ci->lpVerb) && ci->lpVerb &&
+        !_stricmp((LPCSTR)ci->lpVerb, "autoplay")) return true;
+    if (IS_INTRESOURCE(ci->lpVerb)) {
+        UINT_PTR offset = LOWORD((ULONG_PTR)ci->lpVerb);
+        WCHAR wide[64] = {};
+        if (SUCCEEDED(menu->GetCommandString(offset, GCS_VERBW, nullptr,
+                                             (LPSTR)wide, ARRAYSIZE(wide))) &&
+            !_wcsicmp(wide, L"autoplay")) return true;
+        char narrow[64] = {};
+        if (SUCCEEDED(menu->GetCommandString(offset, GCS_VERBA, nullptr,
+                                             narrow, ARRAYSIZE(narrow))) &&
+            !_stricmp(narrow, "autoplay")) return true;
+    }
+    return false;
+}
+
+static HRESULT STDMETHODCALLTYPE ContextInvokeHook(IContextMenu* menu,
+                                                    LPCMINVOKECOMMANDINFO ci) {
+    ContextMenuInfo* info = FindContextMenu(menu);
+    Wh_Log(L"Context menu InvokeCommand self=%p mapped=%d", menu, info ? 1 : 0);
+    // Without the menu object's path, guessing from the last inserted volume
+    // can open the wrong drive. Only use the letter captured for this object.
+    int letter = info ? FindContextAutoPlayDrive(info->letter)
+                      : FindContextAutoPlayDrive();
+    bool known = info && info->autoPlayOffset != kNoAutoPlayCommand;
+    if (letter && ci && g_hwndListener &&
+        ((known && IS_INTRESOURCE(ci->lpVerb) &&
+          LOWORD((ULONG_PTR)ci->lpVerb) == info->autoPlayOffset) ||
+         ContextInvocationIsAutoPlay(menu, ci))) {
+        PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
+                     (WPARAM)letter, 0);
+        Wh_Log(L"Context AutoPlay: intercepted IContextMenu::InvokeCommand for %c:", letter);
+        return S_OK;
+    }
+    return g_ContextInvokeOriginal(menu, ci);
+}
+
+static bool InstallAutoplayContextMenuHooks() {
+    // Probe the shell's own AutoPlay COM class, like the Open With mod does.
+    // This covers Explorer builds which don't use CDefFolderMenu_Create2.
+    static const CLSID kClsidAutoPlay =
+        { 0x9C60DE1E, 0xE5FC, 0x40F4, { 0xA4, 0x87, 0x46, 0x08, 0x51, 0xA8, 0xD9, 0x15 } };
+    ApScopedCoInit coInit;
+    if (!coInit.available()) return false;
+    IContextMenu* menu = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidAutoPlay, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_IContextMenu, (void**)&menu);
+    if (FAILED(hr) || !menu) {
+        Wh_Log(L"AutoPlay context COM probe failed hr=0x%08X", (unsigned)hr);
+        return false;
+    }
+    void** vt = *(void***)menu;
+    auto query = (decltype(g_ContextQueryOriginal))vt[3];
+    auto invoke = (decltype(g_ContextInvokeOriginal))vt[4];
+    bool q = query && Wh_SetFunctionHook((void*)query, (void*)ContextQueryHook,
+                                         (void**)&g_ContextQueryOriginal);
+    bool i = invoke && Wh_SetFunctionHook((void*)invoke, (void*)ContextInvokeHook,
+                                           (void**)&g_ContextInvokeOriginal);
+    Wh_Log(L"AutoPlay context COM probe query=%p invoke=%p hooks=%d/%d",
+           query, invoke, q, i);
+    menu->Release();
+    return q && i;
+}
+
+static bool InstallDriveContextMenuHooks() {
+    // Obtain the same drive context-menu implementation Explorer uses, then
+    // hook its real IContextMenu vtable. This is the boundary at which the
+    // selected menu item is still identified by its canonical verb.
+    WCHAR drives[512] = {};
+    if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
+    WCHAR root[4] = {};
+    for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
+        if (GetDriveTypeW(p) == DRIVE_NO_ROOT_DIR) continue;
+        wcscpy_s(root, p);
+        break;
+    }
+    if (!root[0]) return false;
+
+    HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool uninit = SUCCEEDED(co);
+    if (FAILED(co) && co != RPC_E_CHANGED_MODE) return false;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    IShellFolder* parent = nullptr;
+    PCUITEMID_CHILD child = nullptr;
+    IContextMenu* menu = nullptr;
+    HRESULT hr = SHParseDisplayName(root, nullptr, &pidl, 0, nullptr);
+    if (SUCCEEDED(hr))
+        hr = SHBindToParent(pidl, IID_IShellFolder,
+                            (void**)&parent, &child);
+    if (SUCCEEDED(hr))
+        hr = parent->GetUIObjectOf(nullptr, 1, &child, IID_IContextMenu,
+                                   nullptr, (void**)&menu);
+    bool ok = false;
+    if (SUCCEEDED(hr) && menu) {
+        void** vt = *(void***)menu;
+        auto query = (decltype(g_ContextQueryOriginal))vt[3];
+        auto invoke = (decltype(g_ContextInvokeOriginal))vt[4];
+        bool q = query && Wh_SetFunctionHook((void*)query,
+                                             (void*)ContextQueryHook,
+                                             (void**)&g_ContextQueryOriginal);
+        bool i = invoke && Wh_SetFunctionHook((void*)invoke,
+                                               (void*)ContextInvokeHook,
+                                               (void**)&g_ContextInvokeOriginal);
+        // Association is built at the shell-folder boundary (GetUIObjectOf),
+        // because the IContextMenu vtable alone cannot tell which drive the
+        // menu belongs to. Hook the enclosing folder's GetUIObjectOf (IShellFolder
+        // vtable slot 10) so every real drive menu gets its letter.
+        bool gui = false;
+        if (parent) {
+            void** pvt = *(void***)parent;
+            auto guiObj = pvt ? (decltype(g_GetUIObjectOf_Original))pvt[10] : nullptr;
+            gui = guiObj && Wh_SetFunctionHook((void*)guiObj,
+                                               (void*)GetUIObjectOfHook,
+                                               (void**)&g_GetUIObjectOf_Original);
+        }
+        Wh_Log(L"Drive AutoPlay context probe root=%s query=%p invoke=%p hooks=%d/%d getUIObjectOf=%d",
+               root, query, invoke, q, i, gui ? 1 : 0);
+        ok = q && i;
+    } else {
+        Wh_Log(L"Drive AutoPlay context probe failed hr=0x%08X root=%s",
+               (unsigned)hr, root);
+    }
+    if (menu) menu->Release();
+    if (parent) parent->Release();
+    if (pidl) CoTaskMemFree(pidl);
+    if (uninit) CoUninitialize();
+    EnsureContextMenusCS();
+    return ok;
+}
+
+static HRESULT (WINAPI* g_CDefCreateOriginal)(LPCITEMIDLIST, HWND, UINT, PCUITEMID_CHILD_ARRAY, IShellFolder*, LPFNDFMCALLBACK, UINT, HKEY*, IContextMenu**) = nullptr;
+
+static HRESULT WINAPI CDefFolderMenuCreate2Hook(
+    LPCITEMIDLIST folder, HWND hwnd, UINT cidl, PCUITEMID_CHILD_ARRAY items,
+    IShellFolder* sf, LPFNDFMCALLBACK callback, UINT keys, HKEY* hkeys,
+    IContextMenu** outMenu) {
+    HRESULT hr = g_CDefCreateOriginal(folder, hwnd, cidl, items, sf,
+                                       callback, keys, hkeys, outMenu);
+    // Diagnose whether this hook actually fires and can derive a drive letter.
+    Wh_Log(L"CDefFolderMenuCreate2Hook fired hr=0x%08X cidl=%u menu=%p",
+           (unsigned)hr, cidl, outMenu && *outMenu ? *outMenu : nullptr);
+    if (SUCCEEDED(hr) && outMenu && *outMenu) {
+        // A drive's own context menu is created with cidl == 1 and a single
+        // volume child. Do not require cidl == 1 strictly: some Explorer builds
+        // create the drive menu with additional items. Try every item until a
+        // "X:\" path is found, and fall back to the folder itself.
+        int foundLetter = 0;
+        UINT itemsToTry = (cidl == 0) ? 1 : cidl;
+        for (UINT k = 0; k < itemsToTry && !foundLetter; ++k) {
+            LPCITEMIDLIST item = items ? items[k] : nullptr;
+            if (!item) continue;
+            WCHAR path[MAX_PATH] = {};
+            if (folder) {
+                PIDLIST_ABSOLUTE abs = ILCombine(folder, item);
+                if (abs) { SHGetPathFromIDListW(abs, path); CoTaskMemFree(abs); }
+            }
+            if (!path[0]) SHGetPathFromIDListW(item, path);
+            if (path[0] && path[1] == L':' && path[2] == L'\\') {
+                foundLetter = (int)towupper((wint_t)path[0]);
+                Wh_Log(L"CDefFolderMenuCreate2Hook: item %u -> %s -> %c:",
+                       k, path, foundLetter);
+                break;
+            }
+            // The path may be empty in the modern shell view; also check folder.
+            if (!path[0] && folder && k == 0) {
+                WCHAR folderPath[MAX_PATH] = {};
+                if (SHGetPathFromIDListW(folder, folderPath) &&
+                    folderPath[0] && folderPath[1] == L':' && folderPath[2] == L'\\') {
+                    foundLetter = (int)towupper((wint_t)folderPath[0]);
+                    Wh_Log(L"CDefFolderMenuCreate2Hook: folder -> %s -> %c:",
+                           folderPath, foundLetter);
+                    break;
+                }
+            }
+        }
+        if (foundLetter) {
+            g_contextMenus.push_back({ *outMenu, foundLetter, kNoAutoPlayCommand });
+        } else {
+            Wh_Log(L"CDefFolderMenuCreate2Hook: could not derive a drive letter for menu=%p",
+                   *outMenu);
+        }
+    }
+    return hr;
+}
+
+
 static DWORD g_rotCookie = 0;
 static IRunningObjectTable* g_rot = nullptr;
 static DWORD g_classCookie = 0;
@@ -4146,7 +4976,7 @@ static bool OpenWpdInExplorer(const std::wstring& friendly, const std::wstring& 
                 LPITEMIDLIST abs = ILCombine(pidlComputer, child);
                 if (abs) {
                     SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                    sei.fMask = SEE_MASK_IDLIST;
+                    sei.fMask = SEE_MASK_IDLIST | SEE_MASK_NOASYNC;
                     sei.lpIDList = abs;
                     sei.nShow = SW_SHOWNORMAL;
                     sei.lpVerb = L"explore";
@@ -4530,7 +5360,7 @@ static void ExecuteReadyBoost() {
         sei.lpVerb = L"properties";
         sei.lpFile = g_driveRoot.c_str();
         sei.nShow = SW_SHOWNORMAL;
-        sei.fMask = SEE_MASK_INVOKEIDLIST;
+        sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC;
         ShellExecuteExW(&sei);
     }
 }
@@ -4544,7 +5374,7 @@ static void ExecuteProgram(const AutoPlayOption& opt) {
     if (GetFileAttributesW(opt.programPath.c_str()) == INVALID_FILE_ATTRIBUTES)
         return;
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
-    sei.fMask = SEE_MASK_FLAG_NO_UI;
+    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
     sei.lpVerb = L"open";
     sei.lpFile = opt.programPath.c_str();
     sei.lpParameters = opt.programArgs.empty() ? nullptr : opt.programArgs.c_str();
@@ -4645,6 +5475,45 @@ static void ExecuteViewPictures(const AutoPlayOption& opt) {
         Wh_Log(L"ExecuteViewPictures: rundll32 Photo Viewer failed");
 }
 
+// Optional component probes are defined below, after the option builder.
+static bool FileExistsExpanded(PCWSTR pattern, std::wstring& out);
+static bool HasWindowsPhotoGallery();
+static bool HasWindowsMobileCenter();
+static bool HasDiscImageBurner();
+
+static void ExecuteBurnDisc() {
+    if (!DrivePresent(g_driveLetter) || !HasDiscImageBurner()) return;
+    std::wstring p;
+    if (!FileExistsExpanded(L"%SystemRoot%\\System32\\isoburn.exe", p)) return;
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = L"open"; sei.lpFile = p.c_str();
+    std::wstring args = L"\"" + g_driveRoot + L"\"";
+    sei.lpParameters = args.c_str(); sei.nShow = SW_SHOWNORMAL;
+    ShellExecuteExW(&sei);
+}
+static void ExecuteImportPictures() {
+    if (!DrivePresent(g_driveLetter) || !HasWindowsPhotoGallery()) return;
+    std::wstring p;
+    if (!FileExistsExpanded(L"%ProgramFiles%\\Windows Photo Gallery\\PhotoGallery.exe", p) &&
+        !FileExistsExpanded(L"%ProgramFiles(x86)%\\Windows Photo Gallery\\PhotoGallery.exe", p)) return;
+    ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+static void ExecuteImportMusic() {
+    if (!DrivePresent(g_driveLetter)) return;
+    std::wstring p = FindWindowsMediaPlayer();
+    if (!p.empty()) ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+static void ExecuteSyncDevice() {
+    std::wstring p;
+    if (FileExistsExpanded(L"%ProgramFiles%\\Windows Mobile\\wmdSync.exe", p) ||
+        FileExistsExpanded(L"%ProgramFiles(x86)%\\Windows Mobile\\wmdSync.exe", p))
+        ShellExecuteW(nullptr, L"open", p.c_str(), L"/sync", nullptr, SW_SHOWNORMAL);
+}
+static void ExecuteViewSlideshow() {
+    if (!DrivePresent(g_driveLetter)) return;
+    ExecuteOpenFolder(); // safe fallback when Photo Viewer has no slideshow verb
+}
 static void ExecuteControlPanelLink() {
     ShellExecuteW(NULL, L"open", L"control.exe",
                   L"/name Microsoft.AutoPlay", nullptr, SW_SHOWNORMAL);
@@ -4668,6 +5537,17 @@ static void RebuildHeaderIcon() {
         if (g_hicoDisc48) { g_hdrIcon.hIcon = g_hicoDisc48; g_hdrIcon.shared = true; return; }
         if (g_bmpDisc48) { g_hdrIcon.hBmp = g_bmpDisc48; g_hdrIcon.shared = true; return; }
     }
+    // Local (fixed) disks use the silver local-disk icon; removable drives keep
+    // the current removable-drive icon. The local icon is also the fallback.
+    if (g_driveType == DRIVE_FIXED) {
+        if (g_hicoLocal48) { g_hdrIcon.hIcon = g_hicoLocal48; g_hdrIcon.shared = true; return; }
+        if (g_bmpLocal48) { g_hdrIcon.hBmp = g_bmpLocal48; g_hdrIcon.shared = true; return; }
+        if (g_hicoDrive48) { g_hdrIcon.hIcon = g_hicoDrive48; g_hdrIcon.shared = true; return; }
+        if (g_bmpDrive48) { g_hdrIcon.hBmp = g_bmpDrive48; g_hdrIcon.shared = true; return; }
+        if (!g_driveRoot.empty())
+            g_hdrIcon.hIcon = GetShellIcon(g_driveRoot.c_str(), 2);
+        return;
+    }
     if (g_hicoDrive48) { g_hdrIcon.hIcon = g_hicoDrive48; g_hdrIcon.shared = true; return; }
     if (g_bmpDrive48) { g_hdrIcon.hBmp = g_bmpDrive48; g_hdrIcon.shared = true; return; }
     if (!g_driveRoot.empty())
@@ -4683,6 +5563,11 @@ static void RebindSharedIcons() {
             case ActionType::RunProgram:   if (!o.icon.hIcon) o.icon.hBmp = g_bmpSetup; break;
             case ActionType::PlayMedia:    if (!o.icon.hIcon) o.icon.hBmp = g_bmpPlay; break;
             case ActionType::ViewPictures: if (!o.icon.hIcon) o.icon.hBmp = g_bmpFolder; break;
+            case ActionType::BurnDisc:       if (!o.icon.hIcon) o.icon.hBmp = g_bmpSetup; break;
+            case ActionType::ImportPictures: if (!o.icon.hIcon) o.icon.hBmp = g_bmpFolder; break;
+            case ActionType::ImportMusic:    if (!o.icon.hIcon) o.icon.hBmp = g_bmpPlay; break;
+            case ActionType::SyncDevice:     if (!o.icon.hIcon) o.icon.hBmp = g_bmpSetup; break;
+            case ActionType::ViewSlideshow:  if (!o.icon.hIcon) o.icon.hBmp = g_bmpFolder; break;
         }
     }
     if (g_hdrIcon.shared) {
@@ -4690,11 +5575,15 @@ static void RebindSharedIcons() {
             g_hdrIcon.hIcon = g_hicoPhone48;
         else if (g_driveType == DRIVE_CDROM && g_hicoDisc48)
             g_hdrIcon.hIcon = g_hicoDisc48;
+        else if (g_driveType == DRIVE_FIXED && g_hicoLocal48)
+            g_hdrIcon.hIcon = g_hicoLocal48;
         else if (g_hicoDrive48)
             g_hdrIcon.hIcon = g_hicoDrive48;
         else if (!g_hdrIcon.hIcon) {
             g_hdrIcon.hBmp = (g_driveType == DRIVE_CDROM && g_bmpDisc48)
-                           ? g_bmpDisc48 : g_bmpDrive48;
+                           ? g_bmpDisc48
+                           : (g_driveType == DRIVE_FIXED && g_bmpLocal48)
+                           ? g_bmpLocal48 : g_bmpDrive48;
         }
     }
 }
@@ -4715,6 +5604,39 @@ static DialogIcon MakeProgramIcon(const AutorunInfo& ar) {
 static DialogIcon MakePathIcon(const std::wstring& path, HBITMAP fallback) {
     DialogIcon ic;
     if (!path.empty())
+        ic.hIcon = GetShellIcon(path.c_str(), 0);
+    if (!ic.hIcon) { ic.hBmp = fallback; ic.shared = true; }
+    return ic;
+}
+
+static bool FileExistsExpanded(PCWSTR pattern, std::wstring& out) {
+    WCHAR path[MAX_PATH] = {};
+    if (!ExpandEnvironmentStringsW(pattern, path, ARRAYSIZE(path))) return false;
+    if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) return false;
+    out = path;
+    return true;
+}
+
+static bool HasWindowsPhotoGallery() {
+    std::wstring p;
+    return FileExistsExpanded(L"%ProgramFiles%\\Windows Photo Gallery\\PhotoGallery.exe", p) ||
+           FileExistsExpanded(L"%ProgramFiles(x86)%\\Windows Photo Gallery\\PhotoGallery.exe", p);
+}
+static bool HasWindowsMobileCenter() {
+    std::wstring p;
+    return FileExistsExpanded(L"%ProgramFiles%\\Windows Mobile\\wmdSync.exe", p) ||
+           FileExistsExpanded(L"%ProgramFiles(x86)%\\Windows Mobile\\wmdSync.exe", p);
+}
+static bool HasDiscImageBurner() {
+    WCHAR p[MAX_PATH] = {};
+    return GetSystemDirectoryW(p, ARRAYSIZE(p)) &&
+           wcscat_s(p, L"\\isoburn.exe") == 0 &&
+           GetFileAttributesW(p) != INVALID_FILE_ATTRIBUTES;
+}
+
+static DialogIcon MakeSafePathIcon(const std::wstring& path, HBITMAP fallback) {
+    DialogIcon ic;
+    if (!path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         ic.hIcon = GetShellIcon(path.c_str(), 0);
     if (!ic.hIcon) { ic.hBmp = fallback; ic.shared = true; }
     return ic;
@@ -4857,6 +5779,53 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
         }
     }
 
+    // Add optional handlers only when the actual component is installed.
+    // Detection is deliberately conservative: no placeholder rows are shown.
+    if (g_contentKind == ContentKind::AudioCD && HasWindowsMediaPlayer()) {
+        AutoPlayOption o;
+        o.type = ActionType::ImportMusic; o.group = OptionGroup::Content;
+        o.line1 = L"Importa brani nel Windows Media Player";
+        o.line2 = lp->usingPlayer; o.icon.hBmp = g_bmpPlay; o.icon.shared = true;
+        g_options.push_back(std::move(o));
+    }
+    if (g_contentKind == ContentKind::BlankDisc && HasDiscImageBurner()) {
+        AutoPlayOption o;
+        o.type = ActionType::BurnDisc; o.group = OptionGroup::Content;
+        o.line1 = L"Masterizza disco";
+        o.line2 = L"utilizzando Windows Disc Image Burner";
+        std::wstring p = L""; FileExistsExpanded(L"%SystemRoot%\\System32\\isoburn.exe", p);
+        o.icon = MakeSafePathIcon(p, g_bmpSetup);
+        g_options.push_back(std::move(o));
+    }
+    if (g_contentKind == ContentKind::Pictures) {
+        if (HasWindowsPhotoGallery()) {
+            AutoPlayOption o;
+            o.type = ActionType::ImportPictures; o.group = OptionGroup::Content;
+            o.line1 = L"Importa immagini e video";
+            o.line2 = L"utilizzando Windows Photo Gallery";
+            std::wstring p; FileExistsExpanded(L"%ProgramFiles%\\Windows Photo Gallery\\PhotoGallery.exe", p);
+            o.icon = MakeSafePathIcon(p, g_bmpFolder);
+            g_options.push_back(std::move(o));
+        }
+        if (HasWindowsPhotoViewer() && !inv.firstPicture.empty()) {
+            AutoPlayOption o;
+            o.type = ActionType::ViewSlideshow; o.group = OptionGroup::Content;
+            o.line1 = L"Avvia presentazione";
+            o.line2 = lp->usingWindows; o.targetPath = inv.firstPicture;
+            o.icon = MakeSafePathIcon(inv.firstPicture, g_bmpFolder);
+            g_options.push_back(std::move(o));
+        }
+    }
+    if (g_isWpd && HasWindowsMobileCenter()) {
+        AutoPlayOption o;
+        o.type = ActionType::SyncDevice; o.group = OptionGroup::Content;
+        o.line1 = L"Sincronizza dispositivo";
+        o.line2 = L"utilizzando Windows Mobile Center";
+        std::wstring p; FileExistsExpanded(L"%ProgramFiles%\\Windows Mobile\\wmdSync.exe", p);
+        o.icon = MakeSafePathIcon(p, g_bmpSetup);
+        g_options.push_back(std::move(o));
+    }
+
     g_firstGeneralIdx = (int)g_options.size();
 
     {
@@ -4880,6 +5849,7 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
         boost.icon.shared = true;
         g_options.push_back(std::move(boost));
     }
+
 
     g_prompt.clear();
     if (g_contentKind == ContentKind::Mixed)
@@ -4912,6 +5882,11 @@ static void ExecuteOptionByIndex(int idx, HWND hwndDlg) {
             case ActionType::PlayMedia:    token = L"PlayMedia"; break;
             case ActionType::ViewPictures: token = L"ViewPictures"; break;
             case ActionType::RunProgram:   break; // unreachable, excluded above
+            case ActionType::BurnDisc:      token = L"BurnDisc"; break;
+            case ActionType::ImportPictures: token = L"ImportPictures"; break;
+            case ActionType::ImportMusic:   token = L"ImportMusic"; break;
+            case ActionType::SyncDevice:    token = L"SyncDevice"; break;
+            case ActionType::ViewSlideshow: token = L"ViewSlideshow"; break;
         }
         WriteRemembered(ClassKey(g_contentKind, g_hasProgramSection, g_driveType), token);
     }
@@ -4934,20 +5909,33 @@ static void ExecuteOptionByIndex(int idx, HWND hwndDlg) {
     // behind a UAC prompt or a slow shell call.
     if (hwndDlg && IsWindow(hwndDlg)) DestroyWindow(hwndDlg);
 
+    // Keep the worker handle until it has finished. ProcessPendingQueue is held
+    // while this handle exists, so the globals used by the Execute* routines
+    // cannot be rewritten for another volume during the action.
+    if (g_hActionWorker) return;
     auto* pOpt = new AutoPlayOption(opt);
     HANDLE hWorker = CreateThread(NULL, 0, [](LPVOID param) -> DWORD {
         std::unique_ptr<AutoPlayOption> opt(static_cast<AutoPlayOption*>(param));
+        ApScopedCoInit coInit;
         switch (opt->type) {
             case ActionType::OpenFolder:   ExecuteOpenFolder(); break;
             case ActionType::ReadyBoost:   ExecuteReadyBoost(); break;
             case ActionType::RunProgram:   ExecuteProgram(*opt); break;
             case ActionType::PlayMedia:    ExecutePlay(*opt); break;
             case ActionType::ViewPictures: ExecuteViewPictures(*opt); break;
+            case ActionType::BurnDisc: ExecuteBurnDisc(); break;
+            case ActionType::ImportPictures: ExecuteImportPictures(); break;
+            case ActionType::ImportMusic: ExecuteImportMusic(); break;
+            case ActionType::SyncDevice: ExecuteSyncDevice(); break;
+            case ActionType::ViewSlideshow: ExecuteViewSlideshow(); break;
         }
+        // ApScopedCoInit releases COM even when an action throws.
+        if (g_hwndListener)
+            PostMessageW(g_hwndListener, WMU_ACTION_DONE, 0, 0);
         return 0;
     }, pOpt, 0, nullptr);
     if (hWorker) {
-        CloseHandle(hWorker); // fire-and-forget; the thread frees pOpt itself
+        g_hActionWorker = hWorker;
     } else {
         delete pOpt;
     }
@@ -5204,6 +6192,10 @@ static void PaintDialog(HWND hWnd, HDC hdcPaint) {
         DrawIconEx(mem, iconX, iconY, g_hicoPhone48, iconSz, iconSz, 0, NULL, DI_NORMAL);
     else if (g_driveType == DRIVE_CDROM && g_hicoDisc48)
         DrawIconEx(mem, iconX, iconY, g_hicoDisc48, iconSz, iconSz, 0, NULL, DI_NORMAL);
+    else if (g_driveType == DRIVE_FIXED && g_hicoLocal48)
+        DrawIconEx(mem, iconX, iconY, g_hicoLocal48, iconSz, iconSz, 0, NULL, DI_NORMAL);
+    else if (g_driveType == DRIVE_FIXED && g_bmpLocal48)
+        DrawAlphaBitmap(mem, g_bmpLocal48, iconX, iconY, iconSz, iconSz);
     else if (g_hicoDrive48)
         DrawIconEx(mem, iconX, iconY, g_hicoDrive48, iconSz, iconSz, 0, NULL, DI_NORMAL);
     else if (g_bmpDrive48)
@@ -5525,12 +6517,16 @@ static void ShowAutoPlayDialog() {
 
     if (g_hwndIconBig) { DestroyIcon(g_hwndIconBig); g_hwndIconBig = nullptr; }
     if (g_hwndIconSmall) { DestroyIcon(g_hwndIconSmall); g_hwndIconSmall = nullptr; }
-    g_hwndIconBig = CreateIconFromBase64PNG(USER_REMOVABLE_ICON_BASE64, GetSystemMetrics(SM_CXICON),
+    // Title-bar icon: local (fixed) disks use the silver local-disk icon,
+    // removable drives keep the current removable icon, with fallbacks.
+    const WCHAR* bigB64 = (g_driveType == DRIVE_FIXED) ? USER_LOCALDISK_ICON_BASE64
+                                                       : USER_REMOVABLE_ICON_BASE64;
+    g_hwndIconBig = CreateIconFromBase64PNG(bigB64, GetSystemMetrics(SM_CXICON),
                                             GetSystemMetrics(SM_CYICON));
     if (!g_hwndIconBig)
         g_hwndIconBig = CreateIconFromBase64PNG(USER_DRIVE_ICON_BASE64, GetSystemMetrics(SM_CXICON),
                                                 GetSystemMetrics(SM_CYICON));
-    g_hwndIconSmall = CreateIconFromBase64PNG(USER_REMOVABLE_ICON_BASE64, GetSystemMetrics(SM_CXSMICON),
+    g_hwndIconSmall = CreateIconFromBase64PNG(bigB64, GetSystemMetrics(SM_CXSMICON),
                                               GetSystemMetrics(SM_CYSMICON));
     if (!g_hwndIconSmall)
         g_hwndIconSmall = CreateIconFromBase64PNG(USER_DRIVE_ICON_BASE64, GetSystemMetrics(SM_CXSMICON),
@@ -5669,9 +6665,9 @@ static void BuildWpdDialog(const std::wstring& devicePath, bool forceDialog) {
     MediaInventory inv;
     EnsureDpiResources();
     RebuildHeaderIcon();
-    BuildOptions(ar, inv);
     g_contentKind = ContentKind::Portable;
     g_hasProgramSection = false;
+    BuildOptions(ar, inv);
     g_prompt.clear();
 
     if (!forceDialog && TryExecuteRemembered()) {
@@ -6006,11 +7002,14 @@ static void HandleVolumeArrival(DWORD unitmask) {
 
 static void ProcessPendingQueue() {
     try {
-    if (g_hwndDialog) {
-        if (g_pending.empty() && g_hwndListener)
-            KillTimer(g_hwndListener, IDT_READY);
+    // Only a blocking action worker shares the globals we need; a dialog being
+    // open must NOT freeze the queue. Otherwise inserting a second drive (Z:)
+    // while the dialog for an already-mounted drive (D:) is open would leave Z:
+    // queued forever and you would keep seeing the D: dialog (or the native
+    // AutoPlay if D: is not present). BuildDriveDialog() already destroys and
+    // replaces a dialog belonging to a different drive.
+    if (g_hActionWorker)
         return;
-    }
 
     for (size_t i = 0; i < g_pending.size(); ) {
         if (g_pending[i].isWpd) {
@@ -6024,6 +7023,15 @@ static void ProcessPendingQueue() {
             if (resolved && (!name.empty() || g_pending[i].tries >= 2)) {
                 std::wstring path = g_pending[i].wpdPath;
                 g_pending.erase(g_pending.begin() + i);
+                // Same rule as volumes: if this device already has its dialog
+                // open, do nothing; otherwise BuildWpdDialog replaces it.
+                if (g_hwndDialog && g_isWpd &&
+                    (WpdIdsMatch(g_wpdPath, path) || WpdIdsMatch(g_wpdId, path))) {
+                    Wh_Log(L"ProcessPending: WPD dialog already open, drop");
+                    if (g_pending.empty() && g_hwndListener)
+                        KillTimer(g_hwndListener, IDT_READY);
+                    return;
+                }
                 Wh_Log(L"ProcessPending: show WPD remaining=%u", (unsigned)g_pending.size());
                 BuildWpdDialog(path, false);
                 if (g_pending.empty() && g_hwndListener)
@@ -6054,6 +7062,16 @@ static void ProcessPendingQueue() {
         bool opticalGiveUp = (dt == DRIVE_CDROM) && g_pending[i].tries >= 4;
         if (ready || audioGuess || opticalGiveUp) {
             g_pending.erase(g_pending.begin() + i);
+            // If the classic dialog is already open for THIS same drive, it is
+            // already shown - nothing new to do. A dialog for a DIFFERENT drive
+            // is replaced by BuildDriveDialog() below, so the newly inserted
+            // volume always gets its own dialog instead of the old one's.
+            if (g_hwndDialog && !g_isWpd && g_driveLetter == letter) {
+                Wh_Log(L"ProcessPending: dialog already open for %c:, drop", letter);
+                if (g_pending.empty() && g_hwndListener)
+                    KillTimer(g_hwndListener, IDT_READY);
+                return;
+            }
             Wh_Log(L"ProcessPending: show %c: remaining=%u", letter, (unsigned)g_pending.size());
             BuildDriveDialog(letter, false);
             if (g_pending.empty() && g_hwndListener)
@@ -6184,6 +7202,24 @@ LRESULT CALLBACK ListenerWndProc(HWND hWnd, UINT uMsg,
                 BuildDriveDialog(g_driveLetter, true);
         }
         return 0;
+    case WMU_ACTION_DONE:
+        if (g_hActionWorker) {
+            WaitForSingleObject(g_hActionWorker, INFINITE);
+            CloseHandle(g_hActionWorker);
+            g_hActionWorker = nullptr;
+        }
+        ProcessPendingQueue();
+        return 0;
+    case WMU_CONTEXT_AUTOPLAY: {
+        // Never fall back to the last inserted volume: this request belongs to
+        // the drive represented by the context-menu object.
+        int letter = (int)wParam;
+        if (letter >= L'A' && letter <= L'Z' && DrivePresent(letter))
+            BuildDriveDialog(letter, true);
+        else
+            Wh_Log(L"WMU_CONTEXT_AUTOPLAY: invalid or missing drive=%d", letter);
+        return 0;
+    }
     case WMU_APPLY_SUPPRESS:
         RegisterCancelAutoPlay();
         return 0;
@@ -6297,10 +7333,10 @@ static DWORD WINAPI AutoPlayUiThreadProc(LPVOID) {
 BOOL Wh_ModInit() {
     try {
         LoadSettings();
-        // Item 3 fix: unconditionally clean up any CancelAutoplay CLSID values
-        // left behind by a previous session that ended without running
-        // Wh_ModUninit (crash, forced Explorer restart, prior mod version).
-        WriteCancelAutoPlayClsid(false);
+        // Do not touch CancelAutoplay\CLSID before ownership is acquired:
+        // secondary Explorer instances are injected too and could erase the
+        // values owned by the shell instance. RegisterCancelAutoPlay() performs
+        // the cleanup/re-registration after ownership is established.
         const DWORD pid = GetCurrentProcessId();
         const DWORD tray = GetTrayOwnerPid();
         const bool mainShell = IsMainExplorerShell();
@@ -6314,6 +7350,44 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Wh_ModInit: another instance already owns AutoPlay");
             return TRUE;
         }
+
+        Wh_SetFunctionHook((void*)ShellExecuteExW, (void*)ShellExecuteExWHook,
+                           (void**)&g_ShellExecuteExW_Original);
+        Wh_SetFunctionHook((void*)ShellExecuteW, (void*)ShellExecuteWHook,
+                           (void**)&g_ShellExecuteW_Original);
+        Wh_SetFunctionHook((void*)ShellExecuteExA, (void*)ShellExecuteExAHook,
+                           (void**)&g_ShellExecuteExA_Original);
+        Wh_SetFunctionHook((void*)ShellExecuteA, (void*)ShellExecuteAHook,
+                           (void**)&g_ShellExecuteA_Original);
+        Wh_SetFunctionHook((void*)CreateProcessW, (void*)CreateProcessWHook,
+                           (void**)&g_CreateProcessW_Original);
+        Wh_SetFunctionHook((void*)CreateProcessA, (void*)CreateProcessAHook,
+                           (void**)&g_CreateProcessA_Original);
+        Wh_SetFunctionHook((void*)TrackPopupMenuEx,
+                           (void*)TrackPopupMenuExHook,
+                           (void**)&g_TrackPopupMenuEx_Original);
+        Wh_SetFunctionHook((void*)TrackPopupMenu,
+                           (void*)TrackPopupMenuHook,
+                           (void**)&g_TrackPopupMenu_Original);
+        // Prefer the AutoPlay COM implementation; fall back to a real drive
+        // context-menu object only if the probe is unavailable. Installing two
+        // different vtable detours into the same global originals can recurse.
+        if (!InstallAutoplayContextMenuHooks())
+            InstallDriveContextMenuHooks();
+        // Capture the path of each real Explorer drive-menu object. The vtable
+        // hook above handles the command; this hook supplies its drive letter.
+        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+        if (shell32) {
+            void* create2 = (void*)GetProcAddress(shell32, "CDefFolderMenu_Create2");
+            if (create2)
+                Wh_SetFunctionHook(create2, (void*)CDefFolderMenuCreate2Hook,
+                                   (void**)&g_CDefCreateOriginal);
+        }
+
+        // Pre-associate the already-mounted drives (no UI shown) so a first
+        // right-click hits a mapped menu even if Explorer cached drive menus
+        // before the mod loaded.
+        WarmUpDriveContextMenus();
 
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES };
         InitCommonControlsEx(&icc);
@@ -6353,6 +7427,11 @@ void Wh_ModUninit() {
         g_hUiThread = nullptr;
         g_dwUiThreadId = 0;
     }
+    if (g_hActionWorker) {
+        WaitForSingleObject(g_hActionWorker, INFINITE);
+        CloseHandle(g_hActionWorker);
+        g_hActionWorker = nullptr;
+    }
     if (g_evtListenerReady) { CloseHandle(g_evtListenerReady); g_evtListenerReady = nullptr; }
 
     if (g_dialogClassRegistered)
@@ -6365,6 +7444,11 @@ void Wh_ModUninit() {
     g_rotCookie = 0;
     g_classCookie = 0;
     WriteCancelAutoPlayClsid(false);
+    // Release any drive menus kept alive by the startup warm-up.
+    for (IContextMenu* m : g_warmupMenus)
+        if (m) m->Release();
+    g_warmupMenus.clear();
+    if (g_csContextMenusInit) { DeleteCriticalSection(&g_csContextMenus); g_csContextMenusInit = false; }
     FreeDpiResources();
     FreeOptions();
     ReleaseAutoPlayOwner();
