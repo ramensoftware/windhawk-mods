@@ -492,6 +492,9 @@ LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         if(inf && (inf->fMask & RBBIM_CHILDSIZE)) {
             HWND ch = (inf->fMask&RBBIM_CHILD) ? inf->hwndChild : [&](){ REBARBANDINFO q={sizeof(q)}; q.fMask=RBBIM_CHILD; return SendMessage(h,RB_GETBANDINFO,w,(LPARAM)&q)?q.hwndChild:NULL; }();
             if(ch && ((int)(INT_PTR)GetPropW(ch, L"FlexTbFlag") & CF_MOVED)) {
+                if(inf->cbSize < sizeof(REBARBANDINFO)) {
+                    return DefSubclassProc(h, m, w, l);
+                }
                 REBARBANDINFO local = *inf;
                 UINT dpi = GetDpiForWindow(h);
                 local.cyMinChild = local.cyChild = local.cyMaxChild = GetSystemMetricsForDpi(SM_CYSIZE, dpi) +  GetSystemMetricsForDpi(SM_CYBORDER, dpi) * 2 + 2;
@@ -512,12 +515,6 @@ LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     }
     if(m==RB_INSERTBAND) if(HWND cab=GetCabinet(h)) if(!GetPropW(cab, L"FlexTbMoved")) PostMessage(cab,g_msgDoMove,0,0);
     if(m==RB_SETBANDINFO && !g_inSync) if(HWND cab=GetCabinet(h)) if(GetPropW(cab, L"FlexTbMoved")) SyncGrippers(h);
-    if(m==WM_MOUSEMOVE || m==WM_LBUTTONUP) {
-        HWND cab=(HWND)GetPropW(h, L"FlexTbCab"); if(!cab) cab = GetCabinet(h);
-        if(cab && GetPropW(cab, L"FlexTbMoved") && !g_inApply) {
-            static DWORD ls=0; DWORD n=GetTickCount(); if(m==WM_LBUTTONUP || (n-ls>1000)) { SaveBandPositions(h); ls=n; }
-        }
-    }
     return r;
 }
 
