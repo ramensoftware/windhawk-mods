@@ -2,7 +2,7 @@
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
 // @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         2.0.0
+// @version         2.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -20,7 +20,7 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Notification area icons (intended for the Windows 10 taskbar)
 * Network Connections
 * Printers and Faxes
-* HomeGroup (legacy, partially functional)
+* HomeGroup (partially functional, read the note below)
 * BitLocker Drive Encryption
 * Tablet PC Settings
 
@@ -35,8 +35,9 @@ The optional "Restore Classic Task Links" setting restores localized, classic ta
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
+The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2 and Windows 11 25H2.
 
+HomeGroup is disabled by default because on Windows 11 the page was completely removed, use the https://windhawk.net/mods/win11-home-group-restorer mod to restore it.
 BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
 
 If the automatic detection is wrong on your edition, each of the two applets has an **Always add** / **Never add** override in the settings. "Always add" still does nothing when the applet is genuinely not installed (e.g. Windows Home), since the entry would have no name, icon or target.
@@ -66,9 +67,9 @@ Credits to m417z for the code review and enhancing the mod.
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
   $description: This setting adds the "Printers and Faxes" icon to the Control Panel
-- enableHomeGroup: true
+- enableHomeGroup: false
   $name: HomeGroup
-  $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
+  $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied. It is recommended to use the fix proposed above for simplicity.
 - bitLockerMode: auto
   $name: BitLocker Drive Encryption
   $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
