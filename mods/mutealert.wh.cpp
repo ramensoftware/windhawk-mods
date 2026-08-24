@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.3
+// @version         0.9.4
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -213,6 +213,7 @@ volume control, call state, and headset integration.
 
 #include <windows.h>
 #include <commctrl.h>
+#include <dbt.h>
 #include <endpointvolume.h>
 #include <audiopolicy.h>
 #include <functiondiscoverykeys_devpkey.h>
@@ -539,6 +540,7 @@ static std::atomic<int> g_audioVolume{0};
 static std::atomic<float> g_audioPeak{0.0f};
 static std::atomic<int> g_pendingVolumeNotches{0};
 static std::atomic<int> g_pendingVolumeSet{-1};
+static std::atomic<int> g_pendingForcedVolumePersist{-1};
 static std::atomic<unsigned int> g_pendingMuteToggles{0};
 static std::atomic<int> g_pendingMuteSet{-1};
 static std::atomic<int> g_pendingSlackCommand{-1};
@@ -576,6 +578,9 @@ static std::vector<std::wstring> g_diagnosticEvents;
 static ULONGLONG g_diagnosticStartTime = 0;
 static HWND g_headsetMessageWindow = nullptr;
 static HINSTANCE g_headsetWindowInstance = nullptr;
+static HDEVNOTIFY g_hidDeviceNotification = nullptr;
+static std::atomic<bool> g_vendorProbeRequested{true};
+static std::vector<RAWINPUTDEVICE> g_previousHidRegistrations;
 static constexpr wchar_t kHeadsetWindowClass[] =
     L"MuteAlert.Windhawk.HeadsetInput";
 static SRWLOCK g_audioNameLock = SRWLOCK_INIT;
@@ -759,7 +764,7 @@ static void QueueVolumeNotches(int notches) {
             g_forcedVolume.load() + notches * g_settings.volumeStep, 0, 100);
         g_forcedVolume.store(target);
         g_pendingVolumeSet.store(target);
-        Wh_SetIntValue(L"forcedVolumeTarget", target);
+        g_pendingForcedVolumePersist.store(target);
     } else {
         g_pendingVolumeNotches.fetch_add(notches);
     }
@@ -1696,6 +1701,10 @@ static DWORD WINAPI AudioThreadProc(void*) {
         }
 
         ULONGLONG now = GetTickCount64();
+        if (int target = g_pendingForcedVolumePersist.exchange(-1);
+            target >= 0) {
+            Wh_SetIntValue(L"forcedVolumeTarget", target);
+        }
         if (lastEndpointCheck == 0 || now - lastEndpointCheck >= 1000) {
             lastEndpointCheck = now;
             if (!OpenDefaultEndpoint(enumerator.get(), &endpoint)) {
@@ -1848,6 +1857,14 @@ static HANDLE OpenArctisStatusDevice() {
                 devices, &interfaceData, detail, required, nullptr, nullptr)) {
             continue;
         }
+
+        std::wstring path = Lowercase(detail->DevicePath);
+        bool supportedPath =
+            path.find(L"vid_1038") != std::wstring::npos &&
+            (path.find(L"pid_12e0") != std::wstring::npos ||
+             path.find(L"pid_12e5") != std::wstring::npos ||
+             path.find(L"pid_225d") != std::wstring::npos);
+        if (!supportedPath) continue;
 
         HANDLE device = CreateFileW(
             detail->DevicePath, GENERIC_READ | GENERIC_WRITE,
@@ -2400,7 +2417,37 @@ static void ProcessStandardHidRawInput(HRAWINPUT inputHandle) {
     }
 }
 
+static void SnapshotStandardHidRegistrations() {
+    g_previousHidRegistrations.clear();
+    UINT count = 0;
+    if (GetRegisteredRawInputDevices(nullptr, &count,
+                                     sizeof(RAWINPUTDEVICE)) != 0 ||
+        !count) {
+        return;
+    }
+
+    std::vector<RAWINPUTDEVICE> registered(count);
+    UINT copied = count;
+    if (GetRegisteredRawInputDevices(registered.data(), &copied,
+                                     sizeof(RAWINPUTDEVICE)) == UINT_MAX) {
+        return;
+    }
+    registered.resize(copied);
+    for (const auto& device : registered) {
+        bool matchingGeneric =
+            device.usUsagePage == kHidUsagePageGeneric &&
+            device.usUsage == kHidUsageSystemControl;
+        bool matchingTelephony =
+            device.usUsagePage == kHidUsagePageTelephony;
+        if ((matchingGeneric || matchingTelephony) &&
+            (!device.hwndTarget || IsWindow(device.hwndTarget))) {
+            g_previousHidRegistrations.push_back(device);
+        }
+    }
+}
+
 static bool RegisterStandardHidInput(HWND target) {
+    SnapshotStandardHidRegistrations();
     RAWINPUTDEVICE devices[2]{};
     devices[0].usUsagePage = kHidUsagePageGeneric;
     devices[0].usUsage = kHidUsageSystemControl;
@@ -2428,6 +2475,27 @@ static void UnregisterStandardHidInput() {
         Wh_Log(L"[Headset] Standard HID Raw Input removal failed: %u",
                GetLastError());
     }
+    if (!g_previousHidRegistrations.empty() &&
+        !RegisterRawInputDevices(g_previousHidRegistrations.data(),
+                                 static_cast<UINT>(
+                                     g_previousHidRegistrations.size()),
+                                 sizeof(RAWINPUTDEVICE))) {
+        Wh_Log(L"[Headset] Restoring previous Raw Input registrations failed: "
+               L"%u",
+               GetLastError());
+    }
+    g_previousHidRegistrations.clear();
+}
+
+static HDEVNOTIFY RegisterHidDeviceNotifications(HWND target) {
+    GUID hidGuid{};
+    HidD_GetHidGuid(&hidGuid);
+    DEV_BROADCAST_DEVICEINTERFACE_W filter{};
+    filter.dbcc_size = sizeof(filter);
+    filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    filter.dbcc_classguid = hidGuid;
+    return RegisterDeviceNotificationW(target, &filter,
+                                       DEVICE_NOTIFY_WINDOW_HANDLE);
 }
 
 static LRESULT CALLBACK HeadsetMessageWindowProc(HWND window, UINT message,
@@ -2440,6 +2508,18 @@ static LRESULT CALLBACK HeadsetMessageWindowProc(HWND window, UINT message,
         case WM_INPUT_DEVICE_CHANGE:
             g_standardHidRuntime.clear();
             RefreshStandardHidDevices();
+            g_vendorProbeRequested.store(true);
+            return 0;
+        case WM_DEVICECHANGE:
+            if (wParam == DBT_DEVICEARRIVAL ||
+                wParam == DBT_DEVICEREMOVECOMPLETE) {
+                auto* header =
+                    reinterpret_cast<DEV_BROADCAST_HDR*>(lParam);
+                if (!header ||
+                    header->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE) {
+                    g_vendorProbeRequested.store(true);
+                }
+            }
             return 0;
         case WM_TIMER:
             if (wParam == kStandardHidTimer) {
@@ -2608,10 +2688,18 @@ static void ExportHeadsetDiagnosticsIfRequested() {
 }
 
 static DWORD WINAPI HeadsetThreadProc(void*) {
+    g_vendorProbeRequested.store(true);
     g_headsetMessageWindow = CreateHeadsetMessageWindow();
     if (g_headsetMessageWindow) {
         if (!RegisterStandardHidInput(g_headsetMessageWindow)) {
             Wh_Log(L"[Headset] Standard HID Raw Input registration failed");
+        }
+        g_hidDeviceNotification =
+            RegisterHidDeviceNotifications(g_headsetMessageWindow);
+        if (!g_hidDeviceNotification) {
+            Wh_Log(L"[Headset] HID device notification registration failed: "
+                   L"%u",
+                   GetLastError());
         }
         RefreshStandardHidDevices();
     } else {
@@ -2623,6 +2711,7 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
     bool stateKnown = false;
     bool previousMuted = false;
     ULONGLONG nextVendorPoll = 0;
+    ULONGLONG scheduledVendorProbe = 0;
     bool diagnosticsExported = false;
     ULONGLONG diagnosticsExportAt = GetTickCount64() + 2000;
 
@@ -2633,69 +2722,76 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
         }
 
         ULONGLONG now = GetTickCount64();
-        if (now >= nextVendorPoll) {
-            if (!connected) {
-                connected = adapter->TryConnect();
-                stateKnown = false;
-                if (connected) {
-                    RecordDiagnosticEvent(
-                        L"SteelSeries vendor adapter connected");
-                } else {
-                    UpdateSteelSeriesSource(false, false, L"", L"");
+        if (scheduledVendorProbe && now >= scheduledVendorProbe) {
+            scheduledVendorProbe = 0;
+            g_vendorProbeRequested.store(true);
+        }
+        if (!connected && g_vendorProbeRequested.exchange(false)) {
+            connected = adapter->TryConnect();
+            stateKnown = false;
+            if (connected) {
+                RecordDiagnosticEvent(
+                    L"SteelSeries vendor adapter connected");
+                nextVendorPoll = now;
+            } else {
+                UpdateSteelSeriesSource(false, false, L"", L"");
+                // If device notifications aren't available, retain a slow
+                // fallback so a headset connected later can still be found.
+                if (!g_hidDeviceNotification) {
+                    scheduledVendorProbe = now + 60000;
                 }
             }
-            if (connected) {
-                HeadsetAdapterObservation observation;
-                if (!adapter->Poll(observation)) {
-                    adapter->Disconnect();
-                    connected = false;
-                    stateKnown = false;
-                    UpdateSteelSeriesSource(false, false, L"", L"");
-                    RecordDiagnosticEvent(
-                        L"SteelSeries adapter disconnected after read failure");
-                    nextVendorPoll = now + 500;
-                } else if (!observation.available ||
-                           !observation.stateKnown) {
-                    stateKnown = false;
-                    UpdateSteelSeriesSource(false, false, L"", L"");
-                    nextVendorPoll = now + g_settings.headsetPollInterval;
-                } else {
-                    bool stateChanged =
-                        !stateKnown || observation.muted != previousMuted;
-                    UpdateSteelSeriesSource(
-                        true, observation.muted, observation.deviceName,
-                        observation.detail);
-                    if (stateChanged) {
-                        Wh_Log(L"[Headset] SteelSeries microphone is %s",
-                               observation.muted ? L"muted" : L"unmuted");
-                        RecordDiagnosticEvent(
-                            std::wstring(L"SteelSeries physical state: ") +
-                            (observation.muted ? L"muted" : L"unmuted"));
-                    }
-                    bool syncMute = g_settings.headsetSyncMode == L"full" ||
-                                    g_settings.headsetSyncMode == L"muteOnly";
-                    bool syncUnmute = g_settings.headsetSyncMode == L"full";
-                    if (observation.muted && syncMute) {
-                        if (g_settings.headsetSyncWindows &&
-                            !g_audioMuted.load()) {
-                            QueueMuteSet(true);
-                        }
-                        if (g_settings.headsetSyncCalls) {
-                            QueueActiveCallMuteState(true);
-                        }
-                    } else if (!observation.muted && syncUnmute &&
-                               stateKnown && previousMuted) {
-                        if (g_settings.headsetSyncWindows) QueueMuteSet(false);
-                        if (g_settings.headsetSyncCalls) {
-                            QueueActiveCallMuteState(false);
-                        }
-                    }
-                    stateKnown = true;
-                    previousMuted = observation.muted;
-                    nextVendorPoll = now + g_settings.headsetPollInterval;
-                }
+        }
+        if (connected && now >= nextVendorPoll) {
+            HeadsetAdapterObservation observation;
+            if (!adapter->Poll(observation)) {
+                adapter->Disconnect();
+                connected = false;
+                stateKnown = false;
+                UpdateSteelSeriesSource(false, false, L"", L"");
+                RecordDiagnosticEvent(
+                    L"SteelSeries adapter disconnected after read failure");
+                // Allow one delayed reconnect for a transient read error. If
+                // it fails, wait for the next HID arrival notification.
+                scheduledVendorProbe = now + 1000;
+            } else if (!observation.available || !observation.stateKnown) {
+                stateKnown = false;
+                UpdateSteelSeriesSource(false, false, L"", L"");
+                nextVendorPoll = now + g_settings.headsetPollInterval;
             } else {
-                nextVendorPoll = now + 2000;
+                bool stateChanged =
+                    !stateKnown || observation.muted != previousMuted;
+                UpdateSteelSeriesSource(true, observation.muted,
+                                        observation.deviceName,
+                                        observation.detail);
+                if (stateChanged) {
+                    Wh_Log(L"[Headset] SteelSeries microphone is %s",
+                           observation.muted ? L"muted" : L"unmuted");
+                    RecordDiagnosticEvent(
+                        std::wstring(L"SteelSeries physical state: ") +
+                        (observation.muted ? L"muted" : L"unmuted"));
+                }
+                bool syncMute = g_settings.headsetSyncMode == L"full" ||
+                                g_settings.headsetSyncMode == L"muteOnly";
+                bool syncUnmute = g_settings.headsetSyncMode == L"full";
+                if (observation.muted && syncMute) {
+                    if (g_settings.headsetSyncWindows &&
+                        !g_audioMuted.load()) {
+                        QueueMuteSet(true);
+                    }
+                    if (g_settings.headsetSyncCalls) {
+                        QueueActiveCallMuteState(true);
+                    }
+                } else if (!observation.muted && syncUnmute && stateKnown &&
+                           previousMuted) {
+                    if (g_settings.headsetSyncWindows) QueueMuteSet(false);
+                    if (g_settings.headsetSyncCalls) {
+                        QueueActiveCallMuteState(false);
+                    }
+                }
+                stateKnown = true;
+                previousMuted = observation.muted;
+                nextVendorPoll = now + g_settings.headsetPollInterval;
             }
         }
 
@@ -2704,8 +2800,22 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
             diagnosticsExported = true;
         }
 
+        DWORD timeout = INFINITE;
+        auto includeDeadline = [now, &timeout](ULONGLONG deadline) {
+            if (!deadline) return;
+            ULONGLONG remaining = deadline > now ? deadline - now : 0;
+            DWORD candidate = remaining > MAXDWORD
+                                  ? MAXDWORD
+                                  : static_cast<DWORD>(remaining);
+            timeout = std::min(timeout, candidate);
+        };
+        if (connected) includeDeadline(nextVendorPoll);
+        includeDeadline(scheduledVendorProbe);
+        if (!diagnosticsExported) includeDeadline(diagnosticsExportAt);
+        if (!connected && g_vendorProbeRequested.load()) timeout = 0;
+
         DWORD wait = MsgWaitForMultipleObjects(
-            1, &g_audioStopEvent, FALSE, 50, QS_ALLINPUT);
+            1, &g_audioStopEvent, FALSE, timeout, QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0) break;
         if (wait == WAIT_OBJECT_0 + 1) {
             MSG message;
@@ -2721,6 +2831,10 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
     UpdateStandardHidSource(false, L"", L"");
     g_standardHidRuntime.clear();
     if (g_headsetMessageWindow) {
+        if (g_hidDeviceNotification) {
+            UnregisterDeviceNotification(g_hidDeviceNotification);
+            g_hidDeviceNotification = nullptr;
+        }
         UnregisterStandardHidInput();
         DestroyWindow(g_headsetMessageWindow);
         g_headsetMessageWindow = nullptr;
@@ -2800,6 +2914,10 @@ static void StopAudioThread() {
     if (g_audioThread) {
         WaitForSingleObject(g_audioThread, INFINITE);
         CloseHandle(g_audioThread);
+    }
+    if (int target = g_pendingForcedVolumePersist.exchange(-1);
+        target >= 0) {
+        Wh_SetIntValue(L"forcedVolumeTarget", target);
     }
     if (g_audioStopEvent) CloseHandle(g_audioStopEvent);
     if (g_audioWakeEvent) CloseHandle(g_audioWakeEvent);
@@ -3027,7 +3145,6 @@ struct WidgetState {
     HWND taskbarWnd = nullptr;
     Grid parent{nullptr};
     Button button{nullptr};
-    Grid fillLayer{nullptr};
     RectangleGeometry fillClip{nullptr};
     Shapes::Line muteLine{nullptr};
     TextBlock tooltipText{nullptr};
@@ -3503,7 +3620,6 @@ static Button BuildWidgetButton(WidgetState* state) {
         winrt::Windows::UI::Xaml::Controls::Primitives::PlacementMode::Top);
     ToolTipService::SetToolTip(button, tooltip);
 
-    state->fillLayer = fillLayer;
     state->fillClip = fillClip;
     state->muteLine = muteLine;
     state->tooltipText = tooltipText;
@@ -3809,16 +3925,20 @@ static void RemoveWidgetState(WidgetState& state) {
         state.callTooltip.Content(nullptr);
         state.callButton.Content(nullptr);
 
-        int liveColumn = state.column;
+        int liveColumn = -1;
+        bool removed = false;
         for (uint32_t i = 0; i < state.parent.Children().Size(); i++) {
             auto element = state.parent.Children().GetAt(i)
                                .try_as<FrameworkElement>();
             if (element && element.Name() == L"MicrophoneActivityWidget") {
                 liveColumn = Grid::GetColumn(element);
                 state.parent.Children().RemoveAt(i);
+                removed = true;
                 break;
             }
         }
+
+        if (!removed) return;
 
         if (liveColumn >= 0 &&
             static_cast<uint32_t>(liveColumn) <
@@ -3851,11 +3971,8 @@ static void RemoveAllWidgets() {
     g_widgets->clear();
 }
 
-static constexpr UINT_PTR kTaskbarSubclassId = 0x4D494357;
-
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
                                             WPARAM wParam, LPARAM lParam,
-                                            UINT_PTR subclassId,
                                             DWORD_PTR referenceData) {
     if (g_audioUpdateMessage && message == g_audioUpdateMessage) {
         try {
@@ -3866,7 +3983,8 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
         return 0;
     }
     if (message == WM_NCDESTROY) {
-        RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+        HWND expected = hWnd;
+        g_mainTaskbarWnd.compare_exchange_strong(expected, nullptr);
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
@@ -3887,9 +4005,13 @@ static bool ApplyWidgetsFromTaskbarThread() {
                 XamlRoot root = nullptr;
                 if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
                     root = GetTaskbarXamlRoot(hWnd);
+                    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            hWnd, TaskbarSubclassProc, 0)) {
+                        Wh_Log(L"[XAML] Failed to subclass taskbar window %p",
+                               hWnd);
+                        return TRUE;
+                    }
                     g_mainTaskbarWnd.store(hWnd);
-                    SetWindowSubclass(hWnd, TaskbarSubclassProc,
-                                      kTaskbarSubclassId, 0);
                 } else if (_wcsicmp(className,
                                     L"Shell_SecondaryTrayWnd") == 0) {
                     root = GetSecondaryTaskbarXamlRoot(hWnd);
@@ -3928,18 +4050,15 @@ static void ApplyWidgetsOnWindowThread() {
 
 static bool RemoveWidgetsOnWindowThread() {
     HWND hWnd = FindMainTaskbarWindow();
-    if (!hWnd) return false;
-    return RunFromWindowThread(
-        hWnd,
-        [](void*) {
-            RemoveAllWidgets();
-            HWND mainWindow = g_mainTaskbarWnd.exchange(nullptr);
-            if (mainWindow) {
-                RemoveWindowSubclass(mainWindow, TaskbarSubclassProc,
-                                     kTaskbarSubclassId);
-            }
-        },
-        nullptr);
+    bool widgetsRemoved =
+        hWnd && RunFromWindowThread(
+                    hWnd, [](void*) { RemoveAllWidgets(); }, nullptr);
+
+    if (HWND subclassWindow = g_mainTaskbarWnd.exchange(nullptr)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(subclassWindow,
+                                                         TaskbarSubclassProc);
+    }
+    return widgetsRemoved;
 }
 
 // -----------------------------------------------------------------------------
@@ -4126,6 +4245,10 @@ void Wh_ModSettingsChanged() {
     StopRetryThreadLocked();
     RemoveWidgetsOnWindowThread();
     StopAudioThread();
+    AcquireSRWLockExclusive(&g_diagnosticLock);
+    g_diagnosticEvents.clear();
+    g_diagnosticStartTime = GetTickCount64();
+    ReleaseSRWLockExclusive(&g_diagnosticLock);
     LoadSettings();
     if (FindMainTaskbarWindow()) {
         StartAudioThread();
