@@ -5,6 +5,7 @@
 // @version         1.13.19
 // @author          meteoni
 // @github          https://github.com/Meteony
+// @license         MIT
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -ldwmapi -lversion -lgdi32 -ladvapi32
 // ==/WindhawkMod==
@@ -42,8 +43,8 @@ continuous polling.
 ## Getting Started
 Move a tiled window to **float it** or **swap it with the window underneath**. 
 
-Hotkeys are available for tiling, changing layouts, moving windows through the logical 
-order, floating a window, and switching between Automatic and Manual management.
+By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), moving windows through the logical
+order (Alt+, / .), floating a window (Alt+F), and switching between Automatic and Manual management (Alt R).
 
 A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.
 
@@ -51,6 +52,8 @@ A small tray indicator shows the active workspace layout and provides quick acce
 ## Also check out
 - [Virtual Desktop Helper by u2x1](https://windhawk.net/mods/virtual-desktop-helper)
 - [Taskbar Desktop Indicator by Simon Benedict](https://windhawk.net/mods/taskbar-desktop-indicator)
+
+MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).
 
 */
 // ==/WindhawkModReadme==
@@ -207,7 +210,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
   $name: '[Advanced] Lifecycle Settle Delay (ms)'
   $description: Delay before visibility/lifecycle bursts are reconciled. Increase only if shell transitions are unusually slow (20-2000 ms).
 
-- DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\TilingHelperDiagnostics"
+- DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\MultiWMDiagnostics"
   $name: '[Diagnostics] Output Directory'
   $description: 'Directory for timestamped UTF-8 .txt diagnostic reports. Environment variables such as %USERPROFILE% are supported and missing directories are created. Reports include window titles and executable paths, so review them before sharing.'
 
@@ -965,8 +968,9 @@ constexpr LONG kPlacementTolerancePx = 4;
 using WorkspaceMap = std::unordered_map<
     DesktopMonitorKey, Workspace, DesktopMonitorKeyHash, DesktopMonitorKeyEqual>;
 
-// Synchronization boundary for the workspace graph. Writers are restricted to
-// the serialized WM thread; WinEvent callbacks may perform lock-protected reads.
+// Access boundary for the workspace graph. All current callers, including
+// WinEvent callbacks, run on the serialized WM thread; the repository keeps its
+// workspace snapshots and reverse ownership index consistent.
 class WorkspaceRepository {
  public:
   bool Load(const DesktopMonitorKey& key, Workspace* workspace) const;
@@ -979,7 +983,6 @@ class WorkspaceRepository {
   std::vector<std::pair<DesktopMonitorKey, Workspace>> Snapshot() const;
   std::vector<std::pair<HWND, std::vector<DesktopMonitorKey>>>
       OwnershipIndexSnapshot() const;
-  void ClearAfterWmStopped();
 
  private:
   mutable SRWLOCK lock_ = SRWLOCK_INIT;
@@ -1006,7 +1009,6 @@ using Model::WorkspaceGeometryItem;
 using Model::WorkspaceRepository;
 
 struct MoveSizeTracker {
-  SRWLOCK lock = SRWLOCK_INIT;
   std::unordered_map<HWND, RECT> startRects;
   std::unordered_map<HWND, RECT> endRects;
   std::unordered_map<HWND, POINT> endPoints;
@@ -1040,7 +1042,6 @@ struct ConformanceLease {
 };
 
 struct ConformanceLeaseTracker {
-  SRWLOCK lock = SRWLOCK_INIT;
   std::unordered_map<HWND, ConformanceLease> leases;
   uint64_t nextGeneration = 1;
 };
@@ -1057,15 +1058,15 @@ enum class ConformanceLeaseReadResult {
 };
 
 // Reads lease state without consuming expiry. Expired leases stay present until
-// the WM actor performs the final passive conformance verdict; foreign WinEvent
-// readers must never silently erase the evidence needed for that deadline action.
+// the WM actor performs the final passive conformance verdict; WinEvent
+// observations must never silently erase the evidence needed for that action.
 static ConformanceLeaseReadResult ReadConformanceLease(
     HWND hwnd, ConformanceLease* outLease) {
+  AssertWmThread(L"ReadConformanceLease");
   if (!hwnd) return ConformanceLeaseReadResult::Missing;
 
   const ULONGLONG now = GetTickCount64();
   ConformanceLeaseReadResult result = ConformanceLeaseReadResult::Missing;
-  AcquireSRWLockShared(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
   if (it != g_conformanceLeases.leases.end()) {
     if (outLease) *outLease = it->second;
@@ -1073,7 +1074,6 @@ static ConformanceLeaseReadResult ReadConformanceLease(
                  ? ConformanceLeaseReadResult::Active
                  : ConformanceLeaseReadResult::Expired;
   }
-  ReleaseSRWLockShared(&g_conformanceLeases.lock);
   return result;
 }
 
@@ -1092,33 +1092,30 @@ static bool HasActiveConformanceLease(HWND hwnd) {
 // topology/lifecycle teardown, migration, etc.). A nonzero generation lets a
 // stale WM-thread observation avoid deleting a newer lease.
 static bool CancelConformanceLease(HWND hwnd, uint64_t generation = 0) {
+  AssertWmThread(L"CancelConformanceLease");
   if (!hwnd) return false;
   bool erased = false;
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
   if (it != g_conformanceLeases.leases.end() &&
       (generation == 0 || it->second.generation == generation)) {
     g_conformanceLeases.leases.erase(it);
     erased = true;
   }
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
   return erased;
 }
 
 static void ClearAllConformanceLeases() {
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
+  AssertWmThread(L"ClearAllConformanceLeases");
   g_conformanceLeases.leases.clear();
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
 }
 
 static size_t CountActiveConformanceLeases() {
+  AssertWmThread(L"CountActiveConformanceLeases");
   const ULONGLONG now = GetTickCount64();
   size_t count = 0;
-  AcquireSRWLockShared(&g_conformanceLeases.lock);
   for (const auto& kv : g_conformanceLeases.leases) {
     if (now < kv.second.expiresAtTickMs) ++count;
   }
-  ReleaseSRWLockShared(&g_conformanceLeases.lock);
   return count;
 }
 
@@ -1131,7 +1128,6 @@ static void ScheduleNextConformanceTimer() {
 
   const ULONGLONG now = GetTickCount64();
   ULONGLONG earliestDue = 0;
-  AcquireSRWLockShared(&g_conformanceLeases.lock);
   for (const auto& kv : g_conformanceLeases.leases) {
     const ConformanceLease& lease = kv.second;
     ULONGLONG due = lease.expiresAtTickMs;
@@ -1140,8 +1136,6 @@ static void ScheduleNextConformanceTimer() {
     }
     if (!earliestDue || due < earliestDue) earliestDue = due;
   }
-  ReleaseSRWLockShared(&g_conformanceLeases.lock);
-
   if (!earliestDue) return;
   const ULONGLONG remaining = earliestDue > now ? earliestDue - now : 1;
   const UINT delayMs = static_cast<UINT>(std::min<ULONGLONG>(remaining, 0x7FFFFFFFULL));
@@ -1153,11 +1147,11 @@ static void ScheduleNextConformanceTimer() {
 
 static bool DeferConformanceLeaseRepair(
     HWND hwnd, uint64_t generation, ULONGLONG dueTickMs) {
+  AssertWmThread(L"DeferConformanceLeaseRepair");
   if (!hwnd || generation == 0 || !dueTickMs) return false;
 
   const ULONGLONG now = GetTickCount64();
   bool retained = false;
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
   if (it != g_conformanceLeases.leases.end() &&
       now < it->second.expiresAtTickMs &&
@@ -1167,13 +1161,12 @@ static bool DeferConformanceLeaseRepair(
     }
     retained = true;
   }
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
-
   if (retained) ScheduleNextConformanceTimer();
   return retained;
 }
 
-static uint64_t AllocateConformanceLeaseGenerationLocked() {
+static uint64_t AllocateConformanceLeaseGeneration() {
+  AssertWmThread(L"AllocateConformanceLeaseGeneration");
   uint64_t generation = g_conformanceLeases.nextGeneration++;
   if (generation == 0) {
     generation = g_conformanceLeases.nextGeneration++;
@@ -1182,6 +1175,7 @@ static uint64_t AllocateConformanceLeaseGenerationLocked() {
 }
 
 static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
+  AssertWmThread(L"BeginConformanceLease");
   if (!hwnd || g_settings.conformanceLeaseMs == 0 ||
       expectedRect.right <= expectedRect.left ||
       expectedRect.bottom <= expectedRect.top) {
@@ -1190,7 +1184,6 @@ static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
   }
 
   const ULONGLONG now = GetTickCount64();
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
 
   // Re-observing the same authoritative target while its lease is still active
@@ -1198,7 +1191,6 @@ static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
   if (it != g_conformanceLeases.leases.end() &&
       now < it->second.expiresAtTickMs &&
       EqualRect(&it->second.expectedRect, &expectedRect)) {
-    ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
     ScheduleNextConformanceTimer();
     return;
   }
@@ -1206,9 +1198,8 @@ static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
   ConformanceLease lease;
   lease.expectedRect = expectedRect;
   lease.expiresAtTickMs = now + g_settings.conformanceLeaseMs;
-  lease.generation = AllocateConformanceLeaseGenerationLocked();
+  lease.generation = AllocateConformanceLeaseGeneration();
   g_conformanceLeases.leases[hwnd] = lease;
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
 
   ++Diagnostics::g_runtime.counters.conformanceLeasesStarted;
   ScheduleNextConformanceTimer();
@@ -1223,11 +1214,11 @@ static bool IsCurrentConformanceLease(HWND hwnd, uint64_t generation) {
 
 static bool RecordConformanceLeaseAttempt(
     HWND hwnd, uint64_t generation, unsigned* outAttemptNumber = nullptr) {
+  AssertWmThread(L"RecordConformanceLeaseAttempt");
   if (!hwnd || generation == 0) return false;
 
   const ULONGLONG now = GetTickCount64();
   bool retained = false;
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
   if (it != g_conformanceLeases.leases.end() &&
       now < it->second.expiresAtTickMs &&
@@ -1238,7 +1229,6 @@ static bool RecordConformanceLeaseAttempt(
     if (outAttemptNumber) *outAttemptNumber = it->second.attempts;
     retained = true;
   }
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
   return retained;
 }
 
@@ -1307,8 +1297,8 @@ MoveSizeIntent ClassifyMoveSizeIntent(const RECT& before, const RECT& after, LON
 }
 
 static MoveSizeGesture PeekMoveSizeGesture(HWND hwnd) {
+  AssertWmThread(L"PeekMoveSizeGesture");
   MoveSizeGesture gesture;
-  AcquireSRWLockShared(&g_moveSize.lock);
   auto startIt = g_moveSize.startRects.find(hwnd);
   auto endIt = g_moveSize.endRects.find(hwnd);
   auto pointIt = g_moveSize.endPoints.find(hwnd);
@@ -1317,22 +1307,22 @@ static MoveSizeGesture PeekMoveSizeGesture(HWND hwnd) {
     gesture.start = startIt->second;
     gesture.end = endIt->second;
     gesture.hasRects = true;
-    gesture.intent = ClassifyMoveSizeIntent(gesture.start, gesture.end, 1);
   }
   if (pointIt != g_moveSize.endPoints.end()) {
     gesture.dropPoint = pointIt->second;
     gesture.hasDropPoint = true;
   }
-  ReleaseSRWLockShared(&g_moveSize.lock);
+  if (gesture.hasRects) {
+    gesture.intent = ClassifyMoveSizeIntent(gesture.start, gesture.end, 1);
+  }
   return gesture;
 }
 
 static bool IsMoveSizeGestureInProgress(HWND hwnd) {
+  AssertWmThread(L"IsMoveSizeGestureInProgress");
   if (!hwnd) return false;
-  AcquireSRWLockShared(&g_moveSize.lock);
   const bool started = g_moveSize.startRects.find(hwnd) != g_moveSize.startRects.end();
   const bool ended = g_moveSize.endRects.find(hwnd) != g_moveSize.endRects.end();
-  ReleaseSRWLockShared(&g_moveSize.lock);
   return started && !ended;
 }
 
@@ -1380,21 +1370,22 @@ TileLayout ParseLayoutSetting(PCWSTR str) {
 }
 
 template <typename T, typename Parser>
-T ReadHotkeySetting(PCWSTR name, Parser parser, T defaultVal) {
-  PCWSTR str = Wh_GetStringSetting(name);
-  if (!str || !*str) {
-    Wh_FreeStringSetting(str);
-    return T{};  // Blank hotkey = unused.
+T ReadHotkeySetting(PCWSTR name, Parser parser) {
+  auto value = WindhawkUtils::StringSetting::make(name);
+  if (!*value.get()) return T{};  // Blank hotkey = unused.
+
+  T result = parser(value.get());
+  if (!result) {
+    Wh_Log(
+        L"Invalid %ls hotkey setting '%ls'; hotkey disabled", name,
+        value.get());
   }
-  T result = parser(str);
-  Wh_FreeStringSetting(str);
-  return result ? result : defaultVal;
+  return result;
 }
 
 UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
-  PCWSTR str = Wh_GetStringSetting(name);
-  UINT result = ParseModifiers(str);
-  Wh_FreeStringSetting(str);
+  auto value = WindhawkUtils::StringSetting::make(name);
+  UINT result = ParseModifiers(value.get());
   return result ? result : defaultVal;
 }
 
@@ -1524,7 +1515,8 @@ static UINT GetMonitorEffectiveDpi(HMONITOR monitor) {
   };
   static const DpiApis apis = [] {
     DpiApis result;
-    HMODULE shcore = LoadLibraryW(L"Shcore.dll");
+    HMODULE shcore = LoadLibraryExW(
+        L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (shcore) {
       result.getDpi = reinterpret_cast<GetDpiForMonitorFn>(
           GetProcAddress(shcore, "GetDpiForMonitor"));
@@ -1555,19 +1547,10 @@ static LONG ScaleDip(LONG value, UINT dpi) {
   return MulDiv(value, static_cast<int>(dpi ? dpi : 96), 96);
 }
 
-bool AreSameWindows(const std::vector<HWND>& a, const std::vector<HWND>& b) {
-  if (a.size() != b.size()) return false;
-  for (size_t i = 0; i < a.size(); ++i) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
 std::vector<double> DefaultWeights(size_t count) {
   return std::vector<double>(count, 1.0);
 }
 
-bool IsCurrentlyManagedWindow(HWND hwnd, HMONITOR targetMonitor);
 static HMONITOR GetCurrentManagedWindowMonitor(HWND hwnd);
 static SuspensionReason GetPhysicalSuspensionReason(HWND hwnd);
 static bool WindowCanBeManaged(HWND hwnd);
@@ -1990,70 +1973,6 @@ std::vector<LONG> ComputeWeightedSizes(
   return sizes;
 }
 
-std::vector<LONG> ComputeWeightedSizesWithFixed(
-    LONG totalSize, LONG gap, const std::vector<double>& weights,
-    size_t fixedIndex, LONG fixedSize) {
-
-  const size_t count = weights.size();
-  std::vector<LONG> sizes(count, 0);
-  if (count == 0) return sizes;
-  if (fixedIndex >= count) return ComputeWeightedSizes(totalSize, gap, weights);
-
-  const LONG available = totalSize - gap * (LONG)(count - 1);
-  if (available <= 0) return sizes;
-
-  // Clamp fixed size so remaining windows can still be >=1
-  const LONG minFixed = 1;
-  const LONG maxFixed = std::max<LONG>(1, available - (LONG)(count - 1));
-  fixedSize = std::clamp(fixedSize, minFixed, maxFixed);
-
-  sizes[fixedIndex] = fixedSize;
-
-  LONG remaining = available - fixedSize;
-  if (count == 1) return sizes;
-
-  // Sum weights for non-fixed slots
-  double sum = 0.0;
-  for (size_t i = 0; i < count; ++i) {
-    if (i == fixedIndex) continue;
-    sum += (weights[i] > 0.0 ? weights[i] : 1.0);
-  }
-  if (sum <= 0.0) sum = (double)(count - 1);
-
-  LONG used = 0;
-  double remainingSum = sum;
-
-  // Distribute remaining across non-fixed indices (no gap math here)
-  for (size_t i = 0; i < count; ++i) {
-    if (i == fixedIndex) continue;
-
-    // how many non-fixed slots remain after i?
-    LONG slotsLeft = 0;
-    for (size_t j = i + 1; j < count; ++j) if (j != fixedIndex) ++slotsLeft;
-
-    double w = (weights[i] > 0.0 ? weights[i] : 1.0);
-    LONG size = 0;
-
-    if (slotsLeft == 0) {
-      size = remaining - used;
-    } else {
-      const double ratio = w / remainingSum;
-      size = (LONG)std::llround((double)(remaining - used) * ratio);
-      if (size < 1) size = 1;
-
-      const LONG maxSize = (remaining - used) - slotsLeft; // leave >=1 for each remaining slot
-      if (size > maxSize) size = maxSize;
-    }
-
-    sizes[i] = size;
-    used += size;
-    remainingSum -= w;
-    if (remainingSum <= 0.0) remainingSum = 1.0;
-  }
-
-  return sizes;
-}
-
 void LayoutGridWeighted(
     const RECT& area, LONG gap, size_t windowCount,
     std::vector<RECT>& outRects, bool horizontal,
@@ -2210,48 +2129,8 @@ static WindowRecord MakeWindowRecord(HWND hwnd, ManageState state = ManageState:
   return record;
 }
 
-// Best-effort bridge for apps that replace one top-level HWND with another.
-// Candidates must share the PID and class; an exact title match wins, otherwise
-// the first PID/class match is returned from the caller's scoped candidate set.
-HWND ResolveEquivalentWindow(HWND hwnd, const std::vector<HWND>& candidates) {
-  if (!hwnd || !IsWindow(hwnd)) return nullptr;
-
-  DWORD pid = 0;
-  GetWindowThreadProcessId(hwnd, &pid);
-
-  wchar_t className[128] = {};
-  GetClassNameW(hwnd, className, ARRAYSIZE(className));
-
-  wchar_t title[256] = {};
-  GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-
-  HWND bestMatch = nullptr;
-  for (HWND candidate : candidates) {
-    if (!candidate || candidate == hwnd || !IsWindow(candidate)) continue;
-
-    DWORD candPid = 0;
-    GetWindowThreadProcessId(candidate, &candPid);
-    if (candPid != pid) continue;
-
-    wchar_t candClass[128] = {};
-    GetClassNameW(candidate, candClass, ARRAYSIZE(candClass));
-    if (_wcsicmp(candClass, className) != 0) continue;
-
-    wchar_t candTitle[256] = {};
-    GetWindowTextW(candidate, candTitle, ARRAYSIZE(candTitle));
-
-    if (_wcsicmp(candTitle, title) == 0 || (candTitle[0] == 0 && title[0] == 0)) {
-      return candidate;
-    }
-
-    if (!bestMatch) bestMatch = candidate;
-  }
-
-  return bestMatch;
-}
-
-// Maps an event or foreground HWND to its active tile, preferring exact and
-// ownership relationships before falling back to the looser equivalence check.
+// Maps an event or foreground HWND to its active tile using only unambiguous
+// HWND identity and ownership relationships.
 HWND ResolveToTiledWindow(HWND hwnd, const std::vector<HWND>& candidates) {
   if (!hwnd || !IsWindow(hwnd)) return nullptr;
 
@@ -2272,7 +2151,7 @@ HWND ResolveToTiledWindow(HWND hwnd, const std::vector<HWND>& candidates) {
     owner = GetWindow(owner, GW_OWNER);
   }
 
-  return ResolveEquivalentWindow(hwnd, candidates);
+  return nullptr;
 }
 
 std::vector<HWND> CollectTileWindows(HMONITOR monitor) {
@@ -2503,11 +2382,6 @@ static HMONITOR GetCurrentManagedWindowMonitor(HWND hwnd) {
   return GetWindowPhysicalMonitor(hwnd);
 }
 
-// Determines whether an HWND can actively participate on targetMonitor now.
-bool IsCurrentlyManagedWindow(HWND hwnd, HMONITOR targetMonitor) {
-  return targetMonitor && GetCurrentManagedWindowMonitor(hwnd) == targetMonitor;
-}
-
 static bool RectsNear(const RECT& a, const RECT& b, LONG tolerance = Model::kPlacementTolerancePx) {
   return !Differs(a.left, b.left, tolerance) &&
          !Differs(a.top, b.top, tolerance) &&
@@ -2612,19 +2486,17 @@ static PlacementObservation PlaceWindowChecked(
 static void ArrangeWorkspace(const DesktopMonitorKey& key);
 
 static void ClearMoveSizeSamples(HWND hwnd) {
-  AcquireSRWLockExclusive(&g_moveSize.lock);
+  AssertWmThread(L"ClearMoveSizeSamples");
   g_moveSize.startRects.erase(hwnd);
   g_moveSize.endRects.erase(hwnd);
   g_moveSize.endPoints.erase(hwnd);
-  ReleaseSRWLockExclusive(&g_moveSize.lock);
 }
 
 static void ClearAllMoveSizeSamples() {
-  AcquireSRWLockExclusive(&g_moveSize.lock);
+  AssertWmThread(L"ClearAllMoveSizeSamples");
   g_moveSize.startRects.clear();
   g_moveSize.endRects.clear();
   g_moveSize.endPoints.clear();
-  ReleaseSRWLockExclusive(&g_moveSize.lock);
 }
 
 
@@ -3180,15 +3052,6 @@ WorkspaceRepository::OwnershipIndexSnapshot() const {
   for (const auto& kv : ownersByWindow_) snapshot.push_back(kv);
   ReleaseSRWLockShared(&lock_);
   return snapshot;
-}
-
-void WorkspaceRepository::ClearAfterWmStopped() {
-  // This operation is intentionally permitted only when no WM actor exists.
-  assert(!g_wm.thread || g_wm.threadId.load(std::memory_order_acquire) == 0);
-  AcquireSRWLockExclusive(&lock_);
-  states_.clear();
-  ownersByWindow_.clear();
-  ReleaseSRWLockExclusive(&lock_);
 }
 
 // UI is intentionally implemented later so the complete workspace model and
@@ -4147,15 +4010,15 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
   }
 }
 
-// Atomically consumes one expired generation. A user gesture, migration, or new
+// Consumes one expired generation. A user gesture, migration, or new
 // authoritative placement that cancelled/replaced it wins if it happens first.
 static bool TakeExpiredConformanceLease(
     HWND hwnd, uint64_t generation, ConformanceLease* outLease) {
+  AssertWmThread(L"TakeExpiredConformanceLease");
   if (!hwnd || generation == 0 || !outLease) return false;
 
   const ULONGLONG now = GetTickCount64();
   bool taken = false;
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   auto it = g_conformanceLeases.leases.find(hwnd);
   if (it != g_conformanceLeases.leases.end() &&
       it->second.generation == generation &&
@@ -4164,7 +4027,6 @@ static bool TakeExpiredConformanceLease(
     g_conformanceLeases.leases.erase(it);
     taken = true;
   }
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
   return taken;
 }
 
@@ -4417,7 +4279,6 @@ static void ProcessConformanceTimer() {
   const ULONGLONG now = GetTickCount64();
   std::vector<ExpiredCandidate> expired;
   std::vector<HWND> dueWindows;
-  AcquireSRWLockExclusive(&g_conformanceLeases.lock);
   for (auto& kv : g_conformanceLeases.leases) {
     ConformanceLease& lease = kv.second;
     if (now >= lease.expiresAtTickMs) {
@@ -4429,8 +4290,6 @@ static void ProcessConformanceTimer() {
       lease.repairDueTickMs = 0;
     }
   }
-  ReleaseSRWLockExclusive(&g_conformanceLeases.lock);
-
   for (const ExpiredCandidate& candidate : expired) {
     ConformanceLease lease;
     if (TakeExpiredConformanceLease(
@@ -4915,7 +4774,7 @@ static void ReconcileWindowParticipation(
     std::vector<DesktopMonitorKey>* changedKeys) {
   const SuspensionReason reason = GetPhysicalSuspensionReason(hwnd);
 
-  // In Manual mode, minimizing is an explicit departure from the Alt+D group.
+  // In Manual mode, minimizing is an explicit departure from the managed group.
   // Forget the logical member entirely; restoring the HWND won't re-admit it
   // because Manual discovery remains closed. Maximization is intentionally
   // different: suspend it so restore returns to the exact saved slot/weight.
@@ -5553,7 +5412,7 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
 
     case EVENT_SYSTEM_MINIMIZESTART:
       if (IsManualMode()) {
-        // Minimize is an explicit exit from an inert Manual Alt+D group. Act on
+        // Minimize is an explicit exit from an inert Manual group. Act on
         // the event itself so a very fast minimize/restore cannot outrun the
         // settled IsIconic() check and accidentally retain membership.
         ForgetManagedWindow(hwnd);
@@ -5600,12 +5459,12 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
 
 }  // namespace Reconcile
 
-// Atomically consumes and clears the WinEvent samples for one completed gesture.
+// Consumes and clears the WinEvent samples for one completed gesture.
 // The WM core never reads these caches piecemeal after this boundary.
 static MoveSizeGesture ConsumeMoveSizeGesture(HWND hwnd) {
+  AssertWmThread(L"ConsumeMoveSizeGesture");
   MoveSizeGesture gesture;
 
-  AcquireSRWLockExclusive(&g_moveSize.lock);
   auto startIt = g_moveSize.startRects.find(hwnd);
   auto endIt = g_moveSize.endRects.find(hwnd);
   auto pointIt = g_moveSize.endPoints.find(hwnd);
@@ -5614,7 +5473,6 @@ static MoveSizeGesture ConsumeMoveSizeGesture(HWND hwnd) {
     gesture.start = startIt->second;
     gesture.end = endIt->second;
     gesture.hasRects = true;
-    gesture.intent = ClassifyMoveSizeIntent(gesture.start, gesture.end, 1);
   }
   if (pointIt != g_moveSize.endPoints.end()) {
     gesture.dropPoint = pointIt->second;
@@ -5624,7 +5482,9 @@ static MoveSizeGesture ConsumeMoveSizeGesture(HWND hwnd) {
   g_moveSize.startRects.erase(hwnd);
   g_moveSize.endRects.erase(hwnd);
   g_moveSize.endPoints.erase(hwnd);
-  ReleaseSRWLockExclusive(&g_moveSize.lock);
+  if (gesture.hasRects) {
+    gesture.intent = ClassifyMoveSizeIntent(gesture.start, gesture.end, 1);
+  }
   return gesture;
 }
 
@@ -5778,8 +5638,8 @@ void TileWindows(HMONITOR monitor = nullptr) {
   if (!Reconcile::EnsureWorkspaceFromSnapshot(monitor, true, &changedKeys)) return;
 
   // Ensure other affected current workspaces also lose stale slots. Keep the
-  // target workspace until after geometry adoption so Alt+D does not overwrite
-  // the user's geometry before capturing it.
+  // target workspace until after geometry adoption so manual tiling does not
+  // overwrite the user's geometry before capturing it.
   for (const auto& key : changedKeys) {
     if (!Reconcile::SameWorkspaceKey(key, targetKey)) ArrangeWorkspace(key);
   }
@@ -6070,10 +5930,11 @@ static bool HasTrackedMonitorOwnershipMismatch(HWND hwnd) {
       [&](const DesktopMonitorKey& owner) { return owner.monitor != observedId; });
 }
 
-// Treats out-of-context WinEvents as edge-triggered observations: filter noise,
-// cache move/resize boundaries, and post accepted work to the hotkey thread.
-// Workspace state is never mutated from this callback.
+// Out-of-context WinEvents are delivered on this WM thread. Keep the callback
+// observation-only and post accepted work so reentrant delivery can't recursively
+// mutate workspace state.
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+  AssertWmThread(L"WinEventProc");
   switch (event) {
     case EVENT_SYSTEM_FOREGROUND:
     case EVENT_SYSTEM_MOVESIZESTART:
@@ -6156,8 +6017,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
   }
 
   // Explicit user manipulation always wins over a transient placement lease.
-  // Cancellation is lock-protected because this callback is outside the model
-  // mutation boundary.
+  // Lease cancellation is actor-local; workspace mutation remains deferred until
+  // normal message dispatch.
   if (event == EVENT_SYSTEM_MOVESIZESTART) {
     CancelConformanceLease(hwnd);
   }
@@ -6165,7 +6026,6 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
   // Cache user move/resize boundaries. The callback only records facts; model
   // mutation and layout work happen later on the WM thread.
   if (event == EVENT_SYSTEM_MOVESIZESTART || event == EVENT_SYSTEM_MOVESIZEEND) {
-    AcquireSRWLockExclusive(&g_moveSize.lock);
     RECT r{};
     if (GetWindowFrameRect(hwnd, &r)) {
       if (event == EVENT_SYSTEM_MOVESIZESTART) {
@@ -6176,8 +6036,6 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         if (GetCursorPos(&pt)) g_moveSize.endPoints[hwnd] = pt;
       }
     }
-    ReleaseSRWLockExclusive(&g_moveSize.lock);
-
     if (event == EVENT_SYSTEM_MOVESIZEEND) OnWindowMoveSizeEnd(hwnd);
     return;
   }
@@ -6193,6 +6051,7 @@ bool AllWinEventHooksInstalled() {
 }
 
 bool InstallWinEventHooks() {
+  AssertWmThread(L"Platform::WindowEvents::InstallWinEventHooks");
   auto noteFailure = [](const wchar_t* name) {
     ++Diagnostics::g_runtime.counters.winEventHookInstallFailures;
     Wh_Log(L"Failed to install %s WinEvent hook: %lu", name, GetLastError());
@@ -7131,8 +6990,8 @@ namespace TrayUi {
 // Settings + naming
 //-----------------------------------------------------------------------------
 
-constexpr wchar_t kTrayWindowClassName[] = L"WindhawkTilingHelperTrayWindow";
-constexpr wchar_t kFlyoutWindowClassName[] = L"WindhawkTilingHelperStatusFlyout";
+constexpr wchar_t kTrayWindowClassName[] = L"WindhawkMultiWMTrayWindow";
+constexpr wchar_t kFlyoutWindowClassName[] = L"WindhawkMultiWMStatusFlyout";
 constexpr UINT kTrayCallbackMessage = WM_APP + 20;
 constexpr UINT kIconId = 1;
 constexpr UINT kContextTileWorkspace = 41001;
@@ -7367,7 +7226,7 @@ static void SetTooltip(TileLayout layout) {
   // distinguish and would otherwise be pure visual clutter.
   std::wstring tooltip;
   if (monitors.size() <= 1) {
-    tooltip = L"Tiling Helper - ";
+    tooltip = L"MultiWM - ";
     tooltip += LayoutDisplayName(layout);
   } else {
     GUID desktopId{};
@@ -7378,10 +7237,10 @@ static void SetTooltip(TileLayout layout) {
     }
 
     if (!haveDesktop) {
-      tooltip = L"Tiling Helper - ";
+      tooltip = L"MultiWM - ";
       tooltip += LayoutDisplayName(layout);
     } else {
-      tooltip = L"Tiling Helper";
+      tooltip = L"MultiWM";
       for (size_t i = 0; i < monitors.size(); ++i) {
         const HMONITOR monitor = monitors[i];
         TileLayout monitorLayout = g_settings.defaultLayout;
@@ -8333,7 +8192,7 @@ static bool WriteReportToConfiguredDirectory(
   wchar_t baseName[128]{};
   swprintf(
       baseName, ARRAYSIZE(baseName),
-      L"TilingHelper-Diagnostics-%04u%02u%02u-%02u%02u%02u",
+      L"MultiWM-Diagnostics-%04u%02u%02u-%02u%02u%02u",
       local.wYear, local.wMonth, local.wDay, local.wHour, local.wMinute,
       local.wSecond);
 
@@ -8904,11 +8763,9 @@ static void DumpPlatformHealth(ReportBuilder& report) {
       g_hooks.state ? 1 : 0);
 
   size_t moveStarts = 0, moveEnds = 0, movePoints = 0;
-  AcquireSRWLockShared(&g_moveSize.lock);
   moveStarts = g_moveSize.startRects.size();
   moveEnds = g_moveSize.endRects.size();
   movePoints = g_moveSize.endPoints.size();
-  ReleaseSRWLockShared(&g_moveSize.lock);
   report.Line(
       L"Move/size cache: starts=%zu ends=%zu endPoints=%zu", moveStarts,
       moveEnds, movePoints);
@@ -9042,7 +8899,7 @@ static void WriteDiagnosticReport() {
 
   ReportBuilder report;
   report.Line(L"============================================================");
-  report.Line(L"TILING HELPER DIAGNOSTIC REPORT");
+  report.Line(L"MULTIWM DIAGNOSTIC REPORT");
   report.Line(L"============================================================");
   report.Line(L"Mod version: %ls", WH_MOD_VERSION);
   report.Line(L"Report sequence: %llu", static_cast<unsigned long long>(reportSequence));
@@ -9539,9 +9396,45 @@ static void WriteDiagnosticReport() {
 // Settings parsing + serialized WM thread
 //=============================================================================
 
-// Parse single character to virtual key code
-UINT ParseSingleCharKey(PCWSTR str) {
+UINT ParseHotkeyKey(PCWSTR str) {
   if (!str || !str[0]) return 0;
+
+  static const std::pair<PCWSTR, UINT> kNamedKeys[] = {
+      {L"Space", VK_SPACE},
+      {L"Tab", VK_TAB},
+      {L"Enter", VK_RETURN},
+      {L"Return", VK_RETURN},
+      {L"Esc", VK_ESCAPE},
+      {L"Escape", VK_ESCAPE},
+      {L"Backspace", VK_BACK},
+      {L"Insert", VK_INSERT},
+      {L"Ins", VK_INSERT},
+      {L"Delete", VK_DELETE},
+      {L"Del", VK_DELETE},
+      {L"Home", VK_HOME},
+      {L"End", VK_END},
+      {L"PageUp", VK_PRIOR},
+      {L"PgUp", VK_PRIOR},
+      {L"PageDown", VK_NEXT},
+      {L"PgDn", VK_NEXT},
+      {L"Left", VK_LEFT},
+      {L"Right", VK_RIGHT},
+      {L"Up", VK_UP},
+      {L"Down", VK_DOWN},
+  };
+  for (const auto& namedKey : kNamedKeys) {
+    if (_wcsicmp(str, namedKey.first) == 0) return namedKey.second;
+  }
+
+  if ((str[0] == L'F' || str[0] == L'f') && str[1]) {
+    wchar_t* end = nullptr;
+    long functionKey = std::wcstol(str + 1, &end, 10);
+    if (*end == L'\0' && functionKey >= 1 && functionKey <= 12) {
+      return VK_F1 + static_cast<UINT>(functionKey - 1);
+    }
+  }
+
+  if (str[1] != L'\0') return 0;
   wchar_t c = str[0];
 
   if (c >= L'A' && c <= L'Z') return c;
@@ -9630,39 +9523,38 @@ static bool ParseFloatingDefaultSizeSetting(
 }
 
 void LoadSettings() {
+  using WindhawkUtils::StringSetting;
+
   g_settings.tilingModifiers = ReadModifierSetting(L"TilingModifier", MOD_ALT);
 
-  PCWSTR insets = Wh_GetStringSetting(L"WorkspaceInsets");
+  auto insets = StringSetting::make(L"WorkspaceInsets");
   WorkspaceInsets parsedInsets{};
-  if (ParseWorkspaceInsetsSetting(insets, &parsedInsets)) {
+  if (ParseWorkspaceInsetsSetting(insets.get(), &parsedInsets)) {
     g_settings.insetsDip = parsedInsets;
   } else {
     g_settings.insetsDip = {};
     Wh_Log(L"Invalid WorkspaceInsets setting; using 6, 6, 6, 6");
   }
-  Wh_FreeStringSetting(insets);
   g_settings.gapDip = Wh_GetIntSetting(L"TileGap");
   if (g_settings.gapDip < 0 || g_settings.gapDip > 100) g_settings.gapDip = 6;
 
-  PCWSTR floatingSize = Wh_GetStringSetting(L"FloatingDefaultSize");
+  auto floatingSize = StringSetting::make(L"FloatingDefaultSize");
   FloatingDefaultSize parsedFloatingSize{};
-  if (ParseFloatingDefaultSizeSetting(floatingSize, &parsedFloatingSize)) {
+  if (ParseFloatingDefaultSizeSetting(floatingSize.get(), &parsedFloatingSize)) {
     g_settings.floatingDefaultSizeDip = parsedFloatingSize;
   } else {
     g_settings.floatingDefaultSizeDip = {};
     Wh_Log(L"Invalid FloatingDefaultSize setting; using 960, 640");
   }
-  Wh_FreeStringSetting(floatingSize);
   g_settings.masterPercent = Wh_GetIntSetting(L"MasterPercent");
   if (g_settings.masterPercent < 1 || g_settings.masterPercent > 99) g_settings.masterPercent = 50;
 
-  PCWSTR layout = Wh_GetStringSetting(L"DefaultLayout");
-  g_settings.defaultLayout = ParseLayoutSetting(layout);
-  Wh_FreeStringSetting(layout);
+  auto layout = StringSetting::make(L"DefaultLayout");
+  g_settings.defaultLayout = ParseLayoutSetting(layout.get());
 
   g_settings.layoutCycle.clear();
   for (int i = 0; i < 32; ++i) {
-    auto cycleEntry = WindhawkUtils::StringSetting::make(L"LayoutCycle[%d]", i);
+    auto cycleEntry = StringSetting::make(L"LayoutCycle[%d]", i);
     if (!*cycleEntry.get()) break;
 
     TileLayout cycleLayout{};
@@ -9680,27 +9572,25 @@ void LoadSettings() {
     Wh_Log(L"LayoutCycle is empty or invalid; using the built-in layout sequence");
   }
 
-  PCWSTR mouseBehavior = Wh_GetStringSetting(L"MouseMoveBehavior");
-  g_settings.mouseMoveBehavior = mouseBehavior && _wcsicmp(mouseBehavior, L"swap") == 0
-                            ? MouseMoveBehavior::Swap
-                            : MouseMoveBehavior::Float;
-  Wh_FreeStringSetting(mouseBehavior);
+  auto mouseBehavior = StringSetting::make(L"MouseMoveBehavior");
+  g_settings.mouseMoveBehavior =
+      _wcsicmp(mouseBehavior.get(), L"swap") == 0
+          ? MouseMoveBehavior::Swap
+          : MouseMoveBehavior::Float;
 
-  PCWSTR automaticNewWindowPosition =
-      Wh_GetStringSetting(L"AutomaticNewWindowPosition");
+  auto automaticNewWindowPosition =
+      StringSetting::make(L"AutomaticNewWindowPosition");
   g_settings.automaticNewWindowPosition =
-      automaticNewWindowPosition &&
-              _wcsicmp(automaticNewWindowPosition, L"after_focused") == 0
+      _wcsicmp(automaticNewWindowPosition.get(), L"after_focused") == 0
           ? AutomaticNewWindowPosition::AfterFocused
           : AutomaticNewWindowPosition::LastSlot;
-  Wh_FreeStringSetting(automaticNewWindowPosition);
 
-  PCWSTR managementMode = Wh_GetStringSetting(L"DefaultWindowManagementMode");
+  auto managementMode =
+      StringSetting::make(L"DefaultWindowManagementMode");
   g_wm.managementMode =
-      managementMode && _wcsicmp(managementMode, L"manual") == 0
+      _wcsicmp(managementMode.get(), L"manual") == 0
           ? ManagementMode::Manual
           : ManagementMode::Automatic;
-  Wh_FreeStringSetting(managementMode);
 
   int conformanceLease = Wh_GetIntSetting(L"ConformanceLeaseMs");
   if (conformanceLease < 0 || conformanceLease > 10000) conformanceLease = 3000;
@@ -9711,7 +9601,6 @@ void LoadSettings() {
   g_settings.reconcileDelayMs = static_cast<UINT>(reconcileDelay);
 
   g_settings.exclusionRules.clear();
-  using WindhawkUtils::StringSetting;
   for (int i = 0; i < 64; ++i) {
     auto match = StringSetting::make(L"Exclusions[%d].Match", i);
     auto value = StringSetting::make(L"Exclusions[%d].Value", i);
@@ -9730,33 +9619,40 @@ void LoadSettings() {
     g_settings.exclusionRules.push_back(std::move(rule));
   }
 
-  g_settings.tileKey = ReadHotkeySetting(L"TileKey", ParseSingleCharKey, (UINT)'T');
-  g_settings.layoutKey = ReadHotkeySetting(L"LayoutKey", ParseSingleCharKey, (UINT)'L');
-  g_settings.swapMasterKey = ReadHotkeySetting(L"SwapMasterKey", ParseSingleCharKey, (UINT)'M');
+  g_settings.tileKey = ReadHotkeySetting<UINT>(L"TileKey", ParseHotkeyKey);
+  g_settings.layoutKey = ReadHotkeySetting<UINT>(L"LayoutKey", ParseHotkeyKey);
+  g_settings.swapMasterKey =
+      ReadHotkeySetting<UINT>(L"SwapMasterKey", ParseHotkeyKey);
   g_settings.promoteWindowKey =
-      ReadHotkeySetting(L"PromoteWindowKey", ParseSingleCharKey, (UINT)VK_OEM_COMMA);
+      ReadHotkeySetting<UINT>(L"PromoteWindowKey", ParseHotkeyKey);
   g_settings.demoteWindowKey =
-      ReadHotkeySetting(L"DemoteWindowKey", ParseSingleCharKey, (UINT)VK_OEM_PERIOD);
-  g_settings.managementModeToggleKey = ReadHotkeySetting(L"ManagementModeToggleKey", ParseSingleCharKey, (UINT)'R');
-  g_settings.floatFocusedKey = ReadHotkeySetting(L"FloatFocusedKey", ParseSingleCharKey, (UINT)'F');
-  g_settings.diagnosticDumpKey = ReadHotkeySetting(L"DiagnosticDumpKey", ParseSingleCharKey, (UINT)'I');
+      ReadHotkeySetting<UINT>(L"DemoteWindowKey", ParseHotkeyKey);
+  g_settings.managementModeToggleKey =
+      ReadHotkeySetting<UINT>(L"ManagementModeToggleKey", ParseHotkeyKey);
+  g_settings.floatFocusedKey =
+      ReadHotkeySetting<UINT>(L"FloatFocusedKey", ParseHotkeyKey);
+  g_settings.diagnosticDumpKey =
+      ReadHotkeySetting<UINT>(L"DiagnosticDumpKey", ParseHotkeyKey);
 
-  PCWSTR diagnosticsPath = Wh_GetStringSetting(L"DiagnosticsOutputPath");
-  if (diagnosticsPath && *diagnosticsPath) {
-    g_settings.diagnosticsOutputPath = diagnosticsPath;
+  auto diagnosticsPath = StringSetting::make(L"DiagnosticsOutputPath");
+  if (*diagnosticsPath.get()) {
+    g_settings.diagnosticsOutputPath = diagnosticsPath.get();
   } else {
     g_settings.diagnosticsOutputPath =
-        L"%USERPROFILE%\\Documents\\TilingHelperDiagnostics";
+        L"%USERPROFILE%\\Documents\\MultiWMDiagnostics";
   }
-  Wh_FreeStringSetting(diagnosticsPath);
 
   TrayUi::LoadSettings();
 }
 
 static void RegisterConfiguredHotkeys() {
-  auto registerOne = [](int id, UINT modifiers, UINT key, const wchar_t* name) {
+  auto registerOne = [](
+      int id, UINT modifiers, UINT key, const wchar_t* name,
+      bool allowRepeat = false) {
     if (!key) return;
-    if (!RegisterHotKey(nullptr, id, modifiers, key)) {
+    const UINT registrationModifiers =
+        allowRepeat ? modifiers : modifiers | MOD_NOREPEAT;
+    if (!RegisterHotKey(nullptr, id, registrationModifiers, key)) {
       Wh_Log(L"Failed to register %s hotkey (id=%d error=%lu)",
              name, id, GetLastError());
     }
@@ -9766,9 +9662,9 @@ static void RegisterConfiguredHotkeys() {
   registerOne(HK_SWAP_MASTER, g_settings.tilingModifiers,
               g_settings.swapMasterKey, L"Swap master");
   registerOne(HK_PROMOTE_WINDOW, g_settings.tilingModifiers,
-              g_settings.promoteWindowKey, L"Promote window");
+              g_settings.promoteWindowKey, L"Promote window", true);
   registerOne(HK_DEMOTE_WINDOW, g_settings.tilingModifiers,
-              g_settings.demoteWindowKey, L"Demote window");
+              g_settings.demoteWindowKey, L"Demote window", true);
   registerOne(HK_MANAGEMENT_MODE_TOGGLE, g_settings.tilingModifiers,
               g_settings.managementModeToggleKey, L"Management mode");
   registerOne(HK_FLOAT_FOCUSED, g_settings.tilingModifiers,
@@ -9992,9 +9888,8 @@ static void RunWmMessageLoop() {
 }
 
 static void CleanupWmThread() {
-  // Stop external producers before clearing their transient caches. In particular,
-  // an out-of-context MOVESIZE callback can otherwise repopulate move samples after
-  // they were cleared, leaking gesture state into the next settings-reload session.
+  // Unhook WinEvent delivery before clearing transient callback observations so
+  // no reentrant delivery can repopulate the next settings-reload session.
   UnregisterConfiguredHotkeys();
   TrayUi::Shutdown();
   Platform::WindowEvents::RemoveWinEventHooks();
@@ -10030,6 +9925,9 @@ static void CleanupWmThread() {
 // to narrow helpers. All workspace mutations reachable from this thread remain
 // serialized; foreign STA messages are dispatched back to Windows.
 DWORD WINAPI HotkeyThreadProc(LPVOID) {
+  SetThreadDpiAwarenessContext(
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
   const DWORD threadId = GetCurrentThreadId();
   g_wm.threadId.store(threadId, std::memory_order_release);
   Diagnostics::BeginWmSession();
@@ -10063,8 +9961,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
 
   RunWmMessageLoop();
 
-  // Stop out-of-context callbacks from queueing new work as soon as the actor stops
-  // consuming messages. Cleanup then unhooks producers before clearing their caches.
+  // Stop callbacks from queueing new work as soon as the actor stops consuming
+  // messages. Cleanup then unhooks delivery before clearing callback observations.
   g_wm.threadId.store(0, std::memory_order_release);
   CleanupWmThread();
 
@@ -10146,24 +10044,24 @@ bool StopHotkeyThread() {
 
 BOOL WhTool_ModInit() {
   Diagnostics::InitializeProcessRuntime();
-  Wh_Log(L"Tiling Helper mod initializing...");
+  Wh_Log(L"MultiWM mod initializing...");
   LoadSettings();
   if (!StartHotkeyThread()) {
     Wh_Log(L"Failed to start hotkey thread");
     return FALSE;
   }
-  Wh_Log(L"Tiling Helper mod initialized successfully");
+  Wh_Log(L"MultiWM mod initialized successfully");
   return TRUE;
 }
 
 void WhTool_ModUninit() {
-  Wh_Log(L"Tiling Helper mod uninitializing...");
+  Wh_Log(L"MultiWM mod uninitializing...");
   if (!StopHotkeyThread()) {
     // The standard tool-mod wrapper exits this dedicated process immediately
     // after WhTool_ModUninit returns, so never create a second owner here.
     Wh_Log(L"WM worker did not join before tool-process shutdown");
   }
-  Wh_Log(L"Tiling Helper mod uninitialized");
+  Wh_Log(L"MultiWM mod uninitialized");
 }
 
 void WhTool_ModSettingsChanged() {
