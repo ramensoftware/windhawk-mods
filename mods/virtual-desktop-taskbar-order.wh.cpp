@@ -2,14 +2,14 @@
 // @id              virtual-desktop-taskbar-order
 // @name            Virtual Desktop Preserve Taskbar Order
 // @description     The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lversion -lwininet
+// @compilerOptions -lcomctl32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -27,21 +27,21 @@
 The order on the taskbar isn't preserved between virtual desktop switches, this
 mod fixes it.
 
-Only Windows 11 is currently supported. For older Windows versions check out [7+
-Taskbar Tweaker](https://tweaker.ramensoftware.com/).
+Only Windows 11 x64 is currently supported. ARM64 is unsupported. For older
+Windows versions check out [7+ Taskbar
+Tweaker](https://tweaker.ramensoftware.com/).
 
 ![Demonstration](https://i.imgur.com/ie8Q9cl.gif)
 */
 // ==/WindhawkModReadme==
 
-#include <algorithm>
+#include <windhawk_utils.h>
+
 #include <regex>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <commctrl.h>
-#include <wininet.h>
 
 enum class WinVersion {
     Unsupported,
@@ -55,7 +55,6 @@ HWND g_hTaskbarWnd;
 
 #pragma region offsets
 
-void* CTaskListWnd_GetFocusedBtn;
 void* CTaskBand__EnumExistingImmersiveApps;
 void* CApplicationViewManager__GetViewInFocus;
 
@@ -93,12 +92,6 @@ size_t OffsetFromAssembly(void* func,
     return defValue;
 }
 
-HDPA* EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(LONG_PTR lp) {
-    static size_t offset = OffsetFromAssembly(CTaskListWnd_GetFocusedBtn, 0xE0);
-
-    return (HDPA*)(lp + offset);
-}
-
 LONG_PTR* EV_TASK_SW_APP_VIEW_MGR(LONG_PTR lp) {
     static size_t offset =
         OffsetFromAssembly(CTaskBand__EnumExistingImmersiveApps, 0x220);
@@ -126,6 +119,8 @@ size_t* EV_APP_VIEW_MGR_APP_ARRAY_SIZE(LONG_PTR lp) {
 }
 
 #pragma endregion  // offsets
+
+void* CTaskBtnGroup_ITaskBtnGroup_vftable;
 
 using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
 CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup;
@@ -287,6 +282,9 @@ ULONG WINAPI TaskItemReleaseHook(LONG_PTR this_ptr) {
 void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
                            HDPA hButtonGroupsDpa,
                            int nButtonGroupIndex) {
+    Wh_Log(L"> lpTaskSwLongPtr=%p, hButtonGroupsDpa=%p, nButtonGroupIndex=%d",
+           (void*)lpTaskSwLongPtr, (void*)hButtonGroupsDpa, nButtonGroupIndex);
+
     LONG_PTR* plp = (LONG_PTR*)hButtonGroupsDpa;
     int button_groups_count = (int)plp[0];
     LONG_PTR** button_groups = (LONG_PTR**)plp[1];
@@ -434,17 +432,25 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
 }
 
 void ComFuncVirtualDesktopFixAfterDPA_InsertPtr(HDPA pdpa, int index, void* p) {
+    Wh_Log(L"> index=%d, p=%p", index, p);
+
     if (index == INT_MAX) {
         return;
     }
 
     if (!g_tryMoveGroup_taskListLongPtr) {
+        Wh_Log(L"Not in TryMoveGroup, skipping");
         return;
     }
 
-    HDPA hButtonGroupsDpa =
-        *EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(g_tryMoveGroup_taskListLongPtr);
-    if (!hButtonGroupsDpa || pdpa != hButtonGroupsDpa) {
+    if (!p || *(void**)p != CTaskBtnGroup_ITaskBtnGroup_vftable) {
+        Wh_Log(L"Invalid pointer or vftable mismatch, skipping");
+        return;
+    }
+
+    LONG_PTR* button_group = (LONG_PTR*)p;
+    LONG_PTR* task_group = (LONG_PTR*)CTaskBtnGroup_GetGroup(button_group);
+    if (!task_group || task_group != g_tryMoveGroup_taskGroup) {
         return;
     }
 
@@ -461,34 +467,36 @@ void ComFuncVirtualDesktopFixAfterDPA_InsertPtr(HDPA pdpa, int index, void* p) {
     OnButtonGroupInserted(lpTaskSwLongPtr, pdpa, index);
 }
 
-bool InitializeTaskbarVariables(HWND hTaskbarWnd) {
-    DWORD processId;
-    DWORD taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, &processId);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    if (!taskbarThreadId) {
-        Wh_Log(L"GetWindowThreadProcessId() failed for taskbar %08X",
-               (DWORD)(ULONG_PTR)hTaskbarWnd);
-        return false;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
-    if (processId != GetCurrentProcessId()) {
-        Wh_Log(L"Taskbar %08X is from another process",
-               (DWORD)(ULONG_PTR)hTaskbarWnd);
-        return false;
-    }
+    return hTaskbarWnd;
+}
 
+void InitializeTaskbarVariables(HWND hTaskbarWnd) {
     Wh_Log(L"Initialized for taskbar %08X", (DWORD)(ULONG_PTR)hTaskbarWnd);
-
-    g_taskbarThreadId = taskbarThreadId;
+    g_taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
     g_hTaskbarWnd = hTaskbarWnd;
-    return true;
 }
 
 using DPA_InsertPtr_t = decltype(&DPA_InsertPtr);
 DPA_InsertPtr_t DPA_InsertPtr_Original;
 auto WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
-    Wh_Log(L">");
-
     auto ret = DPA_InsertPtr_Original(hdpa, i, p);
 
     if (GetCurrentThreadId() == g_taskbarThreadId) {
@@ -549,16 +557,18 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         }
     }
 
-    if (puPtrLen)
+    if (puPtrLen) {
         *puPtrLen = uPtrLen;
+    }
 
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetWindowsVersion() {
+WinVersion GetExplorerVersion() {
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
-    if (!fixedFileInfo)
+    if (!fixedFileInfo) {
         return WinVersion::Unsupported;
+    }
 
     WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
     WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
@@ -569,466 +579,118 @@ WinVersion GetWindowsVersion() {
 
     switch (major) {
         case 10:
-            if (build < 22000)
+            if (build < 22000) {
                 return WinVersion::Win10;
-            else
+            } else {
                 return WinVersion::Win11;
+            }
             break;
     }
 
     return WinVersion::Unsupported;
 }
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
-    void** pOriginalFunction;
-    void* hookFunction = nullptr;
-    bool optional = false;
-};
-
-bool HookSymbols(HMODULE module,
-                 const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount,
-                 bool cacheOnly = false) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'@';
-    constexpr size_t cacheMaxSize = 10240;
-
-    WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             &newSystemCacheStr,
-                             module](std::wstring_view symbol, void* address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
-                                   symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr +=
-                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 &&
-        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
-        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void* addressPtr =
-                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
-                        (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-
-                symbolResolved[i] = true;
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    newSystemCacheStr += cacheSep;
-                    newSystemCacheStr += hookSymbol;
-                    newSystemCacheStr += cacheSep;
-                }
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
-                        [](bool b) { return b; })) {
-            return true;
-        }
-    }
-
-    Wh_Log(L"Couldn't resolve all symbols from cache");
-
-    if (cacheOnly) {
-        return false;
-    }
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
-        }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
-    }
-
-    return true;
-}
-
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
-        }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
-    }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
-}
-
-bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
-                                        const SYMBOL_HOOK* symbolHooks,
-                                        size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"virtual-desktop-taskbar-order";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount,
-                    /*cacheOnly=*/true)) {
-        return true;
-    }
-
-    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (onlineCache) {
-        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-    } else {
-        Wh_Log(L"Failed to get online cache");
-    }
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    g_winVersion = GetWindowsVersion();
+    g_winVersion = GetExplorerVersion();
     if (g_winVersion < WinVersion::Win11) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    SYMBOL_HOOK taskbarDllHooks[] = {
+#ifdef _M_ARM64
+    Wh_Log(L"Unsupported architecture");
+    return FALSE;
+#endif
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBtnGroup::`vftable'{for `ITaskBtnGroup'})"},
+            &CTaskBtnGroup_ITaskBtnGroup_vftable,
+        },
         {
             {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
-            (void**)&CTaskBtnGroup_GetGroup,
+            &CTaskBtnGroup_GetGroup,
         },
         {
             {LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))"},
-            (void**)&CTaskBtnGroup_GetNumItems,
+            &CTaskBtnGroup_GetNumItems,
         },
         {
             {LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))"},
-            (void**)&CTaskBtnGroup_GetTaskItem,
+            &CTaskBtnGroup_GetTaskItem,
         },
         {
             {LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))"},
-            (void**)&CTaskGroup_DoesWindowMatch_Original,
-            (void*)CTaskGroup_DoesWindowMatch_Hook,
+            &CTaskGroup_DoesWindowMatch_Original,
+            CTaskGroup_DoesWindowMatch_Hook,
         },
         {
             {LR"(public: virtual bool __cdecl CTaskListWnd::TryMoveGroup(struct ITaskGroup *,unsigned int))"},
-            (void**)&CTaskListWnd_TryMoveGroup_Original,
-            (void*)CTaskListWnd_TryMoveGroup_Hook,
+            &CTaskListWnd_TryMoveGroup_Original,
+            CTaskListWnd_TryMoveGroup_Hook,
         },
         {
             {LR"(public: virtual long __cdecl CTaskBand::ViewVirtualDesktopChanged(struct IApplicationView *))"},
-            (void**)&CTaskBand_ViewVirtualDesktopChanged_Original,
+            &CTaskBand_ViewVirtualDesktopChanged_Original,
         },
         // For offsets:
         {
-            {LR"(public: virtual long __cdecl CTaskListWnd::GetFocusedBtn(struct ITaskGroup * *,int *))"},
-            (void**)&CTaskListWnd_GetFocusedBtn,
-        },
-        {
             {LR"(protected: void __cdecl CTaskBand::_EnumExistingImmersiveApps(void))"},
-            (void**)&CTaskBand__EnumExistingImmersiveApps,
+            &CTaskBand__EnumExistingImmersiveApps,
         },
     };
 
-    HMODULE taskbarModule = LoadLibrary(L"taskbar.dll");
+    HMODULE taskbarModule =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!taskbarModule) {
         Wh_Log(L"Couldn't load taskbar.dll");
         return FALSE;
     }
 
-    if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, taskbarDllHooks,
-                                            ARRAYSIZE(taskbarDllHooks))) {
+    if (!HookSymbols(taskbarModule, taskbarDllHooks,
+                     ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
 
     // twinui.pcshell.dll
-    SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
         // For offsets:
         {
             {LR"(public: virtual long __cdecl CApplicationViewManager::GetViewInFocus(struct IApplicationView * *))"},
-            (void**)&CApplicationViewManager__GetViewInFocus,
+            &CApplicationViewManager__GetViewInFocus,
         },
     };
 
-    HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+    HMODULE twinuiPcshellModule = LoadLibraryEx(L"twinui.pcshell.dll", nullptr,
+                                                LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinuiPcshellModule) {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return FALSE;
     }
 
-    if (!HookSymbolsWithOnlineCacheFallback(
-            twinuiPcshellModule, twinuiPcshellSymbolHooks,
-            ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+    if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
+                     ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)DPA_InsertPtr, (void*)DPA_InsertPtr_Hook,
-                       (void**)&DPA_InsertPtr_Original);
+    WindhawkUtils::SetFunctionHook(DPA_InsertPtr, DPA_InsertPtr_Hook,
+                                   &DPA_InsertPtr_Original);
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
 
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         InitializeTaskbarVariables(hTaskbarWnd);
     }
-
-    return TRUE;
 }

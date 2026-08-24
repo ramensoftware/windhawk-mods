@@ -2,7 +2,7 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark appearance/wallpapers/themes based on a schedule with hotkey and custom script support
-// @version         1.3.0
+// @version         1.3.2
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
@@ -1100,6 +1100,47 @@ SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
     return st;
 }
 
+void ClearLockScreenCache() {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lock Screen", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+        return;
+
+    auto isWindhawkEntry = [](PCWSTR s) -> bool {
+        constexpr PCWSTR kPrefix = L"IMAGENAME:";
+        if (_wcsnicmp(s, kPrefix, 10) != 0) return false;
+        PCWSTR path = s + 10;
+        PCWSTR name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"windhawk.exe") == 0;
+    };
+
+    auto hasWindhawkEntry = [&]() -> bool {
+        wchar_t data[512];
+        DWORD dataSize;
+        for (wchar_t c = L'A'; c <= L'G'; ++c) {
+            std::wstring valueName = L"Details_" + std::wstring(1, c);
+            dataSize = sizeof(data);
+            if (RegGetValueW(hKey, NULL, valueName.c_str(), RRF_RT_REG_SZ, NULL, data, &dataSize) == ERROR_SUCCESS) {
+                if (isWindhawkEntry(data)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    if (hasWindhawkEntry()) {
+        for (wchar_t c = L'A'; c <= L'G'; ++c) {
+            std::wstring suffix(1, c);
+            RegDeleteValueW(hKey, (L"Details_" + suffix).c_str());
+            RegDeleteValueW(hKey, (L"ImageId_" + suffix).c_str());
+            RegDeleteValueW(hKey, (L"OriginalFile_" + suffix).c_str());
+        }
+        Wh_Log(L"Cleared lock screen cache");
+    }
+
+    RegCloseKey(hKey);
+}
+
 void LoadSettings() {
     auto getString = [](PCWSTR name, PCWSTR defaultValue = L"") {
         PCWSTR value = Wh_GetStringSetting(name);
@@ -1158,6 +1199,7 @@ void LoadSettings() {
 }
 
 BOOL WhTool_ModInit() {
+    ClearLockScreenCache();
     LoadSettings();
     StartScheduler();
     return TRUE;
@@ -1192,9 +1234,9 @@ void WhTool_ModUninit() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
+// The mod will load and run in a dedicated explorer.exe process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
@@ -1212,7 +1254,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -1223,8 +1271,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -1241,7 +1291,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 

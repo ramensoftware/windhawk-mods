@@ -2,7 +2,7 @@
 // @id              tiling-helper
 // @name            Tiling Helper
 // @description     Tile windows on the current monitor with customizable layouts and hotkeys
-// @version         2.0.0
+// @version         2.0.1
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -2252,7 +2252,13 @@ HANDLE g_toolModProcessMutex;
 void WINAPI EntryPoint_Hook() { ExitThread(0); }
 
 BOOL Wh_ModInit() {
-  bool isService = false;
+  DWORD sessionId;
+  if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+      sessionId == 0) {
+    return FALSE;
+  }
+
+  bool isExcluded = false;
   bool isToolModProcess = false;
   bool isCurrentToolModProcess = false;
   int argc;
@@ -2263,8 +2269,10 @@ BOOL Wh_ModInit() {
   }
 
   for (int i = 1; i < argc; i++) {
-    if (wcscmp(argv[i], L"-service") == 0) {
-      isService = true;
+    if (wcscmp(argv[i], L"-service") == 0 ||
+        wcscmp(argv[i], L"-service-start") == 0 ||
+        wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
       break;
     }
   }
@@ -2281,7 +2289,7 @@ BOOL Wh_ModInit() {
 
   LocalFree(argv);
 
-  if (isService) {
+  if (isExcluded) {
     return FALSE;
   }
 

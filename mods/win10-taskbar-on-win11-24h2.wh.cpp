@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Win10 taskbar on Win11 24H2 or 25H2
 // @description     Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1.7
+// @version         0.1.8
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -53,7 +53,10 @@ in File Explorer's settings.
 
 Known issues:
 
-* Notification toasts may cause Explorer to crash, it is recommended to disable notifications.
+* Notification toasts may cause Explorer to crash, it is recommended to disable notifications. Also, this mod is
+designed to mitigate this issue:
+
+[*Fix 11's notifications crash in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-10-taskbar-notifications).
 
 * The language switch menu flyout may appear at Explorer's start.
 
@@ -61,6 +64,8 @@ Known issues:
 To mitigate this, install this mod:
 
 [*Fix language indicator in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator)
+
+* The UWP apps do not appear on the Win10 taskbar.
 
 */
 // ==/WindhawkModReadme==

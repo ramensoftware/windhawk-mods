@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remap-copilot-key
 // @name            Remap Copilot Key
-// @description     Global low-level hook running inside Windhawk to remap or disable the Copilot key.
-// @version         1.0
+// @description     Global low-level hook running inside Windhawk to remap or disable the Copilot key, featuring per-app rules.
+// @version         2.0
 // @author          Lukvbp
 // @github          https://github.com/lukvbp
 // @include         windhawk.exe
@@ -91,14 +91,23 @@ If you choose the "Custom Remap" option, find the Hexadecimal code for your desi
 // ==WindhawkModSettings==
 /*
 - CopilotMode: "Remap"
-  $name: "Copilot Key Action"
+  $name: "Global Action"
   $options:
   - "Default": "Default"
   - "Disable": "Disabled"
   - "Remap": "Custom Remap"
 - CopilotVkCode: "0xA3"
-  $name: "Copilot Key Custom VK Code"
+  $name: "Global Custom VK Code"
   $description: Enter hex (e.g., 0xA3) or decimal.
+- AppRules:
+  - - targetApp: ""
+      $name: "Application Executable"
+      $description: "e.g., notepad.exe, explorer.exe"
+    - customVkCode: ""
+      $name: "Custom VK Code"
+      $description: "Hex code (e.g., 0xAD for Volume Mute)"
+  $name: "Per-App Rules"
+  $description: Add specific keys to trigger only when certain applications are focused.
 */
 // ==/WindhawkModSettings==
 
@@ -106,6 +115,9 @@ If you choose the "Custom Remap" option, find the Hexadecimal code for your desi
 #include <thread>
 #include <mutex>
 #include <cwchar>
+#include <string>
+#include <unordered_map>
+#include <algorithm>
 
 // --- ENUMS ---
 enum class KeyMode {
@@ -122,6 +134,7 @@ std::thread g_workerThread;
 struct {
     KeyMode copilotMode;
     int copilotVkCode;
+    std::unordered_map<std::wstring, int> appRules;
 } g_settings;
 std::mutex g_settingsMutex;
 
@@ -137,15 +150,39 @@ KeyMode ParseModeString(PCWSTR modeStr) {
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     
-    // Parse Mode
+    // Parse Global Mode
     PCWSTR copilotModeStr = Wh_GetStringSetting(L"CopilotMode");
     g_settings.copilotMode = ParseModeString(copilotModeStr);
     Wh_FreeStringSetting(copilotModeStr);
 
-    // Parse VK Code
+    // Parse Global VK Code
     PCWSTR copilotVkStr = Wh_GetStringSetting(L"CopilotVkCode");
     g_settings.copilotVkCode = wcstol(copilotVkStr, nullptr, 0);
     Wh_FreeStringSetting(copilotVkStr);
+
+    // Parse Per-App Array
+    g_settings.appRules.clear();
+    for (int i = 0; i < 200; i++) { // Cap iteration as a safety measure
+        WCHAR keyName[128];
+        
+        swprintf_s(keyName, L"AppRules[%d].targetApp", i);
+        PCWSTR targetAppStr = Wh_GetStringSetting(keyName);
+        if (!targetAppStr) break; // Reached the end of the user's array list
+
+        swprintf_s(keyName, L"AppRules[%d].customVkCode", i);
+        PCWSTR customVkStr = Wh_GetStringSetting(keyName);
+
+        if (targetAppStr[0] != L'\0' && customVkStr) {
+            std::wstring appName(targetAppStr);
+            // Convert app name to lowercase to ensure matching is case-insensitive
+            std::transform(appName.begin(), appName.end(), appName.begin(), ::towlower);
+            
+            g_settings.appRules[appName] = wcstol(customVkStr, nullptr, 0);
+        }
+
+        Wh_FreeStringSetting(targetAppStr);
+        if (customVkStr) Wh_FreeStringSetting(customVkStr);
+    }
 }
 
 void WhTool_ModSettingsChanged() {
@@ -153,6 +190,34 @@ void WhTool_ModSettingsChanged() {
 }
 
 // --- MOD LOGIC ---
+
+// Helper to find the active foreground app's executable name
+std::wstring GetForegroundProcessName() {
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd) return L"";
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) return L"";
+
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) return L"";
+
+    WCHAR path[MAX_PATH];
+    DWORD size = MAX_PATH;
+    std::wstring exeName = L"";
+
+    if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+        // Strip the full path to isolate just the .exe name
+        WCHAR* filename = wcsrchr(path, L'\\');
+        filename = filename ? filename + 1 : path;
+        exeName = filename;
+        std::transform(exeName.begin(), exeName.end(), exeName.begin(), ::towlower);
+    }
+
+    CloseHandle(hProcess);
+    return exeName;
+}
 
 // Helper to determine if a VK code requires the Extended flag
 bool IsExtendedKey(int vkCode) {
@@ -205,10 +270,25 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             static int s_activeTargetVk = 0; // Tracks the currently held key to prevent getting stuck
             
             KeyMode mode; int targetVk;
+            std::wstring activeExe = L"";
+
+            // Query active app before locking mutex to maintain zero latency
+            if (isKeyDown && !s_copilotActive) {
+                activeExe = GetForegroundProcessName();
+            }
+            
             {
                 std::lock_guard<std::mutex> lock(g_settingsMutex);
                 mode = g_settings.copilotMode;
                 targetVk = g_settings.copilotVkCode;
+
+                // Override global target if per-app rule matches
+                if (mode == KeyMode::Remap && !activeExe.empty()) {
+                    auto it = g_settings.appRules.find(activeExe);
+                    if (it != g_settings.appRules.end()) {
+                        targetVk = it->second;
+                    }
+                }
             }
             
             if (mode == KeyMode::Disable) {

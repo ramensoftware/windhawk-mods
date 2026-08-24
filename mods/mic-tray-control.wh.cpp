@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.13
+// @version         1.14
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         windhawk.exe
@@ -434,20 +434,32 @@ void ShowMicMixerUI() {
     if (pDevices) pDevices->Release();
     if (pEnum) pEnum->Release();
 
-    POINT pt;
-    GetCursorPos(&pt);
-    int winWidth = 320;
-    int winHeight = y + 10;
-    
-    int x = pt.x - winWidth / 2;
-    if (x < 0) x = 0;
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    if (x + winWidth > screenWidth) x = screenWidth - winWidth;
+	POINT pt;
+		GetCursorPos(&pt);
+		int winWidth = 320;
+		int winHeight = y + 10;
 
-    SetWindowPos(g_hPopup, HWND_TOPMOST, x, pt.y - winHeight - 20, winWidth, winHeight, SWP_SHOWWINDOW);
-    SetForegroundWindow(g_hPopup);
-    SetFocus(g_hPopup);
-}
+		HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+		MONITORINFO mi = { sizeof(mi) };
+		GetMonitorInfoW(hMonitor, &mi);
+
+		int x = pt.x - winWidth / 2;
+		if (x < mi.rcMonitor.left) x = mi.rcMonitor.left;
+		if (x + winWidth > mi.rcMonitor.right) x = mi.rcMonitor.right - winWidth;
+
+		int monitorHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+		int relativeY = pt.y - mi.rcMonitor.top;
+		bool taskbarOnTop = (relativeY < monitorHeight / 2);
+		
+		int popupY = taskbarOnTop ? (pt.y + 20) : (pt.y - winHeight - 20);
+		
+		if (popupY < mi.rcMonitor.top) popupY = mi.rcMonitor.top;
+		if (popupY + winHeight > mi.rcMonitor.bottom) popupY = mi.rcMonitor.bottom - winHeight;
+
+		SetWindowPos(g_hPopup, HWND_TOPMOST, x, popupY, winWidth, winHeight, SWP_SHOWWINDOW);
+		SetForegroundWindow(g_hPopup);
+		SetFocus(g_hPopup);
+	}
 
 // IAudioEndpointVolumeCallback
 
