@@ -2,9 +2,8 @@
 // @id              glass-cursors
 // @name            Glass Cursors
 // @description     Original DPI-aware translucent glass system cursors with a live animated loading indicator.
-// @version         0.18.1
+// @version         0.18.3
 // @author          fizixes
-// @github          https://github.com/fizixes
 // @license         MIT
 // @include         explorer.exe
 // @compilerOptions -lgdi32
@@ -36,12 +35,12 @@ Created and maintained by `fizixes`.
 
 // ==WindhawkModSettings==
 /*
-- FillOpacity: 25
+- FillOpacity: "25"
   $name: Glass fill
   $description: Interior opacity of the glass cursor shapes.
   $options:
-  - 25: 25% fill
-  - 50: 50% fill
+  - "25": 25% fill
+  - "50": 50% fill
 - GlassColor:
   - Red: 33
     $name: Red (0-255)
@@ -51,15 +50,15 @@ Created and maintained by `fizixes`.
     $name: Blue (0-255)
   $name: Internal glass color
   $description: RGB color of the translucent interior. Opacity is controlled separately by Glass fill.
-- CursorSize: 0
+- CursorSize: "0"
   $name: Cursor resolution
   $description: Automatic uses the current Windows cursor metric and system DPI.
   $options:
-  - 0: Automatic (DPI-aware)
-  - 32: 32 px
-  - 48: 48 px
-  - 64: 64 px
-  - 96: 96 px
+  - "0": Automatic (DPI-aware)
+  - "32": 32 px
+  - "48": 48 px
+  - "64": 64 px
+  - "96": 96 px
 - PointerStyle: sharpRounded
   $name: Pointer style
   $description: Choose the pointer silhouette and notch geometry.
@@ -74,23 +73,16 @@ Created and maintained by `fizixes`.
   $options:
   - separated: Glass hand - finger separators (default)
   - clean: Glass hand - clean silhouette
-- ArtworkScale: 68
+- ArtworkScale: "68"
   $name: Artwork size
   $description: Shrinks the artwork inside the high-resolution cursor canvas without reducing edge quality.
   $options:
-  - 65: Extra compact (65%)
-  - 68: Compact (68%)
-  - 75: Small (75%)
-  - 82: Medium (82%)
-  - 90: Large (90%)
-  - 100: Full size (100%)
-- AnimationDelay: 33
-  $name: Loading animation frame time
-  $description: Milliseconds per frame. 33 ms is approximately 30 FPS.
-  $options:
-  - 25: 25 ms (~40 FPS)
-  - 33: 33 ms (~30 FPS)
-  - 50: 50 ms (~20 FPS)
+  - "65": Extra compact (65%)
+  - "68": Compact (68%)
+  - "75": Small (75%)
+  - "82": Medium (82%)
+  - "90": Large (90%)
+  - "100": Full size (100%)
 */
 // ==/WindhawkModSettings==
 
@@ -197,7 +189,7 @@ int g_cursorSize = 32;
 int g_pointerStyle = 0;
 int g_handStyle = 1;
 int g_artworkScale = 68;
-DWORD g_animationDelay = 33;
+constexpr DWORD kAnimationDelay = 33;
 HANDLE g_animationStopEvent = nullptr;
 HANDLE g_animationThread = nullptr;
 std::vector<RenderedCursor> g_busyFrames;
@@ -1202,8 +1194,25 @@ bool SetRenderedSystemCursor(const RenderedCursor& rendered, DWORD cursorId) {
     return true;
 }
 
+int GetIntegerChoiceSetting(PCWSTR name, int fallback) {
+    PCWSTR rawValue = Wh_GetStringSetting(name);
+    if (!rawValue || !*rawValue) {
+        if (rawValue) {
+            Wh_FreeStringSetting(rawValue);
+        }
+        return fallback;
+    }
+
+    wchar_t* end = nullptr;
+    const long parsed = wcstol(rawValue, &end, 10);
+    const bool valid = end && *end == L'\0';
+    Wh_FreeStringSetting(rawValue);
+
+    return valid ? static_cast<int>(parsed) : fallback;
+}
+
 int ResolveCursorSize() {
-    const int configured = Wh_GetIntSetting(L"CursorSize");
+    const int configured = GetIntegerChoiceSetting(L"CursorSize", 0);
     for (int supported : {32, 48, 64, 96}) {
         if (configured == supported) {
             return supported;
@@ -1236,7 +1245,7 @@ int ResolveCursorSize() {
 }
 
 void LoadSettings() {
-    g_fillOpacity = Wh_GetIntSetting(L"FillOpacity");
+    g_fillOpacity = GetIntegerChoiceSetting(L"FillOpacity", 25);
     if (g_fillOpacity != 25 && g_fillOpacity != 50) {
         g_fillOpacity = 25;
     }
@@ -1267,21 +1276,16 @@ void LoadSettings() {
         Wh_FreeStringSetting(handStyle);
     }
 
-    g_artworkScale = Wh_GetIntSetting(L"ArtworkScale");
+    g_artworkScale = GetIntegerChoiceSetting(L"ArtworkScale", 68);
     if (g_artworkScale != 65 && g_artworkScale != 68 &&
         g_artworkScale != 75 && g_artworkScale != 82 &&
         g_artworkScale != 90 && g_artworkScale != 100) {
         g_artworkScale = 68;
     }
 
-    const int animationDelay = Wh_GetIntSetting(L"AnimationDelay");
-    g_animationDelay = (animationDelay == 25 || animationDelay == 33 || animationDelay == 50)
-        ? static_cast<DWORD>(animationDelay)
-        : 33u;
-
-    Wh_Log(L"Glass Cursors: size=%d fill=%d%% color=%d,%d,%d pointerStyle=%d handStyle=%d artwork=%d%% frame=%lu ms",
+    Wh_Log(L"Glass Cursors: size=%d fill=%d%% color=%d,%d,%d pointerStyle=%d handStyle=%d artwork=%d%%",
            g_cursorSize, g_fillOpacity, g_glassRed, g_glassGreen, g_glassBlue,
-           g_pointerStyle, g_handStyle, g_artworkScale, g_animationDelay);
+           g_pointerStyle, g_handStyle, g_artworkScale);
 }
 
 void ApplyStaticCursors() {
@@ -1329,7 +1333,7 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
         }
 
         frame = (frame + 1) % kSpinnerFrames;
-        if (WaitForSingleObject(g_animationStopEvent, g_animationDelay) == WAIT_OBJECT_0) {
+        if (WaitForSingleObject(g_animationStopEvent, kAnimationDelay) == WAIT_OBJECT_0) {
             break;
         }
     }
