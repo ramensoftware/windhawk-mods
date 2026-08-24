@@ -1521,7 +1521,14 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
         // Create the per-thread UIAutomation object lazily, only once an action is
         // configured and we actually need to hit-test the click point.
-        auto pUIA = GetUIAutomation();
+        // Take an owning reference: ElementFromPoint is an out-of-process COM
+        // call that pumps messages, so a nested WM_NCDESTROY / g_msgTeardown
+        // could call ReleaseUIAutomationForThread() (dropping g_pUIAutomation's
+        // only other reference) and free the object mid-call. Holding our own
+        // ref keeps it alive for the duration; the nested null-out still does
+        // the right thing for the next click.
+        winrt::com_ptr<IUIAutomation> pUIA;
+        pUIA.copy_from(GetUIAutomation());
         if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -1571,7 +1578,14 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
         // Create the per-thread UIAutomation object lazily, only once an action is
         // configured and we actually need to hit-test the click point.
-        auto pUIA = GetUIAutomation();
+        // Take an owning reference: ElementFromPoint is an out-of-process COM
+        // call that pumps messages, so a nested WM_NCDESTROY / g_msgTeardown
+        // could call ReleaseUIAutomationForThread() (dropping g_pUIAutomation's
+        // only other reference) and free the object mid-call. Holding our own
+        // ref keeps it alive for the duration; the nested null-out still does
+        // the right thing for the next click.
+        winrt::com_ptr<IUIAutomation> pUIA;
+        pUIA.copy_from(GetUIAutomation());
         if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
