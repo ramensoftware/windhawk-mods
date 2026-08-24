@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.1
+// @version         0.9.2
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -19,6 +19,8 @@
 # MuteAlert for Windhawk
 
 Adds a microphone button to the Windows 11 system tray area.
+
+![MuteAlert microphone activity widget](https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png)
 
 * The microphone fills from bottom to top as the default input device detects
   sound.
@@ -41,6 +43,11 @@ Adds a microphone button to the Windows 11 system tray area.
 The widget follows the default Windows capture endpoint. Changing the default
 input device in Windows automatically moves the widget to the new device.
 
+Call-app monitoring and call synchronization are disabled by default. Enable
+only the Slack, Teams, or Zoom features you use. When enabled, MuteAlert first
+checks capture audio sessions and only performs UI Automation scans for an app
+that is recording, has a pending command, or was already detected in a call.
+
 Headset detection reports one of four methods in the hover tooltip: Windows
 hardware mute, Standard HID mute button, SteelSeries device state, or
 Unsupported/no observable state. Standard HID buttons are events and do not
@@ -52,7 +59,17 @@ full `.txt` path and apply Settings. The report includes device IDs, HID
 descriptors, provider slots, and changed byte offsets, but excludes device
 paths, serial numbers, and raw report values.
 
-Windows 11 is required. The initial release supports x64 Explorer.
+Windows 11 is required. x64 and ARM64 Explorer are supported.
+
+## How this differs from existing microphone mods
+
+Unlike **mic-tray-control**, MuteAlert injects a native XAML taskbar widget
+with a live bottom-to-top peak meter and an optional separate call-app badge.
+It also detects speaking while a Slack, Teams, or Zoom call is muted and can
+synchronize observable headset mute controls with Windows and active calls.
+**adaptive-microphone-icon-visibility** controls the visibility of Windows'
+built-in microphone indicator; MuteAlert supplies its own interactive meter,
+volume control, call state, and headset integration.
 */
 // ==/WindhawkModReadme==
 
@@ -93,7 +110,7 @@ Windows 11 is required. The initial release supports x64 Explorer.
   $name: Microphone icon size (px)
 - buttonWidth: 32
   $name: Widget width (px)
-- showCallStateIcon: true
+- showCallStateIcon: false
   $name: Show active-call app icon
   $description: Shows a secondary Slack, Teams, or Zoom logo while a supported call is active. Left-clicking it focuses the call window.
 - headsetSyncMode: full
@@ -106,7 +123,7 @@ Windows 11 is required. The initial release supports x64 Explorer.
   - off: Disabled
 - headsetSyncWindows: true
   $name: Synchronize headset mute with Windows input
-- headsetSyncCalls: true
+- headsetSyncCalls: false
   $name: Synchronize headset mute with active calls
 - headsetPollInterval: 500
   $name: Headset status interval (ms)
@@ -114,18 +131,21 @@ Windows 11 is required. The initial release supports x64 Explorer.
 - headsetDiagnosticsPath: ""
   $name: Export sanitized headset diagnostics
   $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, provider slots, and sanitized report changes without paths, serial numbers, or raw report values.
-- slackWarning: true
+- slackWarning: false
   $name: Warn when speaking while Slack is muted
   $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
-- slackAudioCue: true
+- slackAudioCue: false
   $name: Play Slack muted audio cue
   $description: Plays the Windows exclamation sound once when the speaking-while-muted warning begins.
-- slackRightClickUnmute: true
+- slackRightClickUnmute: false
   $name: Right-click to toggle Slack microphone
   $description: Invokes Slack's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a huddle.
 - slackMutedButtonText: "unmute"
   $name: Slack muted-button text
   $description: Case-insensitive text expected in Slack's button while your huddle microphone is muted. Change this for a localized Slack interface.
+- slackUnmutedButtonText: "mute"
+  $name: Slack unmuted-button text
+  $description: Case-insensitive text expected in Slack's button while your huddle microphone is unmuted. Change this for a localized Slack interface.
 - slackCallButtonText: "leave"
   $name: Slack in-call button text
   $description: Case-insensitive text expected in Slack's Leave huddle button. Change this for a localized Slack interface.
@@ -135,18 +155,21 @@ Windows 11 is required. The initial release supports x64 Explorer.
 - slackSpeechDelay: 500
   $name: Slack warning delay (ms)
   $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- teamsWarning: true
+- teamsWarning: false
   $name: Warn when speaking while Microsoft Teams is muted
   $description: Uses Windows UI Automation to detect a visible muted Teams call. No Teams credentials or network access are used.
-- teamsAudioCue: true
+- teamsAudioCue: false
   $name: Play Teams muted audio cue
   $description: Plays the Windows exclamation sound once when the Teams speaking-while-muted warning begins.
-- teamsRightClickUnmute: true
+- teamsRightClickUnmute: false
   $name: Right-click to toggle Teams microphone
   $description: Invokes Teams' accessible Mute or Unmute button when the taskbar microphone is right-clicked during a call.
 - teamsMutedButtonText: "unmute"
   $name: Teams muted-button text
   $description: Case-insensitive text expected in Teams' button while your call microphone is muted. Change this for a localized Teams interface.
+- teamsUnmutedButtonText: "mute"
+  $name: Teams unmuted-button text
+  $description: Case-insensitive text expected in Teams' button while your call microphone is unmuted. Change this for a localized Teams interface.
 - teamsCallButtonText: "hang up|leave"
   $name: Teams in-call button text
   $description: Case-insensitive text expected in Teams' Hang up or Leave button. Separate alternatives with a vertical bar.
@@ -156,18 +179,24 @@ Windows 11 is required. The initial release supports x64 Explorer.
 - teamsSpeechDelay: 500
   $name: Teams warning delay (ms)
   $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- zoomWarning: true
+- zoomWarning: false
   $name: Warn when speaking while Zoom is muted
   $description: Uses Windows UI Automation to detect a visible muted Zoom meeting. No Zoom credentials or network access are used.
-- zoomAudioCue: true
+- zoomAudioCue: false
   $name: Play Zoom muted audio cue
   $description: Plays the Windows exclamation sound once when the Zoom speaking-while-muted warning begins.
-- zoomRightClickUnmute: true
+- zoomRightClickUnmute: false
   $name: Right-click to toggle Zoom microphone
   $description: Invokes Zoom's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+- zoomShortcutFallback: false
+  $name: Allow Zoom Alt+A fallback
+  $description: When Zoom hides its accessible microphone button, temporarily focuses Zoom and sends Alt+A. This can interrupt typing, is attempted at most three times, and is disabled by default.
 - zoomMutedButtonText: "unmute"
   $name: Zoom muted-button text
   $description: Case-insensitive text expected in Zoom's button while your meeting microphone is muted. Change this for a localized Zoom interface.
+- zoomUnmutedButtonText: "mute"
+  $name: Zoom unmuted-button text
+  $description: Case-insensitive text expected in Zoom's button while your meeting microphone is unmuted. Change this for a localized Zoom interface.
 - zoomCallButtonText: "leave|end"
   $name: Zoom in-meeting button text
   $description: Case-insensitive text expected in Zoom's Leave or End meeting button. Separate alternatives with a vertical bar.
@@ -185,6 +214,7 @@ Windows 11 is required. The initial release supports x64 Explorer.
 #include <windows.h>
 #include <commctrl.h>
 #include <endpointvolume.h>
+#include <audiopolicy.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <hidsdi.h>
 #include <hidpi.h>
@@ -235,6 +265,7 @@ __CRT_UUID_DECL(IAudioMeterInformation, 0xc02216f6, 0x8c67, 0x4b5b, 0x9d,
 #include <cwctype>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -324,30 +355,34 @@ struct ModSettings {
     int peakSensitivity = 150;
     int iconSize = 18;
     int buttonWidth = 32;
-    bool showCallStateIcon = true;
+    bool showCallStateIcon = false;
     std::wstring headsetSyncMode = L"full";
     bool headsetSyncWindows = true;
-    bool headsetSyncCalls = true;
+    bool headsetSyncCalls = false;
     int headsetPollInterval = 500;
     std::wstring headsetDiagnosticsPath;
-    bool slackWarning = true;
-    bool slackAudioCue = true;
-    bool slackRightClickToggle = true;
+    bool slackWarning = false;
+    bool slackAudioCue = false;
+    bool slackRightClickToggle = false;
     std::wstring slackMutedButtonText = L"unmute";
+    std::wstring slackUnmutedButtonText = L"mute";
     std::wstring slackCallButtonText = L"leave";
     int slackSpeechThreshold = 8;
     int slackSpeechDelay = 500;
-    bool teamsWarning = true;
-    bool teamsAudioCue = true;
-    bool teamsRightClickToggle = true;
+    bool teamsWarning = false;
+    bool teamsAudioCue = false;
+    bool teamsRightClickToggle = false;
     std::wstring teamsMutedButtonText = L"unmute";
+    std::wstring teamsUnmutedButtonText = L"mute";
     std::wstring teamsCallButtonText = L"hang up|leave";
     int teamsSpeechThreshold = 8;
     int teamsSpeechDelay = 500;
-    bool zoomWarning = true;
-    bool zoomAudioCue = true;
-    bool zoomRightClickToggle = true;
+    bool zoomWarning = false;
+    bool zoomAudioCue = false;
+    bool zoomRightClickToggle = false;
+    bool zoomShortcutFallback = false;
     std::wstring zoomMutedButtonText = L"unmute";
+    std::wstring zoomUnmutedButtonText = L"mute";
     std::wstring zoomCallButtonText = L"leave|end";
     int zoomSpeechThreshold = 8;
     int zoomSpeechDelay = 500;
@@ -361,10 +396,7 @@ static std::atomic<bool> g_forceVolume{false};
 static std::atomic<int> g_forcedVolume{100};
 
 static std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 static void LoadSettings() {
@@ -423,10 +455,15 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"slackRightClickUnmute") != 0;
     g_settings.slackMutedButtonText =
         GetStringSetting(L"slackMutedButtonText");
+    g_settings.slackUnmutedButtonText =
+        GetStringSetting(L"slackUnmutedButtonText");
     g_settings.slackCallButtonText =
         GetStringSetting(L"slackCallButtonText");
     if (g_settings.slackMutedButtonText.empty()) {
         g_settings.slackMutedButtonText = L"unmute";
+    }
+    if (g_settings.slackUnmutedButtonText.empty()) {
+        g_settings.slackUnmutedButtonText = L"mute";
     }
     if (g_settings.slackCallButtonText.empty()) {
         g_settings.slackCallButtonText = L"leave";
@@ -441,10 +478,15 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"teamsRightClickUnmute") != 0;
     g_settings.teamsMutedButtonText =
         GetStringSetting(L"teamsMutedButtonText");
+    g_settings.teamsUnmutedButtonText =
+        GetStringSetting(L"teamsUnmutedButtonText");
     g_settings.teamsCallButtonText =
         GetStringSetting(L"teamsCallButtonText");
     if (g_settings.teamsMutedButtonText.empty()) {
         g_settings.teamsMutedButtonText = L"unmute";
+    }
+    if (g_settings.teamsUnmutedButtonText.empty()) {
+        g_settings.teamsUnmutedButtonText = L"mute";
     }
     if (g_settings.teamsCallButtonText.empty()) {
         g_settings.teamsCallButtonText = L"hang up|leave";
@@ -457,12 +499,19 @@ static void LoadSettings() {
     g_settings.zoomAudioCue = Wh_GetIntSetting(L"zoomAudioCue") != 0;
     g_settings.zoomRightClickToggle =
         Wh_GetIntSetting(L"zoomRightClickUnmute") != 0;
+    g_settings.zoomShortcutFallback =
+        Wh_GetIntSetting(L"zoomShortcutFallback") != 0;
     g_settings.zoomMutedButtonText =
         GetStringSetting(L"zoomMutedButtonText");
+    g_settings.zoomUnmutedButtonText =
+        GetStringSetting(L"zoomUnmutedButtonText");
     g_settings.zoomCallButtonText =
         GetStringSetting(L"zoomCallButtonText");
     if (g_settings.zoomMutedButtonText.empty()) {
         g_settings.zoomMutedButtonText = L"unmute";
+    }
+    if (g_settings.zoomUnmutedButtonText.empty()) {
+        g_settings.zoomUnmutedButtonText = L"mute";
     }
     if (g_settings.zoomCallButtonText.empty()) {
         g_settings.zoomCallButtonText = L"leave|end";
@@ -536,6 +585,7 @@ static std::wstring g_audioDeviceName = L"No microphone available";
 static HANDLE g_audioThread = nullptr;
 static HANDLE g_callAppsThread = nullptr;
 static HANDLE g_headsetThread = nullptr;
+static std::atomic<DWORD> g_callAppsThreadId{0};
 static HANDLE g_audioStopEvent = nullptr;
 static HANDLE g_audioWakeEvent = nullptr;
 
@@ -680,6 +730,7 @@ static void UpdateSteelSeriesSource(bool detected, bool muted,
 }
 
 static void RecordDiagnosticEvent(const std::wstring& event) {
+    if (g_settings.headsetDiagnosticsPath.empty()) return;
     ULONGLONG elapsed = GetTickCount64() - g_diagnosticStartTime;
     std::wstring line = L"+" + std::to_wstring(elapsed) + L" ms: " + event;
     AcquireSRWLockExclusive(&g_diagnosticLock);
@@ -923,6 +974,114 @@ static PCWSTR CallAppName(CallApp app) {
     return L"Call app";
 }
 
+static constexpr unsigned kSlackAppMask = 1 << 0;
+static constexpr unsigned kTeamsAppMask = 1 << 1;
+static constexpr unsigned kZoomAppMask = 1 << 2;
+
+struct ProcessImageCacheEntry {
+    std::wstring fileName;
+    std::wstring fullPath;
+    ULONGLONG checkedAt = 0;
+};
+
+static std::unordered_map<DWORD, ProcessImageCacheEntry>
+    g_processImageCache;
+
+static const ProcessImageCacheEntry* CachedProcessImage(DWORD processId) {
+    ULONGLONG now = GetTickCount64();
+    auto existing = g_processImageCache.find(processId);
+    if (existing != g_processImageCache.end() &&
+        now - existing->second.checkedAt < 10000) {
+        return &existing->second;
+    }
+
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        g_processImageCache.erase(processId);
+        return nullptr;
+    }
+    WCHAR path[MAX_PATH * 4];
+    DWORD pathLength = ARRAYSIZE(path);
+    bool queried =
+        QueryFullProcessImageNameW(process, 0, path, &pathLength) != FALSE;
+    CloseHandle(process);
+    if (!queried) {
+        g_processImageCache.erase(processId);
+        return nullptr;
+    }
+
+    const wchar_t* fileName = path;
+    for (DWORD index = 0; index < pathLength; ++index) {
+        if (path[index] == L'\\' || path[index] == L'/') {
+            fileName = path + index + 1;
+        }
+    }
+    if (g_processImageCache.size() >= 256) g_processImageCache.clear();
+    auto& entry = g_processImageCache[processId];
+    entry.fileName = Lowercase(fileName);
+    entry.fullPath = Lowercase(std::wstring(path, pathLength));
+    entry.checkedAt = now;
+    return &entry;
+}
+
+static unsigned CallAppMaskForProcess(DWORD processId) {
+    const ProcessImageCacheEntry* image = CachedProcessImage(processId);
+    if (!image) return 0;
+    if (image->fileName == L"slack.exe") return kSlackAppMask;
+    if (image->fileName == L"ms-teams.exe" ||
+        image->fileName == L"teams.exe")
+        return kTeamsAppMask;
+    if (image->fileName == L"zoom.exe" ||
+        (image->fileName == L"cpthost.exe" &&
+         image->fullPath.find(L"\\zoom\\") != std::wstring::npos))
+        return kZoomAppMask;
+    return 0;
+}
+
+static unsigned CaptureSessionAppMaskForRole(IMMDeviceEnumerator* enumerator,
+                                             ERole role) {
+    winrt::com_ptr<IMMDevice> endpoint;
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eCapture, role,
+                                                    endpoint.put())))
+        return 0;
+    winrt::com_ptr<IAudioSessionManager2> manager;
+    if (FAILED(endpoint->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL,
+                                  nullptr, manager.put_void())))
+        return 0;
+    winrt::com_ptr<IAudioSessionEnumerator> sessions;
+    if (FAILED(manager->GetSessionEnumerator(sessions.put())) || !sessions)
+        return 0;
+    int count = 0;
+    if (FAILED(sessions->GetCount(&count))) return 0;
+    unsigned mask = 0;
+    for (int index = 0; index < count && !g_unloading.load(); ++index) {
+        winrt::com_ptr<IAudioSessionControl> control;
+        if (FAILED(sessions->GetSession(index, control.put())) || !control)
+            continue;
+        AudioSessionState state = AudioSessionStateExpired;
+        if (FAILED(control->GetState(&state)) ||
+            state == AudioSessionStateExpired)
+            continue;
+        winrt::com_ptr<IAudioSessionControl2> control2;
+        if (FAILED(control->QueryInterface(__uuidof(IAudioSessionControl2),
+                                           control2.put_void())) ||
+            !control2)
+            continue;
+        DWORD processId = 0;
+        if (SUCCEEDED(control2->GetProcessId(&processId)) && processId)
+            mask |= CallAppMaskForProcess(processId);
+    }
+    return mask;
+}
+
+static unsigned CaptureSessionAppMask(IMMDeviceEnumerator* enumerator) {
+    if (!enumerator) return 0;
+    return CaptureSessionAppMaskForRole(enumerator, eConsole) |
+           CaptureSessionAppMaskForRole(enumerator, eCommunications) |
+           CaptureSessionAppMaskForRole(enumerator, eMultimedia);
+}
+
 static bool IsCallAppWindow(HWND hWnd, CallApp app) {
     if (!IsWindowVisible(hWnd)) return false;
 
@@ -930,36 +1089,10 @@ static bool IsCallAppWindow(HWND hWnd, CallApp app) {
     GetWindowThreadProcessId(hWnd, &processId);
     if (!processId) return false;
 
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (!process) return false;
-
-    WCHAR path[32768];
-    DWORD pathLength = ARRAYSIZE(path);
-    bool matches = false;
-    if (QueryFullProcessImageNameW(process, 0, path, &pathLength)) {
-        const wchar_t* fileName = path;
-        for (DWORD i = 0; i < pathLength; i++) {
-            if (path[i] == L'\\' || path[i] == L'/') {
-                fileName = path + i + 1;
-            }
-        }
-        switch (app) {
-            case CallApp::Slack:
-                matches = _wcsicmp(fileName, L"slack.exe") == 0;
-                break;
-            case CallApp::Teams:
-                matches = _wcsicmp(fileName, L"ms-teams.exe") == 0 ||
-                          _wcsicmp(fileName, L"teams.exe") == 0;
-                break;
-            case CallApp::Zoom:
-                matches = _wcsicmp(fileName, L"zoom.exe") == 0 ||
-                          _wcsicmp(fileName, L"cpthost.exe") == 0;
-                break;
-        }
-    }
-    CloseHandle(process);
-    return matches;
+    unsigned mask = CallAppMaskForProcess(processId);
+    return (app == CallApp::Slack && (mask & kSlackAppMask)) ||
+           (app == CallApp::Teams && (mask & kTeamsAppMask)) ||
+           (app == CallApp::Zoom && (mask & kZoomAppMask));
 }
 
 static bool IsZoomMeetingHostRunning() {
@@ -973,18 +1106,8 @@ static bool IsZoomMeetingHostRunning() {
         do {
             if (_wcsicmp(entry.szExeFile, L"cpthost.exe") != 0) continue;
 
-            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
-                                         FALSE, entry.th32ProcessID);
-            if (!process) continue;
-            WCHAR path[32768];
-            DWORD length = ARRAYSIZE(path);
-            if (QueryFullProcessImageNameW(process, 0, path, &length)) {
-                std::wstring lowered = Lowercase(std::wstring(path, length));
-                if (lowered.find(L"\\zoom\\") != std::wstring::npos) {
-                    found = true;
-                }
-            }
-            CloseHandle(process);
+            found = (CallAppMaskForProcess(entry.th32ProcessID) &
+                     kZoomAppMask) != 0;
             if (found) break;
         } while (Process32NextW(snapshot, &entry));
     }
@@ -996,25 +1119,9 @@ static bool RequestForegroundWindow(HWND hWnd) {
     hWnd = GetAncestor(hWnd, GA_ROOT);
     if (!hWnd || !IsWindow(hWnd)) return false;
 
-    DWORD currentThread = GetCurrentThreadId();
-    DWORD targetThread = GetWindowThreadProcessId(hWnd, nullptr);
-    HWND previousForeground = GetForegroundWindow();
-    DWORD foregroundThread = previousForeground
-                                 ? GetWindowThreadProcessId(previousForeground,
-                                                            nullptr)
-                                 : 0;
-    bool attachedTarget =
-        targetThread && targetThread != currentThread &&
-        AttachThreadInput(currentThread, targetThread, TRUE);
-    bool attachedForeground =
-        foregroundThread && foregroundThread != currentThread &&
-        foregroundThread != targetThread &&
-        AttachThreadInput(currentThread, foregroundThread, TRUE);
-
     if (IsIconic(hWnd)) ShowWindowAsync(hWnd, SW_RESTORE);
     BringWindowToTop(hWnd);
     SetForegroundWindow(hWnd);
-    SetFocus(hWnd);
 
     HWND actualForeground = GetForegroundWindow();
     DWORD requestedProcess = 0;
@@ -1024,17 +1131,11 @@ static bool RequestForegroundWindow(HWND hWnd) {
         GetWindowThreadProcessId(actualForeground, &actualProcess);
     }
 
-    if (attachedForeground) {
-        AttachThreadInput(currentThread, foregroundThread, FALSE);
-    }
-    if (attachedTarget) {
-        AttachThreadInput(currentThread, targetThread, FALSE);
-    }
     return requestedProcess && requestedProcess == actualProcess;
 }
 
 static bool SendZoomMuteShortcut(HWND callWindow) {
-    if (!callWindow || !IsWindow(callWindow) ||
+    if (g_unloading.load() || !callWindow || !IsWindow(callWindow) ||
         !IsCallAppWindow(callWindow, CallApp::Zoom)) {
         return false;
     }
@@ -1046,7 +1147,9 @@ static bool SendZoomMuteShortcut(HWND callWindow) {
         return false;
     }
 
-    Sleep(20);
+    if (g_audioStopEvent &&
+        WaitForSingleObject(g_audioStopEvent, 20) != WAIT_TIMEOUT)
+        return false;
     INPUT input[4]{};
     input[0].type = INPUT_KEYBOARD;
     input[0].ki.wVk = VK_MENU;
@@ -1059,12 +1162,16 @@ static bool SendZoomMuteShortcut(HWND callWindow) {
     input[3].ki.wVk = VK_MENU;
     input[3].ki.dwFlags = KEYEVENTF_KEYUP;
     UINT sent = SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
-    Sleep(40);
+    bool stopping =
+        g_audioStopEvent &&
+        WaitForSingleObject(g_audioStopEvent, 40) != WAIT_TIMEOUT;
 
     if (previousForeground && previousForeground != zoomWindow &&
         IsWindow(previousForeground)) {
         RequestForegroundWindow(previousForeground);
     }
+
+    if (stopping || g_unloading.load()) return false;
 
     if (sent != ARRAYSIZE(input)) {
         Wh_Log(L"[Zoom] Alt+A input failed after %u of %u events: %u", sent,
@@ -1122,12 +1229,13 @@ struct CallWindowSearch {
 static CallState ReadCallState(IUIAutomation* automation, CallApp app,
                                int command, HWND* activeWindow) {
     if (activeWindow) *activeWindow = nullptr;
-    if (!automation) return CallState::NotInCall;
+    if (!automation || g_unloading.load()) return CallState::NotInCall;
 
     std::vector<HWND> appWindows;
     CallWindowSearch search{app, &appWindows};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
+            if (g_unloading.load()) return FALSE;
             auto* search = reinterpret_cast<CallWindowSearch*>(lParam);
             if (IsCallAppWindow(hWnd, search->app)) {
                 search->windows->push_back(hWnd);
@@ -1154,35 +1262,53 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
             UIA_ControlTypePropertyId, buttonType, buttonCondition.put()))) {
         return CallState::NotInCall;
     }
+    winrt::com_ptr<IUIAutomationCacheRequest> cacheRequest;
+    if (FAILED(automation->CreateCacheRequest(cacheRequest.put())) ||
+        !cacheRequest ||
+        FAILED(cacheRequest->AddProperty(UIA_NamePropertyId)) ||
+        FAILED(cacheRequest->AddProperty(UIA_IsOffscreenPropertyId)) ||
+        FAILED(cacheRequest->AddPattern(UIA_InvokePatternId)) ||
+        FAILED(cacheRequest->put_TreeScope(TreeScope_Element)) ||
+        FAILED(cacheRequest->put_AutomationElementMode(
+            AutomationElementMode_Full))) {
+        return CallState::NotInCall;
+    }
 
     const std::wstring* mutedButtonText = nullptr;
+    const std::wstring* unmutedButtonText = nullptr;
     const std::wstring* callButtonText = nullptr;
     switch (app) {
         case CallApp::Slack:
             mutedButtonText = &g_settings.slackMutedButtonText;
+            unmutedButtonText = &g_settings.slackUnmutedButtonText;
             callButtonText = &g_settings.slackCallButtonText;
             break;
         case CallApp::Teams:
             mutedButtonText = &g_settings.teamsMutedButtonText;
+            unmutedButtonText = &g_settings.teamsUnmutedButtonText;
             callButtonText = &g_settings.teamsCallButtonText;
             break;
         case CallApp::Zoom:
             mutedButtonText = &g_settings.zoomMutedButtonText;
+            unmutedButtonText = &g_settings.zoomUnmutedButtonText;
             callButtonText = &g_settings.zoomCallButtonText;
             break;
     }
     std::wstring mutedText = Lowercase(*mutedButtonText);
+    std::wstring unmutedText = Lowercase(*unmutedButtonText);
     std::wstring callText = Lowercase(*callButtonText);
 
     for (HWND hWnd : appWindows) {
+        if (g_unloading.load()) return CallState::NotInCall;
         winrt::com_ptr<IUIAutomationElement> root;
         if (FAILED(automation->ElementFromHandle(hWnd, root.put())) || !root) {
             continue;
         }
 
         winrt::com_ptr<IUIAutomationElementArray> buttons;
-        if (FAILED(root->FindAll(TreeScope_Descendants, buttonCondition.get(),
-                                 buttons.put())) ||
+        if (FAILED(root->FindAllBuildCache(
+                TreeScope_Descendants, buttonCondition.get(),
+                cacheRequest.get(), buttons.put())) ||
             !buttons) {
             continue;
         }
@@ -1195,19 +1321,20 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
         int count = 0;
         buttons->get_Length(&count);
         for (int i = 0; i < count; i++) {
+            if (g_unloading.load()) return CallState::NotInCall;
             winrt::com_ptr<IUIAutomationElement> button;
             if (FAILED(buttons->GetElement(i, button.put())) || !button) {
                 continue;
             }
 
             BOOL offscreen = TRUE;
-            if (FAILED(button->get_CurrentIsOffscreen(&offscreen)) ||
+            if (FAILED(button->get_CachedIsOffscreen(&offscreen)) ||
                 (offscreen && app != CallApp::Zoom)) {
                 continue;
             }
 
             BSTR rawName = nullptr;
-            if (FAILED(button->get_CurrentName(&rawName)) || !rawName) {
+            if (FAILED(button->get_CachedName(&rawName)) || !rawName) {
                 continue;
             }
             std::wstring name = Lowercase(rawName);
@@ -1219,7 +1346,7 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
             if (ContainsConfiguredText(name, mutedText)) {
                 hasMutedAction = true;
                 mutedButton.copy_from(button.get());
-            } else if (ContainsConfiguredText(name, L"mute")) {
+            } else if (ContainsConfiguredText(name, unmutedText)) {
                 hasUnmutedAction = true;
                 unmutedButton.copy_from(button.get());
             }
@@ -1239,7 +1366,7 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
                  currentState == CallState::Muted);
             if (shouldInvoke && actionButton) {
                 winrt::com_ptr<IUIAutomationInvokePattern> invokePattern;
-                HRESULT patternResult = actionButton->GetCurrentPatternAs(
+                HRESULT patternResult = actionButton->GetCachedPatternAs(
                     UIA_InvokePatternId, IID_IUIAutomationInvokePattern,
                     invokePattern.put_void());
                 HRESULT actionResult = patternResult;
@@ -1269,6 +1396,9 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
         Wh_Log(L"[Call apps] COM initialization failed: 0x%08X", coInit);
         return 0;
     }
+    g_callAppsThreadId.store(GetCurrentThreadId());
+    bool callCancellationEnabled =
+        SUCCEEDED(CoEnableCallCancellation(nullptr));
 
     winrt::com_ptr<IUIAutomation> automation;
     HRESULT automationResult = CoCreateInstance(
@@ -1277,8 +1407,20 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     if (FAILED(automationResult)) {
         Wh_Log(L"[Call apps] UI Automation unavailable: 0x%08X",
                automationResult);
+        if (callCancellationEnabled) CoDisableCallCancellation(nullptr);
+        g_callAppsThreadId.store(0);
         CoUninitialize();
         return 0;
+    }
+
+    winrt::com_ptr<IMMDeviceEnumerator> captureEnumerator;
+    HRESULT captureResult = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+        __uuidof(IMMDeviceEnumerator), captureEnumerator.put_void());
+    bool gateOnCaptureSessions = SUCCEEDED(captureResult);
+    if (!gateOnCaptureSessions) {
+        Wh_Log(L"[Call apps] Capture-session gating unavailable: 0x%08X",
+               captureResult);
     }
 
     ULONGLONG lastSlackCheck = 0;
@@ -1290,10 +1432,13 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     ULONGLONG teamsWarningUntil = 0;
     ULONGLONG zoomSpeakingSince = 0;
     ULONGLONG zoomWarningUntil = 0;
+    ULONGLONG lastCaptureSessionCheck = 0;
+    unsigned captureAppMask = 0;
     CallState slackState = CallState::NotInCall;
     CallState teamsState = CallState::NotInCall;
     CallState zoomState = CallState::NotInCall;
     int deferredZoomCommand = kCallCommandNone;
+    int deferredZoomAttempts = 0;
     bool syncCallsFromHeadset =
         g_settings.headsetSyncCalls &&
         (g_settings.headsetSyncMode == L"full" ||
@@ -1311,10 +1456,25 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     while (WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT &&
            !g_unloading.load()) {
         ULONGLONG now = GetTickCount64();
+        if (lastCaptureSessionCheck == 0 ||
+            now - lastCaptureSessionCheck >= 2000) {
+            captureAppMask = gateOnCaptureSessions
+                                 ? CaptureSessionAppMask(
+                                       captureEnumerator.get())
+                                 : kSlackAppMask | kTeamsAppMask |
+                                       kZoomAppMask;
+            lastCaptureSessionCheck = now;
+        }
         int slackCommand =
             g_pendingSlackCommand.exchange(kCallCommandNone);
-        if (lastSlackCheck == 0 || now - lastSlackCheck >= 750 ||
-            slackCommand != kCallCommandNone) {
+        bool pollSlack =
+            monitorSlack &&
+            ((captureAppMask & kSlackAppMask) ||
+             slackCommand != kCallCommandNone ||
+             slackState != CallState::NotInCall);
+        if (pollSlack &&
+            (lastSlackCheck == 0 || now - lastSlackCheck >= 1500 ||
+             slackCommand != kCallCommandNone)) {
             HWND callWindow = nullptr;
             slackState = monitorSlack
                              ? ReadCallState(automation.get(), CallApp::Slack,
@@ -1329,8 +1489,14 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
 
         int teamsCommand =
             g_pendingTeamsCommand.exchange(kCallCommandNone);
-        if (lastTeamsCheck == 0 || now - lastTeamsCheck >= 750 ||
-            teamsCommand != kCallCommandNone) {
+        bool pollTeams =
+            monitorTeams &&
+            ((captureAppMask & kTeamsAppMask) ||
+             teamsCommand != kCallCommandNone ||
+             teamsState != CallState::NotInCall);
+        if (pollTeams &&
+            (lastTeamsCheck == 0 || now - lastTeamsCheck >= 1500 ||
+             teamsCommand != kCallCommandNone)) {
             HWND callWindow = nullptr;
             teamsState = monitorTeams
                              ? ReadCallState(automation.get(), CallApp::Teams,
@@ -1347,9 +1513,16 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
             g_pendingZoomCommand.exchange(kCallCommandNone);
         if (requestedZoomCommand != kCallCommandNone) {
             deferredZoomCommand = requestedZoomCommand;
+            deferredZoomAttempts = 0;
         }
-        if (lastZoomCheck == 0 || now - lastZoomCheck >= 750 ||
-            requestedZoomCommand != kCallCommandNone) {
+        bool zoomHasCapture = (captureAppMask & kZoomAppMask) != 0;
+        bool pollZoom =
+            monitorZoom &&
+            (zoomHasCapture || requestedZoomCommand != kCallCommandNone ||
+             zoomState != CallState::NotInCall);
+        if (pollZoom &&
+            (lastZoomCheck == 0 || now - lastZoomCheck >= 1500 ||
+             requestedZoomCommand != kCallCommandNone)) {
             HWND callWindow = nullptr;
             CallState detectedState =
                 monitorZoom
@@ -1357,7 +1530,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                                     deferredZoomCommand, &callWindow)
                     : CallState::NotInCall;
             bool meetingHostRunning =
-                monitorZoom && IsZoomMeetingHostRunning();
+                monitorZoom && zoomHasCapture && IsZoomMeetingHostRunning();
             if (detectedState == CallState::NotInCall &&
                 meetingHostRunning) {
                 if (zoomState == CallState::NotInCall) {
@@ -1367,11 +1540,23 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                 if (!callWindow && IsWindow(previousWindow)) {
                     callWindow = previousWindow;
                 }
-                if (deferredZoomCommand != kCallCommandNone &&
-                    SendZoomMuteShortcut(callWindow)) {
-                    zoomState = ApplyCallCommandToState(
-                        zoomState, deferredZoomCommand);
-                    deferredZoomCommand = kCallCommandNone;
+                if (deferredZoomCommand != kCallCommandNone) {
+                    if (!g_settings.zoomShortcutFallback) {
+                        Wh_Log(L"[Zoom] Alt+A fallback is disabled; dropping "
+                               L"the deferred command");
+                        deferredZoomCommand = kCallCommandNone;
+                    } else if (deferredZoomAttempts >= 3) {
+                        Wh_Log(L"[Zoom] Alt+A fallback failed three times; "
+                               L"dropping the deferred command");
+                        deferredZoomCommand = kCallCommandNone;
+                    } else if (!g_unloading.load()) {
+                        deferredZoomAttempts++;
+                        if (SendZoomMuteShortcut(callWindow)) {
+                            zoomState = ApplyCallCommandToState(
+                                zoomState, deferredZoomCommand);
+                            deferredZoomCommand = kCallCommandNone;
+                        }
+                    }
                 }
             } else {
                 zoomState = detectedState;
@@ -1388,7 +1573,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
 
         bool windowsCanHear =
             g_audioAvailable.load() && !g_audioMuted.load();
-        float currentPeak = g_audioLinearPeak.load();
+        float currentPeak = g_audioPeak.load();
         bool playCue = false;
         bool notify = false;
 
@@ -1452,8 +1637,12 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     g_zoomStateKnown.store(false);
     g_zoomWarningActive.store(false);
     g_zoomCallWindow.store(nullptr);
+    g_processImageCache.clear();
     NotifyTaskbar();
     automation = nullptr;
+    captureEnumerator = nullptr;
+    if (callCancellationEnabled) CoDisableCallCancellation(nullptr);
+    g_callAppsThreadId.store(0);
     CoUninitialize();
     return 0;
 }
@@ -1811,6 +2000,10 @@ struct StandardHidMetadata {
 };
 
 struct StandardHidRuntime {
+    bool metadataLoaded = false;
+    bool metadataValid = false;
+    StandardHidMetadata metadata;
+    std::vector<BYTE> preparsedStorage;
     std::unordered_map<unsigned, unsigned> activeMasks;
     std::unordered_map<unsigned, std::vector<BYTE>> previousReports;
 };
@@ -2113,6 +2306,7 @@ static void RecordSanitizedReportChange(
     const StandardHidMetadata& metadata, StandardHidRuntime& runtime,
     const BYTE* report, DWORD reportLength, unsigned reportKey,
     unsigned muteMask) {
+    if (g_settings.headsetDiagnosticsPath.empty()) return;
     auto& previous = runtime.previousReports[reportKey];
     std::wstring event = L"HID VID " + Hex4(metadata.vendorId) + L" / PID " +
                          Hex4(metadata.productId) + L", report " +
@@ -2148,16 +2342,21 @@ static void ProcessStandardHidRawInput(HRAWINPUT inputHandle) {
     auto* input = reinterpret_cast<RAWINPUT*>(inputStorage.data());
     if (input->header.dwType != RIM_TYPEHID) return;
 
-    std::vector<BYTE> preparsedStorage;
-    StandardHidMetadata metadata;
-    if (!ReadStandardHidMetadata(input->header.hDevice, metadata,
-                                 &preparsedStorage) ||
-        !metadata.HasStandardMuteUsage()) {
+    auto& runtime = g_standardHidRuntime[input->header.hDevice];
+    if (!runtime.metadataLoaded) {
+        runtime.metadataValid = ReadStandardHidMetadata(
+            input->header.hDevice, runtime.metadata,
+            &runtime.preparsedStorage);
+        runtime.metadataLoaded = true;
+    }
+    if (!runtime.metadataValid ||
+        !runtime.metadata.HasStandardMuteUsage()) {
         return;
     }
     auto* preparsed =
-        reinterpret_cast<PHIDP_PREPARSED_DATA>(preparsedStorage.data());
-    auto& runtime = g_standardHidRuntime[input->header.hDevice];
+        reinterpret_cast<PHIDP_PREPARSED_DATA>(
+            runtime.preparsedStorage.data());
+    const StandardHidMetadata& metadata = runtime.metadata;
     for (DWORD index = 0; index < input->data.hid.dwCount; index++) {
         const BYTE* report = input->data.hid.bRawData +
                              index * input->data.hid.dwSizeHid;
@@ -2204,6 +2403,21 @@ static bool RegisterStandardHidInput(HWND target) {
     devices[1].hwndTarget = target;
     return RegisterRawInputDevices(devices, ARRAYSIZE(devices),
                                    sizeof(devices[0])) != FALSE;
+}
+
+static void UnregisterStandardHidInput() {
+    RAWINPUTDEVICE devices[2]{};
+    devices[0].usUsagePage = kHidUsagePageGeneric;
+    devices[0].usUsage = kHidUsageSystemControl;
+    devices[0].dwFlags = RIDEV_REMOVE;
+    devices[1].usUsagePage = kHidUsagePageTelephony;
+    devices[1].usUsage = 0;
+    devices[1].dwFlags = RIDEV_REMOVE | RIDEV_PAGEONLY;
+    if (!RegisterRawInputDevices(devices, ARRAYSIZE(devices),
+                                 sizeof(devices[0]))) {
+        Wh_Log(L"[Headset] Standard HID Raw Input removal failed: %u",
+               GetLastError());
+    }
 }
 
 static LRESULT CALLBACK HeadsetMessageWindowProc(HWND window, UINT message,
@@ -2394,6 +2608,7 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
     bool previousMuted = false;
     ULONGLONG nextVendorPoll = 0;
     bool diagnosticsExported = false;
+    ULONGLONG diagnosticsExportAt = GetTickCount64() + 2000;
 
     for (;;) {
         if (g_unloading.load() ||
@@ -2468,7 +2683,7 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
             }
         }
 
-        if (!diagnosticsExported) {
+        if (!diagnosticsExported && now >= diagnosticsExportAt) {
             ExportHeadsetDiagnosticsIfRequested();
             diagnosticsExported = true;
         }
@@ -2490,6 +2705,7 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
     UpdateStandardHidSource(false, L"", L"");
     g_standardHidRuntime.clear();
     if (g_headsetMessageWindow) {
+        UnregisterStandardHidInput();
         DestroyWindow(g_headsetMessageWindow);
         g_headsetMessageWindow = nullptr;
     }
@@ -2554,6 +2770,9 @@ static void StopAudioThread() {
     if (g_audioStopEvent) {
         SetEvent(g_audioStopEvent);
     }
+    if (DWORD callThreadId = g_callAppsThreadId.load()) {
+        CoCancelCall(callThreadId, 0);
+    }
     if (g_headsetThread) {
         WaitForSingleObject(g_headsetThread, INFINITE);
         CloseHandle(g_headsetThread);
@@ -2601,14 +2820,30 @@ static XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
         return nullptr;
     }
 
-    size_t elementOffset = 0x10;
+    size_t elementOffset = 0;
+#if defined(_M_X64)
     const BYTE* bytes = static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (bytes[0] == 0x48 && bytes[1] == 0x83 && bytes[2] == 0xEC &&
         bytes[4] == 0x48 && bytes[5] == 0x83 && bytes[6] == 0xC1 &&
         bytes[7] <= 0x7F) {
         elementOffset = bytes[7];
-    } else {
+    }
+#elif defined(_M_ARM64)
+    const DWORD* instructions =
+        static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+    if (instructions[0] == 0xD503237F &&
+        (instructions[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        instructions[2] == 0x910003FD &&
+        (instructions[3] & 0xFFF00FE0) == 0xF8400C00) {
+        elementOffset = (instructions[3] >> 12) & 0xFF;
+    }
+#else
+#error "Unsupported architecture"
+#endif
+    if (!elementOffset) {
         Wh_Log(L"[XAML] Unsupported TaskbarHost::FrameHeight prologue");
+        std__Ref_count_base__Decref_Original(sharedPtr[1]);
+        return nullptr;
     }
 
     auto* unknown =
@@ -3345,6 +3580,42 @@ static FrameworkElement FindDirectChild(Grid const& parent, PCWSTR name) {
     return nullptr;
 }
 
+static bool RemoveStaleWidget(Grid const& parent) {
+    int staleColumn = -1;
+    bool removed = false;
+    for (uint32_t index = 0; index < parent.Children().Size(); ++index) {
+        auto element = parent.Children().GetAt(index)
+                           .try_as<FrameworkElement>();
+        if (!element || element.Name() != L"MicrophoneActivityWidget")
+            continue;
+        staleColumn = Grid::GetColumn(element);
+        parent.Children().RemoveAt(index);
+        removed = true;
+        break;
+    }
+    if (!removed) return false;
+
+    if (staleColumn >= 0 &&
+        static_cast<uint32_t>(staleColumn) <
+            parent.ColumnDefinitions().Size()) {
+        parent.ColumnDefinitions().RemoveAt(staleColumn);
+        for (auto const& child : parent.Children()) {
+            auto element = child.try_as<FrameworkElement>();
+            if (!element) continue;
+            int column = Grid::GetColumn(element);
+            int span = Grid::GetColumnSpan(element);
+            if (column > staleColumn) {
+                Grid::SetColumn(element, column - 1);
+            } else if (column < staleColumn &&
+                       column + span > staleColumn) {
+                Grid::SetColumnSpan(element, span - 1);
+            }
+        }
+    }
+    Wh_Log(L"[XAML] Removed a stale widget before reinjection");
+    return true;
+}
+
 static bool InjectWidget(XamlRoot const& xamlRoot, HWND taskbarWnd) {
     auto root = xamlRoot.Content().try_as<FrameworkElement>();
     if (!root) return false;
@@ -3356,9 +3627,7 @@ static bool InjectWidget(XamlRoot const& xamlRoot, HWND taskbarWnd) {
                       .try_as<Grid>();
     if (!parent || parent.ActualHeight() <= 0.0) return false;
 
-    if (FindDirectChild(parent, L"MicrophoneActivityWidget")) {
-        return true;
-    }
+    RemoveStaleWidget(parent);
 
     FrameworkElement anchor = nullptr;
     bool afterAnchor = false;
@@ -3569,8 +3838,9 @@ static bool RemoveWidgetsOnWindowThread() {
 static HANDLE g_retryThread = nullptr;
 static HANDLE g_retryStopEvent = nullptr;
 static SRWLOCK g_retryLock = SRWLOCK_INIT;
+static std::mutex g_retryLifecycleMutex;
 
-static void StopRetryThread() {
+static void StopRetryThreadLocked() {
     AcquireSRWLockExclusive(&g_retryLock);
     HANDLE thread = g_retryThread;
     HANDLE stopEvent = g_retryStopEvent;
@@ -3594,8 +3864,8 @@ static void StopRetryThread() {
     if (stopEvent) CloseHandle(stopEvent);
 }
 
-static void StartRetryThread() {
-    StopRetryThread();
+static void StartRetryThreadLocked() {
+    StopRetryThreadLocked();
     AcquireSRWLockExclusive(&g_retryLock);
     if (g_unloading.load()) {
         ReleaseSRWLockExclusive(&g_retryLock);
@@ -3635,13 +3905,18 @@ static void StartRetryThread() {
     ReleaseSRWLockExclusive(&g_retryLock);
 }
 
+static void StartRetryThread() {
+    if (g_unloading.load()) return;
+    std::unique_lock<std::mutex> guard(g_retryLifecycleMutex,
+                                       std::try_to_lock);
+    if (!guard.owns_lock()) return;
+    StartRetryThreadLocked();
+}
+
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
-using CSecondaryTray_GetTrayWindow_t = HWND(WINAPI*)(void*);
 using CSecondaryTray_InitModelAndHost_t = void(WINAPI*)(void*, void*);
 
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
-static CSecondaryTray_GetTrayWindow_t CSecondaryTray_GetTrayWindow_Original =
-    nullptr;
 static CSecondaryTray_InitModelAndHost_t
     CSecondaryTray_InitModelAndHost_Original = nullptr;
 
@@ -3676,8 +3951,6 @@ static bool HookTaskbarSymbols() {
          &std__Ref_count_base__Decref_Original},
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
-        {{LR"(public: virtual struct HWND__ * __cdecl CSecondaryTray::GetTrayWindow(void))"},
-         &CSecondaryTray_GetTrayWindow_Original},
         {{LR"(public: virtual void __cdecl CSecondaryTray::InitModelAndHost(struct winrt::WindowsUdk::UI::Shell::TaskbarModel))"},
          &CSecondaryTray_InitModelAndHost_Original,
          CSecondaryTray_InitModelAndHost_Hook},
@@ -3691,7 +3964,7 @@ static bool HookTaskbarSymbols() {
 // -----------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[Init] Microphone Activity Taskbar Widget 0.9.0");
+    Wh_Log(L"[Init] MuteAlert %s", WH_MOD_VERSION);
     g_diagnosticStartTime = GetTickCount64();
     LoadSettings();
     if (!HookTaskbarSymbols()) {
@@ -3709,7 +3982,10 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     g_unloading.store(true);
-    StopRetryThread();
+    {
+        std::lock_guard<std::mutex> retryGuard(g_retryLifecycleMutex);
+        StopRetryThreadLocked();
+    }
     StopAudioThread();
     if (RemoveWidgetsOnWindowThread() && g_widgets) {
         g_widgets.reset();
@@ -3722,11 +3998,12 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    StopRetryThread();
+    std::lock_guard<std::mutex> retryGuard(g_retryLifecycleMutex);
+    StopRetryThreadLocked();
     RemoveWidgetsOnWindowThread();
     StopAudioThread();
     LoadSettings();
     StartAudioThread();
     ApplyWidgetsOnWindowThread();
-    if (!g_widgetsLive.load()) StartRetryThread();
+    if (!g_widgetsLive.load()) StartRetryThreadLocked();
 }
