@@ -734,14 +734,24 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
     // Pass 1: exact match on the normalized text or verb.
     for (const auto& it : leaves) {
         if (it.normText == normMatch || it.normVerb == normMatch) {
-            if (invokeLeaf(it)) return true;
+            // Once a matching entry is found, dispatch it and stop. A verb can
+            // return a failure HRESULT *after* already doing work, so falling
+            // through would risk running a second, unrelated command.
+            if (!invokeLeaf(it))
+                Wh_Log(L"EnumContextMenuMatch: InvokeCommand failed for '%s'", it.text.c_str());
+            return true;
         }
     }
     // Pass 2: substring match.
     for (const auto& it : leaves) {
         if (StrContainsNorm(it.text.c_str(), matchText) ||
             StrContainsNorm(it.verb.c_str(), matchText)) {
-            if (invokeLeaf(it)) return true;
+            // Once a matching entry is found, dispatch it and stop. A verb can
+            // return a failure HRESULT *after* already doing work, so falling
+            // through would risk running a second, unrelated command.
+            if (!invokeLeaf(it))
+                Wh_Log(L"EnumContextMenuMatch: InvokeCommand failed for '%s'", it.text.c_str());
+            return true;
         }
     }
     // Pass 3: descend into submenus in menu order.
@@ -1268,10 +1278,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
         ReleasePendingNavForThread();
-        // Drop any not-yet-dispatched actions. The thread_local queue outlives
-        // the mod on Explorer's long-lived UI threads, so without this it would
-        // keep holding the wstrings for the rest of the process's life.
+        // Drop any not-yet-dispatched actions and pending click state. These
+        // thread_local objects outlive the mod on Explorer's long-lived UI
+        // threads, so without this they would keep holding their state for the
+        // rest of the process's life.
         g_pendingActions.clear();
+        CancelPendingMidClick();
+        CancelPendingDblClick();
         return 0;
     }
 
@@ -1301,7 +1314,10 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (!g_pendingActions.empty() && g_pendingActions.front().target == hWnd) {
             PendingAction a = std::move(g_pendingActions.front());
             g_pendingActions.erase(g_pendingActions.begin());
-            if (g_initialized && !a.action.empty())
+            // The posted message can be dispatched late if the Explorer UI thread
+            // is stuck, so guard the SendInput-based actions the same way as the
+            // timer paths — only run while the clicked frame is still foreground.
+            if (g_initialized && !a.action.empty() && StillForeground(hWnd))
                 FindShellTabAndDoAction(hWnd, a.action.c_str(), a.match.c_str());
         }
         return 0;
@@ -1460,10 +1476,13 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
         ReleasePendingNavForThread();
-        // Drop any not-yet-dispatched actions. The thread_local queue outlives
-        // the mod on Explorer's long-lived UI threads, so without this it would
-        // keep holding the wstrings for the rest of the process's life.
+        // Drop any not-yet-dispatched actions and pending click state. These
+        // thread_local objects outlive the mod on Explorer's long-lived UI
+        // threads, so without this they would keep holding their state for the
+        // rest of the process's life.
         g_pendingActions.clear();
+        CancelPendingMidClick();
+        CancelPendingDblClick();
         return 0;
     }
 
@@ -1493,7 +1512,10 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (!g_pendingActions.empty() && g_pendingActions.front().target == hWnd) {
             PendingAction a = std::move(g_pendingActions.front());
             g_pendingActions.erase(g_pendingActions.begin());
-            if (g_initialized && !a.action.empty())
+            // The posted message can be dispatched late if the Explorer UI thread
+            // is stuck, so guard the SendInput-based actions the same way as the
+            // timer paths — only run while the clicked frame is still foreground.
+            if (g_initialized && !a.action.empty() && StillForeground(hWnd))
                 FindShellTabAndDoAction(hWnd, a.action.c_str(), a.match.c_str());
         }
         return 0;
