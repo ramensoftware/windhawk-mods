@@ -2,7 +2,7 @@
 // @id              glass-cursors
 // @name            Glass Cursors
 // @description     Original DPI-aware translucent glass system cursors with a live animated loading indicator.
-// @version         0.19.0
+// @version         0.20.0
 // @author          fizixes
 // @github          https://github.com/fizixes
 // @license         MIT
@@ -97,6 +97,7 @@ Windows system cursor slots hold one fixed-size cursor at a time. On mixed-DPI m
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <cwchar>
 #include <vector>
 
 namespace {
@@ -121,6 +122,8 @@ constexpr DWORD CURSOR_PERSON      = 32672u;
 constexpr int kSupersample = 4;
 constexpr int kSpinnerFrames = 24;
 constexpr double kPi = 3.14159265358979323846;
+constexpr UINT kReapplyCursorsMessage = WM_APP + 0x471;
+constexpr wchar_t kCursorWindowClassName[] = L"WindhawkGlassCursorsWindow";
 
 struct Point {
     double x;
@@ -196,7 +199,13 @@ int g_handStyle = 1;
 int g_artworkScale = 68;
 constexpr DWORD kAnimationDelay = 33;
 HANDLE g_animationStopEvent = nullptr;
+HANDLE g_animationReadyEvent = nullptr;
 HANDLE g_animationThread = nullptr;
+HWND g_cursorWindow = nullptr;
+bool g_animationThreadInitialized = false;
+bool g_animationFramesReady = false;
+bool g_reapplyMessagePending = false;
+int g_animationFrame = 0;
 std::vector<HCURSOR> g_busyFrames;
 std::vector<HCURSOR> g_workingFrames;
 double g_renderOffsetX = 0.0;
@@ -1157,17 +1166,9 @@ int ResolveCursorSize() {
         }
     }
 
-    int desired = GetSystemMetrics(SM_CXCURSOR);
-    int dpi = 96;
-    HDC screenDc = GetDC(nullptr);
-    if (screenDc) {
-        const int measuredDpi = GetDeviceCaps(screenDc, LOGPIXELSX);
-        if (measuredDpi > 0) {
-            dpi = measuredDpi;
-        }
-        ReleaseDC(nullptr, screenDc);
-    }
-    desired = std::max(desired, MulDiv(32, dpi, 96));
+    const UINT dpi = GetDpiForSystem();
+    int desired = GetSystemMetricsForDpi(SM_CXCURSOR, dpi);
+    desired = std::max(desired, MulDiv(32, static_cast<int>(dpi), 96));
 
     constexpr std::array<int, 4> sizes = {32, 48, 64, 96};
     int best = sizes[0];
@@ -1223,7 +1224,7 @@ void LoadSettings() {
 }
 
 void ApplyStaticCursors() {
-    const std::array<DWORD, 13> roles = {
+    const std::array<DWORD, 14> roles = {
         CURSOR_NORMAL,
         CURSOR_IBEAM,
         CURSOR_CROSS,
@@ -1237,13 +1238,12 @@ void ApplyStaticCursors() {
         CURSOR_HAND,
         CURSOR_HELP,
         CURSOR_PIN,
+        CURSOR_PERSON,
     };
 
     for (DWORD role : roles) {
         SetRenderedSystemCursor(RenderRole(g_cursorSize, role), role);
     }
-
-    SetRenderedSystemCursor(RenderRole(g_cursorSize, CURSOR_PERSON), CURSOR_PERSON);
 }
 
 void DestroyAnimationFrames() {
@@ -1288,6 +1288,7 @@ bool PrepareAnimationFrames() {
 
     for (int frame = 0; frame < kSpinnerFrames; ++frame) {
         if (WaitForSingleObject(g_animationStopEvent, 0) == WAIT_OBJECT_0) {
+            DestroyAnimationFrames();
             return false;
         }
 
@@ -1303,11 +1304,18 @@ bool PrepareAnimationFrames() {
                 DestroyCursor(workingCursor);
             }
             Wh_Log(L"Failed to create animation frame %d", frame);
+            DestroyAnimationFrames();
             return false;
         }
 
         g_busyFrames.push_back(busyCursor);
         g_workingFrames.push_back(workingCursor);
+    }
+
+    if (g_busyFrames.size() != kSpinnerFrames ||
+        g_workingFrames.size() != kSpinnerFrames) {
+        DestroyAnimationFrames();
+        return false;
     }
 
     SetPreparedSystemCursor(g_busyFrames.front(), CURSOR_WAIT);
@@ -1334,26 +1342,167 @@ DWORD GetVisibleBusyCursorRole() {
     return 0;
 }
 
+void RebuildCursorSet() {
+    g_animationFramesReady = false;
+    DestroyAnimationFrames();
+
+    LoadSettings();
+    ApplyStaticCursors();
+
+    g_animationFramesReady = PrepareAnimationFrames() &&
+                             g_busyFrames.size() == kSpinnerFrames &&
+                             g_workingFrames.size() == kSpinnerFrames;
+    g_animationFrame = 0;
+
+    if (!g_animationFramesReady &&
+        WaitForSingleObject(g_animationStopEvent, 0) != WAIT_OBJECT_0) {
+        Wh_Log(L"Animation frames unavailable, static cursors only");
+    }
+}
+
+void QueueCursorReapply(HWND hWnd) {
+    if (g_reapplyMessagePending) {
+        return;
+    }
+
+    g_reapplyMessagePending = true;
+    if (!PostMessageW(hWnd, kReapplyCursorsMessage, 0, 0)) {
+        g_reapplyMessagePending = false;
+        Wh_Log(L"Failed to queue cursor reapply: %lu", GetLastError());
+    }
+}
+
+LRESULT CALLBACK CursorWindowProc(HWND hWnd, UINT message, WPARAM wParam,
+                                  LPARAM lParam) {
+    switch (message) {
+        case WM_SETTINGCHANGE:
+            if (wParam == SPI_SETCURSORS) {
+                QueueCursorReapply(hWnd);
+                return 0;
+            }
+            break;
+
+        case WM_DISPLAYCHANGE:
+            QueueCursorReapply(hWnd);
+            return 0;
+
+        case kReapplyCursorsMessage:
+            g_reapplyMessagePending = false;
+            RebuildCursorSet();
+            return 0;
+    }
+
+    return DefWindowProcW(hWnd, message, wParam, lParam);
+}
+
 DWORD WINAPI AnimationThreadProc(LPVOID) {
-    if (!PrepareAnimationFrames()) {
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    WNDCLASSW windowClass = {};
+    windowClass.lpfnWndProc = CursorWindowProc;
+    windowClass.hInstance = instance;
+    windowClass.lpszClassName = kCursorWindowClassName;
+
+    const ATOM classAtom = RegisterClassW(&windowClass);
+    if (!classAtom && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"RegisterClass failed: %lu", GetLastError());
+        g_animationThreadInitialized = false;
+        SetEvent(g_animationReadyEvent);
+        WaitForSingleObject(g_animationStopEvent, INFINITE);
         return 0;
     }
 
-    int frame = 0;
-    while (WaitForSingleObject(g_animationStopEvent, 0) != WAIT_OBJECT_0) {
-        const DWORD visibleRole = GetVisibleBusyCursorRole();
-        if (visibleRole == CURSOR_WAIT) {
-            SetPreparedSystemCursor(g_busyFrames[frame], CURSOR_WAIT);
-            frame = (frame + 1) % kSpinnerFrames;
-        } else if (visibleRole == CURSOR_APPSTARTING) {
-            SetPreparedSystemCursor(g_workingFrames[frame], CURSOR_APPSTARTING);
-            frame = (frame + 1) % kSpinnerFrames;
-        }
+    // A hidden top-level window is used instead of HWND_MESSAGE because
+    // WM_SETTINGCHANGE is broadcast only to top-level windows.
+    g_cursorWindow = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kCursorWindowClassName,
+        L"",
+        WS_POPUP,
+        0,
+        0,
+        0,
+        0,
+        nullptr,
+        nullptr,
+        instance,
+        nullptr);
 
+    if (!g_cursorWindow) {
+        Wh_Log(L"CreateWindowEx failed: %lu", GetLastError());
+        g_animationThreadInitialized = false;
+        SetEvent(g_animationReadyEvent);
+        WaitForSingleObject(g_animationStopEvent, INFINITE);
+        if (classAtom) {
+            UnregisterClassW(kCursorWindowClassName, instance);
+        }
+        return 0;
+    }
+
+    g_animationThreadInitialized = true;
+    SetEvent(g_animationReadyEvent);
+
+    g_animationFramesReady = PrepareAnimationFrames() &&
+                             g_busyFrames.size() == kSpinnerFrames &&
+                             g_workingFrames.size() == kSpinnerFrames;
+    if (!g_animationFramesReady) {
+        Wh_Log(L"Animation frames unavailable, static cursors only");
+    }
+
+    g_animationFrame = 0;
+
+    for (;;) {
+        const DWORD visibleRole =
+            g_animationFramesReady ? GetVisibleBusyCursorRole() : 0;
         const DWORD delay = visibleRole ? kAnimationDelay : 100;
-        if (WaitForSingleObject(g_animationStopEvent, delay) == WAIT_OBJECT_0) {
+
+        const DWORD waitResult = MsgWaitForMultipleObjects(
+            1,
+            &g_animationStopEvent,
+            FALSE,
+            delay,
+            QS_ALLINPUT);
+
+        if (waitResult == WAIT_OBJECT_0) {
             break;
         }
+
+        if (waitResult == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            continue;
+        }
+
+        if (waitResult == WAIT_TIMEOUT && g_animationFramesReady) {
+            const DWORD currentRole = GetVisibleBusyCursorRole();
+            if (currentRole == CURSOR_WAIT) {
+                SetPreparedSystemCursor(
+                    g_busyFrames[static_cast<size_t>(g_animationFrame)],
+                    CURSOR_WAIT);
+                g_animationFrame = (g_animationFrame + 1) % kSpinnerFrames;
+            } else if (currentRole == CURSOR_APPSTARTING) {
+                SetPreparedSystemCursor(
+                    g_workingFrames[static_cast<size_t>(g_animationFrame)],
+                    CURSOR_APPSTARTING);
+                g_animationFrame = (g_animationFrame + 1) % kSpinnerFrames;
+            }
+        }
+    }
+
+    DestroyAnimationFrames();
+    g_animationFramesReady = false;
+    g_reapplyMessagePending = false;
+
+    HWND window = g_cursorWindow;
+    g_cursorWindow = nullptr;
+    if (window) {
+        DestroyWindow(window);
+    }
+
+    if (classAtom) {
+        UnregisterClassW(kCursorWindowClassName, instance);
     }
 
     return 0;
@@ -1366,15 +1515,61 @@ bool StartAnimation() {
         return false;
     }
 
-    g_animationThread = CreateThread(nullptr, 0, AnimationThreadProc, nullptr, 0, nullptr);
-    if (!g_animationThread) {
-        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+    g_animationReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_animationReadyEvent) {
+        Wh_Log(L"CreateEvent for animation readiness failed: %lu", GetLastError());
         CloseHandle(g_animationStopEvent);
         g_animationStopEvent = nullptr;
         return false;
     }
 
-    return true;
+    g_animationThreadInitialized = false;
+    g_animationThread =
+        CreateThread(nullptr, 0, AnimationThreadProc, nullptr, 0, nullptr);
+    if (!g_animationThread) {
+        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+        CloseHandle(g_animationReadyEvent);
+        g_animationReadyEvent = nullptr;
+        CloseHandle(g_animationStopEvent);
+        g_animationStopEvent = nullptr;
+        return false;
+    }
+
+    HANDLE startupHandles[] = {g_animationReadyEvent, g_animationThread};
+    const DWORD waitResult =
+        WaitForMultipleObjects(ARRAYSIZE(startupHandles), startupHandles,
+                               FALSE, 5000);
+    const bool initialized =
+        waitResult == WAIT_OBJECT_0 && g_animationThreadInitialized;
+
+    if (initialized) {
+        CloseHandle(g_animationReadyEvent);
+        g_animationReadyEvent = nullptr;
+        return true;
+    }
+
+    if (waitResult == WAIT_OBJECT_0 + 1) {
+        Wh_Log(L"Animation thread exited during initialization");
+    } else if (waitResult == WAIT_TIMEOUT) {
+        Wh_Log(L"Animation thread initialization timed out");
+    } else if (waitResult != WAIT_OBJECT_0) {
+        Wh_Log(L"Waiting for animation thread initialization failed: %lu",
+               GetLastError());
+    }
+
+    SetEvent(g_animationStopEvent);
+    WaitForSingleObject(g_animationThread, INFINITE);
+    CloseHandle(g_animationThread);
+    g_animationThread = nullptr;
+
+    CloseHandle(g_animationReadyEvent);
+    g_animationReadyEvent = nullptr;
+
+    CloseHandle(g_animationStopEvent);
+    g_animationStopEvent = nullptr;
+
+    DestroyAnimationFrames();
+    return false;
 }
 
 void StopAnimation() {
@@ -1388,11 +1583,20 @@ void StopAnimation() {
         g_animationThread = nullptr;
     }
 
+    if (g_animationReadyEvent) {
+        CloseHandle(g_animationReadyEvent);
+        g_animationReadyEvent = nullptr;
+    }
+
     if (g_animationStopEvent) {
         CloseHandle(g_animationStopEvent);
         g_animationStopEvent = nullptr;
     }
 
+    g_cursorWindow = nullptr;
+    g_animationThreadInitialized = false;
+    g_animationFramesReady = false;
+    g_reapplyMessagePending = false;
     DestroyAnimationFrames();
 }
 
@@ -1411,18 +1615,25 @@ BOOL WhTool_ModInit() {
     SetUnhandledExceptionFilter(RestoreCursorsOnCrash);
     LoadSettings();
     ApplyStaticCursors();
+
     if (!StartAnimation()) {
-        Wh_Log(L"Failed to start cursor animation");
+        Wh_Log(L"Failed to start cursor worker thread");
+        RestoreWindowsCursorScheme();
+        return FALSE;
     }
+
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    StopAnimation();
-    LoadSettings();
-    ApplyStaticCursors();
-    if (!StartAnimation()) {
-        Wh_Log(L"Failed to restart cursor animation");
+    HWND window = g_cursorWindow;
+    if (!window) {
+        Wh_Log(L"Cursor worker window is unavailable");
+        return;
+    }
+
+    if (!PostMessageW(window, kReapplyCursorsMessage, 0, 0)) {
+        Wh_Log(L"Failed to queue settings update: %lu", GetLastError());
     }
 }
 
@@ -1459,6 +1670,7 @@ BOOL Wh_ModInit() {
         sessionId == 0) {
         return FALSE;
     }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1489,6 +1701,7 @@ BOOL Wh_ModInit() {
     }
 
     LocalFree(argv);
+
     if (isExcluded) {
         return FALSE;
     }
@@ -1549,6 +1762,7 @@ void Wh_ModAfterInit() {
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -1602,6 +1816,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
