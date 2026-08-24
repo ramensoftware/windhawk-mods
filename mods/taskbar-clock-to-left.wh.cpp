@@ -79,6 +79,8 @@ struct DeferredClockData {
     winrt::weak_ref<FrameworkElement> content;
     std::optional<winrt::event_token> loadedToken;
     std::optional<winrt::event_token> layoutUpdatedToken;
+    ULONGLONG layoutUpdatedStartTick;
+    uint32_t layoutUpdatedAttempts;
 };
 
 std::atomic<bool> g_moveClockToLeft;
@@ -89,6 +91,8 @@ std::atomic<bool> g_taskbarViewHooked;
 std::atomic<bool> g_systemTrayHookAttempted;
 std::atomic<bool> g_taskbarViewHookAttempted;
 std::atomic<DWORD> g_clockThreadId;
+std::atomic<bool> g_extentThreadMismatchLogged;
+std::atomic<int> g_lastTaskbarCenteredAlignment{-1};
 std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
 [[clang::no_destroy]] std::optional<std::vector<DeferredClockData>>
@@ -123,13 +127,16 @@ bool CallbackAllowed(DWORD generation) {
     return g_callbacksEnabled && g_callbackGeneration == generation;
 }
 
+std::vector<HWND> FindExplorerTaskbarWindows();
 HWND FindExplorerTaskbarWindow();
+void QueueKnownClockPlacementUpdate();
 
 using RunFromWindowThreadProc = void (*)(void* parameter);
 
 bool RunFromWindowThread(HWND window,
                          RunFromWindowThreadProc procedure,
-                         void* parameter) {
+                         void* parameter,
+                         DWORD expectedThreadId = 0) {
     static const UINT message = RegisterWindowMessage(
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -140,7 +147,7 @@ bool RunFromWindowThread(HWND window,
     };
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId) {
+    if (!threadId || (expectedThreadId && threadId != expectedThreadId)) {
         return false;
     }
 
@@ -529,13 +536,13 @@ bool MoveClock(FrameworkElement content) {
         root.Children().Append(moved.leftHost.as<UIElement>());
 
         // If a clock customization mod loaded first, TaskbarFrame has already
-        // arranged app buttons using the expanded clock. Force a new measure
-        // now so SystemTrayExtent is immediately called with our native-width
-        // baseline and the app group returns to its normal position.
+        // arranged app buttons using the expanded clock. Queue a fresh measure
+        // with our native-width baseline. Don't call UpdateLayout here: this
+        // path can run from LayoutUpdated, where synchronous layout re-entry is
+        // unsafe.
         originalParent.InvalidateMeasure();
         systemTrayFrame.InvalidateMeasure();
         root.InvalidateMeasure();
-        root.UpdateLayout();
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         RestoreClock(clock);
@@ -550,6 +557,15 @@ bool MoveClock(FrameworkElement content) {
 
 double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
     if (!g_callbacksEnabled || !g_moveClockToLeft || !pThis) {
+        return 0;
+    }
+
+    DWORD clockThreadId = g_clockThreadId;
+    if (!clockThreadId || clockThreadId != GetCurrentThreadId()) {
+        if (clockThreadId && !g_extentThreadMismatchLogged.exchange(true)) {
+            Wh_Log(L"Taskbar extent skipped on unexpected thread: %u != %u",
+                   GetCurrentThreadId(), clockThreadId);
+        }
         return 0;
     }
 
@@ -593,6 +609,14 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
         GetLayoutReservedClockWidthForTaskbarFrame(pThis);
     TaskbarFrame_SystemTrayExtent_Original(pThis,
                                            value + layoutReservedWidth);
+
+    int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
+    int previousAlignment =
+        g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
+    if (previousAlignment >= 0 && previousAlignment != centeredAlignment) {
+        Wh_Log(L"Taskbar alignment changed; clock placement will be updated");
+        QueueKnownClockPlacementUpdate();
+    }
 
     if (layoutReservedWidth > 0) {
         Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
@@ -643,6 +667,8 @@ void RemoveLayoutUpdatedHandler(FrameworkElement content) {
         if (data.content.get() == content && data.layoutUpdatedToken) {
             token = data.layoutUpdatedToken;
             data.layoutUpdatedToken.reset();
+            data.layoutUpdatedStartTick = 0;
+            data.layoutUpdatedAttempts = 0;
             break;
         }
     }
@@ -694,6 +720,27 @@ bool ClockLayoutIsReady(FrameworkElement content) {
            root.ActualHeight() > 0;
 }
 
+bool LayoutUpdatedWaitExpired(FrameworkElement content) {
+    constexpr ULONGLONG kLayoutReadyTimeoutMs = 10000;
+    constexpr uint32_t kLayoutReadyMaxAttempts = 600;
+
+    for (auto& data : DeferredClocks()) {
+        if (data.content.get() != content || !data.layoutUpdatedToken) {
+            continue;
+        }
+
+        data.layoutUpdatedAttempts++;
+        ULONGLONG elapsed =
+            data.layoutUpdatedStartTick
+                ? GetTickCount64() - data.layoutUpdatedStartTick
+                : kLayoutReadyTimeoutMs;
+        return data.layoutUpdatedAttempts >= kLayoutReadyMaxAttempts ||
+               elapsed >= kLayoutReadyTimeoutMs;
+    }
+
+    return true;
+}
+
 void MoveClockSafely(FrameworkElement content) {
     if (!g_callbacksEnabled || !g_moveClockToLeft || !g_movedClocks) {
         return;
@@ -723,6 +770,12 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
                 if (auto content = weakContent.get()) {
                     try {
                         if (!ClockLayoutIsReady(content)) {
+                            if (LayoutUpdatedWaitExpired(content)) {
+                                RemoveLayoutUpdatedHandler(content);
+                                Wh_Log(L"Clock layout wait expired; relocation "
+                                       L"will retry after the next template "
+                                       L"callback");
+                            }
                             return;
                         }
 
@@ -742,6 +795,8 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
 
     auto& data = GetDeferredData(content);
     if (!data.layoutUpdatedToken) {
+        data.layoutUpdatedStartTick = GetTickCount64();
+        data.layoutUpdatedAttempts = 0;
         data.layoutUpdatedToken = content.LayoutUpdated(handler);
         content.InvalidateMeasure();
     }
@@ -781,6 +836,23 @@ void RegisterLoadedHandler(FrameworkElement content) {
     }
 }
 
+void QueueKnownClockPlacementUpdate() {
+    if (!g_callbacksEnabled || !g_moveClockToLeft || !g_deferredClocks) {
+        return;
+    }
+
+    std::vector<FrameworkElement> contents;
+    for (auto& data : DeferredClocks()) {
+        if (auto content = data.content.get()) {
+            contents.push_back(content);
+        }
+    }
+
+    for (const auto& content : contents) {
+        RegisterLayoutUpdatedHandler(content);
+    }
+}
+
 void UpdateClockPlacement(FrameworkElement content) {
     if (!g_callbacksEnabled || !g_deferredClocks || !g_movedClocks) {
         return;
@@ -799,7 +871,7 @@ void UpdateClockPlacement(FrameworkElement content) {
         return;
     }
 
-    if (!g_moveClockToLeft) {
+    if (!g_moveClockToLeft || !TaskbarUsesCenteredAlignment()) {
         RemoveDeferredHandlers(content);
         RestoreClock(clock);
     } else if (content.IsLoaded()) {
@@ -908,18 +980,23 @@ void CleanupTaskbarStateCallback(void* parameter) {
 
 bool RunOnTaskbarThread(RunFromWindowThreadProc procedure, void* parameter,
                         PCWSTR operation) {
-    HWND taskbar = FindExplorerTaskbarWindow();
-    if (!taskbar) {
+    auto taskbarWindows = FindExplorerTaskbarWindows();
+    if (taskbarWindows.empty()) {
         Wh_Log(L"%s skipped: taskbar window not found", operation);
         return false;
     }
 
-    if (!RunFromWindowThread(taskbar, procedure, parameter)) {
-        Wh_Log(L"%s failed: taskbar UI thread didn't respond", operation);
-        return false;
+    DWORD expectedThreadId = g_clockThreadId;
+    for (HWND taskbarWindow : taskbarWindows) {
+        if (RunFromWindowThread(taskbarWindow, procedure, parameter,
+                                expectedThreadId)) {
+            return true;
+        }
     }
 
-    return true;
+    Wh_Log(L"%s failed on all %u taskbar-thread windows", operation,
+           static_cast<unsigned>(taskbarWindows.size()));
+    return false;
 }
 
 void UpdateKnownClocksSynchronously() {
@@ -980,13 +1057,16 @@ HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis,
     return result;
 }
 
-HWND FindExplorerTaskbarWindow() {
+std::vector<HWND> FindExplorerTaskbarWindows() {
     struct TaskbarWindows {
         DWORD preferredThreadId;
-        HWND preferredThreadWindow;
+        HWND preferredSystemTrayWindow;
+        HWND preferredShellTrayWindow;
+        std::vector<HWND> preferredOtherWindows;
         HWND systemTrayWindow;
         HWND shellTrayWindow;
-    } windows{g_clockThreadId, nullptr, nullptr, nullptr};
+    } windows{};
+    windows.preferredThreadId = g_clockThreadId;
 
     EnumWindows(
         [](HWND window, LPARAM parameter) -> BOOL {
@@ -999,25 +1079,55 @@ HWND FindExplorerTaskbarWindow() {
                 return TRUE;
             }
 
-            if (windows->preferredThreadId &&
-                threadId == windows->preferredThreadId &&
-                !windows->preferredThreadWindow) {
-                windows->preferredThreadWindow = window;
-            }
             if (_wcsicmp(className, L"SystemTray_Main") == 0) {
-                windows->systemTrayWindow = window;
+                if (!windows->systemTrayWindow) {
+                    windows->systemTrayWindow = window;
+                }
+                if (windows->preferredThreadId == threadId &&
+                    !windows->preferredSystemTrayWindow) {
+                    windows->preferredSystemTrayWindow = window;
+                }
             } else if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                windows->shellTrayWindow = window;
+                if (!windows->shellTrayWindow) {
+                    windows->shellTrayWindow = window;
+                }
+                if (windows->preferredThreadId == threadId &&
+                    !windows->preferredShellTrayWindow) {
+                    windows->preferredShellTrayWindow = window;
+                }
+            } else if (windows->preferredThreadId == threadId) {
+                windows->preferredOtherWindows.push_back(window);
             }
 
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&windows));
 
-    return windows.preferredThreadWindow
-               ? windows.preferredThreadWindow
-               : (windows.systemTrayWindow ? windows.systemTrayWindow
-                                           : windows.shellTrayWindow);
+    std::vector<HWND> result;
+    auto appendUnique = [&result](HWND window) {
+        if (window && std::find(result.begin(), result.end(), window) ==
+                          result.end()) {
+            result.push_back(window);
+        }
+    };
+
+    if (windows.preferredThreadId) {
+        appendUnique(windows.preferredSystemTrayWindow);
+        appendUnique(windows.preferredShellTrayWindow);
+        for (HWND window : windows.preferredOtherWindows) {
+            appendUnique(window);
+        }
+    } else {
+        appendUnique(windows.systemTrayWindow);
+        appendUnique(windows.shellTrayWindow);
+    }
+
+    return result;
+}
+
+HWND FindExplorerTaskbarWindow() {
+    auto windows = FindExplorerTaskbarWindows();
+    return windows.empty() ? nullptr : windows.front();
 }
 
 void RefreshTaskbarClock() {
@@ -1254,6 +1364,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 
 BOOL Wh_ModInit() {
     g_moveClockToLeft = Wh_GetIntSetting(L"MoveClockToLeft");
+    g_lastTaskbarCenteredAlignment =
+        TaskbarUsesCenteredAlignment() ? 1 : 0;
     g_callbacksEnabled = true;
     g_callbackGeneration.fetch_add(1);
 
