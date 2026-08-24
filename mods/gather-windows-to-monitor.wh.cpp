@@ -18,7 +18,13 @@ to a selected display work area.
 
 By default, `Ctrl+Alt+Shift+W` moves the foreground window to the primary display,
 and `Ctrl+Alt+Shift+1` through `Ctrl+Alt+Shift+5` move it to a numbered display.
-Numbered gather actions are available but disabled by default.
+`Ctrl+Alt+Shift+P` gathers to the primary display, `Ctrl+Alt+Shift+M` gathers to
+the display under the mouse, and `Ctrl+Alt+Shift+A` gathers to the active window's
+display. Numbered gather actions are available but disabled by default.
+
+If a numbered display is unavailable, the primary display is used. After an update,
+an existing gather shortcut keeps priority over a conflicting new move shortcut;
+change either shortcut in settings to enable both actions.
 
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
