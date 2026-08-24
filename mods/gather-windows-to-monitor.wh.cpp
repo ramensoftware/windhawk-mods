@@ -195,12 +195,12 @@ applications handle that inconsistently.
     primary display and makes DISPLAY3 become display 2. Missing displays keep
     their slots; unlisted displays follow in automatic order. An invalid override
     uses automatic order. Leave empty for automatic DISPLAY number order.
-- RestoreMinimized: 0
+- RestoreMinimized: skip
   $name: Minimized windows
   $description: Choose whether minimized windows stay minimized or are restored and moved.
   $options:
-  - 0: Skip minimized windows (default)
-  - 1: Restore and move minimized windows
+  - skip: Skip minimized windows (default)
+  - restore: Restore and move minimized windows
 - SkipFullscreen: true
   $name: Skip fullscreen windows
   $description: Applies to every action, including moving only the active window.
@@ -527,7 +527,9 @@ void LoadSettings() {
                displayOrderText.c_str());
         g_settings.displayOrder = ParseDisplayOrder(L"");
     }
-    g_settings.restoreMinimized = Wh_GetIntSetting(L"RestoreMinimized") != 0;
+    g_settings.restoreMinimized =
+        Wh_GetIntSetting(L"RestoreMinimized") != 0 ||
+        GetStringSetting(L"RestoreMinimized") == L"restore";
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
     g_settings.sizeMode = ParseSizeMode(GetStringSetting(L"SizeMode"));
     g_settings.cascadeWindows = Wh_GetIntSetting(L"CascadeWindows") != 0;
