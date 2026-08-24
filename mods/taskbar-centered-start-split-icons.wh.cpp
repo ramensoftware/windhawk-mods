@@ -92,6 +92,14 @@ right next to Start on whichever side you prefer.
   grouping is a native decision made before this mod's hooks ever see a
   button - but it's flagged here as a planned follow-up pending
   confirmation of whether it reproduces with the mod disabled.
+- **A grouped button (multiple windows combined under one icon) follows
+  only its first window.** With "Combine taskbar buttons" set to "Always",
+  a group's side and ordering are both decided by whichever of its windows
+  happens to be first in the taskbar's own internal list - not necessarily
+  the one you'd expect - so a group whose windows straddle the center line
+  won't visually reflect all of them. There's no exposed way to pick a
+  more meaningful "primary" window for a group, so this is a documented
+  tradeoff rather than a bug.
 - **Undocumented internals.** This mod hooks private, unversioned classes
   inside `taskbar.dll` and `Taskbar.View.dll` (via symbols resolved from
   Microsoft's public symbol server at runtime, not hardcoded offsets). A
@@ -864,6 +872,19 @@ thread_local void* g_clickSentinel_TaskGroup;
 // session, with only a log line as the symptom. kClickSentinelMissesBeforeBroken
 // requires a few misses (still a bounded cost if the mechanism really is
 // broken) before actually latching - see NoteUnconfirmedClickSentinelMiss.
+//
+// This bound only holds pre-confirmation: NoteUnconfirmedClickSentinelMiss
+// returns immediately once a path is confirmed, by design (a post-
+// confirmation miss is routinely innocent - see above - so counting it
+// would risk latching a working path dead over an unrelated timing
+// hiccup). So "at most kClickSentinelMissesBeforeBroken real clicks per
+// path, per session" is the guarantee before first confirmation, not a
+// session-wide cap. Also note ResolveHwndFromTaskListButton tries the
+// item path first and falls through to the group path on a miss, so one
+// unresolvable button can burn a probe on BOTH paths in a single attempt
+// - the worst case before both latches trip is
+// 2 * kClickSentinelMissesBeforeBroken (6, at the current constant)
+// dispatched clicks, not kClickSentinelMissesBeforeBroken.
 std::atomic<bool> g_clickSentinelItemConfirmed;
 std::atomic<bool> g_clickSentinelItemBroken;
 std::atomic<int> g_clickSentinelItemMisses;
@@ -1722,6 +1743,16 @@ struct LayoutPlanStats {
 // changed - same reasoning as g_passStats.
 thread_local LayoutPlanStats g_planStats;
 
+// Total realized repeater children (every kind - Start, system buttons,
+// task list buttons) as of the last successful RecomputeLayoutPlan pass -
+// used only by that function's own staleness-backstop check (see there)
+// to detect ANY child appearing/disappearing via a single cheap count
+// comparison, with no per-child class-name lookup needed. Deliberately
+// broader than g_planStats.taskListTotal: a Search/Task View/Widgets
+// visibility change also needs to invalidate the plan, not just a task
+// list button count change.
+thread_local int g_planChildCount;
+
 struct TaskListPlanEntry {
     FrameworkElement element;
     ButtonClassification info;
@@ -1882,14 +1913,31 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
     // x itself (the reference point carried to the next icon) advances by
     // the scaled amount. Scaling the placement itself instead would drift
     // the innermost icon into Start as compression increases.
+    // A just-realized button reports ActualWidth()==0 for one pass (only
+    // the *previous* arrange pass ever sets it), so entry->width can be 0
+    // here for a genuinely brand-new button. Giving it a plan entry in
+    // that state would place it exactly on top of its neighbor for one
+    // frame. Leaving it out of outPlan entirely instead falls through to
+    // native positioning for that one pass (same fallback every element
+    // this mod doesn't plan gets) - and since it's then also missing from
+    // g_lastArrangedX, RecomputeLayoutPlan's own staleness check (the
+    // hash-lookup miss, not even the child-count backstop) forces a real
+    // recompute on the very next pass once its real width is available,
+    // so this is a one-frame artifact, not a persistent one. Doesn't
+    // affect `x`'s advance either way - a zero-width entry doesn't move
+    // the reference point regardless of whether it gets a plan entry.
     double x = leftInnerX;
     for (auto* entry : left) {
-        outPlan[winrt::get_abi(entry->element)] = x - entry->width;
+        if (entry->width > 0) {
+            outPlan[winrt::get_abi(entry->element)] = x - entry->width;
+        }
         x -= entry->width * leftScale;
     }
     x = rightInnerX;
     for (auto* entry : right) {
-        outPlan[winrt::get_abi(entry->element)] = x;
+        if (entry->width > 0) {
+            outPlan[winrt::get_abi(entry->element)] = x;
+        }
         x += entry->width * rightScale;
     }
 }
@@ -2415,54 +2463,63 @@ void RecomputeLayoutPlan() {
         // getting called at least this often - a change landing in a
         // skipped pass on an otherwise-idle desktop (e.g. a pin/unpin)
         // could sit stale indefinitely otherwise. GetCachedTaskbarRepeater
-        // makes checking the realized task-list-button set against what
-        // the plan actually covers affordable every time this branch is
-        // taken - if any live button isn't in g_lastArrangedX, the plan is
+        // makes checking the realized child set against what the plan
+        // actually covers affordable every time this branch is taken - if
+        // any live task list button isn't in g_lastArrangedX, or the live
+        // child count doesn't match the last recompute's, the plan is
         // stale regardless of the dirty flag or the clock.
-        bool planCoversLiveTaskListButtons = true;
+        //
+        // Hash lookup first, IsTaskListButton (winrt::get_class_name - a
+        // GetRuntimeClassName round trip plus an HSTRING allocation)
+        // second, short-circuited via && - every element the plan covers
+        // (Start and the system buttons too, not just task list buttons)
+        // is already a key in g_lastArrangedX, so the common "nothing
+        // changed" case never pays for a single class-name lookup here.
+        // IsTaskListButton only runs at all on a hash-lookup miss, i.e.
+        // a genuinely new child.
+        bool planIsCurrent = true;
         try {
             if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
-                int liveTaskListCount = 0;
+                int liveChildCount = 0;
                 for (auto& child : GetRepeaterChildElements(repeater)) {
-                    // Map lookup first: every element the plan covers is
-                    // already a key in g_lastArrangedX, so this is a plain
-                    // hash lookup for the common case. IsTaskListButton
-                    // (winrt::get_class_name - a GetRuntimeClassName round
-                    // trip plus an HSTRING allocation) only runs once per
-                    // child, hoisted into a local rather than called twice.
-                    bool isTaskListButton = IsTaskListButton(child);
-                    if (!isTaskListButton) {
-                        continue;
-                    }
-                    liveTaskListCount++;
-                    if (!g_lastArrangedX.count(winrt::get_abi(child))) {
-                        // A live button the plan doesn't cover yet (just
-                        // realized after the last recompute) - the case
-                        // this check was originally added for.
-                        planCoversLiveTaskListButtons = false;
+                    liveChildCount++;
+                    if (!g_lastArrangedX.count(winrt::get_abi(child)) &&
+                        IsTaskListButton(child)) {
+                        // A live task list button the plan doesn't cover
+                        // yet (just realized after the last recompute).
+                        // Scoped to task list buttons specifically since
+                        // a brand-new system button reaching this branch
+                        // isn't otherwise possible - Search/Task View/
+                        // Widgets/Start don't get created or destroyed
+                        // the way task list buttons do - so there's
+                        // nothing to gain from paying for the class-name
+                        // check on a system-button miss too.
+                        planIsCurrent = false;
                         break;
                     }
                 }
-                // A button *disappearing* (unpin, app closed) adds nothing
-                // new to g_lastArrangedX's coverage - every remaining live
-                // button is still a key in it - so the loop above alone
-                // can't catch it, and it would otherwise sit at its old X
-                // (a visible hole) until the resolve timer's own prune
-                // eventually invalidates, up to kIdleResolveTickMs or the
-                // backoff schedule away. This count comparison catches
-                // that direction too.
-                if (planCoversLiveTaskListButtons &&
-                    liveTaskListCount != g_planStats.taskListTotal) {
-                    planCoversLiveTaskListButtons = false;
+                // A child *disappearing* (unpin, app closed, or a system
+                // button's visibility changing) adds nothing new to
+                // g_lastArrangedX's coverage - every remaining live child
+                // is still a key in it - so the loop above alone can't
+                // catch it, and a removed task list button would
+                // otherwise sit at its old X (a visible hole) until the
+                // resolve timer's own prune eventually invalidates, up to
+                // kIdleResolveTickMs or the backoff schedule away. This
+                // count comparison against g_planChildCount (every child
+                // kind, not just task list buttons - see its own comment)
+                // catches that direction too, for free, off the same walk.
+                if (planIsCurrent && liveChildCount != g_planChildCount) {
+                    planIsCurrent = false;
                 }
             }
         } catch (...) {
             // Conservative default: treat an exception here as "can't
             // confirm the plan is current" and fall through to the real
             // recompute below, which has its own exception handling.
-            planCoversLiveTaskListButtons = false;
+            planIsCurrent = false;
         }
-        if (planCoversLiveTaskListButtons) {
+        if (planIsCurrent) {
             return;
         }
     }
@@ -2598,6 +2655,7 @@ void RecomputeLayoutPlan() {
                             rightBoundLocal, newPlan);
 
         g_lastArrangedX = std::move(newPlan);
+        g_planChildCount = (int)children.size();
         g_planDirty = false;
     } catch (...) {
         g_planStats.exceptions++;
