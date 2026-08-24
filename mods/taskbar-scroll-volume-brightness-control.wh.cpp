@@ -2,7 +2,7 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.1.0
+// @version       1.1.1
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
@@ -50,12 +50,12 @@ Issues and PRs welcome: https://github.com/NarayanChetri
   $name: Split position (%)
   $description: >-
     Percentage from the edge of the taskbar where the volume/brightness
-    zones split.
+    zones split (top/bottom on a vertical taskbar).
 - invertSides: false
   $name: Invert zones
   $description: >-
     When enabled, the left side of the taskbar controls volume and the
-    right side controls brightness.
+    right side controls brightness (top/bottom on a vertical taskbar).
 - reverseScrollDirection: false
   $name: Reverse scroll direction
   $description: >-
@@ -77,7 +77,7 @@ Issues and PRs welcome: https://github.com/NarayanChetri
   $description: Show a native-looking taskbar element with the current percentage.
 - overlayDurationMs: 1000
   $name: Overlay display duration (ms)
-  $description: How long the overlay stays on screen before fading out.
+  $description: How long the overlay stays on screen before fading out (200-5000).
 - accentColor: "FFBE5C"
   $name: Overlay accent color (hex RRGGBB)
   $description: Color of the progress bar and percentage text accent.
@@ -107,6 +107,7 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #include <cwchar>
 #include <algorithm>
 #include <atomic>
+#include <string>
 #include <windhawk_utils.h>
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
@@ -554,7 +555,7 @@ int AdjustBrightnessWMI(bool up, int notches, int stepPercent) {
     if (SUCCEEDED(hres) && pEnumBrightness) {
         IWbemClassObject* pObj = nullptr;
         ULONG uReturned = 0;
-        if (pEnumBrightness->Next(WBEM_INFINITE, 1, &pObj, &uReturned) == S_OK && uReturned > 0) {
+        if (pEnumBrightness->Next(2000, 1, &pObj, &uReturned) == S_OK && uReturned > 0) {
             VARIANT vtCurrent; VariantInit(&vtCurrent);
             VARIANT vtInstanceName; VariantInit(&vtInstanceName);
 
@@ -798,8 +799,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (HandleTaskbarScroll(hWnd, pt, delta)) return 0;
     } else if (uMsg == WM_DISPLAYCHANGE) {
         if (g_monitorThreadId) {
-            while (!PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0) &&
-                   WaitForSingleObject(g_hMonitorThread, 10) == WAIT_TIMEOUT) {}
+            PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0);
         }
     } else if (uMsg == WM_NCDESTROY) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
@@ -921,15 +921,14 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
 
                     if (percent >= 0 && g_workerThreadId) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
-                        while (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res) &&
-                               WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
+                        PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res);
                     }
                 }
                 delete req;
 
                 DWORD currentThreadId = GetCurrentThreadId();
                 for (ScrollRequest* d : deferred) {
-                    while (!PostThreadMessageW(currentThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d) && !g_stopping) {}
+                    PostThreadMessageW(currentThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d);
                 }
             }
             continue;
@@ -938,14 +937,12 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
             CloseAllMonitorCaches();
             continue;
         }
-        TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
     MSG leftover;
-    while (PeekMessageW(&leftover, nullptr, WM_APP_BRIGHTNESS_REQUEST, WM_APP_BRIGHTNESS_RESULT, PM_REMOVE)) {
-        if (leftover.message == WM_APP_BRIGHTNESS_REQUEST) delete (ScrollRequest*)leftover.lParam;
-        else if (leftover.message == WM_APP_BRIGHTNESS_RESULT) delete (ScrollResult*)leftover.lParam;
+    while (PeekMessageW(&leftover, nullptr, WM_APP_BRIGHTNESS_REQUEST, WM_APP_BRIGHTNESS_REQUEST, PM_REMOVE)) {
+        delete (ScrollRequest*)leftover.lParam;
     }
 
     CleanupWMI();
@@ -1035,13 +1032,15 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             }
             continue;
         }
-        TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
     MSG leftover;
     while (PeekMessageW(&leftover, nullptr, WM_APP_VOLUME_REQUEST, WM_APP_VOLUME_REQUEST, PM_REMOVE)) {
         delete (ScrollRequest*)leftover.lParam;
+    }
+    while (PeekMessageW(&leftover, nullptr, WM_APP_BRIGHTNESS_RESULT, WM_APP_BRIGHTNESS_RESULT, PM_REMOVE)) {
+        delete (ScrollResult*)leftover.lParam;
     }
 
     if (pEnum) pEnum->Release();
@@ -1126,8 +1125,7 @@ BOOL Wh_ModInit() {
     if (!g_hMonitorThread) {
         g_stopping = true;
         if (g_workerThreadId) {
-            while (!PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0) &&
-                   WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
+            PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
         }
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
@@ -1148,26 +1146,24 @@ void Wh_ModUninit() {
     g_stopping = true;
     EnumWindows(EnumWindowsUninitProc, 0);
 
-    if (g_workerThreadId) {
-        while (!PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0) &&
-               WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
-    }
-    if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = nullptr;
-        g_workerThreadId = 0;
-    }
-
     if (g_monitorThreadId) {
-        while (!PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0) &&
-               WaitForSingleObject(g_hMonitorThread, 10) == WAIT_TIMEOUT) {}
+        PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0);
     }
     if (g_hMonitorThread) {
         WaitForSingleObject(g_hMonitorThread, INFINITE);
         CloseHandle(g_hMonitorThread);
         g_hMonitorThread = nullptr;
         g_monitorThreadId = 0;
+    }
+
+    if (g_workerThreadId) {
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_hWorkerThread) {
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = nullptr;
+        g_workerThreadId = 0;
     }
 
     if (g_gdiplusToken) {
