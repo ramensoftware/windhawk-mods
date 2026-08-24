@@ -395,6 +395,13 @@ constexpr UINT WM_APP_MANAGEMENT_MODE_SET = WM_APP + 8;
 constexpr UINT WM_APP_TILE_WORKSPACE = WM_APP + 9;
 constexpr UINT WM_APP_FOREGROUND_CHANGED = WM_APP + 10;
 
+enum class WmMessageDisposition {
+  Handled,
+  DispatchToWindows,
+};
+
+static WmMessageDisposition HandleWmThreadMessage(const MSG& msg);
+
 enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, BSP, Monocle, Floating, COUNT };
 enum class MouseMoveBehavior { Float, Swap };
 enum class ExclusionMatch { Process, Class, Title };
@@ -7641,6 +7648,21 @@ static TileLayout GetMonitorLayoutOrDefault(HMONITOR monitor) {
   return layout;
 }
 
+// TrackPopupMenuEx runs a modal loop which otherwise retrieves and discards
+// hwnd-less actor messages. Process only messages owned by the WM and leave all
+// menu/system traffic to the next hook and the menu loop.
+static LRESULT CALLBACK TrayMenuMessageFilterProc(
+    int code, WPARAM wParam, LPARAM lParam) {
+  if (code == MSGF_MENU && lParam) {
+    const MSG& msg = *reinterpret_cast<const MSG*>(lParam);
+    if (!msg.hwnd &&
+        HandleWmThreadMessage(msg) == WmMessageDisposition::Handled) {
+      return 1;
+    }
+  }
+  return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
 static void ShowContextMenu() {
   if (!g_trayWindow) return;
 
@@ -7651,9 +7673,13 @@ static void ShowContextMenu() {
   if (!menu) return;
 
   AppendMenuW(menu, MF_STRING, kContextTileWorkspace, L"Tile Workspace");
+  const ManagementMode targetMode = IsAutomaticMode()
+                                        ? ManagementMode::Manual
+                                        : ManagementMode::Automatic;
   AppendMenuW(
       menu, MF_STRING, kContextToggleMode,
-      IsAutomaticMode() ? L"Switch to Manual Mode" : L"Switch to Automatic Mode");
+      targetMode == ManagementMode::Manual ? L"Switch to Manual Mode"
+                                           : L"Switch to Automatic Mode");
 
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
@@ -7676,11 +7702,22 @@ static void ShowContextMenu() {
     return;
   }
 
+  HHOOK menuMessageHook = SetWindowsHookExW(
+      WH_MSGFILTER, TrayMenuMessageFilterProc, nullptr, GetCurrentThreadId());
+  if (!menuMessageHook) {
+    Wh_Log(L"Failed to install tray menu message filter: %lu", GetLastError());
+    DestroyMenu(menu);
+    return;
+  }
+
   // Required for reliable dismissal of notification-area popup menus.
   SetForegroundWindow(g_trayWindow);
   const UINT command = TrackPopupMenuEx(
       menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
       point.x, point.y, g_trayWindow, nullptr);
+  if (!UnhookWindowsHookEx(menuMessageHook)) {
+    Wh_Log(L"Failed to remove tray menu message filter: %lu", GetLastError());
+  }
   PostMessageW(g_trayWindow, WM_NULL, 0, 0);
   DestroyMenu(menu);
 
@@ -7695,12 +7732,9 @@ static void ShowContextMenu() {
   }
 
   if (command == kContextToggleMode) {
-    const ManagementMode mode = IsAutomaticMode()
-                                    ? ManagementMode::Manual
-                                    : ManagementMode::Automatic;
     PostThreadMessageW(
         threadId, WM_APP_MANAGEMENT_MODE_SET,
-        static_cast<WPARAM>(mode), 0);
+        static_cast<WPARAM>(targetMode), 0);
     return;
   }
 
@@ -9809,11 +9843,6 @@ static void HandleMoveSizeEndMessage(HWND hwnd) {
   for (const auto& key : changedKeys) ArrangeWorkspace(key);
   Reconcile::ScheduleLifecycleReconcile(hwnd);
 }
-
-enum class WmMessageDisposition {
-  Handled,
-  DispatchToWindows,
-};
 
 // Converts one serialized thread message into a domain command. Messages not
 // owned by the WM are explicitly returned to Windows so STA COM's hidden window
