@@ -1,3 +1,7 @@
+## 1.3 ([Aug 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fa70d57a80b307b069a16e5a889febc47afd01f1/mods/disable-inactive-menubar-greying.wh.cpp))
+
+Exclude effect on taskbar
+
 ## 1.2 ([Jul 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c31d06a195bfa0cf47cb700c22d23b5c68f78709/mods/disable-inactive-menubar-greying.wh.cpp))
 
 Remove unwanted effects, simplify code, remove a memory leak

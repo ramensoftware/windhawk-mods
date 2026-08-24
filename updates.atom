@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-23T17:59:31.000Z</updated>
+    <updated>2026-08-24T17:28:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.3]]></title>
+        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#fa70d57a80b307b069a16e5a889febc47afd01f1</id>
+        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
+        <updated>2026-08-24T17:28:36.000Z</updated>
+        <content type="html"><![CDATA[<p>Exclude effect on taskbar</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SnapSentry 0.17.3]]></title>
         <id>https://windhawk.net/mods/snap-sentry#fa893122b9e544bd3605075f8fed427f84e6141a</id>
@@ -1051,22 +1062,6 @@ not something the mod can work around.</li>
         <author>
             <name>Vitaliy</name>
             <uri>https://github.com/vicitacal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Launch & Media Panel 2.2.0]]></title>
-        <id>https://windhawk.net/mods/quick-launch-media-panel#b5a50ad39a19c398dadf70e3f35640cf22bd53e9</id>
-        <link href="https://windhawk.net/mods/quick-launch-media-panel"/>
-        <updated>2026-08-20T17:02:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a compact collapsed capsule at the top of the desktop.</li>
-<li>Redesigned the panel with a modern translucent visual style.</li>
-<li>Reorganized the header, shortcut grid and media controls.</li>
-<li>Restored and expanded the localized settings and documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>Spartacus</name>
-            <uri>https://github.com/spartaaacus</uri>
         </author>
     </entry>
 </feed>
