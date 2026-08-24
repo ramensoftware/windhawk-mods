@@ -2,7 +2,7 @@
 // @id              disable-inactive-menubar-greying
 // @name            Disable Inactive Menubar Greying
 // @description     Prevents menubar text from being greyed out in inactive folder windows in Classic theme
-// @version         1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -54,10 +54,34 @@ bool IsCurrentThreadWindowFocused()
     return fgThreadId == GetCurrentThreadId();
 }
 
+BOOL CALLBACK EnumThreadWndProc_CheckTaskbar(HWND hwnd, LPARAM lParam)
+{
+    wchar_t className[256];
+    if (GetClassNameW(hwnd, className, 256) > 0)
+    {
+        if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)
+        {
+            *(bool*)lParam = true;
+            return FALSE; // нашли, прекращаем перебор
+        }
+    }
+    return TRUE; // продолжаем перебор
+}
+
+// Возвращает true, если текущий поток владеет хотя бы одним окном панели задач
+bool IsCurrentThreadTaskbar()
+{
+    bool found = false;
+    EnumThreadWindows(GetCurrentThreadId(), EnumThreadWndProc_CheckTaskbar, (LPARAM)&found);
+    return found;
+}
+
 COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
     // Если рисует поток окна, которое реально в фокусе - не вмешиваемся вообще.
-    if (IsCurrentThreadWindowFocused())
+    // Если это поток панели задач - не вмешиваемся вообще.
+    if (IsCurrentThreadWindowFocused() || IsCurrentThreadTaskbar())
     {
         return SetTextColor_Original(hdc, color);
     }
