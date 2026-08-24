@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              win7-classic-autoplay-restorer
-// @name            Windows 7 Classic AutoPlay Dialog
+// @name            Windows 7 Classic AutoPlay Dialog Restorer
 // @description     This mod restores the classic Windows 7 AutoPlay dialog for removable drives and optical media
 // @version         1.0.0
 // @author          babamohammed
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 Classic AutoPlay Dialog
+# Windows 7 Classic AutoPlay Dialog Restorer
 
 This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.
 
