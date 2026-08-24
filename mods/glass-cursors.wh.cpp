@@ -2,11 +2,12 @@
 // @id              glass-cursors
 // @name            Glass Cursors
 // @description     Original DPI-aware translucent glass system cursors with a live animated loading indicator.
-// @version         0.18.3
+// @version         0.19.0
 // @author          fizixes
+// @github          https://github.com/fizixes
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -lgdi32
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -26,10 +27,11 @@ of scaling a 32 px bitmap, giving cleaner edges on high-DPI displays.
 - Automatic DPI-aware size selection, plus 32 / 48 / 64 / 96 px overrides.
 - Replaces the standard Windows cursor roles.
 - Busy and Working-in-background cursors use a live animated white glass spinner.
+- Runs in a dedicated Windhawk tool process instead of inside Explorer.
 - Disabling the mod restores the user's configured Windows cursor scheme.
 
-## Author
-Created and maintained by `fizixes`.
+## Display scaling
+Windows system cursor slots hold one fixed-size cursor at a time. On mixed-DPI multi-monitor setups, the selected size can therefore look larger or smaller on a secondary display. Use the cursor resolution and artwork size settings to choose the best compromise for your setup.
 */
 // ==/WindhawkModReadme==
 
@@ -87,6 +89,9 @@ Created and maintained by `fizixes`.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <stdint.h>
 #include <algorithm>
 #include <array>
@@ -192,8 +197,10 @@ int g_artworkScale = 68;
 constexpr DWORD kAnimationDelay = 33;
 HANDLE g_animationStopEvent = nullptr;
 HANDLE g_animationThread = nullptr;
-std::vector<RenderedCursor> g_busyFrames;
-std::vector<RenderedCursor> g_workingFrames;
+std::vector<HCURSOR> g_busyFrames;
+std::vector<HCURSOR> g_workingFrames;
+double g_renderOffsetX = 0.0;
+double g_renderOffsetY = 0.0;
 
 FColor White(double alpha = 1.0) {
     return {1.0, 1.0, 1.0, alpha};
@@ -416,7 +423,8 @@ std::vector<uint32_t> Downsample(const Surface& hi, int outSize) {
 }
 
 Point P(double x, double y, int canvasSize) {
-    return {x * canvasSize, y * canvasSize};
+    return {g_renderOffsetX + x * canvasSize,
+            g_renderOffsetY + y * canvasSize};
 }
 
 Point CubicPoint(Point p0, Point p1, Point p2, Point p3, double t) {
@@ -975,93 +983,37 @@ void RenderSpinner(Surface& s,
     }
 }
 
-void ScaleArtworkAroundHotspot(RenderedCursor& cursor, int percent) {
-    if (percent >= 100 || percent <= 0 || cursor.pixels.empty()) {
-        return;
+Point GetRoleHotspot(DWORD role) {
+    switch (role) {
+        case CURSOR_NORMAL:
+        case CURSOR_APPSTARTING:
+        case CURSOR_HELP:
+            return {0.235, 0.085};
+        case CURSOR_HAND:
+            return {0.420, 0.085};
+        case CURSOR_UP:
+            return {0.500, 0.100};
+        case CURSOR_PIN:
+            return {0.500, 0.900};
+        default:
+            return {0.500, 0.500};
     }
-
-    const int size = cursor.size;
-    const double scale = percent / 100.0;
-    const std::vector<uint32_t> source = cursor.pixels;
-    std::vector<uint32_t> output(static_cast<size_t>(size) * size, 0);
-
-    auto sample = [&](int x, int y) -> uint32_t {
-        if (x < 0 || y < 0 || x >= size || y >= size) {
-            return 0;
-        }
-        return source[static_cast<size_t>(y) * size + x];
-    };
-
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
-            const double sx = cursor.hotspotX + (x - cursor.hotspotX) / scale;
-            const double sy = cursor.hotspotY + (y - cursor.hotspotY) / scale;
-            if (sx < -0.5 || sy < -0.5 || sx > size - 0.5 || sy > size - 0.5) {
-                continue;
-            }
-
-            const int x0 = static_cast<int>(std::floor(sx));
-            const int y0 = static_cast<int>(std::floor(sy));
-            const int x1 = x0 + 1;
-            const int y1 = y0 + 1;
-            const double fx = sx - x0;
-            const double fy = sy - y0;
-
-            const uint32_t p[4] = {
-                sample(x0, y0), sample(x1, y0),
-                sample(x0, y1), sample(x1, y1)
-            };
-            const double w[4] = {
-                (1.0 - fx) * (1.0 - fy), fx * (1.0 - fy),
-                (1.0 - fx) * fy, fx * fy
-            };
-
-            double a = 0.0, pr = 0.0, pg = 0.0, pb = 0.0;
-            for (int i = 0; i < 4; ++i) {
-                const double pa = ((p[i] >> 24) & 0xFF) / 255.0;
-                const double r = ((p[i] >> 16) & 0xFF) / 255.0;
-                const double g = ((p[i] >> 8) & 0xFF) / 255.0;
-                const double b = (p[i] & 0xFF) / 255.0;
-                a += pa * w[i];
-                pr += r * pa * w[i];
-                pg += g * pa * w[i];
-                pb += b * pa * w[i];
-            }
-
-            double r = 0.0, g = 0.0, b = 0.0;
-            if (a > 1e-8) {
-                r = pr / a;
-                g = pg / a;
-                b = pb / a;
-            }
-
-            const BYTE A = static_cast<BYTE>(std::clamp(std::lround(a * 255.0), 0l, 255l));
-            const BYTE R = static_cast<BYTE>(std::clamp(std::lround(r * 255.0), 0l, 255l));
-            const BYTE G = static_cast<BYTE>(std::clamp(std::lround(g * 255.0), 0l, 255l));
-            const BYTE B = static_cast<BYTE>(std::clamp(std::lround(b * 255.0), 0l, 255l));
-
-            output[static_cast<size_t>(y) * size + x] =
-                (static_cast<uint32_t>(A) << 24) |
-                (static_cast<uint32_t>(R) << 16) |
-                (static_cast<uint32_t>(G) << 8) |
-                static_cast<uint32_t>(B);
-        }
-    }
-
-    cursor.pixels.swap(output);
 }
 
 RenderedCursor RenderRole(int size, DWORD role, int frame = 0) {
-    const int n = size * kSupersample;
-    Surface surface(n, n);
-    int hotX = size / 2;
-    int hotY = size / 2;
+    const int fullCanvasSize = size * kSupersample;
+    Surface surface(fullCanvasSize, fullCanvasSize);
+
+    const Point hotspot = GetRoleHotspot(role);
+    const double artworkScale = std::clamp(g_artworkScale / 100.0, 0.01, 1.0);
+    const int n = std::max(1, static_cast<int>(std::lround(fullCanvasSize * artworkScale)));
+
+    g_renderOffsetX = hotspot.x * (fullCanvasSize - n);
+    g_renderOffsetY = hotspot.y * (fullCanvasSize - n);
 
     switch (role) {
         case CURSOR_NORMAL:
             RenderArrowShape(surface, n);
-            hotX = static_cast<int>(size * 0.235);
-            hotY = static_cast<int>(size * 0.085);
             break;
         case CURSOR_IBEAM:
             RenderIBeam(surface, n);
@@ -1074,8 +1026,6 @@ RenderedCursor RenderRole(int size, DWORD role, int frame = 0) {
             break;
         case CURSOR_UP:
             RenderUp(surface, n);
-            hotX = size / 2;
-            hotY = static_cast<int>(size * 0.10);
             break;
         case CURSOR_SIZENWSE:
             RenderResize(surface, n, 0);
@@ -1097,24 +1047,16 @@ RenderedCursor RenderRole(int size, DWORD role, int frame = 0) {
             break;
         case CURSOR_HAND:
             RenderHandShape(surface, n);
-            hotX = static_cast<int>(size * 0.420);
-            hotY = static_cast<int>(size * 0.085);
             break;
         case CURSOR_APPSTARTING:
             RenderArrowShape(surface, n);
             RenderSpinner(surface, n, P(0.805, 0.185, n), n * 0.115, n * 0.020, frame % kSpinnerFrames);
-            hotX = static_cast<int>(size * 0.235);
-            hotY = static_cast<int>(size * 0.085);
             break;
         case CURSOR_HELP:
             RenderHelp(surface, n);
-            hotX = static_cast<int>(size * 0.235);
-            hotY = static_cast<int>(size * 0.085);
             break;
         case CURSOR_PIN:
             RenderPin(surface, n);
-            hotX = size / 2;
-            hotY = static_cast<int>(size * 0.90);
             break;
         case CURSOR_PERSON:
             RenderPerson(surface, n);
@@ -1123,10 +1065,9 @@ RenderedCursor RenderRole(int size, DWORD role, int frame = 0) {
 
     RenderedCursor result;
     result.size = size;
-    result.hotspotX = std::clamp(hotX, 0, size - 1);
-    result.hotspotY = std::clamp(hotY, 0, size - 1);
+    result.hotspotX = std::clamp(static_cast<int>(std::lround(size * hotspot.x)), 0, size - 1);
+    result.hotspotY = std::clamp(static_cast<int>(std::lround(size * hotspot.y)), 0, size - 1);
     result.pixels = Downsample(surface, size);
-    ScaleArtworkAroundHotspot(result, g_artworkScale);
     return result;
 }
 
@@ -1158,7 +1099,9 @@ HCURSOR CreateCursorFromPixels(const RenderedCursor& cursor) {
 
     std::memcpy(bits, cursor.pixels.data(), cursor.pixels.size() * sizeof(uint32_t));
 
-    HBITMAP maskBitmap = CreateBitmap(cursor.size, cursor.size, 1, 1, nullptr);
+    const size_t maskRowBytes = static_cast<size_t>((cursor.size + 15) / 16) * 2;
+    std::vector<BYTE> maskBits(maskRowBytes * cursor.size, 0);
+    HBITMAP maskBitmap = CreateBitmap(cursor.size, cursor.size, 1, 1, maskBits.data());
     if (!maskBitmap) {
         DeleteObject(colorBitmap);
         return nullptr;
@@ -1195,20 +1138,15 @@ bool SetRenderedSystemCursor(const RenderedCursor& rendered, DWORD cursorId) {
 }
 
 int GetIntegerChoiceSetting(PCWSTR name, int fallback) {
-    PCWSTR rawValue = Wh_GetStringSetting(name);
-    if (!rawValue || !*rawValue) {
-        if (rawValue) {
-            Wh_FreeStringSetting(rawValue);
-        }
+    WindhawkUtils::StringSetting rawValue =
+        WindhawkUtils::StringSetting::make(name);
+    if (!*rawValue) {
         return fallback;
     }
 
     wchar_t* end = nullptr;
-    const long parsed = wcstol(rawValue, &end, 10);
-    const bool valid = end && *end == L'\0';
-    Wh_FreeStringSetting(rawValue);
-
-    return valid ? static_cast<int>(parsed) : fallback;
+    const long parsed = wcstol(rawValue.get(), &end, 10);
+    return end && *end == L'\0' ? static_cast<int>(parsed) : fallback;
 }
 
 int ResolveCursorSize() {
@@ -1256,25 +1194,21 @@ void LoadSettings() {
 
     g_cursorSize = ResolveCursorSize();
 
-    PCWSTR pointerStyle = Wh_GetStringSetting(L"PointerStyle");
-    if (pointerStyle && wcscmp(pointerStyle, L"cleanRounded") == 0) {
+    WindhawkUtils::StringSetting pointerStyle =
+        WindhawkUtils::StringSetting::make(L"PointerStyle");
+    if (wcscmp(pointerStyle.get(), L"cleanRounded") == 0) {
         g_pointerStyle = 1;
-    } else if (pointerStyle && wcscmp(pointerStyle, L"symmetricSharp") == 0) {
+    } else if (wcscmp(pointerStyle.get(), L"symmetricSharp") == 0) {
         g_pointerStyle = 2;
-    } else if (pointerStyle && wcscmp(pointerStyle, L"symmetricCurved") == 0) {
+    } else if (wcscmp(pointerStyle.get(), L"symmetricCurved") == 0) {
         g_pointerStyle = 3;
     } else {
         g_pointerStyle = 0;
     }
-    if (pointerStyle) {
-        Wh_FreeStringSetting(pointerStyle);
-    }
 
-    PCWSTR handStyle = Wh_GetStringSetting(L"HandStyle");
-    g_handStyle = (handStyle && wcscmp(handStyle, L"clean") == 0) ? 0 : 1;
-    if (handStyle) {
-        Wh_FreeStringSetting(handStyle);
-    }
+    WindhawkUtils::StringSetting handStyle =
+        WindhawkUtils::StringSetting::make(L"HandStyle");
+    g_handStyle = wcscmp(handStyle.get(), L"clean") == 0 ? 0 : 1;
 
     g_artworkScale = GetIntegerChoiceSetting(L"ArtworkScale", 68);
     if (g_artworkScale != 65 && g_artworkScale != 68 &&
@@ -1283,7 +1217,7 @@ void LoadSettings() {
         g_artworkScale = 68;
     }
 
-    Wh_Log(L"Glass Cursors: size=%d fill=%d%% color=%d,%d,%d pointerStyle=%d handStyle=%d artwork=%d%%",
+    Wh_Log(L"size=%d fill=%d%% color=%d,%d,%d pointerStyle=%d handStyle=%d artwork=%d%%",
            g_cursorSize, g_fillOpacity, g_glassRed, g_glassGreen, g_glassBlue,
            g_pointerStyle, g_handStyle, g_artworkScale);
 }
@@ -1312,37 +1246,120 @@ void ApplyStaticCursors() {
     SetRenderedSystemCursor(RenderRole(g_cursorSize, CURSOR_PERSON), CURSOR_PERSON);
 }
 
-void PrepareAnimationFrames() {
+void DestroyAnimationFrames() {
+    for (HCURSOR cursor : g_busyFrames) {
+        if (cursor) {
+            DestroyCursor(cursor);
+        }
+    }
+    for (HCURSOR cursor : g_workingFrames) {
+        if (cursor) {
+            DestroyCursor(cursor);
+        }
+    }
     g_busyFrames.clear();
     g_workingFrames.clear();
+}
+
+bool SetPreparedSystemCursor(HCURSOR source, DWORD cursorId) {
+    if (!source) {
+        return false;
+    }
+
+    HCURSOR cursorCopy = static_cast<HCURSOR>(CopyIcon(source));
+    if (!cursorCopy) {
+        Wh_Log(L"CopyIcon failed for cursor %lu: %lu", cursorId, GetLastError());
+        return false;
+    }
+
+    if (!SetSystemCursor(cursorCopy, cursorId)) {
+        Wh_Log(L"SetSystemCursor failed for cursor %lu: %lu", cursorId, GetLastError());
+        DestroyCursor(cursorCopy);
+        return false;
+    }
+
+    return true;
+}
+
+bool PrepareAnimationFrames() {
+    DestroyAnimationFrames();
     g_busyFrames.reserve(kSpinnerFrames);
     g_workingFrames.reserve(kSpinnerFrames);
 
     for (int frame = 0; frame < kSpinnerFrames; ++frame) {
-        g_busyFrames.push_back(RenderRole(g_cursorSize, CURSOR_WAIT, frame));
-        g_workingFrames.push_back(RenderRole(g_cursorSize, CURSOR_APPSTARTING, frame));
+        if (WaitForSingleObject(g_animationStopEvent, 0) == WAIT_OBJECT_0) {
+            return false;
+        }
+
+        HCURSOR busyCursor =
+            CreateCursorFromPixels(RenderRole(g_cursorSize, CURSOR_WAIT, frame));
+        HCURSOR workingCursor =
+            CreateCursorFromPixels(RenderRole(g_cursorSize, CURSOR_APPSTARTING, frame));
+        if (!busyCursor || !workingCursor) {
+            if (busyCursor) {
+                DestroyCursor(busyCursor);
+            }
+            if (workingCursor) {
+                DestroyCursor(workingCursor);
+            }
+            Wh_Log(L"Failed to create animation frame %d", frame);
+            return false;
+        }
+
+        g_busyFrames.push_back(busyCursor);
+        g_workingFrames.push_back(workingCursor);
     }
+
+    SetPreparedSystemCursor(g_busyFrames.front(), CURSOR_WAIT);
+    SetPreparedSystemCursor(g_workingFrames.front(), CURSOR_APPSTARTING);
+    return true;
+}
+
+DWORD GetVisibleBusyCursorRole() {
+    CURSORINFO cursorInfo = {sizeof(cursorInfo)};
+    if (!GetCursorInfo(&cursorInfo) ||
+        !(cursorInfo.flags & CURSOR_SHOWING) ||
+        !cursorInfo.hCursor) {
+        return 0;
+    }
+
+    for (DWORD cursorId : {CURSOR_WAIT, CURSOR_APPSTARTING}) {
+        HCURSOR systemCursor = static_cast<HCURSOR>(LoadImageW(
+            nullptr, MAKEINTRESOURCEW(cursorId), IMAGE_CURSOR, 0, 0, LR_SHARED));
+        if (systemCursor && cursorInfo.hCursor == systemCursor) {
+            return cursorId;
+        }
+    }
+
+    return 0;
 }
 
 DWORD WINAPI AnimationThreadProc(LPVOID) {
+    if (!PrepareAnimationFrames()) {
+        return 0;
+    }
+
     int frame = 0;
     while (WaitForSingleObject(g_animationStopEvent, 0) != WAIT_OBJECT_0) {
-        if (!g_busyFrames.empty() && !g_workingFrames.empty()) {
-            SetRenderedSystemCursor(g_busyFrames[frame], CURSOR_WAIT);
-            SetRenderedSystemCursor(g_workingFrames[frame], CURSOR_APPSTARTING);
+        const DWORD visibleRole = GetVisibleBusyCursorRole();
+        if (visibleRole == CURSOR_WAIT) {
+            SetPreparedSystemCursor(g_busyFrames[frame], CURSOR_WAIT);
+            frame = (frame + 1) % kSpinnerFrames;
+        } else if (visibleRole == CURSOR_APPSTARTING) {
+            SetPreparedSystemCursor(g_workingFrames[frame], CURSOR_APPSTARTING);
+            frame = (frame + 1) % kSpinnerFrames;
         }
 
-        frame = (frame + 1) % kSpinnerFrames;
-        if (WaitForSingleObject(g_animationStopEvent, kAnimationDelay) == WAIT_OBJECT_0) {
+        const DWORD delay = visibleRole ? kAnimationDelay : 100;
+        if (WaitForSingleObject(g_animationStopEvent, delay) == WAIT_OBJECT_0) {
             break;
         }
     }
+
     return 0;
 }
 
 bool StartAnimation() {
-    PrepareAnimationFrames();
-
     g_animationStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_animationStopEvent) {
         Wh_Log(L"CreateEvent failed: %lu", GetLastError());
@@ -1366,7 +1383,7 @@ void StopAnimation() {
     }
 
     if (g_animationThread) {
-        WaitForSingleObject(g_animationThread, 2000);
+        WaitForSingleObject(g_animationThread, INFINITE);
         CloseHandle(g_animationThread);
         g_animationThread = nullptr;
     }
@@ -1376,29 +1393,215 @@ void StopAnimation() {
         g_animationStopEvent = nullptr;
     }
 
-    g_busyFrames.clear();
-    g_workingFrames.clear();
+    DestroyAnimationFrames();
 }
 
 void RestoreWindowsCursorScheme() {
     SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, SPIF_SENDCHANGE);
 }
 
+LONG WINAPI RestoreCursorsOnCrash(EXCEPTION_POINTERS*) {
+    RestoreWindowsCursorScheme();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 } // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
+    SetUnhandledExceptionFilter(RestoreCursorsOnCrash);
     LoadSettings();
     ApplyStaticCursors();
-    StartAnimation();
+    if (!StartAnimation()) {
+        Wh_Log(L"Failed to start cursor animation");
+    }
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModSettingsChanged() {
+    StopAnimation();
+    LoadSettings();
+    ApplyStaticCursors();
+    if (!StartAnimation()) {
+        Wh_Log(L"Failed to restart cursor animation");
+    }
+}
+
+void WhTool_ModUninit() {
     StopAnimation();
     RestoreWindowsCursorScheme();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    *bReload = TRUE;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
