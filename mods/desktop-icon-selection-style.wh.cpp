@@ -51,9 +51,12 @@ File Explorer windows are untouched - this is the desktop only.
 **The plate follows the icon height on purpose.** Windows makes a selected icon
 taller so its full file name can wrap onto extra lines, so the same icon needs a
 short plate with a short name and a much taller one with a long name. The plate
-grows with it, which is why the label never spills outside the highlight.
-*Square* shape is available, but it is capped at the size of the item, so a very
-large square comes out smaller than requested.
+grows with it, so a long name never runs out of the bottom of the highlight.
+Width is a different matter: it is a percentage of the cell, while Windows wraps
+the label to roughly the full cell, so a long name can overhang a narrow plate at
+the sides. Raise **Plate width** if that bothers you. *Square* shape is
+available, but it is capped at the size of the item, so a very large square comes
+out smaller than requested.
 
 **The glow is a fake, deliberately.** It is stacked translucent rings, not a real
 blur, because a real blur is impossible here - the wallpaper simply is not
@@ -64,8 +67,13 @@ all Windows repaints around it; a larger glow gets cut off rather than smeared.
 **Colours** take `accent` to follow your system accent colour, or a hex value
 like `#3399FF`. The accent is read through the immersive colour API, so it is
 the colour you actually picked in Settings rather than the blended colorization
-value. Changing it is picked up on the next repaint, without restarting
-anything.
+value. Changing it is picked up as plates are next repainted, so selecting a
+different icon shows the new colour; nothing is forced to redraw on a timer.
+
+**Mixed-DPI setups** are fine. Windows keeps desktop icons on the primary
+monitor and sizes the icon area to it, so the pixel settings are scaled by the
+DPI of the monitor the plate is actually drawn on. Tested with a second display
+at a different resolution and scale factor.
 
 ## Credit
 
@@ -88,7 +96,9 @@ mod goes inert rather than breaking anything.
   $name: Plate width
   $description: >-
     Width of the plate as a percentage of one icon cell. The stock plate is 100%,
-    which is why adjacent selections touch. Lower values leave a gutter.
+    which is why adjacent selections touch. Lower values leave a gutter. Windows
+    wraps a selected file name to about the full cell width, so a narrow plate
+    can leave a long name overhanging its sides.
 - topInset: 0
   $name: Top inset
   $description: >-
@@ -144,7 +154,10 @@ mod goes inert rather than breaking anything.
     anything past the invalidated area is clipped away unseen.
 - glowOffsetY: 0
   $name: Glow vertical offset
-  $description: Pushes the glow downwards, which reads as a drop shadow.
+  $description: >-
+    Pushes the glow downwards, which reads as a drop shadow. Negative values push
+    it up. Limited to 32 either way, since the glow is clipped a few pixels
+    beyond the icon regardless.
 - borderStyle: dash
   $name: Border style
   $options:
@@ -199,6 +212,9 @@ mod goes inert rather than breaking anything.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <cwchar>
 #include <cwctype>
 #include <mutex>
 #include <string>
@@ -228,6 +244,12 @@ constexpr int kLISS_HOTSELECTED = 6;
 // unit, per selected item, per repaint.
 constexpr int kMaxGlowSize = 32;
 constexpr int kMaxGlowDevicePixels = 48;
+
+// Every pixel setting is bounded, not just floored. MulDiv returns -1 on
+// overflow rather than saturating, and a negative inset would widen the plate
+// and then be clamped back to the whole item - the exact opposite of what the
+// setting promises at its extreme.
+constexpr int kMaxPixelSetting = 1024;
 
 constexpr DWORD kAccentRefreshMs = 3000;
 
@@ -272,6 +294,7 @@ std::atomic<UINT> g_dpi{96};
 std::atomic<COLORREF> g_accentColor{RGB(0, 120, 215)};
 std::atomic<DWORD> g_accentTick{0};
 
+std::mutex g_attachMutex;
 std::mutex g_gdiplusMutex;
 ULONG_PTR g_gdiplusToken;
 std::atomic<bool> g_gdiplusReady{false};
@@ -761,13 +784,52 @@ bool DrawPlate(HDC hdc, const RECT& itemRect, LPCRECT clipRect, bool hot) {
 using DrawThemeBackground_t = HRESULT(WINAPI*)(HTHEME, HDC, int, int, LPCRECT, LPCRECT);
 DrawThemeBackground_t DrawThemeBackground_Original;
 
-bool ShouldReplace(int partId, int stateId, bool* hot) {
+// Part 1 is LVP_LISTITEM only in the ListView class. Other classes number their
+// parts from 1 too, so a draw is rejected when the theme it came from is
+// recognisably one of those.
+//
+// Deliberately fail-open: anything not positively identified as a foreign class
+// is allowed through. GetThemeClass is an undocumented ordinal, and matching the
+// other way round - allowing only names ending in "ListView" - would silently
+// disable the whole mod if it ever returned something unexpected, which is a far
+// worse failure than the artifact it prevents.
+bool IsForeignThemeClass(HTHEME hTheme) {
+    using GetThemeClass_t = HRESULT(WINAPI*)(HTHEME, LPWSTR, int);
+    static const auto pGetThemeClass = []() -> GetThemeClass_t {
+        HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+        return uxtheme ? (GetThemeClass_t)GetProcAddress(uxtheme,
+                                                         MAKEINTRESOURCEA(74))
+                       : nullptr;
+    }();
+
+    if (!pGetThemeClass) {
+        return false;
+    }
+
+    WCHAR cls[64];
+    if (FAILED(pGetThemeClass(hTheme, cls, ARRAYSIZE(cls)))) {
+        return false;
+    }
+
+    // A class list can be prefixed, as in "Explorer::ListView", so the tail is
+    // what identifies it.
+    size_t length = wcslen(cls);
+    auto endsWith = [&](PCWSTR suffix) {
+        size_t suffixLength = wcslen(suffix);
+        return length >= suffixLength &&
+               _wcsicmp(cls + length - suffixLength, suffix) == 0;
+    };
+
+    return endsWith(L"ScrollBar") || endsWith(L"Edit");
+}
+
+bool ShouldReplace(HTHEME hTheme, int partId, int stateId, bool* hot) {
     if (g_lvPaintDepth <= 0 ||
         !g_gdiplusReady.load(std::memory_order_relaxed)) {
         return false;
     }
 
-    if (partId != kLVP_LISTITEM) {
+    if (partId != kLVP_LISTITEM || IsForeignThemeClass(hTheme)) {
         return false;
     }
 
@@ -795,7 +857,7 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME hTheme,
                                         LPCRECT pRect,
                                         LPCRECT pClipRect) {
     bool hot = false;
-    if (pRect && ShouldReplace(partId, stateId, &hot) &&
+    if (pRect && ShouldReplace(hTheme, partId, stateId, &hot) &&
         DrawPlate(hdc, *pRect, pClipRect, hot)) {
         return S_OK;
     }
@@ -842,8 +904,15 @@ LRESULT CALLBACK LvSubclassProc(HWND hWnd,
             g_dpi.store(ReadWindowDpi(hWnd), std::memory_order_relaxed);
             break;
 
+        // WM_NCPAINT is deliberately absent. Item backgrounds are never drawn
+        // during non-client paint, but scroll bars are - by DefWindowProc, in
+        // the ScrollBar theme class, where part 1 is SBP_ARROWBTN and its
+        // states line up exactly with the list item states matched below. The
+        // desktop list view has no LVS_NOSCROLL, so a resolution or DPI change
+        // that pushes icons out of the work area gives it a scroll bar, and
+        // counting non-client paint would draw a selection plate over the
+        // arrows.
         case WM_PAINT:
-        case WM_NCPAINT:
         case WM_ERASEBKGND:
         case WM_PRINTCLIENT: {
             g_lvPaintDepth++;
@@ -861,6 +930,13 @@ void AttachToListView(HWND hWnd) {
     // processes that can never host the desktop do not pay for a GDI+
     // initialization and its background thread.
     EnsureGdiplus();
+
+    // Subclassing and taking ownership have to happen together. This runs on
+    // the desktop thread from the CreateWindowExW hook and on Windhawk's thread
+    // from Wh_ModAfterInit, and interleaving them could leave the live list view
+    // unsubclassed while a doomed one is tracked. LvSubclassProc never takes
+    // this lock, so the cross-thread send below cannot deadlock against it.
+    std::lock_guard<std::mutex> lock(g_attachMutex);
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, LvSubclassProc, 0)) {
         return;
@@ -946,14 +1022,18 @@ int GetBorderStyleSetting() {
 
 void LoadSettings() {
     g_settings.widthPercent = std::clamp(Wh_GetIntSetting(L"widthPercent"), 1, 100);
-    g_settings.topInset = std::max(0, Wh_GetIntSetting(L"topInset"));
-    g_settings.bottomInset = std::max(0, Wh_GetIntSetting(L"bottomInset"));
-    g_settings.cornerRadius = std::max(0, Wh_GetIntSetting(L"cornerRadius"));
+    g_settings.topInset =
+        std::clamp(Wh_GetIntSetting(L"topInset"), 0, kMaxPixelSetting);
+    g_settings.bottomInset =
+        std::clamp(Wh_GetIntSetting(L"bottomInset"), 0, kMaxPixelSetting);
+    g_settings.cornerRadius =
+        std::clamp(Wh_GetIntSetting(L"cornerRadius"), 0, kMaxPixelSetting);
 
     WindhawkUtils::StringSetting shape =
         WindhawkUtils::StringSetting::make(L"shape");
     g_settings.square = _wcsicmp(shape.get(), L"square") == 0;
-    g_settings.squareSize = std::max(0, Wh_GetIntSetting(L"squareSize"));
+    g_settings.squareSize =
+        std::clamp(Wh_GetIntSetting(L"squareSize"), 0, kMaxPixelSetting);
 
     g_settings.fillColor = RGB(255, 255, 255);
     g_settings.fillUsesAccent = true;
