@@ -90,9 +90,6 @@ If a numbered destination is unavailable, the primary display is used.
   cursor.
 * **Include owned windows/popups** includes dialogs and secondary windows attached
   to another app window during gather actions.
-* **Debug logging** records why individual windows were skipped. Leave it off
-  unless troubleshooting.
-
 ## Behavior and limitations
 
 Hidden windows, desktop and taskbar windows, system interface windows, helper
@@ -165,7 +162,7 @@ supported because applications handle that inconsistently.
 - RestoreMinimized: false
   $name: Restore minimized windows before moving
   $description: Used only when Skip minimized windows is turned off.
-- SkipFullscreen: false
+- SkipFullscreen: true
   $name: Skip fullscreen windows
   $description: Applies to every action, including moving only the active window.
 - SizeMode: fit
@@ -190,9 +187,6 @@ supported because applications handle that inconsistently.
 - IncludeOwnedWindows: true
   $name: Include owned windows/popups
   $description: Also moves dialogs and secondary windows attached to another app window.
-- DebugLogging: false
-  $name: Debug logging
-  $description: Logs why individual windows were skipped. Enable only while troubleshooting.
 */
 // ==/WindhawkModSettings==
 
@@ -268,7 +262,6 @@ struct Settings {
     int cascadeOffset;
     AnchorMode anchor;
     bool includeOwnedWindows;
-    bool debugLogging;
     DisplayOrderOverride displayOrder;
     std::wstring hotkeys[(int)TargetMode::Count];
 };
@@ -459,7 +452,6 @@ void LoadSettings() {
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
     g_settings.anchor = ParseAnchorMode(GetStringSetting(L"Anchor"));
     g_settings.includeOwnedWindows = Wh_GetIntSetting(L"IncludeOwnedWindows") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"DebugLogging") != 0;
     g_lastDisplayTopology.clear();
 }
 
@@ -872,7 +864,6 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
 }
 
 void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
-    if (!g_settings.debugLogging) return;
     wchar_t title[128]{};
     wchar_t className[128]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
@@ -1009,12 +1000,10 @@ void GatherWindows(TargetMode mode) {
         return;
     }
 
-    if (g_settings.debugLogging) {
-        Wh_Log(L"Target: detected display %zu%s work=(%ld,%ld,%ld,%ld)",
-               target->detectedIndex, target->primary ? L" primary" : L"",
-               target->work.left, target->work.top, target->work.right,
-               target->work.bottom);
-    }
+    Wh_Log(L"Target: detected display %zu%s work=(%ld,%ld,%ld,%ld)",
+           target->detectedIndex, target->primary ? L" primary" : L"",
+           target->work.left, target->work.top, target->work.right,
+           target->work.bottom);
     bool foregroundOnly = IsForegroundOnlyAction(mode);
     GatherState state{ target,
                        !foregroundOnly,
@@ -1125,10 +1114,12 @@ void WhTool_ModUninit() {
 // * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -1138,6 +1129,7 @@ BOOL Wh_ModInit() {
         sessionId == 0) {
         return FALSE;
     }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1147,6 +1139,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -1155,6 +1148,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -1170,6 +1164,7 @@ BOOL Wh_ModInit() {
     if (isExcluded) {
         return FALSE;
     }
+
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
@@ -1182,6 +1177,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
@@ -1193,6 +1189,7 @@ BOOL Wh_ModInit() {
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
@@ -1209,6 +1206,7 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
+
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
@@ -1217,11 +1215,13 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
+
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -1230,6 +1230,7 @@ void Wh_ModAfterInit() {
             return;
         }
     }
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -1245,6 +1246,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
+
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
@@ -1256,6 +1258,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
