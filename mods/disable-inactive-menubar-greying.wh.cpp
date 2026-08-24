@@ -2,7 +2,7 @@
 // @id              disable-inactive-menubar-greying
 // @name            Disable Inactive Menubar Greying
 // @description     Prevents menubar text from being greyed out in inactive folder windows in Classic theme
-// @version         1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -26,6 +26,9 @@ the way it was in Windows 95, before Windows 98.
 
 typedef COLORREF (WINAPI *SetTextColor_t)(HDC hdc, COLORREF color);
 SetTextColor_t SetTextColor_Original;
+
+thread_local bool checked=false;
+thread_local bool found=false;
 
 bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
 {
@@ -54,22 +57,42 @@ bool IsCurrentThreadWindowFocused()
     return fgThreadId == GetCurrentThreadId();
 }
 
+BOOL CALLBACK EnumThreadWndProc_CheckTaskbar(HWND hwnd, LPARAM lParam)
+{
+    wchar_t className[256];
+    if (GetClassNameW(hwnd, className, 256) > 0)
+    {
+        if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)
+        {
+            *(bool*)lParam = true;
+            return FALSE; // нашли, прекращаем перебор
+        }
+    }
+    return TRUE; // продолжаем перебор
+}
+
+// Возвращает true, если текущий поток владеет хотя бы одним окном панели задач
+bool IsCurrentThreadTaskbar()
+{
+    if (!checked) {
+        EnumThreadWindows(GetCurrentThreadId(), EnumThreadWndProc_CheckTaskbar, (LPARAM)&found);
+        checked=true;
+    }
+    return found;
+}
+
 COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
-    // Если рисует поток окна, которое реально в фокусе - не вмешиваемся вообще.
-    if (IsCurrentThreadWindowFocused())
-    {
+    COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
+
+    // Cheapest checks first: no syscalls unless the color actually matches.
+    if (!IsGreyColor(color, menuTextColor) || WindowFromDC(hdc) ||
+        IsCurrentThreadWindowFocused() || IsCurrentThreadTaskbar()) {
         return SetTextColor_Original(hdc, color);
     }
 
-    COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
-
-    if (IsGreyColor(color, menuTextColor) && !WindowFromDC(hdc))
-    {
-        return SetTextColor_Original(hdc, menuTextColor);
-    }
-
-    return SetTextColor_Original(hdc, color);
+    return SetTextColor_Original(hdc, menuTextColor);
 }
 
 BOOL Wh_ModInit()
