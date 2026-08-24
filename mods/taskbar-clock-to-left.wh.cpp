@@ -22,6 +22,9 @@ extent supplied to the taskbar layout engine. Centered Start/app buttons remain
 at their original position and the remaining tray stays flush with the right
 edge. Clock customization mods can load before or after this mod: customized
 text width only changes the left host and never becomes a taskbar-layout input.
+On a centered taskbar, the left host is placed after the Widgets/weather button
+when it is visible. If Windows is configured to left-align Start and app icons,
+the clock stays in its native position to avoid covering those buttons.
 
 Windows 11's modern taskbar is required.
 */
@@ -41,7 +44,6 @@ Windows 11's modern taskbar is required.
 
 #include <algorithm>
 #include <atomic>
-#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -71,25 +73,32 @@ struct MovedClockData {
     Thickness originalMargin;
 };
 
-using DispatcherOperation =
-    winrt::Windows::Foundation::IAsyncOperation<bool>;
-
 struct DeferredClockData {
     winrt::weak_ref<FrameworkElement> content;
     std::optional<winrt::event_token> loadedToken;
-    DispatcherOperation moveOperation{nullptr};
+    std::optional<winrt::event_token> layoutUpdatedToken;
 };
 
 std::atomic<bool> g_moveClockToLeft;
 std::atomic<bool> g_callbacksEnabled;
 std::atomic<DWORD> g_callbackGeneration;
-std::atomic<long> g_runningCallbacks;
 std::atomic<bool> g_systemTrayHooked;
 std::atomic<bool> g_taskbarViewHooked;
+std::atomic<DWORD> g_clockThreadId;
+std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
-std::mutex g_deferredMutex;
-std::vector<DeferredClockData> g_deferredClocks;
-std::vector<MovedClockData> g_movedClocks;
+[[clang::no_destroy]] std::optional<std::vector<DeferredClockData>>
+    g_deferredClocks{std::in_place};
+[[clang::no_destroy]] std::optional<std::vector<MovedClockData>>
+    g_movedClocks{std::in_place};
+
+std::vector<DeferredClockData>& DeferredClocks() {
+    return *g_deferredClocks;
+}
+
+std::vector<MovedClockData>& MovedClocks() {
+    return *g_movedClocks;
+}
 
 using DateTimeIconContent_OnApplyTemplate_t = HRESULT(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
@@ -106,60 +115,65 @@ TaskbarFrame_SystemTrayExtent_t TaskbarFrame_SystemTrayExtent_Original;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
-class CallbackScope {
-   public:
-    explicit CallbackScope(DWORD generation) {
-        g_runningCallbacks.fetch_add(1);
-        if (g_callbacksEnabled && g_callbackGeneration == generation) {
-            m_entered = true;
-        } else {
-            g_runningCallbacks.fetch_sub(1);
-        }
-    }
-
-    ~CallbackScope() {
-        if (m_entered) {
-            g_runningCallbacks.fetch_sub(1);
-        }
-    }
-
-    explicit operator bool() const {
-        return m_entered;
-    }
-
-   private:
-    bool m_entered = false;
-};
-
-bool OperationPending(const DispatcherOperation& operation) {
-    if (!operation) {
-        return false;
-    }
-
-    try {
-        return operation.Status() ==
-               winrt::Windows::Foundation::AsyncStatus::Started;
-    } catch (...) {
-        return false;
-    }
+bool CallbackAllowed(DWORD generation) {
+    return g_callbacksEnabled && g_callbackGeneration == generation;
 }
 
-void WaitForOperations(const std::vector<DispatcherOperation>& operations) {
-    for (;;) {
-        bool done = true;
-        for (const auto& operation : operations) {
-            if (OperationPending(operation)) {
-                done = false;
-                break;
-            }
-        }
+HWND FindExplorerTaskbarWindow();
 
-        if (done) {
-            return;
-        }
+using RunFromWindowThreadProc = void (*)(void* parameter);
 
-        Sleep(10);
+bool RunFromWindowThread(HWND window,
+                         RunFromWindowThreadProc procedure,
+                         void* parameter) {
+    static const UINT message = RegisterWindowMessage(
+        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RunParameters {
+        RunFromWindowThreadProc procedure;
+        void* parameter;
+        bool executed;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) {
+        return false;
     }
+
+    if (threadId == GetCurrentThreadId()) {
+        procedure(parameter);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                const auto* messageData =
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (messageData->message == message) {
+                    auto* runParameters =
+                        reinterpret_cast<RunParameters*>(messageData->lParam);
+                    runParameters->procedure(runParameters->parameter);
+                    runParameters->executed = true;
+                }
+            }
+
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RunParameters runParameters{procedure, parameter, false};
+    DWORD_PTR sendResult = 0;
+    LRESULT sent = SendMessageTimeout(
+        window, message, 0, reinterpret_cast<LPARAM>(&runParameters),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &sendResult);
+    UnhookWindowsHookEx(hook);
+
+    return sent && runParameters.executed;
 }
 
 FrameworkElement FindAncestor(FrameworkElement element,
@@ -197,6 +211,44 @@ FrameworkElement FindDescendantByName(FrameworkElement element,
     }
 
     return nullptr;
+}
+
+bool TaskbarUsesCenteredAlignment() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValue(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+            L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &value,
+            &size) != ERROR_SUCCESS) {
+        return true;
+    }
+
+    return value != 0;
+}
+
+double GetLeftHostOffset(Controls::Grid root) {
+    // The Widgets/weather entry point occupies the physical left edge on the
+    // centered taskbar. Keep the relocated clock beside it instead of placing
+    // an input-capable overlay on top of it.
+    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
+    if (!widgets || widgets.Visibility() != Visibility::Visible ||
+        widgets.ActualWidth() <= 0) {
+        return 0;
+    }
+
+    try {
+        auto origin = widgets.TransformToVisual(root).TransformPoint({0, 0});
+        double rightEdge = origin.X + widgets.ActualWidth();
+        if (origin.X >= 0 && rightEdge > 0 &&
+            rightEdge <= root.ActualWidth() / 2) {
+            return rightEdge + 4;
+        }
+    } catch (...) {
+        Wh_Log(L"Widgets position lookup failed: %08X", winrt::to_hresult());
+    }
+
+    return 0;
 }
 
 bool TaskbarClockShowsSeconds() {
@@ -301,10 +353,11 @@ void RemoveLeftHost(MovedClockData& data) {
 }
 
 void CleanupMovedClockData() {
-    for (auto it = g_movedClocks.begin(); it != g_movedClocks.end();) {
+    auto& movedClocks = MovedClocks();
+    for (auto it = movedClocks.begin(); it != movedClocks.end();) {
         if (!it->clock.get()) {
             RemoveLeftHost(*it);
-            it = g_movedClocks.erase(it);
+            it = movedClocks.erase(it);
         } else {
             ++it;
         }
@@ -314,7 +367,8 @@ void CleanupMovedClockData() {
 bool RestoreClock(FrameworkElement clock) {
     CleanupMovedClockData();
 
-    for (auto it = g_movedClocks.begin(); it != g_movedClocks.end(); ++it) {
+    auto& movedClocks = MovedClocks();
+    for (auto it = movedClocks.begin(); it != movedClocks.end(); ++it) {
         auto movedClock = it->clock.get();
         if (!movedClock || movedClock != clock) {
             continue;
@@ -357,7 +411,7 @@ bool RestoreClock(FrameworkElement clock) {
             }
         }
 
-        g_movedClocks.erase(it);
+        movedClocks.erase(it);
         return true;
     }
 
@@ -379,7 +433,13 @@ bool MoveClock(FrameworkElement content) {
         return false;
     }
 
-    for (const auto& data : g_movedClocks) {
+    if (!TaskbarUsesCenteredAlignment()) {
+        RestoreClock(clock);
+        Wh_Log(L"Clock relocation skipped for a left-aligned taskbar");
+        return false;
+    }
+
+    for (const auto& data : MovedClocks()) {
         if (auto movedClock = data.clock.get(); movedClock == clock) {
             return true;
         }
@@ -437,6 +497,7 @@ bool MoveClock(FrameworkElement content) {
     data.leftHost = Controls::Grid();
     data.leftHost.HorizontalAlignment(HorizontalAlignment::Left);
     data.leftHost.VerticalAlignment(VerticalAlignment::Stretch);
+    data.leftHost.Margin(Thickness{GetLeftHostOffset(root), 0, 0, 0});
     Controls::Grid::SetColumn(data.leftHost, 0);
     Controls::Grid::SetColumnSpan(
         data.leftHost,
@@ -445,7 +506,7 @@ bool MoveClock(FrameworkElement content) {
     Controls::Grid::SetRowSpan(
         data.leftHost, std::max<int>(1, root.RowDefinitions().Size()));
 
-    g_movedClocks.push_back(std::move(data));
+    MovedClocks().push_back(std::move(data));
 
     try {
         originalParent.Children().RemoveAt(originalIndex);
@@ -457,7 +518,7 @@ bool MoveClock(FrameworkElement content) {
         clock.VerticalAlignment(VerticalAlignment::Stretch);
         clock.Margin(Thickness{0, 0, 0, 0});
 
-        auto& moved = g_movedClocks.back();
+        auto& moved = MovedClocks().back();
         moved.leftHost.Children().Append(element);
         root.Children().Append(moved.leftHost.as<UIElement>());
 
@@ -501,7 +562,11 @@ double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
             return 0;
         }
 
-        for (const auto& data : g_movedClocks) {
+        if (!g_movedClocks) {
+            return 0;
+        }
+
+        for (const auto& data : MovedClocks()) {
             auto clock = data.clock.get();
             auto host = data.leftHost;
             if (!clock || !host || host.XamlRoot() != taskbarXamlRoot) {
@@ -529,11 +594,12 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     }
 }
 
-DeferredClockData& GetDeferredDataLocked(FrameworkElement content) {
-    for (auto it = g_deferredClocks.begin(); it != g_deferredClocks.end();) {
+DeferredClockData& GetDeferredData(FrameworkElement content) {
+    auto& deferredClocks = DeferredClocks();
+    for (auto it = deferredClocks.begin(); it != deferredClocks.end();) {
         auto element = it->content.get();
-        if (!element && !OperationPending(it->moveOperation)) {
-            it = g_deferredClocks.erase(it);
+        if (!element) {
+            it = deferredClocks.erase(it);
             continue;
         }
         if (element == content) {
@@ -542,25 +608,21 @@ DeferredClockData& GetDeferredDataLocked(FrameworkElement content) {
         ++it;
     }
 
-    g_deferredClocks.push_back({.content = content});
-    return g_deferredClocks.back();
+    deferredClocks.push_back({.content = content});
+    return deferredClocks.back();
 }
 
 void RememberClockContent(FrameworkElement content) {
-    std::lock_guard<std::mutex> guard(g_deferredMutex);
-    GetDeferredDataLocked(content);
+    GetDeferredData(content);
 }
 
 void RemoveLoadedHandler(FrameworkElement content) {
     std::optional<winrt::event_token> token;
-    {
-        std::lock_guard<std::mutex> guard(g_deferredMutex);
-        for (auto& data : g_deferredClocks) {
-            if (data.content.get() == content && data.loadedToken) {
-                token = data.loadedToken;
-                data.loadedToken.reset();
-                break;
-            }
+    for (auto& data : DeferredClocks()) {
+        if (data.content.get() == content && data.loadedToken) {
+            token = data.loadedToken;
+            data.loadedToken.reset();
+            break;
         }
     }
 
@@ -569,43 +631,114 @@ void RemoveLoadedHandler(FrameworkElement content) {
     }
 }
 
-void ScheduleMove(FrameworkElement content) {
-    auto dispatcher = content.Dispatcher();
-    if (!dispatcher) {
+void RemoveLayoutUpdatedHandler(FrameworkElement content) {
+    std::optional<winrt::event_token> token;
+    for (auto& data : DeferredClocks()) {
+        if (data.content.get() == content && data.layoutUpdatedToken) {
+            token = data.layoutUpdatedToken;
+            data.layoutUpdatedToken.reset();
+            break;
+        }
+    }
+
+    if (token) {
+        content.LayoutUpdated(*token);
+    }
+}
+
+void RemoveDeferredHandlers(FrameworkElement content) {
+    RemoveLoadedHandler(content);
+    RemoveLayoutUpdatedHandler(content);
+}
+
+bool ClockIsAlreadyMoved(FrameworkElement clock) {
+    for (const auto& data : MovedClocks()) {
+        if (data.clock.get() == clock) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ClockLayoutIsReady(FrameworkElement content) {
+    if (!content.IsLoaded()) {
+        return false;
+    }
+
+    auto clock = FindAncestor(content, L"SystemTray.OmniButton",
+                              L"NotificationCenterButton");
+    if (!clock || ClockIsAlreadyMoved(clock)) {
+        return true;
+    }
+
+    auto originalParent = Media::VisualTreeHelper::GetParent(clock)
+                              .try_as<Controls::Grid>();
+    if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
+        return false;
+    }
+
+    auto systemTrayFrame = Media::VisualTreeHelper::GetParent(originalParent)
+                               .try_as<FrameworkElement>();
+    auto root = systemTrayFrame
+                    ? Media::VisualTreeHelper::GetParent(systemTrayFrame)
+                          .try_as<Controls::Grid>()
+                    : nullptr;
+    return root && root.XamlRoot() && root.ActualWidth() > 0 &&
+           root.ActualHeight() > 0;
+}
+
+void MoveClockSafely(FrameworkElement content) {
+    if (!g_callbacksEnabled || !g_moveClockToLeft || !g_movedClocks) {
         return;
     }
 
+    try {
+        MoveClock(content);
+    } catch (...) {
+        Wh_Log(L"Clock relocation failed: %08X", winrt::to_hresult());
+    }
+}
+
+void RegisterLayoutUpdatedHandler(FrameworkElement content) {
     DWORD generation = g_callbackGeneration;
     auto weakContent = winrt::make_weak(content);
 
-    std::lock_guard<std::mutex> guard(g_deferredMutex);
+    winrt::Windows::Foundation::EventHandler<
+        winrt::Windows::Foundation::IInspectable>
+        handler =
+            [weakContent, generation](
+                winrt::Windows::Foundation::IInspectable const&,
+                winrt::Windows::Foundation::IInspectable const&) {
+                if (!CallbackAllowed(generation)) {
+                    return;
+                }
+
+                if (auto content = weakContent.get()) {
+                    try {
+                        if (!ClockLayoutIsReady(content)) {
+                            return;
+                        }
+
+                        RemoveLayoutUpdatedHandler(content);
+                        MoveClockSafely(content);
+                    } catch (...) {
+                        Wh_Log(L"Layout-ready clock handling failed: %08X",
+                               winrt::to_hresult());
+                    }
+                }
+            };
+
     if (!g_callbacksEnabled || !g_moveClockToLeft ||
         generation != g_callbackGeneration) {
         return;
     }
 
-    auto& data = GetDeferredDataLocked(content);
-    if (OperationPending(data.moveOperation)) {
-        return;
+    auto& data = GetDeferredData(content);
+    if (!data.layoutUpdatedToken) {
+        data.layoutUpdatedToken = content.LayoutUpdated(handler);
+        content.InvalidateMeasure();
     }
-
-    data.moveOperation = dispatcher.TryRunAsync(
-        winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
-        [weakContent, generation]() {
-            CallbackScope scope(generation);
-            if (!scope || !g_moveClockToLeft) {
-                return;
-            }
-
-            if (auto content = weakContent.get()) {
-                try {
-                    MoveClock(content);
-                } catch (...) {
-                    Wh_Log(L"Deferred relocation failed: %08X",
-                           winrt::to_hresult());
-                }
-            }
-        });
 }
 
 void RegisterLoadedHandler(FrameworkElement content) {
@@ -616,32 +749,42 @@ void RegisterLoadedHandler(FrameworkElement content) {
         [weakContent, generation](
             winrt::Windows::Foundation::IInspectable const&,
             RoutedEventArgs const&) {
-            CallbackScope scope(generation);
-            if (!scope) {
+            if (!CallbackAllowed(generation)) {
                 return;
             }
 
             if (auto content = weakContent.get()) {
-                RemoveLoadedHandler(content);
-                if (g_moveClockToLeft) {
-                    ScheduleMove(content);
+                try {
+                    RemoveLoadedHandler(content);
+                    RegisterLayoutUpdatedHandler(content);
+                } catch (...) {
+                    Wh_Log(L"Loaded clock handling failed: %08X",
+                           winrt::to_hresult());
                 }
             }
         };
 
-    std::lock_guard<std::mutex> guard(g_deferredMutex);
     if (!g_callbacksEnabled || !g_moveClockToLeft ||
         generation != g_callbackGeneration) {
         return;
     }
 
-    auto& data = GetDeferredDataLocked(content);
+    auto& data = GetDeferredData(content);
     if (!data.loadedToken) {
         data.loadedToken = content.Loaded(handler);
     }
 }
 
 void UpdateClockPlacement(FrameworkElement content) {
+    if (!g_callbacksEnabled || !g_deferredClocks || !g_movedClocks) {
+        return;
+    }
+
+    // On current Windows builds, SystemTray_Main can be owned by a different
+    // thread than Shell_TrayWnd. Remember the actual XAML owner thread from the
+    // clock callback and use it for teardown and settings changes.
+    g_clockThreadId = GetCurrentThreadId();
+
     RememberClockContent(content);
 
     auto clock = FindAncestor(content, L"SystemTray.OmniButton",
@@ -651,124 +794,137 @@ void UpdateClockPlacement(FrameworkElement content) {
     }
 
     if (!g_moveClockToLeft) {
-        RemoveLoadedHandler(content);
+        RemoveDeferredHandlers(content);
         RestoreClock(clock);
     } else if (content.IsLoaded()) {
-        ScheduleMove(content);
+        RemoveLoadedHandler(content);
+        if (ClockIsAlreadyMoved(clock)) {
+            RemoveLayoutUpdatedHandler(content);
+        } else {
+            RegisterLayoutUpdatedHandler(content);
+        }
     } else {
         RegisterLoadedHandler(content);
     }
 }
 
-void StopDeferredCallbacks(bool permanent) {
-    if (permanent) {
-        g_callbacksEnabled = false;
-    }
-    g_callbackGeneration.fetch_add(1);
-
-    struct LoadedRegistration {
-        FrameworkElement element;
-        winrt::event_token token;
-    };
-
-    std::vector<LoadedRegistration> registrations;
-    std::vector<DispatcherOperation> moveOperations;
-    {
-        std::lock_guard<std::mutex> guard(g_deferredMutex);
-        for (auto& data : g_deferredClocks) {
-            if (auto content = data.content.get();
-                content && data.loadedToken) {
-                registrations.push_back({content, *data.loadedToken});
-                data.loadedToken.reset();
-            }
-            if (data.moveOperation) {
-                moveOperations.push_back(data.moveOperation);
-                data.moveOperation = nullptr;
-            }
-        }
+void StopDeferredCallbacksOnTaskbarThread() {
+    if (!g_deferredClocks) {
+        return;
     }
 
-    for (const auto& operation : moveOperations) {
-        if (OperationPending(operation)) {
-            operation.Cancel();
-        }
-    }
-
-    std::vector<DispatcherOperation> revokeOperations;
-    for (const auto& registration : registrations) {
+    for (auto& data : DeferredClocks()) {
         try {
-            auto dispatcher = registration.element.Dispatcher();
-            if (dispatcher && !dispatcher.HasThreadAccess()) {
-                auto weakElement = winrt::make_weak(registration.element);
-                auto token = registration.token;
-                revokeOperations.push_back(dispatcher.TryRunAsync(
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                    [weakElement, token]() {
-                        if (auto element = weakElement.get()) {
-                            element.Loaded(token);
-                        }
-                    }));
-            } else {
-                registration.element.Loaded(registration.token);
+            if (auto content = data.content.get()) {
+                if (data.loadedToken) {
+                    content.Loaded(*data.loadedToken);
+                }
+                if (data.layoutUpdatedToken) {
+                    content.LayoutUpdated(*data.layoutUpdatedToken);
+                }
             }
         } catch (...) {
-            Wh_Log(L"Loaded handler cleanup failed: %08X",
+            Wh_Log(L"Deferred handler cleanup failed: %08X",
                    winrt::to_hresult());
         }
-    }
-
-    WaitForOperations(moveOperations);
-    WaitForOperations(revokeOperations);
-    while (g_runningCallbacks.load() != 0) {
-        Sleep(10);
+        data.loadedToken.reset();
+        data.layoutUpdatedToken.reset();
     }
 }
 
-void RestoreAllMovedClocks() {
-    while (!g_movedClocks.empty()) {
-        auto clock = g_movedClocks.front().clock.get();
+void RestoreAllMovedClocksOnTaskbarThread() {
+    if (!g_movedClocks) {
+        return;
+    }
+
+    auto& movedClocks = MovedClocks();
+    while (!movedClocks.empty()) {
+        auto clock = movedClocks.front().clock.get();
         if (!clock) {
             CleanupMovedClockData();
             continue;
         }
 
         try {
-            auto dispatcher = clock.Dispatcher();
-            if (dispatcher && !dispatcher.HasThreadAccess()) {
-                auto weakClock = winrt::make_weak(clock);
-                std::vector<DispatcherOperation> operations;
-                operations.push_back(dispatcher.TryRunAsync(
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                    [weakClock]() {
-                        if (auto clock = weakClock.get()) {
-                            RestoreClock(clock);
-                        }
-                    }));
-                WaitForOperations(operations);
-            } else {
-                RestoreClock(clock);
+            if (!RestoreClock(clock)) {
+                RemoveLeftHost(movedClocks.front());
+                movedClocks.erase(movedClocks.begin());
             }
         } catch (...) {
             Wh_Log(L"Clock restore failed: %08X", winrt::to_hresult());
-            break;
+            try {
+                RemoveLeftHost(movedClocks.front());
+            } catch (...) {
+            }
+            movedClocks.erase(movedClocks.begin());
         }
     }
 }
 
-void ScheduleKnownClocks() {
+void UpdateKnownClocksOnTaskbarThread() {
+    if (!g_deferredClocks) {
+        return;
+    }
+
     std::vector<FrameworkElement> contents;
-    {
-        std::lock_guard<std::mutex> guard(g_deferredMutex);
-        for (auto& data : g_deferredClocks) {
-            if (auto content = data.content.get()) {
-                contents.push_back(content);
-            }
+    for (auto& data : DeferredClocks()) {
+        if (auto content = data.content.get()) {
+            contents.push_back(content);
         }
     }
 
     for (const auto& content : contents) {
-        ScheduleMove(content);
+        UpdateClockPlacement(content);
     }
+}
+
+void UpdateKnownClocksCallback(void*) {
+    UpdateKnownClocksOnTaskbarThread();
+}
+
+struct CleanupTaskbarStateParameters {
+    bool releaseContainers;
+};
+
+void CleanupTaskbarStateCallback(void* parameter) {
+    auto* cleanup = static_cast<CleanupTaskbarStateParameters*>(parameter);
+
+    StopDeferredCallbacksOnTaskbarThread();
+    RestoreAllMovedClocksOnTaskbarThread();
+
+    if (cleanup->releaseContainers) {
+        // These containers intentionally have no process-shutdown destructor.
+        // Release their XAML/WinRT members here, on the owning UI thread.
+        g_deferredClocks.reset();
+        g_movedClocks.reset();
+    }
+}
+
+bool RunOnTaskbarThread(RunFromWindowThreadProc procedure, void* parameter,
+                        PCWSTR operation) {
+    HWND taskbar = FindExplorerTaskbarWindow();
+    if (!taskbar) {
+        Wh_Log(L"%s skipped: taskbar window not found", operation);
+        return false;
+    }
+
+    if (!RunFromWindowThread(taskbar, procedure, parameter)) {
+        Wh_Log(L"%s failed: taskbar UI thread didn't respond", operation);
+        return false;
+    }
+
+    return true;
+}
+
+void UpdateKnownClocksSynchronously() {
+    RunOnTaskbarThread(UpdateKnownClocksCallback, nullptr,
+                       L"Clock placement update");
+}
+
+void CleanupTaskbarStateSynchronously(bool releaseContainers) {
+    CleanupTaskbarStateParameters parameters{releaseContainers};
+    RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
+                       L"Clock layout cleanup");
 }
 
 HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
@@ -819,22 +975,43 @@ HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis,
 }
 
 HWND FindExplorerTaskbarWindow() {
-    HWND taskbar = nullptr;
+    struct TaskbarWindows {
+        DWORD preferredThreadId;
+        HWND preferredThreadWindow;
+        HWND systemTrayWindow;
+        HWND shellTrayWindow;
+    } windows{g_clockThreadId, nullptr, nullptr, nullptr};
+
     EnumWindows(
         [](HWND window, LPARAM parameter) -> BOOL {
+            auto* windows = reinterpret_cast<TaskbarWindows*>(parameter);
             DWORD processId = 0;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(window, &processId) &&
-                processId == GetCurrentProcessId() &&
-                GetClassName(window, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(parameter) = window;
-                return FALSE;
+            DWORD threadId = GetWindowThreadProcessId(window, &processId);
+            WCHAR className[64];
+            if (!threadId || processId != GetCurrentProcessId() ||
+                !GetClassName(window, className, ARRAYSIZE(className))) {
+                return TRUE;
             }
+
+            if (windows->preferredThreadId &&
+                threadId == windows->preferredThreadId &&
+                !windows->preferredThreadWindow) {
+                windows->preferredThreadWindow = window;
+            }
+            if (_wcsicmp(className, L"SystemTray_Main") == 0) {
+                windows->systemTrayWindow = window;
+            } else if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                windows->shellTrayWindow = window;
+            }
+
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(&taskbar));
-    return taskbar;
+        reinterpret_cast<LPARAM>(&windows));
+
+    return windows.preferredThreadWindow
+               ? windows.preferredThreadWindow
+               : (windows.systemTrayWindow ? windows.systemTrayWindow
+                                           : windows.shellTrayWindow);
 }
 
 void RefreshTaskbarClock() {
@@ -915,24 +1092,6 @@ bool HookTaskbarView(HMODULE module) {
     return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
-bool TryHookTaskbarView(HMODULE module, bool applyImmediately) {
-    bool expected = false;
-    if (!g_taskbarViewHooked.compare_exchange_strong(expected, true)) {
-        return true;
-    }
-
-    if (!HookTaskbarView(module)) {
-        g_taskbarViewHooked = false;
-        return false;
-    }
-
-    if (applyImmediately) {
-        Wh_ApplyHookOperations();
-        ScheduleKnownClocks();
-    }
-    return true;
-}
-
 bool HookSystemTray(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
@@ -952,36 +1111,99 @@ bool HookSystemTray(HMODULE module) {
     return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
-bool TryHookSystemTray(HMODULE module, bool applyImmediately) {
-    bool expected = false;
-    if (!g_systemTrayHooked.compare_exchange_strong(expected, true)) {
+bool HookTaskbarViewAndSystemTray(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::SystemTrayExtent(double))"},
+            &TaskbarFrame_SystemTrayExtent_Original,
+            TaskbarFrame_SystemTrayExtent_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
+            &DateTimeIconContent_OnApplyTemplate_Original,
+            DateTimeIconContent_OnApplyTemplate_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))"},
+            &BadgeIconContent_get_ViewModel_Original,
+            BadgeIconContent_get_ViewModel_Hook,
+            true,
+        },
+    };
+
+    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+}
+
+struct HookSetupGuard {
+    ~HookSetupGuard() {
+        g_hookSetupInProgress.clear(std::memory_order_release);
+    }
+};
+
+bool TryHookAvailableModules(bool applyImmediately) {
+    if (g_hookSetupInProgress.test_and_set(std::memory_order_acquire)) {
         return true;
     }
+    HookSetupGuard guard;
 
-    if (!HookSystemTray(module)) {
-        g_systemTrayHooked = false;
-        return false;
-    }
+    HMODULE taskbarViewModule = GetTaskbarViewModule();
+    HMODULE systemTrayModule = GetSystemTrayModule();
+    bool taskbarViewHookedNow = false;
+    bool systemTrayHookedNow = false;
+    bool success = true;
 
-    if (applyImmediately) {
-        Wh_ApplyHookOperations();
-        RefreshTaskbarClock();
-    }
-    return true;
-}
+    if (taskbarViewModule && taskbarViewModule == systemTrayModule) {
+        if (!g_taskbarViewHooked && !g_systemTrayHooked) {
+            if (HookTaskbarViewAndSystemTray(taskbarViewModule)) {
+                g_taskbarViewHooked = true;
+                g_systemTrayHooked = true;
+                taskbarViewHookedNow = true;
+                systemTrayHookedNow = true;
+            } else {
+                Wh_Log(L"Failed to hook the shared taskbar module");
+                success = false;
+            }
+        } else if (g_taskbarViewHooked != g_systemTrayHooked) {
+            // Starting with all symbols in one HookSymbols call avoids a second
+            // symbol-cache pass for the same module. A mixed state isn't
+            // expected in a fresh Explorer process, so don't repeat the call.
+            Wh_Log(L"Shared taskbar module has an inconsistent hook state");
+            success = false;
+        }
+    } else {
+        if (taskbarViewModule && !g_taskbarViewHooked) {
+            if (HookTaskbarView(taskbarViewModule)) {
+                g_taskbarViewHooked = true;
+                taskbarViewHookedNow = true;
+            } else {
+                Wh_Log(L"Failed to hook the Windows 11 taskbar layout");
+                success = false;
+            }
+        }
 
-void HandleLoadedSystemTrayModule(HMODULE module) {
-    if (!g_systemTrayHooked && GetSystemTrayModule() == module) {
-        TryHookSystemTray(module, true);
-    }
-}
-
-void HandleLoadedTaskbarViewModule(HMODULE module) {
-    if (!g_taskbarViewHooked && GetTaskbarViewModule() == module) {
-        if (!TryHookTaskbarView(module, true)) {
-            Wh_Log(L"Failed to hook the Windows 11 taskbar layout");
+        if (systemTrayModule && !g_systemTrayHooked) {
+            if (HookSystemTray(systemTrayModule)) {
+                g_systemTrayHooked = true;
+                systemTrayHookedNow = true;
+            } else {
+                Wh_Log(L"Failed to hook the Windows 11 system tray");
+                success = false;
+            }
         }
     }
+
+    if (applyImmediately && (taskbarViewHookedNow || systemTrayHookedNow)) {
+        Wh_ApplyHookOperations();
+    }
+    // A late module can be loaded while the loader lock is held on a non-UI
+    // thread. Don't synchronously enter XAML from the LoadLibrary hook; the
+    // registry refresh makes the taskbar invoke the installed hooks later.
+    if (applyImmediately && (taskbarViewHookedNow || systemTrayHookedNow)) {
+        RefreshTaskbarClock();
+    }
+
+    return success;
 }
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
@@ -989,8 +1211,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
                                    DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
     if (module) {
-        HandleLoadedTaskbarViewModule(module);
-        HandleLoadedSystemTrayModule(module);
+        TryHookAvailableModules(true);
     }
     return module;
 }
@@ -1000,18 +1221,8 @@ BOOL Wh_ModInit() {
     g_callbacksEnabled = true;
     g_callbackGeneration.fetch_add(1);
 
-    if (HMODULE module = GetTaskbarViewModule()) {
-        if (!TryHookTaskbarView(module, false)) {
-            Wh_Log(L"Failed to hook the Windows 11 taskbar layout");
-            return FALSE;
-        }
-    }
-
-    if (HMODULE module = GetSystemTrayModule()) {
-        if (!TryHookSystemTray(module, false)) {
-            Wh_Log(L"Failed to hook the Windows 11 system tray");
-            return FALSE;
-        }
+    if (!TryHookAvailableModules(false)) {
+        return FALSE;
     }
 
     HMODULE kernelBase = GetModuleHandle(L"kernelbase.dll");
@@ -1027,18 +1238,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (!g_taskbarViewHooked) {
-        if (HMODULE module = GetTaskbarViewModule()) {
-            TryHookTaskbarView(module, true);
-        }
-    }
+    TryHookAvailableModules(true);
 
-    if (!g_systemTrayHooked) {
-        if (HMODULE module = GetSystemTrayModule()) {
-            TryHookSystemTray(module, true);
-        }
+    if (g_taskbarViewHooked) {
+        UpdateKnownClocksSynchronously();
     }
-
     if (g_systemTrayHooked) {
         RefreshTaskbarClock();
     }
@@ -1046,14 +1250,16 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     g_moveClockToLeft = false;
-    StopDeferredCallbacks(true);
-    RestoreAllMovedClocks();
+    g_callbacksEnabled = false;
+    g_callbackGeneration.fetch_add(1);
+    CleanupTaskbarStateSynchronously(false);
 }
 
 void Wh_ModUninit() {
     g_moveClockToLeft = false;
-    StopDeferredCallbacks(true);
-    RestoreAllMovedClocks();
+    g_callbacksEnabled = false;
+    g_callbackGeneration.fetch_add(1);
+    CleanupTaskbarStateSynchronously(true);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL*) {
@@ -1062,11 +1268,11 @@ BOOL Wh_ModSettingsChanged(BOOL*) {
     g_moveClockToLeft = isEnabled;
 
     if (wasEnabled && !isEnabled) {
-        StopDeferredCallbacks(false);
-        RestoreAllMovedClocks();
+        g_callbackGeneration.fetch_add(1);
+        CleanupTaskbarStateSynchronously(false);
     } else if (!wasEnabled && isEnabled) {
         g_callbackGeneration.fetch_add(1);
-        ScheduleKnownClocks();
+        UpdateKnownClocksSynchronously();
         RefreshTaskbarClock();
     }
 
