@@ -196,12 +196,25 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
+    // PKEY_ItemNameDisplay (the Name column) resolves to
+    // ISF::GetDisplayNameOf(SHGDN_NORMAL), which honors "Hide extensions
+    // for known file types" and so can omit a file's extension. The
+    // shell's own file-vs-file CompareIDs for Name instead compares the
+    // real underlying file/folder name (PKEY_FileName), extension included.
+    // Match that here: using the display name for one comparison key and
+    // the real name for another would make the overall ordering
+    // non-transitive (e.g. folder "report" could tie with file
+    // "report.txt" on display name while "report.txt" sorts against other
+    // files by their real, extended names).
+    const PROPERTYKEY& valueSCID =
+        columnSCID == PKEY_ItemNameDisplay ? PKEY_FileName : columnSCID;
+
     _variant_t value1;
     _variant_t value2;
     if (FAILED(CFSFolder_GetDetailsEx_Original(
-            pCFSFolder, itemid1, &columnSCID, value1.GetAddress())) ||
+            pCFSFolder, itemid1, &valueSCID, value1.GetAddress())) ||
         FAILED(CFSFolder_GetDetailsEx_Original(
-            pCFSFolder, itemid2, &columnSCID, value2.GetAddress()))) {
+            pCFSFolder, itemid2, &valueSCID, value2.GetAddress()))) {
         return original();
     }
 
