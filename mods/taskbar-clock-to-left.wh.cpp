@@ -26,6 +26,8 @@ On a centered taskbar, the left host is placed after the Widgets/weather button
 when it is visible. If Windows is configured to left-align Start and app icons,
 the clock stays in its native position to avoid covering those buttons.
 
+![Taskbar Clock to Left](https://i.imgur.com/Wew0LZh.png)
+
 Windows 11's modern taskbar is required.
 */
 // ==/WindhawkModReadme==
@@ -84,6 +86,8 @@ std::atomic<bool> g_callbacksEnabled;
 std::atomic<DWORD> g_callbackGeneration;
 std::atomic<bool> g_systemTrayHooked;
 std::atomic<bool> g_taskbarViewHooked;
+std::atomic<bool> g_systemTrayHookAttempted;
+std::atomic<bool> g_taskbarViewHookAttempted;
 std::atomic<DWORD> g_clockThreadId;
 std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
@@ -167,13 +171,15 @@ bool RunFromWindowThread(HWND window,
     }
 
     RunParameters runParameters{procedure, parameter, false};
-    DWORD_PTR sendResult = 0;
-    LRESULT sent = SendMessageTimeout(
-        window, message, 0, reinterpret_cast<LPARAM>(&runParameters),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &sendResult);
+    // The parameters and callback both live in this mod. A timeout could let
+    // this function return while the target thread is still entering the hook,
+    // leaving it with dangling stack and code pointers during mod unloading.
+    // Wait synchronously until the taskbar thread has finished the callback.
+    SendMessage(window, message, 0,
+                reinterpret_cast<LPARAM>(&runParameters));
     UnhookWindowsHookEx(hook);
 
-    return sent && runParameters.executed;
+    return runParameters.executed;
 }
 
 FrameworkElement FindAncestor(FrameworkElement element,
@@ -1142,10 +1148,21 @@ struct HookSetupGuard {
 };
 
 bool TryHookAvailableModules(bool applyImmediately) {
+    // Once both module roles have been attempted, no later DLL load can add
+    // useful work. In particular, don't repeatedly invalidate and resolve the
+    // same symbol cache if a symbol wasn't available on this Windows build.
+    if (g_taskbarViewHookAttempted && g_systemTrayHookAttempted) {
+        return g_taskbarViewHooked && g_systemTrayHooked;
+    }
+
     if (g_hookSetupInProgress.test_and_set(std::memory_order_acquire)) {
         return true;
     }
     HookSetupGuard guard;
+
+    if (g_taskbarViewHookAttempted && g_systemTrayHookAttempted) {
+        return g_taskbarViewHooked && g_systemTrayHooked;
+    }
 
     HMODULE taskbarViewModule = GetTaskbarViewModule();
     HMODULE systemTrayModule = GetSystemTrayModule();
@@ -1154,7 +1171,12 @@ bool TryHookAvailableModules(bool applyImmediately) {
     bool success = true;
 
     if (taskbarViewModule && taskbarViewModule == systemTrayModule) {
-        if (!g_taskbarViewHooked && !g_systemTrayHooked) {
+        if (!g_taskbarViewHookAttempted &&
+            !g_systemTrayHookAttempted) {
+            // Mark the shared module before resolving symbols so a failed
+            // attempt isn't repeated from every later LoadLibraryExW call.
+            g_taskbarViewHookAttempted = true;
+            g_systemTrayHookAttempted = true;
             if (HookTaskbarViewAndSystemTray(taskbarViewModule)) {
                 g_taskbarViewHooked = true;
                 g_systemTrayHooked = true;
@@ -1164,15 +1186,34 @@ bool TryHookAvailableModules(bool applyImmediately) {
                 Wh_Log(L"Failed to hook the shared taskbar module");
                 success = false;
             }
-        } else if (g_taskbarViewHooked != g_systemTrayHooked) {
-            // Starting with all symbols in one HookSymbols call avoids a second
-            // symbol-cache pass for the same module. A mixed state isn't
-            // expected in a fresh Explorer process, so don't repeat the call.
-            Wh_Log(L"Shared taskbar module has an inconsistent hook state");
-            success = false;
+        } else {
+            // A mixed attempted state is unusual, but can occur if the module
+            // candidates change during Explorer startup. Attempt only the role
+            // that hasn't been handled yet.
+            if (!g_taskbarViewHookAttempted) {
+                g_taskbarViewHookAttempted = true;
+                if (HookTaskbarView(taskbarViewModule)) {
+                    g_taskbarViewHooked = true;
+                    taskbarViewHookedNow = true;
+                } else {
+                    Wh_Log(L"Failed to hook the Windows 11 taskbar layout");
+                    success = false;
+                }
+            }
+            if (!g_systemTrayHookAttempted) {
+                g_systemTrayHookAttempted = true;
+                if (HookSystemTray(systemTrayModule)) {
+                    g_systemTrayHooked = true;
+                    systemTrayHookedNow = true;
+                } else {
+                    Wh_Log(L"Failed to hook the Windows 11 system tray");
+                    success = false;
+                }
+            }
         }
     } else {
-        if (taskbarViewModule && !g_taskbarViewHooked) {
+        if (taskbarViewModule && !g_taskbarViewHookAttempted) {
+            g_taskbarViewHookAttempted = true;
             if (HookTaskbarView(taskbarViewModule)) {
                 g_taskbarViewHooked = true;
                 taskbarViewHookedNow = true;
@@ -1182,7 +1223,8 @@ bool TryHookAvailableModules(bool applyImmediately) {
             }
         }
 
-        if (systemTrayModule && !g_systemTrayHooked) {
+        if (systemTrayModule && !g_systemTrayHookAttempted) {
+            g_systemTrayHookAttempted = true;
             if (HookSystemTray(systemTrayModule)) {
                 g_systemTrayHooked = true;
                 systemTrayHookedNow = true;
@@ -1195,12 +1237,6 @@ bool TryHookAvailableModules(bool applyImmediately) {
 
     if (applyImmediately && (taskbarViewHookedNow || systemTrayHookedNow)) {
         Wh_ApplyHookOperations();
-    }
-    // A late module can be loaded while the loader lock is held on a non-UI
-    // thread. Don't synchronously enter XAML from the LoadLibrary hook; the
-    // registry refresh makes the taskbar invoke the installed hooks later.
-    if (applyImmediately && (taskbarViewHookedNow || systemTrayHookedNow)) {
-        RefreshTaskbarClock();
     }
 
     return success;
@@ -1252,14 +1288,21 @@ void Wh_ModBeforeUninit() {
     g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
-    CleanupTaskbarStateSynchronously(false);
+    // Revoke all mod-owned XAML delegates and release their containers while
+    // the mod code and hooks are still present. The synchronous taskbar-thread
+    // call must finish before Windhawk can continue unloading this DLL.
+    CleanupTaskbarStateSynchronously(true);
 }
 
 void Wh_ModUninit() {
     g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
-    CleanupTaskbarStateSynchronously(true);
+    // Normally Wh_ModBeforeUninit already released both containers. Retry only
+    // if taskbar discovery failed during that earlier cleanup.
+    if (g_deferredClocks || g_movedClocks) {
+        CleanupTaskbarStateSynchronously(true);
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL*) {
