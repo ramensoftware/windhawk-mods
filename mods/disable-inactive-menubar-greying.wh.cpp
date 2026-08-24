@@ -27,6 +27,9 @@ the way it was in Windows 95, before Windows 98.
 typedef COLORREF (WINAPI *SetTextColor_t)(HDC hdc, COLORREF color);
 SetTextColor_t SetTextColor_Original;
 
+bool checked=false;
+bool found=false;
+
 bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
 {
     // Отсекаем PALETTERGB/PALETTEINDEX - ненулевой старший байт.
@@ -72,28 +75,24 @@ BOOL CALLBACK EnumThreadWndProc_CheckTaskbar(HWND hwnd, LPARAM lParam)
 // Возвращает true, если текущий поток владеет хотя бы одним окном панели задач
 bool IsCurrentThreadTaskbar()
 {
-    bool found = false;
-    EnumThreadWindows(GetCurrentThreadId(), EnumThreadWndProc_CheckTaskbar, (LPARAM)&found);
+    if (!checked) {
+        EnumThreadWindows(GetCurrentThreadId(), EnumThreadWndProc_CheckTaskbar, (LPARAM)&found);
+        checked=true;
+    }
     return found;
 }
 
 COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
-    // Если рисует поток окна, которое реально в фокусе - не вмешиваемся вообще.
-    // Если это поток панели задач - не вмешиваемся вообще.
-    if (IsCurrentThreadWindowFocused() || IsCurrentThreadTaskbar())
-    {
+    COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
+
+    // Cheapest checks first: no syscalls unless the color actually matches.
+    if (!IsGreyColor(color, menuTextColor) || WindowFromDC(hdc) ||
+        IsCurrentThreadWindowFocused() || IsCurrentThreadTaskbar()) {
         return SetTextColor_Original(hdc, color);
     }
 
-    COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
-
-    if (IsGreyColor(color, menuTextColor) && !WindowFromDC(hdc))
-    {
-        return SetTextColor_Original(hdc, menuTextColor);
-    }
-
-    return SetTextColor_Original(hdc, color);
+    return SetTextColor_Original(hdc, menuTextColor);
 }
 
 BOOL Wh_ModInit()
