@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.2
+// @version         0.9.3
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -537,7 +537,6 @@ static std::atomic<bool> g_audioAvailable{false};
 static std::atomic<bool> g_audioMuted{false};
 static std::atomic<int> g_audioVolume{0};
 static std::atomic<float> g_audioPeak{0.0f};
-static std::atomic<float> g_audioLinearPeak{0.0f};
 static std::atomic<int> g_pendingVolumeNotches{0};
 static std::atomic<int> g_pendingVolumeSet{-1};
 static std::atomic<unsigned int> g_pendingMuteToggles{0};
@@ -590,11 +589,12 @@ static HANDLE g_audioStopEvent = nullptr;
 static HANDLE g_audioWakeEvent = nullptr;
 
 static std::atomic<HWND> g_mainTaskbarWnd{nullptr};
+static UINT g_audioUpdateMessage = 0;
 
-static UINT AudioUpdateMessage() {
-    static const UINT message = RegisterWindowMessageW(
-        L"Windhawk_MicrophoneActivityUpdate_" WH_MOD_ID);
-    return message;
+static bool IsStopping() {
+    return g_unloading.load() ||
+           (g_audioStopEvent &&
+            WaitForSingleObject(g_audioStopEvent, 0) == WAIT_OBJECT_0);
 }
 
 static void SetSharedDeviceName(std::wstring name) {
@@ -611,8 +611,8 @@ static std::wstring GetSharedDeviceName() {
 }
 
 static void NotifyTaskbar() {
-    if (HWND hWnd = g_mainTaskbarWnd.load()) {
-        PostMessageW(hWnd, AudioUpdateMessage(), 0, 0);
+    if (HWND hWnd = g_mainTaskbarWnd.load(); hWnd && g_audioUpdateMessage) {
+        PostMessageW(hWnd, g_audioUpdateMessage, 0, 0);
     }
 }
 
@@ -698,12 +698,19 @@ static void RecomputeHeadsetStatus() {
 
 static void UpdateWindowsHardwareSource(bool supported, bool muted,
                                         const std::wstring& deviceName) {
+    bool changed = false;
+    const std::wstring nextDevice = supported ? deviceName : L"";
     AcquireSRWLockExclusive(&g_headsetStatusLock);
-    g_windowsHardwareMuteSupported = supported;
-    g_windowsHardwareMuted = muted;
-    g_windowsHardwareDevice = supported ? deviceName : L"";
+    changed = g_windowsHardwareMuteSupported != supported ||
+              g_windowsHardwareMuted != muted ||
+              g_windowsHardwareDevice != nextDevice;
+    if (changed) {
+        g_windowsHardwareMuteSupported = supported;
+        g_windowsHardwareMuted = muted;
+        g_windowsHardwareDevice = nextDevice;
+    }
     ReleaseSRWLockExclusive(&g_headsetStatusLock);
-    RecomputeHeadsetStatus();
+    if (changed) RecomputeHeadsetStatus();
 }
 
 static void UpdateStandardHidSource(bool detected,
@@ -943,7 +950,6 @@ static void PublishUnavailableAudio() {
     g_audioMuted.store(false);
     g_audioVolume.store(0);
     g_audioPeak.store(0.0f);
-    g_audioLinearPeak.store(0.0f);
     g_slackWarningActive.store(false);
     g_teamsWarningActive.store(false);
     g_zoomWarningActive.store(false);
@@ -1041,21 +1047,25 @@ static unsigned CallAppMaskForProcess(DWORD processId) {
 
 static unsigned CaptureSessionAppMaskForRole(IMMDeviceEnumerator* enumerator,
                                              ERole role) {
+    if (IsStopping()) return 0;
     winrt::com_ptr<IMMDevice> endpoint;
     if (FAILED(enumerator->GetDefaultAudioEndpoint(eCapture, role,
                                                     endpoint.put())))
         return 0;
+    if (IsStopping()) return 0;
     winrt::com_ptr<IAudioSessionManager2> manager;
     if (FAILED(endpoint->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL,
                                   nullptr, manager.put_void())))
         return 0;
+    if (IsStopping()) return 0;
     winrt::com_ptr<IAudioSessionEnumerator> sessions;
     if (FAILED(manager->GetSessionEnumerator(sessions.put())) || !sessions)
         return 0;
+    if (IsStopping()) return 0;
     int count = 0;
     if (FAILED(sessions->GetCount(&count))) return 0;
     unsigned mask = 0;
-    for (int index = 0; index < count && !g_unloading.load(); ++index) {
+    for (int index = 0; index < count && !IsStopping(); ++index) {
         winrt::com_ptr<IAudioSessionControl> control;
         if (FAILED(sessions->GetSession(index, control.put())) || !control)
             continue;
@@ -1104,6 +1114,7 @@ static bool IsZoomMeetingHostRunning() {
     entry.dwSize = sizeof(entry);
     if (Process32FirstW(snapshot, &entry)) {
         do {
+            if (IsStopping()) break;
             if (_wcsicmp(entry.szExeFile, L"cpthost.exe") != 0) continue;
 
             found = (CallAppMaskForProcess(entry.th32ProcessID) &
@@ -1135,7 +1146,7 @@ static bool RequestForegroundWindow(HWND hWnd) {
 }
 
 static bool SendZoomMuteShortcut(HWND callWindow) {
-    if (g_unloading.load() || !callWindow || !IsWindow(callWindow) ||
+    if (IsStopping() || !callWindow || !IsWindow(callWindow) ||
         !IsCallAppWindow(callWindow, CallApp::Zoom)) {
         return false;
     }
@@ -1171,7 +1182,7 @@ static bool SendZoomMuteShortcut(HWND callWindow) {
         RequestForegroundWindow(previousForeground);
     }
 
-    if (stopping || g_unloading.load()) return false;
+    if (stopping || IsStopping()) return false;
 
     if (sent != ARRAYSIZE(input)) {
         Wh_Log(L"[Zoom] Alt+A input failed after %u of %u events: %u", sent,
@@ -1229,13 +1240,13 @@ struct CallWindowSearch {
 static CallState ReadCallState(IUIAutomation* automation, CallApp app,
                                int command, HWND* activeWindow) {
     if (activeWindow) *activeWindow = nullptr;
-    if (!automation || g_unloading.load()) return CallState::NotInCall;
+    if (!automation || IsStopping()) return CallState::NotInCall;
 
     std::vector<HWND> appWindows;
     CallWindowSearch search{app, &appWindows};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
-            if (g_unloading.load()) return FALSE;
+            if (IsStopping()) return FALSE;
             auto* search = reinterpret_cast<CallWindowSearch*>(lParam);
             if (IsCallAppWindow(hWnd, search->app)) {
                 search->windows->push_back(hWnd);
@@ -1299,7 +1310,7 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
     std::wstring callText = Lowercase(*callButtonText);
 
     for (HWND hWnd : appWindows) {
-        if (g_unloading.load()) return CallState::NotInCall;
+        if (IsStopping()) return CallState::NotInCall;
         winrt::com_ptr<IUIAutomationElement> root;
         if (FAILED(automation->ElementFromHandle(hWnd, root.put())) || !root) {
             continue;
@@ -1321,7 +1332,7 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
         int count = 0;
         buttons->get_Length(&count);
         for (int i = 0; i < count; i++) {
-            if (g_unloading.load()) return CallState::NotInCall;
+            if (IsStopping()) return CallState::NotInCall;
             winrt::com_ptr<IUIAutomationElement> button;
             if (FAILED(buttons->GetElement(i, button.put())) || !button) {
                 continue;
@@ -1453,8 +1464,8 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
         g_settings.showCallStateIcon || g_settings.zoomWarning ||
         g_settings.zoomRightClickToggle || syncCallsFromHeadset;
 
-    while (WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT &&
-           !g_unloading.load()) {
+    while (!IsStopping() &&
+           WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT) {
         ULONGLONG now = GetTickCount64();
         if (lastCaptureSessionCheck == 0 ||
             now - lastCaptureSessionCheck >= 2000) {
@@ -1549,7 +1560,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                         Wh_Log(L"[Zoom] Alt+A fallback failed three times; "
                                L"dropping the deferred command");
                         deferredZoomCommand = kCallCommandNone;
-                    } else if (!g_unloading.load()) {
+                    } else if (!IsStopping()) {
                         deferredZoomAttempts++;
                         if (SendZoomMuteShortcut(callWindow)) {
                             zoomState = ApplyCallCommandToState(
@@ -1776,7 +1787,6 @@ static DWORD WINAPI AudioThreadProc(void*) {
         g_audioMuted.store(muted != FALSE);
         g_audioVolume.store(static_cast<int>(std::lround(volume * 100.0f)));
         g_audioPeak.store(muted ? 0.0f : smoothedPeak);
-        g_audioLinearPeak.store(muted ? 0.0f : scaledPeak);
         SetSharedDeviceName(endpoint.name);
         UpdateWindowsHardwareSource(endpoint.hardwareMute, muted != FALSE,
                                     endpoint.name);
@@ -2453,7 +2463,13 @@ static HWND CreateHeadsetMessageWindow() {
     windowClass.lpfnWndProc = HeadsetMessageWindowProc;
     windowClass.hInstance = g_headsetWindowInstance;
     windowClass.lpszClassName = kHeadsetWindowClass;
-    RegisterClassW(&windowClass);
+    if (!RegisterClassW(&windowClass)) {
+        Wh_Log(L"[Headset] Refusing a stale or unavailable message-window "
+               L"class: %u",
+               GetLastError());
+        g_headsetWindowInstance = nullptr;
+        return nullptr;
+    }
     return CreateWindowExW(0, kHeadsetWindowClass, L"", 0, 0, 0, 0, 0,
                            HWND_MESSAGE, nullptr, windowClass.hInstance,
                            nullptr);
@@ -2811,12 +2827,20 @@ static void* TaskbarHost_FrameHeight_Original = nullptr;
 static std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original =
     nullptr;
 
+struct TaskbarHostSharedPtrGuard {
+    void* refCount = nullptr;
+
+    ~TaskbarHostSharedPtrGuard() noexcept {
+        if (refCount && std__Ref_count_base__Decref_Original) {
+            std__Ref_count_base__Decref_Original(refCount);
+        }
+    }
+};
+
 static XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
+    TaskbarHostSharedPtrGuard guard{sharedPtr[1]};
     if (!sharedPtr[0] || !sharedPtr[1] || !TaskbarHost_FrameHeight_Original ||
         !std__Ref_count_base__Decref_Original) {
-        if (sharedPtr[1] && std__Ref_count_base__Decref_Original) {
-            std__Ref_count_base__Decref_Original(sharedPtr[1]);
-        }
         return nullptr;
     }
 
@@ -2842,7 +2866,6 @@ static XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
 #endif
     if (!elementOffset) {
         Wh_Log(L"[XAML] Unsupported TaskbarHost::FrameHeight prologue");
-        std__Ref_count_base__Decref_Original(sharedPtr[1]);
         return nullptr;
     }
 
@@ -2854,9 +2877,7 @@ static XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
         unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                 winrt::put_abi(taskbarElement));
     }
-    XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-    std__Ref_count_base__Decref_Original(sharedPtr[1]);
-    return result;
+    return taskbarElement ? taskbarElement.XamlRoot() : nullptr;
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
@@ -2962,6 +2983,23 @@ static HWND FindMainTaskbarWindow() {
         },
         reinterpret_cast<LPARAM>(&result));
     return result;
+}
+
+static bool IsCurrentProcessShell() {
+    HWND shellWindow = GetShellWindow();
+    if (!shellWindow) {
+        // During early shell startup the shell window may not exist yet. Keep
+        // the taskbar hooks available; background services remain separately
+        // gated on a taskbar window owned by this process.
+        return true;
+    }
+
+    DWORD shellProcessId = 0;
+    if (!GetWindowThreadProcessId(shellWindow, &shellProcessId) ||
+        !shellProcessId) {
+        return true;
+    }
+    return shellProcessId == GetCurrentProcessId();
 }
 
 static FrameworkElement FindChildRecursive(
@@ -3617,80 +3655,139 @@ static bool RemoveStaleWidget(Grid const& parent) {
 }
 
 static bool InjectWidget(XamlRoot const& xamlRoot, HWND taskbarWnd) {
-    auto root = xamlRoot.Content().try_as<FrameworkElement>();
-    if (!root) return false;
+    struct ChildLayout {
+        FrameworkElement element{nullptr};
+        int column = 0;
+        int span = 1;
+    };
 
-    auto parent = FindChildRecursive(
-                      root, [](FrameworkElement const& element) {
-                          return element.Name() == L"SystemTrayFrameGrid";
-                      })
-                      .try_as<Grid>();
-    if (!parent || parent.ActualHeight() <= 0.0) return false;
+    Grid parent{nullptr};
+    std::vector<ChildLayout> originalLayout;
+    int insertColumn = -1;
+    bool columnInserted = false;
+    bool widgetAppended = false;
 
-    RemoveStaleWidget(parent);
+    try {
+        auto root = xamlRoot.Content().try_as<FrameworkElement>();
+        if (!root) return false;
 
-    FrameworkElement anchor = nullptr;
-    bool afterAnchor = false;
-    if (g_settings.position == L"beforeOmni") {
-        anchor = FindDirectChild(parent, L"ControlCenterButton");
-    } else if (g_settings.position == L"beforeClock") {
-        anchor = FindDirectChild(parent, L"NotificationCenterButton");
-    } else if (g_settings.position == L"afterClock") {
-        anchor = FindDirectChild(parent, L"ShowDesktopStack");
-    } else if (g_settings.position == L"afterShowDesktop") {
-        anchor = FindDirectChild(parent, L"ShowDesktopStack");
-        afterAnchor = true;
-    } else if (g_settings.position != L"beforeIcons") {
+        parent = FindChildRecursive(
+                     root, [](FrameworkElement const& element) {
+                         return element.Name() == L"SystemTrayFrameGrid";
+                     })
+                     .try_as<Grid>();
+        if (!parent || parent.ActualHeight() <= 0.0) return false;
+
+        RemoveStaleWidget(parent);
+
+        FrameworkElement anchor = nullptr;
+        bool afterAnchor = false;
+        if (g_settings.position == L"beforeOmni") {
+            anchor = FindDirectChild(parent, L"ControlCenterButton");
+        } else if (g_settings.position == L"beforeClock") {
+            anchor = FindDirectChild(parent, L"NotificationCenterButton");
+        } else if (g_settings.position == L"afterClock") {
+            anchor = FindDirectChild(parent, L"ShowDesktopStack");
+        } else if (g_settings.position == L"afterShowDesktop") {
+            anchor = FindDirectChild(parent, L"ShowDesktopStack");
+            afterAnchor = true;
+        } else if (g_settings.position != L"beforeIcons") {
+            return false;
+        }
+
+        if (g_settings.position != L"beforeIcons" && !anchor) return false;
+
+        insertColumn = anchor ? Grid::GetColumn(anchor) : 0;
+        if (afterAnchor) insertColumn++;
+        insertColumn = std::clamp(
+            insertColumn, 0,
+            static_cast<int>(parent.ColumnDefinitions().Size()));
+
+        WidgetState state;
+        state.taskbarWnd = taskbarWnd;
+        state.parent = parent;
+        state.column = insertColumn;
+
+        StackPanel widget;
+        widget.Name(L"MicrophoneActivityWidget");
+        widget.Orientation(Orientation::Horizontal);
+        widget.VerticalAlignment(VerticalAlignment::Stretch);
+        auto button = BuildWidgetButton(&state);
+        auto callButton = BuildCallStateButton(&state);
+        widget.Children().Append(button);
+        widget.Children().Append(callButton);
+
+        originalLayout.reserve(parent.Children().Size());
+        for (auto const& child : parent.Children()) {
+            auto element = child.try_as<FrameworkElement>();
+            if (!element) continue;
+            originalLayout.push_back(
+                {element, Grid::GetColumn(element), Grid::GetColumnSpan(element)});
+        }
+
+        ColumnDefinition definition;
+        definition.Width({1.0, GridUnitType::Auto});
+        if (static_cast<uint32_t>(insertColumn) <
+            parent.ColumnDefinitions().Size()) {
+            parent.ColumnDefinitions().InsertAt(insertColumn, definition);
+        } else {
+            parent.ColumnDefinitions().Append(definition);
+        }
+        columnInserted = true;
+
+        for (auto const& layout : originalLayout) {
+            if (layout.column >= insertColumn) {
+                Grid::SetColumn(layout.element, layout.column + 1);
+            } else if (layout.column + layout.span > insertColumn) {
+                Grid::SetColumnSpan(layout.element, layout.span + 1);
+            }
+        }
+
+        Grid::SetColumn(widget, insertColumn);
+        parent.Children().Append(widget);
+        widgetAppended = true;
+
+        g_widgets->push_back(std::move(state));
+        Wh_Log(L"[XAML] Widget injected into taskbar %p at column %d",
+               taskbarWnd, insertColumn);
+        return true;
+    } catch (...) {
+        if (parent) {
+            if (widgetAppended) {
+                try {
+                    for (uint32_t index = 0;
+                         index < parent.Children().Size(); ++index) {
+                        auto element = parent.Children().GetAt(index)
+                                           .try_as<FrameworkElement>();
+                        if (element &&
+                            element.Name() == L"MicrophoneActivityWidget") {
+                            parent.Children().RemoveAt(index);
+                            break;
+                        }
+                    }
+                } catch (...) {
+                }
+            }
+            for (auto const& layout : originalLayout) {
+                try {
+                    Grid::SetColumn(layout.element, layout.column);
+                    Grid::SetColumnSpan(layout.element, layout.span);
+                } catch (...) {
+                }
+            }
+            if (columnInserted && insertColumn >= 0) {
+                try {
+                    if (static_cast<uint32_t>(insertColumn) <
+                        parent.ColumnDefinitions().Size()) {
+                        parent.ColumnDefinitions().RemoveAt(insertColumn);
+                    }
+                } catch (...) {
+                }
+            }
+        }
+        Wh_Log(L"[XAML] Widget injection failed; partial layout rolled back");
         return false;
     }
-
-    if (g_settings.position != L"beforeIcons" && !anchor) return false;
-
-    int insertColumn = 0;
-    if (anchor) insertColumn = Grid::GetColumn(anchor);
-    if (afterAnchor) insertColumn++;
-
-    ColumnDefinition definition;
-    definition.Width({1.0, GridUnitType::Auto});
-    if (static_cast<uint32_t>(insertColumn) <
-        parent.ColumnDefinitions().Size()) {
-        parent.ColumnDefinitions().InsertAt(insertColumn, definition);
-    } else {
-        parent.ColumnDefinitions().Append(definition);
-    }
-
-    for (auto const& child : parent.Children()) {
-        auto element = child.try_as<FrameworkElement>();
-        if (!element) continue;
-        int column = Grid::GetColumn(element);
-        int span = Grid::GetColumnSpan(element);
-        if (column >= insertColumn) {
-            Grid::SetColumn(element, column + 1);
-        } else if (column + span > insertColumn) {
-            Grid::SetColumnSpan(element, span + 1);
-        }
-    }
-
-    WidgetState state;
-    state.taskbarWnd = taskbarWnd;
-    state.parent = parent;
-    state.column = insertColumn;
-
-    StackPanel widget;
-    widget.Name(L"MicrophoneActivityWidget");
-    widget.Orientation(Orientation::Horizontal);
-    widget.VerticalAlignment(VerticalAlignment::Stretch);
-    auto button = BuildWidgetButton(&state);
-    auto callButton = BuildCallStateButton(&state);
-    widget.Children().Append(button);
-    widget.Children().Append(callButton);
-    Grid::SetColumn(widget, insertColumn);
-    parent.Children().Append(widget);
-
-    g_widgets->push_back(std::move(state));
-    Wh_Log(L"[XAML] Widget injected into taskbar %p at column %d",
-           taskbarWnd, insertColumn);
-    return true;
 }
 
 static void RemoveWidgetState(WidgetState& state) {
@@ -3760,8 +3857,12 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
                                             WPARAM wParam, LPARAM lParam,
                                             UINT_PTR subclassId,
                                             DWORD_PTR referenceData) {
-    if (message == AudioUpdateMessage()) {
-        UpdateWidgets();
+    if (g_audioUpdateMessage && message == g_audioUpdateMessage) {
+        try {
+            UpdateWidgets();
+        } catch (...) {
+            Wh_Log(L"[XAML] Exception while updating widget state");
+        }
         return 0;
     }
     if (message == WM_NCDESTROY) {
@@ -3777,31 +3878,41 @@ static bool ApplyWidgetsFromTaskbarThread() {
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
-            WCHAR className[32];
-            if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-                return TRUE;
-            }
+            try {
+                WCHAR className[32];
+                if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+                    return TRUE;
+                }
 
-            XamlRoot root = nullptr;
-            if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                root = GetTaskbarXamlRoot(hWnd);
-                g_mainTaskbarWnd.store(hWnd);
-                SetWindowSubclass(hWnd, TaskbarSubclassProc,
-                                  kTaskbarSubclassId, 0);
-            } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                root = GetSecondaryTaskbarXamlRoot(hWnd);
-            } else {
-                return TRUE;
-            }
+                XamlRoot root = nullptr;
+                if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    root = GetTaskbarXamlRoot(hWnd);
+                    g_mainTaskbarWnd.store(hWnd);
+                    SetWindowSubclass(hWnd, TaskbarSubclassProc,
+                                      kTaskbarSubclassId, 0);
+                } else if (_wcsicmp(className,
+                                    L"Shell_SecondaryTrayWnd") == 0) {
+                    root = GetSecondaryTaskbarXamlRoot(hWnd);
+                } else {
+                    return TRUE;
+                }
 
-            if (root && InjectWidget(root, hWnd)) {
-                *reinterpret_cast<bool*>(lParam) = true;
+                if (root && InjectWidget(root, hWnd)) {
+                    *reinterpret_cast<bool*>(lParam) = true;
+                }
+            } catch (...) {
+                Wh_Log(L"[XAML] Exception while enumerating taskbar window %p",
+                       hWnd);
             }
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&injected));
 
-    UpdateWidgets();
+    try {
+        UpdateWidgets();
+    } catch (...) {
+        Wh_Log(L"[XAML] Exception while applying initial widget state");
+    }
     g_widgetsLive.store(injected);
     return injected;
 }
@@ -3905,12 +4016,17 @@ static void StartRetryThreadLocked() {
     ReleaseSRWLockExclusive(&g_retryLock);
 }
 
-static void StartRetryThread() {
+static void StartTaskbarOwnedServices() {
     if (g_unloading.load()) return;
     std::unique_lock<std::mutex> guard(g_retryLifecycleMutex,
                                        std::try_to_lock);
     if (!guard.owns_lock()) return;
-    StartRetryThreadLocked();
+    if (!FindMainTaskbarWindow()) return;
+
+    StopRetryThreadLocked();
+    StartAudioThread();
+    ApplyWidgetsOnWindowThread();
+    if (!g_widgetsLive.load()) StartRetryThreadLocked();
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
@@ -3922,13 +4038,13 @@ static CSecondaryTray_InitModelAndHost_t
 
 static void WINAPI TrayUI_StartTaskbar_Hook(void* self) {
     TrayUI_StartTaskbar_Original(self);
-    if (!g_unloading.load()) StartRetryThread();
+    StartTaskbarOwnedServices();
 }
 
 static void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* self,
                                                         void* taskbarModel) {
     CSecondaryTray_InitModelAndHost_Original(self, taskbarModel);
-    if (!g_unloading.load()) StartRetryThread();
+    StartTaskbarOwnedServices();
 }
 
 static bool HookTaskbarSymbols() {
@@ -3965,6 +4081,16 @@ static bool HookTaskbarSymbols() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L"[Init] MuteAlert %s", WH_MOD_VERSION);
+    if (!IsCurrentProcessShell()) {
+        Wh_Log(L"[Init] Skipping a folder-only Explorer process");
+        return FALSE;
+    }
+    g_audioUpdateMessage = RegisterWindowMessageW(
+        L"Windhawk_MicrophoneActivityUpdate_" WH_MOD_ID);
+    if (!g_audioUpdateMessage) {
+        Wh_Log(L"[Init] Failed to register the taskbar update message");
+        return FALSE;
+    }
     g_diagnosticStartTime = GetTickCount64();
     LoadSettings();
     if (!HookTaskbarSymbols()) {
@@ -3975,9 +4101,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    StartAudioThread();
-    ApplyWidgetsOnWindowThread();
-    if (!g_widgetsLive.load()) StartRetryThread();
+    StartTaskbarOwnedServices();
 }
 
 void Wh_ModUninit() {
@@ -4003,7 +4127,9 @@ void Wh_ModSettingsChanged() {
     RemoveWidgetsOnWindowThread();
     StopAudioThread();
     LoadSettings();
-    StartAudioThread();
-    ApplyWidgetsOnWindowThread();
-    if (!g_widgetsLive.load()) StartRetryThreadLocked();
+    if (FindMainTaskbarWindow()) {
+        StartAudioThread();
+        ApplyWidgetsOnWindowThread();
+        if (!g_widgetsLive.load()) StartRetryThreadLocked();
+    }
 }
