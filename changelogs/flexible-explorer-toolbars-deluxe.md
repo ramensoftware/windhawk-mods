@@ -1,3 +1,11 @@
+## 1.4 ([Aug 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/be13fba7112e7504c68607c9f2ca8dee08de621c/mods/flexible-explorer-toolbars-deluxe.wh.cpp))
+
+* Fix initial layout of breadcrumbs
+* Fix restoring breadcrumbs from the minimized state
+* Apply lock/unlock to all open windows
+* Toolbar height is DPI-aware
+* Fix navbar re-appearing after fullscreen (F11)
+
 ## 1.3.6 ([Jul 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e835b59c3c83b3878f30fc8cd62bc9fb48f595af/mods/flexible-explorer-toolbars-deluxe.wh.cpp))
 
 * Make the code 2.5 times shorter
