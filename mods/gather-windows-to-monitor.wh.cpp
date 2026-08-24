@@ -70,15 +70,13 @@ not attempted because it is not reliable for all apps.
 - SkipFullscreen: true
   $name: Skip fullscreen windows
   $description: Applies to every action, including moving only the active window.
-- SizeMode: preserve
+- SizeMode: fit
   $name: Window size behavior
-  $description: Preserve keeps each window's current size. Scale adjusts its size for the destination monitor.
+  $description: Fit shrinks only oversized windows. Preserve never resizes. Scale resizes all windows for the destination monitor.
   $options:
-  - preserve: Preserve
+  - fit: Fit oversized windows (default)
+  - preserve: Always preserve size
   - scale: Scale proportionally
-- ShrinkOversized: true
-  $name: Shrink oversized windows to fit
-  $description: Keeps windows usable when target monitor is smaller.
 - CascadeWindows: true
   $name: Cascade windows
   $description: Offsets moved windows so they do not completely overlap.
@@ -140,6 +138,7 @@ enum class AnchorMode {
 };
 
 enum class SizeMode {
+    Fit,
     Preserve,
     Scale,
 };
@@ -149,7 +148,6 @@ struct Settings {
     bool restoreMinimized;
     bool skipFullscreen;
     SizeMode sizeMode;
-    bool shrinkOversized;
     bool cascadeWindows;
     int cascadeOffset;
     AnchorMode anchor;
@@ -225,7 +223,6 @@ void LoadSettings() {
     g_settings.restoreMinimized = Wh_GetIntSetting(L"RestoreMinimized") != 0;
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
     g_settings.sizeMode = ParseSizeMode(GetStringSetting(L"SizeMode"));
-    g_settings.shrinkOversized = Wh_GetIntSetting(L"ShrinkOversized") != 0;
     g_settings.cascadeWindows = Wh_GetIntSetting(L"CascadeWindows") != 0;
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
     g_settings.anchor = ParseAnchorMode(GetStringSetting(L"Anchor"));
@@ -250,57 +247,100 @@ AnchorMode ParseAnchorMode(const std::wstring& text) {
 }
 
 SizeMode ParseSizeMode(const std::wstring& text) {
-    return TrimUpper(text) == L"SCALE" ? SizeMode::Scale
-                                        : SizeMode::Preserve;
+    std::wstring value = TrimUpper(text);
+    if (value == L"PRESERVE") return SizeMode::Preserve;
+    if (value == L"SCALE") return SizeMode::Scale;
+    return SizeMode::Fit;
 }
 
-UINT VkFromToken(const std::wstring& key) {
-    if (key.empty()) return 0;
-    if (key.size() == 1 && key[0] >= L'A' && key[0] <= L'Z') return key[0];
-    if (key.size() == 1 && key[0] >= L'0' && key[0] <= L'9') return key[0];
-    if (key[0] == L'F' && key.size() <= 3) {
-        int n = _wtoi(key.c_str() + 1);
-        if (n >= 1 && n <= 24) return VK_F1 + n - 1;
+bool TryParseVirtualKey(const std::wstring& key, UINT* vk) {
+    struct NamedVirtualKey {
+        const wchar_t* name;
+        UINT value;
+    };
+    static constexpr NamedVirtualKey namedKeys[] = {
+        { L"LEFT", VK_LEFT },       { L"RIGHT", VK_RIGHT },
+        { L"UP", VK_UP },           { L"DOWN", VK_DOWN },
+        { L"HOME", VK_HOME },       { L"END", VK_END },
+        { L"PGUP", VK_PRIOR },      { L"PAGEUP", VK_PRIOR },
+        { L"PGDN", VK_NEXT },       { L"PAGEDOWN", VK_NEXT },
+        { L"INSERT", VK_INSERT },   { L"INS", VK_INSERT },
+        { L"DELETE", VK_DELETE },   { L"DEL", VK_DELETE },
+        { L"SPACE", VK_SPACE },     { L"TAB", VK_TAB },
+        { L"ESC", VK_ESCAPE },      { L"ESCAPE", VK_ESCAPE },
+        { L"BACKSPACE", VK_BACK },
+    };
+
+    UINT parsed = 0;
+    if (key.size() == 1 &&
+        ((key[0] >= L'A' && key[0] <= L'Z') ||
+         (key[0] >= L'0' && key[0] <= L'9'))) {
+        parsed = key[0];
+    } else if (key.size() >= 2 && key.size() <= 3 && key[0] == L'F') {
+        if (key[1] == L'0') return false;
+        int number = 0;
+        for (size_t i = 1; i < key.size(); i++) {
+            if (key[i] < L'0' || key[i] > L'9') return false;
+            number = number * 10 + key[i] - L'0';
+        }
+        if (number >= 1 && number <= 24) parsed = VK_F1 + number - 1;
+    } else {
+        for (const NamedVirtualKey& namedKey : namedKeys) {
+            if (key == namedKey.name) {
+                parsed = namedKey.value;
+                break;
+            }
+        }
     }
-    if (key == L"LEFT") return VK_LEFT;
-    if (key == L"RIGHT") return VK_RIGHT;
-    if (key == L"UP") return VK_UP;
-    if (key == L"DOWN") return VK_DOWN;
-    if (key == L"HOME") return VK_HOME;
-    if (key == L"END") return VK_END;
-    if (key == L"PGUP" || key == L"PAGEUP") return VK_PRIOR;
-    if (key == L"PGDN" || key == L"PAGEDOWN") return VK_NEXT;
-    if (key == L"INSERT" || key == L"INS") return VK_INSERT;
-    if (key == L"DELETE" || key == L"DEL") return VK_DELETE;
-    if (key == L"SPACE") return VK_SPACE;
-    if (key == L"TAB") return VK_TAB;
-    if (key == L"ESC" || key == L"ESCAPE") return VK_ESCAPE;
-    if (key == L"BACKSPACE") return VK_BACK;
-    return 0;
+
+    if (!parsed) return false;
+    *vk = parsed;
+    return true;
 }
 
-bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* vk) {
+enum class HotkeyParseResult {
+    Valid,
+    Disabled,
+    Invalid,
+};
+
+HotkeyParseResult ParseHotkey(const std::wstring& text, UINT* modifiers,
+                              UINT* vk) {
     std::wstring s = TrimUpper(text);
     if (s.empty() || s == L"NONE" || s == L"DISABLED") {
-        return false;
+        return HotkeyParseResult::Disabled;
     }
 
-    *modifiers = MOD_NOREPEAT;
-    *vk = 0;
+    UINT parsedModifiers = MOD_NOREPEAT;
+    UINT parsedVk = 0;
     size_t start = 0;
     for (;;) {
         size_t pos = s.find(L'+', start);
         std::wstring token = TrimUpper(s.substr(start, pos - start));
-        if (token == L"CTRL" || token == L"CONTROL") *modifiers |= MOD_CONTROL;
-        else if (token == L"ALT") *modifiers |= MOD_ALT;
-        else if (token == L"SHIFT") *modifiers |= MOD_SHIFT;
-        else if (token == L"WIN" || token == L"WINDOWS") *modifiers |= MOD_WIN;
-        else *vk = VkFromToken(token);
+        if (token == L"CTRL" || token == L"CONTROL") {
+            parsedModifiers |= MOD_CONTROL;
+        } else if (token == L"ALT") {
+            parsedModifiers |= MOD_ALT;
+        } else if (token == L"SHIFT") {
+            parsedModifiers |= MOD_SHIFT;
+        } else if (token == L"WIN" || token == L"WINDOWS") {
+            parsedModifiers |= MOD_WIN;
+        } else {
+            UINT tokenVk = 0;
+            if (parsedVk || !TryParseVirtualKey(token, &tokenVk)) {
+                return HotkeyParseResult::Invalid;
+            }
+            parsedVk = tokenVk;
+        }
 
         if (pos == std::wstring::npos) break;
         start = pos + 1;
     }
-    return *vk != 0;
+
+    if (!parsedVk) return HotkeyParseResult::Invalid;
+    *modifiers = parsedModifiers;
+    *vk = parsedVk;
+    return HotkeyParseResult::Valid;
 }
 
 void UnregisterConfiguredHotkeys() {
@@ -326,8 +366,14 @@ void RegisterConfiguredHotkeys() {
     for (size_t i = 0; i < ARRAYSIZE(modes); i++) {
         UINT modifiers = 0;
         UINT vk = 0;
-        if (!ParseHotkey(g_settings.hotkeys[(int)modes[i]], &modifiers, &vk)) {
+        const std::wstring& configured = g_settings.hotkeys[(int)modes[i]];
+        HotkeyParseResult parseResult = ParseHotkey(configured, &modifiers, &vk);
+        if (parseResult == HotkeyParseResult::Disabled) {
             Wh_Log(L"Hotkey disabled: %s", names[i]);
+            continue;
+        }
+        if (parseResult == HotkeyParseResult::Invalid) {
+            Wh_Log(L"Invalid hotkey: %s = %s", names[i], configured.c_str());
             continue;
         }
 
@@ -335,10 +381,10 @@ void RegisterConfiguredHotkeys() {
         if (RegisterHotKey(nullptr, id, modifiers, vk)) {
             g_hotkeys.push_back({ id, modifiers, vk, modes[i], names[i] });
             Wh_Log(L"Hotkey registered: %s = %s", names[i],
-                   g_settings.hotkeys[(int)modes[i]].c_str());
+                   configured.c_str());
         } else {
             Wh_Log(L"Hotkey register failed: %s = %s, error=%u", names[i],
-                   g_settings.hotkeys[(int)modes[i]].c_str(), GetLastError());
+                   configured.c_str(), GetLastError());
         }
     }
 }
@@ -549,7 +595,7 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         width = ScaleDimensionForWorkArea(width, sourceWorkWidth, workWidth);
         height = ScaleDimensionForWorkArea(height, sourceWorkHeight, workHeight);
     }
-    if (g_settings.shrinkOversized) {
+    if (g_settings.sizeMode != SizeMode::Preserve) {
         width = std::min(width, workWidth);
         height = std::min(height, workHeight);
     }
@@ -582,8 +628,7 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
     }
 
     UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
-    if (g_settings.sizeMode == SizeMode::Preserve &&
-        !g_settings.shrinkOversized) {
+    if (g_settings.sizeMode == SizeMode::Preserve) {
         flags |= SWP_NOSIZE;
     }
     bool moved = SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, flags) != FALSE;
