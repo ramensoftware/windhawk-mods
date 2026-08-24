@@ -17,9 +17,16 @@ Move the active window, or gather eligible open windows, to a chosen display wit
 global shortcuts. Windows are placed inside the usable desktop area so taskbars
 remain clear. Windows already on the destination display are left unchanged.
 
-Numbered shortcuts can be remapped to the displays you intend without changing
-the shortcuts themselves. This is useful when Windows and Windhawk number displays
-differently or when reconnecting a display changes their order.
+Numbered shortcuts follow the `DISPLAY1`, `DISPLAY2`, and other names assigned by
+Windows. They can be remapped without changing the shortcuts themselves.
+
+## Choosing between similar mods
+
+This mod is useful when you want shortcuts for the primary, numbered, mouse, or
+active-window display, or when you want to gather multiple windows at once. The
+**Move Window to Monitor** mod is a simpler alternative when you only want to move
+the active window to the nearest display above, below, left, or right with arrow
+shortcuts. Both mods can be installed, but their shortcuts must not conflict.
 
 ## Move foreground window shortcuts
 
@@ -48,37 +55,69 @@ is logged. This protects existing shortcuts after an update.
 
 ## Display order override
 
-Numbered move and gather actions normally use the order in which Windhawk detects
-your displays. That order can differ from the numbers in Windows Settings and can
-change after displays are connected or disconnected. **Display order override**
-changes what "display 1", "display 2", and so on mean while keeping every hotkey
-unchanged.
+Numbered move and gather actions normally follow Windows display device names in
+numeric order: `DISPLAY1`, `DISPLAY2`, and so on. **Display order override** changes
+what "display 1", "display 2", and so on mean while keeping every hotkey unchanged.
 
-Enter a comma-separated list containing `primary` or detected display numbers:
+Enter a comma-separated list containing `primary` or display device names. Both
+`DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
 
-* `primary,3` keeps display 1 tied to whichever display is currently primary and
-  makes detected display 3 become display 2.
-* `4,3` makes detected display 4 become display 1 and detected display 3 become
-  display 2.
+* `primary,DISPLAY3` keeps display 1 tied to whichever display is currently
+  primary and makes `DISPLAY3` become display 2.
+* `\\.\DISPLAY4,\\.\DISPLAY3` accepts names copied directly from PowerShell.
 
-Displays not listed keep their detected order after the listed displays. For
-example, if the detected order is `1,2,3,4`, the override `4,3` produces
-`4,3,1,2`. The override affects numbered move and gather actions only. Primary,
-mouse, and active-window destinations are unchanged.
+Each listed name keeps its numbered slot even while that display is disconnected;
+using that shortcut temporarily falls back to the primary display. Unlisted
+connected displays follow in normal `DISPLAY` number order. The override affects
+numbered move and gather actions only. Primary, mouse, and active-window
+destinations are unchanged.
 
-Leave the setting empty to use detection order. An invalid value rejects the
-whole override and safely returns to detection order. Enable Windhawk logging to
-see both the detected order and the final numbered order. These lines appear when
-the mod starts, settings change, or the display layout changes.
+To find the names assigned to connected displays, run this in Windows PowerShell:
+
+```powershell
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Screen]::AllScreens |
+    Select-Object DeviceName, Primary, Bounds
+```
+
+Leave the setting empty to use automatic `DISPLAY` number order. An invalid value
+rejects the whole override and safely returns to automatic order. Windhawk logging
+also shows connected device names and the final numbered order when the mod starts,
+settings change, or the display layout changes.
 
 If a numbered destination is unavailable, the primary display is used.
 
+## Updating window size settings
+
+Earlier versions used **Window size behavior** together with a separate
+**Shrink oversized windows to fit** switch. After updating, verify the new
+**Window size behavior** setting:
+
+* **Preserve** with shrinking on maps to **Fit oversized windows**.
+* **Preserve** with shrinking off maps to **Always preserve size**.
+* **Scale proportionally** with shrinking on maps to **Scale proportionally**.
+* **Scale proportionally** with shrinking off also maps most closely to
+  **Scale proportionally**, but oversized windows are now kept within the
+  destination display.
+
+Windhawk can retain an existing value during an update, so customized users
+should check this dropdown once after installing the new version.
+
+## Updating minimized window settings
+
+The previous two minimized-window checkboxes are now one **Minimized windows**
+dropdown. The existing **Restore minimized windows before moving** value is kept:
+
+* Off maps to **Skip minimized windows**.
+* On maps to **Restore and move minimized windows**.
+
+If both old checkboxes were on, select **Skip minimized windows** to keep the old
+behavior, where skipping took priority.
+
 ## Window handling settings
 
-* **Skip minimized windows** ignores minimized windows immediately.
-* **Restore minimized windows before moving** applies when skipping is off.
-  When both settings are off, minimized windows remain skipped because moving
-  them without restoring is unreliable.
+* **Minimized windows** chooses whether minimized windows are skipped or restored
+  and moved. Skipping is the default.
 * **Skip fullscreen windows** avoids disturbing fullscreen apps and games. It
   applies to both single-window moves and gather actions.
 * **Window size behavior** controls resizing at the destination. **Fit** shrinks
@@ -101,9 +140,8 @@ Moved windows are raised above windows already on the destination display withou
 taking keyboard focus. A moved maximized active window is maximized again on the
 destination. Gathered maximized windows are restored so they can be arranged.
 
-Detected display numbers are Windhawk's numbers, not necessarily the numbers shown
-in Windows Settings. Moving a minimized window without restoring it is not
-supported because applications handle that inconsistently.
+Moving a minimized window without restoring it is not supported because
+applications handle that inconsistently.
 */
 // ==/WindhawkModReadme==
 
@@ -152,16 +190,17 @@ supported because applications handle that inconsistently.
   $name: Display order override
   $description: >-
     Remaps what numbered move and gather shortcuts target without rebinding them.
-    Enter comma-separated primary or detected display numbers. Example: primary,3
-    keeps display 1 tied to the current primary display after reconnects and makes
-    detected display 3 become display 2. Unlisted displays keep detected order.
-    Enable Windhawk logging to see detected numbers. Invalid values are ignored;
-    leave empty for detection order.
-- SkipMinimized: false
-  $name: Skip minimized windows
-- RestoreMinimized: false
-  $name: Restore minimized windows before moving
-  $description: Used only when Skip minimized windows is turned off.
+    Enter comma-separated primary or display names such as DISPLAY4 or
+    \\.\DISPLAY4. Example: primary,DISPLAY3 keeps display 1 tied to the current
+    primary display and makes DISPLAY3 become display 2. Missing displays keep
+    their slots; unlisted displays follow in automatic order. An invalid override
+    uses automatic order. Leave empty for automatic DISPLAY number order.
+- RestoreMinimized: 0
+  $name: Minimized windows
+  $description: Choose whether minimized windows stay minimized or are restored and moved.
+  $options:
+  - 0: Skip minimized windows (default)
+  - 1: Restore and move minimized windows
 - SkipFullscreen: true
   $name: Skip fullscreen windows
   $description: Applies to every action, including moving only the active window.
@@ -192,10 +231,13 @@ supported because applications handle that inconsistently.
 
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 
 #include <algorithm>
 #include <atomic>
+#include <climits>
+#include <cstdlib>
 #include <cwctype>
 #include <string>
 #include <string_view>
@@ -229,7 +271,6 @@ enum class SkipReason {
     OwnedWindow,
     Untitled,
     Minimized,
-    MinimizedNoRestore,
     Fullscreen,
     AlreadyOnTarget,
     BadRect,
@@ -249,12 +290,14 @@ enum class SizeMode {
 
 struct DisplayOrderOverride {
     bool valid;
-    int entries[5];  // -1 is the current primary display; 0-4 are detected indices.
+    struct Entry {
+        bool primary;
+        int displayNumber;
+    } entries[5];
     size_t count;
 };
 
 struct Settings {
-    bool skipMinimized;
     bool restoreMinimized;
     bool skipFullscreen;
     SizeMode sizeMode;
@@ -272,6 +315,8 @@ struct MonitorInfo {
     RECT work;
     bool primary;
     size_t detectedIndex;
+    int displayNumber;
+    std::wstring deviceName;
 };
 
 struct Hotkey {
@@ -300,6 +345,17 @@ constexpr int ScaleDimensionForWorkArea(int dimension, int sourceExtent,
 }
 static_assert(ScaleDimensionForWorkArea(800, 1920, 1280) == 533);
 static_assert(ScaleDimensionForWorkArea(1, 7680, 800) == 1);
+
+constexpr bool ShouldResizeWindow(SizeMode mode, int width, int height,
+                                  int workWidth, int workHeight) {
+    return mode == SizeMode::Scale ||
+           (mode == SizeMode::Fit &&
+            (width > workWidth || height > workHeight));
+}
+static_assert(!ShouldResizeWindow(SizeMode::Preserve, 2000, 1200, 1000, 800));
+static_assert(!ShouldResizeWindow(SizeMode::Fit, 800, 600, 1000, 800));
+static_assert(ShouldResizeWindow(SizeMode::Fit, 1200, 600, 1000, 800));
+static_assert(ShouldResizeWindow(SizeMode::Scale, 800, 600, 1000, 800));
 
 constexpr bool IsForegroundOnlyAction(TargetMode mode) {
     return mode == TargetMode::ForegroundPrimary ||
@@ -347,6 +403,31 @@ constexpr bool IsPrimaryDisplayOrderToken(std::wstring_view text) {
     return true;
 }
 
+constexpr int ParseDisplayDeviceNumber(std::wstring_view text) {
+    text = TrimDisplayOrderToken(text);
+    constexpr std::wstring_view pathPrefix = L"\\\\.\\";
+    if (text.starts_with(pathPrefix)) {
+        text.remove_prefix(pathPrefix.size());
+    }
+
+    constexpr std::wstring_view displayPrefix = L"DISPLAY";
+    if (text.size() <= displayPrefix.size()) return 0;
+    for (size_t i = 0; i < displayPrefix.size(); i++) {
+        wchar_t c = text[i];
+        if (c >= L'a' && c <= L'z') c -= L'a' - L'A';
+        if (c != displayPrefix[i]) return 0;
+    }
+
+    int number = 0;
+    for (wchar_t c : text.substr(displayPrefix.size())) {
+        if (c < L'0' || c > L'9') return 0;
+        int digit = c - L'0';
+        if (number > (INT_MAX - digit) / 10) return 0;
+        number = number * 10 + digit;
+    }
+    return number;
+}
+
 constexpr DisplayOrderOverride ParseDisplayOrder(std::wstring_view text) {
     DisplayOrderOverride result{ true, {}, 0 };
     text = TrimDisplayOrderToken(text);
@@ -354,21 +435,22 @@ constexpr DisplayOrderOverride ParseDisplayOrder(std::wstring_view text) {
         size_t comma = text.find(L',');
         std::wstring_view token =
             TrimDisplayOrderToken(text.substr(0, comma));
-        int entry;
+        DisplayOrderOverride::Entry entry{};
         if (IsPrimaryDisplayOrderToken(token)) {
-            entry = -1;
-        } else if (token.size() == 1 && token[0] >= L'1' &&
-                   token[0] <= L'5') {
-            entry = token[0] - L'1';
+            entry.primary = true;
         } else {
-            return { false, {}, 0 };
+            entry.displayNumber = ParseDisplayDeviceNumber(token);
+            if (!entry.displayNumber) return { false, {}, 0 };
         }
 
         if (result.count == ARRAYSIZE(result.entries)) {
             return { false, {}, 0 };
         }
         for (size_t i = 0; i < result.count; i++) {
-            if (result.entries[i] == entry) return { false, {}, 0 };
+            if (result.entries[i].primary == entry.primary &&
+                result.entries[i].displayNumber == entry.displayNumber) {
+                return { false, {}, 0 };
+            }
         }
         result.entries[result.count++] = entry;
 
@@ -379,19 +461,25 @@ constexpr DisplayOrderOverride ParseDisplayOrder(std::wstring_view text) {
     return result;
 }
 
-constexpr auto kDisplayOrderPrimaryTest = ParseDisplayOrder(L"primary, 3");
+constexpr auto kDisplayOrderPrimaryTest =
+    ParseDisplayOrder(L"primary, DISPLAY3");
 static_assert(kDisplayOrderPrimaryTest.valid &&
               kDisplayOrderPrimaryTest.count == 2 &&
-              kDisplayOrderPrimaryTest.entries[0] == -1 &&
-              kDisplayOrderPrimaryTest.entries[1] == 2);
-constexpr auto kDisplayOrderNumericTest = ParseDisplayOrder(L"4,3");
-static_assert(kDisplayOrderNumericTest.valid &&
-              kDisplayOrderNumericTest.entries[0] == 3 &&
-              kDisplayOrderNumericTest.entries[1] == 2);
+              kDisplayOrderPrimaryTest.entries[0].primary &&
+              kDisplayOrderPrimaryTest.entries[1].displayNumber == 3);
+constexpr auto kDisplayOrderPathTest =
+    ParseDisplayOrder(L"\\\\.\\DISPLAY4, display3");
+static_assert(kDisplayOrderPathTest.valid &&
+              kDisplayOrderPathTest.entries[0].displayNumber == 4 &&
+              kDisplayOrderPathTest.entries[1].displayNumber == 3);
 static_assert(ParseDisplayOrder(L"").valid);
-static_assert(ParseDisplayOrder(L"3,3").valid == false);
+static_assert(ParseDisplayOrder(L"DISPLAY3,display3").valid == false);
 static_assert(ParseDisplayOrder(L"primary,").valid == false);
 static_assert(ParseDisplayOrder(L"leftmost").valid == false);
+static_assert(ParseDisplayOrder(L"DISPLAY4").valid);
+static_assert(ParseDisplayOrder(L"\\\\.\\DISPLAY4").valid);
+static_assert(ParseDisplayOrder(L"DISPLAY0").valid == false);
+static_assert(ParseDisplayOrder(L"4,3").valid == false);
 
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_STOP = WM_APP + 2;
@@ -404,12 +492,7 @@ std::atomic<DWORD> g_workerThreadId{};
 HANDLE g_workerReady;
 
 std::wstring GetStringSetting(const wchar_t* name) {
-    PCWSTR raw = Wh_GetStringSetting(name);
-    std::wstring value = raw ? raw : L"";
-    if (raw) {
-        Wh_FreeStringSetting(raw);
-    }
-    return value;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 AnchorMode ParseAnchorMode(const std::wstring& text);
@@ -439,12 +522,11 @@ void LoadSettings() {
     std::wstring displayOrderText = GetStringSetting(L"DisplayOrder");
     g_settings.displayOrder = ParseDisplayOrder(displayOrderText);
     if (!g_settings.displayOrder.valid) {
-        Wh_Log(L"Invalid display order override: %s. Using detected order; "
-               L"expected primary or numbers 1-5 separated by commas",
+        Wh_Log(L"Invalid display order override: %s. Using automatic order; "
+               L"expected primary or DISPLAY<number> separated by commas",
                displayOrderText.c_str());
         g_settings.displayOrder = ParseDisplayOrder(L"");
     }
-    g_settings.skipMinimized = Wh_GetIntSetting(L"SkipMinimized") != 0;
     g_settings.restoreMinimized = Wh_GetIntSetting(L"RestoreMinimized") != 0;
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
     g_settings.sizeMode = ParseSizeMode(GetStringSetting(L"SizeMode"));
@@ -641,55 +723,81 @@ void RegisterConfiguredHotkeys() {
 
 BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
     auto monitors = reinterpret_cast<std::vector<MonitorInfo>*>(lParam);
-    MONITORINFO mi{};
+    MONITORINFOEXW mi{};
     mi.cbSize = sizeof(mi);
-    if (GetMonitorInfo(monitor, &mi)) {
+    if (GetMonitorInfoW(monitor, &mi)) {
         monitors->push_back({ monitor, mi.rcMonitor, mi.rcWork,
                               (mi.dwFlags & MONITORINFOF_PRIMARY) != 0,
-                              monitors->size() + 1 });
+                              monitors->size() + 1,
+                              ParseDisplayDeviceNumber(mi.szDevice),
+                              mi.szDevice });
     }
     return TRUE;
 }
 
 std::vector<MonitorInfo> ApplyDisplayOrder(
     const std::vector<MonitorInfo>& detected) {
+    std::vector<MonitorInfo> automatic = detected;
+    std::stable_sort(automatic.begin(), automatic.end(),
+                     [](const MonitorInfo& a, const MonitorInfo& b) {
+                         if (!!a.displayNumber != !!b.displayNumber) {
+                             return a.displayNumber != 0;
+                         }
+                         if (a.displayNumber &&
+                             a.displayNumber != b.displayNumber) {
+                             return a.displayNumber < b.displayNumber;
+                         }
+                         return a.detectedIndex < b.detectedIndex;
+                     });
     std::vector<MonitorInfo> ordered;
-    ordered.reserve(detected.size());
+    size_t slotCount = g_settings.displayOrder.count
+                           ? g_settings.displayOrder.count
+                           : 5;
+    ordered.reserve(slotCount + detected.size());
     std::vector<bool> used(detected.size());
 
-    for (size_t i = 0; i < g_settings.displayOrder.count; i++) {
-        int entry = g_settings.displayOrder.entries[i];
+    for (size_t i = 0; i < slotCount; i++) {
+        DisplayOrderOverride::Entry entry = g_settings.displayOrder.count
+                                                ? g_settings.displayOrder.entries[i]
+                                                : DisplayOrderOverride::Entry{
+                                                      false, (int)i + 1 };
         size_t detectedIndex = detected.size();
-        if (entry == -1) {
-            for (size_t j = 0; j < detected.size(); j++) {
-                if (detected[j].primary) {
-                    detectedIndex = j;
-                    break;
-                }
+        for (size_t j = 0; j < detected.size(); j++) {
+            if ((entry.primary && detected[j].primary) ||
+                (!entry.primary &&
+                 detected[j].displayNumber == entry.displayNumber)) {
+                detectedIndex = j;
+                break;
             }
-        } else {
-            detectedIndex = (size_t)entry;
         }
 
-        if (detectedIndex < detected.size() && !used[detectedIndex]) {
+        if (detectedIndex < detected.size()) {
             ordered.push_back(detected[detectedIndex]);
             used[detectedIndex] = true;
+        } else {
+            std::wstring name = entry.primary
+                                    ? L"primary"
+                                    : L"\\\\.\\DISPLAY" +
+                                          std::to_wstring(entry.displayNumber);
+            ordered.push_back({ nullptr, {}, {}, false, 0,
+                                entry.displayNumber, name });
         }
     }
 
-    for (size_t i = 0; i < detected.size(); i++) {
-        if (!used[i]) ordered.push_back(detected[i]);
+    for (const MonitorInfo& display : automatic) {
+        size_t detectedIndex = display.detectedIndex - 1;
+        if (!used[detectedIndex]) ordered.push_back(display);
     }
     return ordered;
 }
 
 void LogDisplayTopology(const std::vector<MonitorInfo>& detected,
                         const std::vector<MonitorInfo>& ordered) {
-    std::wstring detectedText = L"Detected displays:";
+    std::wstring detectedText = L"Displays:";
     for (const MonitorInfo& display : detected) {
         LONG width = display.monitor.right - display.monitor.left;
         LONG height = display.monitor.bottom - display.monitor.top;
-        detectedText += L" " + std::to_wstring(display.detectedIndex) + L"=" +
+        detectedText += L" " + display.deviceName + L"=" +
                         std::to_wstring(width) + L"x" +
                         std::to_wstring(height) + L"@(" +
                         std::to_wstring(display.monitor.left) + L"," +
@@ -701,8 +809,9 @@ void LogDisplayTopology(const std::vector<MonitorInfo>& detected,
 
     std::wstring orderText = L"Numbered display order:";
     for (size_t i = 0; i < ordered.size(); i++) {
-        orderText += L" " + std::to_wstring(i + 1) + L"=detected " +
-                     std::to_wstring(ordered[i].detectedIndex);
+        orderText += L" " + std::to_wstring(i + 1) + L"=" +
+                     ordered[i].deviceName;
+        if (!ordered[i].handle) orderText += L" missing";
         if (ordered[i].primary) orderText += L" primary";
         orderText += L";";
     }
@@ -724,6 +833,10 @@ std::vector<MonitorInfo> GetMonitors() {
     std::vector<MonitorInfo> ordered = ApplyDisplayOrder(detected);
     LogDisplayTopology(detected, ordered);
     return ordered;
+}
+
+void LogCurrentDisplayTopology() {
+    (void)GetMonitors();
 }
 
 const MonitorInfo* PrimaryMonitor(const std::vector<MonitorInfo>& monitors) {
@@ -748,7 +861,9 @@ const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<Monit
     int numberedIndex = NumberedDisplayIndex(mode);
     if (numberedIndex >= 0) {
         size_t index = (size_t)numberedIndex;
-        if (index < monitors.size()) return &monitors[index];
+        if (index < monitors.size() && monitors[index].handle) {
+            return &monitors[index];
+        }
         Wh_Log(L"Requested display %zu missing; using primary", index + 1);
         return PrimaryMonitor(monitors);
     }
@@ -814,7 +929,6 @@ const wchar_t* SkipReasonText(SkipReason reason) {
         case SkipReason::OwnedWindow: return L"owned popup";
         case SkipReason::Untitled: return L"empty title";
         case SkipReason::Minimized: return L"minimized";
-        case SkipReason::MinimizedNoRestore: return L"minimized without restore";
         case SkipReason::Fullscreen: return L"fullscreen";
         case SkipReason::AlreadyOnTarget: return L"already on target display";
         case SkipReason::BadRect: return L"bad rect";
@@ -846,9 +960,9 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
         return false;
     }
 
-    if (IsIconic(hwnd)) {
-        if (g_settings.skipMinimized) { *reason = SkipReason::Minimized; return false; }
-        if (!g_settings.restoreMinimized) { *reason = SkipReason::MinimizedNoRestore; return false; }
+    if (IsIconic(hwnd) && !g_settings.restoreMinimized) {
+        *reason = SkipReason::Minimized;
+        return false;
     }
 
     RECT rect{};
@@ -879,7 +993,6 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
     const RECT& workArea = target.work;
     bool wasMaximized = IsZoomed(hwnd);
     bool wasMinimized = IsIconic(hwnd);
-    bool wasTopmost = (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
 
     RECT rect{};
     if (wasMaximized || wasMinimized) {
@@ -899,6 +1012,8 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
     int height = rect.bottom - rect.top;
     int workWidth = workArea.right - workArea.left;
     int workHeight = workArea.bottom - workArea.top;
+    bool resize = ShouldResizeWindow(g_settings.sizeMode, width, height,
+                                     workWidth, workHeight);
 
     if (g_settings.sizeMode == SizeMode::Scale) {
         MONITORINFO sourceInfo{ sizeof(sourceInfo) };
@@ -908,7 +1023,7 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         width = ScaleDimensionForWorkArea(width, sourceWorkWidth, workWidth);
         height = ScaleDimensionForWorkArea(height, sourceWorkHeight, workHeight);
     }
-    if (g_settings.sizeMode != SizeMode::Preserve) {
+    if (resize) {
         width = std::min(width, workWidth);
         height = std::min(height, workHeight);
     }
@@ -940,34 +1055,47 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         y += offset;
     }
 
-    UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
-    if (g_settings.sizeMode == SizeMode::Preserve) {
+    UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER |
+                 SWP_ASYNCWINDOWPOS;
+    if (!resize) {
         flags |= SWP_NOSIZE;
     }
-    bool moved = SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, flags) != FALSE;
-    if (moved && !wasTopmost) {
-        UINT demoteFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                           SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
-        if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, demoteFlags)) {
-            DWORD firstError = GetLastError();
-            if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                              demoteFlags)) {
-                Wh_Log(L"Failed to restore normal window level: hwnd=%p "
-                       L"errors=%u,%u", hwnd, firstError, GetLastError());
-            }
-        }
-    }
-    if (wasMaximized && (!moved || !bulk)) {
+    bool moved = SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
+    if (wasMaximized && !bulk) {
         ShowWindowAsync(hwnd, SW_MAXIMIZE);
     }
     return moved;
+}
+
+bool RaiseMovedWindows(const std::vector<HWND>& movedWindows) {
+    std::vector<HWND> windows;
+    windows.reserve(movedWindows.size());
+    for (auto it = movedWindows.rbegin(); it != movedWindows.rend(); ++it) {
+        HWND hwnd = *it;
+        if (IsWindow(hwnd) && !IsHungAppWindow(hwnd) &&
+            !(GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+            windows.push_back(hwnd);
+        }
+    }
+    if (windows.empty()) return true;
+
+    HDWP batch = BeginDeferWindowPos((int)windows.size());
+    if (!batch) return false;
+
+    HWND insertAfter = HWND_TOP;
+    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+    for (HWND hwnd : windows) {
+        batch = DeferWindowPos(batch, hwnd, insertAfter, 0, 0, 0, 0, flags);
+        if (!batch) return false;
+        insertAfter = hwnd;
+    }
+    return EndDeferWindowPos(batch) != FALSE;
 }
 
 struct GatherState {
     const MonitorInfo* target;
     bool bulk;
     std::vector<HWND> windows;
-    int found;
     int moved;
     int skipped;
 };
@@ -987,7 +1115,6 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    state->found++;
     state->windows.push_back(hwnd);
     return TRUE;
 }
@@ -1000,8 +1127,8 @@ void GatherWindows(TargetMode mode) {
         return;
     }
 
-    Wh_Log(L"Target: detected display %zu%s work=(%ld,%ld,%ld,%ld)",
-           target->detectedIndex, target->primary ? L" primary" : L"",
+    Wh_Log(L"Target: %s%s work=(%ld,%ld,%ld,%ld)",
+           target->deviceName.c_str(), target->primary ? L" primary" : L"",
            target->work.left, target->work.top, target->work.right,
            target->work.bottom);
     bool foregroundOnly = IsForegroundOnlyAction(mode);
@@ -1009,26 +1136,47 @@ void GatherWindows(TargetMode mode) {
                        !foregroundOnly,
                        {},
                        0,
-                       0,
                        0 };
     if (foregroundOnly) {
         GatherEnumProc(GetForegroundWindow(), (LPARAM)&state);
     } else {
         EnumWindows(GatherEnumProc, (LPARAM)&state);
     }
+    std::vector<HWND> movedWindows;
+    movedWindows.reserve(state.windows.size());
     for (size_t i = state.windows.size(); i-- > 0;) {
         HWND hwnd = state.windows[i];
         if (MoveWindowToMonitor(hwnd, *state.target, (int)i, state.bulk)) {
             state.moved++;
+            movedWindows.push_back(hwnd);
         } else {
             state.skipped++;
             DebugLogSkipReason(hwnd, SkipReason::Invalid);
         }
     }
-    Wh_Log(L"Gather done: found=%d moved=%d skipped=%d", state.found, state.moved, state.skipped);
+    if (!RaiseMovedWindows(movedWindows)) {
+        Wh_Log(L"Failed to raise one or more moved windows: error=%u",
+               GetLastError());
+    }
+    Wh_Log(L"Gather done: found=%d moved=%d skipped=%d",
+           (int)state.windows.size(), state.moved, state.skipped);
 }
 
 DWORD WINAPI WorkerMain(LPVOID) {
+    // Keep window and display rectangles in one physical-pixel coordinate space.
+    DPI_AWARENESS_CONTEXT previousDpiContext =
+        SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    if (!previousDpiContext) {
+        previousDpiContext = SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+        if (previousDpiContext) {
+            Wh_Log(L"Per-display DPI mode: v1 fallback");
+        } else {
+            Wh_Log(L"Could not enable per-display DPI mode");
+        }
+    }
+
     g_workerThreadId = GetCurrentThreadId();
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -1036,7 +1184,7 @@ DWORD WINAPI WorkerMain(LPVOID) {
 
     LoadSettings();
     RegisterConfiguredHotkeys();
-    GetMonitors();
+    LogCurrentDisplayTopology();
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (msg.message == WM_HOTKEY) {
@@ -1050,7 +1198,7 @@ DWORD WINAPI WorkerMain(LPVOID) {
         } else if (msg.message == WM_APP_RELOAD) {
             LoadSettings();
             RegisterConfiguredHotkeys();
-            GetMonitors();
+            LogCurrentDisplayTopology();
         } else if (msg.message == WM_APP_STOP) {
             break;
         }
@@ -1058,6 +1206,9 @@ DWORD WINAPI WorkerMain(LPVOID) {
 
     UnregisterConfiguredHotkeys();
     g_workerThreadId = 0;
+    if (previousDpiContext) {
+        SetThreadDpiAwarenessContext(previousDpiContext);
+    }
     return 0;
 }
 
