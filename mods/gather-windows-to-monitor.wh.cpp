@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              gather-windows-to-monitor
-// @name            Gather Windows To Monitor
-// @description     Move eligible open windows to a chosen monitor with global hotkeys
+// @name            Gather Windows To Display
+// @description     Move one window or gather eligible open windows to a chosen display with global hotkeys
 // @version         0.1.2
 // @author          Fred
 // @github          https://github.com/fjdiazt
@@ -11,68 +11,91 @@
 
 // ==WindhawkModReadme==
 /*
-# Gather Windows To Monitor
+# Gather Windows To Display
 
-Global hotkeys gather visible application windows to a selected monitor work area.
+Global hotkeys move the foreground window or gather visible application windows
+to a selected display work area.
 
-By default, `Ctrl+Alt+Shift+W` moves only the foreground window to the primary monitor.
+By default, `Ctrl+Alt+Shift+W` moves the foreground window to the primary display,
+and `Ctrl+Alt+Shift+1` through `Ctrl+Alt+Shift+5` move it to a numbered display.
+Numbered gather actions are available but disabled by default.
 
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
 
 Window size behavior can preserve dimensions or scale them proportionally between
-the source and target monitor work areas.
+the source and target display work areas.
 
-Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
-tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
-and untitled windows.
+Skipped by default: minimized windows, hidden windows, tool windows,
+desktop/taskbar/shell UI, cloaked UWP/helper windows, and untitled windows.
 
 The foreground-window action ignores the owned-window and untitled-window filters.
-The fullscreen setting applies to every action. Windows already on the target monitor
+The fullscreen setting applies to every action. Windows already on the target display
 are left unchanged. Gather actions restore maximized windows before moving them and
 leave them restored for arranging; the foreground-window action re-maximizes them on
-the target monitor. Moved windows are raised above existing target-monitor windows
+the target display. Moved windows are raised above existing target-display windows
 without taking focus.
 
 Enable logging in Windhawk to see per-window skip reasons.
 
-Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
-the Windows Settings display number. Moving minimized windows without restoring is
+Known limitations: numbered display actions use detection order, which can differ
+from the display numbers in Windows Settings. Moving minimized windows without restoring is
 not attempted because it is not reliable for all apps.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- HotkeyPrimary: "Ctrl+Alt+Shift+P"
-  $name: Gather to primary monitor
 - HotkeyForegroundPrimary: "Ctrl+Alt+Shift+W"
-  $name: Move foreground window to primary monitor
-- HotkeyMonitor1: "Ctrl+Alt+Shift+1"
-  $name: Gather to monitor 1
-  $description: Uses the first monitor detected by Windhawk, which may not be display 1 in Windows Settings.
-- HotkeyMonitor2: "Ctrl+Alt+Shift+2"
-  $name: Gather to monitor 2
-  $description: Uses the second monitor detected by Windhawk, which may not be display 2 in Windows Settings.
-- HotkeyMonitor3: "Ctrl+Alt+Shift+3"
-  $name: Gather to monitor 3
-  $description: Uses the third monitor detected by Windhawk, which may not be display 3 in Windows Settings.
+  $name: Move foreground window to primary display
+- HotkeyForegroundMonitor1: "Ctrl+Alt+Shift+1"
+  $name: Move foreground window to display 1
+  $description: Uses the first display detected by Windhawk, which may not be display 1 in Windows Settings.
+- HotkeyForegroundMonitor2: "Ctrl+Alt+Shift+2"
+  $name: Move foreground window to display 2
+  $description: Uses the second display detected by Windhawk, which may not be display 2 in Windows Settings.
+- HotkeyForegroundMonitor3: "Ctrl+Alt+Shift+3"
+  $name: Move foreground window to display 3
+  $description: Uses the third display detected by Windhawk, which may not be display 3 in Windows Settings.
+- HotkeyForegroundMonitor4: "Ctrl+Alt+Shift+4"
+  $name: Move foreground window to display 4
+  $description: Uses the fourth display detected by Windhawk, which may not be display 4 in Windows Settings.
+- HotkeyForegroundMonitor5: "Ctrl+Alt+Shift+5"
+  $name: Move foreground window to display 5
+  $description: Uses the fifth display detected by Windhawk, which may not be display 5 in Windows Settings.
+- HotkeyPrimary: "Ctrl+Alt+Shift+P"
+  $name: Gather to primary display
 - HotkeyMouse: "Ctrl+Alt+Shift+M"
-  $name: Gather to monitor under mouse
+  $name: Gather to display under mouse
 - HotkeyForeground: "Ctrl+Alt+Shift+A"
-  $name: Gather to foreground window monitor
-  $description: Moves all eligible windows to the monitor containing the active window.
-- SkipMinimized: true
+  $name: Gather to foreground window display
+  $description: Moves all eligible windows to the display containing the active window.
+- HotkeyMonitor1: "None"
+  $name: Gather to display 1
+  $description: Uses the first display detected by Windhawk, which may not be display 1 in Windows Settings.
+- HotkeyMonitor2: "None"
+  $name: Gather to display 2
+  $description: Uses the second display detected by Windhawk, which may not be display 2 in Windows Settings.
+- HotkeyMonitor3: "None"
+  $name: Gather to display 3
+  $description: Uses the third display detected by Windhawk, which may not be display 3 in Windows Settings.
+- HotkeyMonitor4: "None"
+  $name: Gather to display 4
+  $description: Uses the fourth display detected by Windhawk, which may not be display 4 in Windows Settings.
+- HotkeyMonitor5: "None"
+  $name: Gather to display 5
+  $description: Uses the fifth display detected by Windhawk, which may not be display 5 in Windows Settings.
+- SkipMinimized: false
   $name: Skip minimized windows
 - RestoreMinimized: false
   $name: Restore minimized windows before moving
   $description: Used only when Skip minimized windows is turned off.
-- SkipFullscreen: true
+- SkipFullscreen: false
   $name: Skip fullscreen windows
   $description: Applies to every action, including moving only the active window.
 - SizeMode: fit
   $name: Window size behavior
-  $description: Fit shrinks only oversized windows. Preserve never resizes. Scale resizes all windows for the destination monitor.
+  $description: Fit shrinks only oversized windows. Preserve never resizes. Scale resizes all windows for the destination display.
   $options:
   - fit: Fit oversized windows (default)
   - preserve: Always preserve size
@@ -89,7 +112,7 @@ not attempted because it is not reliable for all apps.
   - center: Center
   - top-left: Top left
   - mouse: Mouse cursor
-- IncludeOwnedWindows: false
+- IncludeOwnedWindows: true
   $name: Include owned windows/popups
   $description: Also moves dialogs and secondary windows attached to another app window.
 */
@@ -108,11 +131,19 @@ not attempted because it is not reliable for all apps.
 enum class TargetMode {
     Primary,
     ForegroundPrimary,
+    ForegroundMonitor1,
+    ForegroundMonitor2,
+    ForegroundMonitor3,
+    ForegroundMonitor4,
+    ForegroundMonitor5,
     Monitor1,
     Monitor2,
     Monitor3,
+    Monitor4,
+    Monitor5,
     Mouse,
     Foreground,
+    Count,
 };
 
 enum class SkipReason {
@@ -152,7 +183,7 @@ struct Settings {
     int cascadeOffset;
     AnchorMode anchor;
     bool includeOwnedWindows;
-    std::wstring hotkeys[7];
+    std::wstring hotkeys[(int)TargetMode::Count];
 };
 
 struct MonitorInfo {
@@ -189,6 +220,27 @@ constexpr int ScaleDimensionForWorkArea(int dimension, int sourceExtent,
 static_assert(ScaleDimensionForWorkArea(800, 1920, 1280) == 533);
 static_assert(ScaleDimensionForWorkArea(1, 7680, 800) == 1);
 
+constexpr bool IsForegroundOnlyAction(TargetMode mode) {
+    return mode == TargetMode::ForegroundPrimary ||
+           (mode >= TargetMode::ForegroundMonitor1 &&
+            mode <= TargetMode::ForegroundMonitor5);
+}
+
+constexpr int NumberedDisplayIndex(TargetMode mode) {
+    if (mode >= TargetMode::ForegroundMonitor1 &&
+        mode <= TargetMode::ForegroundMonitor5) {
+        return (int)mode - (int)TargetMode::ForegroundMonitor1;
+    }
+    if (mode >= TargetMode::Monitor1 && mode <= TargetMode::Monitor5) {
+        return (int)mode - (int)TargetMode::Monitor1;
+    }
+    return -1;
+}
+static_assert(IsForegroundOnlyAction(TargetMode::ForegroundMonitor5));
+static_assert(!IsForegroundOnlyAction(TargetMode::Monitor5));
+static_assert(NumberedDisplayIndex(TargetMode::ForegroundMonitor2) == 1);
+static_assert(NumberedDisplayIndex(TargetMode::Monitor5) == 4);
+
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_STOP = WM_APP + 2;
 
@@ -214,9 +266,21 @@ void LoadSettings() {
     g_settings.hotkeys[(int)TargetMode::Primary] = GetStringSetting(L"HotkeyPrimary");
     g_settings.hotkeys[(int)TargetMode::ForegroundPrimary] =
         GetStringSetting(L"HotkeyForegroundPrimary");
+    g_settings.hotkeys[(int)TargetMode::ForegroundMonitor1] =
+        GetStringSetting(L"HotkeyForegroundMonitor1");
+    g_settings.hotkeys[(int)TargetMode::ForegroundMonitor2] =
+        GetStringSetting(L"HotkeyForegroundMonitor2");
+    g_settings.hotkeys[(int)TargetMode::ForegroundMonitor3] =
+        GetStringSetting(L"HotkeyForegroundMonitor3");
+    g_settings.hotkeys[(int)TargetMode::ForegroundMonitor4] =
+        GetStringSetting(L"HotkeyForegroundMonitor4");
+    g_settings.hotkeys[(int)TargetMode::ForegroundMonitor5] =
+        GetStringSetting(L"HotkeyForegroundMonitor5");
     g_settings.hotkeys[(int)TargetMode::Monitor1] = GetStringSetting(L"HotkeyMonitor1");
     g_settings.hotkeys[(int)TargetMode::Monitor2] = GetStringSetting(L"HotkeyMonitor2");
     g_settings.hotkeys[(int)TargetMode::Monitor3] = GetStringSetting(L"HotkeyMonitor3");
+    g_settings.hotkeys[(int)TargetMode::Monitor4] = GetStringSetting(L"HotkeyMonitor4");
+    g_settings.hotkeys[(int)TargetMode::Monitor5] = GetStringSetting(L"HotkeyMonitor5");
     g_settings.hotkeys[(int)TargetMode::Mouse] = GetStringSetting(L"HotkeyMouse");
     g_settings.hotkeys[(int)TargetMode::Foreground] = GetStringSetting(L"HotkeyForeground");
     g_settings.skipMinimized = Wh_GetIntSetting(L"SkipMinimized") != 0;
@@ -353,14 +417,23 @@ void UnregisterConfiguredHotkeys() {
 void RegisterConfiguredHotkeys() {
     UnregisterConfiguredHotkeys();
 
+    // Existing actions register first so an update never changes what an
+    // already-configured shortcut does when a new default uses the same keys.
     const TargetMode modes[] = {
         TargetMode::Primary, TargetMode::ForegroundPrimary, TargetMode::Monitor1,
-        TargetMode::Monitor2, TargetMode::Monitor3, TargetMode::Mouse,
-        TargetMode::Foreground,
+        TargetMode::Monitor2, TargetMode::Monitor3, TargetMode::Monitor4,
+        TargetMode::Monitor5, TargetMode::Mouse, TargetMode::Foreground,
+        TargetMode::ForegroundMonitor1, TargetMode::ForegroundMonitor2,
+        TargetMode::ForegroundMonitor3, TargetMode::ForegroundMonitor4,
+        TargetMode::ForegroundMonitor5,
     };
     const wchar_t* names[] = {
-        L"primary", L"foreground to primary", L"monitor 1", L"monitor 2",
-        L"monitor 3", L"mouse", L"foreground",
+        L"primary display", L"foreground to primary display", L"display 1",
+        L"display 2", L"display 3", L"display 4", L"display 5",
+        L"display under mouse", L"foreground window display",
+        L"foreground to display 1", L"foreground to display 2",
+        L"foreground to display 3", L"foreground to display 4",
+        L"foreground to display 5",
     };
 
     for (size_t i = 0; i < ARRAYSIZE(modes); i++) {
@@ -374,6 +447,19 @@ void RegisterConfiguredHotkeys() {
         }
         if (parseResult == HotkeyParseResult::Invalid) {
             Wh_Log(L"Invalid hotkey: %s = %s", names[i], configured.c_str());
+            continue;
+        }
+
+        const Hotkey* conflict = nullptr;
+        for (const Hotkey& hotkey : g_hotkeys) {
+            if (hotkey.modifiers == modifiers && hotkey.vk == vk) {
+                conflict = &hotkey;
+                break;
+            }
+        }
+        if (conflict) {
+            Wh_Log(L"Hotkey conflict: %s = %s already used by %s; skipping",
+                   names[i], configured.c_str(), conflict->name);
             continue;
         }
 
@@ -403,11 +489,11 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
 std::vector<MonitorInfo> GetMonitors() {
     std::vector<MonitorInfo> monitors;
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, (LPARAM)&monitors);
-    Wh_Log(L"Monitors: %zu", monitors.size());
+    Wh_Log(L"Displays: %zu", monitors.size());
     for (size_t i = 0; i < monitors.size(); i++) {
         const RECT& m = monitors[i].monitor;
         const RECT& w = monitors[i].work;
-        Wh_Log(L"Monitor %zu%s: monitor=(%ld,%ld,%ld,%ld) work=(%ld,%ld,%ld,%ld)",
+        Wh_Log(L"Display %zu%s: bounds=(%ld,%ld,%ld,%ld) work=(%ld,%ld,%ld,%ld)",
                i + 1, monitors[i].primary ? L" primary" : L"", m.left, m.top,
                m.right, m.bottom, w.left, w.top, w.right, w.bottom);
     }
@@ -433,10 +519,11 @@ const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<Monit
     if (mode == TargetMode::Primary || mode == TargetMode::ForegroundPrimary) {
         return PrimaryMonitor(monitors);
     }
-    if (mode == TargetMode::Monitor1 || mode == TargetMode::Monitor2 || mode == TargetMode::Monitor3) {
-        size_t index = (size_t)mode - (size_t)TargetMode::Monitor1;
+    int numberedIndex = NumberedDisplayIndex(mode);
+    if (numberedIndex >= 0) {
+        size_t index = (size_t)numberedIndex;
         if (index < monitors.size()) return &monitors[index];
-        Wh_Log(L"Requested monitor %zu missing; using primary", index + 1);
+        Wh_Log(L"Requested display %zu missing; using primary", index + 1);
         return PrimaryMonitor(monitors);
     }
     if (mode == TargetMode::Mouse) {
@@ -503,7 +590,7 @@ const wchar_t* SkipReasonText(SkipReason reason) {
         case SkipReason::Minimized: return L"minimized";
         case SkipReason::MinimizedNoRestore: return L"minimized without restore";
         case SkipReason::Fullscreen: return L"fullscreen";
-        case SkipReason::AlreadyOnTarget: return L"already on target monitor";
+        case SkipReason::AlreadyOnTarget: return L"already on target display";
         case SkipReason::BadRect: return L"bad rect";
         default: return L"none";
     }
@@ -682,19 +769,20 @@ void GatherWindows(TargetMode mode) {
     auto monitors = GetMonitors();
     const MonitorInfo* target = ResolveTargetMonitor(mode, monitors);
     if (!target) {
-        Wh_Log(L"No monitors found");
+        Wh_Log(L"No displays found");
         return;
     }
 
     Wh_Log(L"Target work area: (%ld,%ld,%ld,%ld)", target->work.left, target->work.top,
            target->work.right, target->work.bottom);
+    bool foregroundOnly = IsForegroundOnlyAction(mode);
     GatherState state{ target,
-                       mode != TargetMode::ForegroundPrimary,
+                       !foregroundOnly,
                        {},
                        0,
                        0,
                        0 };
-    if (mode == TargetMode::ForegroundPrimary) {
+    if (foregroundOnly) {
         GatherEnumProc(GetForegroundWindow(), (LPARAM)&state);
     } else {
         EnumWindows(GatherEnumProc, (LPARAM)&state);
