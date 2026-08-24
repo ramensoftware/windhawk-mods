@@ -177,6 +177,7 @@ struct Settings {
     std::atomic<bool> restoreWin7CategoryTaskLinks;
 } g_settings;
 
+static std::atomic<bool> g_homeGroupUsable{ false };
 // Wh_Log is already a cheap no-op check (if (g_logsOn)) when logging is off,
 // so there is nothing to gain by compiling diagnostics out entirely — doing so
 // only prevented getting a log out of this mod when a user reports a problem.
@@ -822,11 +823,7 @@ bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegist
     }
 }
 bool IsHomeGroupAvailable() {
-    if (!g_settings.enableHomeGroup.load()) return false;
-    if (!g_homeGroupClsidAvailable.load()) return false;
-    
-
-    return g_homeGroupImplementationExists.load();
+    return g_settings.enableHomeGroup.load() && g_homeGroupUsable.load();
 }
 // Reads a REG_SZ/REG_EXPAND_SZ value from an already-open key via the plain,
 // unhooked registry API (only ever called from InitDisplayNames, before this
@@ -1719,7 +1716,7 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                       nullptr },  // Keep it outside category view; search still exposes its tasks
         { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,        nullptr },
         { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware,       nullptr },
-        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupClsidAvailable },
+        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupUsable },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
@@ -2695,23 +2692,23 @@ BOOL Wh_ModInit() {
     // Check if the HomeGroup implementation actually exists (hgcpl.dll)
     bool implementationExists = false;
     if (g_homeGroupClsidAvailable.load()) {
-        // Read InProcServer32 from the CLSID
-        ScopedHKey clsidKey;
-        const std::wstring clsidPath = L"CLSID\\" + kHomeGroupGuid + L"\\InProcServer32";
-        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, clsidPath.c_str(), 0, KEY_READ, clsidKey.AddressOf()) == ERROR_SUCCESS) {
-            std::wstring dllPath;
-            if (ReadStringValue(clsidKey.Get(), nullptr, dllPath)) {
-                // Expand environment variables if present
-                wchar_t expandedPath[MAX_PATH] = {};
-                if (ExpandEnvironmentStringsW(dllPath.c_str(), expandedPath, MAX_PATH)) {
-                    DWORD attributes = GetFileAttributesW(expandedPath);
-                    implementationExists = (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY));
-                    Wh_Log(L"HomeGroup implementation DLL: %s %s", expandedPath, implementationExists ? L"exists" : L"does not exist");
-                }
-            }
+        // Check for hgcpl.dll directly in System32
+        wchar_t system32[MAX_PATH] = {};
+        if (GetSystemDirectoryW(system32, MAX_PATH)) {
+            const std::wstring hgcplPath = std::wstring(system32) + L"\\hgcpl.dll";
+            DWORD attributes = GetFileAttributesW(hgcplPath.c_str());
+            implementationExists = (attributes != INVALID_FILE_ATTRIBUTES && 
+                                   !(attributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"HomeGroup implementation DLL: %s %s", 
+                   hgcplPath.c_str(), 
+                   implementationExists ? L"exists" : L"does not exist");
         }
     }
     g_homeGroupImplementationExists.store(implementationExists);
+    
+    // Combined flag for HomeGroup usability (CLSID registered AND implementation exists)
+    g_homeGroupUsable.store(g_homeGroupClsidAvailable.load() && 
+                            g_homeGroupImplementationExists.load());
 
     g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
     g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
@@ -2852,7 +2849,6 @@ BOOL Wh_ModInit() {
       return FALSE;
   }
 }
-
 // Body of the dedicated lazy-detection worker thread. Waits on either the
 // wake event (probe requested/re-armed) or the stop event (mod unloading).
 static void LazyDetectionThreadProc() {
@@ -2860,10 +2856,15 @@ static void LazyDetectionThreadProc() {
     for (;;) {
         DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
         if (wait != WAIT_OBJECT_0) {
-            // Stop event, or a wait failure - either way, exit the thread.
             return;
         }
         ResetEvent(g_lazyDetectionWakeEvent);
+        
+        // Check stop event before running the probe
+        if (WaitForSingleObject(g_lazyDetectionStopEvent, 0) == WAIT_OBJECT_0) {
+            return;
+        }
+        
         try {
             RunLazyVirtualAppletDetection();
         } catch (...) {
