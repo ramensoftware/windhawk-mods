@@ -64,7 +64,15 @@ all Windows repaints around it; a larger glow gets cut off rather than smeared.
 **Colours** take `accent` to follow your system accent colour, or a hex value
 like `#3399FF`. The accent is read through the immersive colour API, so it is
 the colour you actually picked in Settings rather than the blended colorization
-value, and it is re-checked periodically so changing it takes effect on its own.
+value. Changing it is picked up on the next repaint, without restarting
+anything.
+
+## Credit
+
+The approach for finding the desktop list view and attaching to it - a
+`CreateWindowExW` hook alongside `Wh_ModAfterInit` - follows
+[Hide Desktop Icon Text and Shortcut Arrows](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/hide-desktop-icon-text.wh.cpp)
+by kivsak.
 
 ## Compatibility
 
@@ -192,6 +200,7 @@ mod goes inert rather than breaking anything.
 #include <atomic>
 #include <cmath>
 #include <cwctype>
+#include <mutex>
 #include <string>
 
 // Child windows get the BEFOREPARENT/AFTERPARENT pair rather than
@@ -218,6 +227,7 @@ constexpr int kLISS_HOTSELECTED = 6;
 // item, so anything past this is invisible work: one antialiased path fill per
 // unit, per selected item, per repaint.
 constexpr int kMaxGlowSize = 32;
+constexpr int kMaxGlowDevicePixels = 48;
 
 constexpr DWORD kAccentRefreshMs = 3000;
 
@@ -262,8 +272,9 @@ std::atomic<UINT> g_dpi{96};
 std::atomic<COLORREF> g_accentColor{RGB(0, 120, 215)};
 std::atomic<DWORD> g_accentTick{0};
 
+std::mutex g_gdiplusMutex;
 ULONG_PTR g_gdiplusToken;
-bool g_gdiplusReady;
+std::atomic<bool> g_gdiplusReady{false};
 
 // Non-zero while the desktop list view is inside a paint message on this thread.
 // Double buffering hands the theme call a memory DC, and WindowFromDC returns
@@ -277,6 +288,26 @@ thread_local int g_lvPaintDepth = 0;
 
 int Scale(int logical) {
     return MulDiv(logical, (int)g_dpi.load(std::memory_order_relaxed), 96);
+}
+
+// Called from the desktop UI thread by the CreateWindowExW hook and from
+// Wh_ModAfterInit on Windhawk's thread, so it has to be safe to race.
+bool EnsureGdiplus() {
+    std::lock_guard<std::mutex> lock(g_gdiplusMutex);
+
+    if (g_gdiplusReady.load(std::memory_order_relaxed)) {
+        return true;
+    }
+
+    Gdiplus::GdiplusStartupInput startupInput;
+    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &startupInput, nullptr) !=
+        Gdiplus::Ok) {
+        Wh_Log(L"GDI+ failed to start");
+        return false;
+    }
+
+    g_gdiplusReady.store(true, std::memory_order_relaxed);
+    return true;
 }
 
 COLORREF ReadAccentColor() {
@@ -411,8 +442,10 @@ Gdiplus::Color MakeColor(COLORREF color, bool usesAccent, int opacityPercent) {
 // Finding the desktop
 //
 // The mod loads into every explorer.exe, not only the one hosting the shell, so
-// both paths below refuse windows belonging to another process. Without that, a
+// ListViewUnder refuses a window belonging to another process. Without that, a
 // secondary Explorer process would attach itself to the shell's desktop.
+// IsDesktopListView needs no such check: the CreateWindowExW hook only ever
+// hands it a window this process just created.
 
 bool IsDesktopListView(HWND hWnd) {
     WCHAR buffer[64];
@@ -565,7 +598,10 @@ void AddRoundedRect(Gdiplus::GraphicsPath* path,
 void DrawGlow(Gdiplus::Graphics* graphics,
               const Gdiplus::RectF& plateRect,
               Gdiplus::REAL radius) {
-    int size = Scale(g_settings.glowSize);
+    // The setting is capped in logical pixels, so the loop count would still
+    // scale with DPI - 64 fills at 200%, 96 at 300%. Bounded again in device
+    // pixels so the per-item cost cannot grow with the display.
+    int size = std::min(Scale(g_settings.glowSize), kMaxGlowDevicePixels);
     if (size < 1) {
         return;
     }
@@ -665,8 +701,12 @@ bool DrawPlate(HDC hdc, const RECT& itemRect, LPCRECT clipRect, bool hot) {
                         (Gdiplus::REAL)(plate.bottom - plate.top));
 
     // The stroke straddles the path, so pull the path in by half the pen width
-    // to keep the whole border inside the plate.
+    // to keep the whole border inside the plate. Capped first: a thickness wider
+    // than the plate would inset it out of existence, and the selection would
+    // vanish rather than merely look wrong.
     if (thickness > 0.0f) {
+        Gdiplus::REAL maxThickness = std::min(rect.Width, rect.Height) - 1.0f;
+        thickness = std::max(0.0f, std::min(thickness, maxThickness));
         rect.Inflate(-thickness / 2, -thickness / 2);
     }
 
@@ -722,7 +762,8 @@ using DrawThemeBackground_t = HRESULT(WINAPI*)(HTHEME, HDC, int, int, LPCRECT, L
 DrawThemeBackground_t DrawThemeBackground_Original;
 
 bool ShouldReplace(int partId, int stateId, bool* hot) {
-    if (g_lvPaintDepth <= 0 || !g_gdiplusReady) {
+    if (g_lvPaintDepth <= 0 ||
+        !g_gdiplusReady.load(std::memory_order_relaxed)) {
         return false;
     }
 
@@ -785,12 +826,15 @@ LRESULT CALLBACK LvSubclassProc(HWND hWnd,
         }
 
         // These rarely reach a child window, but cost nothing to honour when
-        // they do. RefreshAccentIfStale is the reliable path.
+        // they do. RefreshAccentIfStale is the reliable path. The repaint
+        // matters: refreshing the colour alone only changes what the next draw
+        // uses, so plates already on screen would keep the old accent.
         case WM_THEMECHANGED:
         case WM_SETTINGCHANGE:
         case WM_DWMCOLORIZATIONCOLORCHANGED:
             g_accentTick.store(0, std::memory_order_relaxed);
             g_dpi.store(ReadWindowDpi(hWnd), std::memory_order_relaxed);
+            InvalidateRect(hWnd, nullptr, TRUE);
             break;
 
         case WM_DPICHANGED_BEFOREPARENT:
@@ -813,11 +857,25 @@ LRESULT CALLBACK LvSubclassProc(HWND hWnd,
 }
 
 void AttachToListView(HWND hWnd) {
+    // Deferred to here rather than done in Wh_ModInit, so the File Explorer
+    // processes that can never host the desktop do not pay for a GDI+
+    // initialization and its background thread.
+    EnsureGdiplus();
+
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, LvSubclassProc, 0)) {
         return;
     }
 
-    g_lv.store(hWnd, std::memory_order_relaxed);
+    // Exactly one list view stays subclassed. When the shell rebuilds the
+    // desktop the replacement can be attached before the old window is
+    // destroyed, and leaving the old subclass in place would let it outlive the
+    // mod image: unloading only ever unsubclasses the tracked window, so the
+    // forgotten one would call into freed memory on its next message.
+    HWND previous = g_lv.exchange(hWnd, std::memory_order_relaxed);
+    if (previous && previous != hWnd) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(previous, LvSubclassProc);
+    }
+
     g_dpi.store(ReadWindowDpi(hWnd), std::memory_order_relaxed);
     g_accentTick.store(0, std::memory_order_relaxed);
     InvalidateRect(hWnd, nullptr, TRUE);
@@ -903,20 +961,24 @@ void LoadSettings() {
                &g_settings.fillColor, &g_settings.fillUsesAccent);
     g_settings.fillOpacity = std::clamp(Wh_GetIntSetting(L"fillOpacity"), 0, 100);
 
+    // Each fallback is the value the setting declares as its default, so an
+    // unparseable string lands on the documented colour rather than on some
+    // other one the setting never advertised.
     g_settings.glow = Wh_GetIntSetting(L"glow");
     g_settings.glowColor = RGB(0, 0, 0);
-    g_settings.glowUsesAccent = false;
+    g_settings.glowUsesAccent = true;
     ParseColor(WindhawkUtils::StringSetting::make(L"glowColor").get(),
                &g_settings.glowColor, &g_settings.glowUsesAccent);
     g_settings.glowOpacity = std::clamp(Wh_GetIntSetting(L"glowOpacity"), 0, 100);
     g_settings.glowSize =
         std::clamp(Wh_GetIntSetting(L"glowSize"), 0, kMaxGlowSize);
-    g_settings.glowOffsetY = Wh_GetIntSetting(L"glowOffsetY");
+    g_settings.glowOffsetY =
+        std::clamp(Wh_GetIntSetting(L"glowOffsetY"), -kMaxGlowSize, kMaxGlowSize);
 
     g_settings.borderStyle = GetBorderStyleSetting();
     g_settings.borderOnSelectionOnly = Wh_GetIntSetting(L"borderOnSelectionOnly");
     g_settings.borderColor = RGB(255, 255, 255);
-    g_settings.borderUsesAccent = true;
+    g_settings.borderUsesAccent = false;
     ParseColor(WindhawkUtils::StringSetting::make(L"borderColor").get(),
                &g_settings.borderColor, &g_settings.borderUsesAccent);
     g_settings.borderOpacity = std::clamp(Wh_GetIntSetting(L"borderOpacity"), 0, 100);
@@ -937,14 +999,6 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Gdiplus::GdiplusStartupInput startupInput;
-    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &startupInput, nullptr) !=
-        Gdiplus::Ok) {
-        Wh_Log(L"GDI+ failed to start");
-        return FALSE;
-    }
-    g_gdiplusReady = true;
-
     // uxtheme is always already loaded in Explorer, so there is no module
     // reference to acquire or leak here.
     HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
@@ -958,19 +1012,16 @@ BOOL Wh_ModInit() {
                                         DrawThemeBackground_Hook,
                                         &DrawThemeBackground_Original)) {
         Wh_Log(L"Failed to hook DrawThemeBackground");
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusReady = false;
         return FALSE;
     }
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                         &CreateWindowExW_Original)) {
         Wh_Log(L"Failed to hook CreateWindowExW");
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusReady = false;
         return FALSE;
     }
 
+    // GDI+ is started by the first attach instead of here. See AttachToListView.
     return TRUE;
 }
 
@@ -997,9 +1048,10 @@ void Wh_ModUninit() {
         }
     }
 
-    if (g_gdiplusReady) {
+    std::lock_guard<std::mutex> lock(g_gdiplusMutex);
+    if (g_gdiplusReady.load(std::memory_order_relaxed)) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusReady = false;
+        g_gdiplusReady.store(false, std::memory_order_relaxed);
     }
 }
 
@@ -1008,7 +1060,18 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    if (HWND listView = g_lv.load(std::memory_order_relaxed)) {
+    HWND listView = g_lv.load(std::memory_order_relaxed);
+    if (!listView) {
+        // A retry, so a lookup that missed at startup - an unusual wallpaper
+        // host, say - is recoverable by touching a setting rather than by
+        // restarting Explorer.
+        if (HWND found = GetExistingDesktopListView()) {
+            AttachToListView(found);
+            return;
+        }
+    }
+
+    if (listView) {
         g_dpi.store(ReadWindowDpi(listView), std::memory_order_relaxed);
         g_accentTick.store(0, std::memory_order_relaxed);
         InvalidateRect(listView, nullptr, TRUE);
