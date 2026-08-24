@@ -27,8 +27,8 @@ the way it was in Windows 95, before Windows 98.
 typedef COLORREF (WINAPI *SetTextColor_t)(HDC hdc, COLORREF color);
 SetTextColor_t SetTextColor_Original;
 
-bool checked=false;
-bool found=false;
+thread_local bool checked=false;
+thread_local bool found=false;
 
 bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
 {
