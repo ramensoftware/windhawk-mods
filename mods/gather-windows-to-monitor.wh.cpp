@@ -2,7 +2,7 @@
 // @id              gather-windows-to-monitor
 // @name            Gather Windows To Monitor
 // @description     Move eligible open windows to a chosen monitor with global hotkeys
-// @version         0.1.1
+// @version         0.1.2
 // @author          Fred
 // @github          https://github.com/fjdiazt
 // @include         windhawk.exe
@@ -20,14 +20,19 @@ By default, `Ctrl+Alt+Shift+W` moves only the foreground window to the primary m
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
 
+Window size behavior can preserve dimensions or scale them proportionally between
+the source and target monitor work areas.
+
 Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
 tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
 and untitled windows.
 
-The foreground-window action ignores the fullscreen, owned-window, and untitled-window
-filters. Windows already on the target monitor are left unchanged. Gather actions
-restore maximized windows before moving them and leave them restored for arranging;
-the foreground-window action re-maximizes them on the target monitor.
+The foreground-window action ignores the owned-window and untitled-window filters.
+The fullscreen setting applies to every action. Windows already on the target monitor
+are left unchanged. Gather actions restore maximized windows before moving them and
+leave them restored for arranging; the foreground-window action re-maximizes them on
+the target monitor. Moved windows are raised above existing target-monitor windows
+without taking focus.
 
 Enable logging in Windhawk to see per-window skip reasons.
 
@@ -45,37 +50,50 @@ not attempted because it is not reliable for all apps.
   $name: Move foreground window to primary monitor
 - HotkeyMonitor1: "Ctrl+Alt+Shift+1"
   $name: Gather to monitor 1
+  $description: Uses the first monitor detected by Windhawk, which may not be display 1 in Windows Settings.
 - HotkeyMonitor2: "Ctrl+Alt+Shift+2"
   $name: Gather to monitor 2
+  $description: Uses the second monitor detected by Windhawk, which may not be display 2 in Windows Settings.
 - HotkeyMonitor3: "Ctrl+Alt+Shift+3"
   $name: Gather to monitor 3
+  $description: Uses the third monitor detected by Windhawk, which may not be display 3 in Windows Settings.
 - HotkeyMouse: "Ctrl+Alt+Shift+M"
   $name: Gather to monitor under mouse
 - HotkeyForeground: "Ctrl+Alt+Shift+A"
   $name: Gather to foreground window monitor
+  $description: Moves all eligible windows to the monitor containing the active window.
 - SkipMinimized: true
   $name: Skip minimized windows
 - RestoreMinimized: false
   $name: Restore minimized windows before moving
+  $description: Used only when Skip minimized windows is turned off.
 - SkipFullscreen: true
   $name: Skip fullscreen windows
-- PreserveSize: true
-  $name: Preserve window size
+  $description: Applies to every action, including moving only the active window.
+- SizeMode: preserve
+  $name: Window size behavior
+  $description: Preserve keeps each window's current size. Scale adjusts its size for the destination monitor.
+  $options:
+  - preserve: Preserve
+  - scale: Scale proportionally
 - ShrinkOversized: true
   $name: Shrink oversized windows to fit
   $description: Keeps windows usable when target monitor is smaller.
 - CascadeWindows: true
   $name: Cascade windows
+  $description: Offsets moved windows so they do not completely overlap.
 - CascadeOffset: 24
   $name: Cascade offset in pixels
 - Anchor: center
   $name: Window anchor
+  $description: Chooses the starting position for moved windows.
   $options:
   - center: Center
   - top-left: Top left
   - mouse: Mouse cursor
 - IncludeOwnedWindows: false
   $name: Include owned windows/popups
+  $description: Also moves dialogs and secondary windows attached to another app window.
 */
 // ==/WindhawkModSettings==
 
@@ -111,6 +129,7 @@ enum class SkipReason {
     Minimized,
     MinimizedNoRestore,
     Fullscreen,
+    AlreadyOnTarget,
     BadRect,
 };
 
@@ -120,11 +139,16 @@ enum class AnchorMode {
     Mouse,
 };
 
+enum class SizeMode {
+    Preserve,
+    Scale,
+};
+
 struct Settings {
     bool skipMinimized;
     bool restoreMinimized;
     bool skipFullscreen;
-    bool preserveSize;
+    SizeMode sizeMode;
     bool shrinkOversized;
     bool cascadeWindows;
     int cascadeOffset;
@@ -148,6 +172,25 @@ struct Hotkey {
     const wchar_t* name;
 };
 
+constexpr int CascadeOffsetForIndex(int step, int available, size_t index) {
+    if (step <= 0 || available <= 0) return 0;
+    int positionCount = available / step + 1;
+    return (int)(index % (size_t)positionCount) * step;
+}
+static_assert(CascadeOffsetForIndex(24, 120, 5) == 120);
+static_assert(CascadeOffsetForIndex(24, 120, 6) == 0);
+
+constexpr int ScaleDimensionForWorkArea(int dimension, int sourceExtent,
+                                        int targetExtent) {
+    if (dimension <= 0 || sourceExtent <= 0 || targetExtent <= 0) {
+        return dimension;
+    }
+    int scaled = (int)((long long)dimension * targetExtent / sourceExtent);
+    return std::max(1, scaled);
+}
+static_assert(ScaleDimensionForWorkArea(800, 1920, 1280) == 533);
+static_assert(ScaleDimensionForWorkArea(1, 7680, 800) == 1);
+
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_STOP = WM_APP + 2;
 
@@ -167,6 +210,7 @@ std::wstring GetStringSetting(const wchar_t* name) {
 }
 
 AnchorMode ParseAnchorMode(const std::wstring& text);
+SizeMode ParseSizeMode(const std::wstring& text);
 
 void LoadSettings() {
     g_settings.hotkeys[(int)TargetMode::Primary] = GetStringSetting(L"HotkeyPrimary");
@@ -180,7 +224,7 @@ void LoadSettings() {
     g_settings.skipMinimized = Wh_GetIntSetting(L"SkipMinimized") != 0;
     g_settings.restoreMinimized = Wh_GetIntSetting(L"RestoreMinimized") != 0;
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
-    g_settings.preserveSize = Wh_GetIntSetting(L"PreserveSize") != 0;
+    g_settings.sizeMode = ParseSizeMode(GetStringSetting(L"SizeMode"));
     g_settings.shrinkOversized = Wh_GetIntSetting(L"ShrinkOversized") != 0;
     g_settings.cascadeWindows = Wh_GetIntSetting(L"CascadeWindows") != 0;
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
@@ -203,6 +247,11 @@ AnchorMode ParseAnchorMode(const std::wstring& text) {
     if (s == L"TOP-LEFT" || s == L"TOPLEFT") return AnchorMode::TopLeft;
     if (s == L"MOUSE") return AnchorMode::Mouse;
     return AnchorMode::Center;
+}
+
+SizeMode ParseSizeMode(const std::wstring& text) {
+    return TrimUpper(text) == L"SCALE" ? SizeMode::Scale
+                                        : SizeMode::Preserve;
 }
 
 UINT VkFromToken(const std::wstring& key) {
@@ -408,6 +457,7 @@ const wchar_t* SkipReasonText(SkipReason reason) {
         case SkipReason::Minimized: return L"minimized";
         case SkipReason::MinimizedNoRestore: return L"minimized without restore";
         case SkipReason::Fullscreen: return L"fullscreen";
+        case SkipReason::AlreadyOnTarget: return L"already on target monitor";
         case SkipReason::BadRect: return L"bad rect";
         default: return L"none";
     }
@@ -447,7 +497,7 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
         *reason = SkipReason::BadRect;
         return false;
     }
-    if (bulk && g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
+    if (g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
         *reason = SkipReason::Fullscreen;
         return false;
     }
@@ -465,10 +515,12 @@ void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
 bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
                          bool bulk) {
     if (!IsWindow(hwnd)) return false;
-    if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) == target.handle) return false;
+    HMONITOR sourceHandle = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (sourceHandle == target.handle) return false;
     const RECT& workArea = target.work;
     bool wasMaximized = IsZoomed(hwnd);
     bool wasMinimized = IsIconic(hwnd);
+    bool wasTopmost = (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
 
     RECT rect{};
     if (wasMaximized || wasMinimized) {
@@ -489,7 +541,15 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
     int workWidth = workArea.right - workArea.left;
     int workHeight = workArea.bottom - workArea.top;
 
-    if (!g_settings.preserveSize || g_settings.shrinkOversized) {
+    if (g_settings.sizeMode == SizeMode::Scale) {
+        MONITORINFO sourceInfo{ sizeof(sourceInfo) };
+        if (!GetMonitorInfo(sourceHandle, &sourceInfo)) return false;
+        int sourceWorkWidth = sourceInfo.rcWork.right - sourceInfo.rcWork.left;
+        int sourceWorkHeight = sourceInfo.rcWork.bottom - sourceInfo.rcWork.top;
+        width = ScaleDimensionForWorkArea(width, sourceWorkWidth, workWidth);
+        height = ScaleDimensionForWorkArea(height, sourceWorkHeight, workHeight);
+    }
+    if (g_settings.shrinkOversized) {
         width = std::min(width, workWidth);
         height = std::min(height, workHeight);
     }
@@ -506,14 +566,6 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         y = pt.y;
     }
 
-    int offset = g_settings.cascadeWindows ? g_settings.cascadeOffset * cascadeIndex : 0;
-    x += offset;
-    y += offset;
-    if (x + width > workArea.right || y + height > workArea.bottom) {
-        x = workArea.left;
-        y = workArea.top;
-    }
-
     int minX = (int)workArea.left;
     int minY = (int)workArea.top;
     int maxX = (int)std::max(workArea.left, workArea.right - std::min(width, workWidth));
@@ -521,12 +573,31 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
     x = std::clamp(x, minX, maxX);
     y = std::clamp(y, minY, maxY);
 
-    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
-                 SWP_ASYNCWINDOWPOS;
-    if (g_settings.preserveSize && !g_settings.shrinkOversized) {
+    if (g_settings.cascadeWindows) {
+        int availableOffset = std::min(maxX - x, maxY - y);
+        int offset = CascadeOffsetForIndex(g_settings.cascadeOffset,
+                                           availableOffset, cascadeIndex);
+        x += offset;
+        y += offset;
+    }
+
+    UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
+    if (g_settings.sizeMode == SizeMode::Preserve &&
+        !g_settings.shrinkOversized) {
         flags |= SWP_NOSIZE;
     }
-    bool moved = SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
+    bool moved = SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, flags) != FALSE;
+    if (moved && !wasTopmost) {
+        UINT demoteFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                           SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
+        if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, demoteFlags)) {
+            Wh_Log(L"Failed to clear topmost for hwnd=%p, retrying", hwnd);
+            if (!SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                              demoteFlags)) {
+                Wh_Log(L"Failed to clear topmost for hwnd=%p", hwnd);
+            }
+        }
+    }
     if (wasMaximized && (!moved || !bulk)) {
         ShowWindowAsync(hwnd, SW_MAXIMIZE);
     }
@@ -536,6 +607,7 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
 struct GatherState {
     const MonitorInfo* target;
     bool bulk;
+    std::vector<HWND> windows;
     int found;
     int moved;
     int skipped;
@@ -549,14 +621,15 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
         DebugLogSkipReason(hwnd, reason);
         return TRUE;
     }
+    if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) ==
+        state->target->handle) {
+        state->skipped++;
+        DebugLogSkipReason(hwnd, SkipReason::AlreadyOnTarget);
+        return TRUE;
+    }
 
     state->found++;
-    if (MoveWindowToMonitor(hwnd, *state->target, state->moved, state->bulk)) {
-        state->moved++;
-    } else {
-        state->skipped++;
-        DebugLogSkipReason(hwnd, SkipReason::Invalid);
-    }
+    state->windows.push_back(hwnd);
     return TRUE;
 }
 
@@ -572,6 +645,7 @@ void GatherWindows(TargetMode mode) {
            target->work.right, target->work.bottom);
     GatherState state{ target,
                        mode != TargetMode::ForegroundPrimary,
+                       {},
                        0,
                        0,
                        0 };
@@ -579,6 +653,15 @@ void GatherWindows(TargetMode mode) {
         GatherEnumProc(GetForegroundWindow(), (LPARAM)&state);
     } else {
         EnumWindows(GatherEnumProc, (LPARAM)&state);
+    }
+    for (size_t i = state.windows.size(); i-- > 0;) {
+        HWND hwnd = state.windows[i];
+        if (MoveWindowToMonitor(hwnd, *state.target, (int)i, state.bulk)) {
+            state.moved++;
+        } else {
+            state.skipped++;
+            DebugLogSkipReason(hwnd, SkipReason::Invalid);
+        }
     }
     Wh_Log(L"Gather done: found=%d moved=%d skipped=%d", state.found, state.moved, state.skipped);
 }
