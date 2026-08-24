@@ -2,7 +2,7 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.0.9
+// @version       1.1.0
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
@@ -255,7 +255,6 @@ HWND g_hOverlayWnd = nullptr;
 // Animation & Tracking state 
 float g_animatedPercent = -1.0f;
 int g_targetPercent = 0;
-bool g_isHiding = false;
 float g_opacity = 0.0f;
 float g_targetOpacity = 255.0f;
 HWND g_hTargetTaskbar = nullptr;
@@ -355,7 +354,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_TIMER:
             if (wParam == kOverlayHideTimerId) {
                 KillTimer(hWnd, kOverlayHideTimerId);
-                g_isHiding = true;
                 g_targetOpacity = 0.0f;
             } else if (wParam == kFrameTimerId) {
                 bool changed = false;
@@ -459,7 +457,6 @@ void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
     g_lastCursorPt = cursorPt;
     g_targetPercent = percent;
     g_targetOpacity = 255.0f;
-    g_isHiding = false;
 
     if (!hTaskbar || !IsWindow(hTaskbar)) hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     g_hTargetTaskbar = hTaskbar;
@@ -721,25 +718,35 @@ bool HandleTaskbarScroll(HWND hTaskbar, POINT pt, short delta) {
 
     if (settings.excludeSystemTray) {
         HWND hTrayNotify = FindWindowExW(hTaskbar, nullptr, L"TrayNotifyWnd", nullptr);
-        if (!hTrayNotify) {
+        RECT trayRect = {0};
+        bool hasTrayRect = false;
+
+        if (hTrayNotify && GetWindowRect(hTrayNotify, &trayRect) && !IsRectEmpty(&trayRect)) {
+            hasTrayRect = true;
+        }
+
+        if (!hasTrayRect) {
             HWND hBridge = nullptr;
             while ((hBridge = FindWindowExW(hTaskbar, hBridge, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr)) != nullptr) {
-                RECT bridgeRect;
-                if (GetWindowRect(hBridge, &bridgeRect)) {
-                    if (bridgeRect.left == rc.left && bridgeRect.right == rc.right && bridgeRect.top == rc.top && bridgeRect.bottom == rc.bottom) {
+                if (GetWindowRect(hBridge, &trayRect) && !IsRectEmpty(&trayRect)) {
+                    if (trayRect.left == rc.left && trayRect.right == rc.right && trayRect.top == rc.top && trayRect.bottom == rc.bottom) {
                         continue;
                     }
-                    hTrayNotify = hBridge;
+                    hasTrayRect = true;
                     break;
                 }
             }
         }
         
-        if (hTrayNotify) {
-            RECT trayRect;
-            if (GetWindowRect(hTrayNotify, &trayRect) && !IsRectEmpty(&trayRect) && PtInRect(&trayRect, pt)) {
-                return false;
+        if (!hasTrayRect) {
+            HWND hClock = FindWindowExW(hTaskbar, nullptr, L"ClockButton", nullptr);
+            if (hClock && GetWindowRect(hClock, &trayRect) && !IsRectEmpty(&trayRect)) {
+                hasTrayRect = true;
             }
+        }
+        
+        if (hasTrayRect && PtInRect(&trayRect, pt)) {
+            return false;
         }
     }
 
@@ -790,7 +797,10 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         short delta = GET_WHEEL_DELTA_WPARAM(wParam);
         if (HandleTaskbarScroll(hWnd, pt, delta)) return 0;
     } else if (uMsg == WM_DISPLAYCHANGE) {
-        if (g_monitorThreadId) PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0);
+        if (g_monitorThreadId) {
+            while (!PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0) &&
+                   WaitForSingleObject(g_hMonitorThread, 10) == WAIT_TIMEOUT) {}
+        }
     } else if (uMsg == WM_NCDESTROY) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
     }
@@ -804,7 +814,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (hRootWnd) {
             WCHAR szClass[32];
             if (GetClassNameW(hRootWnd, szClass, 32)) {
-                if (wcscmp(szClass, L"Shell_TrayWnd") == 0 || wcscmp(szClass, L"Shell_SecondaryTrayWnd") == 0) {
+                if (_wcsicmp(szClass, L"Shell_TrayWnd") == 0 || _wcsicmp(szClass, L"Shell_SecondaryTrayWnd") == 0) {
                     POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                     short delta = GET_WHEEL_DELTA_WPARAM(wParam);
                     if (HandleTaskbarScroll(hRootWnd, pt, delta)) return 0;
@@ -911,13 +921,15 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
 
                     if (percent >= 0 && g_workerThreadId) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
-                        if (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) delete res;
+                        while (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res) &&
+                               WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
                     }
                 }
                 delete req;
 
+                DWORD currentThreadId = GetCurrentThreadId();
                 for (ScrollRequest* d : deferred) {
-                    if (!PostThreadMessageW(g_monitorThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d)) delete d;
+                    while (!PostThreadMessageW(currentThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d) && !g_stopping) {}
                 }
             }
             continue;
@@ -928,6 +940,12 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+    }
+
+    MSG leftover;
+    while (PeekMessageW(&leftover, nullptr, WM_APP_BRIGHTNESS_REQUEST, WM_APP_BRIGHTNESS_RESULT, PM_REMOVE)) {
+        if (leftover.message == WM_APP_BRIGHTNESS_REQUEST) delete (ScrollRequest*)leftover.lParam;
+        else if (leftover.message == WM_APP_BRIGHTNESS_RESULT) delete (ScrollResult*)leftover.lParam;
     }
 
     CleanupWMI();
@@ -959,6 +977,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                         if (nextReq->scrollUp == req->scrollUp) req->notches += nextReq->notches;
                         else req->notches -= nextReq->notches;
                         req->cursorPt = nextReq->cursorPt; 
+                        req->hTaskbar = nextReq->hTaskbar;
                         delete nextReq;
                     }
                 }
@@ -1020,6 +1039,11 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    MSG leftover;
+    while (PeekMessageW(&leftover, nullptr, WM_APP_VOLUME_REQUEST, WM_APP_VOLUME_REQUEST, PM_REMOVE)) {
+        delete (ScrollRequest*)leftover.lParam;
+    }
+
     if (pEnum) pEnum->Release();
     if (g_hOverlayWnd) {
         DestroyWindow(g_hOverlayWnd);
@@ -1077,10 +1101,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    Gdiplus::Status gdiStatus = Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original)) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
@@ -1093,7 +1117,7 @@ BOOL Wh_ModInit() {
 
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
@@ -1101,10 +1125,16 @@ BOOL Wh_ModInit() {
     g_hMonitorThread = CreateThread(nullptr, 0, MonitorThreadProc, nullptr, 0, &g_monitorThreadId);
     if (!g_hMonitorThread) {
         g_stopping = true;
-        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        if (g_workerThreadId) {
+            while (!PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0) &&
+                   WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
+        }
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_hWorkerThread = nullptr;
+        g_workerThreadId = 0;
+        
+        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
@@ -1118,7 +1148,10 @@ void Wh_ModUninit() {
     g_stopping = true;
     EnumWindows(EnumWindowsUninitProc, 0);
 
-    if (g_workerThreadId) PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+    if (g_workerThreadId) {
+        while (!PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0) &&
+               WaitForSingleObject(g_hWorkerThread, 10) == WAIT_TIMEOUT) {}
+    }
     if (g_hWorkerThread) {
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
@@ -1126,7 +1159,10 @@ void Wh_ModUninit() {
         g_workerThreadId = 0;
     }
 
-    if (g_monitorThreadId) PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0);
+    if (g_monitorThreadId) {
+        while (!PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0) &&
+               WaitForSingleObject(g_hMonitorThread, 10) == WAIT_TIMEOUT) {}
+    }
     if (g_hMonitorThread) {
         WaitForSingleObject(g_hMonitorThread, INFINITE);
         CloseHandle(g_hMonitorThread);
