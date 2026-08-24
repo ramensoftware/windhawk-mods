@@ -1,16 +1,16 @@
 ﻿// ==WindhawkMod==
 // @id              microslop
 // @name            Microslop
-// @description     Replaces "Microsoft" with "Microslop" in system apps
+// @description     Replaces "Microsoft" with "Microslop" in system apps and more
 // @version         1.0
 // @author          gameknight963
 // @github          https://github.com/Gameknight963
 // @include         winver.exe
-// @include         explorer.exe
 // @include         SystemSettings.exe
 // @include         StartMenuExperienceHost.exe
 // @include         Taskmgr.exe
-// @compilerOptions -lgdi32 -ldwrite
+// @license         GPL-3.0
+// @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
 // DWrite vtable hooking technique permanently borrowed from m417z's text-replace mod
@@ -38,9 +38,12 @@
   _note: much of the Start Menu is web-based in 
 Windows 11, and that's not possible to replace._
 
-  ![context mnenu](https://i.imgur.com/P6I0GxD.png)
+  ![context menu](https://i.imgur.com/P6I0GxD.png)
 
 _not really the intention I had lol_
+
+_note: in order to have your context menus or other shell items affected, add `explorer.exe` to
+Custom process inclusion list under Advanced. Or add whatever process you want, should work._
 */
 // ==/WindhawkModReadme==
 
@@ -51,11 +54,6 @@ _not really the intention I had lol_
   - skipFilePaths: true
     $name: Skip file paths
     $description: Tries to skip strings that look like file paths. Not foolproof though.
-
-  - enableExplorer: false
-    $name: Replace in Explorer
-    $description: Additionally replaces text in explorer.exe, but can make file paths confusing. 
-  $name: Behaviour
 
 - replacements:
   - microsoft: true
@@ -93,11 +91,11 @@ _not really the intention I had lol_
 #include <windows.h>
 #include <algorithm>
 #include <string>
-#include <d2d1.h>
 #include <dwrite.h>
+#include <windhawk_utils.h>
+#include <cwctype>
 
 static bool g_skipFilePaths = true;
-static bool g_enableExplorer = false;
 static bool g_replaceMicrosoft = true;
 static bool g_replaceWindows = false;
 static bool g_replaceMicrosoftEdge = false;
@@ -106,10 +104,7 @@ static bool g_replaceWinSecurity = false;
 static bool g_replaceSecurity = false;
 static bool g_replaceRecommended = false;
 
-static bool g_isExplorer = false; 
-
 static void LoadSettings() {
-    g_enableExplorer = Wh_GetIntSetting(L"behaviour.enableExplorer");
     g_skipFilePaths = Wh_GetIntSetting(L"behaviour.skipFilePaths");
     g_replaceMicrosoft = Wh_GetIntSetting(L"replacements.microsoft");
     g_replaceWindows = Wh_GetIntSetting(L"replacements.windows");
@@ -128,7 +123,7 @@ static bool LooksLikeFilePath(const std::wstring& s) {
     if (s.size() >= 2 && ((s[0] == L'\\' && s[1] == L'\\') || (s[0] == L'/' && s[1] == L'/')))
         return true;
     // Backslash sequence that looks like a path segment
-    if (s.find(L":\\") != std::wstring::npos || s.find(L"C:\\") != std::wstring::npos)
+    if (s.find(L":\\") != std::wstring::npos)
         return true;
     return false;
 }
@@ -137,8 +132,6 @@ static std::wstring PatchString(const wchar_t* str, size_t len = (size_t)-1) {
     if (!str) return {};
     if (len == (size_t)-1) len = wcslen(str);
     std::wstring s(str, len);
-
-    if (g_isExplorer && !g_enableExplorer) return s;
 
     if (g_skipFilePaths && LooksLikeFilePath(s)) return s;
 
@@ -159,7 +152,7 @@ static std::wstring PatchString(const wchar_t* str, size_t len = (size_t)-1) {
     if (g_replaceMicrosoft) replace(L"Microsoft", L"Microslop");
     if (g_replaceWinSecurity) replace(L"Windows Security", L"Windows's Insecurities");
     if (g_replaceSecurity) replace(L"Security", L"Illusion");
-    if (g_replaceSecurity) replace(L"Recommended", L"Forced");
+    if (g_replaceRecommended) replace(L"Recommended", L"Forced");
     if (g_replaceWindows) replace(L"Windows",   L"Winslop");
 
     return s;
@@ -198,6 +191,17 @@ HRESULT STDMETHODCALLTYPE CreateTextLayoutHook(
     return pOrigCreateTextLayout(pThis, s, len, fmt, w, h, out);
 }
 
+using IDWriteFactory_CreateGdiCompatibleTextLayout_t = HRESULT(STDMETHODCALLTYPE*)(IDWriteFactory*, const WCHAR*, UINT32, IDWriteTextFormat*, FLOAT, FLOAT, FLOAT, BOOL, const DWRITE_MATRIX*, IDWriteTextLayout**);
+IDWriteFactory_CreateGdiCompatibleTextLayout_t pOrigCreateGdiCompatibleTextLayout;
+
+HRESULT STDMETHODCALLTYPE CreateGdiCompatibleTextLayoutHook(IDWriteFactory* pThis, const WCHAR* s, UINT32 len, IDWriteTextFormat* fmt, FLOAT w, FLOAT h, FLOAT pixelsPerDip, BOOL useGdiNatural, const DWRITE_MATRIX* transform, IDWriteTextLayout** out) {
+    if (s) {
+        std::wstring p = PatchString(s, len);
+        return pOrigCreateGdiCompatibleTextLayout(pThis, p.c_str(), static_cast<UINT32>(p.size()), fmt, w, h, pixelsPerDip, useGdiNatural, transform, out);
+    }
+    return pOrigCreateGdiCompatibleTextLayout(pThis, s, len, fmt, w, h, pixelsPerDip, useGdiNatural, transform, out);
+}
+
 static void HookDWrite() {
     HMODULE hDWrite = LoadLibraryExW(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hDWrite) return;
@@ -210,7 +214,10 @@ static void HookDWrite() {
     if (FAILED(pCreate(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&pFactory))) return;
 
     void** vtable = *(void***)pFactory;
+    // IDWriteFactory::CreateTextLayout
     Wh_SetFunctionHook(vtable[18], (void*)CreateTextLayoutHook, (void**)&pOrigCreateTextLayout);
+    // IDWriteFactory::CreateGdiCompatibleTextLayout
+    Wh_SetFunctionHook(vtable[19], (void*)CreateGdiCompatibleTextLayoutHook, (void**)&pOrigCreateGdiCompatibleTextLayout);
     pFactory->Release();
 }
 
@@ -218,13 +225,25 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Microslop init");
     LoadSettings();
 
+    if (!g_skipFilePaths &&
+        !g_replaceMicrosoft &&
+        !g_replaceWindows &&
+        !g_replaceMicrosoftEdge &&
+        !g_replaceMsDefender &&
+        !g_replaceWinSecurity &&
+        !g_replaceSecurity &&
+        !g_replaceRecommended)
+    {
+        // all are false, we should not hook because ai-reviewer said so
+        return FALSE;
+    }
+
     WCHAR path[MAX_PATH];
     GetModuleFileNameW(nullptr, path, MAX_PATH);
-    g_isExplorer = !!wcsstr(path, L"explorer.exe");
     
-    Wh_SetFunctionHook((void*)SetWindowTextW, (void*)SetWindowTextWHook, (void**)&pOrigSetWindowTextW);
-    Wh_SetFunctionHook((void*)DrawTextW, (void*)DrawTextWHook, (void**)&pOrigDrawTextW);
-    Wh_SetFunctionHook((void*)ExtTextOutW, (void*)ExtTextOutWHook, (void**)&pOrigExtTextOutW);
+    WindhawkUtils::SetFunctionHook((void*)SetWindowTextW, (void*)SetWindowTextWHook, (void**)&pOrigSetWindowTextW);
+    WindhawkUtils::SetFunctionHook((void*)DrawTextW, (void*)DrawTextWHook, (void**)&pOrigDrawTextW);
+    WindhawkUtils::SetFunctionHook((void*)ExtTextOutW, (void*)ExtTextOutWHook, (void**)&pOrigExtTextOutW);
 
     HookDWrite();
 
