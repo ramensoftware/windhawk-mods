@@ -2,7 +2,7 @@
 // @id            taskbar-scroll-volume-brightness-control
 // @name          Taskbar Scroll: Volume & Brightness Controller
 // @description   Scroll over the right side of the taskbar to change volume, scroll over the left side to change brightness. Uses a custom in-taskbar UI that tracks your cursor.
-// @version       1.1.1
+// @version       1.1.2
 // @author        Narayan Chetri
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
@@ -427,7 +427,6 @@ void EnsureOverlayWindow() {
 
     if (!g_classRegistered) {
         WNDCLASSEXW wc = {sizeof(wc)};
-        wc.style = CS_DROPSHADOW;
         wc.lpfnWndProc = OverlayWndProc;
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kOverlayClassName;
@@ -439,11 +438,6 @@ void EnsureOverlayWindow() {
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
         kOverlayClassName, L"", WS_POPUP, 0, 0, kOverlayWidth, kOverlayHeight,
         nullptr, nullptr, GetCurrentModuleHandle(), nullptr);
-
-    if (g_hOverlayWnd) {
-        DWORD pref = DWMWCP_ROUND;
-        DwmSetWindowAttribute(g_hOverlayWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
-    }
 }
 
 void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
@@ -459,7 +453,12 @@ void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
     g_targetPercent = percent;
     g_targetOpacity = 255.0f;
 
-    if (!hTaskbar || !IsWindow(hTaskbar)) hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!hTaskbar || !IsWindow(hTaskbar)) return;
+    
+    DWORD procId = 0;
+    GetWindowThreadProcessId(hTaskbar, &procId);
+    if (procId != GetCurrentProcessId()) return;
+
     g_hTargetTaskbar = hTaskbar;
 
     if (g_currentMode != mode) {
@@ -879,9 +878,10 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 // Monitor thread
 // -----------------------------------------------------------------------
 
-DWORD WINAPI MonitorThreadProc(LPVOID) {
+DWORD WINAPI MonitorThreadProc(LPVOID lpParam) {
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  
+    if (lpParam) SetEvent((HANDLE)lpParam);
 
     HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
@@ -921,14 +921,18 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
 
                     if (percent >= 0 && g_workerThreadId) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
-                        PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res);
+                        if (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) {
+                            delete res;
+                        }
                     }
                 }
                 delete req;
 
                 DWORD currentThreadId = GetCurrentThreadId();
                 for (ScrollRequest* d : deferred) {
-                    PostThreadMessageW(currentThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d);
+                    if (!PostThreadMessageW(currentThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)d)) {
+                        delete d;
+                    }
                 }
             }
             continue;
@@ -955,9 +959,10 @@ DWORD WINAPI MonitorThreadProc(LPVOID) {
 // UI / Audio thread
 // -----------------------------------------------------------------------
 
-DWORD WINAPI WorkerThreadProc(LPVOID) {
+DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (lpParam) SetEvent((HANDLE)lpParam);
     
     HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IMMDeviceEnumerator* pEnum = nullptr;
@@ -1114,28 +1119,33 @@ BOOL Wh_ModInit() {
         if (pCreateWindowInBand) WindhawkUtils::SetFunctionHook(pCreateWindowInBand, CreateWindowInBand_Hook, &CreateWindowInBand_Original);
     }
 
-    g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
+    HANDLE hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, hReadyEvent, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
+        CloseHandle(hReadyEvent);
         if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
+    WaitForSingleObject(hReadyEvent, INFINITE);
+    ResetEvent(hReadyEvent);
 
-    g_hMonitorThread = CreateThread(nullptr, 0, MonitorThreadProc, nullptr, 0, &g_monitorThreadId);
+    g_hMonitorThread = CreateThread(nullptr, 0, MonitorThreadProc, hReadyEvent, 0, &g_monitorThreadId);
     if (!g_hMonitorThread) {
         g_stopping = true;
-        if (g_workerThreadId) {
-            PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
-        }
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
         g_workerThreadId = 0;
-        
+        CloseHandle(hReadyEvent);
         if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
         DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
+    WaitForSingleObject(hReadyEvent, INFINITE);
+    CloseHandle(hReadyEvent);
 
     g_initialized = true;
     return TRUE;
