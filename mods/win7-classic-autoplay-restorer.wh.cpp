@@ -3657,6 +3657,7 @@ static UINT    g_msgQueryCancelAP = 0;
 // build/test cycle) - back to explorer.exe injection with the original
 // single-instance mutex.
 static HANDLE  g_hOwnerMutex = nullptr;
+static bool    g_ownsAutoPlay = false;   // only the owning instance writes/deletes CancelAutoplay values
 static HANDLE  g_hActionWorker = nullptr;
 
 struct HotRect { RECT rc; int kind; int idx; }; // 0=option 1=link 2=checkbox
@@ -3842,7 +3843,13 @@ static std::wstring GetCompanyName(const std::wstring& exePath) {
     UINT len = 0;
     if (!VerQueryValueW(buf.data(), key.c_str(), &data, &len) || !data || !len)
         return L"";
-    return std::wstring((const wchar_t*)data);
+    // Bound the string by the length VerQueryValueW returned instead of scanning
+    // for a NUL, so a crafted/truncated version resource cannot over-read (item 9).
+    size_t chars = (size_t)len / sizeof(wchar_t);
+    const wchar_t* p = (const wchar_t*)data;
+    size_t n = 0;
+    while (n < chars && p[n]) n++;
+    return std::wstring(p, n);
 }
 
 // ============================================================================
@@ -4031,13 +4038,14 @@ static bool IsMainExplorerShell() {
 
 static bool TryBecomeAutoPlayOwner() {
     if (g_hOwnerMutex) return true;
-    g_hOwnerMutex = CreateMutexW(nullptr, TRUE, L"Local\\Win7ClassicAutoPlay.Owner");
-    if (!g_hOwnerMutex) return false;
+    HANDLE h = CreateMutexW(nullptr, TRUE, L"Local\\Win7ClassicAutoPlay.Owner");
+    if (!h) return false;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_hOwnerMutex);
-        g_hOwnerMutex = nullptr;
+        CloseHandle(h);
         return false;
     }
+    g_hOwnerMutex = h;
+    g_ownsAutoPlay = true;
     return true;
 }
 
@@ -4047,6 +4055,7 @@ static void ReleaseAutoPlayOwner() {
         CloseHandle(g_hOwnerMutex);
         g_hOwnerMutex = nullptr;
     }
+    g_ownsAutoPlay = false;
 }
 
 class CancelAutoPlayObj : public IQueryCancelAutoPlay {
@@ -4189,10 +4198,13 @@ static int FindAutoplayDriveInText(PCWSTR text) {
 
 static bool IsAutoplayLaunchText(PCWSTR text) {
     if (!text) return false;
-    return StrStrIW(text, L"autoplay") ||
-           StrStrIW(text, L"9C60DE1E-E5FC-40F4-A487-460851A8D915") ||
-           StrStrIW(text, L"ms-settings:autoplay") ||
-           StrStrIW(text, L"Microsoft.AutoPlay");
+    // Only match the precise, unambiguous AutoPlay entry points. The bare
+    // substring "autoplay" is deliberately NOT matched: it would block unrelated
+    // launches (e.g. D:\AutoPlay\setup.exe, a folder named "AutoPlay something").
+    // "Microsoft.AutoPlay" is also excluded so the mod does not block its own
+    // "View more AutoPlay options in Control Panel" link (item 2).
+    return StrStrIW(text, L"9C60DE1E-E5FC-40F4-A487-460851A8D915") ||
+           StrStrIW(text, L"ms-settings:autoplay");
 }
 
 static bool RedirectAutoplayLaunch(PCWSTR file, PCWSTR parameters) {
@@ -4404,12 +4416,61 @@ static HRESULT (STDMETHODCALLTYPE* g_ContextQueryOriginal)(IContextMenu*, HMENU,
 static HRESULT (STDMETHODCALLTYPE* g_ContextInvokeOriginal)(IContextMenu*, LPCMINVOKECOMMANDINFO) = nullptr;
 static HRESULT (STDMETHODCALLTYPE* g_GetUIObjectOf_Original)(IShellFolder*, HWND, UINT, PCUITEMID_CHILD_ARRAY, REFIID, UINT*, void**) = nullptr;
 
-static ContextMenuInfo* FindContextMenu(IContextMenu* menu) {
+// Stored entries own a reference to their IContextMenu object (AddRef on
+// insert) so the pointer can never dangle, and everything is accessed under the
+// single lock. Callers always copy the fields out through SnapshotContextMenu
+// instead of receiving a pointer into the vector (which could be invalidated by
+// a concurrent reallocation). Growth is bounded to kMaxContextMenuEntries by
+// dropping + releasing the oldest entries, so repeated right-clicks cannot grow
+// the table without limit.
+static const size_t kMaxContextMenuEntries = 64;
+
+struct ContextMenuSnapshot { int letter = 0; UINT autoPlayOffset = kNoAutoPlayCommand; };
+
+static bool SnapshotContextMenu(IContextMenu* menu, ContextMenuSnapshot* snap) {
     EnsureContextMenusCS();
     ApScopedCriticalSection lock(&g_csContextMenus);
-    ContextMenuInfo* r = nullptr;
-    for (auto& i : g_contextMenus) if (i.menu == menu) { r = &i; break; }
-    return r;
+    for (auto& i : g_contextMenus) {
+        if (i.menu == menu) {
+            if (snap) { snap->letter = i.letter; snap->autoPlayOffset = i.autoPlayOffset; }
+            return true;
+        }
+    }
+    return false;
+}
+
+static void SetContextMenuLetter(IContextMenu* menu, int letter) {
+    if (!menu) return;
+    EnsureContextMenusCS();
+    ApScopedCriticalSection lock(&g_csContextMenus);
+    for (auto& i : g_contextMenus) {
+        if (i.menu == menu) { i.letter = letter; return; }
+    }
+    // Own the object so the stored pointer stays valid for the entry's life.
+    menu->AddRef();
+    g_contextMenus.push_back({ menu, letter, kNoAutoPlayCommand });
+    while (g_contextMenus.size() > kMaxContextMenuEntries) {
+        ContextMenuInfo& oldest = g_contextMenus.front();
+        if (oldest.menu) oldest.menu->Release();
+        g_contextMenus.erase(g_contextMenus.begin());
+    }
+}
+
+static void SetContextMenuAutoPlayOffset(IContextMenu* menu, UINT offset) {
+    if (!menu) return;
+    EnsureContextMenusCS();
+    ApScopedCriticalSection lock(&g_csContextMenus);
+    for (auto& i : g_contextMenus) {
+        if (i.menu == menu) { i.autoPlayOffset = offset; return; }
+    }
+}
+
+static void ReleaseAllContextMenuEntries() {
+    EnsureContextMenusCS();
+    ApScopedCriticalSection lock(&g_csContextMenus);
+    for (auto& i : g_contextMenus)
+        if (i.menu) i.menu->Release();
+    g_contextMenus.clear();
 }
 
 // Derive a "X:\" path from a shell folder child item. This is the reliable
@@ -4442,15 +4503,8 @@ static HRESULT STDMETHODCALLTYPE GetUIObjectOfHook(
             std::wstring path = GetPathFromChild(parent, items[0]);
             if (path.size() >= 2 && path[1] == L':') {
                 int letter = (int)towupper((wint_t)path[0]);
-                EnsureContextMenusCS();
-                {
-                    ApScopedCriticalSection lock(&g_csContextMenus);
-                    bool found = false;
-                    for (auto& e : g_contextMenus)
-                        if (e.menu == *ppv) { e.letter = letter; found = true; break; }
-                    if (!found)
-                        g_contextMenus.push_back({ (IContextMenu*)*ppv, letter, kNoAutoPlayCommand });
-                }
+                // Takes the lock internally and owns the menu reference.
+                SetContextMenuLetter((IContextMenu*)*ppv, letter);
                 Wh_Log(L"GetUIObjectOfHook: menu=%p -> %s -> %c:",
                        *ppv, path.c_str(), letter);
             } else {
@@ -4502,19 +4556,11 @@ static void WarmUpDriveContextMenus() {
                     hr = parent->GetUIObjectOf(nullptr, 1, &child, IID_IContextMenu,
                                                nullptr, (void**)menu.put());
                 if (SUCCEEDED(hr) && menu) {
-                    // The hooked GetUIObjectOf already associated this menu; ensure
-                    // the map entry too, in case the path was used without the hook.
-                    EnsureContextMenusCS();
-                    {
-                        ApScopedCriticalSection lock(&g_csContextMenus);
-                        bool found = false;
-                        for (auto& e : g_contextMenus)
-                            if (e.menu == menu.get()) { e.letter = letter; found = true; break; }
-                        if (!found)
-                            g_contextMenus.push_back({ menu.get(), letter, kNoAutoPlayCommand });
-                    }
+                    // Locked + owns a reference to the menu object.
+                    SetContextMenuLetter(menu.get(), letter);
                     // Transfer ownership to the session-lifetime list so the menu
-                    // stays alive and the letter mapping remains valid.
+                    // stays alive and the letter mapping remains valid. Held on
+                    // this (COM-initialised) thread and released on it too.
                     IContextMenu* rawMenu = menu.get();
                     g_warmupMenus.push_back(menu.release());
                     ++associated;
@@ -4530,14 +4576,41 @@ static void WarmUpDriveContextMenus() {
     }
 }
 
+// Release the session-lifetime menus acquired by the warm-up. Each menu already
+// owns a reference in g_contextMenus (SetContextMenuLetter AddRef'd it), so this
+// only drops the extra warm-up reference; the association stays valid. Must run
+// on the same COM-initialised thread that created them (item 3).
+static void ReleaseContextMenuWarmupMenus() {
+    for (IContextMenu* m : g_warmupMenus)
+        if (m) m->Release();
+    g_warmupMenus.clear();
+}
+
+// Drop and release all entries belonging to a removed drive letter, so the table
+// stays bounded and no reference outlives the volume it describes.
+static void ReleaseContextMenuEntriesForLetter(int letter) {
+    if (!letter) return;
+    EnsureContextMenusCS();
+    ApScopedCriticalSection lock(&g_csContextMenus);
+    for (auto it = g_contextMenus.begin(); it != g_contextMenus.end(); ) {
+        if (it->letter == letter) {
+            if (it->menu) it->menu->Release();
+            it = g_contextMenus.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 static HRESULT STDMETHODCALLTYPE ContextQueryHook(IContextMenu* menu, HMENU hmenu,
                                                     UINT index, UINT first, UINT last,
                                                     UINT flags) {
     HRESULT hr = g_ContextQueryOriginal(menu, hmenu, index, first, last, flags);
-    ContextMenuInfo* info = FindContextMenu(menu);
+    ContextMenuSnapshot snap;
+    bool mapped = SnapshotContextMenu(menu, &snap);
     Wh_Log(L"Context menu QueryContextMenu self=%p first=%u last=%u mapped=%d",
-           menu, first, last, info ? 1 : 0);
-    if (SUCCEEDED(hr) && info) {
+           menu, first, last, mapped ? 1 : 0);
+    if (SUCCEEDED(hr) && mapped) {
         int n = GetMenuItemCount(hmenu);
         for (int i = 0; i < n; ++i) {
             WCHAR text[256] = {};
@@ -4546,7 +4619,7 @@ static HRESULT STDMETHODCALLTYPE ContextQueryHook(IContextMenu* menu, HMENU hmen
                 StrStrIW(text, L"riproduzione automatica")) {
                 UINT id = GetMenuItemID(hmenu, i);
                 if (id != (UINT)-1 && id >= first && id <= last)
-                    info->autoPlayOffset = id - first;
+                    SetContextMenuAutoPlayOffset(menu, id - first);
             }
         }
     }
@@ -4574,17 +4647,27 @@ static bool ContextInvocationIsAutoPlay(IContextMenu* menu,
 
 static HRESULT STDMETHODCALLTYPE ContextInvokeHook(IContextMenu* menu,
                                                     LPCMINVOKECOMMANDINFO ci) {
-    ContextMenuInfo* info = FindContextMenu(menu);
-    Wh_Log(L"Context menu InvokeCommand self=%p mapped=%d", menu, info ? 1 : 0);
-    // Without the menu object's path, guessing from the last inserted volume
-    // can open the wrong drive. Only use the letter captured for this object.
-    int letter = info ? FindContextAutoPlayDrive(info->letter)
-                      : FindContextAutoPlayDrive();
-    bool known = info && info->autoPlayOffset != kNoAutoPlayCommand;
-    if (letter && ci && g_hwndListener &&
-        ((known && IS_INTRESOURCE(ci->lpVerb) &&
-          LOWORD((ULONG_PTR)ci->lpVerb) == info->autoPlayOffset) ||
-         ContextInvocationIsAutoPlay(menu, ci))) {
+    ContextMenuSnapshot snap;
+    bool mapped = SnapshotContextMenu(menu, &snap);
+    Wh_Log(L"Context menu InvokeCommand self=%p mapped=%d", menu, mapped ? 1 : 0);
+    if (!ci || !g_hwndListener) return g_ContextInvokeOriginal(menu, ci);
+
+    // Cheap checks first: is this an AutoPlay command at all? Only then do we
+    // do the (expensive) eligible-drive scan. The canonical "autoplay" verb is
+    // language-independent, so prefer it over localized menu text (item 4/6).
+    bool known = mapped && snap.autoPlayOffset != kNoAutoPlayCommand;
+    bool isAutoPlay =
+        (known && IS_INTRESOURCE(ci->lpVerb) &&
+         LOWORD((ULONG_PTR)ci->lpVerb) == snap.autoPlayOffset) ||
+        ContextInvocationIsAutoPlay(menu, ci);
+    if (!isAutoPlay)
+        return g_ContextInvokeOriginal(menu, ci);
+
+    // Use the drive letter captured for this menu object if available; only
+    // fall back to scanning when we truly have no mapping for it.
+    int letter = mapped ? FindContextAutoPlayDrive(snap.letter)
+                        : FindContextAutoPlayDrive();
+    if (letter) {
         PostMessageW(g_hwndListener, WMU_CONTEXT_AUTOPLAY,
                      (WPARAM)letter, 0);
         Wh_Log(L"Context AutoPlay: intercepted IContextMenu::InvokeCommand for %c:", letter);
@@ -4618,6 +4701,49 @@ static bool InstallAutoplayContextMenuHooks() {
            query, invoke, q, i);
     menu->Release();
     return q && i;
+}
+
+// The drive-letter association must be built regardless of which IContextMenu
+// implementation gets hooked. Explorer obtains each drive's context menu from
+// the "This PC" (CSIDL_DRIVES) shell folder via IShellFolder::GetUIObjectOf, so
+// hooking that folder's GetUIObjectOf (vtable slot 10) captures every real drive
+// menu. This is installed unconditionally in Wh_ModInit, independently of the
+// AutoPlay COM probe path (item 5).
+static bool g_getUIObjectOfHookInstalled = false;
+static bool InstallDriveFolderGetUIObjectHook() {
+    if (g_getUIObjectOfHookInstalled) return true;
+
+    WCHAR drives[512] = {};
+    if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
+    WCHAR root[4] = {};
+    for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
+        if (GetDriveTypeW(p) == DRIVE_NO_ROOT_DIR) continue;
+        wcscpy_s(root, p);
+        break;
+    }
+    if (!root[0]) return false;
+
+    ApScopedCoInit coInit;
+    if (!coInit.available()) return false;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    IShellFolder* parent = nullptr;
+    PCUITEMID_CHILD child = nullptr;
+    HRESULT hr = SHParseDisplayName(root, nullptr, &pidl, 0, nullptr);
+    if (SUCCEEDED(hr))
+        hr = SHBindToParent(pidl, IID_IShellFolder, (void**)&parent, &child);
+    bool ok = false;
+    if (SUCCEEDED(hr) && parent) {
+        void** pvt = *(void***)parent;
+        auto guiObj = pvt ? (decltype(g_GetUIObjectOf_Original))pvt[10] : nullptr;
+        ok = guiObj && Wh_SetFunctionHook((void*)guiObj,
+                                          (void*)GetUIObjectOfHook,
+                                          (void**)&g_GetUIObjectOf_Original);
+    }
+    Wh_Log(L"Drive folder GetUIObjectOf hook installed=%d", ok ? 1 : 0);
+    if (parent) parent->Release();
+    if (pidl) CoTaskMemFree(pidl);
+    if (ok) g_getUIObjectOfHookInstalled = true;
+    return ok;
 }
 
 static bool InstallDriveContextMenuHooks() {
@@ -4659,20 +4785,8 @@ static bool InstallDriveContextMenuHooks() {
         bool i = invoke && Wh_SetFunctionHook((void*)invoke,
                                                (void*)ContextInvokeHook,
                                                (void**)&g_ContextInvokeOriginal);
-        // Association is built at the shell-folder boundary (GetUIObjectOf),
-        // because the IContextMenu vtable alone cannot tell which drive the
-        // menu belongs to. Hook the enclosing folder's GetUIObjectOf (IShellFolder
-        // vtable slot 10) so every real drive menu gets its letter.
-        bool gui = false;
-        if (parent) {
-            void** pvt = *(void***)parent;
-            auto guiObj = pvt ? (decltype(g_GetUIObjectOf_Original))pvt[10] : nullptr;
-            gui = guiObj && Wh_SetFunctionHook((void*)guiObj,
-                                               (void*)GetUIObjectOfHook,
-                                               (void**)&g_GetUIObjectOf_Original);
-        }
-        Wh_Log(L"Drive AutoPlay context probe root=%s query=%p invoke=%p hooks=%d/%d getUIObjectOf=%d",
-               root, query, invoke, q, i, gui ? 1 : 0);
+        Wh_Log(L"Drive AutoPlay context probe root=%s query=%p invoke=%p hooks=%d/%d",
+               root, query, invoke, q, i);
         ok = q && i;
     } else {
         Wh_Log(L"Drive AutoPlay context probe failed hr=0x%08X root=%s",
@@ -4732,7 +4846,8 @@ static HRESULT WINAPI CDefFolderMenuCreate2Hook(
             }
         }
         if (foundLetter) {
-            g_contextMenus.push_back({ *outMenu, foundLetter, kNoAutoPlayCommand });
+            // Locked + owns a reference, so this is safe to call from any thread.
+            SetContextMenuLetter(*outMenu, foundLetter);
         } else {
             Wh_Log(L"CDefFolderMenuCreate2Hook: could not derive a drive letter for menu=%p",
                    *outMenu);
@@ -5437,15 +5552,35 @@ static bool HasWindowsPhotoViewer() {
     return !FindPhotoViewerDll().empty();
 }
 
+// Open a media/picture file with the shell's default handler. On Windows 10/11
+// the legacy "Windows Media Player" (wmplayer.exe) and Windows 7 Photo Viewer
+// (PhotoViewer.dll) are often stubs/unavailable, so opening the file with the
+// user's real default app is the reliable way to show something. Returns true
+// if the default handler accepted the launch.
+static bool OpenFileWithDefaultHandler(const std::wstring& path) {
+    if (path.empty() || !FileExistsOnDisk(path.c_str())) return false;
+    Wh_Log(L"OpenFileWithDefaultHandler: %s", path.c_str());
+    return (INT_PTR)ShellExecuteW(NULL, L"open", path.c_str(),
+                                  nullptr, nullptr, SW_SHOWNORMAL) > 32;
+}
+
 static void ExecutePlay(const AutoPlayOption& opt) {
     if (!DrivePresent(g_driveLetter)) return;
-    std::wstring wmp = FindWindowsMediaPlayer();
-    if (wmp.empty()) {
-        Wh_Log(L"ExecutePlay: Windows Media Player not installed, skip");
-        return;
-    }
     const wchar_t* target = !opt.targetPath.empty() && FileExistsOnDisk(opt.targetPath.c_str())
                           ? opt.targetPath.c_str() : g_driveRoot.c_str();
+
+    // Prefer the shell default handler (the app the user actually uses); only if
+    // that fails (e.g. no association) fall back to the legacy wmplayer.exe.
+    if (OpenFileWithDefaultHandler(target)) {
+        Wh_Log(L"ExecutePlay: opened via default handler");
+        return;
+    }
+    std::wstring wmp = FindWindowsMediaPlayer();
+    if (wmp.empty()) {
+        Wh_Log(L"ExecutePlay: no default handler and WMP not installed, skip");
+        return;
+    }
+    Wh_Log(L"ExecutePlay: launching %s %s", wmp.c_str(), target);
     if ((INT_PTR)ShellExecuteW(NULL, L"open", wmp.c_str(), target,
                                nullptr, SW_SHOWNORMAL) <= 32)
         Wh_Log(L"ExecutePlay: ShellExecute WMP failed");
@@ -5457,9 +5592,16 @@ static void ExecuteViewPictures(const AutoPlayOption& opt) {
         ExecuteOpenFolder();
         return;
     }
+
+    // Prefer the shell default handler (Photos on Win10/11) so it always opens;
+    // fall back to the legacy rundll32 + PhotoViewer.dll only if that fails.
+    if (OpenFileWithDefaultHandler(opt.targetPath)) {
+        Wh_Log(L"ExecuteViewPictures: opened via default handler");
+        return;
+    }
     std::wstring dll = FindPhotoViewerDll();
     if (dll.empty()) {
-        Wh_Log(L"ExecuteViewPictures: Photo Viewer not installed, skip");
+        Wh_Log(L"ExecuteViewPictures: no default handler and Photo Viewer not installed, skip");
         return;
     }
     WCHAR rundll[MAX_PATH] = {};
@@ -5470,6 +5612,7 @@ static void ExecuteViewPictures(const AutoPlayOption& opt) {
     args += L"\", ImageView_Fullscreen \"";
     args += opt.targetPath;
     args += L"\"";
+    Wh_Log(L"ExecuteViewPictures: launching rundll32 %s", args.c_str());
     if ((INT_PTR)ShellExecuteW(NULL, L"open", rundll, args.c_str(),
                                nullptr, SW_SHOWNORMAL) <= 32)
         Wh_Log(L"ExecuteViewPictures: rundll32 Photo Viewer failed");
@@ -5510,9 +5653,17 @@ static void ExecuteSyncDevice() {
         FileExistsExpanded(L"%ProgramFiles(x86)%\\Windows Mobile\\wmdSync.exe", p))
         ShellExecuteW(nullptr, L"open", p.c_str(), L"/sync", nullptr, SW_SHOWNORMAL);
 }
-static void ExecuteViewSlideshow() {
+static void ExecuteViewSlideshow(const AutoPlayOption& opt) {
     if (!DrivePresent(g_driveLetter)) return;
-    ExecuteOpenFolder(); // safe fallback when Photo Viewer has no slideshow verb
+    // Open the first picture with the shell default handler (Photos on Win10/11),
+    // which provides a slideshow; fall back to opening the folder if no picture.
+    if (!opt.targetPath.empty() && FileExistsOnDisk(opt.targetPath.c_str())) {
+        if (OpenFileWithDefaultHandler(opt.targetPath)) {
+            Wh_Log(L"ExecuteViewSlideshow: opened first picture via default handler");
+            return;
+        }
+    }
+    ExecuteOpenFolder(); // safe fallback
 }
 static void ExecuteControlPanelLink() {
     ShellExecuteW(NULL, L"open", L"control.exe",
@@ -5663,15 +5814,20 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
         if (!ar.action.empty()) {
             prog.line1 = ar.action;
         } else {
-            wchar_t buf[280];
+            // Widen the buffer so a MAX_PATH filename cannot overflow swprintf_s
+            // (which terminates the process on overflow) (item 9).
+            wchar_t buf[1024];
             swprintf_s(buf, ARRAYSIZE(buf), lp->runFile,
                        PathFindFileNameW(ar.programPath.c_str()));
             prog.line1 = buf;
         }
         std::wstring company = GetCompanyName(ar.programPath);
         if (!company.empty()) {
-            wchar_t buf[512];
-            swprintf_s(buf, ARRAYSIZE(buf), lp->publishedBy, company.c_str());
+            // Clamp the (attacker-controlled) company string so it can never
+            // overflow swprintf_s (item 9).
+            std::wstring companyClamped = company.substr(0, 256);
+            wchar_t buf[1024];
+            swprintf_s(buf, ARRAYSIZE(buf), lp->publishedBy, companyClamped.c_str());
             prog.line2 = buf;
         } else {
             prog.line2 = lp->publisherUnknown;
@@ -5696,8 +5852,11 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
         Wh_Log(L"BuildOptions: added Play audio CD (WMP present)");
     } else if (g_audioCd) {
         Wh_Log(L"BuildOptions: skip Play audio CD, WMP missing");
-    } else if (g_contentKind == ContentKind::Pictures && HasWindowsPhotoViewer() &&
+    } else if (g_contentKind == ContentKind::Pictures &&
                !inv.firstPicture.empty() && FileExistsOnDisk(inv.firstPicture.c_str())) {
+        // On Windows 10/11 the legacy Windows 7 Photo Viewer (PhotoViewer.dll) is
+        // often absent, so we no longer require it to offer "View pictures": the
+        // shell default handler (Photos) is used first (see ExecuteViewPictures).
         AutoPlayOption view;
         view.type = ActionType::ViewPictures;
         view.group = OptionGroup::Content;
@@ -5706,9 +5865,7 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
         view.targetPath = inv.firstPicture;
         view.icon = MakePathIcon(inv.firstPicture, g_bmpFolder);
         g_options.push_back(std::move(view));
-        Wh_Log(L"BuildOptions: added View pictures (Photo Viewer present)");
-    } else if (g_contentKind == ContentKind::Pictures && !HasWindowsPhotoViewer()) {
-        Wh_Log(L"BuildOptions: skip View pictures, Photo Viewer missing");
+        Wh_Log(L"BuildOptions: added View pictures (default handler first)");
     } else if (g_contentKind == ContentKind::Music && haveWmp &&
                !inv.firstAudio.empty() && FileExistsOnDisk(inv.firstAudio.c_str())) {
         AutoPlayOption play;
@@ -5807,7 +5964,7 @@ static void BuildOptions(const AutorunInfo& ar, const MediaInventory& inv) {
             o.icon = MakeSafePathIcon(p, g_bmpFolder);
             g_options.push_back(std::move(o));
         }
-        if (HasWindowsPhotoViewer() && !inv.firstPicture.empty()) {
+        if (!inv.firstPicture.empty()) {
             AutoPlayOption o;
             o.type = ActionType::ViewSlideshow; o.group = OptionGroup::Content;
             o.line1 = L"Avvia presentazione";
@@ -5863,6 +6020,10 @@ static int DefaultOptionIndex() {
 }
 
 static void ExecuteOptionByIndex(int idx, HWND hwndDlg) {
+    Wh_Log(L"ExecuteOptionByIndex: idx=%d options=%d letter=%c drivePresent=%d",
+           idx, (int)g_options.size(),
+           g_driveLetter ? (wchar_t)g_driveLetter : L'?',
+           g_driveLetter ? (DrivePresent(g_driveLetter) ? 1 : 0) : -1);
     if (idx < 0 || idx >= (int)g_options.size()) return;
     AutoPlayOption opt = g_options[idx];
     bool remember = g_alwaysChecked;
@@ -5927,7 +6088,7 @@ static void ExecuteOptionByIndex(int idx, HWND hwndDlg) {
             case ActionType::ImportPictures: ExecuteImportPictures(); break;
             case ActionType::ImportMusic: ExecuteImportMusic(); break;
             case ActionType::SyncDevice: ExecuteSyncDevice(); break;
-            case ActionType::ViewSlideshow: ExecuteViewSlideshow(); break;
+            case ActionType::ViewSlideshow: ExecuteViewSlideshow(*opt); break;
         }
         // ApScopedCoInit releases COM even when an action throws.
         if (g_hwndListener)
@@ -7150,6 +7311,7 @@ static void HandleVolumeRemoved(DWORD unitmask) {
         if (!(unitmask & (1u << i))) continue;
         int letter = 'A' + i;
         RemovePending(letter);
+        ReleaseContextMenuEntriesForLetter(letter);
         if (g_hwndDialog && !g_isWpd && g_driveLetter == letter)
             DestroyWindow(g_hwndDialog);
     }
@@ -7193,6 +7355,11 @@ LRESULT CALLBACK ListenerWndProc(HWND hWnd, UINT uMsg,
         ProcessPendingQueue();
         return 0;
     case WMU_REBUILD:
+        // Skip while an action worker is running: the worker reads the shared
+        // globals below (g_driveRoot/g_driveLetter/g_isWpd/...), and Rebuild
+        // would rewrite them concurrently (item 7). The next settings change or
+        // queue event will pick the work up again.
+        if (g_hActionWorker) { Wh_Log(L"WMU_REBUILD: deferred, worker running"); return 0; }
         if (g_hwndDialog) {
             g_dpi = (int)GetDpiForWindow(g_hwndDialog);
             if (g_dpi < 96) g_dpi = 96;
@@ -7213,6 +7380,9 @@ LRESULT CALLBACK ListenerWndProc(HWND hWnd, UINT uMsg,
     case WMU_CONTEXT_AUTOPLAY: {
         // Never fall back to the last inserted volume: this request belongs to
         // the drive represented by the context-menu object.
+        // Defer while an action worker is running so we never rewrite the globals
+        // the worker is reading (item 7).
+        if (g_hActionWorker) { Wh_Log(L"WMU_CONTEXT_AUTOPLAY: deferred, worker running"); return 0; }
         int letter = (int)wParam;
         if (letter >= L'A' && letter <= L'Z' && DrivePresent(letter))
             BuildDriveDialog(letter, true);
@@ -7290,6 +7460,13 @@ static DWORD WINAPI AutoPlayUiThreadProc(LPVOID) {
         Wh_Log(L"UiThread: RegisterDeviceNotification WPD failed %lu", GetLastError());
 
     RegisterCancelAutoPlay();
+
+    // Warm up the drive-letter association on this COM-initialised thread
+    // (item 3): shell extensions are built here, not on Explorer's startup
+    // path, and the menus are (re)leased on this same thread before COM shuts
+    // down, so there is no cross-apartment Release from an uninitialised thread.
+    WarmUpDriveContextMenus();
+    ReleaseContextMenuWarmupMenus();
 
     Wh_Log(L"UiThread: ready pid=%lu", GetCurrentProcessId());
 
@@ -7369,11 +7546,21 @@ BOOL Wh_ModInit() {
         Wh_SetFunctionHook((void*)TrackPopupMenu,
                            (void*)TrackPopupMenuHook,
                            (void**)&g_TrackPopupMenu_Original);
+        // Initialise the menu-association critical section eagerly on the main
+        // thread, before any hook callback can run. This removes the lazy-init
+        // race (item 1).
+        EnsureContextMenusCS();
+
         // Prefer the AutoPlay COM implementation; fall back to a real drive
         // context-menu object only if the probe is unavailable. Installing two
         // different vtable detours into the same global originals can recurse.
         if (!InstallAutoplayContextMenuHooks())
             InstallDriveContextMenuHooks();
+        // The drive-letter association must be installed regardless of which
+        // IContextMenu implementation was hooked above (item 5). Without this,
+        // on the common AutoPlay-probe path the mod would fall back to guessing
+        // the drive.
+        InstallDriveFolderGetUIObjectHook();
         // Capture the path of each real Explorer drive-menu object. The vtable
         // hook above handles the command; this hook supplies its drive letter.
         HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
@@ -7386,9 +7573,8 @@ BOOL Wh_ModInit() {
 
         // Pre-associate the already-mounted drives (no UI shown) so a first
         // right-click hits a mapped menu even if Explorer cached drive menus
-        // before the mod loaded.
-        WarmUpDriveContextMenus();
-
+        // before the mod loaded. Done lazily on the mod's own COM-initialised
+        // UI thread (item 3), not on Explorer's startup path.
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES };
         InitCommonControlsEx(&icc);
 
@@ -7443,11 +7629,19 @@ void Wh_ModUninit() {
     g_rot = nullptr;
     g_rotCookie = 0;
     g_classCookie = 0;
-    WriteCancelAutoPlayClsid(false);
-    // Release any drive menus kept alive by the startup warm-up.
+    // Only the owning explorer.exe instance owns the CancelAutoplay values; a
+    // secondary instance must not delete what the shell instance wrote (item 8).
+    // The UI thread (already joined above) also removes them via UnregisterCancelAutoPlay,
+    // so this is a belt-and-suspenders guard rather than the primary cleanup.
+    if (g_ownsAutoPlay)
+        WriteCancelAutoPlayClsid(false);
+    // Release any drive menus kept alive by the startup warm-up (done on the
+    // UI thread, but keep this as a harmless double-check).
     for (IContextMenu* m : g_warmupMenus)
         if (m) m->Release();
     g_warmupMenus.clear();
+    // Release the owned references held for the drive-letter association.
+    ReleaseAllContextMenuEntries();
     if (g_csContextMenusInit) { DeleteCriticalSection(&g_csContextMenus); g_csContextMenusInit = false; }
     FreeDpiResources();
     FreeOptions();
