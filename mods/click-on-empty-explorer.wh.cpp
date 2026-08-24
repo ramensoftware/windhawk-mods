@@ -345,6 +345,7 @@ require Windows 11 for tabbed Explorer support.
 #include <initguid.h>
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <windowsx.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -1351,9 +1352,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (!ctrlOn && !altOn && !shiftOn && !tripleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        POINT mousePos;
-        GetCursorPos(&mousePos);
-        ScreenToClient(hWnd, &mousePos);
+        POINT mousePos = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         LVHITTESTINFO ht = {};
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
@@ -1391,9 +1390,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (!dblOn && !tripleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        POINT mousePos;
-        GetCursorPos(&mousePos);
-        ScreenToClient(hWnd, &mousePos);
+        POINT mousePos = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         LVHITTESTINFO ht = {};
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
@@ -1417,9 +1414,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         }
 
     } else if (uMsg == WM_MBUTTONDOWN) {
-        POINT mousePos;
-        GetCursorPos(&mousePos);
-        ScreenToClient(hWnd, &mousePos);
+        POINT mousePos = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         LVHITTESTINFO ht = {};
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
@@ -1562,8 +1557,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        POINT mousePos;
-        GetCursorPos(&mousePos);
+        POINT mousePos = { GET_X_LPARAM(GetMessagePos()), GET_Y_LPARAM(GetMessagePos()) };
         winrt::com_ptr<IUIAutomationElement> pElement = NULL;
         if (SUCCEEDED(pUIA->ElementFromPoint(mousePos, pElement.put())) && pElement) {
             bstr_ptr clsName;
@@ -1619,8 +1613,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        POINT mousePos;
-        GetCursorPos(&mousePos);
+        POINT mousePos = { GET_X_LPARAM(GetMessagePos()), GET_Y_LPARAM(GetMessagePos()) };
         winrt::com_ptr<IUIAutomationElement> pElement = NULL;
         if (FAILED(pUIA->ElementFromPoint(mousePos, pElement.put())) || !pElement)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
