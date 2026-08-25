@@ -2,7 +2,7 @@
 // @id             win7-language-switcher-restorer
 // @name           Windows 7/8.1 Language Switcher Restorer
 // @description    This mod restores the classic Windows 7 and Windows 8.1 language switcher on Windows 10 and 11
-// @version        1.0.0
+// @version        1.0.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -22,7 +22,7 @@ This mod restores the classic **Windows 7 and 8.1 language switcher** on Windows
 
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.
 
-## Screenshots 
+## Screenshots
 
 ## Windows 7 Theme
 
@@ -182,6 +182,10 @@ namespace WindhawkUtils {
 #endif
 #endif
 
+#ifndef MDT_EFFECTIVE_DPI
+#define MDT_EFFECTIVE_DPI 0
+#endif
+
 #define CLICK_DEBOUNCE_MS        400
 #define WM_SAFE_CLOSE            (WM_USER + 101)
 #define WM_SHOW_FLYOUT           (WM_USER + 102)
@@ -193,10 +197,17 @@ namespace WindhawkUtils {
 
 static const wchar_t* kFlyoutClassName = L"Windhawk_Win78LanguageFlyout";
 
-// Mod context architecture (identical to win7-network-flyout-recreation)
+// Each load gets a fresh HINSTANCE. Never register the window class against
+// explorer.exe — that registration would survive unload with lpfnWndProc
+// pointing into the unmapped image.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+
 typedef struct {
     HANDLE hWorkerThread;
     DWORD dwWorkerThreadId;
+    HANDLE hHookThread;
+    DWORD dwHookThreadId;
     volatile LONG refCount;
     volatile LONG isUninitializing;
     CRITICAL_SECTION csLock;
@@ -205,17 +216,17 @@ typedef struct {
 static ModContext g_Ctx;
 static BOOL g_Initialized = FALSE;
 static UINT g_uTaskbarCreated = 0;
-static DWORD g_dwFlyoutOwnerThreadId = 0;
-static HWND g_hFlyoutWnd = NULL;
-static HWND g_targetWindow = NULL;
-static DWORD g_lastInactiveTick = 0;
 
-// Subclassed taskbar window handles
+static std::atomic<HWND> g_hFlyoutWnd{nullptr};
+static std::atomic<DWORD> g_dwFlyoutOwnerThreadId{0};
+static std::atomic<HWND> g_targetWindow{nullptr};
+static std::atomic<DWORD> g_lastInactiveTick{0};
+static std::atomic<HWND> g_hClickedTaskbar{nullptr};
+
 static HWND G_hSubclassedToolbar = NULL;
 static HWND G_hSubclassedIndicator = NULL;
 static HWND G_hSubclassedSecToolbar = NULL;
 
-// GDI+ function pointer infrastructure
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -296,9 +307,7 @@ static void ShutdownGdiPlusRendering() {
         g_gdiplusToken = 0;
     }
 }
-// =============================================================================
-// Language Abbreviations Table (65+ Languages)
-// =============================================================================
+
 struct LangAbbrevEntry {
     WORD langId;
     const wchar_t* abbrev;
@@ -376,9 +385,6 @@ static const LangAbbrevEntry g_LangAbbrevs[] = {
     { LANG_VIETNAMESE,  L"VIT" },
 };
 
-// =============================================================================
-// Localized UI String Catalog (27 Languages)
-// =============================================================================
 struct LocalizedUiText {
     const wchar_t* langTag;
     const wchar_t* preferences;
@@ -415,24 +421,18 @@ static const LocalizedUiText kLocalizedStrings[] = {
     { L"af", L"Taalvoorkeure", L"Vir maklike wisseling, druk Windows-sleutel + Spasie", L"Wys die taalbalk" }
 };
 
-// =============================================================================
-// Keyboard Layout & Input Profile Information
-// =============================================================================
 struct KeyboardLayoutItem {
     HKL hkl = nullptr;
     LANGID langId = 0;
-    std::wstring langName;      // e.g. "Italiano (Italia)"
-    std::wstring langAbbrev;    // e.g. "ITA", "ENG"
-    std::wstring subAbbrev;     // e.g. "US", "INTL", "DV"
-    std::wstring layoutName;    // e.g. "Italiano", "US keyboard"
-    std::wstring klid;          // e.g. "00000410"
+    std::wstring langName;
+    std::wstring langAbbrev;
+    std::wstring subAbbrev;
+    std::wstring layoutName;
+    std::wstring klid;
     bool isCurrent = false;
     size_t sameLangCount = 1;
 };
 
-// =============================================================================
-// Settings Model & State
-// =============================================================================
 enum class SwitcherStyle { Win8, Win7 };
 enum class ThemeMode { Win8Purple, Auto, Dark, Light, Custom };
 
@@ -456,16 +456,20 @@ static int g_hoveredIndex = -1;
 static bool g_hoveredFooter = false;
 static int g_hoveredWin7Index = -1;
 
-// Atomic flags for non-blocking hooks
+// Hot-path flags: read without taking csLock or copying wstrings.
+static std::atomic<bool> g_enableWinSpace{true};
+static std::atomic<bool> g_enableAltShift{true};
+static std::atomic<bool> g_hookTrayClicks{true};
+static std::atomic<bool> g_enableCustomHotkey{false};
+
 static std::atomic<bool> g_isWinSpaceCycling{false};
 static std::atomic<bool> g_altPressed{false};
 static std::atomic<bool> g_shiftPressed{false};
 static std::atomic<bool> g_ctrlPressed{false};
 static std::atomic<bool> g_interveningKeyPressed{false};
-static std::atomic<bool> g_altShiftChordTriggered{false};
-static std::atomic<bool> g_ctrlShiftChordTriggered{false};
+static std::atomic<bool> g_altShiftChordArmed{false};
+static std::atomic<bool> g_ctrlShiftChordArmed{false};
 
-// Low-level keyboard hook handle
 class ScopedHookHolder {
 public:
     ScopedHookHolder() = default;
@@ -480,16 +484,10 @@ private:
 };
 
 [[clang::no_destroy]] static ScopedHookHolder g_keyboardHook;
+[[clang::no_destroy]] static ScopedHookHolder g_mouseHook;
 
-// Helper: Mod Instance
 static HINSTANCE GetModInstance() {
-    HMODULE hMod = NULL;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(&GetModInstance),
-        &hMod
-    );
-    return hMod ? hMod : GetModuleHandleW(NULL);
+    return HINST_THISCOMPONENT;
 }
 
 static ModSettings GetSettingsSnapshot() {
@@ -497,6 +495,10 @@ static ModSettings GetSettingsSnapshot() {
     ModSettings s = g_settings;
     LeaveCriticalSection(&g_Ctx.csLock);
     return s;
+}
+
+static HWND AtomicLoadHwnd(const std::atomic<HWND>& a) {
+    return a.load(std::memory_order_acquire);
 }
 
 static COLORREF ParseHexColor(const std::wstring& hexStr, COLORREF fallback) {
@@ -510,7 +512,7 @@ static COLORREF ParseHexColor(const std::wstring& hexStr, COLORREF fallback) {
         wchar_t* endPtr = nullptr;
         unsigned long val = wcstoul(p, &endPtr, 16);
         if (endPtr == p) return fallback;
-        
+
         BYTE r = static_cast<BYTE>((val >> 16) & 0xFF);
         BYTE g = static_cast<BYTE>((val >> 8) & 0xFF);
         BYTE b = static_cast<BYTE>(val & 0xFF);
@@ -556,6 +558,32 @@ static int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, static_cast<int>(dpi), 96);
 }
 
+static UINT GetMonitorDpi(HMONITOR hMon) {
+    if (hMon) {
+        HMODULE hShcore = LoadLibraryW(L"shcore.dll");
+        if (hShcore) {
+            using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+            auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
+                GetProcAddress(hShcore, "GetDpiForMonitor"));
+            if (pGetDpiForMonitor) {
+                UINT dpiX = 0, dpiY = 0;
+                if (SUCCEEDED(pGetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiY > 0) {
+                    FreeLibrary(hShcore);
+                    return dpiY;
+                }
+            }
+            FreeLibrary(hShcore);
+        }
+    }
+    HDC dc = GetDC(NULL);
+    if (dc) {
+        int dpi = GetDeviceCaps(dc, LOGPIXELSY);
+        ReleaseDC(NULL, dc);
+        if (dpi > 0) return static_cast<UINT>(dpi);
+    }
+    return 96;
+}
+
 static UINT GetWindowDpi(HWND hwnd) {
     try {
         HMODULE hUser = GetModuleHandleW(L"user32.dll");
@@ -567,16 +595,10 @@ static UINT GetWindowDpi(HWND hwnd) {
             }
         }
     } catch (...) {}
-    HDC dc = GetDC(NULL);
-    if (dc) {
-        int dpi = GetDeviceCaps(dc, LOGPIXELSY);
-        ReleaseDC(NULL, dc);
-        if (dpi > 0) return static_cast<UINT>(dpi);
-    }
-    return 96;
+    HMONITOR hMon = (hwnd && IsWindow(hwnd)) ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : NULL;
+    return GetMonitorDpi(hMon);
 }
 
-// Get localized UI strings for footer across 27 languages
 static void GetLocalizedFooterStrings(std::wstring& outPreferences, std::wstring& outHint, std::wstring* outShowBar = nullptr) {
     try {
         ModSettings settings = GetSettingsSnapshot();
@@ -609,10 +631,6 @@ static void GetLocalizedFooterStrings(std::wstring& outPreferences, std::wstring
     }
 }
 
-// =============================================================================
-// Layout Display Text & Deduplication Helpers (Fixes Issue 12)
-// =============================================================================
-
 static bool IsCaseInsensitiveSubstr(const std::wstring& str, const std::wstring& sub) {
     if (sub.empty()) return true;
     if (sub.length() > str.length()) return false;
@@ -634,10 +652,6 @@ static std::wstring FormatWin7LayoutItemText(const KeyboardLayoutItem& item, siz
     }
     return text;
 }
-
-// =============================================================================
-// Keyboard Layout Query & MUI Resolution
-// =============================================================================
 
 static std::wstring GetLangAbbrev(LANGID langId) {
     WORD priLang = PRIMARYLANGID(langId);
@@ -711,10 +725,11 @@ static void RefreshKeyboardLayouts() {
         if (fetched == 0) return;
         hkls.resize(fetched);
 
-        HWND hFore = g_targetWindow;
-        if (!hFore || !IsWindow(hFore) || hFore == g_hFlyoutWnd) {
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+        HWND hFore = AtomicLoadHwnd(g_targetWindow);
+        if (!hFore || !IsWindow(hFore) || hFore == hFlyout) {
             hFore = GetForegroundWindow();
-            if (hFore == g_hFlyoutWnd) hFore = nullptr;
+            if (hFore == hFlyout) hFore = nullptr;
         }
 
         DWORD dwTid = (hFore ? GetWindowThreadProcessId(hFore, nullptr) : 0);
@@ -788,7 +803,7 @@ static void RefreshKeyboardLayouts() {
             if (sameLangCount > 1) {
                 std::wstring upperLayout = newLayouts[i].layoutName;
                 for (auto& c : upperLayout) c = towupper(c);
-                
+
                 if (upperLayout.find(L"INTERNATIONAL") != std::wstring::npos || upperLayout.find(L"INTL") != std::wstring::npos) {
                     newLayouts[i].subAbbrev = L"INTL";
                 } else if (upperLayout.find(L"UNITED STATES") != std::wstring::npos || upperLayout.find(L"US") != std::wstring::npos) {
@@ -841,10 +856,11 @@ static void SwitchToLayout(size_t index) {
 
         if (!targetHkl) return;
 
-        hTarget = g_targetWindow;
-        if (!hTarget || !IsWindow(hTarget) || hTarget == g_hFlyoutWnd) {
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+        hTarget = AtomicLoadHwnd(g_targetWindow);
+        if (!hTarget || !IsWindow(hTarget) || hTarget == hFlyout) {
             hTarget = GetForegroundWindow();
-            if (hTarget == g_hFlyoutWnd) hTarget = nullptr;
+            if (hTarget == hFlyout) hTarget = nullptr;
         }
 
         if (hTarget && IsWindow(hTarget)) {
@@ -853,15 +869,10 @@ static void SwitchToLayout(size_t index) {
     } catch (...) {}
 }
 
-// Forward declarations
 void ToggleFlyoutWindow();
 void ShowFlyoutWindow();
 static void CycleSwitcher(bool forward, bool switchImmediately);
 static void ApplySelection();
-
-// =============================================================================
-// Rendering Engine
-// =============================================================================
 
 static void PaintWin8Flyout(HWND hwnd, HDC hdc) {
     RECT clientRect{};
@@ -888,7 +899,7 @@ static void PaintWin8Flyout(HWND hwnd, HDC hdc) {
     ModSettings settings = GetSettingsSnapshot();
     bool isDark = (settings.themeMode == ThemeMode::Dark) ||
                   (settings.themeMode == ThemeMode::Auto && IsDarkModeActive());
-    
+
     COLORREF colBg = isDark ? RGB(32, 32, 32) : RGB(242, 242, 242);
     COLORREF colTextNormal = isDark ? RGB(240, 240, 240) : RGB(0, 0, 0);
     COLORREF colTextSub = isDark ? RGB(160, 160, 160) : RGB(96, 96, 96);
@@ -905,7 +916,7 @@ static void PaintWin8Flyout(HWND hwnd, HDC hdc) {
     COLORREF colSelectedText = RGB(255, 255, 255);
     COLORREF colSelectedSubText = RGB(235, 235, 235);
 
-    COLORREF colLink = (settings.themeMode == ThemeMode::Win8Purple) ? RGB(91, 44, 130) : 
+    COLORREF colLink = (settings.themeMode == ThemeMode::Win8Purple) ? RGB(91, 44, 130) :
                        (isDark ? RGB(100, 160, 255) : RGB(0, 102, 204));
     COLORREF colTipText = isDark ? RGB(160, 160, 160) : RGB(96, 96, 96);
 
@@ -1104,8 +1115,8 @@ static void DrawWin7MenuCheckmark(HDC hdc, const RECT& gutter, COLORREF color, U
         return;
     }
 
-    pGdipSetSmoothingMode(graphics, 2 /* AntiAlias */);
-    pGdipSetPixelOffsetMode(graphics, 2 /* HighQuality */);
+    pGdipSetSmoothingMode(graphics, 2);
+    pGdipSetPixelOffsetMode(graphics, 2);
 
     const float boxL = static_cast<float>(gutter.left);
     const float boxT = static_cast<float>(gutter.top);
@@ -1130,7 +1141,7 @@ static void DrawWin7MenuCheckmark(HDC hdc, const RECT& gutter, COLORREF color, U
     };
 
     void* path = NULL;
-    if (pGdipCreatePath(0 /* FillModeAlternate */, &path) == 0 && path) {
+    if (pGdipCreatePath(0, &path) == 0 && path) {
         pGdipAddPathPolygon(path, pts, 6);
         DWORD argb = (255 << 24) | (r << 16) | (gch << 8) | b;
         void* brush = NULL;
@@ -1140,8 +1151,8 @@ static void DrawWin7MenuCheckmark(HDC hdc, const RECT& gutter, COLORREF color, U
         }
         void* pen = NULL;
         float outlineW = (dpi >= 144) ? 0.90f * (static_cast<float>(dpi) / 96.0f) : 0.70f;
-        if (pGdipCreatePen1(argb, outlineW, 2 /* UnitPixel */, &pen) == 0 && pen) {
-            pGdipSetPenLineJoin(pen, 2 /* LineJoinRound */);
+        if (pGdipCreatePen1(argb, outlineW, 2, &pen) == 0 && pen) {
+            pGdipSetPenLineJoin(pen, 2);
             pGdipDrawPath(graphics, pen, path);
             pGdipDeletePen(pen);
         }
@@ -1175,7 +1186,7 @@ static void PaintWin7Menu(HWND hwnd, HDC hdc) {
     ModSettings settings = GetSettingsSnapshot();
     bool isDark = (settings.themeMode == ThemeMode::Dark) ||
                   (settings.themeMode == ThemeMode::Auto && IsDarkModeActive());
-    
+
     COLORREF colBg = isDark ? RGB(36, 36, 36) : RGB(242, 242, 242);
     COLORREF colTextNormal = isDark ? RGB(245, 245, 245) : RGB(0, 0, 0);
     COLORREF colHoverBg = isDark ? RGB(56, 56, 56) : RGB(185, 215, 251);
@@ -1252,7 +1263,6 @@ static void PaintWin7Menu(HWND hwnd, HDC hdc) {
     int footer1Index = static_cast<int>(layoutsCopy.size());
     int footer2Index = footer1Index + 1;
 
-    // Option 1: Show the Language bar
     {
         RECT itemRect{ScaleForDpi(2, dpi), currentY, width - ScaleForDpi(2, dpi), currentY + itemHeight};
         if (hovIdx == footer1Index) {
@@ -1275,7 +1285,6 @@ static void PaintWin7Menu(HWND hwnd, HDC hdc) {
         currentY += itemHeight;
     }
 
-    // Option 2: Language preferences...
     {
         RECT itemRect{ScaleForDpi(2, dpi), currentY, width - ScaleForDpi(2, dpi), currentY + itemHeight};
         if (hovIdx == footer2Index) {
@@ -1331,14 +1340,41 @@ static void PaintSwitcher(HWND hwnd, HDC hdc) {
     s_inPaint = false;
 }
 
-// =============================================================================
-// Window Procedure & Geometry Calculation
-// =============================================================================
+static HWND FindAncestorTaskbar(HWND hwnd) {
+    HWND h = hwnd;
+    while (h) {
+        WCHAR cls[64] = {};
+        if (GetClassNameW(h, cls, ARRAYSIZE(cls)) > 0) {
+            if (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0) {
+                return h;
+            }
+        }
+        HWND parent = GetAncestor(h, GA_PARENT);
+        if (!parent || parent == h) break;
+        h = parent;
+    }
+    return hwnd;
+}
 
 static void PositionWindowNearTray(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
 
-    UINT dpi = GetWindowDpi(hwnd);
+    HWND hAnchor = AtomicLoadHwnd(g_hClickedTaskbar);
+    if (!hAnchor || !IsWindow(hAnchor)) {
+        hAnchor = FindWindowW(L"Shell_TrayWnd", NULL);
+    }
+
+    HMONITOR hMon = MonitorFromWindow(hAnchor ? hAnchor : hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT rcWork{};
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        rcWork = mi.rcWork;
+    } else {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    }
+
+    UINT dpi = GetMonitorDpi(hMon);
+
     int flyoutWidth = 0;
     int totalHeight = 0;
 
@@ -1403,14 +1439,28 @@ static void PositionWindowNearTray(HWND hwnd) {
 
     APPBARDATA abd = { sizeof(APPBARDATA) };
     SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-    RECT rcWork;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+
+    // Prefer the actual taskbar window on this monitor for edge detection.
+    RECT rcTaskbar{};
+    UINT edge = abd.uEdge;
+    if (hAnchor && GetWindowRect(hAnchor, &rcTaskbar)) {
+        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
+        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        int tbW = rcTaskbar.right - rcTaskbar.left;
+        int tbH = rcTaskbar.bottom - rcTaskbar.top;
+        if (tbW >= monW * 0.8 && tbH < monH / 2) {
+            edge = (rcTaskbar.top <= mi.rcMonitor.top + 8) ? ABE_TOP : ABE_BOTTOM;
+        } else if (tbH >= monH * 0.8 && tbW < monW / 2) {
+            edge = (rcTaskbar.left <= mi.rcMonitor.left + 8) ? ABE_LEFT : ABE_RIGHT;
+        }
+    }
 
     int x = rcWork.right - flyoutWidth - 8;
     int y = rcWork.bottom - totalHeight - 8;
-    if (abd.uEdge == ABE_TOP)        y = abd.rc.bottom + 8;
-    else if (abd.uEdge == ABE_LEFT)  x = abd.rc.right + 8;
-    else if (abd.uEdge == ABE_RIGHT) x = abd.rc.left - flyoutWidth - 8;
+    if (edge == ABE_TOP)        y = (hAnchor ? rcTaskbar.bottom : abd.rc.bottom) + 8;
+    else if (edge == ABE_LEFT)  x = (hAnchor ? rcTaskbar.right : abd.rc.right) + 8;
+    else if (edge == ABE_RIGHT) x = (hAnchor ? rcTaskbar.left : abd.rc.left) - flyoutWidth - 8;
+    else if (hAnchor)           y = rcTaskbar.top - totalHeight - 8;
 
     SetWindowPos(hwnd, HWND_TOPMOST, x, y, flyoutWidth, totalHeight, SWP_SHOWWINDOW);
 }
@@ -1628,7 +1678,7 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
 
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
-                g_lastInactiveTick = GetTickCount();
+                g_lastInactiveTick.store(GetTickCount(), std::memory_order_relaxed);
                 if (!g_isWinSpaceCycling.load(std::memory_order_relaxed)) {
                     ShowWindow(hwnd, SW_HIDE);
                 }
@@ -1645,89 +1695,92 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
 
         case WM_DESTROY:
             InterlockedDecrement(&g_Ctx.refCount);
-            g_hFlyoutWnd = NULL;
-            g_dwFlyoutOwnerThreadId = 0;
+            g_hFlyoutWnd.store(NULL, std::memory_order_release);
+            g_dwFlyoutOwnerThreadId.store(0, std::memory_order_release);
             return 0;
         }
     } catch (...) {}
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
-// =============================================================================
-// Toggle & Show Window (Rock-Solid Thread Marshalling)
-// =============================================================================
-
 void ShowFlyoutWindow() {
     if (g_Ctx.isUninitializing) return;
 
     DWORD dwCurrentThreadId = GetCurrentThreadId();
-    BOOL flyoutAlreadyExists = (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd));
-    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwWorkerThreadId;
+    HWND hExisting = AtomicLoadHwnd(g_hFlyoutWnd);
+    BOOL flyoutAlreadyExists = (hExisting && IsWindow(hExisting));
+    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists
+        ? g_dwFlyoutOwnerThreadId.load(std::memory_order_acquire)
+        : g_Ctx.dwWorkerThreadId;
     if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_SHOW_FLYOUT, 0, 0);
         return;
     }
 
-    EnterCriticalSection(&g_Ctx.csLock);
-    if (!g_Ctx.isUninitializing) {
-        if (!g_hFlyoutWnd || !IsWindow(g_hFlyoutWnd)) {
-            HINSTANCE hInst = GetModInstance();
-            WNDCLASSW wc = {0};
-            wc.lpfnWndProc   = FlyoutWndProc;
-            wc.hInstance     = hInst;
-            wc.lpszClassName = kFlyoutClassName;
-            wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-            wc.hbrBackground = NULL;
-            UnregisterClassW(wc.lpszClassName, hInst);
-            RegisterClassW(&wc);
-
-            DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
-            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER;
-
-            g_hFlyoutWnd = CreateWindowExW(dwExStyle, wc.lpszClassName, L"Windows Language Switcher", dwStyle,
-                0, 0, 100, 100,
-                NULL, NULL, hInst, NULL);
-            if (g_hFlyoutWnd) {
-                g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
-                InterlockedIncrement(&g_Ctx.refCount);
-
-                ModSettings settings = g_settings;
-                bool isDark = (settings.themeMode == ThemeMode::Dark) ||
-                              (settings.themeMode == ThemeMode::Auto && IsDarkModeActive());
-                BOOL useDarkMode = isDark ? TRUE : FALSE;
-                DwmSetWindowAttribute(g_hFlyoutWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &useDarkMode, sizeof(useDarkMode));
-                DwmSetWindowAttribute(g_hFlyoutWnd, 19 /* DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 */, &useDarkMode, sizeof(useDarkMode));
-
-                enum { DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL = 33, DWMWCP_ROUND_LOCAL = 2 };
-                DWORD cornerPref = DWMWCP_ROUND_LOCAL;
-                DwmSetWindowAttribute(g_hFlyoutWnd, DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL, &cornerPref, sizeof(cornerPref));
-            }
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    if (!hFlyout || !IsWindow(hFlyout)) {
+        HINSTANCE hInst = GetModInstance();
+        WNDCLASSW wc = {0};
+        wc.lpfnWndProc   = FlyoutWndProc;
+        wc.hInstance     = hInst;
+        wc.lpszClassName = kFlyoutClassName;
+        wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = NULL;
+        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"Win78LangSwitcher: RegisterClassW failed (%lu)", GetLastError());
+            return;
         }
 
-        if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd)) {
-            RefreshKeyboardLayouts();
-            PositionWindowNearTray(g_hFlyoutWnd);
-            ShowWindow(g_hFlyoutWnd, SW_SHOW);
-            SetForegroundWindow(g_hFlyoutWnd);
-            InvalidateRect(g_hFlyoutWnd, NULL, TRUE);
+        DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+        DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER;
+
+        hFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"Windows Language Switcher", dwStyle,
+            0, 0, 100, 100,
+            NULL, NULL, hInst, NULL);
+        if (hFlyout) {
+            g_hFlyoutWnd.store(hFlyout, std::memory_order_release);
+            g_dwFlyoutOwnerThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+            InterlockedIncrement(&g_Ctx.refCount);
+
+            ModSettings settings = GetSettingsSnapshot();
+            bool isDark = (settings.themeMode == ThemeMode::Dark) ||
+                          (settings.themeMode == ThemeMode::Auto && IsDarkModeActive());
+            BOOL useDarkMode = isDark ? TRUE : FALSE;
+            DwmSetWindowAttribute(hFlyout, 20, &useDarkMode, sizeof(useDarkMode));
+            DwmSetWindowAttribute(hFlyout, 19, &useDarkMode, sizeof(useDarkMode));
+
+            enum { DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL = 33, DWMWCP_ROUND_LOCAL = 2 };
+            DWORD cornerPref = DWMWCP_ROUND_LOCAL;
+            DwmSetWindowAttribute(hFlyout, DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL, &cornerPref, sizeof(cornerPref));
         }
     }
-    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (hFlyout && IsWindow(hFlyout)) {
+        RefreshKeyboardLayouts();
+        PositionWindowNearTray(hFlyout);
+        ShowWindow(hFlyout, SW_SHOW);
+        SetForegroundWindow(hFlyout);
+        InvalidateRect(hFlyout, NULL, TRUE);
+    }
 }
 
 void ToggleFlyoutWindow() {
     if (g_Ctx.isUninitializing) return;
 
     DWORD dwCurrentThreadId = GetCurrentThreadId();
-    BOOL flyoutAlreadyExists = (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd));
-    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwWorkerThreadId;
+    HWND hExisting = AtomicLoadHwnd(g_hFlyoutWnd);
+    BOOL flyoutAlreadyExists = (hExisting && IsWindow(hExisting));
+    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists
+        ? g_dwFlyoutOwnerThreadId.load(std::memory_order_acquire)
+        : g_Ctx.dwWorkerThreadId;
     if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
         return;
     }
 
-    if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd) && IsWindowVisible(g_hFlyoutWnd)) {
-        ShowWindow(g_hFlyoutWnd, SW_HIDE);
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    if (hFlyout && IsWindow(hFlyout) && IsWindowVisible(hFlyout)) {
+        ShowWindow(hFlyout, SW_HIDE);
     } else {
         ShowFlyoutWindow();
     }
@@ -1755,8 +1808,9 @@ static void CycleSwitcher(bool forward, bool switchImmediately) {
             SwitchToLayout(sel);
         }
 
-        if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd) && IsWindowVisible(g_hFlyoutWnd)) {
-            InvalidateRect(g_hFlyoutWnd, nullptr, FALSE);
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+        if (hFlyout && IsWindow(hFlyout) && IsWindowVisible(hFlyout)) {
+            InvalidateRect(hFlyout, nullptr, FALSE);
         } else {
             ShowFlyoutWindow();
         }
@@ -1770,15 +1824,12 @@ static void ApplySelection() {
         sel = g_selectedIndex;
         LeaveCriticalSection(&g_Ctx.csLock);
         SwitchToLayout(sel);
-        if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd)) {
-            ShowWindow(g_hFlyoutWnd, SW_HIDE);
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+        if (hFlyout && IsWindow(hFlyout)) {
+            ShowWindow(hFlyout, SW_HIDE);
         }
     } catch (...) {}
 }
-
-// =============================================================================
-// ShowWindow Hook (Intercepts modern Shell_InputSwitch* flyouts)
-// =============================================================================
 
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t ShowWindow_Original = nullptr;
@@ -1788,23 +1839,21 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
         return ShowWindow_Original ? ShowWindow_Original(hWnd, nCmdShow) : ShowWindow(hWnd, nCmdShow);
     }
 
-    ModSettings settings = GetSettingsSnapshot();
-    if (settings.hookTrayClicks && hWnd && IsWindow(hWnd) && nCmdShow != SW_HIDE) {
+    if (g_hookTrayClicks.load(std::memory_order_relaxed) && hWnd && IsWindow(hWnd) && nCmdShow != SW_HIDE) {
         WCHAR className[128] = {0};
         if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) > 0) {
-            // Dismiss overlay is just the background hit layer: suppress it without triggering
             if (_wcsicmp(className, L"Shell_InputSwitchDismissOverlay") == 0) {
                 return TRUE;
             }
 
-            // TopLevelWindow is the modern switcher UI: suppress it and show our classic flyout
             if (_wcsicmp(className, L"Shell_InputSwitchTopLevelWindow") == 0 ||
                 _wcsicmp(className, L"Shell_InputSwitch") == 0 ||
                 _wcsicmp(className, L"InputSwitch") == 0) {
-                
+
+                HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
                 HWND hFore = GetForegroundWindow();
-                if (hFore != hWnd && hFore != g_hFlyoutWnd) {
-                    g_targetWindow = hFore;
+                if (hFore != hWnd && hFore != hFlyout) {
+                    g_targetWindow.store(hFore, std::memory_order_release);
                 }
                 ShowFlyoutWindow();
                 return TRUE;
@@ -1815,36 +1864,43 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     return ShowWindow_Original ? ShowWindow_Original(hWnd, nCmdShow) : ShowWindow(hWnd, nCmdShow);
 }
 
-// =============================================================================
-// Taskbar Subclass Procedures (Precise & Safe)
-// =============================================================================
+static std::wstring TrimWs(std::wstring s) {
+    size_t b = 0;
+    while (b < s.size() && iswspace(s[b])) ++b;
+    size_t e = s.size();
+    while (e > b && iswspace(s[e - 1])) --e;
+    return s.substr(b, e - b);
+}
 
 static bool IsLanguageButton(HWND hToolbar, int idCommand) {
-    WCHAR text[128] = {0};
-    if (SendMessageW(hToolbar, TB_GETBUTTONTEXT, (WPARAM)idCommand, (LPARAM)text) > 0) {
-        std::wstring s(text);
-        for (auto& c : s) c = towupper(c);
+    LRESULT needed = SendMessageW(hToolbar, TB_GETBUTTONTEXT, (WPARAM)idCommand, (LPARAM)NULL);
+    if (needed <= 0 || needed > 1024) {
+        return false;
+    }
 
-        EnterCriticalSection(&g_Ctx.csLock);
-        for (const auto& l : g_layouts) {
-            if (!l.langAbbrev.empty() && s.find(l.langAbbrev) != std::wstring::npos) {
-                LeaveCriticalSection(&g_Ctx.csLock);
-                return true;
-            }
+    std::wstring text(static_cast<size_t>(needed) + 1, L'\0');
+    LRESULT copied = SendMessageW(hToolbar, TB_GETBUTTONTEXT, (WPARAM)idCommand, (LPARAM)text.data());
+    if (copied <= 0) {
+        return false;
+    }
+    text.resize(static_cast<size_t>(copied));
+    text = TrimWs(text);
+    for (auto& c : text) c = towupper(c);
+
+    std::vector<std::wstring> abbrevs;
+    EnterCriticalSection(&g_Ctx.csLock);
+    abbrevs.reserve(g_layouts.size());
+    for (const auto& l : g_layouts) {
+        if (!l.langAbbrev.empty()) {
+            std::wstring a = l.langAbbrev;
+            for (auto& c : a) c = towupper(c);
+            abbrevs.push_back(std::move(a));
         }
-        LeaveCriticalSection(&g_Ctx.csLock);
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
 
-        if (s.find(L"ITA") != std::wstring::npos ||
-            s.find(L"ENG") != std::wstring::npos ||
-            s.find(L"DEU") != std::wstring::npos ||
-            s.find(L"FRA") != std::wstring::npos ||
-            s.find(L"ESP") != std::wstring::npos ||
-            s.find(L"RUS") != std::wstring::npos ||
-            s.find(L"INPUT") != std::wstring::npos ||
-            s.find(L"TASTIERA") != std::wstring::npos ||
-            s.find(L"KEYBOARD") != std::wstring::npos ||
-            s.find(L"LINGUA") != std::wstring::npos ||
-            s.find(L"LANGUAGE") != std::wstring::npos) {
+    for (const auto& a : abbrevs) {
+        if (text == a) {
             return true;
         }
     }
@@ -1854,8 +1910,10 @@ static bool IsLanguageButton(HWND hToolbar, int idCommand) {
 static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     (void)uIdSubclass;
     if (msg == WM_NCDESTROY) {
+        EnterCriticalSection(&g_Ctx.csLock);
         if (hWnd == G_hSubclassedToolbar) G_hSubclassedToolbar = NULL;
         if (hWnd == G_hSubclassedSecToolbar) G_hSubclassedSecToolbar = NULL;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
 
@@ -1863,8 +1921,7 @@ static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
         return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
 
-    ModSettings settings = GetSettingsSnapshot();
-    if (settings.hookTrayClicks) {
+    if (g_hookTrayClicks.load(std::memory_order_relaxed)) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
             POINT pt;
             if (msg == WM_MOUSEACTIVATE) {
@@ -1885,15 +1942,17 @@ static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
                             DWORD currentTime = GetTickCount();
-                            if (currentTime - g_lastInactiveTick < 350) {
+                            if (currentTime - g_lastInactiveTick.load(std::memory_order_relaxed) < 350) {
                                 return 0;
                             }
                             if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
                                 lastClickTime = currentTime;
+                                HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
                                 HWND hFore = GetForegroundWindow();
-                                if (hFore != hWnd && hFore != g_hFlyoutWnd) {
-                                    g_targetWindow = hFore;
+                                if (hFore != hWnd && hFore != hFlyout) {
+                                    g_targetWindow.store(hFore, std::memory_order_release);
                                 }
+                                g_hClickedTaskbar.store(FindAncestorTaskbar(hWnd), std::memory_order_release);
                                 ToggleFlyoutWindow();
                             }
                         }
@@ -1910,7 +1969,9 @@ static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 static LRESULT CALLBACK InputIndicatorButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     (void)uIdSubclass;
     if (msg == WM_NCDESTROY) {
+        EnterCriticalSection(&g_Ctx.csLock);
         if (hWnd == G_hSubclassedIndicator) G_hSubclassedIndicator = NULL;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
 
@@ -1918,31 +1979,34 @@ static LRESULT CALLBACK InputIndicatorButtonProc(HWND hWnd, UINT msg, WPARAM wPa
         return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
 
-    ModSettings settings = GetSettingsSnapshot();
-    if (settings.hookTrayClicks) {
+    if (g_hookTrayClicks.load(std::memory_order_relaxed)) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
             if (msg == WM_LBUTTONUP) {
                 static DWORD lastClickTime = 0;
                 DWORD currentTime = GetTickCount();
-                if (currentTime - g_lastInactiveTick < 350) {
+                if (currentTime - g_lastInactiveTick.load(std::memory_order_relaxed) < 350) {
                     return 0;
                 }
                 if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
                     lastClickTime = currentTime;
+                    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
                     HWND hFore = GetForegroundWindow();
-                    if (hFore != hWnd && hFore != g_hFlyoutWnd) {
-                        g_targetWindow = hFore;
+                    if (hFore != hWnd && hFore != hFlyout) {
+                        g_targetWindow.store(hFore, std::memory_order_release);
                     }
+                    g_hClickedTaskbar.store(FindAncestorTaskbar(hWnd), std::memory_order_release);
                     ToggleFlyoutWindow();
                 }
             }
             if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
             return 0;
         } else if (msg == WM_KEYDOWN && (wParam == VK_RETURN || wParam == VK_SPACE)) {
+            HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
             HWND hFore = GetForegroundWindow();
-            if (hFore != hWnd && hFore != g_hFlyoutWnd) {
-                g_targetWindow = hFore;
+            if (hFore != hWnd && hFore != hFlyout) {
+                g_targetWindow.store(hFore, std::memory_order_release);
             }
+            g_hClickedTaskbar.store(FindAncestorTaskbar(hWnd), std::memory_order_release);
             ToggleFlyoutWindow();
             return 0;
         }
@@ -1963,11 +2027,21 @@ static BOOL InstallTrayInterceptionInternal() {
         hToolbar = FindWindowExW(hNotify, NULL, L"ToolbarWindow32", NULL);
     }
 
+    HWND oldToolbar = NULL;
+    bool needToolbarSubclass = false;
+
+    EnterCriticalSection(&g_Ctx.csLock);
     if (hToolbar && hToolbar != G_hSubclassedToolbar) {
-        if (G_hSubclassedToolbar) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
-        }
+        oldToolbar = G_hSubclassedToolbar;
         G_hSubclassedToolbar = hToolbar;
+        needToolbarSubclass = true;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (needToolbarSubclass) {
+        if (oldToolbar) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(oldToolbar, ToolbarWndProc);
+        }
         WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, ToolbarWndProc, 0);
         Wh_Log(L"Win78LangSwitcher: Subclassed ToolbarWindow32 (0x%p)", hToolbar);
     }
@@ -1981,11 +2055,19 @@ static BOOL InstallTrayInterceptionInternal() {
                     _wcsicmp(cls, L"InputIndicatorButton") == 0 ||
                     _wcsicmp(cls, L"InputIndicator") == 0 ||
                     _wcsicmp(cls, L"TipBandNotificationArea") == 0) {
+                    HWND prev = NULL;
+                    bool needSubclass = false;
+                    EnterCriticalSection(&g_Ctx.csLock);
                     if (hChild != G_hSubclassedIndicator) {
-                        if (G_hSubclassedIndicator) {
-                            WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedIndicator, InputIndicatorButtonProc);
-                        }
+                        prev = G_hSubclassedIndicator;
                         G_hSubclassedIndicator = hChild;
+                        needSubclass = true;
+                    }
+                    LeaveCriticalSection(&g_Ctx.csLock);
+                    if (needSubclass) {
+                        if (prev) {
+                            WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, InputIndicatorButtonProc);
+                        }
                         WindhawkUtils::SetWindowSubclassFromAnyThread(hChild, InputIndicatorButtonProc, 0);
                         Wh_Log(L"Win78LangSwitcher: Subclassed Input Indicator %s (0x%p)", cls, hChild);
                     }
@@ -1998,12 +2080,22 @@ static BOOL InstallTrayInterceptionInternal() {
     HWND hSecTray = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
     if (hSecTray) {
         HWND hSecToolbar = FindWindowExW(hSecTray, NULL, L"ToolbarWindow32", NULL);
-        if (hSecToolbar && hSecToolbar != G_hSubclassedSecToolbar) {
-            if (G_hSubclassedSecToolbar) {
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedSecToolbar, ToolbarWndProc);
+        if (hSecToolbar) {
+            HWND prev = NULL;
+            bool needSubclass = false;
+            EnterCriticalSection(&g_Ctx.csLock);
+            if (hSecToolbar != G_hSubclassedSecToolbar) {
+                prev = G_hSubclassedSecToolbar;
+                G_hSubclassedSecToolbar = hSecToolbar;
+                needSubclass = true;
             }
-            G_hSubclassedSecToolbar = hSecToolbar;
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hSecToolbar, ToolbarWndProc, 0);
+            LeaveCriticalSection(&g_Ctx.csLock);
+            if (needSubclass) {
+                if (prev) {
+                    WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, ToolbarWndProc);
+                }
+                WindhawkUtils::SetWindowSubclassFromAnyThread(hSecToolbar, ToolbarWndProc, 0);
+            }
         }
     }
 
@@ -2011,23 +2103,41 @@ static BOOL InstallTrayInterceptionInternal() {
 }
 
 static void RemoveTrayInterception() {
-    if (G_hSubclassedToolbar) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
-        G_hSubclassedToolbar = NULL;
+    HWND hToolbar = NULL, hIndicator = NULL, hSec = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
+    hToolbar = G_hSubclassedToolbar;
+    hIndicator = G_hSubclassedIndicator;
+    hSec = G_hSubclassedSecToolbar;
+    G_hSubclassedToolbar = NULL;
+    G_hSubclassedIndicator = NULL;
+    G_hSubclassedSecToolbar = NULL;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (hToolbar) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hToolbar, ToolbarWndProc);
     }
-    if (G_hSubclassedIndicator) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedIndicator, InputIndicatorButtonProc);
-        G_hSubclassedIndicator = NULL;
+    if (hIndicator) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hIndicator, InputIndicatorButtonProc);
     }
-    if (G_hSubclassedSecToolbar) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedSecToolbar, ToolbarWndProc);
-        G_hSubclassedSecToolbar = NULL;
+    if (hSec) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hSec, ToolbarWndProc);
     }
 }
 
-// =============================================================================
-// Low-Level Keyboard Hook
-// =============================================================================
+static bool IsModifierVk(DWORD vk) {
+    return vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU ||
+           vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT ||
+           vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL ||
+           vk == VK_LWIN || vk == VK_RWIN;
+}
+
+static void RememberForegroundTarget() {
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    HWND hFore = GetForegroundWindow();
+    if (hFore && hFore != hFlyout) {
+        g_targetWindow.store(hFore, std::memory_order_release);
+    }
+}
 
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode < 0 || !lParam || g_Ctx.isUninitializing) {
@@ -2047,11 +2157,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool isKeyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-        ModSettings settings = GetSettingsSnapshot();
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
 
-        // 1. ESCAPE
         if (isKeyDown && kbd->vkCode == VK_ESCAPE) {
-            if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd) && IsWindowVisible(g_hFlyoutWnd)) {
+            if (hFlyout && IsWindow(hFlyout) && IsWindowVisible(hFlyout)) {
                 if (g_Ctx.dwWorkerThreadId) {
                     PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_HIDE_SWITCHER, 0, 0);
                 }
@@ -2062,15 +2171,11 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
         bool isWinDown = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
 
-        // 2. Win+Space
-        if (settings.enableWinSpace && kbd->vkCode == VK_SPACE && isWinDown) {
+        if (g_enableWinSpace.load(std::memory_order_relaxed) && kbd->vkCode == VK_SPACE && isWinDown) {
             if (isKeyDown) {
                 if (!g_isWinSpaceCycling.load(std::memory_order_relaxed)) {
                     g_isWinSpaceCycling.store(true, std::memory_order_relaxed);
-                    HWND hFore = GetForegroundWindow();
-                    if (hFore != g_hFlyoutWnd) {
-                        g_targetWindow = hFore;
-                    }
+                    RememberForegroundTarget();
                     keybd_event(VK_CONTROL, 0, 0, 0);
                     keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
                 }
@@ -2084,7 +2189,6 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             }
         }
 
-        // Win key release
         if (g_isWinSpaceCycling.load(std::memory_order_relaxed) && isKeyUp &&
             (kbd->vkCode == VK_LWIN || kbd->vkCode == VK_RWIN)) {
             g_isWinSpaceCycling.store(false, std::memory_order_relaxed);
@@ -2095,23 +2199,26 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             return 0;
         }
 
-        // 3. Alt+Shift / Ctrl+Shift
-        if (settings.enableAltShift) {
+        // Alt+Shift / Ctrl+Shift: arm on the second modifier down, fire on
+        // modifier-up only if no intervening non-modifier key was pressed.
+        if (g_enableAltShift.load(std::memory_order_relaxed)) {
             if (kbd->vkCode == VK_LMENU || kbd->vkCode == VK_RMENU || kbd->vkCode == VK_MENU) {
                 if (isKeyDown) {
                     g_altPressed.store(true, std::memory_order_relaxed);
-                    if (g_shiftPressed.load(std::memory_order_relaxed) && !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
-                        if (!g_altShiftChordTriggered.exchange(true)) {
-                            HWND hFore = GetForegroundWindow();
-                            if (hFore != g_hFlyoutWnd) g_targetWindow = hFore;
-                            if (g_Ctx.dwWorkerThreadId) {
-                                PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
-                            }
-                        }
+                    if (g_shiftPressed.load(std::memory_order_relaxed) &&
+                        !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
+                        g_altShiftChordArmed.store(true, std::memory_order_relaxed);
                     }
                 } else if (isKeyUp) {
+                    bool fire = g_altShiftChordArmed.exchange(false) &&
+                                !g_interveningKeyPressed.load(std::memory_order_relaxed);
                     g_altPressed.store(false, std::memory_order_relaxed);
-                    g_altShiftChordTriggered.store(false, std::memory_order_relaxed);
+                    if (fire) {
+                        RememberForegroundTarget();
+                        if (g_Ctx.dwWorkerThreadId) {
+                            PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
+                        }
+                    }
                     if (!g_shiftPressed.load(std::memory_order_relaxed) && !g_ctrlPressed.load(std::memory_order_relaxed)) {
                         g_interveningKeyPressed.store(false, std::memory_order_relaxed);
                     }
@@ -2119,27 +2226,25 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             } else if (kbd->vkCode == VK_LSHIFT || kbd->vkCode == VK_RSHIFT || kbd->vkCode == VK_SHIFT) {
                 if (isKeyDown) {
                     g_shiftPressed.store(true, std::memory_order_relaxed);
-                    if (g_altPressed.load(std::memory_order_relaxed) && !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
-                        if (!g_altShiftChordTriggered.exchange(true)) {
-                            HWND hFore = GetForegroundWindow();
-                            if (hFore != g_hFlyoutWnd) g_targetWindow = hFore;
-                            if (g_Ctx.dwWorkerThreadId) {
-                                PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
-                            }
-                        }
-                    } else if (g_ctrlPressed.load(std::memory_order_relaxed) && !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
-                        if (!g_ctrlShiftChordTriggered.exchange(true)) {
-                            HWND hFore = GetForegroundWindow();
-                            if (hFore != g_hFlyoutWnd) g_targetWindow = hFore;
-                            if (g_Ctx.dwWorkerThreadId) {
-                                PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
-                            }
-                        }
+                    if (g_altPressed.load(std::memory_order_relaxed) &&
+                        !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
+                        g_altShiftChordArmed.store(true, std::memory_order_relaxed);
+                    } else if (g_ctrlPressed.load(std::memory_order_relaxed) &&
+                               !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
+                        g_ctrlShiftChordArmed.store(true, std::memory_order_relaxed);
                     }
                 } else if (isKeyUp) {
+                    bool fireAlt = g_altShiftChordArmed.exchange(false) &&
+                                   !g_interveningKeyPressed.load(std::memory_order_relaxed);
+                    bool fireCtrl = g_ctrlShiftChordArmed.exchange(false) &&
+                                    !g_interveningKeyPressed.load(std::memory_order_relaxed);
                     g_shiftPressed.store(false, std::memory_order_relaxed);
-                    g_altShiftChordTriggered.store(false, std::memory_order_relaxed);
-                    g_ctrlShiftChordTriggered.store(false, std::memory_order_relaxed);
+                    if (fireAlt || fireCtrl) {
+                        RememberForegroundTarget();
+                        if (g_Ctx.dwWorkerThreadId) {
+                            PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
+                        }
+                    }
                     if (!g_altPressed.load(std::memory_order_relaxed) && !g_ctrlPressed.load(std::memory_order_relaxed)) {
                         g_interveningKeyPressed.store(false, std::memory_order_relaxed);
                     }
@@ -2147,40 +2252,42 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             } else if (kbd->vkCode == VK_LCONTROL || kbd->vkCode == VK_RCONTROL || kbd->vkCode == VK_CONTROL) {
                 if (isKeyDown) {
                     g_ctrlPressed.store(true, std::memory_order_relaxed);
-                    if (g_shiftPressed.load(std::memory_order_relaxed) && !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
-                        if (!g_ctrlShiftChordTriggered.exchange(true)) {
-                            HWND hFore = GetForegroundWindow();
-                            if (hFore != g_hFlyoutWnd) g_targetWindow = hFore;
-                            if (g_Ctx.dwWorkerThreadId) {
-                                PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
-                            }
-                        }
+                    if (g_shiftPressed.load(std::memory_order_relaxed) &&
+                        !g_interveningKeyPressed.load(std::memory_order_relaxed)) {
+                        g_ctrlShiftChordArmed.store(true, std::memory_order_relaxed);
                     }
                 } else if (isKeyUp) {
+                    bool fire = g_ctrlShiftChordArmed.exchange(false) &&
+                                !g_interveningKeyPressed.load(std::memory_order_relaxed);
                     g_ctrlPressed.store(false, std::memory_order_relaxed);
-                    g_ctrlShiftChordTriggered.store(false, std::memory_order_relaxed);
+                    if (fire) {
+                        RememberForegroundTarget();
+                        if (g_Ctx.dwWorkerThreadId) {
+                            PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CYCLE_AND_SWITCH, 1, 0);
+                        }
+                    }
                     if (!g_altPressed.load(std::memory_order_relaxed) && !g_shiftPressed.load(std::memory_order_relaxed)) {
                         g_interveningKeyPressed.store(false, std::memory_order_relaxed);
                     }
                 }
-            } else {
-                if (isKeyDown) {
-                    g_interveningKeyPressed.store(true, std::memory_order_relaxed);
-                }
+            } else if (isKeyDown && !IsModifierVk(kbd->vkCode)) {
+                g_interveningKeyPressed.store(true, std::memory_order_relaxed);
+                g_altShiftChordArmed.store(false, std::memory_order_relaxed);
+                g_ctrlShiftChordArmed.store(false, std::memory_order_relaxed);
             }
         }
 
-        // 4. Ctrl+Shift+L
         static bool s_customHotkeyActive = false;
-        if (settings.enableCustomHotkey && kbd->vkCode == 'L') {
+        if (g_enableCustomHotkey.load(std::memory_order_relaxed) && kbd->vkCode == 'L') {
             bool isCtrlDown = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
             bool isShiftDown = ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
             bool isAltDown = ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
             if (isKeyDown && isCtrlDown && isShiftDown && !isAltDown) {
+                g_interveningKeyPressed.store(true, std::memory_order_relaxed);
+                g_ctrlShiftChordArmed.store(false, std::memory_order_relaxed);
                 if (!s_customHotkeyActive) {
                     s_customHotkeyActive = true;
-                    HWND hFore = GetForegroundWindow();
-                    if (hFore != g_hFlyoutWnd) g_targetWindow = hFore;
+                    RememberForegroundTarget();
                     if (g_Ctx.dwWorkerThreadId) {
                         PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_SHOW_FLYOUT, 0, 0);
                     }
@@ -2196,9 +2303,92 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// =============================================================================
-// Worker Thread Procedure
-// =============================================================================
+static bool IsPointOnHookedTrayControl(const POINT& pt) {
+    HWND hHit = WindowFromPoint(pt);
+    if (!hHit) {
+        return false;
+    }
+    HWND hToolbar = NULL, hIndicator = NULL, hSec = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
+    hToolbar = G_hSubclassedToolbar;
+    hIndicator = G_hSubclassedIndicator;
+    hSec = G_hSubclassedSecToolbar;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (hHit == hToolbar || hHit == hIndicator || hHit == hSec) {
+        return true;
+    }
+    HWND hParent = GetAncestor(hHit, GA_PARENT);
+    return (hParent == hIndicator);
+}
+
+static void HideFlyoutIfClickOutside(const POINT& pt) {
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    if (!hFlyout || !IsWindow(hFlyout) || !IsWindowVisible(hFlyout)) {
+        return;
+    }
+
+    RECT rc = {0};
+    if (!GetWindowRect(hFlyout, &rc)) {
+        return;
+    }
+    if (PtInRect(&rc, pt)) {
+        return;
+    }
+
+    if (IsPointOnHookedTrayControl(pt)) {
+        return;
+    }
+
+    g_lastInactiveTick.store(GetTickCount(), std::memory_order_relaxed);
+
+    if (g_Ctx.dwWorkerThreadId) {
+        PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_HIDE_SWITCHER, 0, 0);
+    }
+}
+
+static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && lParam && !g_Ctx.isUninitializing) {
+        if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN ||
+            wParam == WM_NCLBUTTONDOWN || wParam == WM_NCRBUTTONDOWN) {
+            auto* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+            if (ms && !(ms->flags & LLMHF_INJECTED)) {
+                try {
+                    HideFlyoutIfClickOutside(ms->pt);
+                } catch (...) {}
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+// Dedicated hook thread: only pumps low-level hooks. Never does UI work.
+static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
+    ModContext* ctx = (ModContext*)lpParam;
+    if (!ctx) return 1;
+
+    HHOOK hKbd = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModInstance(), 0);
+    if (hKbd) {
+        g_keyboardHook.reset(hKbd);
+    }
+
+    HHOOK hMouse = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, GetModInstance(), 0);
+    if (hMouse) {
+        g_mouseHook.reset(hMouse);
+    } else {
+        Wh_Log(L"Win78LangSwitcher: WH_MOUSE_LL install failed, outside-click dismissal will rely on WM_ACTIVATE only");
+    }
+
+    MSG msg = {0};
+    while (GetMessageW(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    g_keyboardHook.reset();
+    g_mouseHook.reset();
+    return 0;
+}
 
 static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
@@ -2208,14 +2398,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     InitGdiPlusRendering();
     RefreshKeyboardLayouts();
 
-    HHOOK hKbd = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModInstance(), 0);
-    if (hKbd) {
-        g_keyboardHook.reset(hKbd);
-    }
-
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL || G_hSubclassedIndicator != NULL);
+    BOOL trayAlreadyHooked = false;
+    EnterCriticalSection(&g_Ctx.csLock);
+    trayAlreadyHooked = (G_hSubclassedToolbar != NULL || G_hSubclassedIndicator != NULL);
+    LeaveCriticalSection(&g_Ctx.csLock);
     UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
 
     MSG msg = {0};
@@ -2240,12 +2428,24 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
         } else if (msg.message == WM_APP_APPLY_SELECTION && !ctx->isUninitializing) {
             ApplySelection();
         } else if (msg.message == WM_APP_HIDE_SWITCHER && !ctx->isUninitializing) {
-            if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd)) {
-                ShowWindow(g_hFlyoutWnd, SW_HIDE);
+            HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+            if (hFlyout && IsWindow(hFlyout)) {
+                ShowWindow(hFlyout, SW_HIDE);
+            }
+        } else if (msg.message == WM_SAFE_CLOSE) {
+            HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+            if (hFlyout && IsWindow(hFlyout)) {
+                DestroyWindow(hFlyout);
             }
         } else if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             RemoveTrayInterception();
-            Sleep(1000);
+            // Keep pumping so the hook thread is not affected; this thread
+            // owns the flyout, not the LL hooks.
+            HANDLE timerEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+            if (timerEvent) {
+                MsgWaitForMultipleObjects(1, &timerEvent, FALSE, 1000, QS_ALLINPUT);
+                CloseHandle(timerEvent);
+            }
             if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
@@ -2254,15 +2454,15 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
         DispatchMessageW(&msg);
     }
 
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    if (hFlyout && IsWindow(hFlyout)) {
+        DestroyWindow(hFlyout);
+    }
+
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
-    g_keyboardHook.reset();
     CoUninitialize();
     return 0;
 }
-
-// =============================================================================
-// Settings Loading & Safe Cleanup
-// =============================================================================
 
 static void LoadSettings() {
     try {
@@ -2321,6 +2521,11 @@ static void LoadSettings() {
         EnterCriticalSection(&g_Ctx.csLock);
         g_settings = newSettings;
         LeaveCriticalSection(&g_Ctx.csLock);
+
+        g_enableWinSpace.store(newSettings.enableWinSpace, std::memory_order_relaxed);
+        g_enableAltShift.store(newSettings.enableAltShift, std::memory_order_relaxed);
+        g_hookTrayClicks.store(newSettings.hookTrayClicks, std::memory_order_relaxed);
+        g_enableCustomHotkey.store(newSettings.enableCustomHotkey, std::memory_order_relaxed);
     } catch (...) {}
 }
 
@@ -2329,37 +2534,39 @@ static void SafeCleanup() {
 
     RemoveTrayInterception();
 
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    DWORD ownerTid = g_dwFlyoutOwnerThreadId.load(std::memory_order_acquire);
+    if (hFlyout && IsWindow(hFlyout) && ownerTid) {
+        PostThreadMessageW(ownerTid, WM_SAFE_CLOSE, 0, 0);
+    }
+
+    if (g_Ctx.dwHookThreadId) {
+        PostThreadMessageW(g_Ctx.dwHookThreadId, WM_QUIT, 0, 0);
+    }
     if (g_Ctx.dwWorkerThreadId) {
         PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_QUIT, 0, 0);
     }
+
+    // Must wait forever: returning while either thread still runs leaves
+    // Windhawk free to FreeLibrary the image under executing code.
+    if (g_Ctx.hHookThread) {
+        WaitForSingleObject(g_Ctx.hHookThread, INFINITE);
+        CloseHandle(g_Ctx.hHookThread);
+        g_Ctx.hHookThread = NULL;
+        g_Ctx.dwHookThreadId = 0;
+    }
     if (g_Ctx.hWorkerThread) {
-        WaitForSingleObject(g_Ctx.hWorkerThread, 3000);
+        WaitForSingleObject(g_Ctx.hWorkerThread, INFINITE);
         CloseHandle(g_Ctx.hWorkerThread);
         g_Ctx.hWorkerThread = NULL;
         g_Ctx.dwWorkerThreadId = 0;
     }
 
-    if (g_hFlyoutWnd && IsWindow(g_hFlyoutWnd)) {
-        SendMessageW(g_hFlyoutWnd, WM_SAFE_CLOSE, 0, 0);
-        for (int i = 0; i < 50 && IsWindow(g_hFlyoutWnd); i++) {
-            MSG msg;
-            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-        if (IsWindow(g_hFlyoutWnd)) DestroyWindow(g_hFlyoutWnd);
-    }
-
     ShutdownGdiPlusRendering();
-    g_hFlyoutWnd = NULL;
-    g_dwFlyoutOwnerThreadId = 0;
+    g_hFlyoutWnd.store(NULL, std::memory_order_release);
+    g_dwFlyoutOwnerThreadId.store(0, std::memory_order_release);
     g_Initialized = FALSE;
 }
-
-// =============================================================================
-// Windhawk Entry Points
-// =============================================================================
 
 static bool IsExplorerProcess() {
     WCHAR exePath[MAX_PATH] = {};
@@ -2370,7 +2577,7 @@ static bool IsExplorerProcess() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Win78LangSwitcher: Wh_ModInit v1.0.0 ===");
+    Wh_Log(L"=== Win78LangSwitcher: Wh_ModInit v1.0.1 ===");
 
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
@@ -2383,7 +2590,6 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    // Install ShowWindow hook for intercepting modern Shell_InputSwitch* windows
     HMODULE hUser = GetModuleHandleW(L"user32.dll");
     if (hUser) {
         void* pShowWindow = reinterpret_cast<void*>(reinterpret_cast<FARPROC>(GetProcAddress(hUser, "ShowWindow")));
@@ -2394,13 +2600,23 @@ BOOL Wh_ModInit() {
         }
     }
 
-    InstallTrayInterceptionInternal();
-
     g_Ctx.hWorkerThread = CreateThread(NULL, 0, WorkerThreadProc, &g_Ctx, 0, &g_Ctx.dwWorkerThreadId);
     if (!g_Ctx.hWorkerThread) {
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
+
+    g_Ctx.hHookThread = CreateThread(NULL, 0, HookThreadProc, &g_Ctx, 0, &g_Ctx.dwHookThreadId);
+    if (!g_Ctx.hHookThread) {
+        PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_Ctx.hWorkerThread, INFINITE);
+        CloseHandle(g_Ctx.hWorkerThread);
+        g_Ctx.hWorkerThread = NULL;
+        DeleteCriticalSection(&g_Ctx.csLock);
+        return FALSE;
+    }
+
+    InstallTrayInterceptionInternal();
 
     g_Initialized = TRUE;
     return TRUE;
@@ -2418,6 +2634,5 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
-    UnregisterClassW(kFlyoutClassName, GetModInstance());
-    UnregisterClassW(kFlyoutClassName, GetModuleHandleW(NULL));
+    UnregisterClassW(kFlyoutClassName, HINST_THISCOMPONENT);
 }
