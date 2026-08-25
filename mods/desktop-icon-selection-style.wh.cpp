@@ -65,15 +65,18 @@ expect acrylic. It is also limited to roughly 10 pixels beyond the icon, which i
 all Windows repaints around it; a larger glow gets cut off rather than smeared.
 
 **Colours** take `accent` to follow your system accent colour, or a hex value
-like `#3399FF`. The accent is read through the immersive colour API, so it is
+like `#3399FF` (the `#` is optional). Anything else is ignored, and the setting
+keeps its default - the mod log says which value it rejected. The accent is read through the immersive colour API, so it is
 the colour you actually picked in Settings rather than the blended colorization
 value. Changing it is picked up as plates are next repainted, so selecting a
 different icon shows the new colour; nothing is forced to redraw on a timer.
 
-**Mixed-DPI setups** are fine. Windows keeps desktop icons on the primary
-monitor and sizes the icon area to it, so the pixel settings are scaled by the
-DPI of the monitor the plate is actually drawn on. Tested with a second display
-at a different resolution and scale factor.
+**Mixed-DPI setups** are fine, though not because anything is measured
+per-monitor. The pixel settings are scaled by a single DPI, read from the
+desktop's own window - but the icon rectangles the plate is drawn against come
+from that same window, so the plate and the icon are always scaled by the same
+number and stay in proportion to each other. Tested with a second display at a
+different resolution and scale factor.
 
 ## Credit
 
@@ -1023,58 +1026,69 @@ int GetBorderStyleSetting() {
     return kBorderNone;
 }
 
+// The caller seeds the colour with the default its setting declares, so an
+// unparseable string lands on the documented colour rather than on some other
+// one the setting never advertised - and says so in the log, since otherwise a
+// typo just quietly renders as something else.
+void LoadColorSetting(PCWSTR name, COLORREF* color, bool* usesAccent) {
+    WindhawkUtils::StringSetting value =
+        WindhawkUtils::StringSetting::make(name);
+
+    if (!ParseColor(value.get(), color, usesAccent)) {
+        Wh_Log(L"%s: \"%s\" is not a colour, keeping the default", name,
+               value.get());
+    }
+}
+
 void LoadSettings() {
-    g_settings.widthPercent = std::clamp(Wh_GetIntSetting(L"widthPercent"), 1, 100);
-    g_settings.topInset =
-        std::clamp(Wh_GetIntSetting(L"topInset"), 0, kMaxPixelSetting);
-    g_settings.bottomInset =
+    // Built up locally and published in one assignment. The paint thread reads
+    // g_settings without synchronisation, and writing it field by field let a
+    // repaint land midway through - drawing one frame from a mix of old and new
+    // values, and briefly showing the fallback colour seeded before each parse.
+    decltype(g_settings) s{};
+
+    s.widthPercent = std::clamp(Wh_GetIntSetting(L"widthPercent"), 1, 100);
+    s.topInset = std::clamp(Wh_GetIntSetting(L"topInset"), 0, kMaxPixelSetting);
+    s.bottomInset =
         std::clamp(Wh_GetIntSetting(L"bottomInset"), 0, kMaxPixelSetting);
-    g_settings.cornerRadius =
+    s.cornerRadius =
         std::clamp(Wh_GetIntSetting(L"cornerRadius"), 0, kMaxPixelSetting);
 
     WindhawkUtils::StringSetting shape =
         WindhawkUtils::StringSetting::make(L"shape");
-    g_settings.square = _wcsicmp(shape.get(), L"square") == 0;
-    g_settings.squareSize =
-        std::clamp(Wh_GetIntSetting(L"squareSize"), 0, kMaxPixelSetting);
+    s.square = _wcsicmp(shape.get(), L"square") == 0;
+    s.squareSize = std::clamp(Wh_GetIntSetting(L"squareSize"), 0, kMaxPixelSetting);
 
-    g_settings.fillColor = RGB(255, 255, 255);
-    g_settings.fillUsesAccent = true;
-    ParseColor(WindhawkUtils::StringSetting::make(L"fillColor").get(),
-               &g_settings.fillColor, &g_settings.fillUsesAccent);
-    g_settings.fillOpacity = std::clamp(Wh_GetIntSetting(L"fillOpacity"), 0, 100);
+    s.fillColor = RGB(255, 255, 255);
+    s.fillUsesAccent = true;
+    LoadColorSetting(L"fillColor", &s.fillColor, &s.fillUsesAccent);
+    s.fillOpacity = std::clamp(Wh_GetIntSetting(L"fillOpacity"), 0, 100);
 
-    // Each fallback is the value the setting declares as its default, so an
-    // unparseable string lands on the documented colour rather than on some
-    // other one the setting never advertised.
-    g_settings.glow = Wh_GetIntSetting(L"glow");
-    g_settings.glowColor = RGB(0, 0, 0);
-    g_settings.glowUsesAccent = true;
-    ParseColor(WindhawkUtils::StringSetting::make(L"glowColor").get(),
-               &g_settings.glowColor, &g_settings.glowUsesAccent);
-    g_settings.glowOpacity = std::clamp(Wh_GetIntSetting(L"glowOpacity"), 0, 100);
-    g_settings.glowSize =
-        std::clamp(Wh_GetIntSetting(L"glowSize"), 0, kMaxGlowSize);
-    g_settings.glowOffsetY =
+    s.glow = Wh_GetIntSetting(L"glow");
+    s.glowColor = RGB(0, 0, 0);
+    s.glowUsesAccent = true;
+    LoadColorSetting(L"glowColor", &s.glowColor, &s.glowUsesAccent);
+    s.glowOpacity = std::clamp(Wh_GetIntSetting(L"glowOpacity"), 0, 100);
+    s.glowSize = std::clamp(Wh_GetIntSetting(L"glowSize"), 0, kMaxGlowSize);
+    s.glowOffsetY =
         std::clamp(Wh_GetIntSetting(L"glowOffsetY"), -kMaxGlowSize, kMaxGlowSize);
 
-    g_settings.borderStyle = GetBorderStyleSetting();
-    g_settings.borderOnSelectionOnly = Wh_GetIntSetting(L"borderOnSelectionOnly");
-    g_settings.borderColor = RGB(255, 255, 255);
-    g_settings.borderUsesAccent = false;
-    ParseColor(WindhawkUtils::StringSetting::make(L"borderColor").get(),
-               &g_settings.borderColor, &g_settings.borderUsesAccent);
-    g_settings.borderOpacity = std::clamp(Wh_GetIntSetting(L"borderOpacity"), 0, 100);
-    g_settings.borderThickness =
+    s.borderStyle = GetBorderStyleSetting();
+    s.borderOnSelectionOnly = Wh_GetIntSetting(L"borderOnSelectionOnly");
+    s.borderColor = RGB(255, 255, 255);
+    s.borderUsesAccent = false;
+    LoadColorSetting(L"borderColor", &s.borderColor, &s.borderUsesAccent);
+    s.borderOpacity = std::clamp(Wh_GetIntSetting(L"borderOpacity"), 0, 100);
+    s.borderThickness =
         std::clamp(Wh_GetIntSetting(L"borderThickness"), 1, kMaxPixelSetting);
 
-    g_settings.dashLength =
-        std::clamp(Wh_GetIntSetting(L"dashLength"), 1, kMaxPixelSetting);
-    g_settings.dashGap =
-        std::clamp(Wh_GetIntSetting(L"dashGap"), 1, kMaxPixelSetting);
+    s.dashLength = std::clamp(Wh_GetIntSetting(L"dashLength"), 1, kMaxPixelSetting);
+    s.dashGap = std::clamp(Wh_GetIntSetting(L"dashGap"), 1, kMaxPixelSetting);
 
-    g_settings.styleHover = Wh_GetIntSetting(L"styleHover");
-    g_settings.hoverOpacity = std::clamp(Wh_GetIntSetting(L"hoverOpacity"), 0, 100);
+    s.styleHover = Wh_GetIntSetting(L"styleHover");
+    s.hoverOpacity = std::clamp(Wh_GetIntSetting(L"hoverOpacity"), 0, 100);
+
+    g_settings = s;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
