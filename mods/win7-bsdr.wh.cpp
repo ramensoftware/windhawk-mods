@@ -2683,7 +2683,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         ShowWindow(hYesButton, SW_HIDE);
         ShowWindow(hNoButton, SW_HIDE);
 
-        if (Wh_GetIntSetting(L"themeScrollbar", 0)) {
+        if (!Wh_GetIntSetting(L"themeScrollbar", 0)) {
             SetWindowTheme(hScrollBar, L" ", L"");
         }
 
