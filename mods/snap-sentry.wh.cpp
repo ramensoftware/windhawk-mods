@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.17.3
+// @version         0.18.4
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -27,6 +27,8 @@ notification.
 ## Clipboard modes
 
 * **Image** copies the picture so it stays pasteable even after the file is deleted.
+  For a multi-page or animated image only the first frame is copied, so the file is
+  kept rather than deleted.
 * **File** copies the file for pasting into File Explorer. Deletion is disabled.
 * **Path** copies the full path as text. You can pick plain text, a quoted path, a
   file link, or a Markdown image link, which is handy for pasting a screenshot
@@ -552,35 +554,29 @@ static bool ClipboardFile(const std::wstring& path) {
     return ok;
 }
 
-// Fills a DIB pixel region from a top-down 32bpp BGRA source, writing the rows
-// bottom-up as DIB clipboard formats expect.
-static void WriteBottomUp(BYTE* dest, const BYTE* topDown, UINT width,
-                          UINT height) {
-    size_t stride = (size_t)width * 4;
-    for (UINT y = 0; y < height; y++) {
-        memcpy(dest + (size_t)y * stride,
-               topDown + (size_t)(height - 1 - y) * stride, stride);
-    }
-}
+// Result of an image copy. CopiedFirstFrameOnly means a multi-page or animated
+// image was copied but only its first frame reached the clipboard, so the caller
+// must keep the source file (the rest isn't on the clipboard).
+enum class ImageCopy { Failed, Copied, CopiedFirstFrameOnly };
 
 // Decodes any WIC-supported image into a self-contained CF_DIBV5 payload, which is
 // what makes the copied image survive deletion of the source file. Windows
 // synthesizes CF_DIB and CF_BITMAP from CF_DIBV5 on demand, so publishing those too
 // would just be another full-size copy of the bitmap (it runs in a 32-bit process).
-static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
-    multiFrame = false;  // Assigned for real once the frame count is known below.
+static ImageCopy ClipboardImage(const std::wstring& path) {
     IWICImagingFactory* factory = nullptr;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
-        return false;
+        return ImageCopy::Failed;
     }
 
     IWICBitmapDecoder* decoder = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
     IWICFormatConverter* converter = nullptr;
-    BYTE* topDown = nullptr;
+    IWICBitmapFlipRotator* flipper = nullptr;
     HGLOBAL hV5 = nullptr;
     bool ok = false;
+    bool multiFrame = false;
 
     do {
         if (FAILED(factory->CreateDecoderFromFilename(
@@ -611,18 +607,11 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
 
         size_t stride = (size_t)width * 4;
         size_t pixels = stride * height;
-        topDown = (BYTE*)malloc(pixels);
-        if (!topDown ||
-            FAILED(converter->CopyPixels(nullptr, (UINT)stride, (UINT)pixels,
-                                         topDown))) {
-            break;
-        }
 
         hV5 = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pixels);
         if (!hV5) {
             break;
         }
-
         BYTE* v5 = (BYTE*)GlobalLock(hV5);
         if (!v5) {
             break;
@@ -641,7 +630,19 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
         bv5->bV5BlueMask = 0x000000FF;
         bv5->bV5AlphaMask = 0xFF000000;
         bv5->bV5CSType = LCS_WINDOWS_COLOR_SPACE;
-        WriteBottomUp(v5 + sizeof(BITMAPV5HEADER), topDown, width, height);
+
+        // A DIB stores rows bottom-up, but the converter yields them top-down.
+        // Flipping vertically and copying straight into the DIB buffer avoids a
+        // second full-size scratch copy (peak stays 1x the bitmap, which matters
+        // for a large TIFF in a 32-bit process) and drops the manual row copy.
+        if (FAILED(factory->CreateBitmapFlipRotator(&flipper)) ||
+            FAILED(flipper->Initialize(converter,
+                                       WICBitmapTransformFlipVertical)) ||
+            FAILED(flipper->CopyPixels(nullptr, (UINT)stride, (UINT)pixels,
+                                       v5 + sizeof(BITMAPV5HEADER)))) {
+            GlobalUnlock(hV5);
+            break;
+        }
         GlobalUnlock(hV5);
 
         if (!OpenClipboard(nullptr)) {
@@ -659,7 +660,9 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
     if (hV5) {
         GlobalFree(hV5);
     }
-    free(topDown);
+    if (flipper) {
+        flipper->Release();
+    }
     if (converter) {
         converter->Release();
     }
@@ -670,7 +673,10 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
         decoder->Release();
     }
     factory->Release();
-    return ok;
+    if (!ok) {
+        return ImageCopy::Failed;
+    }
+    return multiFrame ? ImageCopy::CopiedFirstFrameOnly : ImageCopy::Copied;
 }
 
 // ============================================================================
@@ -1454,6 +1460,79 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
     return AskAction(path, s);
 }
 
+// Fire-and-forget informational toast, shown when a multi-frame or animated image
+// was copied (first frame only) and therefore kept instead of deleted, so an
+// explicit "Copy + delete" or a countdown auto-action isn't a silent no-op. Unlike
+// the action toast this adds no listeners and does not wait, so it never parks the
+// worker. Purely informational, so there is nothing to fall back to: if it can't be
+// shown (registration gone, notifications off), the caller's log line stands alone.
+static bool ShowKeptToast(const std::wstring& name) {
+    using namespace ABI::Windows::UI::Notifications;
+    using namespace ABI::Windows::Data::Xml::Dom;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+
+    if (!g_toastRegistered.load()) {
+        return false;
+    }
+    std::wstring xml =
+        L"<toast duration=\"short\" activationType=\"background\">"
+        L"<visual><binding template=\"ToastGeneric\">"
+        L"<text>Kept the file</text><text>" +
+        XmlEscape(name) +
+        L" is a multi-page or animated image, so only its first frame was copied "
+        L"and the file was kept.</text>"
+        L"<text placement=\"attribution\">SnapSentry</text>"
+        L"</binding></visual></toast>";
+
+    ComPtr<IToastNotificationManagerStatics> toastStatics;
+    if (FAILED(RoGetActivationFactory(
+            HStringReference(
+                RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
+                .Get(),
+            IID_PPV_ARGS(&toastStatics)))) {
+        return false;
+    }
+    ComPtr<IToastNotifier> notifier;
+    if (FAILED(toastStatics->CreateToastNotifierWithId(
+            HStringReference(kAppUserModelId).Get(), &notifier))) {
+        return false;
+    }
+    // Respect the user's notification choice; nothing to substitute for an
+    // informational message if they've turned notifications off.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    if (FAILED(notifier->get_Setting(&setting)) ||
+        setting != NotificationSetting_Enabled) {
+        return false;
+    }
+
+    ComPtr<IInspectable> docInspectable;
+    if (FAILED(RoActivateInstance(
+            HStringReference(RuntimeClass_Windows_Data_Xml_Dom_XmlDocument).Get(),
+            &docInspectable))) {
+        return false;
+    }
+    ComPtr<IXmlDocument> doc;
+    ComPtr<IXmlDocumentIO> docIO;
+    if (FAILED(docInspectable.As(&doc)) || FAILED(docInspectable.As(&docIO)) ||
+        FAILED(docIO->LoadXml(HStringReference(xml.c_str()).Get()))) {
+        return false;
+    }
+    ComPtr<IToastNotificationFactory> toastFactory;
+    if (FAILED(RoGetActivationFactory(
+            HStringReference(RuntimeClass_Windows_UI_Notifications_ToastNotification)
+                .Get(),
+            IID_PPV_ARGS(&toastFactory)))) {
+        return false;
+    }
+    ComPtr<IToastNotification> toast;
+    if (FAILED(toastFactory->CreateToastNotification(doc.Get(), &toast))) {
+        return false;
+    }
+    return SUCCEEDED(notifier->Show(toast.Get()));
+}
+
 // ============================================================================
 // Processing
 // ============================================================================
@@ -1475,6 +1554,13 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
 // PerformOperations returns S_OK for "carried out or aborted" alike, so success
 // on its own doesn't mean the file actually moved.
 static bool RecycleFile(const std::wstring& path) {
+    // The shell parser rejects a path that isn't canonical, and a watched folder
+    // ending in a separator composes one with a doubled separator, so hand it a
+    // normalized full path rather than the composed one.
+    wchar_t full[MAX_PATH];
+    DWORD n = GetFullPathNameW(path.c_str(), MAX_PATH, full, nullptr);
+    const wchar_t* target = (n > 0 && n < MAX_PATH) ? full : path.c_str();
+
     IFileOperation* op = nullptr;
     if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(&op)))) {
@@ -1484,7 +1570,7 @@ static bool RecycleFile(const std::wstring& path) {
     if (SUCCEEDED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NO_UI |
                                         FOFX_RECYCLEONDELETE))) {
         IShellItem* item = nullptr;
-        if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+        if (SUCCEEDED(SHCreateItemFromParsingName(target, nullptr,
                                                   IID_PPV_ARGS(&item)))) {
             BOOL aborted = FALSE;
             if (SUCCEEDED(op->DeleteItem(item, nullptr)) &&
@@ -1609,9 +1695,11 @@ static void ProcessOne(std::wstring path) {
     bool forceImage = (action == ACTION_COPY_DELETE);
 
     bool copied;
-    bool multiFrame = false;  // Set by ClipboardImage when only frame 0 was copied.
+    bool multiFrame = false;  // True when only frame 0 of a multi-frame image copied.
     if (forceImage || s.mode == L"image") {
-        copied = ClipboardImage(path, multiFrame);
+        ImageCopy r = ClipboardImage(path);
+        copied = (r != ImageCopy::Failed);
+        multiFrame = (r == ImageCopy::CopiedFirstFrameOnly);
     } else if (s.mode == L"file") {
         copied = ClipboardFile(path);
     } else if (s.mode == L"path") {
@@ -1642,6 +1730,12 @@ static void ProcessOne(std::wstring path) {
     if (deleteRequested && multiFrame) {
         Wh_Log(L"Multi-frame image: copied the first frame only, keeping the file%s",
                s.logDetails ? (L": " + path).c_str() : L"");
+        // A popup was in play (an explicit Copy + delete, or letting the countdown
+        // run), so tell the user the file was kept instead of deleted, otherwise the
+        // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
+        if (s.popup) {
+            ShowKeptToast(path.substr(path.find_last_of(L"\\/") + 1));
+        }
     }
     bool wantsDelete = deleteRequested && !multiFrame;
     if (!wantsDelete) {
@@ -1939,7 +2033,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
     }
     HANDLE readyWaits[] = {g_stopEvent, g_reloadEvent, ov.hEvent};
 
-    int openFailures = 0;
+    int watchFailures = 0;  // consecutive open OR notification failures, for backoff
     while (!WaitStop(0)) {
         Settings s = SnapshotSettings();
         if (s.folder.empty()) {
@@ -1959,15 +2053,19 @@ static DWORD WINAPI WatchThread(LPVOID) {
             // The folder may appear later (Pictures\Screenshots isn't created until
             // the first Win+PrintScreen). Back off from 2s to 30s after a few tries
             // so a Snipping-Tool-only machine isn't polled twice a second forever.
-            DWORD wait = openFailures < 5 ? 2000 : 30000;
-            if (openFailures < 1000000) {
-                openFailures++;
+            DWORD wait = watchFailures < 5 ? 2000 : 30000;
+            if (watchFailures < 1000000) {
+                watchFailures++;
             }
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
             WaitForMultipleObjects(2, idle, FALSE, wait);
             continue;
         }
-        openFailures = 0;
+
+        // Opening the handle isn't proof the watch works, so watchFailures is not
+        // reset here. It resets only when a notification actually arrives (below), so
+        // a path where the handle opens but ReadDirectoryChangesW never delivers still
+        // escalates its backoff instead of respinning every 2s.
 
         // Snapshot existing names before arming notifications so downloads or
         // sync churn on pre-existing files never look like new screenshots.
@@ -2012,6 +2110,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
                 Wh_Log(L"Change buffer overflow; some screenshots may be skipped");
                 continue;
             }
+            watchFailures = 0;  // A notification arrived: the watch works; clear backoff.
             ParseNotifications(s.folder, buffer, bytes);
         }
         CloseHandle(dir);
@@ -2019,10 +2118,15 @@ static DWORD WINAPI WatchThread(LPVOID) {
             // The inner loop ended on an error, not a reload: the handle opened but
             // change notifications don't work on this path (some network redirectors
             // and virtual/sync filesystems return ERROR_INVALID_FUNCTION), or the
-            // volume went away. Back off like the open-failure path so a persistently
-            // failing watch can't peg a core re-opening and re-enumerating in a spin.
+            // volume went away. Back off with the same 2s->30s escalation as the
+            // open-failure path (watchFailures counts both), so a persistently failing
+            // watch can't peg a core re-opening and re-enumerating in a spin.
+            DWORD wait = watchFailures < 5 ? 2000 : 30000;
+            if (watchFailures < 1000000) {
+                watchFailures++;
+            }
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
-            WaitForMultipleObjects(2, idle, FALSE, 2000);
+            WaitForMultipleObjects(2, idle, FALSE, wait);
         }
     }
 
