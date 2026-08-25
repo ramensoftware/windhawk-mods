@@ -8,7 +8,7 @@
 // @twitter         https://x.com/k_ashix
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lpsapi -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lmsimg32 -luiautomationcore -ldwmapi -lwinmm
+// @compilerOptions -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lmsimg32 -luiautomationcore -ldwmapi -lwinmm
 // ==/WindhawkMod==
 
 // For bug reports and feature requests, please open an issue here:
@@ -39,8 +39,12 @@ into `explorer.exe`.
 | Hotkey (default Ctrl + Alt + P) | Pin or unpin the focused app |
 | Triple-tap **L** | Lock / unlock the dock |
 
-There are a few more gestures (rapid-click unpin-all, tap **P** & **U** three
-times) -- see the full guide on GitHub for the complete list and every setting.
+Two more gestures are available but **off by default** (enable them in Settings):
+the **rapid-click unpin-all** (three quick clicks on an icon clears the whole
+dock) and the **bare-key taps** (tap **P** / **U** three times to pin / unpin the
+focused app). They ship disabled because they can fire while you type in other
+apps; the Ctrl + Alt + P hotkey is the safe alternative. Every setting is
+documented in the **Settings reference** below.
 
 **Lock the dock:** triple-tap the **L** key to lock it, triple-tap **L** again
 to unlock. While locked, the quick *gesture* unpins are refused (triple-tap
@@ -64,13 +68,44 @@ out. You can also raise the **Startup delay** setting.
 - Some UWP apps may occasionally resolve to their host process if their window
   isn't ready yet.
 
-## Full documentation
+## Screenshot
 
-This is just a quick overview. For the complete guide  --  every gesture, the
-full settings reference, and the developer internals  --  see the full README
-on GitHub:
+![The Quick Pin dock sitting left of the Start button](https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/screenshot.png)
 
-https://github.com/k-ashix/taskbar-quick-pin
+> Author note: Windhawk only allows images hosted on `i.imgur.com` or
+> `raw.githubusercontent.com`. Replace the URL above with your uploaded
+> screenshot / GIF (e.g. commit `screenshot.png` to the repo's `main` branch).
+
+## Settings reference
+
+Every option lives in the Windhawk **Settings** panel for this mod. Most apply
+live; the two noted below need a mod reload.
+
+| Setting | What it does | Default |
+|---|---|---|
+| Max pinned apps | How many apps can be pinned (1 - 20). The dock auto-sizes: min 5 slots, grows to 10, then extra pins scroll. | 5 |
+| Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
+| Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
+| Separator opacity | Visibility of the right-edge divider line (0 - 100). | 100 |
+| Glass overlay | Frosted-glass tint + richer pin/unpin colour feedback. | on |
+| Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
+| Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
+| Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
+| Bare-key tap gestures (opt-in) | Triple-tap P / U / L to pin / unpin / lock, regardless of focus. Off (fires while typing). | off |
+| Scroll-wheel navigation | Hover + wheel moves the highlight across pins. | on |
+| Drag tether (rope) | Shows the stretchy thread while dragging an icon off. | on |
+| Drag tether - thickness | Rope thickness, 1 (hair) to 10 (cord). | 2 |
+| Drag tether - break length | How far you pull before the rope snaps (150 - 650 px). | 450 |
+| Drag tether - colour mode | Fixed single colour (uses the hue below) or dynamic Rainbow. | fixed |
+| Drag tether - hue | Rope hue in fixed mode (0 - 359). | 30 |
+| Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
+| Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 100 |
+| Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
+| Multi-monitor dock | Mirrored, read-only dock on secondary monitors. *(Reload to apply.)* | off |
+| Startup delay | Extra wait before the dock loads (0 - 3000 ms). | 0 |
+| Sync with taskbar auto-hide | Hide the dock when the taskbar auto-hides. | off |
+| Pin hotkey - modifiers | Modifier keys for the pin/unpin hotkey (or Disabled). | Ctrl + Alt |
+| Pin hotkey - key | Key pressed with the modifiers above. | P |
 
 ## Credits
 
@@ -132,6 +167,23 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     menu shows instead  --  you can still unpin by dragging an icon off the dock
     or with the hotkey. Applies live.
 
+- enableRapidUnpinAll: false
+  $name: Rapid-click unpin-all gesture (opt-in)
+  $description: >-
+    When enabled, clicking a dock icon three times within one second unpins
+    EVERY app at once. OFF by default so impatiently clicking a slow-to-launch
+    app can never wipe your whole pin list. You can always unpin individually
+    via the right-click menu or by dragging an icon off the dock. Applies live.
+
+- enableKeyGestures: false
+  $name: Bare-key tap gestures (P / U / L, opt-in)
+  $description: >-
+    When enabled, tapping the P, U or L key three times quickly pins, unpins,
+    or toggles the dock lock  --  regardless of which window has focus. OFF by
+    default because these fire while typing in other apps, games or password
+    fields. The pin hotkey (default Ctrl + Alt + P) is the safe alternative.
+    Applies live.
+
 - enableScrollNav: true
   $name: Scroll-wheel navigation
   $description: >-
@@ -160,7 +212,23 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     and unpins the app (150 - 650). Lower = snaps sooner, higher = lets you drag
     further before it breaks. Applies live.
 
-- unpinTrigger: 0
+- dragTetherColorMode: fixed
+  $name: Drag tether  --  colour mode
+  $description: >-
+    How the drag rope is coloured. "Fixed" draws a single earthy colour (set the
+    hue below). "Rainbow" cycles the hue dynamically as you drag. Applies live.
+  $options:
+  - fixed: Fixed single colour (uses the hue below)
+  - rainbow: Dynamic rainbow
+
+- dragTetherHue: 30
+  $name: Drag tether  --  hue (0 - 359)
+  $description: >-
+    Colour hue of the drag rope when colour mode is "Fixed" (0 - 359 degrees on
+    the colour wheel). Default 30 = warm tan/brown. Ignored in rainbow mode.
+    Applies live.
+
+- unpinTrigger: ropeBreak
   $name: Unpin trigger (drag-off)
   $description: >-
     Decides WHEN dragging a pinned icon off the dock actually unpins it.
@@ -170,8 +238,8 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     outside the dock" also unpins when you simply drop the icon anywhere off the
     dock. Default: only when the rope breaks. Applies live.
   $options:
-  - 0: Only when the rope BREAKS (pull past the break length)
-  - 1: Rope breaks OR icon released outside the dock
+  - ropeBreak: Only when the rope BREAKS (pull past the break length)
+  - ropeBreakOrOutside: Rope breaks OR icon released outside the dock
 
 - cornerRoundness: 100
   $name: Corner roundness
@@ -209,81 +277,68 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     auto-hide animation slides it off screen.
     Disabled by default  --  the dock stays visible at all times.
 
-- logLevel: 1
-  $name: Logging level
-  $description: >-
-    Production logging filter. 0 = none, 1 = errors, 2 = important production
-    events, 3 = debug diagnostics, 4 = trace-level sampling. Trace is noisy and
-    should only be enabled while diagnosing a specific issue.
-  $options:
-  - 0: None
-  - 1: Errors
-  - 2: Important
-  - 3: Debug
-  - 4: Trace
-
-- hotkeyModifiers: 3
+- hotkeyModifiers: ctrlAlt
   $name: Pin hotkey  --  modifiers
   $description: >-
     Modifier keys to hold when pressing the hotkey key to pin or unpin the
     focused application. Set to "Disabled" to turn the hotkey off entirely.
   $options:
-  - 0: Disabled (no hotkey)
-  - 1: Alt
-  - 2: Ctrl
-  - 3: Ctrl + Alt
-  - 4: Shift
-  - 5: Ctrl + Shift
-  - 6: Alt + Shift
-  - 8: Win
-  - 9: Win + Alt
-  - 10: Win + Ctrl
+  - none: Disabled (no hotkey)
+  - alt: Alt
+  - ctrl: Ctrl
+  - ctrlAlt: Ctrl + Alt
+  - shift: Shift
+  - ctrlShift: Ctrl + Shift
+  - altShift: Alt + Shift
+  - win: Win
+  - winAlt: Win + Alt
+  - winCtrl: Win + Ctrl
 
-- hotkeyKey: 80
+- hotkeyKey: P
   $name: Pin hotkey  --  key
   $description: >-
     The key to press together with the modifiers above to pin or unpin the
     focused app. Has no effect if modifiers is set to "Disabled".
   $options:
-  - 0: (none  --  disabled)
-  - 65: A
-  - 66: B
-  - 67: C
-  - 68: D
-  - 69: E
-  - 70: F
-  - 71: G
-  - 72: H
-  - 73: I
-  - 74: J
-  - 75: K
-  - 76: L
-  - 77: M
-  - 78: N
-  - 79: O
-  - 80: P
-  - 81: Q
-  - 82: R
-  - 83: S
-  - 84: T
-  - 85: U
-  - 86: V
-  - 87: W
-  - 88: X
-  - 89: Y
-  - 90: Z
-  - 112: F1
-  - 113: F2
-  - 114: F3
-  - 115: F4
-  - 116: F5
-  - 117: F6
-  - 118: F7
-  - 119: F8
-  - 120: F9
-  - 121: F10
-  - 122: F11
-  - 123: F12
+  - none: (none  --  disabled)
+  - A: A
+  - B: B
+  - C: C
+  - D: D
+  - E: E
+  - F: F
+  - G: G
+  - H: H
+  - I: I
+  - J: J
+  - K: K
+  - L: L
+  - M: M
+  - N: N
+  - O: O
+  - P: P
+  - Q: Q
+  - R: R
+  - S: S
+  - T: T
+  - U: U
+  - V: V
+  - W: W
+  - X: X
+  - Y: Y
+  - Z: Z
+  - F1: F1
+  - F2: F2
+  - F3: F3
+  - F4: F4
+  - F5: F5
+  - F6: F6
+  - F7: F7
+  - F8: F8
+  - F9: F9
+  - F10: F10
+  - F11: F11
+  - F12: F12
 */
 // ==/WindhawkModSettings==
 
@@ -310,6 +365,7 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 #include <sstream>
 #include <ctime>
 #include <cstdarg>
+#include <atomic>
 
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
 #define DWMWA_SYSTEMBACKDROP_TYPE 38
@@ -397,6 +453,8 @@ static int  THREAD_HUE        = 30;   // "dragTetherHue" 0..359; default 30 = wa
 
 // Interaction settings (user settings; loaded in Wh_ModInit / Wh_ModSettingsChanged).
 static bool ENABLE_DOUBLE_RCLICK_UNPIN = false;  // "enableDoubleRightClickUnpin": double-right-click a pinned icon to unpin it (DEFAULT OFF)
+static bool ENABLE_RAPID_UNPIN_ALL     = false;  // "enableRapidUnpinAll": rapid triple-click in the dock zone unpins ALL pins (DEFAULT OFF, opt-in). Fixes accidental wipe from impatiently clicking a slow app.
+static bool ENABLE_KEY_GESTURES        = false;  // "enableKeyGestures": bare-key P/U/L triple-tap gestures (DEFAULT OFF, opt-in). The Ctrl+Alt+P hotkey covers pin/unpin without firing while typing.
 
 // User-configurable (clamped in Wh_ModInit)
 static int  MAX_PINNED_APPS      = 5;
@@ -439,7 +497,8 @@ static const int MAX_VISIBLE_APP_SLOTS = 10;
 // ============================================================
 //  REGISTRY / WINDOW CLASS NAMES
 // ============================================================
-static const wchar_t* REG_KEY       = L"Software\\WindhawkMods\\TaskbarQuickPin";
+// FIX-C3 (#7): REG_KEY removed -- pinned apps no longer live in HKCU. REG_VALUE
+// is now the Windhawk mod-storage value name for the pinned-apps blob.
 static const wchar_t* REG_VALUE     = L"PinnedApps";
 static const wchar_t* OVERLAY_CLASS = L"QPDockOverlay";
 static const wchar_t* INPUT_CLASS   = L"QPDockInputOwner";
@@ -458,7 +517,7 @@ enum DragState {
     DRAG_DROPPED,   // Drop has been processed
     DRAG_CANCELLED  // Drag aborted (no valid source, Escape, etc.)
 };
-static DragState g_dragState = DRAG_IDLE;
+static std::atomic<DragState> g_dragState{DRAG_IDLE};  // FIX #8: written by worker, read by window procs -- atomic to avoid a torn cross-thread read
 
 // ============================================================
 //  BOOT STATE
@@ -483,19 +542,23 @@ static const wchar_t* g_excludeList[] = {
     NULL
 };
 
-// Case-insensitive substring check against the exclusion list.
-// Empty path is always excluded.
+// Case-insensitive FILE-NAME check (not a whole-path substring match, which
+// would wrongly exclude any path that merely contains "explorer.exe" as a
+// substring). Empty path is always excluded.
 static bool IsExplorerExePath(const std::wstring& path) {
-    return StrStrIW(path.c_str(), L"explorer.exe") != NULL;
+    if (path.empty()) return true;
+    return _wcsicmp(PathFindFileNameW(path.c_str()), L"explorer.exe") == 0;
 }
 
 static bool IsExcludedApp(const std::wstring& path) {
     if (path.empty()) return true;
+    const wchar_t* fileName = PathFindFileNameW(path.c_str());
     for (int i = 0; g_excludeList[i]; ++i) {
         if (ENABLE_EXPLORER_WORKSPACE_PINS &&
             _wcsicmp(g_excludeList[i], L"explorer.exe") == 0)
             continue;
-        if (StrStrIW(path.c_str(), g_excludeList[i]))
+        // Exclusion list holds bare exe names, so compare the file name only.
+        if (_wcsicmp(fileName, g_excludeList[i]) == 0)
             return true;
     }
     return false;
@@ -625,7 +688,7 @@ static void SetHighResTimer(bool enable) {
 // ============================================================
 //  GLOBALS  --  interaction state
 // ============================================================
-static int     g_hoverIndex      = -1;
+static std::atomic<int> g_hoverIndex{-1};  // FIX #8: worker writes, window procs read -- atomic
 static POINT   g_dragStartPt     = {};
 static DWORD   g_mouseDownTime   = 0;
 static std::wstring g_draggedAppPath;  // Path locked at PRESS
@@ -662,7 +725,7 @@ static int     g_tapCountL   = 0;   static DWORD g_tapStartL = 0;   static bool 
 // the rope still unpins (that is an explicit, hard-to-trigger-by-accident act),
 // as does pinning new apps and reordering. Single-writer (worker thread) /
 // multi-reader bool, safe lock-free on x86-64 like the other per-frame flags.
-static bool    g_iconsLocked = false;
+static std::atomic<bool> g_iconsLocked{false};  // FIX #8: toggled by worker (triple-tap L), read by window procs -- atomic
 
 // INTERACTIVE lock glow. Rather than glowing the whole time the dock is locked
 // (which made a locked dock look permanently "highlighted"), the gold edge only
@@ -682,8 +745,8 @@ static DWORD   g_shakeStart       = 0;
 // Taskbar auto-hide integration
 static bool    g_taskbarAutoHide  = false;  // True when taskbar has ABS_AUTOHIDE set
 static int     g_autoHideMiss     = 0;      // Hysteresis counter for auto-hide slide (anti-flicker)
-static int     g_appScrollStart   = 0;      // First VISIBLE app-pin ordinal. When more apps are pinned than MAX_VISIBLE_APP_SLOTS, the app region becomes a scrollable viewport; this is the left edge of that window (wheel nav slides it).
-static DWORD   g_scrollNavUntil   = 0;      // Scroll-lock deadline (GetTickCount) protecting the scrolled highlight
+static std::atomic<int> g_appScrollStart{0};      // FIX #8 atomic. First VISIBLE app-pin ordinal. When more apps are pinned than MAX_VISIBLE_APP_SLOTS, the app region becomes a scrollable viewport; this is the left edge of that window (wheel nav slides it).
+static std::atomic<DWORD> g_scrollNavUntil{0};      // FIX #8 atomic. Scroll-lock deadline (GetTickCount) protecting the scrolled highlight
 static POINT   g_scrollNavPt      = {};     // Cursor pos when the scroll-lock was armed; real movement past it releases the lock
 static const DWORD SCROLL_NAV_LOCK_MS = 700; // How long a wheel-selected highlight is protected from stray WM_MOUSEMOVE
 
@@ -789,133 +852,156 @@ static CRITICAL_SECTION g_cs;
 static bool    g_csInitialized  = false;
 static HANDLE  g_exitEvent      = NULL;
 static HANDLE  g_workerThread   = NULL;
+// FIX-C1 (#1/#2/#8): dedicated UI thread that OWNS all top-level window/class/
+// hotkey lifecycle and runs the message pump. Windows are created, pumped, and
+// destroyed on this ONE thread (Windhawk's lifecycle callbacks run on an
+// arbitrary thread with no message pump, which broke dispatch + teardown).
+static HANDLE g_uiThread     = NULL;
+static DWORD  g_uiThreadId   = 0;
+static HANDLE g_uiReadyEvent = NULL;  // signaled by the UI thread once windows exist (or creation failed)
+static bool   g_uiInitOk     = false; // set by the UI thread; read by Wh_ModInit after the ready event
+// FIX-B2 (#6): LaunchWorkspaceAsync's thread is now tracked so Wh_ModUninit can
+// join it before the mod image is unloaded. g_launchWorkspaceStop lets the
+// worker bail out early if the mod is being torn down mid-launch.
+static HANDLE  g_launchWorkspaceThread = NULL;
+static std::atomic<bool> g_launchWorkspaceStop{false};
+// FIX-B3 (#3): the mod's own module handle. Window classes must be registered
+// with (and unregistered against) THIS handle, not GetModuleHandleW(NULL) which
+// returns explorer.exe. Populated in Wh_ModInit via GetModHInstance().
+static HINSTANCE g_hModule = NULL;
 // g_animationActive removed  --  was written but never read. g_anyAnimationActive is the live flag.
 
+// FIX-B3 (#3): resolve the HINSTANCE of the mod DLL itself (the module that
+// contains this code), regardless of which process/thread we run in. Cached in
+// g_hModule. Used as the hInstance for every RegisterClassExW / CreateWindowExW /
+// UnregisterClassW that belongs to this mod's own window classes.
+static HINSTANCE GetModHInstance() {
+    if (!g_hModule) {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (LPCWSTR)&GetModHInstance, &g_hModule);
+    }
+    return g_hModule;
+}
+
 // Dedicated lock for g_secondaryDocks  --  worker thread iterates it (RepaintSecondaryDocks)
-// while the main thread may destroy/recreate it (WinEventProc, Wh_ModUninit).
+// while the main thread may destroy/recreate it (Wh_ModUninit).
 static CRITICAL_SECTION g_secondaryDocksCS;
 static bool    g_secondaryDocksCSInit = false;
 
-// ============================================================
-//  GLOBALS  --  WinEvent hook
-// ============================================================
-static HWINEVENTHOOK g_winEventHook = NULL;
+// FIX-A7 (#4): g_winEventHook / WinEventProc removed. The hook could never fire
+// and the worker poll loop already drives every geometry refresh; see the note
+// in Wh_ModInit.
 
 // ============================================================
 //  DEBUG LOGGING
+//  FIX (D2 optional): the custom logging layer (LogLevel enum, g_logLevel,
+//  ShouldLog, the QPLog / QPLogRateLimited functions, the rate-limit buckets and
+//  the logLevel setting) reimplemented what Windhawk's own Wh_Log already does.
+//  Wh_Log is auto-prefixed with the mod name, formats printf-style, and is gated
+//  by the "Logging enabled" toggle in the Windhawk UI (a cheap check when off),
+//  so the whole layer was removed. The LOG_* / DEBUG_LOG / TRACE_LOG / LOG_RATE
+//  macros below are now thin Wh_Log wrappers, leaving every call site unchanged.
 // ============================================================
-enum LogLevel {
-    LOG_NONE = 0,
-    LOG_ERROR,
-    LOG_IMPORTANT,
-    LOG_DEBUG,
-    LOG_TRACE
-};
 
-static LogLevel g_logLevel = LOG_ERROR;   // Default logging level = 1 (errors only)
-
-struct RateLogBucket {
-    const wchar_t* key;
-    DWORD lastTick;
-    unsigned suppressed;
-};
-
-static RateLogBucket g_rateLogs[16] = {};
-
-static bool ShouldLog(LogLevel level) {
-    return level != LOG_NONE && level <= g_logLevel;
+// ============================================================
+//  STRING-SETTING MAPPERS
+//  Windhawk only renders a $options dropdown for STRING-valued
+//  settings, so these settings are stored as string tokens and
+//  mapped back to the internal numeric representation here.
+//  (Fix for review item: "$options on numeric settings won't
+//   produce a dropdown".)
+// ============================================================
+static int LoadUnpinTriggerSetting() {
+    PCWSTR v = Wh_GetStringSetting(L"unpinTrigger");
+    int result = 0;   // 0 = ropeBreak (default)
+    if (v) {
+        if (_wcsicmp(v, L"ropeBreakOrOutside") == 0) result = 1;
+        else                                         result = 0;
+        Wh_FreeStringSetting(v);
+    }
+    return result;
 }
 
-static LogLevel ClampLogLevel(int level) {
-    if (level < (int)LOG_NONE) return LOG_NONE;
-    if (level > (int)LOG_TRACE) return LOG_TRACE;
-    return (LogLevel)level;
+static int LoadColorModeSetting() {
+    PCWSTR v = Wh_GetStringSetting(L"dragTetherColorMode");
+    int result = 1;   // 1 = fixed (default)
+    if (v) {
+        if (_wcsicmp(v, L"rainbow") == 0) result = 0;
+        else                              result = 1;
+        Wh_FreeStringSetting(v);
+    }
+    return result;
 }
 
-static void QPLog(LogLevel level, const wchar_t* prefix, const wchar_t* fmt, ...) {
-    if (!ShouldLog(level)) return;
-
-    wchar_t body[1024] = {};
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf_s(body, ARRAYSIZE(body), _TRUNCATE, fmt, args);
-    va_end(args);
-
-    Wh_Log(L"%s %s", prefix, body);
+static UINT LoadHotkeyModifiersSetting() {
+    PCWSTR v = Wh_GetStringSetting(L"hotkeyModifiers");
+    UINT result = MOD_CONTROL | MOD_ALT;   // default ctrlAlt
+    if (v) {
+        if      (_wcsicmp(v, L"none")      == 0) result = 0;
+        else if (_wcsicmp(v, L"alt")       == 0) result = MOD_ALT;
+        else if (_wcsicmp(v, L"ctrl")      == 0) result = MOD_CONTROL;
+        else if (_wcsicmp(v, L"ctrlAlt")   == 0) result = MOD_CONTROL | MOD_ALT;
+        else if (_wcsicmp(v, L"shift")     == 0) result = MOD_SHIFT;
+        else if (_wcsicmp(v, L"ctrlShift") == 0) result = MOD_CONTROL | MOD_SHIFT;
+        else if (_wcsicmp(v, L"altShift")  == 0) result = MOD_ALT | MOD_SHIFT;
+        else if (_wcsicmp(v, L"win")       == 0) result = MOD_WIN;
+        else if (_wcsicmp(v, L"winAlt")    == 0) result = MOD_WIN | MOD_ALT;
+        else if (_wcsicmp(v, L"winCtrl")   == 0) result = MOD_WIN | MOD_CONTROL;
+        Wh_FreeStringSetting(v);
+    }
+    return result;
 }
 
-static void QPLogRateLimited(LogLevel level,
-                             const wchar_t* key,
-                             DWORD cooldownMs,
-                             const wchar_t* prefix,
-                             const wchar_t* fmt, ...) {
-    if (!ShouldLog(level)) return;
-
-    DWORD now = GetTickCount();
-    RateLogBucket* bucket = NULL;
-    RateLogBucket* empty = NULL;
-    for (auto& b : g_rateLogs) {
-        if (b.key == key || (b.key && key && wcscmp(b.key, key) == 0)) {
-            bucket = &b;
-            break;
+static UINT LoadHotkeyKeySetting() {
+    PCWSTR v = Wh_GetStringSetting(L"hotkeyKey");
+    UINT result = 'P';   // default
+    if (v) {
+        if (_wcsicmp(v, L"none") == 0) {
+            result = 0;
+        } else if (v[0] >= L'A' && v[0] <= L'Z' && v[1] == L'\0') {
+            // Single letter token: VK code equals the uppercase ASCII value.
+            result = (UINT)v[0];
+        } else if ((v[0] == L'F' || v[0] == L'f') && v[1] != L'\0') {
+            // Function-key token "F1".."F12".
+            int fn = 0;
+            for (const wchar_t* p = v + 1; *p >= L'0' && *p <= L'9'; ++p)
+                fn = fn * 10 + (int)(*p - L'0');
+            if (fn >= 1 && fn <= 12) result = (UINT)(VK_F1 + (fn - 1));
         }
-        if (!b.key && !empty) empty = &b;
+        Wh_FreeStringSetting(v);
     }
-    if (!bucket) {
-        bucket = empty ? empty : &g_rateLogs[0];
-        bucket->key = key;
-        bucket->lastTick = 0;
-        bucket->suppressed = 0;
-    }
-
-    if (bucket->lastTick && now - bucket->lastTick < cooldownMs) {
-        bucket->suppressed++;
-        return;
-    }
-
-    wchar_t body[1024] = {};
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf_s(body, ARRAYSIZE(body), _TRUNCATE, fmt, args);
-    va_end(args);
-
-    if (bucket->suppressed) {
-        Wh_Log(L"%s %s (suppressed %u repeats)", prefix, body, bucket->suppressed);
-        bucket->suppressed = 0;
-    } else {
-        Wh_Log(L"%s %s", prefix, body);
-    }
-    bucket->lastTick = now;
+    return result;
 }
 
-#define LOG_ERROR(fmt, ...)     QPLog(LOG_ERROR,     L"[QPDock]", fmt, ##__VA_ARGS__)
-#define LOG_IMPORTANT(fmt, ...) QPLog(LOG_IMPORTANT, L"[QPDock]", fmt, ##__VA_ARGS__)
-#define DEBUG_LOG(fmt, ...)     QPLog(LOG_DEBUG,     L"[QPDock]", fmt, ##__VA_ARGS__)
-#define TRACE_LOG(fmt, ...)     QPLog(LOG_TRACE,     L"[QPDock]", fmt, ##__VA_ARGS__)
-#define LOG_RATE(level, key, cooldown, fmt, ...) \
-    QPLogRateLimited(level, key, cooldown, L"[QPDock]", fmt, ##__VA_ARGS__)
+// Wh_Log is variadic printf-style and auto-prefixed with the mod name, so the
+// four level macros collapse to the same thin wrapper. LOG_RATE keeps its old
+// parameter list for call-site compatibility but ignores level/key/cooldown
+// (the args are dropped by the preprocessor, so they're never even evaluated) --
+// rate limiting is no longer needed because Wh_Log is a no-op unless logging is
+// enabled in the Windhawk UI.
+#define LOG_ERROR(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
+#define LOG_IMPORTANT(fmt, ...)                   Wh_Log(fmt, ##__VA_ARGS__)
+#define DEBUG_LOG(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
+#define TRACE_LOG(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
+#define LOG_RATE(level, key, cooldown, fmt, ...)  Wh_Log(fmt, ##__VA_ARGS__)
 
-// DragTraceLog  --  logs every state transition immediately (no rate limit).
-// Only called on genuine state changes, never per-frame, so verbosity is controlled.
+// DragTraceLog  --  logs every state transition immediately. Only called on
+// genuine state changes, never per-frame, so verbosity stays controlled.
 static void DragTraceLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (detail && detail[0])
-        QPLog(LOG_IMPORTANT, L"[DRAG]", L"%s | %s", event, detail);
-    else
-        QPLog(LOG_IMPORTANT, L"[DRAG]", L"%s", event);
+    if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
+    else                     Wh_Log(L"[DRAG] %s", event);
 }
 
 static void DragDebugLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (detail && detail[0])
-        QPLog(LOG_DEBUG, L"[DRAG]", L"%s | %s", event, detail);
-    else
-        QPLog(LOG_DEBUG, L"[DRAG]", L"%s", event);
+    if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
+    else                     Wh_Log(L"[DRAG] %s", event);
 }
 
 static void DragTraceVerboseLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (detail && detail[0])
-        QPLog(LOG_TRACE, L"[DRAG]", L"%s | %s", event, detail);
-    else
-        QPLog(LOG_TRACE, L"[DRAG]", L"%s", event);
+    if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
+    else                     Wh_Log(L"[DRAG] %s", event);
 }
 
 // ============================================================
@@ -2356,31 +2442,19 @@ static std::wstring NormalizeWorkspaceFolderPath(const std::wstring& path) {
     return path;
 }
 
-static bool EnsureDirectory(const std::wstring& path) {
-    if (path.empty()) return false;
-    if (CreateDirectoryW(path.c_str(), NULL) || GetLastError() == ERROR_ALREADY_EXISTS)
-        return true;
-    return false;
+// FIX-C3 (#7): workspace snapshots are persisted in Windhawk's own per-mod
+// storage instead of JSON files under %APPDATA%\WindhawkMods\..., so disabling
+// or uninstalling the mod leaves nothing behind (Windhawk cleans its own values
+// up). One string value per workspace id, keyed "ws:<id>", with the character
+// count stored alongside as "wslen:<id>" -- Wh_GetStringValue can't report the
+// size it needs and copies nothing into a too-small buffer, so we size the read
+// buffer from that companion int. (The former EnsureDirectory / WorkspaceRootDir
+// / WorkspaceFilePath helpers were removed with the file I/O they served.)
+static std::wstring WorkspaceValueName(const std::wstring& workspaceId) {
+    return L"ws:" + workspaceId;
 }
-
-static std::wstring WorkspaceRootDir() {
-    wchar_t appData[MAX_PATH] = {};
-    if (FAILED(SHGetFolderPathW(NULL, CSIDL_APPDATA | CSIDL_FLAG_CREATE, NULL,
-                                SHGFP_TYPE_CURRENT, appData)))
-        return L"";
-    std::wstring root = std::wstring(appData) + L"\\WindhawkMods";
-    EnsureDirectory(root);
-    root += L"\\TaskbarQuickPin";
-    EnsureDirectory(root);
-    root += L"\\workspaces";
-    EnsureDirectory(root);
-    return root;
-}
-
-static std::wstring WorkspaceFilePath(const std::wstring& workspaceId) {
-    std::wstring root = WorkspaceRootDir();
-    if (root.empty() || workspaceId.empty()) return L"";
-    return root + L"\\" + workspaceId + L".json";
+static std::wstring WorkspaceLenName(const std::wstring& workspaceId) {
+    return L"wslen:" + workspaceId;
 }
 
 static std::wstring MakeWorkspaceId() {
@@ -2430,8 +2504,7 @@ static HICON LoadFolderIcon(const std::wstring& folderPath) {
 }
 
 static bool SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot) {
-    std::wstring file = WorkspaceFilePath(snapshot.id);
-    if (file.empty()) return false;
+    if (snapshot.id.empty()) return false;   // FIX-C3 (#7)
 
     std::wstring body;
     body += L"{\r\n";
@@ -2462,18 +2535,13 @@ static bool SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot) {
     }
     body += L"  ]\r\n}\r\n";
 
-    HANDLE h = CreateFileW(file.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) return false;
-    const wchar_t bom = 0xFEFF;
-    DWORD written = 0;
-    bool ok = WriteFile(h, &bom, sizeof(bom), &written, NULL) != 0;
-    if (ok) {
-        DWORD bytes = (DWORD)(body.size() * sizeof(wchar_t));
-        ok = WriteFile(h, body.data(), bytes, &written, NULL) != 0 && written == bytes;
-    }
-    CloseHandle(h);
-    return ok;
+    // FIX-C3 (#7): persist to Windhawk mod storage instead of a %APPDATA% file.
+    // No BOM needed (that was a file-encoding marker); the loader still tolerates
+    // a leading BOM for safety. The companion length lets the loader size its buffer.
+    if (!Wh_SetStringValue(WorkspaceValueName(snapshot.id).c_str(), body.c_str()))
+        return false;
+    Wh_SetIntValue(WorkspaceLenName(snapshot.id).c_str(), (int)body.size());
+    return true;
 }
 
 static bool ExtractJsonStringValue(const std::wstring& line,
@@ -2509,22 +2577,17 @@ static bool ExtractJsonIntValue(const std::wstring& line,
 }
 
 static bool LoadWorkspaceSnapshot(const std::wstring& workspaceId, WorkspaceSnapshot& snapshot) {
-    std::wstring file = WorkspaceFilePath(workspaceId);
-    if (file.empty()) return false;
+    if (workspaceId.empty()) return false;
 
-    HANDLE h = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) return false;
-    DWORD size = GetFileSize(h, NULL);
-    if (size == INVALID_FILE_SIZE || size < sizeof(wchar_t)) {
-        CloseHandle(h);
+    // FIX-C3 (#7): read the snapshot from Windhawk mod storage. The companion
+    // "wslen:<id>" int (0 when unset) gives the exact character count so we can
+    // size the buffer -- Wh_GetStringValue copies nothing into a too-small buffer.
+    int chars = Wh_GetIntValue(WorkspaceLenName(workspaceId).c_str(), 0);
+    if (chars <= 0) return false;
+    std::vector<wchar_t> buf((size_t)chars + 1, 0);
+    if (Wh_GetStringValue(WorkspaceValueName(workspaceId).c_str(),
+                          buf.data(), buf.size()) == 0)
         return false;
-    }
-    std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1, 0);
-    DWORD read = 0;
-    bool ok = ReadFile(h, buf.data(), size, &read, NULL) != 0;
-    CloseHandle(h);
-    if (!ok || read < sizeof(wchar_t)) return false;
 
     snapshot = WorkspaceSnapshot();
     snapshot.id = workspaceId;
@@ -3217,7 +3280,11 @@ static void LaunchWorkspace(const std::wstring& workspaceId) {
 static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
     std::wstring* workspaceId = (std::wstring*)param;
     if (workspaceId) {
-        LaunchWorkspace(*workspaceId);
+        // FIX-B2 (#6): bail out early if the mod is being torn down. Cheap guard
+        // so a reload while this thread is queued doesn't kick off seconds of
+        // COM/ShellExecuteExW work against a soon-to-be-unmapped image.
+        if (!g_launchWorkspaceStop.load())
+            LaunchWorkspace(*workspaceId);
         delete workspaceId;
     }
     return 0;
@@ -3225,10 +3292,25 @@ static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
 
 static void LaunchWorkspaceAsync(const std::wstring& workspaceId) {
     if (workspaceId.empty()) return;
+    // FIX-B2 (#6): keep the thread handle in a global so Wh_ModUninit can join it
+    // before the image unloads. If a previous launch thread is still tracked,
+    // reap it first (join if finished, else leave it -- Wh_ModUninit will wait)
+    // so we never leak the handle.
+    if (g_launchWorkspaceThread) {
+        if (WaitForSingleObject(g_launchWorkspaceThread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_launchWorkspaceThread);
+            g_launchWorkspaceThread = NULL;
+        }
+    }
     std::wstring* ownedId = new std::wstring(workspaceId);
     HANDLE h = CreateThread(NULL, 0, LaunchWorkspaceThread, ownedId, 0, NULL);
-    if (h) CloseHandle(h);
-    else {
+    if (h) {
+        // If an older handle is still running, don't lose it: close the new one's
+        // predecessor only when reaped above. Store the freshest handle; the rare
+        // overlap case still gets joined via the stop flag in Wh_ModUninit.
+        if (g_launchWorkspaceThread) CloseHandle(g_launchWorkspaceThread);
+        g_launchWorkspaceThread = h;
+    } else {
         delete ownedId;
         LaunchWorkspace(workspaceId);
     }
@@ -3699,9 +3781,13 @@ static LRESULT CALLBACK RenameDialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 static bool PromptWorkspaceName(HWND owner, const std::wstring& currentName, std::wstring& outName) {
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = RenameDialogProc;
-    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hInstance = GetModHInstance();   // FIX-B3 (#3): register against the mod's own module, not explorer.exe
     wc.lpszClassName = L"QPDockRenameDialog";
     wc.hCursor = LoadCursor(NULL, IDC_IBEAM);
+    // FIX-B3 (#3): RegisterClassExW returns 0 (ERROR_CLASS_ALREADY_EXISTS) if the
+    // class is still registered from a previous invocation -- that's fine, the
+    // existing registration is reused. Any other failure just means CreateWindowExW
+    // below will fail and we return false.
     RegisterClassExW(&wc);
 
     RenameDialogState state = {};
@@ -3716,17 +3802,23 @@ static bool PromptWorkspaceName(HWND owner, const std::wstring& currentName, std
     HWND dlg = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                                L"QPDockRenameDialog", L"Rename Workspace",
                                WS_POPUP | WS_CAPTION | WS_SYSMENU,
-                               x, y, 300, 140, owner, NULL, GetModuleHandleW(NULL), &state);
+                               x, y, 300, 140, owner, NULL, GetModHInstance(), &state);   // FIX-B3 (#3)
     if (!dlg) return false;
     EnableWindow(owner, FALSE);
     ShowWindow(dlg, SW_SHOWNORMAL);
 
+    // FIX (D2 polish): the old loop tested IsWindow(dlg) only BEFORE GetMessageW
+    // blocked, so once the dialog was destroyed the pump stayed parked inside
+    // GetMessageW until some unrelated message happened to arrive. Check IsWindow
+    // AFTER each dispatch instead: the message that closes the dialog is the one we
+    // just processed, so we break out immediately and never block post-close.
     MSG msg;
-    while (IsWindow(dlg) && GetMessageW(&msg, NULL, 0, 0) > 0) {
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         if (!IsDialogMessageW(dlg, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+        if (!IsWindow(dlg)) break;
     }
     EnableWindow(owner, TRUE);
     SetForegroundWindow(owner);
@@ -3927,16 +4019,16 @@ void SavePinnedApps() {
     if (g_csInitialized) LeaveCriticalSection(&g_cs);
     multiSz += L'\0';
 
-    // Registry write  --  outside CS  --  slow I/O won't block the UI/input loop
-    HKEY hKey = NULL;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, REG_KEY, 0, NULL,
-                        REG_OPTION_NON_VOLATILE, KEY_SET_VALUE,
-                        NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, REG_VALUE, 0, REG_MULTI_SZ,
-                       (const BYTE*)multiSz.c_str(),
-                       (DWORD)(multiSz.size() * sizeof(wchar_t)));
-        RegCloseKey(hKey);
-    }
+    // FIX-C3 (#7): persist to Windhawk mod storage (reversible on uninstall)
+    // instead of HKCU. The exact same double-null-terminated blob is written
+    // verbatim via Wh_SetBinaryValue; its byte length is stored alongside so
+    // LoadPinnedApps can size its read buffer (Wh_GetBinaryValue copies nothing
+    // into a too-small buffer and gives no way to query the needed size). This is
+    // still outside the CS, so the (now local, fast) storage write can't block
+    // the animation/input loop.
+    size_t blobBytes = multiSz.size() * sizeof(wchar_t);
+    Wh_SetBinaryValue(REG_VALUE, multiSz.c_str(), blobBytes);
+    Wh_SetIntValue(L"PinnedAppsBytes", (int)blobBytes);
 }
 
 // Remove invalid entries from the list.
@@ -3966,17 +4058,14 @@ static void ValidateAndCleanPinnedList() {
 void LoadPinnedApps() {
     g_pinnedApps.clear();
 
-    HKEY hKey = NULL;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_KEY, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
-        return;
+    // FIX-C3 (#7): read the pinned-apps blob from Windhawk mod storage instead of
+    // HKCU. "PinnedAppsBytes" (0 when unset) gives the exact byte length so we can
+    // size the read buffer -- Wh_GetBinaryValue copies nothing into a too-small one.
+    int savedBytes = Wh_GetIntValue(L"PinnedAppsBytes", 0);
+    if (savedBytes > (int)sizeof(wchar_t)) {
 
-    DWORD dataSize = 0;
-    if (RegQueryValueExW(hKey, REG_VALUE, NULL, NULL, NULL, &dataSize) == ERROR_SUCCESS
-        && dataSize > sizeof(wchar_t)) {
-
-        std::vector<BYTE> buf(dataSize);
-        if (RegQueryValueExW(hKey, REG_VALUE, NULL, NULL,
-                             buf.data(), &dataSize) == ERROR_SUCCESS) {
+        std::vector<BYTE> buf((size_t)savedBytes);
+        if (Wh_GetBinaryValue(REG_VALUE, buf.data(), buf.size()) == (size_t)savedBytes) {
             const wchar_t* p = (const wchar_t*)buf.data();
 
             int appCap = std::min(MAX_APP_PINS, std::max(1, MAX_PINNED_APPS));
@@ -4056,7 +4145,6 @@ void LoadPinnedApps() {
             }
         }
     }
-    RegCloseKey(hKey);
 
     // ValidateAndCleanPinnedList acquires the CS internally  --  must be called outside CS
     ValidateAndCleanPinnedList();
@@ -4739,7 +4827,7 @@ static bool EnsureTetherSurface() {
         if (!s_cls) {
             WNDCLASSEXW wc = { sizeof(wc) };
             wc.lpfnWndProc   = DefWindowProcW;
-            wc.hInstance     = GetModuleHandleW(NULL);
+            wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
             wc.lpszClassName = L"QPDockTether";
             RegisterClassExW(&wc);
             s_cls = true;
@@ -4750,7 +4838,7 @@ static bool EnsureTetherSurface() {
             // UNDER other top-most windows before the first SetWindowPos.
             WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
             L"QPDockTether", L"", WS_POPUP,
-            0, 0, dim, dim, NULL, NULL, GetModuleHandleW(NULL), NULL);
+            0, 0, dim, dim, NULL, NULL, GetModHInstance(), NULL);   // FIX-B3 (#3)
         if (!g_tetherWnd) return false;
     }
 
@@ -5627,7 +5715,7 @@ static bool EnsureVanishSurface() {
         if (!s_cls) {
             WNDCLASSEXW wc = { sizeof(wc) };
             wc.lpfnWndProc   = DefWindowProcW;
-            wc.hInstance     = GetModuleHandleW(NULL);
+            wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
             wc.lpszClassName = L"QPDockVanish";
             RegisterClassExW(&wc);
             s_cls = true;
@@ -5635,7 +5723,7 @@ static bool EnsureVanishSurface() {
         g_vanishWnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
             L"QPDockVanish", L"", WS_POPUP,
-            0, 0, w, h, NULL, NULL, GetModuleHandleW(NULL), NULL);
+            0, 0, w, h, NULL, NULL, GetModHInstance(), NULL);   // FIX-B3 (#3)
         if (!g_vanishWnd) return false;
     }
     if (g_vanishDIB && g_vanishBits && w == g_vanishW && h == g_vanishH)
@@ -6484,8 +6572,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         int wn = (int)g_pinnedApps.size();
         if (wn <= 0) { LeaveCriticalSection(&g_cs); return 0; }
 
-        int cur = (g_hoverIndex >= 0 && g_hoverIndex < wn) ? g_hoverIndex
-                                                           : (wheel < 0 ? -1 : wn);
+        int hi  = g_hoverIndex.load();
+        int cur = (hi >= 0 && hi < wn) ? hi
+                                       : (wheel < 0 ? -1 : wn);
         int nextIdx = cur + (wheel < 0 ? 1 : -1);
         if (nextIdx < 0) nextIdx = 0;
         if (nextIdx > wn - 1) nextIdx = wn - 1;
@@ -6731,8 +6820,9 @@ LRESULT CALLBACK InputOwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         int wn = (int)g_pinnedApps.size();
         if (wn <= 0) { LeaveCriticalSection(&g_cs); return 0; }
 
-        int cur = (g_hoverIndex >= 0 && g_hoverIndex < wn) ? g_hoverIndex
-                                                           : (wheel < 0 ? -1 : wn);
+        int hi  = g_hoverIndex.load();
+        int cur = (hi >= 0 && hi < wn) ? hi
+                                       : (wheel < 0 ? -1 : wn);
         int nextIdx = cur + (wheel < 0 ? 1 : -1);
         if (nextIdx < 0) nextIdx = 0;
         if (nextIdx > wn - 1) nextIdx = wn - 1;
@@ -6843,7 +6933,7 @@ LRESULT CALLBACK InputOwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 static bool CreateInputOwnerWindow() {
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = InputOwnerProc;
-    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hInstance = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
     wc.lpszClassName = INPUT_CLASS;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     RegisterClassExW(&wc);
@@ -6868,7 +6958,7 @@ static bool CreateInputOwnerWindow() {
 static bool CreateOverlayWindow() {
     WNDCLASSEXW wc   = { sizeof(wc) };
     wc.lpfnWndProc   = OverlayProc;
-    wc.hInstance     = GetModuleHandleW(NULL);
+    wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
     wc.lpszClassName = OVERLAY_CLASS;
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.style         = CS_DBLCLKS;
@@ -6913,7 +7003,7 @@ static bool CreateOverlayWindow() {
 static bool CreateGhostWindow() {
     WNDCLASSEXW gw   = { sizeof(gw) };
     gw.lpfnWndProc   = DefWindowProcW;
-    gw.hInstance     = GetModuleHandleW(NULL);
+    gw.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
     gw.lpszClassName = GHOST_CLASS;
     RegisterClassExW(&gw);
 
@@ -6936,52 +7026,13 @@ static bool CreateGhostWindow() {
 // ============================================================
 //  WINEVENT HOOK  --  event-driven taskbar geometry refresh
 // ============================================================
-static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
-                                   LONG idObject, LONG, DWORD, DWORD) {
-    // Only care about window location and foreground changes
-    if (idObject != OBJID_WINDOW && idObject != OBJID_CLIENT &&
-        idObject != OBJID_CURSOR)
-        return;
-    if (!hwnd) return;
-
-    // Filter quickly to taskbar-related windows only
-    if (hwnd != g_cachedTaskbar) {
-        wchar_t cls[32] = {};
-        GetClassNameW(hwnd, cls, 32);
-        if (wcsstr(cls, L"Shell_TrayWnd") == NULL &&
-            wcsstr(cls, L"Start")         == NULL &&
-            wcsstr(cls, L"Tray")          == NULL)
-            return;
-        // Only enforce the root-ancestor check when our cached taskbar HWND is
-        // known.  If g_cachedTaskbar is NULL (explorer restarted, geometry not yet
-        // measured) allow the event through so RefreshTaskbarCache can re-acquire it.
-        if (g_cachedTaskbar != NULL && GetAncestor(hwnd, GA_ROOT) != g_cachedTaskbar)
-            return;
-    }
-
-    if (event == EVENT_OBJECT_LOCATIONCHANGE || event == EVENT_SYSTEM_FOREGROUND) {
-        if (HasTaskbarGeometryChanged()) {
-            RefreshTaskbarCache();
-            RepositionOverlay();
-            // FIX-6: Rate-limit secondary dock rebuild to at most once every 2 s.
-            // EVENT_OBJECT_LOCATIONCHANGE fires 30-60x/s during any drag; without a
-            // guard each event tears down and recreates secondary dock HWNDs, causing
-            // massive UI churn on multi-monitor systems.
-            if (MULTI_MONITOR_DOCK) {
-                static DWORD s_lastSecondaryRebuild = 0;
-                DWORD nowRebuild = GetTickCount();
-                if (nowRebuild - s_lastSecondaryRebuild >= 2000) {
-                    s_lastSecondaryRebuild = nowRebuild;
-                    // FIX: DestroyWindow must be called on the main thread (the
-                    // thread that created the windows).  Post a message to the
-                    // overlay wndproc instead of calling Destroy/Init directly.
-                    if (g_overlayWnd && IsWindow(g_overlayWnd))
-                        PostMessageW(g_overlayWnd, WM_QPD_REBUILD_SECONDARY, 0, 0);
-                }
-            }
-        }
-    }
-}
+// FIX-A7 (#4): WinEventProc removed together with its SetWinEventHook
+// registration. The hook could never fire (inverted event range,
+// WINEVENT_SKIPOWNPROCESS excluded explorer.exe, idThread pinned to our own
+// thread) and every geometry refresh + secondary-dock rebuild it would have
+// performed is already driven by the worker poll loop below (see the
+// HasTaskbarGeometryChanged -> RefreshTaskbarCache -> RepositionOverlay ->
+// PostMessage(WM_QPD_REBUILD_SECONDARY) block).
 
 // ============================================================
 //  WORKER THREAD  --  input polling and animation loop
@@ -7023,6 +7074,17 @@ static void UnpinForegroundApp() {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
+    // FIX-A8 (#11): the optional startup delay now runs HERE, on the worker
+    // thread, instead of blocking Wh_ModInit (which runs on the process main
+    // thread at load, or the Windhawk Engine thread on a live reload -- either
+    // way a Sleep there stalls Explorer startup / the Windhawk UI). Wait on
+    // g_exitEvent so a disable/reload during the delay tears down instantly
+    // rather than blocking for up to 3 s.
+    if (STARTUP_DELAY_MS > 0) {
+        if (WaitForSingleObject(g_exitEvent, (DWORD)STARTUP_DELAY_MS) == WAIT_OBJECT_0)
+            return 0;
+    }
+
     bool  lastLDown         = false;
     DWORD lastGeometryCheck = GetTickCount();
     DWORD bootWatchdogStart = GetTickCount();
@@ -7130,7 +7192,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // validated pipeline as the drag and the Ctrl+Alt+P hotkey. A held key
         // counts as one tap (edge-detected), and the counter resets when taps
         // are too slow so it does not fire during ordinary typing.
-        {
+        if (ENABLE_KEY_GESTURES) {
             bool pDown    = (GetAsyncKeyState('P') & 0x8000) != 0;
             bool uDown    = (GetAsyncKeyState('U') & 0x8000) != 0;
             bool lKeyDown = (GetAsyncKeyState('L') & 0x8000) != 0;  // triple-tap = lock toggle
@@ -7589,7 +7651,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                         LeaveCriticalSection(&g_cs);
                     }
                 }
-                if (clickIdx >= 0) {
+                if (ENABLE_RAPID_UNPIN_ALL && clickIdx >= 0) {
                     if (clickIdx != g_rapidClickIndex) {
                         g_rapidClickIndex = clickIdx;
                         g_rapidClickCount = 1;
@@ -8207,7 +8269,7 @@ static void InitSecondaryDocks() {
     if (!s_classRegistered) {
         WNDCLASSEXW wc   = { sizeof(wc) };
         wc.lpfnWndProc   = SecondaryOverlayProc;
-        wc.hInstance     = GetModuleHandleW(NULL);
+        wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
         wc.lpszClassName = L"WH_QPDockSecondary";
         wc.style         = CS_HREDRAW | CS_VREDRAW;
         RegisterClassExW(&wc);
@@ -8234,7 +8296,7 @@ static void InitSecondaryDocks() {
             WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,
             L"WH_QPDockSecondary", L"", WS_POPUP,
             dockLeft, tbr.top, dockRight - dockLeft, tbH,
-            NULL, NULL, GetModuleHandleW(NULL), NULL);
+            NULL, NULL, GetModHInstance(), NULL);   // FIX-B3 (#3)
         if (!hwnd) continue;
 
         SetLayeredWindowAttributes(hwnd, RGB(1, 0, 1), 0, LWA_COLORKEY);
@@ -8291,8 +8353,99 @@ static void RepaintSecondaryDocks() {
 // even if Windhawk does not guarantee calling Wh_ModUninit after a FALSE return.
 void Wh_ModUninit();
 
-BOOL Wh_ModInit() {
-    // Read and clamp user settings
+// FIX-C1 (#1/#2/#8): the dedicated UI thread. It creates every top-level window
+// (input owner, overlay, ghost, the pre-warmed tether/vanish layers, and the
+// secondary-monitor docks), registers the pin hotkey (inside CreateOverlayWindow),
+// then runs a real GetMessageW/DispatchMessageW loop so WM_PAINT / WM_MOUSE* /
+// WM_MOUSEWHEEL / WM_HOTKEY / WM_QPD_REBUILD_SECONDARY are actually dispatched.
+// On WM_QUIT it destroys those windows and unregisters the classes -- on the SAME
+// thread that created them, which is what DestroyWindow / UnregisterHotKey /
+// UnregisterClassW require. Wh_ModInit waits on g_uiReadyEvent so the worker only
+// starts once the windows exist.
+static DWORD WINAPI UiThreadProc(LPVOID) {
+    // Force a message queue to exist before Wh_ModUninit can PostThreadMessage() us.
+    MSG probe;
+    PeekMessageW(&probe, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    g_uiThreadId = GetCurrentThreadId();
+
+    bool ok = CreateInputOwnerWindow() && CreateOverlayWindow();
+    InitGhostDIB();
+    if (ok) ok = CreateGhostWindow();
+    if (ok) {
+        // Pre-warm the drag-effect layered windows (rope + vanish) so DWM registers
+        // their layered surfaces up front (avoids a black first-present frame).
+        PrewarmDragEffectWindows();
+
+        // Snap position immediately so there is no fly-in from (0,0) at startup.
+        if (!g_positionInitialized && g_cachedDockRect.left > 0) {
+            g_dockCurrentX        = (float)g_cachedDockRect.left;
+            g_dockCurrentY        = (float)g_cachedDockRect.top;
+            g_dockTargetX         = g_dockCurrentX;
+            g_dockTargetY         = g_dockCurrentY;
+            g_positionInitialized = true;
+        }
+
+        // Force the overlay visible and in position before the worker thread starts.
+        if (g_inputWnd && IsWindow(g_inputWnd)) {
+            ShowWindow(g_inputWnd, SW_SHOWNOACTIVATE);
+            SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+        if (g_overlayWnd && IsWindow(g_overlayWnd)) {
+            ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
+            SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            InvalidateRect(g_overlayWnd, NULL, FALSE);
+        }
+        RepositionOverlay();
+
+        // Multi-monitor: create secondary dock overlays after geometry is ready.
+        InitSecondaryDocks();
+    }
+
+    g_uiInitOk = ok;
+    if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
+
+    // The guaranteed message pump the overlay/ghost/secondary windows never had.
+    if (ok) {
+        MSG msg;
+        while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    // Teardown on the creating thread (FIX #2/#3). Runs on the normal WM_QUIT exit
+    // AND on the early-failure path. Only the thread-affine window/class/hotkey work
+    // happens here; the plain GDI/DIB/CS/icon frees stay in Wh_ModUninit (which runs
+    // this teardown's globals as harmless no-ops after it joins this thread). DIBs
+    // are intentionally NOT deleted here to avoid a double-free with Wh_ModUninit.
+    if (g_overlayWnd && IsWindow(g_overlayWnd) && g_hotkeyKey != 0 && g_hotkeyMods != 0)
+        UnregisterHotKey(g_overlayWnd, HOTKEY_PIN_ID);
+    DestroySecondaryDocks();
+    if (g_tetherWnd) { DestroyWindow(g_tetherWnd); g_tetherWnd = NULL; }
+    if (g_vanishWnd) { DestroyWindow(g_vanishWnd); g_vanishWnd = NULL; }
+    if (g_ghostWnd)  { DestroyWindow(g_ghostWnd);  g_ghostWnd  = NULL; }
+    if (g_overlayWnd){ DestroyWindow(g_overlayWnd);g_overlayWnd= NULL; }
+    if (g_inputWnd)  { DestroyWindow(g_inputWnd);  g_inputWnd  = NULL; }
+    {
+        HINSTANCE hInst = GetModHInstance();
+        UnregisterClassW(INPUT_CLASS,           hInst);   // QPDockInputOwner
+        UnregisterClassW(OVERLAY_CLASS,         hInst);   // QPDockOverlay
+        UnregisterClassW(GHOST_CLASS,           hInst);   // QPDockGhost
+        UnregisterClassW(L"QPDockTether",       hInst);
+        UnregisterClassW(L"QPDockVanish",       hInst);
+        UnregisterClassW(L"WH_QPDockSecondary", hInst);
+        UnregisterClassW(L"QPDockRenameDialog", hInst);
+    }
+    return 0;
+}
+
+// FIX (D2 polish): the setting read+clamp block was duplicated verbatim in both
+// Wh_ModInit and Wh_ModSettingsChanged (~40 lines), which is exactly how the two
+// drift apart (e.g. one reads a setting the other forgets). Factored into a single
+// LoadSettings() helper that both call, so there is now one source of truth.
+static void LoadSettings() {
     MAX_PINNED_APPS      = Wh_GetIntSetting(L"maxPinnedApps",     5);
     BASE_ICON_SIZE       = Wh_GetIntSetting(L"iconSize",          33);
     BASE_ICON_SPACING    = 12;   // fixed per-icon gap (iconSpacing setting removed from the Windhawk UI)
@@ -8303,22 +8456,23 @@ BOOL Wh_ModInit() {
     ENABLE_ICON_THREADS  = Wh_GetIntSetting(L"enableDragTether",    1) != 0;
     THREAD_THICKNESS     = std::max(1, std::min(10, Wh_GetIntSetting(L"dragTetherThickness", 2)));
     THREAD_MAX_STRETCH_PX = (float)std::max(150, std::min(650, Wh_GetIntSetting(L"dragRopeBreakLength", 450)));
-    UNPIN_TRIGGER        = std::max(0, std::min(1, Wh_GetIntSetting(L"unpinTrigger", 0)));
-    THREAD_COLOR_MODE    = Wh_GetIntSetting(L"dragTetherColorMode", 1) != 0 ? 1 : 0;
+    UNPIN_TRIGGER        = LoadUnpinTriggerSetting();
+    THREAD_COLOR_MODE    = LoadColorModeSetting();
     THREAD_HUE           = ((Wh_GetIntSetting(L"dragTetherHue", 30) % 360) + 360) % 360;
     ENABLE_DOUBLE_RCLICK_UNPIN = Wh_GetIntSetting(L"enableDoubleRightClickUnpin", 0) != 0;
+    ENABLE_RAPID_UNPIN_ALL     = Wh_GetIntSetting(L"enableRapidUnpinAll", 0) != 0;
+    ENABLE_KEY_GESTURES        = Wh_GetIntSetting(L"enableKeyGestures", 0) != 0;
     CORNER_ROUNDNESS     = Wh_GetIntSetting(L"cornerRoundness",     100);
     ENABLE_EXPLORER_WORKSPACE_PINS = Wh_GetIntSetting(L"enableExplorerWorkspacePins", 0) != 0;
     MULTI_MONITOR_DOCK   = Wh_GetIntSetting(L"multiMonitorDock",    0) != 0;
     STARTUP_DELAY_MS     = Wh_GetIntSetting(L"startupDelay",        0);
     DOCK_GAP_FROM_START  = Wh_GetIntSetting(L"dockGapFromStart",    6);
-    g_logLevel           = ClampLogLevel(Wh_GetIntSetting(L"logLevel", (int)LOG_ERROR));
-    // Hotkey: 0 modifiers or 0 key = disabled. Clamp modifiers to valid MOD_* flags.
-    g_hotkeyMods = (UINT)Wh_GetIntSetting(L"hotkeyModifiers", (int)(MOD_CONTROL | MOD_ALT));
-    g_hotkeyKey  = (UINT)Wh_GetIntSetting(L"hotkeyKey",       (int)'P');
-    g_hotkeyMods &= (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
     // Auto-hide sync: default OFF  --  dock stays visible even if taskbar auto-hides
     ENABLE_AUTOHIDE_SYNC = Wh_GetIntSetting(L"autoHideSync", 0) != 0;
+    // Hotkey: 0 modifiers or 0 key = disabled. Clamp modifiers to valid MOD_* flags.
+    g_hotkeyMods = LoadHotkeyModifiersSetting();
+    g_hotkeyKey  = LoadHotkeyKeySetting();
+    g_hotkeyMods &= (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
 
     MAX_PINNED_APPS   = std::max(1,  std::min(20,   MAX_PINNED_APPS));
     // FIX (decouple): the per-type app cap and the fixed dock width both
@@ -8331,10 +8485,15 @@ BOOL Wh_ModInit() {
     CORNER_ROUNDNESS  = std::max(0,  std::min(100,  CORNER_ROUNDNESS));
     STARTUP_DELAY_MS  = std::max(0,  std::min(3000, STARTUP_DELAY_MS));
     DOCK_GAP_FROM_START = std::max(0, std::min(40,  DOCK_GAP_FROM_START));
+}
 
-    // Optional startup delay for slow machines  --  applied before any GDI/window work
-    if (STARTUP_DELAY_MS > 0)
-        Sleep((DWORD)STARTUP_DELAY_MS);
+BOOL Wh_ModInit() {
+    // Read and clamp all user settings (shared with Wh_ModSettingsChanged).
+    LoadSettings();
+
+    // FIX-A8 (#11): the optional startup delay was moved OUT of Wh_ModInit and
+    // into the worker thread (see WorkerThread) so init returns promptly and
+    // never blocks Explorer startup / the Windhawk Engine thread for up to 3 s.
 
     InitializeCriticalSection(&g_cs);
     g_csInitialized = true;
@@ -8352,107 +8511,104 @@ BOOL Wh_ModInit() {
     g_bootStartTime = GetTickCount();
     g_systemState   = STATE_BOOT;
 
-    // Bounded geometry retry: the taskbar / DWM composition may not be ready at
-    // injection time, so a single RefreshTaskbarCache can leave g_dockLocalW == 0
-    // and the dock invisible until the first worker poll (or flying in from 0,0).
-    // Retry briefly so the FIRST paint uses correct geometry -> faster,
-    // flicker-free dock appearance at startup.
-    //
-    // PERF: this loop runs on Windhawk's calling thread, so every ms here is a ms
-    // that a Compile/reload blocks the Windhawk UI. On a normal reload the taskbar
-    // is already up, so the FIRST RefreshTaskbarCache succeeds and we break with
-    // ZERO sleep. The retries only matter on a cold boot when DWM isn't ready yet,
-    // so the per-attempt wait was halved (20 -> 10 ms, ~60 ms worst case instead
-    // of ~120 ms). If geometry still isn't ready, the worker's 100 ms boot poll
-    // + snap-position logic corrects it within one cycle anyway.
-    for (int attempt = 0; attempt < 6; ++attempt) {
-        RefreshTaskbarCache();
-        if (g_dockLocalW > 0) break;
-        Sleep(10);
-    }
+    // FIX-A8 (#11): single non-blocking geometry probe. Try once so the FIRST
+    // paint uses correct geometry when the taskbar/DWM are already up (the common
+    // reload case). If composition isn't ready yet (cold boot) g_dockLocalW stays
+    // 0 -- but we no longer Sleep-retry on the lifecycle thread: the worker's
+    // 100 ms boot poll + snap-position logic recovers the geometry within one
+    // cycle, so we don't block Explorer startup / the Windhawk UI here.
+    RefreshTaskbarCache();
     LoadPinnedApps();
 
-    if (!CreateInputOwnerWindow()) { Wh_ModUninit(); return FALSE; }
-    if (!CreateOverlayWindow()) { Wh_ModUninit(); return FALSE; }
-    InitGhostDIB();
-    if (!CreateGhostWindow())   { Wh_ModUninit(); return FALSE; }
-
-    // Pre-warm the drag-effect layered windows (rope + vanish) NOW, at startup,
-    // exactly like the ghost above -- create them + present one transparent frame
-    // so DWM registers their layered surfaces up front. This is the real fix for
-    // the black rope/icon that appeared only on real hardware during unpin:
-    // creating them lazily mid-gesture let their first present flash black for a
-    // frame on a hardware compositor. Non-fatal if it fails (they self-create on
-    // first use as before).
-    PrewarmDragEffectWindows();
-
-    // Snap position immediately so there is no fly-in from (0,0) at startup
-    if (!g_positionInitialized && g_cachedDockRect.left > 0) {
-        g_dockCurrentX        = (float)g_cachedDockRect.left;
-        g_dockCurrentY        = (float)g_cachedDockRect.top;
-        g_dockTargetX         = g_dockCurrentX;
-        g_dockTargetY         = g_dockCurrentY;
-        g_positionInitialized = true;
-    }
-
-    // Force the overlay visible and in position before the worker thread starts
-    if (g_inputWnd && IsWindow(g_inputWnd)) {
-        ShowWindow(g_inputWnd, SW_SHOWNOACTIVATE);
-        SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    }
-    if (g_overlayWnd && IsWindow(g_overlayWnd)) {
-        ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
-        SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        InvalidateRect(g_overlayWnd, NULL, FALSE);
-    }
-    RepositionOverlay();
-
-    // Subscribe to taskbar location/foreground events for geometry-driven refresh.
-    // WINEVENT_INCONTEXT: callback runs on the main thread (the thread calling
-    // SetWinEventHook) which owns the overlay window and has a message pump.
-    // OUTOFCONTEXT fires on a random thread-pool thread with no pump, causing
-    // RefreshTaskbarCache / RepositionOverlay to race with the overlay's wndproc.
-    // NULL hmodWinEventProc is required for INCONTEXT -- the DLL handle is resolved
-    // automatically by the hook system since we are in-process.
-    g_winEventHook = SetWinEventHook(
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND,
-        GetModuleHandleW(NULL), WinEventProc, 0, GetCurrentThreadId(),
-        WINEVENT_INCONTEXT | WINEVENT_SKIPOWNPROCESS);
-
-    // Multi-monitor: create secondary dock overlays after geometry is ready
-    InitSecondaryDocks();
+    // FIX-C1 (#1/#2/#8): all top-level windows, the pin hotkey, and the secondary
+    // docks are now created / pumped / destroyed on the dedicated UI thread
+    // (UiThreadProc) so they finally have a guaranteed GetMessageW/DispatchMessageW
+    // pump and are torn down on their creating thread. Windhawk lifecycle callbacks
+    // (this function) run on an arbitrary, non-pumping thread, so we must own one.
+    // Start the UI thread and wait for it to finish creating its windows before
+    // starting the worker, which immediately expects g_overlayWnd/g_inputWnd to exist.
+    // (The former SetWinEventHook was already removed in FIX-A7 -- the worker poll
+    // drives every geometry update and posts WM_QPD_REBUILD_SECONDARY, now actually
+    // dispatched by this thread's pump.)
+    g_uiReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_uiReadyEvent) { Wh_ModUninit(); return FALSE; }
+    g_uiThread = CreateThread(NULL, 0, UiThreadProc, NULL, 0, NULL);
+    if (!g_uiThread) { Wh_ModUninit(); return FALSE; }
+    WaitForSingleObject(g_uiReadyEvent, INFINITE);
+    if (!g_uiInitOk) { Wh_ModUninit(); return FALSE; }
 
     g_workerThread = CreateThread(NULL, 0, WorkerThread, NULL, 0, NULL);
     if (!g_workerThread) { Wh_ModUninit(); return FALSE; }
 
     if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();  // only when user enables sync
 
-    LOG_IMPORTANT(L"INIT: v31.0.0 OK. state=%d pinned=%d glass=%d reorder=%d explorerWorkspaces=%d multimon=%d delay=%d hotkey=0x%X+0x%X autohide=%d logLevel=%d",
+    LOG_IMPORTANT(L"INIT: v31.0.0 OK. state=%d pinned=%d glass=%d reorder=%d explorerWorkspaces=%d multimon=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
               (int)ENABLE_GLASS_OVERLAY, (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
               (int)MULTI_MONITOR_DOCK, STARTUP_DELAY_MS,
-              g_hotkeyMods, g_hotkeyKey, (int)ENABLE_AUTOHIDE_SYNC, (int)g_logLevel);
+              g_hotkeyMods, g_hotkeyKey, (int)ENABLE_AUTOHIDE_SYNC);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Stop event hook first to prevent callbacks after teardown begins
-    if (g_winEventHook) { UnhookWinEvent(g_winEventHook); g_winEventHook = NULL; }
-    // Unregister hotkey before the overlay window is destroyed
-    if (g_overlayWnd && IsWindow(g_overlayWnd) && g_hotkeyKey != 0 && g_hotkeyMods != 0)
-        UnregisterHotKey(g_overlayWnd, HOTKEY_PIN_ID);
+    // FIX-A7 (#4): WinEvent hook removed -- nothing to unhook.
+    // FIX-C1 (#2): the pin hotkey and every window are unregistered/destroyed by
+    // the UI thread itself (UiThreadProc), on the thread that created them -- see
+    // the WM_QUIT + join below. Nothing here touches those windows directly.
 
-    // Signal the worker thread and wait up to 2 seconds for clean exit
+    // FIX-B1 (#5): signal the worker thread and wait INFINITELY for it to exit.
+    // The old 2 s timeout could return while the worker was still running mod
+    // code (a single loop iteration can do a cross-process UIA hit-test +
+    // EnumWindows/OpenProcess per window and exceed 2 s on a loaded machine);
+    // Windhawk would then FreeLibrary the image out from under the still-running
+    // thread and crash Explorer. Nothing the worker touches (GDI objects, g_cs,
+    // windows) is freed until AFTER this join returns -- all those frees are
+    // below this block. g_exitEvent is what every WaitForSingleObject in the
+    // worker loop waits on, so the join can't deadlock: the loop wakes and
+    // returns immediately once the event is set.
     if (g_exitEvent) {
         SetEvent(g_exitEvent);
         if (g_workerThread) {
-            WaitForSingleObject(g_workerThread, 2000);
+            WaitForSingleObject(g_workerThread, INFINITE);
             CloseHandle(g_workerThread);
             g_workerThread = NULL;
         }
+    }
+
+    // FIX-B2 (#6): join the workspace-launch thread too. LaunchWorkspaceThread
+    // runs LoadWorkspaceSnapshot + COM + ShellExecuteExW (seconds of work); if
+    // the mod is disabled/reloaded meanwhile the image is unmapped underneath
+    // it. Signal the stop flag and wait for it to finish before we return.
+    g_launchWorkspaceStop.store(true);
+    if (g_launchWorkspaceThread) {
+        WaitForSingleObject(g_launchWorkspaceThread, INFINITE);
+        CloseHandle(g_launchWorkspaceThread);
+        g_launchWorkspaceThread = NULL;
+    }
+
+    // FIX-C1 (#1/#2/#3): now that the worker (which may cross-thread SendMessage
+    // into the overlay) has exited, ask the UI thread to quit. WM_QUIT breaks its
+    // GetMessageW loop; UiThreadProc then destroys every top-level window,
+    // unregisters the pin hotkey and UnregisterClassW's all 7 classes ON ITS OWN
+    // (creating) thread -- the only thread allowed to. We must join it here BEFORE
+    // freeing any GDI/DIB/CS resources below, and before Windhawk FreeLibrary's the
+    // image, so no window proc is ever entered against unmapped code. After the join
+    // g_inputWnd/g_overlayWnd/g_ghostWnd/... are NULL, so the DestroyWindow /
+    // UnregisterClassW lines further down run as harmless no-ops.
+    if (g_uiThread) {
+        if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread   = NULL;
+        g_uiThreadId = 0;
+    }
+    if (g_uiReadyEvent) {
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = NULL;
+    }
+
+    if (g_exitEvent) {
         CloseHandle(g_exitEvent);
         g_exitEvent = NULL;
     }
@@ -8488,6 +8644,26 @@ void Wh_ModUninit() {
     if (g_ghostWnd)  { DestroyWindow(g_ghostWnd);  g_ghostWnd  = NULL; }
     if (g_overlayWnd){ DestroyWindow(g_overlayWnd);g_overlayWnd= NULL; }
     if (g_inputWnd)  { DestroyWindow(g_inputWnd);  g_inputWnd  = NULL; }
+
+    // FIX-B3 (#3): unregister every window class this mod registered. A class
+    // registration is NOT removed when the mod DLL unloads, so without this the
+    // next load's RegisterClassExW fails with ERROR_CLASS_ALREADY_EXISTS and
+    // CreateWindowExW binds to the stale class whose lpfnWndProc points into the
+    // now-unmapped previous image -> crash on the first message. All windows of
+    // these classes have been destroyed above, so UnregisterClassW can succeed.
+    // Registered with GetModHInstance() (see the RegisterClassExW sites), so we
+    // must unregister against the same module handle. (Phase C will move this to
+    // the dedicated window thread that owns the classes.)
+    {
+        HINSTANCE hInst = GetModHInstance();
+        UnregisterClassW(INPUT_CLASS,          hInst);   // QPDockInputOwner
+        UnregisterClassW(OVERLAY_CLASS,        hInst);   // QPDockOverlay
+        UnregisterClassW(GHOST_CLASS,          hInst);   // QPDockGhost
+        UnregisterClassW(L"QPDockTether",      hInst);
+        UnregisterClassW(L"QPDockVanish",      hInst);
+        UnregisterClassW(L"WH_QPDockSecondary", hInst);
+        UnregisterClassW(L"QPDockRenameDialog", hInst);
+    }
 
     if (g_blackBrush)    { DeleteObject(g_blackBrush);    g_blackBrush    = NULL; }
     if (g_linePenNormal) { DeleteObject(g_linePenNormal); g_linePenNormal = NULL; }
@@ -8543,42 +8719,8 @@ void Wh_ModUninit() {
 // Re-reads all settings, invalidates the dock-width cache, and refreshes
 // the overlay so changes take effect immediately without a mod reload.
 void Wh_ModSettingsChanged() {
-    MAX_PINNED_APPS      = Wh_GetIntSetting(L"maxPinnedApps",      5);
-    BASE_ICON_SIZE       = Wh_GetIntSetting(L"iconSize",           33);
-    BASE_ICON_SPACING    = 12;   // fixed per-icon gap (iconSpacing setting removed from the Windhawk UI)
-    SEPARATOR_OPACITY    = Wh_GetIntSetting(L"separatorOpacity",  100);
-    ENABLE_GLASS_OVERLAY = Wh_GetIntSetting(L"enableGlassOverlay",  1) != 0;
-    ENABLE_REORDER       = Wh_GetIntSetting(L"enableReorder",       1) != 0;
-    ENABLE_SCROLL_NAV    = Wh_GetIntSetting(L"enableScrollNav",     1) != 0;
-    ENABLE_ICON_THREADS  = Wh_GetIntSetting(L"enableDragTether",    1) != 0;
-    THREAD_THICKNESS     = std::max(1, std::min(10, Wh_GetIntSetting(L"dragTetherThickness", 2)));
-    THREAD_MAX_STRETCH_PX = (float)std::max(150, std::min(650, Wh_GetIntSetting(L"dragRopeBreakLength", 450)));
-    UNPIN_TRIGGER        = std::max(0, std::min(1, Wh_GetIntSetting(L"unpinTrigger", 0)));
-    THREAD_COLOR_MODE    = Wh_GetIntSetting(L"dragTetherColorMode", 1) != 0 ? 1 : 0;
-    THREAD_HUE           = ((Wh_GetIntSetting(L"dragTetherHue", 30) % 360) + 360) % 360;
-    ENABLE_DOUBLE_RCLICK_UNPIN = Wh_GetIntSetting(L"enableDoubleRightClickUnpin", 0) != 0;
-    CORNER_ROUNDNESS     = Wh_GetIntSetting(L"cornerRoundness",     100);
-    ENABLE_EXPLORER_WORKSPACE_PINS = Wh_GetIntSetting(L"enableExplorerWorkspacePins", 0) != 0;
-    MULTI_MONITOR_DOCK   = Wh_GetIntSetting(L"multiMonitorDock",    0) != 0;
-    STARTUP_DELAY_MS     = Wh_GetIntSetting(L"startupDelay",        0);
-    DOCK_GAP_FROM_START  = Wh_GetIntSetting(L"dockGapFromStart",    6);
-    ENABLE_AUTOHIDE_SYNC = Wh_GetIntSetting(L"autoHideSync",        0) != 0;
-    g_logLevel           = ClampLogLevel(Wh_GetIntSetting(L"logLevel", (int)LOG_ERROR));
-    g_hotkeyMods = (UINT)Wh_GetIntSetting(L"hotkeyModifiers", (int)(MOD_CONTROL | MOD_ALT));
-    g_hotkeyKey  = (UINT)Wh_GetIntSetting(L"hotkeyKey",       (int)'P');
-    g_hotkeyMods &= (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
-
-    MAX_PINNED_APPS   = std::max(1,  std::min(20,   MAX_PINNED_APPS));
-    // FIX (decouple): the per-type app cap and the fixed dock width both
-    // derive from MAX_APP_PINS. Previously it was hard-coded to 5, silently
-    // capping the maxPinnedApps setting. Track the user's value instead.
-    MAX_APP_PINS = MAX_PINNED_APPS;
-    BASE_ICON_SIZE    = std::max(16, std::min(48,   BASE_ICON_SIZE));
-    // BASE_ICON_SPACING is fixed at 12 (no user setting) -- no clamp needed.
-    SEPARATOR_OPACITY = std::max(0,  std::min(100,  SEPARATOR_OPACITY));
-    CORNER_ROUNDNESS  = std::max(0,  std::min(100,  CORNER_ROUNDNESS));
-    STARTUP_DELAY_MS  = std::max(0,  std::min(3000, STARTUP_DELAY_MS));
-    DOCK_GAP_FROM_START = std::max(0, std::min(40,  DOCK_GAP_FROM_START));
+    // Read and clamp all user settings (shared with Wh_ModInit via LoadSettings).
+    LoadSettings();
 
     // Invalidate cached dock-width so it is recalculated with new sizes/DPI.
     g_fixedDockWidth = 0;
@@ -8604,8 +8746,8 @@ void Wh_ModSettingsChanged() {
         InvalidateRect(g_overlayWnd, NULL, FALSE);
     }
 
-    LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d glass=%d reorder=%d explorerWorkspaces=%d logLevel=%d",
+    LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d glass=%d reorder=%d explorerWorkspaces=%d",
               MAX_PINNED_APPS, BASE_ICON_SIZE, BASE_ICON_SPACING,
               (int)ENABLE_GLASS_OVERLAY, (int)ENABLE_REORDER,
-              (int)ENABLE_EXPLORER_WORKSPACE_PINS, (int)g_logLevel);
+              (int)ENABLE_EXPLORER_WORKSPACE_PINS);
 }
