@@ -2,7 +2,7 @@
 // @id              taskbar-quick-pin
 // @name            Left Taskbar Quick Pin Dock
 // @description     A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.
-// @version         2.0.0
+// @version         2.5.0
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -68,13 +68,7 @@ out. You can also raise the **Startup delay** setting.
 - Some UWP apps may occasionally resolve to their host process if their window
   isn't ready yet.
 
-## Screenshot
-
-![The Quick Pin dock sitting left of the Start button](https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/screenshot.png)
-
-> Author note: Windhawk only allows images hosted on `i.imgur.com` or
-> `raw.githubusercontent.com`. Replace the URL above with your uploaded
-> screenshot / GIF (e.g. commit `screenshot.png` to the repo's `main` branch).
+## Screenshot (TBA)
 
 ## Settings reference
 
