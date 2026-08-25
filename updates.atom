@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-24T17:37:56.000Z</updated>
+    <updated>2026-08-25T21:41:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Update Control Panel Page Restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/windows-update-control-panel-restorer#521269c59796b23e265e4cb38f0be3daf0d84ad8</id>
+        <link href="https://windhawk.net/mods/windows-update-control-panel-restorer"/>
+        <updated>2026-08-25T21:41:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed Windows 11 compatibility</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.4]]></title>
         <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#be13fba7112e7504c68607c9f2ca8dee08de621c</id>
@@ -1004,25 +1017,6 @@ I focus a game (and the alternate command will reset it to the original type).</
         <author>
             <name>rom4ster</name>
             <uri>https://github.com/rom4ster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Replace Shell Format Dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/replace-format-dialog#1197822c535ab270b52cd878b9a49c7933d68fa0</id>
-        <link href="https://windhawk.net/mods/replace-format-dialog"/>
-        <updated>2026-08-20T17:12:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="replaceshellformatdialog">Replace Shell Format Dialog</h1>
-<p>A simple mod that allows you to replace the File Explorer disk format dialog with a custom one.</p>
-<h2 id="note">Note</h2>
-<p>This will replace the format dialog in all apps that use the Shell Format dialog, not just File Explorer. You can manually
-set the exclusion list in this mod's <strong>Advanced</strong> tab.</p>
-<h2 id="moredetailsabouttheformatargumentsoption">More details about the Format Arguments option</h2>
-<p>If you enable the <strong>Format Arguments</strong> option in the mod settings, the mod will automatically replace the first instance of %s in your
-argument string with the drive letter of the drive the app is attempting to format. This drive letter does not include the <code>:</code> suffix
-(e.g, it will say <code>C</code> instead of <code>C:</code>).</p>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
         </author>
     </entry>
 </feed>

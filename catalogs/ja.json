@@ -16659,7 +16659,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1787507206000,
+        "updated": 1787694083000,
         "users": 25
       },
       "metadata": {
@@ -16675,7 +16675,7 @@
           "control.exe"
         ],
         "name": "Windows Update Control Panel Page Restorer",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "winui-context-menu-animation": {
