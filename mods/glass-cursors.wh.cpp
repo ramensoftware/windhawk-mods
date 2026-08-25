@@ -2,7 +2,7 @@
 // @id              glass-cursors
 // @name            Glass Cursors
 // @description     Original DPI-aware translucent glass system cursors with a live animated loading indicator.
-// @version         0.26.7
+// @version         0.26.8
 // @author          fizixes
 // @github          https://github.com/fizixes
 // @license         MIT
@@ -30,7 +30,7 @@ of scaling a 32 px bitmap. Artwork size is normalized from each role's actual re
 - Busy and Working-in-background cursors use a live animated white glass spinner.
 - Runs in a dedicated Windhawk tool process instead of inside Explorer.
 - Disabling the mod restores the user's configured Windows cursor scheme.
-- Respects hidden/suppressed cursor state and defers cursor-slot self-healing while the cursor is hidden/suppressed or a foreground application is fullscreen.
+- Respects hidden/suppressed cursor state and yields global cursor-slot ownership to exclusive/fullscreen applications when Windows reports exclusive Direct3D, or a monitor-covering application corroborates fullscreen ownership by clipping or hiding the cursor.
 - Acrylic and the default Mica/Mica Alt mode sample live content under the cursor at the refresh rate of the monitor under the cursor, while stationary unchanged captures back off adaptively.
 
 ## Display scaling
@@ -128,7 +128,6 @@ Hand silhouette derived from Bootstrap Icons, Copyright (c) 2019-2024 The Bootst
 #include <array>
 #include <atomic>
 #include <cmath>
-#include <climits>
 #include <cstring>
 #include <cwchar>
 #include <vector>
@@ -299,7 +298,20 @@ LPTOP_LEVEL_EXCEPTION_FILTER g_previousExceptionFilter = nullptr;
 constexpr DWORD kIdlePollInterval = 350;
 constexpr DWORD kHiddenCursorPollInterval = 50;
 constexpr DWORD kMagnifierPollInterval = 50;
+constexpr DWORD kFullscreenProbeInterval = 250;
 constexpr UINT kMaxDynamicRefreshRate = 500;
+
+struct FullscreenProbeState {
+    DWORD lastProbeTick = 0;
+    HWND foreground = nullptr;
+    bool exclusiveD3D = false;
+    bool shellBusy = false;
+    bool coversMonitor = false;
+    bool borderless = false;
+    bool cursorClipped = false;
+};
+
+FullscreenProbeState g_fullscreenProbe;
 
 struct DynamicCaptureSurface {
     HDC screenDc = nullptr;
@@ -1966,7 +1978,18 @@ HCURSOR CreateCursorFromPixels(const RenderedCursor& cursor) {
     return result;
 }
 
+bool ShouldDeferCursorReapply(bool forceFullscreenRefresh = true);
+void DeferCursorReapply(bool forceSystemReapply);
+
 bool SetRenderedSystemCursor(const RenderedCursor& rendered, DWORD cursorId) {
+    // Static rebuilds can overlap a fullscreen/display-mode transition. Never
+    // mutate a global system cursor slot after another application has taken
+    // ownership of cursor presentation.
+    if (ShouldDeferCursorReapply(false)) {
+        DeferCursorReapply(true);
+        return false;
+    }
+
     HCURSOR cursor = CreateCursorFromPixels(rendered);
     if (!cursor) {
         Wh_Log(L"CreateIconIndirect failed for cursor %lu", cursorId);
@@ -2407,11 +2430,6 @@ bool CaptureLiveBackdrop(const RenderedCursor& cursor, const POINT& cursorPos) {
     return true;
 }
 
-bool CaptureDynamicBackdrop(const RenderedCursor& cursor,
-                            const POINT& cursorPos) {
-    return CaptureLiveBackdrop(cursor, cursorPos);
-}
-
 bool DynamicBackdropChanged(DWORD role, const POINT& cursorPos) {
     const DynamicCaptureSurface& capture = g_dynamicGlass.capture;
     const size_t pixelCount =
@@ -2426,13 +2444,14 @@ bool DynamicBackdropChanged(DWORD role, const POINT& cursorPos) {
         std::abs(cursorPos.x - g_dynamicGlass.lastAppliedPosition.x) +
         std::abs(cursorPos.y - g_dynamicGlass.lastAppliedPosition.y);
 
-    // Cursor movement must regenerate the material even on a uniform backdrop
-    // because Acrylic's noise lives in screen space. This also removes the old
-    // one-pixel "sticky" case.
-    if (movement > 0) {
+    // Acrylic's procedural noise is anchored in screen space, so movement can
+    // change the produced bitmap even across a uniform backdrop. Mica/Mica Alt
+    // have no noise; let the captured-pixel comparison decide whether movement
+    // actually changed their output instead of replacing a byte-identical
+    // global system cursor on every mouse tick.
+    if (movement > 0 && GetDynamicMaterialProfile().noiseStrength > 0.0) {
         return true;
     }
-
 
     uint64_t absoluteDifference = 0;
     size_t materiallyChanged = 0;
@@ -2713,54 +2732,141 @@ bool CursorInfoIsVisible(const CURSORINFO& cursorInfo) {
            cursorInfo.hCursor != nullptr;
 }
 
-bool IsForegroundWindowFullscreen() {
-    HWND foreground = GetForegroundWindow();
-    if (!foreground) {
-        return false;
-    }
-
-    foreground = GetAncestor(foreground, GA_ROOT);
-    if (!foreground || foreground == g_cursorWindow.load() ||
-        foreground == GetShellWindow() || foreground == GetDesktopWindow() ||
-        !IsWindowVisible(foreground) || IsIconic(foreground)) {
-        return false;
-    }
-
-    RECT windowRect = {};
-    if (!GetWindowRect(foreground, &windowRect)) {
-        return false;
-    }
-
-    HMONITOR monitor =
-        MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
-    if (!monitor) {
-        return false;
-    }
-
-    MONITORINFO monitorInfo = {sizeof(monitorInfo)};
-    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
-        return false;
-    }
-
+bool RectCoversMonitor(const RECT& windowRect, const RECT& monitorRect) {
     // GetWindowRect can include a small invisible resize border. A tiny
-    // tolerance accepts borderless/exclusive fullscreen windows without
-    // mistaking ordinary maximized windows that stop at the work area for
-    // fullscreen applications.
+    // tolerance accepts fullscreen windows without requiring exact equality.
     constexpr LONG kFullscreenTolerance = 2;
-    const RECT& monitorRect = monitorInfo.rcMonitor;
     return windowRect.left <= monitorRect.left + kFullscreenTolerance &&
            windowRect.top <= monitorRect.top + kFullscreenTolerance &&
            windowRect.right >= monitorRect.right - kFullscreenTolerance &&
            windowRect.bottom >= monitorRect.bottom - kFullscreenTolerance;
 }
 
-bool ShouldDeferCursorReapply() {
-    if (IsForegroundWindowFullscreen()) {
+bool IsCursorClipConstrained() {
+    RECT clipRect = {};
+    if (!GetClipCursor(&clipRect)) {
+        return false;
+    }
+
+    const LONG virtualLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const LONG virtualTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const LONG virtualRight =
+        virtualLeft + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const LONG virtualBottom =
+        virtualTop + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    // GetClipCursor returns the full screen dimensions when the cursor isn't
+    // confined. Treat any meaningfully smaller rectangle as application-owned
+    // cursor confinement. One-pixel tolerance avoids rounding noise.
+    constexpr LONG kClipTolerance = 1;
+    return clipRect.left > virtualLeft + kClipTolerance ||
+           clipRect.top > virtualTop + kClipTolerance ||
+           clipRect.right < virtualRight - kClipTolerance ||
+           clipRect.bottom < virtualBottom - kClipTolerance;
+}
+
+void RefreshFullscreenProbe(bool forceRefresh = false) {
+    const DWORD now = GetTickCount();
+    HWND foreground = GetForegroundWindow();
+    if (foreground) {
+        foreground = GetAncestor(foreground, GA_ROOT);
+    }
+
+    const bool foregroundChanged = foreground != g_fullscreenProbe.foreground;
+    if (!forceRefresh && !foregroundChanged &&
+        g_fullscreenProbe.lastProbeTick &&
+        now - g_fullscreenProbe.lastProbeTick < kFullscreenProbeInterval) {
+        return;
+    }
+
+    g_fullscreenProbe.lastProbeTick = now;
+    g_fullscreenProbe.foreground = foreground;
+    g_fullscreenProbe.exclusiveD3D = false;
+    g_fullscreenProbe.shellBusy = false;
+    g_fullscreenProbe.coversMonitor = false;
+    g_fullscreenProbe.borderless = false;
+    g_fullscreenProbe.cursorClipped = false;
+
+    QUERY_USER_NOTIFICATION_STATE notificationState = QUNS_ACCEPTS_NOTIFICATIONS;
+    if (SUCCEEDED(SHQueryUserNotificationState(&notificationState))) {
+        g_fullscreenProbe.exclusiveD3D =
+            notificationState == QUNS_RUNNING_D3D_FULL_SCREEN;
+        // Fullscreen optimizations can surface as QUNS_BUSY rather than the
+        // exclusive-D3D value. QUNS_BUSY alone is too broad (it also covers
+        // presentation mode), so it's used only with fullscreen geometry and a
+        // borderless foreground window below.
+        g_fullscreenProbe.shellBusy = notificationState == QUNS_BUSY;
+    }
+
+    if (!foreground || foreground == g_cursorWindow.load() ||
+        foreground == GetShellWindow() || foreground == GetDesktopWindow() ||
+        !IsWindowVisible(foreground) || IsIconic(foreground)) {
+        return;
+    }
+
+    RECT windowRect = {};
+    if (!GetWindowRect(foreground, &windowRect)) {
+        return;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
+    if (!monitor) {
+        return;
+    }
+
+    MONITORINFO monitorInfo = {sizeof(monitorInfo)};
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+        return;
+    }
+
+    g_fullscreenProbe.coversMonitor =
+        RectCoversMonitor(windowRect, monitorInfo.rcMonitor);
+    if (g_fullscreenProbe.coversMonitor) {
+        const LONG_PTR style = GetWindowLongPtrW(foreground, GWL_STYLE);
+        g_fullscreenProbe.borderless =
+            (style & (WS_CAPTION | WS_THICKFRAME)) == 0;
+        g_fullscreenProbe.cursorClipped = IsCursorClipConstrained();
+    }
+}
+
+bool IsFullscreenApplicationControllingCursor(
+    const CURSORINFO* cursorInfo = nullptr,
+    bool forceRefresh = false) {
+    RefreshFullscreenProbe(forceRefresh);
+
+    // Exclusive Direct3D is an authoritative fullscreen signal. For borderless
+    // and fullscreen-optimized applications, require monitor coverage plus a
+    // corroborating cursor-ownership signal. This avoids classifying an ordinary
+    // maximized window as a game when an auto-hidden taskbar makes rcWork equal
+    // the monitor rectangle.
+    if (g_fullscreenProbe.exclusiveD3D) {
         return true;
     }
 
+    if (!g_fullscreenProbe.coversMonitor) {
+        return false;
+    }
+
+    if (g_fullscreenProbe.cursorClipped) {
+        return true;
+    }
+
+    if (cursorInfo && !CursorInfoIsVisible(*cursorInfo)) {
+        return true;
+    }
+
+    return g_fullscreenProbe.shellBusy && g_fullscreenProbe.borderless;
+}
+
+bool ShouldDeferCursorReapply(bool forceFullscreenRefresh) {
     CURSORINFO cursorInfo = {sizeof(cursorInfo)};
-    return GetCursorInfo(&cursorInfo) && !CursorInfoIsVisible(cursorInfo);
+    const bool haveCursorInfo = GetCursorInfo(&cursorInfo);
+    if (haveCursorInfo && !CursorInfoIsVisible(cursorInfo)) {
+        return true;
+    }
+
+    return IsFullscreenApplicationControllingCursor(
+        haveCursorInfo ? &cursorInfo : nullptr, forceFullscreenRefresh);
 }
 
 void DeferCursorReapply(bool forceSystemReapply) {
@@ -2781,14 +2887,6 @@ DWORD CursorRoleFromHandle(HCURSOR cursor) {
         }
     }
     return 0;
-}
-
-DWORD GetVisibleSystemCursorRole() {
-    CURSORINFO cursorInfo = {sizeof(cursorInfo)};
-    if (!GetCursorInfo(&cursorInfo) || !CursorInfoIsVisible(cursorInfo)) {
-        return 0;
-    }
-    return CursorRoleFromHandle(cursorInfo.hCursor);
 }
 
 bool UpdateDynamicGlassCursor(DWORD role, const POINT& cursorPos) {
@@ -2828,7 +2926,7 @@ bool UpdateDynamicGlassCursor(DWORD role, const POINT& cursorPos) {
     }
 
     g_dynamicGlass.lastBackdropCaptureTick = now;
-    if (!CaptureDynamicBackdrop(*cached, cursorPos)) {
+    if (!CaptureLiveBackdrop(*cached, cursorPos)) {
         return false;
     }
 
@@ -2854,7 +2952,8 @@ bool UpdateDynamicGlassCursor(DWORD role, const POINT& cursorPos) {
     // cursor that a fullscreen application just hid.
     CURSORINFO latestInfo = {sizeof(latestInfo)};
     if (!GetCursorInfo(&latestInfo) || !CursorInfoIsVisible(latestInfo) ||
-        CursorRoleFromHandle(latestInfo.hCursor) != role) {
+        CursorRoleFromHandle(latestInfo.hCursor) != role ||
+        IsFullscreenApplicationControllingCursor(&latestInfo)) {
         DestroyCursor(cursor);
         return false;
     }
@@ -2908,8 +3007,19 @@ HWND FindMacMagnifyingCursorWindow() {
     return FindWindowW(L"WindhawkShakeCursorExclusiveOverlay", nullptr);
 }
 
+bool IsMacMagnifyingCursorWindow(HWND overlay) {
+    if (!overlay || !IsWindow(overlay)) {
+        return false;
+    }
+
+    wchar_t className[96] = {};
+    const int length = GetClassNameW(overlay, className, ARRAYSIZE(className));
+    return length > 0 &&
+           wcscmp(className, L"WindhawkShakeCursorExclusiveOverlay") == 0;
+}
+
 bool IsMacMagnifyingCursorActive(HWND overlay) {
-    return overlay && IsWindow(overlay) && IsWindowVisible(overlay);
+    return IsMacMagnifyingCursorWindow(overlay) && IsWindowVisible(overlay);
 }
 
 bool NormalCursorSlotChanged() {
@@ -2983,6 +3093,15 @@ void DestroyAnimationFrames() {
 
 bool SetPreparedSystemCursor(HCURSOR source, DWORD cursorId) {
     if (!source) {
+        return false;
+    }
+
+    // Busy/working animation frames also replace global cursor slots. Use the
+    // cached fullscreen probe plus a fresh visibility snapshot as a last-moment
+    // guard so a game entering fullscreen between worker ticks isn't fought by
+    // the spinner path.
+    if (ShouldDeferCursorReapply(false)) {
+        DeferCursorReapply(true);
         return false;
     }
 
@@ -3217,15 +3336,13 @@ LRESULT CALLBACK CursorWindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_DISPLAYCHANGE:
-            // Exclusive fullscreen transitions commonly generate a display-mode
-            // change. Reinstalling global cursor slots at that exact moment can
-            // undo the application's blank/hidden cursor. Defer until the
-            // foreground is no longer fullscreen and the cursor is visible again.
-            if (ShouldDeferCursorReapply()) {
-                DeferCursorReapply(true);
-            } else {
-                QueueCursorReapply(hWnd, true);
-            }
+            // Exclusive/fullscreen transitions commonly generate this message
+            // before the shell's fullscreen state and the application's cursor
+            // clip/show state have settled. Never rebuild synchronously here.
+            // The worker re-evaluates ownership after the transition and applies
+            // the deferred cursor set only once Windows is visibly drawing the
+            // normal system cursor again.
+            DeferCursorReapply(true);
             return 0;
 
         case kReapplyCursorsMessage: {
@@ -3247,6 +3364,15 @@ LRESULT CALLBACK CursorWindowProc(HWND hWnd, UINT message, WPARAM wParam,
 }
 
 DWORD WINAPI AnimationThreadProc(LPVOID) {
+    // windhawk.exe itself isn't guaranteed to be per-monitor DPI aware. Every
+    // metric, cursor coordinate and screen-DC capture below must use physical
+    // pixels or mixed-DPI monitors will sample and size the cursor incorrectly.
+    if (!SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+        Wh_Log(L"SetThreadDpiAwarenessContext(PMv2) failed: %lu",
+               GetLastError());
+    }
+
     HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSW windowClass = {};
     windowClass.lpfnWndProc = CursorWindowProc;
@@ -3291,10 +3417,14 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
     g_animationThreadInitialized.store(true);
     SetEvent(g_animationReadyEvent);
 
-    // All rendering happens on the worker thread. Initialization only waits for
-    // the worker window to exist, so expensive supersampled rendering doesn't
-    // block WhTool_ModInit.
-    RebuildCursorSet();
+    // Don't install or repair global cursor slots if the mod starts while an
+    // application currently owns a fullscreen/hidden cursor. Defer the initial
+    // application until Windows gives the system cursor back.
+    if (ShouldDeferCursorReapply()) {
+        DeferCursorReapply(true);
+    } else {
+        RebuildCursorSet();
+    }
 
     HWND magnifierWindow = nullptr;
     DWORD lastMagnifierDiscoveryTick = 0;
@@ -3304,7 +3434,8 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
 
     for (;;) {
         const DWORD now = GetTickCount();
-        if (!magnifierWindow || !IsWindow(magnifierWindow)) {
+        if (!IsMacMagnifyingCursorWindow(magnifierWindow)) {
+            magnifierWindow = nullptr;
             if (!lastMagnifierDiscoveryTick ||
                 now - lastMagnifierDiscoveryTick >= 500) {
                 magnifierWindow = FindMacMagnifyingCursorWindow();
@@ -3313,16 +3444,11 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
         }
 
         const bool magnifierPresent =
-            magnifierWindow && IsWindow(magnifierWindow);
+            IsMacMagnifyingCursorWindow(magnifierWindow);
         const bool magnifierActive =
             IsMacMagnifyingCursorActive(magnifierWindow);
         if (magnifierActive) {
             g_magnifierWasActive = true;
-        }
-
-        const bool fullscreenActive = IsForegroundWindowFullscreen();
-        if (fullscreenActive) {
-            fullscreenWasActive = true;
         }
 
         CURSORINFO cursorInfo = {sizeof(cursorInfo)};
@@ -3330,9 +3456,17 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
             !magnifierActive && GetCursorInfo(&cursorInfo);
         const bool cursorVisible =
             haveCursorInfo && CursorInfoIsVisible(cursorInfo);
-        const DWORD visibleRole = cursorVisible
-            ? CursorRoleFromHandle(cursorInfo.hCursor)
-            : 0;
+        const bool fullscreenOwnsCursor =
+            !magnifierActive && IsFullscreenApplicationControllingCursor(
+                haveCursorInfo ? &cursorInfo : nullptr);
+        if (fullscreenOwnsCursor) {
+            fullscreenWasActive = true;
+        }
+
+        const DWORD visibleRole =
+            cursorVisible && !fullscreenOwnsCursor
+                ? CursorRoleFromHandle(cursorInfo.hCursor)
+                : 0;
         const DWORD visibleBusyRole =
             g_animationFramesReady.load() &&
             (visibleRole == CURSOR_WAIT || visibleRole == CURSOR_APPSTARTING)
@@ -3342,15 +3476,14 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
         DWORD delay = kIdlePollInterval;
         if (magnifierActive) {
             delay = kMagnifierPollInterval;
+        } else if (fullscreenOwnsCursor || !cursorVisible) {
+            // While another application owns cursor presentation, perform no
+            // global SetSystemCursor work. Poll cheaply so exit/show transitions
+            // are detected promptly.
+            delay = kHiddenCursorPollInterval;
         } else if (visibleBusyRole) {
             delay = kAnimationDelay;
-        } else if (!cursorVisible) {
-            // A hidden cursor needs no material work, but keep a cheap 20 Hz
-            // visibility poll so the glass cursor resumes promptly when an
-            // application shows it again or exits fullscreen.
-            delay = kHiddenCursorPollInterval;
-        } else if (IsSampledGlassStyle() && DynamicMaterialsAllowed() &&
-                   cursorVisible) {
+        } else if (IsSampledGlassStyle() && DynamicMaterialsAllowed()) {
             delay = ResolveDynamicCaptureInterval(cursorInfo.ptScreenPos);
         } else if (magnifierPresent) {
             delay = kMagnifierPollInterval;
@@ -3381,7 +3514,8 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
         }
 
         const DWORD afterWait = GetTickCount();
-        if (!magnifierWindow || !IsWindow(magnifierWindow)) {
+        if (!IsMacMagnifyingCursorWindow(magnifierWindow)) {
+            magnifierWindow = nullptr;
             if (!lastMagnifierDiscoveryTick ||
                 afterWait - lastMagnifierDiscoveryTick >= 500) {
                 magnifierWindow = FindMacMagnifyingCursorWindow();
@@ -3396,32 +3530,47 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
 
         if (g_magnifierWasActive) {
             g_magnifierWasActive = false;
-            RebuildCursorSet();
+            if (ShouldDeferCursorReapply()) {
+                DeferCursorReapply(true);
+            } else {
+                RebuildCursorSet();
+            }
             continue;
         }
 
-        const bool fullscreenActiveNow = IsForegroundWindowFullscreen();
-        if (fullscreenActiveNow) {
+        CURSORINFO currentInfo = {sizeof(currentInfo)};
+        const bool haveCurrentInfo = GetCursorInfo(&currentInfo);
+        const bool currentCursorVisible =
+            haveCurrentInfo && CursorInfoIsVisible(currentInfo);
+        const bool fullscreenOwnsCursorNow =
+            IsFullscreenApplicationControllingCursor(
+                haveCurrentInfo ? &currentInfo : nullptr);
+
+        if (fullscreenOwnsCursorNow) {
+            // A fullscreen/exclusive application has taken responsibility for
+            // cursor presentation. Absolutely no SetSystemCursor calls are made
+            // in this state: no material frames, spinner frames, self-healing,
+            // or deferred setting re-application.
             fullscreenWasActive = true;
+            if (!currentCursorVisible) {
+                cursorWasHidden = true;
+            }
+            continue;
         }
 
-        CURSORINFO currentInfo = {sizeof(currentInfo)};
-        if (!GetCursorInfo(&currentInfo) || !CursorInfoIsVisible(currentInfo)) {
+        if (!currentCursorVisible) {
             // Hidden/suppressed means the application or Windows explicitly does
-            // not want a system cursor drawn. Most importantly, do not run slot
-            // self-healing while hidden: applications sometimes implement hide
-            // behavior by temporarily blanking/replacing a system cursor.
+            // not want a system cursor drawn. Do not run slot self-healing while
+            // hidden: applications sometimes implement hide behavior by
+            // temporarily blanking/replacing a system cursor.
             cursorWasHidden = true;
             continue;
         }
 
         // Do not apply deferred cursor-slot changes until the fullscreen owner
-        // has actually released the foreground AND Windows is drawing a cursor
-        // again. This prevents an exit transition from resurrecting the pointer
-        // while the application still intends it to remain hidden.
-        if (!fullscreenActiveNow &&
-            (fullscreenWasActive || cursorWasHidden ||
-             g_cursorReapplyDeferred.load())) {
+        // has actually released the cursor AND Windows is drawing it again.
+        if (fullscreenWasActive || cursorWasHidden ||
+            g_cursorReapplyDeferred.load()) {
             const bool cameFromFullscreen = fullscreenWasActive;
             fullscreenWasActive = false;
             cursorWasHidden = false;
@@ -3445,14 +3594,8 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
 
         const DWORD currentRole = CursorRoleFromHandle(currentInfo.hCursor);
 
-        // Do not fight a fullscreen application's cursor ownership. In
-        // particular, exclusive-mode transitions can temporarily replace/blank
-        // global cursor slots. We still render/update our cursor when the app is
-        // visibly using one of our known system roles, but integrity repair is
-        // deferred until fullscreen exits.
-        if (!fullscreenActiveNow &&
-            (!lastCursorIntegrityCheckTick ||
-             afterWait - lastCursorIntegrityCheckTick >= kIdlePollInterval)) {
+        if (!lastCursorIntegrityCheckTick ||
+            afterWait - lastCursorIntegrityCheckTick >= kIdlePollInterval) {
             lastCursorIntegrityCheckTick = afterWait;
             if (NormalCursorSlotChanged()) {
                 RebuildCursorSet();
@@ -3491,6 +3634,7 @@ DWORD WINAPI AnimationThreadProc(LPVOID) {
     g_forceCursorReapplyDeferred.store(false);
     g_magnifierWasActive = false;
     g_expectedNormalCursor = nullptr;
+    g_fullscreenProbe = {};
 
     HWND windowToDestroy = g_cursorWindow.exchange(nullptr);
     if (windowToDestroy) {
