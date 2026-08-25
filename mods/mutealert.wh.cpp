@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.4
+// @version         0.9.5
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -107,13 +107,15 @@ volume control, call state, and headset integration.
   $name: Meter sensitivity (%)
   $description: Scales the displayed peak without changing the microphone volume. 100% is the raw Windows peak value.
 - iconSize: 18
-  $name: Microphone icon size (px)
+  $name: Microphone icon size (DIPs)
+  $description: "Logical XAML size for the microphone icon. Range: 12-32 DIPs. Windows scales DIPs for display density."
 - buttonWidth: 32
-  $name: Widget width (px)
+  $name: Widget width (DIPs)
+  $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
 - showCallStateIcon: false
   $name: Show active-call app icon
   $description: Shows a secondary Slack, Teams, or Zoom logo while a supported call is active. Left-clicking it focuses the call window.
-- headsetSyncMode: full
+- headsetSyncMode: off
   $name: Headset mute synchronization
   $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
   $options:
@@ -357,7 +359,7 @@ struct ModSettings {
     int iconSize = 18;
     int buttonWidth = 32;
     bool showCallStateIcon = false;
-    std::wstring headsetSyncMode = L"full";
+    std::wstring headsetSyncMode = L"off";
     bool headsetSyncWindows = true;
     bool headsetSyncCalls = false;
     int headsetPollInterval = 500;
@@ -440,7 +442,7 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"showCallStateIcon") != 0;
     g_settings.headsetSyncMode = GetStringSetting(L"headsetSyncMode");
     if (g_settings.headsetSyncMode.empty()) {
-        g_settings.headsetSyncMode = L"full";
+        g_settings.headsetSyncMode = L"off";
     }
     g_settings.headsetSyncWindows =
         Wh_GetIntSetting(L"headsetSyncWindows") != 0;
@@ -595,6 +597,10 @@ static HANDLE g_audioWakeEvent = nullptr;
 
 static std::atomic<HWND> g_mainTaskbarWnd{nullptr};
 static UINT g_audioUpdateMessage = 0;
+static UINT g_removeWidgetsMessage = 0;
+static std::atomic<bool> g_updateQueued{false};
+static std::atomic<unsigned long long> g_audioNameGeneration{0};
+static std::atomic<unsigned long long> g_headsetStatusGeneration{0};
 
 static bool IsStopping() {
     return g_unloading.load() ||
@@ -602,10 +608,17 @@ static bool IsStopping() {
             WaitForSingleObject(g_audioStopEvent, 0) == WAIT_OBJECT_0);
 }
 
-static void SetSharedDeviceName(std::wstring name) {
+static void SetSharedDeviceName(const std::wstring& name) {
+    bool changed = false;
     AcquireSRWLockExclusive(&g_audioNameLock);
-    g_audioDeviceName = std::move(name);
+    if (g_audioDeviceName != name) {
+        g_audioDeviceName = name;
+        changed = true;
+    }
     ReleaseSRWLockExclusive(&g_audioNameLock);
+    if (changed) {
+        g_audioNameGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 static std::wstring GetSharedDeviceName() {
@@ -617,7 +630,10 @@ static std::wstring GetSharedDeviceName() {
 
 static void NotifyTaskbar() {
     if (HWND hWnd = g_mainTaskbarWnd.load(); hWnd && g_audioUpdateMessage) {
-        PostMessageW(hWnd, g_audioUpdateMessage, 0, 0);
+        if (!g_updateQueued.exchange(true) &&
+            !PostMessageW(hWnd, g_audioUpdateMessage, 0, 0)) {
+            g_updateQueued.store(false);
+        }
     }
 }
 
@@ -698,7 +714,10 @@ static void RecomputeHeadsetStatus() {
     g_headsetMuted.store(g_headsetStatus.stateKnown &&
                          g_headsetStatus.muted);
     ReleaseSRWLockExclusive(&g_headsetStatusLock);
-    if (changed) NotifyTaskbar();
+    if (changed) {
+        g_headsetStatusGeneration.fetch_add(1, std::memory_order_relaxed);
+        NotifyTaskbar();
+    }
 }
 
 static void UpdateWindowsHardwareSource(bool supported, bool muted,
@@ -2420,11 +2439,13 @@ static void ProcessStandardHidRawInput(HRAWINPUT inputHandle) {
 static void SnapshotStandardHidRegistrations() {
     g_previousHidRegistrations.clear();
     UINT count = 0;
-    if (GetRegisteredRawInputDevices(nullptr, &count,
-                                     sizeof(RAWINPUTDEVICE)) != 0 ||
-        !count) {
+    SetLastError(ERROR_SUCCESS);
+    UINT probe = GetRegisteredRawInputDevices(nullptr, &count,
+                                              sizeof(RAWINPUTDEVICE));
+    if (probe == UINT_MAX && GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
         return;
     }
+    if (!count) return;
 
     std::vector<RAWINPUTDEVICE> registered(count);
     UINT copied = count;
@@ -2503,12 +2524,21 @@ static LRESULT CALLBACK HeadsetMessageWindowProc(HWND window, UINT message,
                                                  LPARAM lParam) {
     switch (message) {
         case WM_INPUT:
-            ProcessStandardHidRawInput(reinterpret_cast<HRAWINPUT>(lParam));
+            try {
+                ProcessStandardHidRawInput(
+                    reinterpret_cast<HRAWINPUT>(lParam));
+            } catch (...) {
+                Wh_Log(L"[Headset] Exception while processing Raw Input");
+            }
             return DefWindowProcW(window, message, wParam, lParam);
         case WM_INPUT_DEVICE_CHANGE:
-            g_standardHidRuntime.clear();
-            RefreshStandardHidDevices();
-            g_vendorProbeRequested.store(true);
+            try {
+                g_standardHidRuntime.clear();
+                RefreshStandardHidDevices();
+                g_vendorProbeRequested.store(true);
+            } catch (...) {
+                Wh_Log(L"[Headset] Exception while refreshing HID devices");
+            }
             return 0;
         case WM_DEVICECHANGE:
             if (wParam == DBT_DEVICEARRIVAL ||
@@ -3158,7 +3188,6 @@ struct WidgetState {
     Shapes::Line callMuteLine{nullptr};
     TextBlock callTooltipText{nullptr};
     ToolTip callTooltip{nullptr};
-    int column = -1;
     winrt::event_token clickToken{};
     winrt::event_token wheelToken{};
     winrt::event_token rightTappedToken{};
@@ -3170,6 +3199,57 @@ struct WidgetState {
 [[clang::no_destroy]] static std::optional<std::vector<WidgetState>>
     g_widgets{std::in_place};
 static std::atomic<bool> g_widgetsLive{false};
+
+struct RenderSnapshot {
+    bool initialized = false;
+    int fillPermille = -1;
+    bool available = false;
+    bool muted = false;
+    bool headsetAvailable = false;
+    bool headsetMuted = false;
+    int volume = 0;
+    bool forceVolume = false;
+    int forcedVolume = 0;
+    bool slackWarning = false;
+    bool teamsWarning = false;
+    bool zoomWarning = false;
+    bool slackActive = false;
+    bool teamsActive = false;
+    bool zoomActive = false;
+    bool slackMuted = false;
+    bool teamsMuted = false;
+    bool zoomMuted = false;
+    bool zoomStateKnown = false;
+    unsigned long long audioNameGeneration = 0;
+    unsigned long long headsetStatusGeneration = 0;
+    HWND mainTaskbarWnd = nullptr;
+};
+
+static RenderSnapshot g_lastRenderSnapshot;
+
+static bool SameRenderDetails(const RenderSnapshot& left,
+                              const RenderSnapshot& right) {
+    return left.available == right.available &&
+           left.muted == right.muted &&
+           left.headsetAvailable == right.headsetAvailable &&
+           left.headsetMuted == right.headsetMuted &&
+           left.volume == right.volume &&
+           left.forceVolume == right.forceVolume &&
+           left.forcedVolume == right.forcedVolume &&
+           left.slackWarning == right.slackWarning &&
+           left.teamsWarning == right.teamsWarning &&
+           left.zoomWarning == right.zoomWarning &&
+           left.slackActive == right.slackActive &&
+           left.teamsActive == right.teamsActive &&
+           left.zoomActive == right.zoomActive &&
+           left.slackMuted == right.slackMuted &&
+           left.teamsMuted == right.teamsMuted &&
+           left.zoomMuted == right.zoomMuted &&
+           left.zoomStateKnown == right.zoomStateKnown &&
+           left.audioNameGeneration == right.audioNameGeneration &&
+           left.headsetStatusGeneration == right.headsetStatusGeneration &&
+           left.mainTaskbarWnd == right.mainTaskbarWnd;
+}
 
 static SolidColorBrush MakeBrush(winrt::Windows::UI::Color color) {
     return SolidColorBrush(color);
@@ -3420,152 +3500,204 @@ static std::wstring JoinAppNames(const std::vector<std::wstring>& names) {
 static void UpdateWidgets() {
     if (!g_widgets) return;
 
-    bool available = g_audioAvailable.load();
-    bool muted = g_audioMuted.load();
-    bool headsetAvailable = g_headsetAvailable.load();
-    bool headsetMuted = g_headsetMuted.load();
-    int volume = std::clamp(g_audioVolume.load(), 0, 100);
-    bool slackWarning = g_slackWarningActive.load();
-    bool teamsWarning = g_teamsWarningActive.load();
-    bool zoomWarning = g_zoomWarningActive.load();
-    bool slackActive = g_slackCallActive.load();
-    bool teamsActive = g_teamsCallActive.load();
-    bool zoomActive = g_zoomCallActive.load();
-    bool slackMuted = g_slackMuted.load();
-    bool teamsMuted = g_teamsMuted.load();
-    bool zoomMuted = g_zoomMuted.load();
-    bool zoomStateKnown = g_zoomStateKnown.load();
+    RenderSnapshot next;
+    next.initialized = true;
+    next.available = g_audioAvailable.load();
+    next.muted = g_audioMuted.load();
+    next.headsetAvailable = g_headsetAvailable.load();
+    next.headsetMuted = g_headsetMuted.load();
+    next.volume = std::clamp(g_audioVolume.load(), 0, 100);
+    next.forceVolume = g_forceVolume.load();
+    next.forcedVolume = std::clamp(g_forcedVolume.load(), 0, 100);
+    next.slackWarning = g_slackWarningActive.load();
+    next.teamsWarning = g_teamsWarningActive.load();
+    next.zoomWarning = g_zoomWarningActive.load();
+    next.slackActive = g_slackCallActive.load();
+    next.teamsActive = g_teamsCallActive.load();
+    next.zoomActive = g_zoomCallActive.load();
+    next.slackMuted = g_slackMuted.load();
+    next.teamsMuted = g_teamsMuted.load();
+    next.zoomMuted = g_zoomMuted.load();
+    next.zoomStateKnown = g_zoomStateKnown.load();
+    next.audioNameGeneration =
+        g_audioNameGeneration.load(std::memory_order_relaxed);
+    next.headsetStatusGeneration =
+        g_headsetStatusGeneration.load(std::memory_order_relaxed);
+    next.mainTaskbarWnd = g_mainTaskbarWnd.load();
     float peak =
-        available && !muted && !(headsetAvailable && headsetMuted)
+        next.available && !next.muted &&
+                !(next.headsetAvailable && next.headsetMuted)
             ? std::clamp(g_audioPeak.load(), 0.0f, 1.0f)
             : 0.0f;
-    std::wstring name = GetSharedDeviceName();
+    next.fillPermille =
+        std::clamp(static_cast<int>(std::lround(peak * 1000.0f)), 0, 1000);
+
+    bool detailChanged = !g_lastRenderSnapshot.initialized ||
+                         !SameRenderDetails(next, g_lastRenderSnapshot);
+    bool fillChanged = !g_lastRenderSnapshot.initialized ||
+                       next.fillPermille !=
+                           g_lastRenderSnapshot.fillPermille;
+    if (!detailChanged && !fillChanged) return;
+
     std::wstring tooltip;
+    std::wstring callTooltip;
     std::vector<std::wstring> warningApps;
-    if (slackWarning) warningApps.push_back(L"Slack");
-    if (teamsWarning) warningApps.push_back(L"Microsoft Teams");
-    if (zoomWarning) warningApps.push_back(L"Zoom");
-    if (!warningApps.empty()) {
-        tooltip = L"You're speaking, but " + JoinAppNames(warningApps) +
-                  (warningApps.size() == 1 ? L" is muted.\n\n"
-                                           : L" are muted.\n\n");
-    }
-    tooltip += name + L"\nVolume: " +
-                           std::to_wstring(volume) + L"%";
-    if (g_forceVolume.load()) {
-        tooltip += L" (locked at " +
-                   std::to_wstring(g_forcedVolume.load()) + L"%)";
-    }
-    if (!available) {
-        tooltip += L"\nUnavailable";
-    } else if (muted) {
-        tooltip += L" (Muted)";
-    }
-    HeadsetStatus headset = GetHeadsetStatus();
-    tooltip += L"\nHeadset: ";
-    tooltip += HeadsetMethodName(headset.method);
-    tooltip += L"\nConfidence: ";
-    tooltip += HeadsetConfidenceName(headset.confidence);
-    if (headset.detected) {
-        tooltip += L"\nHeadset state: ";
-        tooltip += headset.stateKnown
-                       ? (headset.muted ? L"Muted" : L"Unmuted")
-                       : L"Button detected; latched state unknown";
-    }
-    tooltip += L"\n\nLeft-click: mute/unmute Windows input";
     std::vector<std::wstring> toggleApps;
-    if (g_settings.slackRightClickToggle && slackActive) {
-        toggleApps.push_back(L"Slack");
-    }
-    if (g_settings.teamsRightClickToggle && teamsActive) {
-        toggleApps.push_back(L"Microsoft Teams");
-    }
-    if (g_settings.zoomRightClickToggle && zoomActive && zoomStateKnown) {
-        toggleApps.push_back(L"Zoom");
-    }
-    if (!toggleApps.empty()) {
-        tooltip += L"\nRight-click: mute/unmute " +
-                   JoinAppNames(toggleApps);
-    }
-
     std::vector<std::wstring> activeApps;
-    std::wstring callTooltip = L"Call microphone";
-    auto addCallState = [&](bool active, bool stateKnown, bool appMuted,
-                            PCWSTR appName) {
-        if (!active) return;
-        activeApps.push_back(appName);
-        callTooltip += L"\n" + std::wstring(appName) + L": " +
-                       (!stateKnown ? L"Unknown"
-                                    : appMuted ? L"Muted" : L"Unmuted");
-    };
-    addCallState(slackActive, true, slackMuted, L"Slack");
-    addCallState(teamsActive, true, teamsMuted, L"Microsoft Teams");
-    addCallState(zoomActive, zoomStateKnown, zoomMuted, L"Zoom");
-    if (zoomActive && !zoomStateKnown) {
-        callTooltip += L"\nShow Zoom's controls once to read its mute state.";
-    }
-    int selectedCallLogo = GetSelectedActiveCallIndex();
-    PCWSTR selectedCallName =
-        selectedCallLogo == 0   ? L"Slack"
-        : selectedCallLogo == 1 ? L"Microsoft Teams"
-        : selectedCallLogo == 2 ? L"Zoom"
-                                : L"active call";
-    if (!activeApps.empty()) {
-        callTooltip += L"\n\nLeft-click: focus " +
-                       std::wstring(selectedCallName);
-    }
-    if (!toggleApps.empty()) {
-        callTooltip += L"\nRight-click: mute/unmute " +
+    int selectedCallLogo = -1;
+    bool anyCallMuted = false;
+    if (detailChanged) {
+        if (next.slackWarning) warningApps.push_back(L"Slack");
+        if (next.teamsWarning) warningApps.push_back(L"Microsoft Teams");
+        if (next.zoomWarning) warningApps.push_back(L"Zoom");
+        if (!warningApps.empty()) {
+            tooltip = L"You're speaking, but " + JoinAppNames(warningApps) +
+                      (warningApps.size() == 1 ? L" is muted.\n\n"
+                                               : L" are muted.\n\n");
+        }
+        tooltip += GetSharedDeviceName() + L"\nVolume: " +
+                   std::to_wstring(next.volume) + L"%";
+        if (next.forceVolume) {
+            tooltip += L" (locked at " +
+                       std::to_wstring(next.forcedVolume) + L"%)";
+        }
+        if (!next.available) {
+            tooltip += L"\nUnavailable";
+        } else if (next.muted) {
+            tooltip += L" (Muted)";
+        }
+        HeadsetStatus headset = GetHeadsetStatus();
+        tooltip += L"\nHeadset: ";
+        tooltip += HeadsetMethodName(headset.method);
+        tooltip += L"\nConfidence: ";
+        tooltip += HeadsetConfidenceName(headset.confidence);
+        if (headset.detected) {
+            tooltip += L"\nHeadset state: ";
+            tooltip += headset.stateKnown
+                           ? (headset.muted ? L"Muted" : L"Unmuted")
+                           : L"Button detected; latched state unknown";
+        }
+        tooltip += L"\n\nLeft-click: mute/unmute Windows input";
+        if (g_settings.slackRightClickToggle && next.slackActive) {
+            toggleApps.push_back(L"Slack");
+        }
+        if (g_settings.teamsRightClickToggle && next.teamsActive) {
+            toggleApps.push_back(L"Microsoft Teams");
+        }
+        if (g_settings.zoomRightClickToggle && next.zoomActive &&
+            next.zoomStateKnown) {
+            toggleApps.push_back(L"Zoom");
+        }
+        if (!toggleApps.empty()) {
+            tooltip += L"\nRight-click: mute/unmute " +
                        JoinAppNames(toggleApps);
-    }
-    bool anyCallMuted = (slackActive && slackMuted) ||
-                        (teamsActive && teamsMuted) ||
-                        (zoomActive && zoomMuted);
+        }
 
+        callTooltip = L"Call microphone";
+        auto addCallState = [&](bool active, bool stateKnown, bool appMuted,
+                                PCWSTR appName) {
+            if (!active) return;
+            activeApps.push_back(appName);
+            callTooltip += L"\n" + std::wstring(appName) + L": " +
+                           (!stateKnown ? L"Unknown"
+                                        : appMuted ? L"Muted" : L"Unmuted");
+        };
+        addCallState(next.slackActive, true, next.slackMuted, L"Slack");
+        addCallState(next.teamsActive, true, next.teamsMuted,
+                     L"Microsoft Teams");
+        addCallState(next.zoomActive, next.zoomStateKnown, next.zoomMuted,
+                     L"Zoom");
+        if (next.zoomActive && !next.zoomStateKnown) {
+            callTooltip +=
+                L"\nShow Zoom's controls once to read its mute state.";
+        }
+        if (next.slackActive && next.slackMuted) {
+            selectedCallLogo = 0;
+        } else if (next.teamsActive && next.teamsMuted) {
+            selectedCallLogo = 1;
+        } else if (next.zoomActive && next.zoomMuted) {
+            selectedCallLogo = 2;
+        } else if (next.slackActive) {
+            selectedCallLogo = 0;
+        } else if (next.teamsActive) {
+            selectedCallLogo = 1;
+        } else if (next.zoomActive) {
+            selectedCallLogo = 2;
+        }
+        PCWSTR selectedCallName =
+            selectedCallLogo == 0   ? L"Slack"
+            : selectedCallLogo == 1 ? L"Microsoft Teams"
+            : selectedCallLogo == 2 ? L"Zoom"
+                                    : L"active call";
+        if (!activeApps.empty()) {
+            callTooltip += L"\n\nLeft-click: focus " +
+                           std::wstring(selectedCallName);
+        }
+        if (!toggleApps.empty()) {
+            callTooltip += L"\nRight-click: mute/unmute " +
+                           JoinAppNames(toggleApps);
+        }
+        anyCallMuted = (next.slackActive && next.slackMuted) ||
+                       (next.teamsActive && next.teamsMuted) ||
+                       (next.zoomActive && next.zoomMuted);
+    }
+
+    bool renderFailed = false;
     for (auto& widget : *g_widgets) {
         try {
-            double size = static_cast<double>(g_settings.iconSize);
-            double filledHeight = size * peak;
-            widget.fillClip.Rect(
-                {0.0f, static_cast<float>(size - filledHeight),
-                 static_cast<float>(size), static_cast<float>(filledHeight)});
-            widget.muteLine.Visibility(
-                (!available || muted ||
-                 (headsetAvailable && headsetMuted))
-                    ? Visibility::Visible
-                    : Visibility::Collapsed);
-            widget.tooltipText.Text(tooltip);
-            bool showCallIcon =
-                g_settings.showCallStateIcon && !activeApps.empty();
-            widget.callButton.Visibility(
-                showCallIcon ? Visibility::Visible : Visibility::Collapsed);
-            widget.callSlackLogo.Visibility(
-                selectedCallLogo == 0 ? Visibility::Visible
-                                      : Visibility::Collapsed);
-            widget.callTeamsLogo.Visibility(
-                selectedCallLogo == 1 ? Visibility::Visible
-                                      : Visibility::Collapsed);
-            widget.callZoomLogo.Visibility(
-                selectedCallLogo == 2 ? Visibility::Visible
-                                      : Visibility::Collapsed);
-            widget.callLogoHost.Opacity(anyCallMuted ? 0.58 : 1.0);
-            widget.callMultipleBadge.Visibility(
-                activeApps.size() > 1 ? Visibility::Visible
-                                      : Visibility::Collapsed);
-            widget.callMuteLine.Visibility(
-                anyCallMuted ? Visibility::Visible : Visibility::Collapsed);
-            widget.callTooltipText.Text(callTooltip);
-            bool shouldOpen = !warningApps.empty() &&
-                              widget.taskbarWnd == g_mainTaskbarWnd.load();
-            if (widget.warningOpen != shouldOpen) {
-                widget.tooltip.IsOpen(shouldOpen);
-                widget.warningOpen = shouldOpen;
+            if (fillChanged) {
+                double size = static_cast<double>(g_settings.iconSize);
+                double filledHeight =
+                    size * next.fillPermille / 1000.0;
+                widget.fillClip.Rect(
+                    {0.0f, static_cast<float>(size - filledHeight),
+                     static_cast<float>(size),
+                     static_cast<float>(filledHeight)});
+            }
+            if (detailChanged) {
+                widget.muteLine.Visibility(
+                    (!next.available || next.muted ||
+                     (next.headsetAvailable && next.headsetMuted))
+                        ? Visibility::Visible
+                        : Visibility::Collapsed);
+                widget.tooltipText.Text(tooltip);
+                bool showCallIcon =
+                    g_settings.showCallStateIcon && !activeApps.empty();
+                widget.callButton.Visibility(
+                    showCallIcon ? Visibility::Visible
+                                 : Visibility::Collapsed);
+                widget.callSlackLogo.Visibility(
+                    selectedCallLogo == 0 ? Visibility::Visible
+                                          : Visibility::Collapsed);
+                widget.callTeamsLogo.Visibility(
+                    selectedCallLogo == 1 ? Visibility::Visible
+                                          : Visibility::Collapsed);
+                widget.callZoomLogo.Visibility(
+                    selectedCallLogo == 2 ? Visibility::Visible
+                                          : Visibility::Collapsed);
+                widget.callLogoHost.Opacity(anyCallMuted ? 0.58 : 1.0);
+                widget.callMultipleBadge.Visibility(
+                    activeApps.size() > 1 ? Visibility::Visible
+                                          : Visibility::Collapsed);
+                widget.callMuteLine.Visibility(
+                    anyCallMuted ? Visibility::Visible
+                                 : Visibility::Collapsed);
+                widget.callTooltipText.Text(callTooltip);
+                bool shouldOpen =
+                    !warningApps.empty() &&
+                    widget.taskbarWnd == next.mainTaskbarWnd;
+                if (widget.warningOpen != shouldOpen) {
+                    widget.tooltip.IsOpen(shouldOpen);
+                    widget.warningOpen = shouldOpen;
+                }
             }
         } catch (...) {
             // The taskbar can replace its visual tree during resume or display
             // changes. The retry path will rebuild stale controls.
+            renderFailed = true;
         }
     }
+    g_lastRenderSnapshot = renderFailed ? RenderSnapshot{} : next;
 }
 
 static Button BuildWidgetButton(WidgetState* state) {
@@ -3822,7 +3954,6 @@ static bool InjectWidget(XamlRoot const& xamlRoot, HWND taskbarWnd) {
         WidgetState state;
         state.taskbarWnd = taskbarWnd;
         state.parent = parent;
-        state.column = insertColumn;
 
         StackPanel widget;
         widget.Name(L"MicrophoneActivityWidget");
@@ -3964,6 +4095,8 @@ static void RemoveWidgetState(WidgetState& state) {
 
 static void RemoveAllWidgets() {
     g_widgetsLive.store(false);
+    g_updateQueued.store(false);
+    g_lastRenderSnapshot = {};
     if (!g_widgets) return;
     for (auto& state : *g_widgets) {
         RemoveWidgetState(state);
@@ -3974,7 +4107,12 @@ static void RemoveAllWidgets() {
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
                                             WPARAM wParam, LPARAM lParam,
                                             DWORD_PTR referenceData) {
+    if (g_removeWidgetsMessage && message == g_removeWidgetsMessage) {
+        RemoveAllWidgets();
+        return TRUE;
+    }
     if (g_audioUpdateMessage && message == g_audioUpdateMessage) {
+        g_updateQueued.store(false);
         try {
             UpdateWidgets();
         } catch (...) {
@@ -3983,6 +4121,7 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
         return 0;
     }
     if (message == WM_NCDESTROY) {
+        g_updateQueued.store(false);
         HWND expected = hWnd;
         g_mainTaskbarWnd.compare_exchange_strong(expected, nullptr);
     }
@@ -3990,6 +4129,7 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
 }
 
 static bool ApplyWidgetsFromTaskbarThread() {
+    g_updateQueued.store(false);
     RemoveAllWidgets();
     bool injected = false;
 
@@ -4050,14 +4190,18 @@ static void ApplyWidgetsOnWindowThread() {
 
 static bool RemoveWidgetsOnWindowThread() {
     HWND hWnd = FindMainTaskbarWindow();
-    bool widgetsRemoved =
-        hWnd && RunFromWindowThread(
-                    hWnd, [](void*) { RemoveAllWidgets(); }, nullptr);
+    if (!hWnd) hWnd = g_mainTaskbarWnd.load();
+    bool widgetsRemoved = false;
+    if (hWnd && IsWindow(hWnd) && g_removeWidgetsMessage) {
+        widgetsRemoved =
+            SendMessageW(hWnd, g_removeWidgetsMessage, 0, 0) != FALSE;
+    }
 
     if (HWND subclassWindow = g_mainTaskbarWnd.exchange(nullptr)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(subclassWindow,
                                                          TaskbarSubclassProc);
     }
+    g_updateQueued.store(false);
     return widgetsRemoved;
 }
 
@@ -4206,8 +4350,10 @@ BOOL Wh_ModInit() {
     }
     g_audioUpdateMessage = RegisterWindowMessageW(
         L"Windhawk_MicrophoneActivityUpdate_" WH_MOD_ID);
-    if (!g_audioUpdateMessage) {
-        Wh_Log(L"[Init] Failed to register the taskbar update message");
+    g_removeWidgetsMessage = RegisterWindowMessageW(
+        L"Windhawk_MicrophoneActivityRemove_" WH_MOD_ID);
+    if (!g_audioUpdateMessage || !g_removeWidgetsMessage) {
+        Wh_Log(L"[Init] Failed to register taskbar control messages");
         return FALSE;
     }
     g_diagnosticStartTime = GetTickCount64();
