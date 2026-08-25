@@ -7,7 +7,7 @@
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshlwapi -luuid -lshell32
+// @compilerOptions -lole32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -289,7 +289,7 @@ If you find a mistake and for additional details, please click [here](https://gi
     $description: Use lowercase with dot (e.g., .zip)
   $name: Extension Filtering
   $description: >-
-    On Windows 11, Notepad and WinRAR items can appear even when right-clicking unrelated files. Use the Extension Filtering to show each only for relevant file types.
+    On Windows 11, Notepad and WinRAR items can appear even when right-clicking unrelated files. Use the Extension Filtering to show each only for relevant file types. Note: this only works for the main file list -- right-clicking a file in the left-hand navigation pane tree has no file selection to check, so filtered items are always hidden there.
 */
 // ==/WindhawkModSettings==
 
@@ -297,12 +297,15 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
-#include <commctrl.h>
+#include <exdisp.h>
+#include <shlguid.h>
+#include <servprov.h>
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
 #include <mutex>
+#include <optional>
 #include <cwctype>
 #include <cwchar>
 #include <windhawk_utils.h>
@@ -310,11 +313,11 @@ If you find a mistake and for additional details, please click [here](https://gi
 // Thread-local storage for file paths
 thread_local std::vector<std::wstring> g_threadFilePaths;
 
-// Returns the SHELLDLL_DefView ancestor of hwnd (or hwnd itself if it is
-// one), else nullptr. This is the only window class CWM_GETISHELLBROWSER
-// (WM_USER+7) is meaningful to.
+// Returns the SHELLDLL_DefView ancestor of hwnd (or hwnd itself), else
+// nullptr. GetAncestor(GA_PARENT) is used instead of GetParent, since
+// GetParent returns a top-level window's owner instead of stopping there.
 HWND FindShellViewWindow(HWND hwnd) {
-    for (HWND h = hwnd; h; h = GetParent(h)) {
+    for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, 256);
         if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
@@ -324,23 +327,16 @@ HWND FindShellViewWindow(HWND hwnd) {
     return nullptr;
 }
 
-// True for any real file/folder context menu: the main list view
-// (SHELLDLL_DefView) or the left-hand navigation tree (NamespaceTreeControl/
-// SysTreeView32, a sibling of SHELLDLL_DefView, not a descendant of it).
-// Excludes the taskbar, tray, Start menu, etc., since TrackPopupMenu(Ex) is
-// hooked process-wide.
+// True for any real file/folder context menu: the main list view, the
+// nav pane (NamespaceTreeControl/SysTreeView32, a sibling of
+// SHELLDLL_DefView, not a descendant), or the desktop (Progman/WorkerW).
+// Excludes the taskbar, tray, Start menu, etc.
 bool IsShellViewWindow(HWND hwnd) {
-    if (FindShellViewWindow(hwnd)) {
-        return true;
-    }
-    // The desktop context menu is different: SHELLDLL_DefView is a *child*
-    // of Progman/WorkerW there, not an ancestor of the hwnd TrackPopupMenu
-    // was called with (the owner is Progman/WorkerW itself), so the
-    // ancestor walk above won't find it. Accept those classes directly.
-    for (HWND h = hwnd; h; h = GetParent(h)) {
+    for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, 256);
-        if (wcscmp(className, L"NamespaceTreeControl") == 0 ||
+        if (wcscmp(className, L"SHELLDLL_DefView") == 0 ||
+            wcscmp(className, L"NamespaceTreeControl") == 0 ||
             wcscmp(className, L"SysTreeView32") == 0 ||
             wcscmp(className, L"Progman") == 0 ||
             wcscmp(className, L"WorkerW") == 0) {
@@ -350,28 +346,26 @@ bool IsShellViewWindow(HWND hwnd) {
     return false;
 }
 
-// Sends CWM_GETISHELLBROWSER (WM_USER+7) only to windows whose class is a
-// known, legitimate target -- e.g. WM_USER+7 collides with
-// LVM_INSERTITEMA on SysListView32, so unrecognized classes are skipped.
-// Every probe is logged so an unanswering build can be diagnosed from logs.
+// Sends CWM_GETISHELLBROWSER (WM_USER+7) only to known frame/tab window
+// classes -- e.g. WM_USER+7 collides with LVM_INSERTITEMA on
+// SysListView32, so unrecognized classes are skipped.
 IShellBrowser* GetShellBrowser(HWND hwnd) {
+    // Progman/WorkerW aren't included here -- IsDesktopWindow() routes
+    // those to GetDesktopShellBrowser() before this is ever called, and
+    // WorkerW is a generic Explorer class rather than a real shell frame.
     static const wchar_t* kAllowedClasses[] = {
         L"SHELLDLL_DefView",
         L"ShellTabWindowClass",
         L"CabinetWClass",
         L"ExploreWClass",
-        L"Progman",
-        L"WorkerW",
     };
     static const wchar_t* kShellFrameClasses[] = {
         L"CabinetWClass",
         L"ExploreWClass",
-        L"Progman",
-        L"WorkerW",
     };
     
     IShellBrowser* pShellBrowser = nullptr;
-    for (HWND h = hwnd; h; h = GetParent(h)) {
+    for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, 256);
         
@@ -397,10 +391,9 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
     return nullptr;
 }
 
-// True if hwnd is (an ancestor chain reaches) the desktop's Progman/WorkerW
-// windows, as opposed to a regular Explorer folder window.
+// True if hwnd's ancestor chain reaches the desktop's Progman/WorkerW.
 bool IsDesktopWindow(HWND hwnd) {
-    for (HWND h = hwnd; h; h = GetParent(h)) {
+    for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, 256);
         if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
@@ -410,119 +403,45 @@ bool IsDesktopWindow(HWND hwnd) {
     return false;
 }
 
-// The desktop doesn't expose an IShellBrowser at all -- confirmed via
-// logging: CWM_GETISHELLBROWSER is delivered and handled (non-zero result)
-// by both SHELLDLL_DefView and Progman on the desktop, but both return a
-// NULL pointer, because the desktop has no navigable "browser" the way a
-// regular Explorer folder window does. So selection has to be read
-// directly from its SysListView32 control instead. This mod DLL is
-// injected into explorer.exe itself, so LVM_GETITEMTEXTW can be called
-// with a buffer in our own memory directly -- no cross-process marshaling
-// needed. The raw list-view text is then resolved through
-// IShellFolder::ParseDisplayName so the real filename (and extension) is
-// used even if Explorer is configured to hide extensions on screen.
-std::vector<std::wstring> GetSelectedDesktopFiles() {
-    std::vector<std::wstring> files;
+// The desktop doesn't expose an IShellBrowser via CWM_GETISHELLBROWSER (the
+// desktop responds but with a NULL browser, confirmed via logging) -- it
+// isn't reachable that way. The documented route is IShellWindows::
+// FindWindowSW with SWC_DESKTOP, then IServiceProvider -> SID_STopLevelBrowser.
+// Unlike GetShellBrowser()'s WM_USER+7 result (a borrowed pointer), this
+// follows normal COM reference-counting rules: the caller owns the
+// returned reference and must Release() it.
+IShellBrowser* GetDesktopShellBrowser() {
+    IShellWindows* pShellWindows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                 IID_IShellWindows, (void**)&pShellWindows)) || !pShellWindows) {
+        return nullptr;
+    }
     
-    HWND hwndProgman = FindWindowW(L"Progman", nullptr);
-    HWND hwndDefView = hwndProgman ? FindWindowExW(hwndProgman, nullptr, L"SHELLDLL_DefView", nullptr) : nullptr;
-    
-    if (!hwndDefView) {
-        // Some Windows builds host the desktop icons under a WorkerW
-        // sibling of Progman instead.
-        HWND hwndWorkerW = nullptr;
-        while ((hwndWorkerW = FindWindowExW(nullptr, hwndWorkerW, L"WorkerW", nullptr)) != nullptr) {
-            hwndDefView = FindWindowExW(hwndWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (hwndDefView) break;
+    IShellBrowser* pShellBrowser = nullptr;
+    VARIANT vEmpty = {};
+    long lhwnd = 0;
+    IDispatch* pDisp = nullptr;
+    if (SUCCEEDED(pShellWindows->FindWindowSW(&vEmpty, &vEmpty, SWC_DESKTOP, &lhwnd,
+                                               SWFO_NEEDDISPATCH, &pDisp)) && pDisp) {
+        IServiceProvider* pServiceProvider = nullptr;
+        if (SUCCEEDED(pDisp->QueryInterface(IID_IServiceProvider, (void**)&pServiceProvider)) && pServiceProvider) {
+            pServiceProvider->QueryService(SID_STopLevelBrowser, IID_IShellBrowser, (void**)&pShellBrowser);
+            pServiceProvider->Release();
         }
+        pDisp->Release();
     }
     
-    if (!hwndDefView) {
-        Wh_Log(L"GetSelectedDesktopFiles: could not find desktop SHELLDLL_DefView");
-        return files;
-    }
-    
-    HWND hwndListView = FindWindowExW(hwndDefView, nullptr, L"SysListView32", nullptr);
-    if (!hwndListView) {
-        Wh_Log(L"GetSelectedDesktopFiles: could not find desktop SysListView32");
-        return files;
-    }
-    
-    IShellFolder* pDesktopFolder = nullptr;
-    HRESULT hr = SHGetDesktopFolder(&pDesktopFolder);
-    
-    int index = -1;
-    while ((index = (int)SendMessageW(hwndListView, LVM_GETNEXTITEM, (WPARAM)index,
-                                       MAKELPARAM(LVNI_SELECTED, 0))) != -1) {
-        wchar_t text[MAX_PATH] = {0};
-        LVITEMW item = {0};
-        item.iItem = index;
-        item.mask = LVIF_TEXT;
-        item.pszText = text;
-        item.cchTextMax = MAX_PATH;
-        SendMessageW(hwndListView, LVM_GETITEMTEXTW, (WPARAM)index, (LPARAM)&item);
-        
-        if (!text[0]) continue;
-        
-        bool resolved = false;
-        if (SUCCEEDED(hr) && pDesktopFolder) {
-            LPITEMIDLIST pidl = nullptr;
-            ULONG chEaten = 0;
-            if (SUCCEEDED(pDesktopFolder->ParseDisplayName(nullptr, nullptr, text, &chEaten, &pidl, nullptr)) && pidl) {
-                STRRET strret;
-                if (SUCCEEDED(pDesktopFolder->GetDisplayNameOf(pidl, SHGDN_FORPARSING, &strret))) {
-                    LPWSTR pszPath = nullptr;
-                    if (SUCCEEDED(StrRetToStrW(&strret, pidl, &pszPath)) && pszPath) {
-                        files.push_back(std::wstring(pszPath));
-                        CoTaskMemFree(pszPath);
-                        resolved = true;
-                    }
-                }
-                CoTaskMemFree(pidl);
-            }
-        }
-        
-        if (!resolved) {
-            // Fall back to the raw display text (may be missing its
-            // extension if Explorer is hiding it) rather than losing the
-            // item entirely.
-            files.push_back(std::wstring(text));
-        }
-    }
-    
-    if (pDesktopFolder) {
-        pDesktopFolder->Release();
-    }
-    
-    return files;
+    pShellWindows->Release();
+    return pShellBrowser;
 }
 
-// Function to get selected files from Explorer, using the exact hWnd that
-// TrackPopupMenu(Ex) was called with. This is the window whose menu is
-// actually being shown, so no cross-process/cross-tab guessing is needed.
-std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
+// Extracts the currently-selected file paths from a live IShellBrowser.
+// Shared by both the desktop and regular-folder-window lookup paths.
+// Reference-counting of pShellBrowser itself is the caller's
+// responsibility (see GetShellBrowser/GetDesktopShellBrowser comments).
+std::vector<std::wstring> GetSelectedFilesFromShellBrowser(IShellBrowser* pShellBrowser) {
     std::vector<std::wstring> files;
-    
-    if (!hwnd) {
-        Wh_Log(L"GetSelectedFilesFromExplorer: No hWnd provided");
-        return files;
-    }
-    
-    if (IsDesktopWindow(hwnd)) {
-        return GetSelectedDesktopFiles();
-    }
-    
-    if (!FindShellViewWindow(hwnd)) {
-        // No SHELLDLL_DefView ancestor -- either not a shell view menu at
-        // all, or (e.g.) a right-click in the navigation pane, which has no
-        // IFolderView selection to read. Either way there's nothing to look up.
-        Wh_Log(L"GetSelectedFilesFromExplorer: no SHELLDLL_DefView ancestor, skipping");
-        return files;
-    }
-    
-    IShellBrowser* pShellBrowser = GetShellBrowser(hwnd);
     if (!pShellBrowser) {
-        Wh_Log(L"Could not get IShellBrowser from window");
         return files;
     }
     
@@ -564,6 +483,47 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
         }
         pShellView->Release();
     }
+    
+    return files;
+}
+
+// Function to get selected files from Explorer, using the exact hWnd that
+// TrackPopupMenu(Ex) was called with. This is the window whose menu is
+// actually being shown, so no cross-process/cross-tab guessing is needed.
+std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd) {
+    std::vector<std::wstring> files;
+    
+    if (!hwnd) {
+        Wh_Log(L"GetSelectedFilesFromExplorer: No hWnd provided");
+        return files;
+    }
+    
+    if (IsDesktopWindow(hwnd)) {
+        IShellBrowser* pShellBrowser = GetDesktopShellBrowser();
+        if (!pShellBrowser) {
+            Wh_Log(L"Could not get desktop IShellBrowser");
+            return files;
+        }
+        files = GetSelectedFilesFromShellBrowser(pShellBrowser);
+        pShellBrowser->Release(); // owned reference (QueryService), unlike the WM_USER+7 path below
+        return files;
+    }
+    
+    if (!FindShellViewWindow(hwnd)) {
+        // No SHELLDLL_DefView ancestor -- either not a shell view menu at
+        // all, or (e.g.) a right-click in the navigation pane, which has no
+        // IFolderView selection to read. Either way there's nothing to look up.
+        Wh_Log(L"GetSelectedFilesFromExplorer: no SHELLDLL_DefView ancestor, skipping");
+        return files;
+    }
+    
+    IShellBrowser* pShellBrowser = GetShellBrowser(hwnd);
+    if (!pShellBrowser) {
+        Wh_Log(L"Could not get IShellBrowser from window");
+        return files;
+    }
+    
+    files = GetSelectedFilesFromShellBrowser(pShellBrowser);
     
     // NOTE: Do not call pShellBrowser->Release() here -- WM_USER+7 returns
     // it without an added reference (a borrowed pointer owned by the frame
@@ -1637,19 +1597,24 @@ std::vector<HHOOK> g_activeMenuHooks;
 // established way to intercept it.
 thread_local HHOOK tl_hMenuHook = nullptr;
 thread_local int tl_menuDepth = 0;
+// Decided once per tracking session in EnterMenuTracking(), so the
+// top-level menu and every submenu agree on whether the bypass is active,
+// even if the Alt key state changes while the menu is still open.
+thread_local bool tl_menuBypassed = false;
 
 LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION) {
+    if (nCode == HC_ACTION && !tl_menuBypassed) {
         CWPRETSTRUCT* cwp = (CWPRETSTRUCT*)lParam;
         if (cwp->message == WM_INITMENUPOPUP) {
             HMENU hSubMenu = (HMENU)cwp->wParam;
             if (hSubMenu) {
+                // g_threadFilePaths was populated before tracking started
+                // and stays valid for the whole session. This also handles
+                // the top-level menu itself, not just submenus -- Explorer
+                // sends WM_INITMENUPOPUP for it too, after its own handler
+                // has finished populating it.
                 std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-                if (!IsModifierKeyBypassActive()) {
-                    // g_threadFilePaths was populated before tracking
-                    // started and stays valid for the whole session.
-                    ProcessMenu(hSubMenu);
-                }
+                ProcessMenu(hSubMenu);
             }
         }
     }
@@ -1660,6 +1625,10 @@ LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam)
 // nested calls (TPM_RECURSE) just bump the depth counter.
 void EnterMenuTracking() {
     if (tl_menuDepth == 0) {
+        {
+            std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+            tl_menuBypassed = IsModifierKeyBypassActive();
+        }
         tl_hMenuHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
                                          nullptr, GetCurrentThreadId());
         if (tl_hMenuHook) {
@@ -1689,24 +1658,27 @@ void ExitMenuTracking() {
     }
 }
 
-// Shared logic for both TrackPopupMenu(Ex) hooks: bypass check, file
-// lookup, and menu filtering for the top-level menu. Only called once the
+// RAII pairing for Enter/ExitMenuTracking, so a thrown exception between
+// them (e.g. std::bad_alloc) can't leave the hook installed forever.
+struct MenuTrackingGuard {
+    MenuTrackingGuard() { EnterMenuTracking(); }
+    ~MenuTrackingGuard() { ExitMenuTracking(); }
+};
+
+// Shared logic for both TrackPopupMenu(Ex) hooks: file lookup and, as a
+// fallback, menu filtering for the top-level menu. Only called once the
 // caller has confirmed hWnd is a shell view.
 void ProcessPopupMenu(HMENU hMenu, HWND hWnd, const wchar_t* logPrefix) {
-    // Single lock covering both reads below (ProcessMenu()'s lock further
-    // down stays separate to avoid holding it across a blocking call).
-    bool isBypassed;
+    if (tl_menuBypassed) {
+        Wh_Log(L"%s: Modifier key bypass active, skipping menu processing", logPrefix);
+        return;
+    }
+    
     bool needFiles;
     {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-        isBypassed = IsModifierKeyBypassActive();
         needFiles = g_settings.extensionFiltering.enableExtensionFiltering ||
                     g_settings.extensionFiltering.enableWinRARFiltering;
-    }
-    
-    if (isBypassed) {
-        Wh_Log(L"%s: Modifier key bypass active, skipping menu processing", logPrefix);
-        return;
     }
     
     bool comInitialized = false;
@@ -1729,9 +1701,11 @@ void ProcessPopupMenu(HMENU hMenu, HWND hWnd, const wchar_t* logPrefix) {
         }
     }
     
-    // Safe to hold the lock across ProcessMenu -- it never blocks on
-    // another thread.
-    {
+    // MenuCallWndProcRetHook processes this same top-level menu too (via
+    // WM_INITMENUPOPUP), and runs after Explorer's own handler has finished
+    // populating it -- strictly better positioned than filtering it here.
+    // Only fall back to filtering it directly if the hook failed to install.
+    if (!tl_hMenuHook) {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
         ProcessMenu(hMenu);
     }
@@ -1760,17 +1734,14 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
     // hooked process-wide, so hWnd can also belong to the taskbar, tray
     // icons, or the Start menu.
     bool isShellView = IsShellViewWindow(hWnd);
+    std::optional<MenuTrackingGuard> guard;
     if (isShellView) {
         g_threadFilePaths.clear();
-        EnterMenuTracking();
+        guard.emplace();
         ProcessPopupMenu(hMenu, hWnd, L"TrackPopupMenuEx");
     }
     
     BOOL bRes = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
-    
-    if (isShellView) {
-        ExitMenuTracking();
-    }
     
     return bRes;
 }
@@ -1786,31 +1757,29 @@ BOOL WINAPI TrackPopupMenu_Hook(
     const RECT* prcRect
 ) {
     bool isShellView = IsShellViewWindow(hWnd);
+    std::optional<MenuTrackingGuard> guard;
     if (isShellView) {
         g_threadFilePaths.clear();
-        EnterMenuTracking();
+        guard.emplace();
         ProcessPopupMenu(hMenu, hWnd, L"TrackPopupMenu");
     }
     
     BOOL bRes = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
     
-    if (isShellView) {
-        ExitMenuTracking();
-    }
-    
     return bRes;
 }
 
-// Logs a warning if a settings array has more entries configured than
-// maxItems, so an overflowed 101st+ entry doesn't just silently vanish.
-void WarnIfSettingArrayOverflows(const wchar_t* keyFormat, int maxItems) {
-    if (maxItems <= 0) return;
-    PCWSTR overflowCheck = Wh_GetStringSetting(keyFormat, maxItems);
+// Shared cap for all settings arrays (customItems, notepadExtensions, winrarExtensions).
+constexpr int kMaxSettingArrayItems = 100;
+
+// Logs a warning if a settings array has more entries configured than the
+// cap, so an overflowed 101st+ entry doesn't just silently vanish.
+void WarnIfSettingArrayOverflows(const wchar_t* keyFormat, const wchar_t* displayName) {
+    auto overflowCheck = WindhawkUtils::StringSetting::make(keyFormat, kMaxSettingArrayItems);
     if (*overflowCheck) {
         Wh_Log(L"WARNING: More than %d entries are configured for '%s'; entries beyond the first %d are ignored",
-               maxItems, keyFormat, maxItems);
+               kMaxSettingArrayItems, displayName, kMaxSettingArrayItems);
     }
-    Wh_FreeStringSetting(overflowCheck);
 }
 
 // Load settings
@@ -1886,30 +1855,21 @@ void LoadSettings() {
     
     // Load extension lists
     g_settings.extensionFiltering.notepadExtensions.clear();
-    int maxItems = 100;
-    for (int i = 0; i < maxItems; i++) {
-        // Wh_GetStringSetting never returns NULL -- it returns an empty
-        // string (L"") when the value is unset. Break on that instead.
-        PCWSTR ext = Wh_GetStringSetting(L"extensionFiltering.notepadExtensions[%d]", i);
-        bool isUnset = !*ext;
-        std::wstring extension(ext);
-        Wh_FreeStringSetting(ext);
-        if (isUnset) break;
-        g_settings.extensionFiltering.notepadExtensions.push_back(extension);
+    for (int i = 0; i < kMaxSettingArrayItems; i++) {
+        auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.notepadExtensions[%d]", i);
+        if (!*ext) break;
+        g_settings.extensionFiltering.notepadExtensions.push_back(ext.get());
     }
-    WarnIfSettingArrayOverflows(L"extensionFiltering.notepadExtensions[%d]", maxItems);
+    WarnIfSettingArrayOverflows(L"extensionFiltering.notepadExtensions[%d]", L"Notepad extensions");
     
     // Load custom items (normalized once here instead of on every
     // ShouldRemoveMenuItem() comparison)
     g_settings.customItems.clear();
-    for (int i = 0; i < maxItems; i++) {
-        PCWSTR customItem = Wh_GetStringSetting(L"customItems[%d]", i);
-        bool isUnset = !*customItem;
-        std::wstring item(customItem);
-        Wh_FreeStringSetting(customItem);
-        if (isUnset) break;
+    for (int i = 0; i < kMaxSettingArrayItems; i++) {
+        auto customItem = WindhawkUtils::StringSetting::make(L"customItems[%d]", i);
+        if (!*customItem) break;
         
-        std::wstring cleanItem = NormalizeString(RemoveAmpersands(item));
+        std::wstring cleanItem = NormalizeString(RemoveAmpersands(customItem.get()));
         
         // A bare "*" matches every menu item (empty prefix matches
         // anything) and would empty the whole context menu -- almost
@@ -1921,23 +1881,20 @@ void LoadSettings() {
         }
         
         g_settings.customItems.push_back(cleanItem);
-        Wh_Log(L"Loaded custom item %d: %s", i, item.c_str());
+        Wh_Log(L"Loaded custom item %d: %s", i, customItem.get());
     }
-    WarnIfSettingArrayOverflows(L"customItems[%d]", maxItems);
+    WarnIfSettingArrayOverflows(L"customItems[%d]", L"Custom items");
     
     // WinRAR filtering settings (nested under extensionFiltering)
     g_settings.extensionFiltering.enableWinRARFiltering = Wh_GetIntSetting(L"extensionFiltering.enableWinRARFiltering");
     
     g_settings.extensionFiltering.winrarExtensions.clear();
-    for (int i = 0; i < maxItems; i++) {
-        PCWSTR ext = Wh_GetStringSetting(L"extensionFiltering.winrarExtensions[%d]", i);
-        bool isUnset = !*ext;
-        std::wstring extension(ext);
-        Wh_FreeStringSetting(ext);
-        if (isUnset) break;
-        g_settings.extensionFiltering.winrarExtensions.push_back(extension);
+    for (int i = 0; i < kMaxSettingArrayItems; i++) {
+        auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.winrarExtensions[%d]", i);
+        if (!*ext) break;
+        g_settings.extensionFiltering.winrarExtensions.push_back(ext.get());
     }
-    WarnIfSettingArrayOverflows(L"extensionFiltering.winrarExtensions[%d]", maxItems);
+    WarnIfSettingArrayOverflows(L"extensionFiltering.winrarExtensions[%d]", L"WinRAR extensions");
     
     // Modifier key override settings (Alt is the only bypass key -- see IsModifierKeyBypassActive)
     g_settings.modifierKeyOverride.enableModifierOverride = Wh_GetIntSetting(L"modifierKeyOverride.enableModifierOverride");
