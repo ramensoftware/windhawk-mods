@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.5
+// @version         0.9.6
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -132,7 +132,7 @@ volume control, call state, and headset integration.
   $description: "How often to query vendor device state. Range: 200-2000 ms."
 - headsetDiagnosticsPath: ""
   $name: Export sanitized headset diagnostics
-  $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, provider slots, and sanitized report changes without paths, serial numbers, or raw report values.
+  $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, and provider slots without paths, serial numbers, or raw report values. Sanitized report changes are included only while headset synchronization is enabled.
 - slackWarning: false
   $name: Warn when speaking while Slack is muted
   $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
@@ -608,7 +608,7 @@ static bool IsStopping() {
             WaitForSingleObject(g_audioStopEvent, 0) == WAIT_OBJECT_0);
 }
 
-static void SetSharedDeviceName(const std::wstring& name) {
+static bool SetSharedDeviceName(const std::wstring& name) {
     bool changed = false;
     AcquireSRWLockExclusive(&g_audioNameLock);
     if (g_audioDeviceName != name) {
@@ -619,6 +619,7 @@ static void SetSharedDeviceName(const std::wstring& name) {
     if (changed) {
         g_audioNameGeneration.fetch_add(1, std::memory_order_relaxed);
     }
+    return changed;
 }
 
 static std::wstring GetSharedDeviceName() {
@@ -970,16 +971,16 @@ static bool OpenDefaultEndpoint(IMMDeviceEnumerator* enumerator,
 }
 
 static void PublishUnavailableAudio() {
-    g_audioAvailable.store(false);
-    g_audioMuted.store(false);
-    g_audioVolume.store(0);
-    g_audioPeak.store(0.0f);
-    g_slackWarningActive.store(false);
-    g_teamsWarningActive.store(false);
-    g_zoomWarningActive.store(false);
-    SetSharedDeviceName(L"No microphone available");
+    bool changed = g_audioAvailable.exchange(false);
+    changed |= g_audioMuted.exchange(false);
+    changed |= g_audioVolume.exchange(0) != 0;
+    changed |= std::lround(g_audioPeak.exchange(0.0f) * 1000.0f) != 0;
+    changed |= g_slackWarningActive.exchange(false);
+    changed |= g_teamsWarningActive.exchange(false);
+    changed |= g_zoomWarningActive.exchange(false);
+    changed |= SetSharedDeviceName(L"No microphone available");
     UpdateWindowsHardwareSource(false, false, L"");
-    NotifyTaskbar();
+    if (changed) NotifyTaskbar();
 }
 
 enum class CallApp { Slack, Teams, Zoom };
@@ -1811,11 +1812,20 @@ static DWORD WINAPI AudioThreadProc(void*) {
             smoothedPeak = 0.0f;
         }
 
-        g_audioAvailable.store(true);
-        g_audioMuted.store(muted != FALSE);
-        g_audioVolume.store(static_cast<int>(std::lround(volume * 100.0f)));
-        g_audioPeak.store(muted ? 0.0f : smoothedPeak);
-        SetSharedDeviceName(endpoint.name);
+        bool publishedMuted = muted != FALSE;
+        int publishedVolume =
+            static_cast<int>(std::lround(volume * 100.0f));
+        float publishedPeak = publishedMuted ? 0.0f : smoothedPeak;
+        bool publishedChanged = !g_audioAvailable.exchange(true);
+        publishedChanged |= g_audioMuted.exchange(publishedMuted) !=
+                            publishedMuted;
+        publishedChanged |= g_audioVolume.exchange(publishedVolume) !=
+                            publishedVolume;
+        float previousPeak = g_audioPeak.exchange(publishedPeak);
+        publishedChanged |=
+            std::lround(previousPeak * 1000.0f) !=
+            std::lround(publishedPeak * 1000.0f);
+        publishedChanged |= SetSharedDeviceName(endpoint.name);
         UpdateWindowsHardwareSource(endpoint.hardwareMute, muted != FALSE,
                                     endpoint.name);
         if (endpoint.hardwareMute) {
@@ -1836,7 +1846,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
         }
         observedHardwareMuteKnown = true;
         observedHardwareMuted = muted != FALSE;
-        NotifyTaskbar();
+        if (publishedChanged) NotifyTaskbar();
     }
 
     endpoint.Reset();
@@ -2479,8 +2489,12 @@ static bool RegisterStandardHidInput(HWND target) {
     devices[1].dwFlags =
         RIDEV_INPUTSINK | RIDEV_DEVNOTIFY | RIDEV_PAGEONLY;
     devices[1].hwndTarget = target;
-    return RegisterRawInputDevices(devices, ARRAYSIZE(devices),
-                                   sizeof(devices[0])) != FALSE;
+    if (!RegisterRawInputDevices(devices, ARRAYSIZE(devices),
+                                 sizeof(devices[0]))) {
+        g_previousHidRegistrations.clear();
+        return false;
+    }
+    return true;
 }
 
 static void UnregisterStandardHidInput() {
@@ -2719,17 +2733,25 @@ static void ExportHeadsetDiagnosticsIfRequested() {
 
 static DWORD WINAPI HeadsetThreadProc(void*) {
     g_vendorProbeRequested.store(true);
+    bool monitorStandardHid = g_settings.headsetSyncMode != L"off";
+    bool standardHidRegistered = false;
     g_headsetMessageWindow = CreateHeadsetMessageWindow();
     if (g_headsetMessageWindow) {
-        if (!RegisterStandardHidInput(g_headsetMessageWindow)) {
-            Wh_Log(L"[Headset] Standard HID Raw Input registration failed");
-        }
-        g_hidDeviceNotification =
-            RegisterHidDeviceNotifications(g_headsetMessageWindow);
-        if (!g_hidDeviceNotification) {
-            Wh_Log(L"[Headset] HID device notification registration failed: "
-                   L"%u",
-                   GetLastError());
+        if (monitorStandardHid) {
+            standardHidRegistered =
+                RegisterStandardHidInput(g_headsetMessageWindow);
+            if (!standardHidRegistered) {
+                Wh_Log(
+                    L"[Headset] Standard HID Raw Input registration failed");
+            }
+            g_hidDeviceNotification =
+                RegisterHidDeviceNotifications(g_headsetMessageWindow);
+            if (!g_hidDeviceNotification) {
+                Wh_Log(
+                    L"[Headset] HID device notification registration failed: "
+                    L"%u",
+                    GetLastError());
+            }
         }
         RefreshStandardHidDevices();
     } else {
@@ -2865,7 +2887,9 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
             UnregisterDeviceNotification(g_hidDeviceNotification);
             g_hidDeviceNotification = nullptr;
         }
-        UnregisterStandardHidInput();
+        if (standardHidRegistered) {
+            UnregisterStandardHidInput();
+        }
         DestroyWindow(g_headsetMessageWindow);
         g_headsetMessageWindow = nullptr;
     }
@@ -4108,8 +4132,13 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
                                             WPARAM wParam, LPARAM lParam,
                                             DWORD_PTR referenceData) {
     if (g_removeWidgetsMessage && message == g_removeWidgetsMessage) {
-        RemoveAllWidgets();
-        return TRUE;
+        try {
+            RemoveAllWidgets();
+            return TRUE;
+        } catch (...) {
+            Wh_Log(L"[XAML] Exception while removing widget state");
+            return FALSE;
+        }
     }
     if (g_audioUpdateMessage && message == g_audioUpdateMessage) {
         g_updateQueued.store(false);
@@ -4128,14 +4157,20 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT message,
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
+struct ApplyWidgetsState {
+    bool injected = false;
+    bool subclassFailed = false;
+};
+
 static bool ApplyWidgetsFromTaskbarThread() {
     g_updateQueued.store(false);
     RemoveAllWidgets();
-    bool injected = false;
+    ApplyWidgetsState state;
 
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* state = reinterpret_cast<ApplyWidgetsState*>(lParam);
             try {
                 WCHAR className[32];
                 if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
@@ -4149,7 +4184,8 @@ static bool ApplyWidgetsFromTaskbarThread() {
                             hWnd, TaskbarSubclassProc, 0)) {
                         Wh_Log(L"[XAML] Failed to subclass taskbar window %p",
                                hWnd);
-                        return TRUE;
+                        state->subclassFailed = true;
+                        return FALSE;
                     }
                     g_mainTaskbarWnd.store(hWnd);
                 } else if (_wcsicmp(className,
@@ -4160,7 +4196,7 @@ static bool ApplyWidgetsFromTaskbarThread() {
                 }
 
                 if (root && InjectWidget(root, hWnd)) {
-                    *reinterpret_cast<bool*>(lParam) = true;
+                    state->injected = true;
                 }
             } catch (...) {
                 Wh_Log(L"[XAML] Exception while enumerating taskbar window %p",
@@ -4168,15 +4204,22 @@ static bool ApplyWidgetsFromTaskbarThread() {
             }
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(&injected));
+        reinterpret_cast<LPARAM>(&state));
+
+    if (state.subclassFailed) {
+        RemoveAllWidgets();
+        g_mainTaskbarWnd.store(nullptr);
+        g_widgetsLive.store(false);
+        return false;
+    }
 
     try {
         UpdateWidgets();
     } catch (...) {
         Wh_Log(L"[XAML] Exception while applying initial widget state");
     }
-    g_widgetsLive.store(injected);
-    return injected;
+    g_widgetsLive.store(state.injected);
+    return state.injected;
 }
 
 static void ApplyWidgetsOnWindowThread() {
