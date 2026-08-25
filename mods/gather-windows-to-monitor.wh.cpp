@@ -17,8 +17,8 @@ Move the active window, or gather eligible open windows, to a chosen display wit
 global shortcuts. Windows are placed inside the usable desktop area so taskbars
 remain clear. Windows already on the destination display are left unchanged.
 
-Numbered shortcuts follow the `DISPLAY1`, `DISPLAY2`, and other names assigned by
-Windows. They can be remapped without changing the shortcuts themselves.
+Numbered shortcuts follow connected Windows display device names in numeric order.
+They can be remapped without changing the shortcuts themselves.
 
 ## Choosing between similar mods
 
@@ -55,9 +55,10 @@ is logged. This protects existing shortcuts after an update.
 
 ## Display order override
 
-Numbered move and gather actions normally follow Windows display device names in
-numeric order: `DISPLAY1`, `DISPLAY2`, and so on. **Display order override** changes
-what "display 1", "display 2", and so on mean while keeping every hotkey unchanged.
+Numbered move and gather actions normally number connected displays contiguously
+using Windows device-name order. For example, connected `DISPLAY4` and `DISPLAY6`
+become display 1 and display 2. **Display order override** changes what "display 1",
+"display 2", and so on mean while keeping every hotkey unchanged.
 
 Enter a comma-separated list containing `primary` or display device names. Both
 `DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
@@ -80,12 +81,22 @@ Add-Type -AssemblyName System.Windows.Forms
     Select-Object DeviceName, Primary, Bounds
 ```
 
-Leave the setting empty to use automatic `DISPLAY` number order. An invalid value
+Leave the setting empty to use automatic connected-display order. An invalid value
 rejects the whole override and safely returns to automatic order. Windhawk logging
 also shows connected device names and the final numbered order when the mod starts,
-settings change, or the display layout changes.
+settings change, or an action runs after the display layout changes.
 
 If a numbered destination is unavailable, the primary display is used.
+
+## Updating shortcut and window selection defaults
+
+Numbered shortcuts now move the foreground window by default. After updating,
+`Ctrl+Alt+Shift+1` through `Ctrl+Alt+Shift+3` move one window instead of gathering;
+numbered gather shortcuts are disabled until configured. Explicitly saved shortcuts
+keep their existing values and take priority if a new default conflicts.
+
+Gather actions now include owned windows and popups by default. Turn off **Include
+owned windows/popups** to keep dialogs and secondary windows in place.
 
 ## Updating window size settings
 
@@ -129,6 +140,7 @@ behavior, where skipping took priority.
   cursor.
 * **Include owned windows/popups** includes dialogs and secondary windows attached
   to another app window during gather actions.
+
 ## Behavior and limitations
 
 Hidden windows, desktop and taskbar windows, system interface windows, helper
@@ -194,7 +206,7 @@ applications handle that inconsistently.
     \\.\DISPLAY4. Example: primary,DISPLAY3 keeps display 1 tied to the current
     primary display and makes DISPLAY3 become display 2. Missing displays keep
     their slots; unlisted displays follow in automatic order. An invalid override
-    uses automatic order. Leave empty for automatic DISPLAY number order.
+    uses automatic order. Leave empty to number connected displays by DISPLAY name.
 - RestoreMinimized: skip
   $name: Minimized windows
   $description: Choose whether minimized windows stay minimized or are restored and moved.
@@ -751,20 +763,18 @@ std::vector<MonitorInfo> ApplyDisplayOrder(
                          }
                          return a.detectedIndex < b.detectedIndex;
                      });
+    if (!g_settings.displayOrder.count) return automatic;
+
     std::vector<MonitorInfo> ordered;
-    size_t slotCount = g_settings.displayOrder.count
-                           ? g_settings.displayOrder.count
-                           : 5;
+    size_t slotCount = g_settings.displayOrder.count;
     ordered.reserve(slotCount + detected.size());
     std::vector<bool> used(detected.size());
 
     for (size_t i = 0; i < slotCount; i++) {
-        DisplayOrderOverride::Entry entry = g_settings.displayOrder.count
-                                                ? g_settings.displayOrder.entries[i]
-                                                : DisplayOrderOverride::Entry{
-                                                      false, (int)i + 1 };
+        DisplayOrderOverride::Entry entry = g_settings.displayOrder.entries[i];
         size_t detectedIndex = detected.size();
         for (size_t j = 0; j < detected.size(); j++) {
+            if (used[j]) continue;
             if ((entry.primary && detected[j].primary) ||
                 (!entry.primary &&
                  detected[j].displayNumber == entry.displayNumber)) {
@@ -843,9 +853,12 @@ void LogCurrentDisplayTopology() {
 
 const MonitorInfo* PrimaryMonitor(const std::vector<MonitorInfo>& monitors) {
     for (const MonitorInfo& monitor : monitors) {
-        if (monitor.primary) return &monitor;
+        if (monitor.primary && monitor.handle) return &monitor;
     }
-    return monitors.empty() ? nullptr : &monitors[0];
+    for (const MonitorInfo& monitor : monitors) {
+        if (monitor.handle) return &monitor;
+    }
+    return nullptr;
 }
 
 const MonitorInfo* MonitorByHandle(const std::vector<MonitorInfo>& monitors, HMONITOR handle) {
@@ -990,6 +1003,10 @@ void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
 bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
                          bool bulk) {
     if (!IsWindow(hwnd)) return false;
+    if (!target.handle || target.work.right <= target.work.left ||
+        target.work.bottom <= target.work.top) {
+        return false;
+    }
     HMONITOR sourceHandle = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (sourceHandle == target.handle) return false;
     const RECT& workArea = target.work;
@@ -1002,6 +1019,12 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
         if (!GetWindowPlacement(hwnd, &placement)) return false;
         rect = placement.rcNormalPosition;
     } else if (!GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+
+    MONITORINFO sourceInfo{ sizeof(sourceInfo) };
+    if (g_settings.sizeMode == SizeMode::Scale &&
+        !GetMonitorInfo(sourceHandle, &sourceInfo)) {
         return false;
     }
 
@@ -1018,8 +1041,6 @@ bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
                                      workWidth, workHeight);
 
     if (g_settings.sizeMode == SizeMode::Scale) {
-        MONITORINFO sourceInfo{ sizeof(sourceInfo) };
-        if (!GetMonitorInfo(sourceHandle, &sourceInfo)) return false;
         int sourceWorkWidth = sourceInfo.rcWork.right - sourceInfo.rcWork.left;
         int sourceWorkHeight = sourceInfo.rcWork.bottom - sourceInfo.rcWork.top;
         width = ScaleDimensionForWorkArea(width, sourceWorkWidth, workWidth);
