@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              neiz-supersmile-audio-visualizer
-// @name            Desktop Audio Visualizer
+// @name            Desktop Audio Visualizer Plus
 // @description     A highly customizable desktop audio visualizer
 // @version         1.0.0
 // @author          NeiZ & SuperSmile123
