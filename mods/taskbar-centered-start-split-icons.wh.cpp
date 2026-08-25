@@ -461,11 +461,20 @@ thread_local bool g_inTaskbarArrangeOverride;
 std::atomic<HWND> g_hTaskbarWnd;
 
 // Whether TaskbarWndSubclassProc is currently installed on g_hTaskbarWnd -
-// see EnsureTaskbarWnd (where it's installed) and InvalidateTaskbarLayout
-// (which checks it to pick PostMessage vs. the RunFromWindowThread
-// fallback). atomic: set from Explorer's UI thread (EnsureTaskbarWnd) or
-// Wh_ModAfterInit's thread, read from InvalidateTaskbarLayout's callers,
-// which include the dedicated WinEventHook thread.
+// see EnsureTaskbarWnd (where it's installed) and InvalidateTaskbarLayout/
+// ButtonHwndResolveTimerProc/ApplyLoadedSettings (which all check it before
+// posting to the taskbar thread). This is the SOLE way any of those reach
+// the taskbar thread - there is no fallback marshal if the subclass never
+// installed (SetWindowSubclassFromAnyThread failing is rare - see
+// EnsureTaskbarWnd's own log line for that case): live drag-follow,
+// HWND resolution, and live settings updates are simply unavailable until
+// the taskbar recreates and a fresh subclass attempt succeeds. The mod's
+// core centering/splitting is unaffected either way, since that's computed
+// synchronously inside RecomputeLayoutPlan on whatever ArrangeOverride
+// passes XAML triggers on its own. atomic: set from Explorer's UI thread
+// (EnsureTaskbarWnd) or Wh_ModAfterInit's thread, read from
+// InvalidateTaskbarLayout's callers, which include the dedicated
+// WinEventHook thread.
 std::atomic<bool> g_taskbarWndSubclassed;
 
 HWINEVENTHOOK g_locationChangeHook;
@@ -596,71 +605,6 @@ std::vector<FrameworkElement> GetRepeaterChildElements(
     return result;
 }
 
-
-using RunFromWindowThreadProc_t = std::function<void()>;
-
-// A second, concurrent RunFromWindowThread call targeting the same thread
-// installs a second WH_CALLWNDPROC hook in the same chain. Both hooks
-// only ever check the message id (there's exactly one, shared by every
-// call), so when either call's SendMessage lands, every currently-
-// installed hook for this thread fires and blindly casts cwp->lParam -
-// which points at whichever call actually sent that specific message - to
-// its own proc pointer. That means an unrelated concurrent call's proc can
-// run in place of (or in addition to) the intended one. The `done` flag
-// caps this at exactly one real invocation per SendMessage regardless of
-// how many hooks are chained and firing for it: whichever hook proc
-// happens to run first for a given message wins, the rest see done==true
-// and no-op. Plain bool, not atomic - all hooks that fire for one message
-// do so synchronously, one after another, on the single thread receiving
-// that message, never concurrently with each other.
-struct RunFromWindowThreadParam {
-    RunFromWindowThreadProc_t* proc;
-    bool done = false;
-};
-
-bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc) {
-    static const UINT runFromWindowThreadRegisteredMsg = RegisterWindowMessage(
-        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return false;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        proc();
-        return true;
-    }
-
-    RunFromWindowThreadParam param{&proc};
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    auto* param = (RunFromWindowThreadParam*)cwp->lParam;
-                    if (!param->done) {
-                        param->done = true;
-                        (*param->proc)();
-                    }
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook) {
-        return false;
-    }
-
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return true;
-}
 
 // ============================================================================
 // taskbar.dll: locating the taskbar's XamlRoot
@@ -2064,21 +2008,54 @@ HWND EnsureTaskbarWnd() {
         Wh_Log(L"Resolved taskbar window: %p", (HWND)g_hTaskbarWnd);
         StartWinEventHook();
 
-        // Lets InvalidateTaskbarLayout notify this window with a
-        // non-blocking PostMessage instead of RunFromWindowThread's
-        // per-call SetWindowsHookEx/SendMessage/UnhookWindowsHookEx dance -
-        // see its own comment. A one-time blocking install here (via
-        // SetWindowSubclassFromAnyThread's own marshal, if this isn't
-        // already running on the taskbar thread) is fine; it's the
+        // Lets InvalidateTaskbarLayout/ButtonHwndResolveTimerProc/
+        // ApplyLoadedSettings notify this window with a non-blocking
+        // PostMessage - see g_taskbarWndSubclassed's own comment for why
+        // there's no fallback if this fails. A one-time blocking install
+        // here (via SetWindowSubclassFromAnyThread's own marshal, if this
+        // isn't already running on the taskbar thread) is fine; it's the
         // per-event cost on the hot invalidate path this is meant to
         // avoid, not one-shot setup.
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(
                 g_hTaskbarWnd, TaskbarWndSubclassProc, 0)) {
             g_taskbarWndSubclassed = true;
+
+            // Wh_ModBeforeUninit's own removal pass only runs once, gated
+            // by this same g_taskbarWndSubclassed.exchange(false) latch -
+            // if it already ran with g_hTaskbarWnd still null (reachable:
+            // right after a Shell_TrayWnd recreate, or a fresh-boot
+            // startup where the one-shot Wh_ModAfterInit lookup failed,
+            // is exactly when EnsureTaskbarWnd can still be resolving
+            // this for the first time as unload begins), it can never run
+            // again - a subclass installed here after that point would
+            // stay wired into Shell_TrayWnd with no later removal call,
+            // and Windhawk unmaps this module's code shortly after
+            // Wh_ModUninit returns. Re-checking g_unloading immediately
+            // after install and undoing it right here closes that window;
+            // StartWinEventHook above needs no equivalent recheck since
+            // its own start/stop pair is already serialized by
+            // g_winEventThreadMutex/g_winEventThreadStopped.
+            if (g_unloading && g_taskbarWndSubclassed.exchange(false)) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                    g_hTaskbarWnd, TaskbarWndSubclassProc);
+            } else {
+                // With no fallback marshal, a subclass that installs
+                // successfully on a LATER call (e.g. after an earlier
+                // attempt failed and the taskbar has since recreated)
+                // needs an explicit kick - ButtonHwndResolveTimerProc's
+                // own self-rearming stopped entirely while unsubclassed
+                // (see its comment), so nothing else would restart it.
+                // Harmless to call unconditionally on the very first
+                // successful resolve too, alongside Wh_ModAfterInit's own
+                // InvalidateTaskbarLayout() call right after this returns.
+                ArmButtonHwndResolveTimer(0);
+                InvalidateTaskbarLayout();
+            }
         } else {
             Wh_Log(L"EnsureTaskbarWnd: SetWindowSubclassFromAnyThread "
-                   L"failed, InvalidateTaskbarLayout will use the blocking "
-                   L"fallback instead");
+                   L"failed - live drag-follow, HWND resolution, and live "
+                   L"settings updates will be unavailable until the "
+                   L"taskbar recreates and a fresh attempt succeeds");
         }
     }
 
@@ -2159,15 +2136,14 @@ FrameworkElement GetCachedTaskbarRepeater() {
 //
 // Also guarded against running while nested inside an active Arrange
 // pass on this thread - defense in depth, not the primary protection.
-// Reentrancy guard: this function is reachable from two independent
-// dispatch paths on the taskbar thread (the posted ResolveButtonHwndsMsg
-// via TaskbarWndSubclassProc, and RunFromWindowThread's sent message via
-// its WH_CALLWNDPROC hook), and it mutates g_buttonHwndCache/
-// g_lastKnownWindowClassification with erase-while-iterating prune loops.
-// If a cross-thread SendMessage gets pumped while a call is already in
-// progress here (it calls into taskbar.dll and WinRT, either of which
-// could pump), a nested call's inserts would invalidate the outer loop's
-// iterator - undefined behavior, not just wasted work. RAII rather than a
+// Reentrancy guard: this function runs dispatched from the posted
+// ResolveButtonHwndsMsg via TaskbarWndSubclassProc, and it mutates
+// g_buttonHwndCache/g_lastKnownWindowClassification with
+// erase-while-iterating prune loops. It calls into taskbar.dll and WinRT,
+// either of which could pump messages - if another posted
+// ResolveButtonHwndsMsg gets dispatched reentrantly while a call is
+// already in progress here, a nested call's inserts would invalidate the
+// outer loop's iterator - undefined behavior, not just wasted work. RAII rather than a
 // plain set/clear, same reasoning as ScopedArrangeOverrideFlag: this
 // function has several early returns a plain clear at the end would never
 // reach.
@@ -2222,10 +2198,10 @@ void ResolvePendingButtonHwnds() {
         return;
     }
 
-    // Runs marshaled through RunFromWindowThread's WH_CALLWNDPROC hook - a
-    // raw Win32 callback boundary with no C++/WinRT exception translation
-    // on the other side, same as IUIElement_Arrange_Hook/RecomputeLayoutPlan/
-    // InvalidateTaskbarLayout's lambda. Every WinRT property access below
+    // Runs dispatched via TaskbarWndSubclassProc, a raw Win32 callback
+    // boundary with no C++/WinRT exception translation on the other side,
+    // same as IUIElement_Arrange_Hook/RecomputeLayoutPlan/
+    // PerformTaskbarLayoutInvalidate. Every WinRT property access below
     // (Content(), ItemsSourceView(), get_class_name, GetName, XamlRoot())
     // can throw winrt::hresult_error, most likely exactly when the taskbar
     // tree is being recreated - an uncaught throw here crosses the boundary
@@ -2817,9 +2793,12 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
 // Guards against reentering the invalidate body itself on the taskbar's
 // own thread. WinEventProc can fire in rapid bursts (observed: thousands
 // of raw events within seconds while something on screen is spamming
-// EVENT_OBJECT_LOCATIONCHANGE), and both call paths below
-// (TaskbarWndSubclassProc's dispatch and RunFromWindowThread's fallback)
-// land on that same thread, so one thread_local flag covers either.
+// EVENT_OBJECT_LOCATIONCHANGE), each one posting another
+// InvalidateTaskbarLayoutMsg dispatched via TaskbarWndSubclassProc - a
+// nested WinRT/taskbar.dll call inside this function's own body (GetCached
+// TaskbarRepeater, InvalidateArrange/InvalidateMeasure) could pump
+// messages and let a second posted message land reentrantly on this same
+// thread before the first call returns.
 //
 // This deliberately never calls UpdateLayout() - see the note on
 // InvalidateTaskbarLayout below for why forcing a synchronous layout pass
@@ -2860,11 +2839,10 @@ void PerformTaskbarLayoutInvalidate() {
 // Private message InvalidateTaskbarLayout posts to run
 // PerformTaskbarLayoutInvalidate on the taskbar's own thread without
 // blocking the caller - see InvalidateTaskbarLayout's own comment for why
-// that matters on this specific call path. Function-local static (like
-// RunFromWindowThread's own registered message) rather than a
-// namespace-scope variable, so RegisterWindowMessage runs lazily on first
-// real use instead of from a dynamic initializer under DllMain's loader
-// lock.
+// that matters on this specific call path. Function-local static rather
+// than a namespace-scope variable, so RegisterWindowMessage runs lazily on
+// first real use instead of from a dynamic initializer under DllMain's
+// loader lock.
 UINT InvalidateTaskbarLayoutMsg() {
     static const UINT msg =
         RegisterWindowMessage(L"Windhawk_InvalidateTaskbarLayout_" WH_MOD_ID);
@@ -2872,8 +2850,7 @@ UINT InvalidateTaskbarLayoutMsg() {
 }
 
 // Same idea as InvalidateTaskbarLayoutMsg, for ButtonHwndResolveTimerProc
-// - lets it post instead of going through RunFromWindowThread on every
-// tick (up to ~7/sec while EVENT_OBJECT_SHOW events are bursting).
+// (up to ~7/sec while EVENT_OBJECT_SHOW events are bursting).
 UINT ResolveButtonHwndsMsg() {
     static const UINT msg =
         RegisterWindowMessage(L"Windhawk_ResolveButtonHwnds_" WH_MOD_ID);
@@ -2894,16 +2871,15 @@ UINT SettingsChangedMsg() {
 // Installed on g_hTaskbarWnd by EnsureTaskbarWnd via
 // SetWindowSubclassFromAnyThread. A subclass proc only ever runs on the
 // thread that owns the window, which is what lets these call paths use a
-// plain PostMessage here instead of RunFromWindowThread's
-// SetWindowsHookEx/SendMessage/UnhookWindowsHookEx dance on every single
-// call - and, since a subclass proc is dispatched directly by that
-// thread's own message loop rather than through a possibly-multiply-
-// chained hook, it can't suffer the double-invocation risk RunFromWindowThread
-// has to guard against instead. Everything other than these private
-// messages is forwarded to DefSubclassProc, which is also what lets
-// comctl32 clean this subclass up automatically via WM_NCDESTROY if the
-// window is ever destroyed out from under the mod without
-// Wh_ModBeforeUninit's explicit removal call running first.
+// plain, non-blocking PostMessage - no per-call SetWindowsHookEx/
+// SendMessage/UnhookWindowsHookEx dance needed. This is also the SOLE way
+// any of these three messages reach the taskbar thread; if this subclass
+// never installs (see g_taskbarWndSubclassed's own comment), there is no
+// fallback. Everything other than these private messages is forwarded to
+// DefSubclassProc, which is also what lets comctl32 clean this subclass up
+// automatically via WM_NCDESTROY if the window is ever destroyed out from
+// under the mod without Wh_ModBeforeUninit's explicit removal call running
+// first.
 LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
                                         UINT uMsg,
                                         WPARAM wParam,
@@ -2957,32 +2933,18 @@ void InvalidateTaskbarLayout() {
     // g_hTaskbarWnd's own comment for why that matters here specifically
     // (a stale nullptr reaching PostMessage is not a no-op).
     HWND hTaskbarWnd = g_hTaskbarWnd;
-    if (!hTaskbarWnd) {
+    // No fallback if the subclass never installed - see
+    // g_taskbarWndSubclassed's own comment for why. Called from
+    // WinEventProc's drag-follow throttle at up to ~7 times/sec while any
+    // window on the system is being dragged, plus every resolve tick, so
+    // this is a hot path - PostMessage doesn't block on Explorer's UI
+    // thread pumping it.
+    if (!hTaskbarWnd || !g_taskbarWndSubclassed) {
         return;
     }
-
-    if (g_taskbarWndSubclassed) {
-        // The hot path: called from WinEventProc's drag-follow throttle
-        // at up to ~7 times/sec while any window on the system is being
-        // dragged, plus every resolve tick. PostMessage doesn't block on
-        // Explorer's UI thread pumping it, unlike RunFromWindowThread
-        // below, which installs a WH_CALLWNDPROC hook and blocks in
-        // SendMessage until that thread processes it - a real cost at
-        // this frequency, even though it's fine for a one-shot call.
-        if (!PostMessage(hTaskbarWnd, InvalidateTaskbarLayoutMsg(), 0, 0)) {
-            Wh_Log(L"InvalidateTaskbarLayout: PostMessage failed, error=%lu",
-                   GetLastError());
-        }
-        return;
-    }
-
-    // Fallback for the (should stay rare) case where the taskbar window
-    // was never successfully subclassed - still gets the job done, just
-    // without the non-blocking benefit above.
-    bool posted =
-        RunFromWindowThread(hTaskbarWnd, PerformTaskbarLayoutInvalidate);
-    if (!posted) {
-        Wh_Log(L"InvalidateTaskbarLayout: RunFromWindowThread failed");
+    if (!PostMessage(hTaskbarWnd, InvalidateTaskbarLayoutMsg(), 0, 0)) {
+        Wh_Log(L"InvalidateTaskbarLayout: PostMessage failed, error=%lu",
+               GetLastError());
     }
 }
 
@@ -3619,42 +3581,35 @@ void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
         // The taskbar window went away (recreate) between this timer
         // being armed and firing - EnsureTaskbarWnd will re-resolve it on
         // its own next pass. Retry later rather than let a null reach
-        // PostMessage/RunFromWindowThread below.
+        // PostMessage below.
         ArmButtonHwndResolveTimer(kIdleResolveTickMs);
         return;
     }
 
-    // Prefer the subclass's non-blocking PostMessage (see
-    // ResolveButtonHwndsMsg) - this can fire several times a second
-    // during an EVENT_OBJECT_SHOW burst, the same hot-path cost
-    // InvalidateTaskbarLayout avoids via PostMessage instead of
-    // RunFromWindowThread's per-call hook install. Only fall back to the
-    // blocking marshal in the (should stay rare) case the subclass was
-    // never successfully installed.
+    // No fallback if the subclass never installed - see
+    // g_taskbarWndSubclassed's own comment for why. In that case,
+    // ResolvePendingButtonHwnds simply never runs and this timer stops
+    // re-arming itself entirely; EnsureTaskbarWnd explicitly kicks both
+    // this timer and InvalidateTaskbarLayout the moment a subclass
+    // install eventually succeeds (its own comment explains why that
+    // kick is needed with no fallback marshal to have kept this ticking
+    // in the meantime).
     //
-    // Neither branch computes/arms the next delay here anymore -
-    // ResolvePendingButtonHwnds does that itself now, at the very end of
-    // whichever pass this triggers (see its own ScheduleNextResolveTick
-    // comment for why: computing it here, right after an async
-    // PostMessage, would read g_buttonHwndCache concurrently with that
-    // pass's own writes to it). The one case that still needs handling
-    // here is a PostMessage failure - nothing will ever call back to
-    // re-arm if the message never arrives, so retry after a fixed
-    // fallback delay rather than leaving the timer silently dead.
+    // ResolvePendingButtonHwnds computes/arms the next delay itself, at
+    // the very end of whichever pass this triggers (see its own
+    // ScheduleNextResolveTick comment for why: computing it here, right
+    // after an async PostMessage, would read g_buttonHwndCache
+    // concurrently with that pass's own writes to it). The one case that
+    // still needs handling here is a PostMessage failure - nothing will
+    // ever call back to re-arm if the message never arrives, so retry
+    // after a fixed fallback delay rather than leaving the timer silently
+    // dead.
     if (g_taskbarWndSubclassed) {
         if (!PostMessage(hTaskbarWnd, ResolveButtonHwndsMsg(), 0, 0)) {
             Wh_Log(L"ButtonHwndResolveTimerProc: PostMessage failed, "
                    L"error=%lu", GetLastError());
             ArmButtonHwndResolveTimer(kIdleResolveTickMs);
         }
-    } else if (!RunFromWindowThread(hTaskbarWnd, ResolvePendingButtonHwnds)) {
-        // Same "nothing will call back" concern as the PostMessage failure
-        // above - a marshal failure here (SetWindowsHookEx failing, or
-        // g_hTaskbarWnd going stale/null mid-taskbar-recreate) means
-        // ResolvePendingButtonHwnds never ran at all, so its own
-        // ScheduleNextResolveTick guard never gets a chance to re-arm.
-        Wh_Log(L"ButtonHwndResolveTimerProc: RunFromWindowThread failed");
-        ArmButtonHwndResolveTimer(kIdleResolveTickMs);
     }
 }
 
@@ -3754,24 +3709,26 @@ void Wh_ModBeforeUninit() {
     // ArrangeOverride isn't gated on g_unloading - a pass landing in that
     // window could still call StartWinEventHook via EnsureTaskbarWnd,
     // creating a thread nobody would tear down (Wh_ModUninit, which does
-    // the actual teardown, runs after this). The Arrange hook also needs
-    // to stay alive here to restore native positioning below. g_unloading
-    // being set first is what keeps ResolvePendingButtonHwnds' click-
-    // sentinel probe from running once its hooks are gone.
+    // the actual teardown, runs after this). g_unloading being set first
+    // is what keeps ResolvePendingButtonHwnds' click-sentinel probe from
+    // running once its hooks are gone, and makes IUIElement_Arrange_Hook
+    // fall through to native positioning immediately regardless of
+    // whether anything below forces a relayout.
 
-    // Removed here, before the final InvalidateTaskbarLayout() call below,
-    // so that call falls back to the blocking RunFromWindowThread marshal
-    // instead of a PostMessage nothing will dispatch once the subclass is
-    // gone, and so TaskbarWndSubclassProc comes off Shell_TrayWnd as early
-    // as it's safe to rather than staying wired in for the rest of
-    // teardown.
+    // Comes off Shell_TrayWnd as early as it's safe to, rather than
+    // staying wired in for the rest of teardown. With no fallback marshal
+    // once this is gone (see g_taskbarWndSubclassed's own comment), there
+    // is no reliable way left to force an immediate visual snap-back to
+    // native positions on disable - g_unloading above already guarantees
+    // the mod stops overriding anything, so this is a cosmetic timing
+    // difference only: native positions apply as soon as anything next
+    // triggers XAML to re-run Arrange on its own (opening/closing an app,
+    // a resize, etc.), rather than instantly.
     HWND hTaskbarWnd = g_hTaskbarWnd;
     if (hTaskbarWnd && g_taskbarWndSubclassed.exchange(false)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hTaskbarWnd, TaskbarWndSubclassProc);
     }
-
-    InvalidateTaskbarLayout();
 }
 
 void Wh_ModUninit() {
@@ -3788,13 +3745,14 @@ void Wh_ModUninit() {
 // Applies a freshly-loaded settings struct on the taskbar's own thread -
 // needed since it reassigns leftApps/rightApps (std::vector<std::wstring>),
 // which a concurrent ContainsAnyFragment call during a layout pass on that
-// thread could otherwise read mid-reassignment. Prefers the subclass's
-// PostMessage over RunFromWindowThread for the same non-blocking reason as
-// InvalidateTaskbarLayout/the HWND-resolve tick, but unlike those two a
-// dropped settings change is a real loss (not just a delayed retry), so
-// this - unlike them - does fall back to the blocking RunFromWindowThread
-// marshal if PostMessage itself fails, not only when the subclass was
-// never installed at all.
+// thread could otherwise read mid-reassignment. No fallback if the
+// subclass never installed or PostMessage itself fails - see
+// g_taskbarWndSubclassed's own comment for why. Unlike
+// InvalidateTaskbarLayout/the HWND-resolve tick, a dropped settings change
+// here is a real loss rather than a delayed retry (there's no periodic
+// mechanism that would naturally pick it up later), so it's logged loudly
+// rather than silently swallowed - the new settings just don't take effect
+// until the taskbar recreates and a fresh subclass attempt succeeds.
 void ApplyLoadedSettings(ModSettings settings) {
     // Snapshot once so every read below agrees - see g_hTaskbarWnd's own
     // comment for why a stale nullptr reaching PostMessage isn't a no-op
@@ -3806,32 +3764,25 @@ void ApplyLoadedSettings(ModSettings settings) {
         return;
     }
 
-    if (g_taskbarWndSubclassed) {
-        // PostMessage is async, so the settings can't live on this
-        // function's own stack - ownership transfers to the heap
-        // allocation, released via .release() only once PostMessage has
-        // actually queued it, and reclaimed by TaskbarWndSubclassProc's
-        // SettingsChangedMsg case on the dispatch side.
-        auto heapSettings = std::make_unique<ModSettings>(std::move(settings));
-        if (PostMessage(hTaskbarWnd, SettingsChangedMsg(), 0,
-                        (LPARAM)heapSettings.get())) {
-            heapSettings.release();
-            return;
-        }
-        Wh_Log(L"ApplyLoadedSettings: PostMessage failed, error=%lu, "
-               L"falling back to RunFromWindowThread", GetLastError());
-        // Reclaim ownership before falling through to the blocking path;
-        // heapSettings frees the now-moved-from struct automatically.
-        settings = std::move(*heapSettings);
+    if (!g_taskbarWndSubclassed) {
+        Wh_Log(L"ApplyLoadedSettings: no taskbar subclass installed, "
+               L"new settings not applied");
+        return;
     }
 
-    if (!RunFromWindowThread(hTaskbarWnd,
-                             [settings = std::move(settings)]() mutable {
-                                 g_settings = std::move(settings);
-                             })) {
-        Wh_Log(L"ApplyLoadedSettings: RunFromWindowThread failed, "
-               L"new settings not applied");
+    // PostMessage is async, so the settings can't live on this function's
+    // own stack - ownership transfers to the heap allocation, released via
+    // .release() only once PostMessage has actually queued it, and
+    // reclaimed by TaskbarWndSubclassProc's SettingsChangedMsg case on the
+    // dispatch side.
+    auto heapSettings = std::make_unique<ModSettings>(std::move(settings));
+    if (PostMessage(hTaskbarWnd, SettingsChangedMsg(), 0,
+                    (LPARAM)heapSettings.get())) {
+        heapSettings.release();
+        return;
     }
+    Wh_Log(L"ApplyLoadedSettings: PostMessage failed, error=%lu, "
+           L"new settings not applied", GetLastError());
 }
 
 void Wh_ModSettingsChanged() {
