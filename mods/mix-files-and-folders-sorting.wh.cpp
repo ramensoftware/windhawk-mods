@@ -2,11 +2,11 @@
 // @id              mix-files-and-folders-sorting
 // @name            Mix Files and Folders When Sorting in Windows Explorer
 // @description     Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files
-// @version         1.4
+// @version         1.5
 // @author          Extremenis
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lshlwapi
+// @compilerOptions -lole32 -lshlwapi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -45,9 +45,10 @@ The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
 other applications — which use the same `CFSFolder` implementation, just in
 a different process — keep the default folders-first ordering.
 
-Sorting by Size does not interleave on its own: folders report an empty size,
-so a folder-vs-file comparison on that column ends up in the same order as
-stock Explorer.
+Sorting by Size is left to the shell entirely. Folders report an empty size, so
+that column never interleaved on its own, and
+[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp)
+already owns it — see below.
 
 Sorting by Type does not interleave either, for a different reason: the Type
 column carries `PKEY_ItemTypeText` ("File folder", "Application extension"),
@@ -64,11 +65,10 @@ on by default). Both hooks delegate to the original for anything they don't
 handle, so they chain rather than fight: that mod handles the Size column,
 this one handles the rest.
 
-This mod reads column values through the shell folder's vtable rather than
-the unhooked original, so when that mod's `calculateFolderSizes` is enabled
-and folders report a real size, the Size column interleaves here too. This
-mod doesn't read `sortSizesMixFolders`, so setting it to `false` while
-`calculateFolderSizes` is on will still leave the Size column mixed.
+To keep that clean, this mod returns the Size column to the original
+comparison untouched. That mod's `sortSizesMixFolders` setting therefore stays
+authoritative for Size whether it's on or off, and the result no longer depends
+on which mod's hook happens to run first.
 
 ## Known limitations
 
@@ -103,6 +103,8 @@ is licensed under GPLv3 for that reason.
 #include <shobjidl.h>
 #include <shtypes.h>
 
+#include <winrt/base.h>
+
 std::atomic<int> g_hookRefCount;
 
 auto hookRefCountScope() {
@@ -117,9 +119,15 @@ auto hookRefCountScope() {
 // type (VT_LPWSTR, VT_FILETIME, VT_CLSID). VariantClear doesn't free those,
 // so it would leak; PropVariantClear handles both families, and the two
 // structs share their layout.
+//
+// Zero-initialize the whole struct rather than calling VariantInit: VariantInit
+// only promises to set vt to VT_EMPTY, leaving wReserved1/2/3 and the union as
+// stack garbage. PropVariantClear validates those reserved fields and rejects
+// the structure if they're non-zero, which would leak the payload on every
+// folder-vs-file comparison.
 class ShellVariant {
    public:
-    ShellVariant() { VariantInit(&m_value); }
+    ShellVariant() = default;
     ~ShellVariant() { PropVariantClear(AsPropVariant()); }
     ShellVariant(const ShellVariant&) = delete;
     ShellVariant& operator=(const ShellVariant&) = delete;
@@ -134,7 +142,7 @@ class ShellVariant {
     }
 
    private:
-    VARIANT m_value;
+    VARIANT m_value{};
 };
 
 // Explorer honors the NoStrCmpLogical policy under
@@ -197,6 +205,32 @@ bool IsMultiLevelPidl(const ITEMIDLIST_RELATIVE* itemid) {
     return next->mkid.cb != 0;
 }
 
+// True only for a real directory: SFGAO_FOLDER set and SFGAO_STREAM clear.
+//
+// SFGAO_FOLDER alone is not "is a directory": a .zip and a folder shortcut both
+// report it, while Explorer's folders-first rule keys off
+// FILE_ATTRIBUTE_DIRECTORY, which is why a .zip sorts among the files in stock
+// Explorer. Treating one as a folder here would make the comparator
+// non-transitive.
+//
+// Asking per item rather than passing both pidls in one call matters: the
+// two-item form of GetAttributesOf returns the bits *common to both*, which
+// can't distinguish "directory vs .zip" (common FOLDER) from "both directories",
+// nor tell a pair that reports neither bit from a genuine folder/file pair.
+// For CFSFolder children these attributes come out of the pidl, so the second
+// call is cheap.
+bool IsRealFolder(IShellFolder2* shellFolder,
+                   const ITEMIDLIST_RELATIVE* itemid,
+                   bool* isFolder) {
+    PCUITEMID_CHILD child = (PCUITEMID_CHILD)itemid;
+    SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
+    if (FAILED(shellFolder->GetAttributesOf(1, &child, &attrs))) {
+        return false;
+    }
+    *isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
+    return true;
+}
+
 HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
                                           LPARAM column,
                                           const ITEMIDLIST_RELATIVE* itemid1,
@@ -224,7 +258,10 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
-    if (IsMultiLevelPidl(itemid1) || IsMultiLevelPidl(itemid2)) {
+    // An empty pidl isn't a child item the property calls below can work with,
+    // so bail out explicitly rather than letting them fail one by one.
+    if (itemid1->mkid.cb == 0 || itemid2->mkid.cb == 0 ||
+        IsMultiLevelPidl(itemid1) || IsMultiLevelPidl(itemid2)) {
         return original();
     }
 
@@ -233,42 +270,36 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     // a future Windows build, correct dispatch if the object is ever a
     // derived class, and -- unlike calling an unhooked _Original -- it picks
     // up other mods' hooks on these methods (e.g. computed folder sizes).
-    IShellFolder2* shellFolder = nullptr;
+    winrt::com_ptr<IShellFolder2> shellFolder;
     if (FAILED(((IUnknown*)pCFSFolder)
-                   ->QueryInterface(IID_IShellFolder2, (void**)&shellFolder))) {
+                   ->QueryInterface(IID_IShellFolder2,
+                                    shellFolder.put_void()))) {
         return original();
     }
-    auto shellFolderRelease =
-        std::unique_ptr<IShellFolder2, void (*)(IShellFolder2*)>{
-            shellFolder, [](auto p) { p->Release(); }};
 
     // Folders-first is the only rule this mod needs to override, so it only
-    // steps in when exactly one of the two items is a real directory.
-    //
-    // GetAttributesOf returns the attributes *common to all* the items passed
-    // in, so one call over both pidls answers this without needing to know
-    // which is which. For CFSFolder children an item is either a directory
-    // (FOLDER, no STREAM), a plain file (STREAM), or a file-backed container
-    // such as a .zip (FOLDER|STREAM) -- so a common FOLDER bit means both are
-    // browsable containers and a common STREAM bit means both are file-backed.
-    // Either way the shell's own comparison applies.
-    //
-    // SFGAO_FOLDER alone is not "is a directory": a .zip and a folder shortcut
-    // both report it, while Explorer's folders-first rule keys off
-    // FILE_ATTRIBUTE_DIRECTORY, which is why a .zip sorts among the files in
-    // stock Explorer. Treating one as a folder here would make the comparator
-    // non-transitive.
-    const ITEMIDLIST_RELATIVE* items[] = {itemid1, itemid2};
-    SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
-    if (FAILED(shellFolder->GetAttributesOf(2, (PCUITEMID_CHILD_ARRAY)items,
-                                             &attrs)) ||
-        (attrs & (SFGAO_FOLDER | SFGAO_STREAM))) {
+    // steps in when exactly one of the two items is a real directory. Anything
+    // else -- two directories, two files, or an item whose attributes couldn't
+    // be read -- is left to the shell's own comparison.
+    bool isFolder1, isFolder2;
+    if (!IsRealFolder(shellFolder.get(), itemid1, &isFolder1) ||
+        !IsRealFolder(shellFolder.get(), itemid2, &isFolder2) ||
+        isFolder1 == isFolder2) {
         return original();
     }
 
     PROPERTYKEY columnSCID;
-    if (FAILED(shellFolder->MapColumnToSCID(
-            (UINT)(column & SHCIDS_COLUMNMASK), &columnSCID))) {
+    if (FAILED(shellFolder->MapColumnToSCID((UINT)column, &columnSCID))) {
+        return original();
+    }
+
+    // Leave the Size column alone. explorer-details-better-file-sizes owns it:
+    // it hooks the same function and exposes a dedicated "Mix files and folders
+    // when sorting by size" toggle. Comparing size values here would override
+    // that setting for anyone who deliberately turned it off, and the outcome
+    // would otherwise depend on which mod's hook runs first. Folders report an
+    // empty size anyway, so this column never interleaved on its own.
+    if (IsEqualPropertyKey(columnSCID, PKEY_Size)) {
         return original();
     }
 
