@@ -2,7 +2,7 @@
 // @id              mix-files-and-folders-sorting
 // @name            Mix Files and Folders When Sorting in Windows Explorer
 // @description     Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files
-// @version         1.3
+// @version         1.4
 // @author          Extremenis
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
@@ -34,10 +34,12 @@ folders-first rule too.
 ## Scope
 
 This only affects regular file-system folders (the `CFSFolder` shell object,
-i.e. anything you'd browse to on disk). Special views such as the Desktop,
-Libraries, "This PC", and search results use different, independent shell
-folder implementations that this mod doesn't touch, so folders may still be
-grouped first there.
+i.e. anything you'd browse to on disk). Special views such as Libraries,
+"This PC", and search results use different, independent shell folder
+implementations that this mod doesn't touch, so folders may still be grouped
+first there. The Desktop is a composite view that delegates comparisons
+between two file-system items to the backing `CFSFolder`, so desktop icon
+sorting is affected.
 
 The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
 other applications — which use the same `CFSFolder` implementation, just in
@@ -56,26 +58,27 @@ on by default). Both hooks delegate to the original for anything they don't
 handle, so they chain rather than fight: that mod handles the Size column,
 this one handles the rest.
 
-Two things follow from running both:
-
-- With that mod's `calculateFolderSizes` enabled, folders report a real size,
-  so the Size column *does* interleave here — the caveat above no longer
-  applies.
-- This mod doesn't read `sortSizesMixFolders`, so setting it to `false` while
-  `calculateFolderSizes` is on will still leave the Size column mixed.
+This mod reads column values through the shell folder's vtable rather than
+the unhooked original, so when that mod's `calculateFolderSizes` is enabled
+and folders report a real size, the Size column interleaves here too. This
+mod doesn't read `sortSizesMixFolders`, so setting it to `false` while
+`calculateFolderSizes` is on will still leave the Size column mixed.
 
 ## Known limitations
 
 The shell's own file-vs-file comparison and this mod's folder-vs-file
 comparison are separate pieces of code, so they can disagree at the margins
 and place a folder in a spot that looks slightly off relative to nearby
-files. Known cases: date columns are compared as `VT_DATE` (a double, ~ms
-resolution) where the shell compares `FILETIME` at 100 ns; and locale
-collation of punctuation or accented characters may differ from the shell's.
+files. Known cases: date columns reported as `VT_DATE` are compared as a
+double (~ms resolution) where the shell compares `FILETIME` at 100 ns;
+locale collation of punctuation or accented characters may differ; and a
+blank value is sorted before any present value, which the shell doesn't
+necessarily do for sparsely-populated columns (Date taken, Length,
+Dimensions).
 
 ## Credit / related mod
 
-The `CFSFolder` hooking scaffolding (symbol hooks, hook lifetime tracking,
+The `CFSFolder` hooking scaffolding (symbol hook, hook lifetime tracking,
 `CompareIDs` hook skeleton) is derived from m417z's
 `explorer-details-better-file-sizes`, which is licensed under GPLv3; this mod
 is licensed under GPLv3 for that reason.
@@ -111,14 +114,18 @@ auto hookRefCountScope() {
 class ShellVariant {
    public:
     ShellVariant() { VariantInit(&m_value); }
-    ~ShellVariant() {
-        PropVariantClear(reinterpret_cast<PROPVARIANT*>(&m_value));
-    }
+    ~ShellVariant() { PropVariantClear(AsPropVariant()); }
     ShellVariant(const ShellVariant&) = delete;
     ShellVariant& operator=(const ShellVariant&) = delete;
 
     VARIANT* GetAddress() { return &m_value; }
     const VARIANT& Get() const { return m_value; }
+    const PROPVARIANT* AsPropVariant() const {
+        return reinterpret_cast<const PROPVARIANT*>(&m_value);
+    }
+    PROPVARIANT* AsPropVariant() {
+        return reinterpret_cast<PROPVARIANT*>(&m_value);
+    }
 
    private:
     VARIANT m_value;
@@ -130,8 +137,10 @@ class ShellVariant {
 // This hook's folder-vs-file comparison has to follow the same rule as the
 // shell's file-vs-file comparison, or the two orderings disagree (e.g. the
 // shell puts a10.txt before a2.txt while a folder named a5 lands between
-// them). It can be set per user or as a machine policy, so check both. Read
-// once -- it's a policy value, not something that changes while Explorer runs.
+// them). It can be set per user or as a machine policy, so check both.
+// Cached for the process lifetime; Explorer re-reads it on policy-change
+// notifications, so flipping the policy mid-session needs an Explorer
+// restart for the two to agree again.
 bool NumericalSortEnabled() {
     static const bool enabled = [] {
         auto policySet = [](HKEY root) {
@@ -147,17 +156,6 @@ bool NumericalSortEnabled() {
     }();
     return enabled;
 }
-
-using CFSFolder_MapColumnToSCID_t = HRESULT(WINAPI*)(void* pCFSFolder,
-                                                       int column,
-                                                       PROPERTYKEY* scid);
-CFSFolder_MapColumnToSCID_t CFSFolder_MapColumnToSCID_Original;
-
-using CFSFolder_GetDetailsEx_t = HRESULT(WINAPI*)(void* pCFSFolder,
-                                                    const ITEMID_CHILD* itemid,
-                                                    const PROPERTYKEY* scid,
-                                                    VARIANT* value);
-CFSFolder_GetDetailsEx_t CFSFolder_GetDetailsEx_Original;
 
 using CFSFolder_CompareIDs_t =
     HRESULT(WINAPI*)(void* pCFSFolder,
@@ -179,29 +177,10 @@ HRESULT CompareResultFromInt(int cmp) {
     return 0;
 }
 
-// Reports whether an item is a real directory.
-//
-// SFGAO_FOLDER alone means "browsable container", not "directory": a .zip
-// handled by Compressed Folders, and a shortcut to a folder, both report it.
-// Explorer's own folders-first rule keys off FILE_ATTRIBUTE_DIRECTORY, which
-// is why a .zip sorts among the files in stock Explorer. Treating one as a
-// folder here would make the comparator non-transitive -- a .zip vs a real
-// folder would be delegated to the shell (folder first, unconditionally)
-// while .zip vs file and folder vs file both get compared by column value,
-// which admits a cycle. SFGAO_STREAM is set for exactly these file-backed
-// containers, so requiring it to be clear matches the shell's rule.
-HRESULT IsFolderItem(IShellFolder* shellFolder,
-                      const ITEMIDLIST_RELATIVE* itemid,
-                      bool* isFolder) {
-    SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
-    HRESULT hr = shellFolder->GetAttributesOf(
-        1, (PCUITEMID_CHILD_ARRAY)&itemid, &attrs);
-    if (FAILED(hr)) {
-        Wh_Log(L"GetAttributesOf failed: 0x%08X", hr);
-        return hr;
-    }
-    *isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
-    return S_OK;
+// True if the pidl has more than one level. GetDetailsEx expects a child
+// pidl, so deeper ones have to go to the shell.
+bool IsMultiLevelPidl(const ITEMIDLIST_RELATIVE* itemid) {
+    return ILNext((PCUIDLIST_RELATIVE)itemid)->mkid.cb != 0;
 }
 
 HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
@@ -231,53 +210,71 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
-    // Folders-first is the only rule this mod needs to override, so only step
-    // in when exactly one of the two items is a real directory.
-    // Folder-vs-folder and file-vs-file pairs go to the shell's own
-    // comparison: it's cheaper, and it guarantees the exact ordering Explorer
-    // would otherwise use. QueryInterface rather than casting pCFSFolder --
-    // the this-pointer's primary vtable being IShellFolder2's is an
-    // undocumented layout assumption.
+    if (IsMultiLevelPidl(itemid1) || IsMultiLevelPidl(itemid2)) {
+        return original();
+    }
+
+    // Everything below goes through the folder's own vtable rather than
+    // separately-resolved CFSFolder symbols: fewer mangled names to break on
+    // a future Windows build, correct dispatch if the object is ever a
+    // derived class, and -- unlike calling an unhooked _Original -- it picks
+    // up other mods' hooks on these methods (e.g. computed folder sizes).
     IShellFolder2* shellFolder = nullptr;
     if (FAILED(((IUnknown*)pCFSFolder)
                    ->QueryInterface(IID_IShellFolder2, (void**)&shellFolder))) {
         return original();
     }
-    auto shellFolderRelease = std::unique_ptr<IShellFolder2, void (*)(
-        IShellFolder2*)>{shellFolder, [](auto p) { p->Release(); }};
+    auto shellFolderRelease =
+        std::unique_ptr<IShellFolder2, void (*)(IShellFolder2*)>{
+            shellFolder, [](auto p) { p->Release(); }};
 
-    bool isFolder1, isFolder2;
-    if (FAILED(IsFolderItem(shellFolder, itemid1, &isFolder1)) ||
-        FAILED(IsFolderItem(shellFolder, itemid2, &isFolder2))) {
-        return original();
-    }
-    if (isFolder1 == isFolder2) {
+    // Folders-first is the only rule this mod needs to override, so it only
+    // steps in when exactly one of the two items is a real directory.
+    //
+    // GetAttributesOf returns the attributes *common to all* the items passed
+    // in, so one call over both pidls answers this without needing to know
+    // which is which. For CFSFolder children an item is either a directory
+    // (FOLDER, no STREAM), a plain file (STREAM), or a file-backed container
+    // such as a .zip (FOLDER|STREAM) -- so a common FOLDER bit means both are
+    // browsable containers and a common STREAM bit means both are file-backed.
+    // Either way the shell's own comparison applies.
+    //
+    // SFGAO_FOLDER alone is not "is a directory": a .zip and a folder shortcut
+    // both report it, while Explorer's folders-first rule keys off
+    // FILE_ATTRIBUTE_DIRECTORY, which is why a .zip sorts among the files in
+    // stock Explorer. Treating one as a folder here would make the comparator
+    // non-transitive.
+    const ITEMIDLIST_RELATIVE* items[] = {itemid1, itemid2};
+    SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
+    if (FAILED(shellFolder->GetAttributesOf(2, (PCUITEMID_CHILD_ARRAY)items,
+                                             &attrs)) ||
+        (attrs & (SFGAO_FOLDER | SFGAO_STREAM))) {
         return original();
     }
 
     PROPERTYKEY columnSCID;
-    if (FAILED(CFSFolder_MapColumnToSCID_Original(
-            pCFSFolder, (int)(column & SHCIDS_COLUMNMASK), &columnSCID))) {
+    if (FAILED(shellFolder->MapColumnToSCID(
+            (UINT)(column & SHCIDS_COLUMNMASK), &columnSCID))) {
         return original();
     }
 
     // PKEY_ItemNameDisplay (the Name column) resolves to
-    // ISF::GetDisplayNameOf(SHGDN_NORMAL), which honors "Hide extensions for
-    // known file types" and so can omit a file's extension. The shell's own
+    // GetDisplayNameOf(SHGDN_NORMAL), which honors "Hide extensions for known
+    // file types" and so can omit a file's extension. The shell's own
     // file-vs-file CompareIDs for Name instead compares the real underlying
-    // file/folder name (PKEY_FileName), extension included. Match that here:
-    // using the display name for one comparison key and the real name for
-    // another would make the overall ordering non-transitive.
+    // name, extension included. Match that here: using the display name for
+    // one comparison key and the real name for another would make the overall
+    // ordering non-transitive.
     const PROPERTYKEY& valueSCID =
         IsEqualPropertyKey(columnSCID, PKEY_ItemNameDisplay) ? PKEY_FileName
                                                               : columnSCID;
 
     ShellVariant value1;
     ShellVariant value2;
-    if (FAILED(CFSFolder_GetDetailsEx_Original(
-            pCFSFolder, itemid1, &valueSCID, value1.GetAddress())) ||
-        FAILED(CFSFolder_GetDetailsEx_Original(
-            pCFSFolder, itemid2, &valueSCID, value2.GetAddress()))) {
+    if (FAILED(shellFolder->GetDetailsEx((PCUITEMID_CHILD)itemid1, &valueSCID,
+                                          value1.GetAddress())) ||
+        FAILED(shellFolder->GetDetailsEx((PCUITEMID_CHILD)itemid2, &valueSCID,
+                                          value2.GetAddress()))) {
         return original();
     }
 
@@ -289,10 +286,10 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     };
 
     if (v1.vt != v2.vt) {
-        // A folder commonly leaves a column blank (VT_EMPTY) where a file
-        // has a real value (Size, Dimensions, Length, ...). Treat a blank
-        // value as sorting before any present value, rather than falling
-        // back to folders-first.
+        // A folder commonly leaves a column blank (VT_EMPTY) where a file has
+        // a real value (Size, Dimensions, Length, ...). Treat a blank value as
+        // sorting before any present value, rather than falling back to
+        // folders-first.
         bool empty1 = isEmpty(v1);
         bool empty2 = isEmpty(v2);
         if (empty1 != empty2) {
@@ -308,13 +305,23 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
             cmp = 0;
             break;
 
-        case VT_BSTR: {
-            LPCWSTR s1 = v1.bstrVal ? (LPCWSTR)v1.bstrVal : L"";
-            LPCWSTR s2 = v2.bstrVal ? (LPCWSTR)v2.bstrVal : L"";
+        case VT_BSTR:
+        case VT_LPWSTR: {
+            // Both tags carry a wide string in the same union slot; read it
+            // through the PROPVARIANT view so VT_LPWSTR is well-defined.
+            LPCWSTR s1 = value1.AsPropVariant()->pwszVal;
+            LPCWSTR s2 = value2.AsPropVariant()->pwszVal;
+            s1 = s1 ? s1 : L"";
+            s2 = s2 ? s2 : L"";
             cmp = NumericalSortEnabled() ? StrCmpLogicalW(s1, s2)
                                           : lstrcmpiW(s1, s2);
             break;
         }
+
+        case VT_FILETIME:
+            cmp = CompareFileTime(&value1.AsPropVariant()->filetime,
+                                   &value2.AsPropVariant()->filetime);
+            break;
 
         case VT_UI8:
             cmp = (v1.ullVal > v2.ullVal) - (v1.ullVal < v2.ullVal);
@@ -366,11 +373,11 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     }
 
     if (cmp == 0) {
-        // CompareIDs returning 0 means "these are the same item" to the
-        // shell (used for locating a row after a rename/change
-        // notification), not just "sorts equal". Two distinct items with
-        // equal values in this column must not be reported as identical,
-        // so delegate the tiebreak to the original implementation instead.
+        // CompareIDs returning 0 means "these are the same item" to the shell
+        // (used for locating a row after a rename/change notification), not
+        // just "sorts equal". Two distinct items with equal values in this
+        // column must not be reported as identical, so delegate the tiebreak
+        // to the original implementation instead.
         return original();
     }
 
@@ -379,11 +386,11 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
 
 bool HookWindowsStorageSymbols() {
     // Wh_ModInit runs before explorer.exe has necessarily loaded
-    // windows.storage.dll (e.g. right after sign-in or an Explorer
-    // restart), so GetModuleHandle can't be relied on here -- load it
-    // explicitly instead. LOAD_LIBRARY_SEARCH_SYSTEM32 restricts the search
-    // to the system directory, which is also what prevents this from being
-    // a DLL-hijacking vector.
+    // windows.storage.dll (e.g. right after sign-in or an Explorer restart),
+    // so GetModuleHandle can't be relied on here -- load it explicitly
+    // instead. LOAD_LIBRARY_SEARCH_SYSTEM32 restricts the search to the
+    // system directory, which is also what prevents this from being a
+    // DLL-hijacking vector.
     HMODULE windowsStorageModule = LoadLibraryExW(
         L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!windowsStorageModule) {
@@ -393,26 +400,6 @@ bool HookWindowsStorageSymbols() {
 
     // windows.storage.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {
-            {
-#ifdef _WIN64
-                LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
-#else
-                LR"(public: virtual long __stdcall CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
-#endif
-            },
-            &CFSFolder_MapColumnToSCID_Original,
-        },
-        {
-            {
-#ifdef _WIN64
-                LR"(public: virtual long __cdecl CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const __unaligned *,struct _tagpropertykey const *,struct tagVARIANT *))",
-#else
-                LR"(public: virtual long __stdcall CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const *,struct _tagpropertykey const *,struct tagVARIANT *))",
-#endif
-            },
-            &CFSFolder_GetDetailsEx_Original,
-        },
         {
             {
 #ifdef _WIN64
