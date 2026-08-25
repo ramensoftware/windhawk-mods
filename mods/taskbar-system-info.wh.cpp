@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.3.0
+// @version         1.3.1
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -54,14 +54,17 @@ stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 
 - CPU utilization from Windows system time counters.
 - RAM usage and capacity from Windows memory status.
-- GPU utilization and dedicated VRAM usage from Windows PDH counters.
-- Dedicated VRAM capacity and adapter identity from DXGI.
+- GPU utilization and dedicated or shared GPU-memory usage from Windows PDH
+  counters.
+- GPU-memory capacity and adapter identity from DXGI. Shared system memory is
+  used when an integrated adapter reports no dedicated video memory.
 - CPU and GPU temperatures from HWiNFO when available.
 - GPU fallback from the Windows display-driver interface (D3DKMT).
 - CPU fallback from Windows ACPI thermal zones exposed through PDH.
 
 Metric collection runs on a worker thread. The taskbar UI thread only renders
-the latest completed snapshot.
+the latest completed snapshot. If a display-driver restart invalidates the
+active GPU performance counters, the mod rebuilds them automatically.
 
 The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
@@ -433,8 +436,13 @@ int g_historyWindow = 0;
 PDH_HQUERY g_pdhQuery = nullptr;
 PDH_HCOUNTER g_gpuCounter = nullptr;
 PDH_HCOUNTER g_vramCounter = nullptr;
+PDH_HCOUNTER g_sharedVramCounter = nullptr;
 PDH_HCOUNTER g_thermalZoneCounter = nullptr;
 std::chrono::steady_clock::time_point g_nextPdhCounterRetry{};
+std::chrono::steady_clock::time_point g_nextPdhRecovery{};
+uint32_t g_consecutivePdhReadFailures = 0;
+bool g_pdhGpuSampleWasAvailable = false;
+bool g_pdhVramSampleWasAvailable = false;
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -746,6 +754,36 @@ bool IsRangeValid(size_t totalSize,
     return count <= remaining / stride;
 }
 
+std::optional<double> NormalizeTemperature(double value,
+                                           std::wstring unitOrFormattedValue) {
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+
+    std::wstring unit = ToLower(unitOrFormattedValue);
+    unit.erase(std::remove_if(unit.begin(), unit.end(), [](wchar_t character) {
+                   return std::iswspace(character) != 0;
+               }),
+               unit.end());
+
+    bool celsius = Contains(unit, L"\u00B0c") || Contains(unit, L"\u2103") ||
+                   unit == L"c" || unit == L"celsius";
+    bool fahrenheit =
+        Contains(unit, L"\u00B0f") || Contains(unit, L"\u2109") ||
+        unit == L"f" || unit == L"fahrenheit";
+    if (celsius == fahrenheit) {
+        return std::nullopt;
+    }
+
+    double celsiusValue =
+        fahrenheit ? (value - 32.0) * 5.0 / 9.0 : value;
+    if (!std::isfinite(celsiusValue) || celsiusValue < -50.0 ||
+        celsiusValue > 200.0) {
+        return std::nullopt;
+    }
+    return celsiusValue;
+}
+
 bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                             const ModSettings& settings) {
     HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE,
@@ -812,9 +850,14 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                 std::memcpy(&reading, readingAddress, sizeof(reading));
 
                 if (reading.readingType != kHwInfoTemperatureType ||
-                    reading.sensorIndex >= header.sensorCount ||
-                    !std::isfinite(reading.value) || reading.value < -50.0 ||
-                    reading.value > 200.0) {
+                    reading.sensorIndex >= header.sensorCount) {
+                    continue;
+                }
+
+                auto value = NormalizeTemperature(
+                    reading.value,
+                    FixedAnsiToWide(reading.unit, std::size(reading.unit)));
+                if (!value) {
                     continue;
                 }
 
@@ -836,7 +879,7 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                     sensorName, label, settings.cpuTempSensor);
                 if (cpuScore > bestCpuScore) {
                     bestCpuScore = cpuScore;
-                    snapshot.cpuTemp = reading.value;
+                    snapshot.cpuTemp = *value;
                     snapshot.cpuTempProvider =
                         TemperatureProvider::HwInfoSharedMemory;
                 }
@@ -845,7 +888,7 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                     sensorName, label, settings.gpuTempSensor);
                 if (gpuScore > bestGpuScore) {
                     bestGpuScore = gpuScore;
-                    snapshot.gpuTemp = reading.value;
+                    snapshot.gpuTemp = *value;
                     snapshot.gpuTempProvider =
                         TemperatureProvider::HwInfoSharedMemory;
                 }
@@ -904,20 +947,7 @@ std::optional<double> NormalizeRegistryTemperature(
         return std::nullopt;
     }
 
-    std::wstring formatted = ToLower(formattedValue);
-    bool celsius = Contains(formatted, L"\u00B0c") ||
-                   Contains(formatted, L"\u2103");
-    bool fahrenheit = Contains(formatted, L"\u00B0f") ||
-                      Contains(formatted, L"\u2109");
-    if (!celsius && !fahrenheit) {
-        return std::nullopt;
-    }
-
-    double result = fahrenheit ? (*value - 32.0) * 5.0 / 9.0 : *value;
-    if (!std::isfinite(result) || result < -50.0 || result > 200.0) {
-        return std::nullopt;
-    }
-    return result;
+    return NormalizeTemperature(*value, formattedValue);
 }
 
 bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
@@ -1143,17 +1173,25 @@ struct DxgiAdapterInfo {
     std::wstring luid;
     LUID luidValue{};
     uint64_t dedicatedVideoMemory = 0;
+    uint64_t sharedSystemMemory = 0;
 };
+
+std::optional<std::wstring> g_cachedDxgiAdapterFilter;
+std::optional<DxgiAdapterInfo> g_cachedDxgiAdapterInfo;
+bool g_cachedDxgiAdapterResolved = false;
+
+void InvalidateDxgiAdapterCache() {
+    g_cachedDxgiAdapterFilter.reset();
+    g_cachedDxgiAdapterInfo.reset();
+    g_cachedDxgiAdapterResolved = false;
+}
 
 std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
     const std::wstring& adapterFilter) {
-    static std::optional<std::wstring> cachedFilter;
-    static std::optional<DxgiAdapterInfo> cachedInfo;
-    static bool cachedResolved = false;
-
     std::wstring filterLower = ToLower(adapterFilter);
-    if (cachedResolved && cachedFilter == filterLower) {
-        return cachedInfo;
+    if (g_cachedDxgiAdapterResolved &&
+        g_cachedDxgiAdapterFilter == filterLower) {
+        return g_cachedDxgiAdapterInfo;
     }
 
     com_ptr<IDXGIFactory> factory;
@@ -1191,29 +1229,34 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
         }
     }
 
-    cachedFilter = filterLower;
-    cachedInfo.reset();
-    cachedResolved = true;
+    g_cachedDxgiAdapterFilter = filterLower;
+    g_cachedDxgiAdapterInfo.reset();
+    g_cachedDxgiAdapterResolved = true;
     if (!found) {
         if (filterLower.empty()) {
             Wh_Log(L"No DXGI GPU adapter found");
         } else {
             Wh_Log(L"No DXGI GPU adapter matched: %s", filterLower.c_str());
         }
-        return cachedInfo;
+        return g_cachedDxgiAdapterInfo;
     }
 
     wchar_t luid[32];
     swprintf(luid, std::size(luid), L"0x%08X_0x%08X",
              static_cast<DWORD>(selected.AdapterLuid.HighPart),
              selected.AdapterLuid.LowPart);
-    cachedInfo = DxgiAdapterInfo{selected.Description, ToLower(luid),
-                                  selected.AdapterLuid,
-                                  selected.DedicatedVideoMemory};
-    Wh_Log(L"Selected GPU: %s, LUID %s, VRAM %.1f GiB",
-           cachedInfo->description.c_str(), cachedInfo->luid.c_str(),
-           static_cast<double>(cachedInfo->dedicatedVideoMemory) / kGiB);
-    return cachedInfo;
+    g_cachedDxgiAdapterInfo = DxgiAdapterInfo{
+        selected.Description, ToLower(luid), selected.AdapterLuid,
+        selected.DedicatedVideoMemory, selected.SharedSystemMemory};
+    Wh_Log(L"Selected GPU: %s, LUID %s, dedicated %.1f GiB, shared %.1f "
+           L"GiB",
+           g_cachedDxgiAdapterInfo->description.c_str(),
+           g_cachedDxgiAdapterInfo->luid.c_str(),
+           static_cast<double>(g_cachedDxgiAdapterInfo->dedicatedVideoMemory) /
+               kGiB,
+           static_cast<double>(g_cachedDxgiAdapterInfo->sharedSystemMemory) /
+               kGiB);
+    return g_cachedDxgiAdapterInfo;
 }
 
 void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
@@ -1266,6 +1309,55 @@ bool MatchesGpuAdapter(const std::wstring& instance,
 void CloseMetricSources();
 
 constexpr auto kPdhCounterRetryInterval = std::chrono::seconds(30);
+constexpr auto kPdhRecoveryRetryDelay = std::chrono::seconds(1);
+constexpr auto kPdhRecoveryCooldown = std::chrono::seconds(30);
+constexpr uint32_t kPdhReadFailureThreshold = 3;
+
+void ClosePdhQuery() {
+    if (g_pdhQuery) {
+        PdhCloseQuery(g_pdhQuery);
+        g_pdhQuery = nullptr;
+    }
+    g_gpuCounter = nullptr;
+    g_vramCounter = nullptr;
+    g_sharedVramCounter = nullptr;
+    g_thermalZoneCounter = nullptr;
+}
+
+void RecordPdhReadFailure(PCWSTR reason,
+                          PDH_STATUS status = ERROR_SUCCESS) {
+    g_consecutivePdhReadFailures =
+        std::min(g_consecutivePdhReadFailures + 1,
+                 kPdhReadFailureThreshold);
+
+    auto now = std::chrono::steady_clock::now();
+    if (g_consecutivePdhReadFailures < kPdhReadFailureThreshold ||
+        now < g_nextPdhRecovery) {
+        return;
+    }
+
+    if (status == ERROR_SUCCESS) {
+        Wh_Log(L"Recreating GPU performance counters after repeated %s "
+               L"failures",
+               reason);
+    } else {
+        Wh_Log(L"Recreating GPU performance counters after repeated %s "
+               L"failures: %08X",
+               reason, status);
+    }
+
+    ClosePdhQuery();
+    InvalidateDxgiAdapterCache();
+    g_consecutivePdhReadFailures = 0;
+    g_nextPdhCounterRetry = now + kPdhRecoveryRetryDelay;
+    g_nextPdhRecovery = now + kPdhRecoveryCooldown;
+}
+
+void RecordPdhReadSuccess(bool gpuAvailable, bool vramAvailable) {
+    g_pdhGpuSampleWasAvailable |= gpuAvailable;
+    g_pdhVramSampleWasAvailable |= vramAvailable;
+    g_consecutivePdhReadFailures = 0;
+}
 
 bool AddPdhCounter(PDH_HCOUNTER& counter,
                    PCWSTR path,
@@ -1299,7 +1391,8 @@ void EnsurePdhQuery() {
             return;
         }
         queryCreated = true;
-    } else if (g_gpuCounter && g_vramCounter && g_thermalZoneCounter) {
+    } else if (g_gpuCounter && g_vramCounter && g_sharedVramCounter &&
+               g_thermalZoneCounter) {
         return;
     }
 
@@ -1314,18 +1407,23 @@ void EnsurePdhQuery() {
         g_vramCounter, L"\\GPU Adapter Memory(*)\\Dedicated Usage",
         L"VRAM usage");
     counterAdded |= AddPdhCounter(
+        g_sharedVramCounter, L"\\GPU Adapter Memory(*)\\Shared Usage",
+        L"shared GPU-memory usage");
+    counterAdded |= AddPdhCounter(
         g_thermalZoneCounter,
         L"\\Thermal Zone Information(*)\\Temperature",
         L"Windows thermal-zone");
 
-    if (!g_gpuCounter && !g_vramCounter && !g_thermalZoneCounter) {
+    if (!g_gpuCounter && !g_vramCounter && !g_sharedVramCounter &&
+        !g_thermalZoneCounter) {
         PdhCloseQuery(g_pdhQuery);
         g_pdhQuery = nullptr;
         g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
         return;
     }
 
-    if (!g_gpuCounter || !g_vramCounter || !g_thermalZoneCounter) {
+    if (!g_gpuCounter || !g_vramCounter || !g_sharedVramCounter ||
+        !g_thermalZoneCounter) {
         g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
     }
 
@@ -1417,15 +1515,17 @@ void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
     snapshot.cpuTempProvider = TemperatureProvider::WindowsThermalZones;
 }
 
-double ReadGpuUsage(const std::optional<DxgiAdapterInfo>& adapter) {
+std::optional<double> ReadGpuUsage(
+    const std::optional<DxgiAdapterInfo>& adapter) {
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
     if (!ReadPdhArray(g_gpuCounter, buffer, itemCount)) {
-        return 0.0;
+        return std::nullopt;
     }
 
     auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
     std::unordered_map<std::wstring, double> engineTotals;
+    bool found = false;
     for (DWORD i = 0; i < itemCount; i++) {
         const auto& value = items[i].FmtValue;
         if ((value.CStatus != PDH_CSTATUS_VALID_DATA &&
@@ -1443,6 +1543,11 @@ double ReadGpuUsage(const std::optional<DxgiAdapterInfo>& adapter) {
             luidPosition == std::wstring::npos ? instance
                                                 : instance.substr(luidPosition);
         engineTotals[engineKey] += value.doubleValue;
+        found = true;
+    }
+
+    if (!found) {
+        return std::nullopt;
     }
 
     double busiestEngine = 0.0;
@@ -1453,10 +1558,11 @@ double ReadGpuUsage(const std::optional<DxgiAdapterInfo>& adapter) {
 }
 
 std::optional<double> ReadVramUsedBytes(
+    PDH_HCOUNTER counter,
     const std::optional<DxgiAdapterInfo>& adapter) {
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
-    if (!ReadPdhArray(g_vramCounter, buffer, itemCount)) {
+    if (!ReadPdhArray(counter, buffer, itemCount)) {
         return std::nullopt;
     }
 
@@ -1483,20 +1589,50 @@ std::optional<double> ReadVramUsedBytes(
 
 void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
     EnsurePdhQuery();
-    if (!g_pdhQuery || PdhCollectQueryData(g_pdhQuery) != ERROR_SUCCESS) {
+    if (!g_pdhQuery) {
+        return;
+    }
+
+    PDH_STATUS collectStatus = PdhCollectQueryData(g_pdhQuery);
+    if (collectStatus != ERROR_SUCCESS) {
+        if (g_pdhGpuSampleWasAvailable || g_pdhVramSampleWasAvailable) {
+            RecordPdhReadFailure(L"collection", collectStatus);
+        }
         return;
     }
 
     auto adapter = GetDxgiAdapterInfo(settings.gpuAdapter);
-    snapshot.gpu = ReadGpuUsage(adapter);
-    auto vramUsedBytes = ReadVramUsedBytes(adapter);
-    if (adapter && adapter->dedicatedVideoMemory > 0 && vramUsedBytes) {
+    auto gpuUsage = ReadGpuUsage(adapter);
+    if (gpuUsage) {
+        snapshot.gpu = *gpuUsage;
+    }
+    uint64_t vramTotalBytes = 0;
+    PDH_HCOUNTER vramCounter = nullptr;
+    if (adapter) {
+        if (adapter->dedicatedVideoMemory > 0) {
+            vramTotalBytes = adapter->dedicatedVideoMemory;
+            vramCounter = g_vramCounter;
+        } else if (adapter->sharedSystemMemory > 0) {
+            vramTotalBytes = adapter->sharedSystemMemory;
+            vramCounter = g_sharedVramCounter;
+        }
+    }
+    auto vramUsedBytes = ReadVramUsedBytes(vramCounter, adapter);
+    bool vramAvailable = vramTotalBytes > 0 && vramUsedBytes.has_value();
+    if (vramAvailable) {
         snapshot.vramUsedGb = *vramUsedBytes / kGiB;
-        snapshot.vramTotalGb =
-            static_cast<double>(adapter->dedicatedVideoMemory) / kGiB;
+        snapshot.vramTotalGb = static_cast<double>(vramTotalBytes) / kGiB;
         snapshot.vram = std::clamp(
             snapshot.vramUsedGb / snapshot.vramTotalGb * 100.0, 0.0, 100.0);
         snapshot.vramAvailable = true;
+    }
+
+    bool lostGpuSample = g_pdhGpuSampleWasAvailable && !gpuUsage;
+    bool lostVramSample = g_pdhVramSampleWasAvailable && !vramAvailable;
+    if (lostGpuSample || lostVramSample) {
+        RecordPdhReadFailure(L"metric read");
+    } else if (gpuUsage || vramAvailable) {
+        RecordPdhReadSuccess(gpuUsage.has_value(), vramAvailable);
     }
 }
 
@@ -1670,10 +1806,9 @@ std::wstring FormatCapacity(double usedGb, double totalGb, bool available) {
         totalGb <= 0.0) {
         return L"--/--G";
     }
-    wchar_t buffer[64];
-    swprintf(buffer, std::size(buffer), L"%.1f/%.0fG", usedGb,
-             std::round(totalGb));
-    return buffer;
+    int totalDecimals = totalGb < 1.0 ? 1 : 0;
+    return FormatFixed(usedGb, 1) + L"/" +
+           FormatFixed(totalGb, totalDecimals) + L"G";
 }
 
 enum class AlertLevel { Normal, Warning, Critical };
@@ -2811,14 +2946,13 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 }
 
 void CloseMetricSources() {
-    if (g_pdhQuery) {
-        PdhCloseQuery(g_pdhQuery);
-        g_pdhQuery = nullptr;
-        g_gpuCounter = nullptr;
-        g_vramCounter = nullptr;
-        g_thermalZoneCounter = nullptr;
-    }
+    ClosePdhQuery();
+    InvalidateDxgiAdapterCache();
     g_nextPdhCounterRetry = {};
+    g_nextPdhRecovery = {};
+    g_consecutivePdhReadFailures = 0;
+    g_pdhGpuSampleWasAvailable = false;
+    g_pdhVramSampleWasAvailable = false;
 }
 
 bool TearDownTaskbarUi() {
