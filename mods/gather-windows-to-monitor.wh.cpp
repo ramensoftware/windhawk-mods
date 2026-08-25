@@ -60,8 +60,8 @@ using Windows device-name order. For example, connected `DISPLAY4` and `DISPLAY6
 become display 1 and display 2. **Display order override** changes what "display 1",
 "display 2", and so on mean while keeping every hotkey unchanged.
 
-Enter a comma-separated list containing `primary` or display device names. Both
-`DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
+Enter up to five comma-separated entries containing `primary` or display device
+names. Both `DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
 
 * `primary,DISPLAY3` keeps display 1 tied to whichever display is currently
   primary and makes `DISPLAY3` become display 2.
@@ -117,20 +117,17 @@ should check this dropdown once after installing the new version.
 ## Updating minimized window settings
 
 The previous two minimized-window checkboxes are now one **Minimized windows**
-dropdown. The existing **Restore minimized windows before moving** value is kept:
-
-* Off maps to **Skip minimized windows**.
-* On maps to **Restore and move minimized windows**.
-
-If both old checkboxes were on, select **Skip minimized windows** to keep the old
-behavior, where skipping took priority.
+dropdown. If minimized windows were restored and moved before updating, select
+**Restore and move minimized windows** once. Otherwise, the new default continues
+skipping minimized windows.
 
 ## Window handling settings
 
 * **Minimized windows** chooses whether minimized windows are skipped or restored
   and moved. Skipping is the default.
-* **Skip fullscreen windows** avoids disturbing fullscreen apps and games. It
-  applies to both single-window moves and gather actions.
+* **Skip fullscreen windows during gather** avoids sweeping fullscreen apps and
+  games into a bulk gather. An explicit foreground-window shortcut still moves
+  the selected fullscreen window.
 * **Window size behavior** controls resizing at the destination. **Fit** shrinks
   only windows that are too large, **Preserve** never resizes, and **Scale**
   adjusts size in proportion to the destination display.
@@ -202,20 +199,20 @@ applications handle that inconsistently.
   $name: Display order override
   $description: >-
     Remaps what numbered move and gather shortcuts target without rebinding them.
-    Enter comma-separated primary or display names such as DISPLAY4 or
+    Enter up to five comma-separated primary or display names such as DISPLAY4 or
     \\.\DISPLAY4. Example: primary,DISPLAY3 keeps display 1 tied to the current
     primary display and makes DISPLAY3 become display 2. Missing displays keep
     their slots; unlisted displays follow in automatic order. An invalid override
     uses automatic order. Leave empty to number connected displays by DISPLAY name.
-- RestoreMinimized: skip
+- MinimizedMode: skip
   $name: Minimized windows
   $description: Choose whether minimized windows stay minimized or are restored and moved.
   $options:
   - skip: Skip minimized windows (default)
   - restore: Restore and move minimized windows
 - SkipFullscreen: true
-  $name: Skip fullscreen windows
-  $description: Applies to every action, including moving only the active window.
+  $name: Skip fullscreen windows during gather
+  $description: Foreground-window shortcuts still move the selected fullscreen window.
 - SizeMode: fit
   $name: Window size behavior
   $description: Fit shrinks only oversized windows. Preserve never resizes. Scale resizes all windows for the destination display.
@@ -540,8 +537,7 @@ void LoadSettings() {
         g_settings.displayOrder = ParseDisplayOrder(L"");
     }
     g_settings.restoreMinimized =
-        Wh_GetIntSetting(L"RestoreMinimized") != 0 ||
-        GetStringSetting(L"RestoreMinimized") == L"restore";
+        GetStringSetting(L"MinimizedMode") == L"restore";
     g_settings.skipFullscreen = Wh_GetIntSetting(L"SkipFullscreen") != 0;
     g_settings.sizeMode = ParseSizeMode(GetStringSetting(L"SizeMode"));
     g_settings.cascadeWindows = Wh_GetIntSetting(L"CascadeWindows") != 0;
@@ -891,20 +887,17 @@ const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<Monit
     return MonitorByHandle(monitors, MonitorFromWindow(foreground, MONITOR_DEFAULTTOPRIMARY));
 }
 
-bool IsClass(HWND hwnd, const wchar_t* name) {
-    wchar_t className[128]{};
-    return GetClassName(hwnd, className, ARRAYSIZE(className)) &&
-           _wcsicmp(className, name) == 0;
-}
-
 bool IsShellClass(HWND hwnd) {
     const wchar_t* shellClasses[] = {
         L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
         L"DV2ControlHost", L"Windows.UI.Core.CoreWindow", L"XamlExplorerHostIslandWindow",
         L"NotifyIconOverflowWindow", L"MultitaskingViewFrame", L"Windows.UI.Composition.DesktopWindowContentBridge",
     };
-    for (const wchar_t* name : shellClasses) {
-        if (IsClass(hwnd, name)) return true;
+    wchar_t className[128]{};
+    if (GetClassName(hwnd, className, ARRAYSIZE(className))) {
+        for (const wchar_t* name : shellClasses) {
+            if (_wcsicmp(className, name) == 0) return true;
+        }
     }
     return hwnd == GetDesktopWindow() || hwnd == GetShellWindow();
 }
@@ -955,7 +948,6 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
     *reason = SkipReason::None;
     if (!IsWindow(hwnd)) { *reason = SkipReason::Invalid; return false; }
     if (!IsWindowVisible(hwnd)) { *reason = SkipReason::Invisible; return false; }
-    if (IsCloaked(hwnd)) { *reason = SkipReason::Cloaked; return false; }
     if (IsShellClass(hwnd)) { *reason = SkipReason::DesktopShell; return false; }
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
@@ -963,6 +955,7 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
         *reason = SkipReason::ToolWindow;
         return false;
     }
+    if (IsCloaked(hwnd)) { *reason = SkipReason::Cloaked; return false; }
     if (bulk && !g_settings.includeOwnedWindows && GetWindow(hwnd, GW_OWNER)) {
         *reason = SkipReason::OwnedWindow;
         return false;
@@ -985,7 +978,7 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
         *reason = SkipReason::BadRect;
         return false;
     }
-    if (g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
+    if (bulk && g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
         *reason = SkipReason::Fullscreen;
         return false;
     }
