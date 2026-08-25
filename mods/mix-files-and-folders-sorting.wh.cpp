@@ -2,11 +2,11 @@
 // @id              mix-files-and-folders-sorting
 // @name            Mix Files and Folders When Sorting in Windows Explorer
 // @description     Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files
-// @version         1.2
+// @version         1.3
 // @author          Extremenis
 // @github          https://github.com/Extremenis
 // @include         explorer.exe
-// @compilerOptions -loleaut32 -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lshlwapi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -26,17 +26,10 @@ to the selected column's value (name, type, date, ...) instead of the folder
 automatically winning. Folder-vs-folder and file-vs-file comparisons are left
 to the shell untouched, so Explorer's own ordering still applies there.
 
-## ⚠ Conflicts with `explorer-details-better-file-sizes`
-
-**Do not enable both mods at once.**
-[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp)
-hooks the very same `CFSFolder::CompareIDs` function and ships a
-"Mix files and folders when sorting by size" setting (`sortSizesMixFolders`)
-that is **on by default**. Each hook returns a result without calling through
-to the other for the cases it handles, so with both installed the resulting
-sort order depends on which mod loaded first — which isn't something you can
-observe or control. If you want size-based mixing, use that mod; this one
-covers the other columns.
+Only real directories count as folders here. Items that Explorer shows as
+browsable but stores as files — `.zip` and other compressed folders, folder
+shortcuts — are treated as files, which is what stock Explorer does for its
+folders-first rule too.
 
 ## Scope
 
@@ -50,11 +43,26 @@ The mod is also scoped to `explorer.exe` only, so common file/save dialogs in
 other applications — which use the same `CFSFolder` implementation, just in
 a different process — keep the default folders-first ordering.
 
-Sorting by Size does not interleave: folders report an empty size, so a
-folder-vs-file comparison on that column ends up in the same order as stock
-Explorer. Real size mixing needs folders to have a computed size, which this
-mod doesn't provide — `explorer-details-better-file-sizes` does, via its
-`calculateFolderSizes` feature.
+Sorting by Size does not interleave on its own: folders report an empty size,
+so a folder-vs-file comparison on that column ends up in the same order as
+stock Explorer.
+
+## Interaction with `explorer-details-better-file-sizes`
+
+[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp)
+hooks the same `CFSFolder::CompareIDs` function and has its own
+"Mix files and folders when sorting by size" setting (`sortSizesMixFolders`,
+on by default). Both hooks delegate to the original for anything they don't
+handle, so they chain rather than fight: that mod handles the Size column,
+this one handles the rest.
+
+Two things follow from running both:
+
+- With that mod's `calculateFolderSizes` enabled, folders report a real size,
+  so the Size column *does* interleave here — the caveat above no longer
+  applies.
+- This mod doesn't read `sortSizesMixFolders`, so setting it to `false` while
+  `calculateFolderSizes` is on will still leave the Size column mixed.
 
 ## Known limitations
 
@@ -69,9 +77,8 @@ collation of punctuation or accented characters may differ from the shell's.
 
 The `CFSFolder` hooking scaffolding (symbol hooks, hook lifetime tracking,
 `CompareIDs` hook skeleton) is derived from m417z's
-[`explorer-details-better-file-sizes`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp),
-which is licensed under GPLv3; this mod is licensed under GPLv3 for that
-reason.
+`explorer-details-better-file-sizes`, which is licensed under GPLv3; this mod
+is licensed under GPLv3 for that reason.
 */
 // ==/WindhawkModReadme==
 
@@ -80,8 +87,8 @@ reason.
 #include <atomic>
 #include <memory>
 
-#include <comutil.h>
 #include <initguid.h>
+#include <propidl.h>
 #include <propkey.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -96,23 +103,47 @@ auto hookRefCountScope() {
         &g_hookRefCount, [](auto hookRefCount) { (*hookRefCount)--; }};
 }
 
+// GetDetailsEx takes a VARIANT*, but a column supplied by a third-party
+// property or column handler can come back tagged with a PROPVARIANT-only
+// type (VT_LPWSTR, VT_FILETIME, VT_CLSID). VariantClear doesn't free those,
+// so it would leak; PropVariantClear handles both families, and the two
+// structs share their layout.
+class ShellVariant {
+   public:
+    ShellVariant() { VariantInit(&m_value); }
+    ~ShellVariant() {
+        PropVariantClear(reinterpret_cast<PROPVARIANT*>(&m_value));
+    }
+    ShellVariant(const ShellVariant&) = delete;
+    ShellVariant& operator=(const ShellVariant&) = delete;
+
+    VARIANT* GetAddress() { return &m_value; }
+    const VARIANT& Get() const { return m_value; }
+
+   private:
+    VARIANT m_value;
+};
+
 // Explorer honors the NoStrCmpLogical policy under
-// HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer: when it's
-// set, "numerical sorting" is off and the shell stops comparing names
-// logically. This hook's folder-vs-file comparison has to follow the same
-// rule as the shell's file-vs-file comparison, or the two orderings disagree
-// (e.g. the shell puts a10.txt before a2.txt while a folder named a5 lands
-// between them). Read once -- it's a policy value, not something that
-// changes while Explorer runs.
+// Software\Microsoft\Windows\CurrentVersion\Policies\Explorer: when it's set,
+// "numerical sorting" is off and the shell stops comparing names logically.
+// This hook's folder-vs-file comparison has to follow the same rule as the
+// shell's file-vs-file comparison, or the two orderings disagree (e.g. the
+// shell puts a10.txt before a2.txt while a folder named a5 lands between
+// them). It can be set per user or as a machine policy, so check both. Read
+// once -- it's a policy value, not something that changes while Explorer runs.
 bool NumericalSortEnabled() {
     static const bool enabled = [] {
-        DWORD value = 0;
-        DWORD size = sizeof(value);
-        LSTATUS status = RegGetValueW(
-            HKEY_CURRENT_USER,
-            LR"(Software\Microsoft\Windows\CurrentVersion\Policies\Explorer)",
-            L"NoStrCmpLogical", RRF_RT_REG_DWORD, nullptr, &value, &size);
-        return status != ERROR_SUCCESS || value == 0;
+        auto policySet = [](HKEY root) {
+            DWORD value = 0;
+            DWORD size = sizeof(value);
+            LSTATUS status = RegGetValueW(
+                root,
+                LR"(Software\Microsoft\Windows\CurrentVersion\Policies\Explorer)",
+                L"NoStrCmpLogical", RRF_RT_REG_DWORD, nullptr, &value, &size);
+            return status == ERROR_SUCCESS && value != 0;
+        };
+        return !policySet(HKEY_CURRENT_USER) && !policySet(HKEY_LOCAL_MACHINE);
     }();
     return enabled;
 }
@@ -148,24 +179,28 @@ HRESULT CompareResultFromInt(int cmp) {
     return 0;
 }
 
-// Asks the shell folder itself whether an item is a folder. pCFSFolder is the
-// IShellFolder2 this-pointer that CompareIDs/MapColumnToSCID/GetDetailsEx are
-// all being called on, and IShellFolder2 single-inherits IShellFolder, so it
-// can be used as one. For CFSFolder this reads SFGAO_FOLDER out of the pidl
-// instead of going through the property store, which matters because this
-// runs on every comparison of an O(N log N) sort.
-HRESULT IsFolderItem(void* pCFSFolder,
+// Reports whether an item is a real directory.
+//
+// SFGAO_FOLDER alone means "browsable container", not "directory": a .zip
+// handled by Compressed Folders, and a shortcut to a folder, both report it.
+// Explorer's own folders-first rule keys off FILE_ATTRIBUTE_DIRECTORY, which
+// is why a .zip sorts among the files in stock Explorer. Treating one as a
+// folder here would make the comparator non-transitive -- a .zip vs a real
+// folder would be delegated to the shell (folder first, unconditionally)
+// while .zip vs file and folder vs file both get compared by column value,
+// which admits a cycle. SFGAO_STREAM is set for exactly these file-backed
+// containers, so requiring it to be clear matches the shell's rule.
+HRESULT IsFolderItem(IShellFolder* shellFolder,
                       const ITEMIDLIST_RELATIVE* itemid,
                       bool* isFolder) {
-    SFGAOF attrs = SFGAO_FOLDER;
-    HRESULT hr = ((IShellFolder*)pCFSFolder)
-                     ->GetAttributesOf(1, (PCUITEMID_CHILD_ARRAY)&itemid,
-                                        &attrs);
+    SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
+    HRESULT hr = shellFolder->GetAttributesOf(
+        1, (PCUITEMID_CHILD_ARRAY)&itemid, &attrs);
     if (FAILED(hr)) {
         Wh_Log(L"GetAttributesOf failed: 0x%08X", hr);
         return hr;
     }
-    *isFolder = (attrs & SFGAO_FOLDER) != 0;
+    *isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
     return S_OK;
 }
 
@@ -195,25 +230,34 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     if (column & ~(LPARAM)SHCIDS_COLUMNMASK) {
         return original();
     }
-    int columnIndex = (int)(column & SHCIDS_COLUMNMASK);
-
-    PROPERTYKEY columnSCID;
-    if (FAILED(CFSFolder_MapColumnToSCID_Original(pCFSFolder, columnIndex,
-                                                    &columnSCID))) {
-        return original();
-    }
 
     // Folders-first is the only rule this mod needs to override, so only step
-    // in when exactly one of the two items is a folder. Folder-vs-folder and
-    // file-vs-file pairs go to the shell's own comparison: it's cheaper (no
-    // property lookups at all for the common case), and it guarantees the
-    // exact ordering Explorer would otherwise use.
+    // in when exactly one of the two items is a real directory.
+    // Folder-vs-folder and file-vs-file pairs go to the shell's own
+    // comparison: it's cheaper, and it guarantees the exact ordering Explorer
+    // would otherwise use. QueryInterface rather than casting pCFSFolder --
+    // the this-pointer's primary vtable being IShellFolder2's is an
+    // undocumented layout assumption.
+    IShellFolder2* shellFolder = nullptr;
+    if (FAILED(((IUnknown*)pCFSFolder)
+                   ->QueryInterface(IID_IShellFolder2, (void**)&shellFolder))) {
+        return original();
+    }
+    auto shellFolderRelease = std::unique_ptr<IShellFolder2, void (*)(
+        IShellFolder2*)>{shellFolder, [](auto p) { p->Release(); }};
+
     bool isFolder1, isFolder2;
-    if (FAILED(IsFolderItem(pCFSFolder, itemid1, &isFolder1)) ||
-        FAILED(IsFolderItem(pCFSFolder, itemid2, &isFolder2))) {
+    if (FAILED(IsFolderItem(shellFolder, itemid1, &isFolder1)) ||
+        FAILED(IsFolderItem(shellFolder, itemid2, &isFolder2))) {
         return original();
     }
     if (isFolder1 == isFolder2) {
+        return original();
+    }
+
+    PROPERTYKEY columnSCID;
+    if (FAILED(CFSFolder_MapColumnToSCID_Original(
+            pCFSFolder, (int)(column & SHCIDS_COLUMNMASK), &columnSCID))) {
         return original();
     }
 
@@ -225,10 +269,11 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     // using the display name for one comparison key and the real name for
     // another would make the overall ordering non-transitive.
     const PROPERTYKEY& valueSCID =
-        columnSCID == PKEY_ItemNameDisplay ? PKEY_FileName : columnSCID;
+        IsEqualPropertyKey(columnSCID, PKEY_ItemNameDisplay) ? PKEY_FileName
+                                                              : columnSCID;
 
-    _variant_t value1;
-    _variant_t value2;
+    ShellVariant value1;
+    ShellVariant value2;
     if (FAILED(CFSFolder_GetDetailsEx_Original(
             pCFSFolder, itemid1, &valueSCID, value1.GetAddress())) ||
         FAILED(CFSFolder_GetDetailsEx_Original(
@@ -236,18 +281,20 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
-    auto isEmpty = [](const _variant_t& v) {
+    const VARIANT& v1 = value1.Get();
+    const VARIANT& v2 = value2.Get();
+
+    auto isEmpty = [](const VARIANT& v) {
         return v.vt == VT_EMPTY || v.vt == VT_NULL;
     };
 
-    if (value1.vt != value2.vt) {
+    if (v1.vt != v2.vt) {
         // A folder commonly leaves a column blank (VT_EMPTY) where a file
         // has a real value (Size, Dimensions, Length, ...). Treat a blank
         // value as sorting before any present value, rather than falling
-        // back to folders-first. This still leaves Size itself effectively
-        // unmixed, since a folder's size is always blank -- see the README.
-        bool empty1 = isEmpty(value1);
-        bool empty2 = isEmpty(value2);
+        // back to folders-first.
+        bool empty1 = isEmpty(v1);
+        bool empty2 = isEmpty(v2);
         if (empty1 != empty2) {
             return CompareResultFromInt(empty1 ? -1 : 1);
         }
@@ -255,66 +302,61 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     }
 
     int cmp;
-    switch (value1.vt) {
+    switch (v1.vt) {
         case VT_EMPTY:
         case VT_NULL:
             cmp = 0;
             break;
 
         case VT_BSTR: {
-            LPCWSTR s1 = value1.bstrVal ? (LPCWSTR)value1.bstrVal : L"";
-            LPCWSTR s2 = value2.bstrVal ? (LPCWSTR)value2.bstrVal : L"";
+            LPCWSTR s1 = v1.bstrVal ? (LPCWSTR)v1.bstrVal : L"";
+            LPCWSTR s2 = v2.bstrVal ? (LPCWSTR)v2.bstrVal : L"";
             cmp = NumericalSortEnabled() ? StrCmpLogicalW(s1, s2)
                                           : lstrcmpiW(s1, s2);
             break;
         }
 
         case VT_UI8:
-            cmp = (value1.ullVal > value2.ullVal) -
-                  (value1.ullVal < value2.ullVal);
+            cmp = (v1.ullVal > v2.ullVal) - (v1.ullVal < v2.ullVal);
             break;
 
         case VT_I8:
-            cmp = (value1.llVal > value2.llVal) -
-                  (value1.llVal < value2.llVal);
+            cmp = (v1.llVal > v2.llVal) - (v1.llVal < v2.llVal);
             break;
 
         case VT_UI4:
-            cmp = (value1.ulVal > value2.ulVal) -
-                  (value1.ulVal < value2.ulVal);
+            cmp = (v1.ulVal > v2.ulVal) - (v1.ulVal < v2.ulVal);
             break;
 
         case VT_I4:
-            cmp = (value1.lVal > value2.lVal) - (value1.lVal < value2.lVal);
+            cmp = (v1.lVal > v2.lVal) - (v1.lVal < v2.lVal);
             break;
 
         case VT_UI2:
-            cmp = (int)value1.uiVal - (int)value2.uiVal;
+            cmp = (int)v1.uiVal - (int)v2.uiVal;
             break;
 
         case VT_I2:
-            cmp = (int)value1.iVal - (int)value2.iVal;
+            cmp = (int)v1.iVal - (int)v2.iVal;
             break;
 
         case VT_UI1:
-            cmp = (int)value1.bVal - (int)value2.bVal;
+            cmp = (int)v1.bVal - (int)v2.bVal;
             break;
 
         case VT_R8:
         case VT_DATE:
-            cmp = (value1.dblVal > value2.dblVal) -
-                  (value1.dblVal < value2.dblVal);
+            cmp = (v1.dblVal > v2.dblVal) - (v1.dblVal < v2.dblVal);
             break;
 
         case VT_R4:
-            cmp = (value1.fltVal > value2.fltVal) -
-                  (value1.fltVal < value2.fltVal);
+            cmp = (v1.fltVal > v2.fltVal) - (v1.fltVal < v2.fltVal);
             break;
 
         case VT_BOOL:
             // VARIANT_TRUE is -1, so comparing boolVal directly would sort
             // true before false. Normalize to 0/1 first.
-            cmp = (int)(!!value1.boolVal) - (int)(!!value2.boolVal);
+            cmp = (int)(!!v1.boolVal) - (int)(!!v2.boolVal);
             break;
 
         default:
