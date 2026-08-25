@@ -1582,7 +1582,7 @@ ILogonUIStateInfo : IInspectable {
     virtual HRESULT get_CurrentLogonUIState(LogonUIState*) PURE;
 };
 
-// Windhawk lacks some WinRT header files needed for EventSource so just handle it with std map
+// Windhawk lacks some WinRT header files needed for EventSource. Since add_Resolved is only called once, just handle one handler
 using ResolvedHandler = ABI::Windows::Foundation::ITypedEventHandler<IBlockedShutdownResolverUX*, BlockedShutdownResolution>;
 Microsoft::WRL::ComPtr<ResolvedHandler> _Resolved;
 mutex resolvedMutex;
