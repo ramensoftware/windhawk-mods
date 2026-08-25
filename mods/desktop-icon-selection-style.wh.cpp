@@ -85,8 +85,10 @@ by kivsak.
 ## Compatibility
 
 Built and tested on Windows 11 build 26200. The highlight is intercepted through
-`DrawThemeBackground`; if a future Windows build stops drawing it that way, the
-mod goes inert rather than breaking anything.
+`DrawThemeBackground`, which is what the desktop was measured to use. That
+function is a wrapper over `DrawThemeBackgroundEx`, which is not hooked, so a
+Windows build that called the inner function directly would leave the mod inert.
+Inert, not broken: the stock highlight simply comes back.
 */
 // ==/WindhawkModReadme==
 
@@ -213,7 +215,6 @@ mod goes inert rather than breaking anything.
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <mutex>
@@ -294,7 +295,6 @@ std::atomic<UINT> g_dpi{96};
 std::atomic<COLORREF> g_accentColor{RGB(0, 120, 215)};
 std::atomic<DWORD> g_accentTick{0};
 
-std::mutex g_attachMutex;
 std::mutex g_gdiplusMutex;
 ULONG_PTR g_gdiplusToken;
 std::atomic<bool> g_gdiplusReady{false};
@@ -820,7 +820,10 @@ bool IsForeignThemeClass(HTHEME hTheme) {
                _wcsicmp(cls + length - suffixLength, suffix) == 0;
     };
 
-    return endsWith(L"ScrollBar") || endsWith(L"Edit");
+    // Every class here numbers part 1 into the state range matched below:
+    // SBP_ARROWBTN, EP_EDITTEXT, HP_HEADERITEM and BP_PUSHBUTTON.
+    return endsWith(L"ScrollBar") || endsWith(L"Edit") ||
+           endsWith(L"Header") || endsWith(L"Button");
 }
 
 bool ShouldReplace(HTHEME hTheme, int partId, int stateId, bool* hot) {
@@ -931,13 +934,13 @@ void AttachToListView(HWND hWnd) {
     // initialization and its background thread.
     EnsureGdiplus();
 
-    // Subclassing and taking ownership have to happen together. This runs on
-    // the desktop thread from the CreateWindowExW hook and on Windhawk's thread
-    // from Wh_ModAfterInit, and interleaving them could leave the live list view
-    // unsubclassed while a doomed one is tracked. LvSubclassProc never takes
-    // this lock, so the cross-thread send below cannot deadlock against it.
-    std::lock_guard<std::mutex> lock(g_attachMutex);
-
+    // Deliberately lock-free. Both subclass helpers end in an untimed
+    // SendMessage to the window's own thread, and one of the two callers of
+    // this function *is* that thread, through the CreateWindowExW hook. A lock
+    // held across those sends would let the desktop thread block on it while
+    // the holder waits on a send to the desktop thread - a permanent shell
+    // hang. The ordering below needs no lock anyway: whichever thread exchanges
+    // last owns g_lv, and every window it displaces is unsubclassed.
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, LvSubclassProc, 0)) {
         return;
     }
@@ -1062,10 +1065,13 @@ void LoadSettings() {
     ParseColor(WindhawkUtils::StringSetting::make(L"borderColor").get(),
                &g_settings.borderColor, &g_settings.borderUsesAccent);
     g_settings.borderOpacity = std::clamp(Wh_GetIntSetting(L"borderOpacity"), 0, 100);
-    g_settings.borderThickness = std::max(1, Wh_GetIntSetting(L"borderThickness"));
+    g_settings.borderThickness =
+        std::clamp(Wh_GetIntSetting(L"borderThickness"), 1, kMaxPixelSetting);
 
-    g_settings.dashLength = std::max(1, Wh_GetIntSetting(L"dashLength"));
-    g_settings.dashGap = std::max(1, Wh_GetIntSetting(L"dashGap"));
+    g_settings.dashLength =
+        std::clamp(Wh_GetIntSetting(L"dashLength"), 1, kMaxPixelSetting);
+    g_settings.dashGap =
+        std::clamp(Wh_GetIntSetting(L"dashGap"), 1, kMaxPixelSetting);
 
     g_settings.styleHover = Wh_GetIntSetting(L"styleHover");
     g_settings.hoverOpacity = std::clamp(Wh_GetIntSetting(L"hoverOpacity"), 0, 100);
@@ -1106,6 +1112,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    // The CreateWindowExW hook may already have caught a newer list view while
+    // this was starting up. Attaching the one found by searching would displace
+    // it with a window that is on its way out.
+    if (g_lv.load(std::memory_order_relaxed)) {
+        return;
+    }
+
     if (HWND listView = GetExistingDesktopListView()) {
         AttachToListView(listView);
     }
@@ -1114,12 +1127,9 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
-    HWND listView = g_lv.exchange(nullptr, std::memory_order_relaxed);
-    if (!listView) {
-        listView = GetExistingDesktopListView();
-    }
-
-    if (listView) {
+    // g_lv is null exactly when nothing is subclassed, so there is nothing to
+    // fall back to searching for.
+    if (HWND listView = g_lv.exchange(nullptr, std::memory_order_relaxed)) {
         // An untimed send, so the mod cannot be unloaded while its subclass proc
         // is still on the list view's chain.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(listView, LvSubclassProc);
