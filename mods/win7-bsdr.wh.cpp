@@ -30,10 +30,10 @@
     * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * Known issues
-    * If you are using the AuthUX logon screen and your account has no password, enabling the logoff sequence option will make the system automatically log on again after logging off.
+    * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
 ## ⚠ Important usage note ⚠
 
-In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
+In order to use this mod, you must allow Windhawk to inject into the **LogonUI.exe**
 system process. To do so, add it to the process inclusion list in the advanced
 settings. If you do not do this, it will silently fail to inject.
 
@@ -52,7 +52,7 @@ settings. If you do not do this, it will silently fail to inject.
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
 - disableAsyncLogoff: true
   $name: Restore Windows 7's logoff sequence
-  $name:ko-KR: Windows 7의 로그오프 절차를 복원합니다.
+  $name:ko-KR: Windows 7의 로그오프 절차 복원
 */
 // ==/WindhawkModSettings==
 
@@ -68,8 +68,8 @@ settings. If you do not do this, it will silently fail to inject.
 
 using namespace std;
 
-#define WM_ADD_APP (WM_USER + 1)
-#define WM_REMOVE_APP (WM_USER + 2)
+#define WM_ADD_APP (WM_APP + 1)
+#define WM_REMOVE_APP (WM_APP + 2)
 
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
 
@@ -77,6 +77,9 @@ using namespace std;
     HRESULT hr = (x); \
     if (FAILED(hr)) return hr; \
 } while(0)
+
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
 
 #pragma region resources
 // Resource IDs
@@ -1582,9 +1585,9 @@ ILogonUIStateInfo : IInspectable {
     virtual HRESULT get_CurrentLogonUIState(LogonUIState*) PURE;
 };
 
-// Windhawk lacks some WinRT header files needed for EventSource. Since add_Resolved is only called once, just handle one handler
+// Windhawk lacks some WinRT header files needed for EventSource. Since add_Resolved is only called once, just handle only one handler
 using ResolvedHandler = ABI::Windows::Foundation::ITypedEventHandler<IBlockedShutdownResolverUX*, BlockedShutdownResolution>;
-Microsoft::WRL::ComPtr<ResolvedHandler> _Resolved;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ResolvedHandler> _Resolved;
 mutex resolvedMutex;
 BlockedShutdownResolution resolvedValue = BlockedShutdownResolution_None;
 bool _wasClicked = false;
@@ -1675,8 +1678,9 @@ namespace CustomBSDR {
         HBITMAP hIconBitmap;
         Microsoft::WRL::ComPtr<IShutdownBlockingApp> app;
     };
-    static vector<AppTile> appTiles;
-    static vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingApps;
+    static optional<vector<AppTile>> appTiles;
+    static optional<vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps;
+    mutex pendingAppsMutex;
 };
 #pragma endregion logoncontroller.h and CustomBSDR.h
 
@@ -2406,7 +2410,7 @@ LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
 
             HWND hControl = (HWND)lParam;
             bool isBlockReason = false;
-            for (auto& tile : appTiles) {
+            for (auto& tile : *appTiles) {
                 if (tile.hBlockReason == hControl) {
                     isBlockReason = true;
                     break;
@@ -2523,16 +2527,16 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
     }
 
     if (tile.isBlocking) {
-        appTiles.insert(appTiles.begin(), tile);
+        appTiles->insert(appTiles->begin(), tile);
     } else {
-        appTiles.push_back(tile);
+        appTiles->push_back(tile);
     }
 
     UpdateAppListLayout();
 }
 
 void CustomBSDR::RemoveAppTileControls(UINT appId) {
-    for (auto it = appTiles.begin(); it != appTiles.end(); ++it) {
+    for (auto it = appTiles->begin(); it != appTiles->end(); ++it) {
         if (it->appId == appId) {
             if (it->hIcon) {
                 DestroyWindow(it->hIcon);
@@ -2547,7 +2551,7 @@ void CustomBSDR::RemoveAppTileControls(UINT appId) {
                 DeleteObject(it->hIconBitmap);
             }
 
-            appTiles.erase(it);
+            appTiles->erase(it);
 
             UpdateAppListLayout();
             return;
@@ -2579,7 +2583,7 @@ void CustomBSDR::UpdateAppListLayout() {
     }
 
     totalContentHeight = 0;
-    for (auto& tile : appTiles) {
+    for (auto& tile : *appTiles) {
         totalContentHeight += (tile.hBlockReason != nullptr) ? itemHeight : itemHeightNoReason;
     }
 
@@ -2608,7 +2612,7 @@ void CustomBSDR::UpdateAppListLayout() {
 
     int yPos = topMargin;
 
-    for (auto& tile : appTiles) {
+    for (auto& tile : *appTiles) {
         bool hasBlockReason = (tile.hBlockReason != nullptr);
         int height = hasBlockReason ? itemHeight : itemHeightNoReason;
 
@@ -2648,14 +2652,14 @@ void CustomBSDR::UpdateAppListLayout() {
         wchar_t titleText[256] = {};
         // Redraw the entire title control area to prevent artifacts from previous longer text when the number of apps decreases
         InvalidateRect(hTitleText, nullptr, TRUE);
-        if (appTiles.size() == 1) {
+        if (appTiles->size() == 1) {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_SINGLE, titleFormat, _countof(titleFormat));
-        } else if (appTiles.size() == 0) {
+        } else if (appTiles->size() == 0) {
             GetString(IDS_BSDR_BLOCKING_BGAPPS, titleFormat, _countof(titleFormat));
         } else {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_MULTI, titleFormat, _countof(titleFormat));
         }
-        swprintf_s(titleText, _countof(titleText), titleFormat, (int)appTiles.size());
+        swprintf_s(titleText, _countof(titleText), titleFormat, (int)appTiles->size());
         SetWindowTextW(hTitleText, titleText);
     }
 }
@@ -2701,12 +2705,15 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             int itemHeightNoReason = MulDiv(62, dpi, 96);
 
             int totalItemsHeight = 0;
-            for (auto& app : pendingApps) {
-                BOOLEAN isBlocking = FALSE;
-                if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
-                    totalItemsHeight += itemHeight;
-                } else {
-                    totalItemsHeight += itemHeightNoReason;
+            {
+                lock_guard lock(pendingAppsMutex);
+                for (auto& app : *pendingApps) {
+                    BOOLEAN isBlocking = FALSE;
+                    if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
+                        totalItemsHeight += itemHeight;
+                    } else {
+                        totalItemsHeight += itemHeightNoReason;
+                    }
                 }
             }
 
@@ -2798,10 +2805,13 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             }
         }
 
-        for (auto& app : pendingApps) {
-            CreateAppTileControls(app.Get());
+        {
+            lock_guard lock(pendingAppsMutex);
+            for (auto& app : *pendingApps) {
+                CreateAppTileControls(app.Get());
+            }
+            pendingApps->clear();
         }
-        pendingApps.clear();
 
         // Load and set the appropriate strings based on the current LogonUI state
         wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
@@ -2888,6 +2898,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
                 // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
                 // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
                 // so force exit the process as a dirty workaround
+                //
+                // This also happens with AuthUX BSDR where AuthUX.dll fully replaces Windows.UI.BlockedShutdown.dll
+                // LogonUI.exe thread is stuck at WaitForSingleObjectEx from LogonController.dll (prob mutex)
+                // It gets stuck between get_WasClicked and remove_Resolved. Pressing C+A+D makes the thread continue and remove_Resolved/Hide/Stop gets called.
+                // Still haven't figured out the culprit yet
                 ExitProcess(0);
             }
             return TRUE;
@@ -3075,10 +3090,10 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_CLOSE: {
-        for (auto& tile : appTiles) {
+        for (auto& tile : *appTiles) {
             if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
         }
-        appTiles.clear();
+        appTiles->clear();
 
         if (hDlg) {
             DestroyWindow(hDlg);
@@ -3136,6 +3151,8 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 }
 
 DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
     // but the Windhawk mod can force this phase of session end to run in the default desktop
     HDESK hDesktop = OpenInputDesktop(0, FALSE, DESKTOP_CREATEWINDOW | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS);
@@ -3156,16 +3173,15 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     wndClass.cbSize = sizeof(WNDCLASSEXW);
     wndClass.style = CS_GLOBALCLASS;
     wndClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    wndClass.hInstance = GetModuleHandleW(nullptr);
+    wndClass.hInstance = HINST_THISCOMPONENT;
     wndClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wndClass.lpfnWndProc = WndProc;
     wndClass.lpszClassName = BSDR_CLASSNAME;
 
     if (RegisterClassExW(&wndClass) == 0) {
         int gle = GetLastError();
-        if (gle != ERROR_CLASS_ALREADY_EXISTS) {
-            return gle;
-        }
+        Wh_Log(L"RegisterClassExW failed, GLE=%d", gle);
+        return gle;
     }
 
     bgOffsetX = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -3176,7 +3192,9 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     hBgWnd = CreateWindowExW(WS_EX_TOPMOST, wndClass.lpszClassName, NULL, WS_POPUP | WS_VISIBLE, bgOffsetX, bgOffsetY, bgWidth, bgHeight, NULL, NULL, NULL, NULL);
 
     if (!hBgWnd) {
-        return GetLastError();
+        int gle = GetLastError();
+        Wh_Log(L"CreateWindowExW failed, GLE=%d", gle);
+        return gle;
     }
 
     HANDLE waitHandles[1] = { hStopEvent };
@@ -3220,12 +3238,20 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             }
         }
     }
+    if (UnregisterClassW(BSDR_CLASSNAME, HINST_THISCOMPONENT) == 0) {
+        Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
+    }
+
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
 void CustomBSDR::Start(LogonUIState state) {
     _logonUIState = state;
     if (hThread) {
+        // This is one-shot, as this mod highly relies on the fact that LogonUI calls the BSDR interface in the following order:
+        // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n ->
+        // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
         Wh_Log(L"CustomBSDR has already started once!");
         return;
     }
@@ -3238,13 +3264,14 @@ void CustomBSDR::Start(LogonUIState state) {
 }
 
 void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
+    lock_guard lock(pendingAppsMutex);
     if (hDlg && IsWindow(hDlg)) {
         blockingApp->AddRef();
         if (!PostMessageW(hDlg, WM_ADD_APP, 0, reinterpret_cast<LPARAM>(blockingApp))) {
             blockingApp->Release();
         }
     } else {
-        pendingApps.push_back(blockingApp);
+        pendingApps->push_back(blockingApp);
     }
 }
 
@@ -3267,7 +3294,7 @@ void CustomBSDR::Stop() {
 }
 #pragma endregion CustomBSDR.cpp
 
-#pragma region LogonUI BSDR Hooks
+#pragma region LogonUI BSDR Hooks (Interface)
 long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettingManager, ILogonUIStateInfo* logonUIStateInfo) {
     Wh_Log(L"BlockedShutdownUXImpl::Start");
     LogonUIState logonUIState = LogonUIState_Start;
@@ -3284,12 +3311,10 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
 
 long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigned char* wasClicked) {
     Wh_Log(L"BlockedShutdownUXImpl::get_WasClicked");
-
     {
         lock_guard lock(resolvedMutex);
         *wasClicked = _wasClicked;
     }
-
     return S_OK;
 };
 
@@ -3454,7 +3479,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         FALSE
     }
 };
-#pragma endregion LogonUI BSDR Hooks
+#pragma endregion LogonUI BSDR Hooks (Interface)
 
 #pragma region Winlogon hooks (disable async logoff)
 int* p_g_fShutdownResolverDisabled = nullptr;
@@ -3462,6 +3487,7 @@ int* p_g_fShutdownResolverDisabled = nullptr;
 typedef void __fastcall (*ShutdownWindowsWorkerThread_t)(void* Instance, void* Context);
 ShutdownWindowsWorkerThread_t ShutdownWindowsWorkerThread_original;
 void __fastcall ShutdownWindowsWorkerThread_hook(void* Instance, void* Context) {
+    int origResolverDisabledState = *p_g_fShutdownResolverDisabled;
     if (p_g_fShutdownResolverDisabled) {
         if (Wh_GetIntValue(L"LogonUIHookOK", 0)) {
             *p_g_fShutdownResolverDisabled = 1; // Disable the async logoff resolver
@@ -3475,6 +3501,8 @@ void __fastcall ShutdownWindowsWorkerThread_hook(void* Instance, void* Context) 
         }
     }
     ShutdownWindowsWorkerThread_original(Instance, Context);
+    *p_g_fShutdownResolverDisabled = origResolverDisabledState;
+    Wh_Log(L"ShutdownWindowsWorkerThread ended; restored p_g_fShutdownResolverDisabled to %d", origResolverDisabledState);
 }
 
 WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
@@ -3564,7 +3592,6 @@ void Wh_ModUninit() {
         }
         WaitForSingleObject(CustomBSDR::hThread, INFINITE);
         CloseHandle(CustomBSDR::hThread);
-        UnregisterClassW(BSDR_CLASSNAME, GetModuleHandleW(nullptr)); // Only unregister if thread is started once
     }
     if (CustomBSDR::hStopEvent) {
         CloseHandle(CustomBSDR::hStopEvent);
