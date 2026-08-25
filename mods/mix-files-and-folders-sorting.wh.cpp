@@ -22,7 +22,7 @@ hardcoded shell behavior, not a UI setting, and it's independent from
 "Group by".
 
 This mod removes that separation: a folder and a file are compared according
-to the selected column's value (name, type, date, ...) instead of the folder
+to the selected column's value (name, date, ...) instead of the folder
 automatically winning. Folder-vs-folder and file-vs-file comparisons are left
 to the shell untouched, so Explorer's own ordering still applies there.
 
@@ -48,6 +48,12 @@ a different process — keep the default folders-first ordering.
 Sorting by Size does not interleave on its own: folders report an empty size,
 so a folder-vs-file comparison on that column ends up in the same order as
 stock Explorer.
+
+Sorting by Type does not interleave either, for a different reason: the Type
+column carries `PKEY_ItemTypeText` ("File folder", "Application extension"),
+which isn't one of `CFSFolder`'s columns at all — Explorer sorts it outside
+`CFSFolder::CompareIDs`, so the folders-first grouping there is out of this
+mod's reach.
 
 ## Interaction with `explorer-details-better-file-sizes`
 
@@ -178,9 +184,17 @@ HRESULT CompareResultFromInt(int cmp) {
 }
 
 // True if the pidl has more than one level. GetDetailsEx expects a child
-// pidl, so deeper ones have to go to the shell.
+// pidl, so deeper ones have to go to the shell. This is what ILNext does,
+// open-coded to avoid pulling in <shlobj.h> for a single inline helper: the
+// next SHITEMID starts cb bytes after this one, and a cb of 0 is the
+// terminator.
 bool IsMultiLevelPidl(const ITEMIDLIST_RELATIVE* itemid) {
-    return ILNext((PCUIDLIST_RELATIVE)itemid)->mkid.cb != 0;
+    USHORT cb = itemid->mkid.cb;
+    if (cb == 0) {
+        return false;
+    }
+    auto next = (const ITEMIDLIST_RELATIVE*)((const BYTE*)itemid + cb);
+    return next->mkid.cb != 0;
 }
 
 HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
