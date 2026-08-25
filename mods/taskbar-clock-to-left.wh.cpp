@@ -93,6 +93,12 @@ std::atomic<bool> g_taskbarViewHookAttempted;
 std::atomic<DWORD> g_clockThreadId;
 std::atomic<bool> g_extentThreadMismatchLogged;
 std::atomic<int> g_lastTaskbarCenteredAlignment{-1};
+std::atomic<HWND> g_clockThreadWindow;
+std::atomic<HHOOK> g_alignmentUpdateHook;
+std::atomic<HWND> g_alignmentUpdateWindow;
+std::atomic<DWORD> g_alignmentUpdateGeneration;
+std::atomic<ULONGLONG> g_alignmentUpdateScheduledTick;
+SRWLOCK g_alignmentScheduleLock = SRWLOCK_INIT;
 std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
 [[clang::no_destroy]] std::optional<std::vector<DeferredClockData>>
@@ -130,6 +136,7 @@ bool CallbackAllowed(DWORD generation) {
 std::vector<HWND> FindExplorerTaskbarWindows();
 HWND FindExplorerTaskbarWindow();
 void QueueKnownClockPlacementUpdate();
+void RememberClockThreadWindow();
 
 using RunFromWindowThreadProc = void (*)(void* parameter);
 
@@ -187,6 +194,133 @@ bool RunFromWindowThread(HWND window,
     UnhookWindowsHookEx(hook);
 
     return runParameters.executed;
+}
+
+UINT AlignmentUpdateMessage() {
+    static const UINT message = RegisterWindowMessage(
+        L"Windhawk_AlignmentUpdate_" WH_MOD_ID);
+    return message;
+}
+
+void CancelQueuedAlignmentUpdate() {
+    HHOOK hook = g_alignmentUpdateHook.exchange(nullptr);
+    g_alignmentUpdateWindow = nullptr;
+    g_alignmentUpdateScheduledTick = 0;
+    if (hook) {
+        UnhookWindowsHookEx(hook);
+    }
+}
+
+void CancelQueuedAlignmentUpdateSynchronously() {
+    AcquireSRWLockExclusive(&g_alignmentScheduleLock);
+    CancelQueuedAlignmentUpdate();
+    ReleaseSRWLockExclusive(&g_alignmentScheduleLock);
+}
+
+LRESULT CALLBACK AlignmentUpdateCallWndProc(int code,
+                                            WPARAM wParam,
+                                            LPARAM lParam) {
+    bool runUpdate = false;
+    DWORD generation = 0;
+
+    if (code == HC_ACTION) {
+        const auto* messageData = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        HWND expectedWindow = g_alignmentUpdateWindow;
+        if (messageData->message == AlignmentUpdateMessage() &&
+            messageData->hwnd == expectedWindow &&
+            messageData->wParam ==
+                reinterpret_cast<WPARAM>(&g_alignmentUpdateHook)) {
+            HHOOK hook = g_alignmentUpdateHook.exchange(nullptr);
+            if (hook) {
+                UnhookWindowsHookEx(hook);
+                g_alignmentUpdateWindow = nullptr;
+                g_alignmentUpdateScheduledTick = 0;
+                generation = static_cast<DWORD>(messageData->lParam);
+                runUpdate = true;
+            }
+        }
+    }
+
+    LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+
+    if (runUpdate && CallbackAllowed(generation) &&
+        GetCurrentThreadId() == g_clockThreadId) {
+        try {
+            QueueKnownClockPlacementUpdate();
+        } catch (...) {
+            Wh_Log(L"Queued clock placement update failed: %08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    return result;
+}
+
+void ScheduleKnownClockPlacementUpdate() {
+    DWORD generation = g_callbackGeneration.load();
+    if (!CallbackAllowed(generation) || !g_moveClockToLeft ||
+        !g_clockThreadId) {
+        return;
+    }
+
+    if (!TryAcquireSRWLockExclusive(&g_alignmentScheduleLock)) {
+        return;
+    }
+
+    struct ScheduleGuard {
+        ~ScheduleGuard() {
+            ReleaseSRWLockExclusive(&g_alignmentScheduleLock);
+        }
+    } guard;
+
+    HHOOK existingHook = g_alignmentUpdateHook;
+    if (existingHook) {
+        ULONGLONG scheduledTick = g_alignmentUpdateScheduledTick;
+        if (scheduledTick && GetTickCount64() - scheduledTick < 5000) {
+            return;
+        }
+
+        CancelQueuedAlignmentUpdate();
+    }
+
+    DWORD clockThreadId = g_clockThreadId;
+    HWND targetWindow = nullptr;
+    for (HWND window : FindExplorerTaskbarWindows()) {
+        if (GetWindowThreadProcessId(window, nullptr) == clockThreadId) {
+            targetWindow = window;
+            break;
+        }
+    }
+
+    if (!targetWindow) {
+        Wh_Log(L"Clock placement update skipped: clock-thread window not found");
+        return;
+    }
+
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC,
+                                  AlignmentUpdateCallWndProc, nullptr,
+                                  clockThreadId);
+    if (!hook) {
+        Wh_Log(L"Clock placement update skipped: thread hook failed");
+        return;
+    }
+
+    if (!CallbackAllowed(generation) || !g_moveClockToLeft) {
+        UnhookWindowsHookEx(hook);
+        return;
+    }
+
+    g_alignmentUpdateWindow = targetWindow;
+    g_alignmentUpdateGeneration = generation;
+    g_alignmentUpdateScheduledTick = GetTickCount64();
+    g_alignmentUpdateHook = hook;
+
+    if (!PostMessage(targetWindow, AlignmentUpdateMessage(),
+                     reinterpret_cast<WPARAM>(&g_alignmentUpdateHook),
+                     g_alignmentUpdateGeneration.load())) {
+        CancelQueuedAlignmentUpdate();
+        Wh_Log(L"Clock placement update skipped: message post failed");
+    }
 }
 
 FrameworkElement FindAncestor(FrameworkElement element,
@@ -610,12 +744,21 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     TaskbarFrame_SystemTrayExtent_Original(pThis,
                                            value + layoutReservedWidth);
 
-    int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
-    int previousAlignment =
-        g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
-    if (previousAlignment >= 0 && previousAlignment != centeredAlignment) {
-        Wh_Log(L"Taskbar alignment changed; clock placement will be updated");
-        QueueKnownClockPlacementUpdate();
+    try {
+        int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
+        int previousAlignment =
+            g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
+        if (previousAlignment >= 0 && previousAlignment != centeredAlignment) {
+            Wh_Log(
+                L"Taskbar alignment changed; clock placement update queued");
+            // Don't touch XAML or the clock containers from this layout hook.
+            // A one-shot message performs the update later on the clock's own
+            // UI thread, after the current taskbar layout pass returns.
+            ScheduleKnownClockPlacementUpdate();
+        }
+    } catch (...) {
+        Wh_Log(L"Taskbar alignment handling failed: %08X",
+               winrt::to_hresult());
     }
 
     if (layoutReservedWidth > 0) {
@@ -841,6 +984,12 @@ void QueueKnownClockPlacementUpdate() {
         return;
     }
 
+    DWORD clockThreadId = g_clockThreadId;
+    if (!clockThreadId || GetCurrentThreadId() != clockThreadId) {
+        Wh_Log(L"Clock placement update rejected on unexpected thread");
+        return;
+    }
+
     std::vector<FrameworkElement> contents;
     for (auto& data : DeferredClocks()) {
         if (auto content = data.content.get()) {
@@ -862,6 +1011,7 @@ void UpdateClockPlacement(FrameworkElement content) {
     // thread than Shell_TrayWnd. Remember the actual XAML owner thread from the
     // clock callback and use it for teardown and settings changes.
     g_clockThreadId = GetCurrentThreadId();
+    RememberClockThreadWindow();
 
     RememberClockContent(content);
 
@@ -975,6 +1125,8 @@ void CleanupTaskbarStateCallback(void* parameter) {
         // Release their XAML/WinRT members here, on the owning UI thread.
         g_deferredClocks.reset();
         g_movedClocks.reset();
+        g_clockThreadWindow = nullptr;
+        g_clockThreadId = 0;
     }
 }
 
@@ -1004,10 +1156,10 @@ void UpdateKnownClocksSynchronously() {
                        L"Clock placement update");
 }
 
-void CleanupTaskbarStateSynchronously(bool releaseContainers) {
+bool CleanupTaskbarStateSynchronously(bool releaseContainers) {
     CleanupTaskbarStateParameters parameters{releaseContainers};
-    RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
-                       L"Clock layout cleanup");
+    return RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
+                              L"Clock layout cleanup");
 }
 
 HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
@@ -1099,6 +1251,27 @@ std::vector<HWND> FindExplorerTaskbarWindows() {
                 windows->preferredOtherWindows.push_back(window);
             }
 
+            // Some Windows 11 builds host the tray XAML thread only in a
+            // descendant content-island window. EnumWindows doesn't see such
+            // windows, so include descendants owned by the remembered clock
+            // thread as valid message targets.
+            EnumChildWindows(
+                window,
+                [](HWND childWindow, LPARAM childParameter) -> BOOL {
+                    auto* windows =
+                        reinterpret_cast<TaskbarWindows*>(childParameter);
+                    DWORD childProcessId = 0;
+                    DWORD childThreadId = GetWindowThreadProcessId(
+                        childWindow, &childProcessId);
+                    if (childThreadId &&
+                        childProcessId == GetCurrentProcessId() &&
+                        windows->preferredThreadId == childThreadId) {
+                        windows->preferredOtherWindows.push_back(childWindow);
+                    }
+                    return TRUE;
+                },
+                parameter);
+
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&windows));
@@ -1111,18 +1284,50 @@ std::vector<HWND> FindExplorerTaskbarWindows() {
         }
     };
 
+    HWND rememberedWindow = g_clockThreadWindow;
+    if (rememberedWindow && IsWindow(rememberedWindow) &&
+        GetWindowThreadProcessId(rememberedWindow, nullptr) ==
+            windows.preferredThreadId) {
+        appendUnique(rememberedWindow);
+    }
+
     if (windows.preferredThreadId) {
         appendUnique(windows.preferredSystemTrayWindow);
         appendUnique(windows.preferredShellTrayWindow);
         for (HWND window : windows.preferredOtherWindows) {
             appendUnique(window);
         }
-    } else {
-        appendUnique(windows.systemTrayWindow);
-        appendUnique(windows.shellTrayWindow);
     }
 
+    // Keep the process-wide taskbar windows as fallbacks. RunOnTaskbarThread
+    // still verifies the expected clock thread before invoking any callback.
+    appendUnique(windows.systemTrayWindow);
+    appendUnique(windows.shellTrayWindow);
+
     return result;
+}
+
+void RememberClockThreadWindow() {
+    DWORD clockThreadId = g_clockThreadId;
+    if (!clockThreadId) {
+        return;
+    }
+
+    HWND rememberedWindow = g_clockThreadWindow;
+    if (rememberedWindow && IsWindow(rememberedWindow) &&
+        GetWindowThreadProcessId(rememberedWindow, nullptr) == clockThreadId) {
+        return;
+    }
+
+    g_clockThreadWindow = nullptr;
+    for (HWND window : FindExplorerTaskbarWindows()) {
+        if (GetWindowThreadProcessId(window, nullptr) == clockThreadId) {
+            g_clockThreadWindow = window;
+            return;
+        }
+    }
+
+    Wh_Log(L"Clock-thread window wasn't available to remember");
 }
 
 HWND FindExplorerTaskbarWindow() {
@@ -1400,20 +1605,26 @@ void Wh_ModBeforeUninit() {
     g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
+    CancelQueuedAlignmentUpdateSynchronously();
     // Revoke all mod-owned XAML delegates and release their containers while
     // the mod code and hooks are still present. The synchronous taskbar-thread
     // call must finish before Windhawk can continue unloading this DLL.
-    CleanupTaskbarStateSynchronously(true);
+    if (!CleanupTaskbarStateSynchronously(true)) {
+        Wh_Log(L"Clock layout cleanup will be retried during mod uninit");
+    }
 }
 
 void Wh_ModUninit() {
     g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
+    CancelQueuedAlignmentUpdateSynchronously();
     // Normally Wh_ModBeforeUninit already released both containers. Retry only
     // if taskbar discovery failed during that earlier cleanup.
     if (g_deferredClocks || g_movedClocks) {
-        CleanupTaskbarStateSynchronously(true);
+        if (!CleanupTaskbarStateSynchronously(true)) {
+            Wh_Log(L"Clock layout cleanup failed during mod uninit");
+        }
     }
 }
 
@@ -1424,6 +1635,7 @@ BOOL Wh_ModSettingsChanged(BOOL*) {
 
     if (wasEnabled && !isEnabled) {
         g_callbackGeneration.fetch_add(1);
+        CancelQueuedAlignmentUpdateSynchronously();
         CleanupTaskbarStateSynchronously(false);
     } else if (!wasEnabled && isEnabled) {
         g_callbackGeneration.fetch_add(1);
