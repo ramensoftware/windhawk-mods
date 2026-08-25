@@ -7,7 +7,7 @@
 // @github        https://github.com/NarayanChetri
 // @homepage      https://narayanchetri.dev
 // @include       explorer.exe
-// @compilerOptions -ldxva2 -lgdi32 -lgdiplus -ldwmapi -lcomctl32 -lshcore -lole32 -loleaut32 -lwbemuuid
+// @compilerOptions -ldxva2 -lgdi32 -lgdiplus -lcomctl32 -lshcore -lole32 -loleaut32 -lwbemuuid
 // @license       GPL-3.0
 // ==/WindhawkMod==
 
@@ -96,7 +96,6 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <gdiplus.h>
-#include <dwmapi.h>
 #include <wbemidl.h>
 #include <comdef.h>
 #include <mmdeviceapi.h>
@@ -108,14 +107,9 @@ Issues and PRs welcome: https://github.com/NarayanChetri
 #include <algorithm>
 #include <atomic>
 #include <string>
+#include <mutex>
 #include <windhawk_utils.h>
 
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-#ifndef DWMWCP_ROUND
-#define DWMWCP_ROUND 2
-#endif
 #ifndef WM_POINTERWHEEL
 #define WM_POINTERWHEEL 0x024E
 #endif
@@ -144,19 +138,19 @@ struct Settings {
     bool enableWmiFallback = true;
 };
 
-CRITICAL_SECTION g_settingsLock;
+std::mutex g_settingsMutex;
 Settings g_settings;
 
 Settings GetSettingsSnapshot() {
-    EnterCriticalSection(&g_settingsLock);
-    Settings copy = g_settings;
-    LeaveCriticalSection(&g_settingsLock);
-    return copy;
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
 }
 
 bool ParseHexColor(PCWSTR text, BYTE& r, BYTE& g, BYTE& b) {
     if (!text) return false;
     if (text[0] == L'#') text++;
+    if (wcslen(text) != 6) return false;
+    
     unsigned int ri = 0, gi = 0, bi = 0;
     if (swscanf_s(text, L"%2x%2x%2x", &ri, &gi, &bi) != 3) return false;
     r = (BYTE)ri;
@@ -194,9 +188,8 @@ void LoadSettings() {
     if (s.overlayDurationMs < 200) s.overlayDurationMs = 200;
     if (s.overlayDurationMs > 5000) s.overlayDurationMs = 5000;
 
-    EnterCriticalSection(&g_settingsLock);
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = s;
-    LeaveCriticalSection(&g_settingsLock);
 }
 
 HINSTANCE GetCurrentModuleHandle() {
@@ -234,10 +227,10 @@ struct ScrollResult {
 };
 
 HANDLE g_hWorkerThread = nullptr;
-DWORD g_workerThreadId = 0;
+std::atomic<DWORD> g_workerThreadId{0};
 
 HANDLE g_hMonitorThread = nullptr;
-DWORD g_monitorThreadId = 0;
+std::atomic<DWORD> g_monitorThreadId{0};
 
 ULONG_PTR g_gdiplusToken = 0;
 
@@ -407,7 +400,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         g_currentX += stepX;
                         g_currentY += stepY;
                         
-                        SetWindowPos(hWnd, nullptr, g_currentX, g_currentY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                        SetWindowPos(hWnd, HWND_TOPMOST, g_currentX, g_currentY, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
                     }
                 }
 
@@ -442,6 +435,11 @@ void EnsureOverlayWindow() {
 
 void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
     if (percent < 0) return;
+    if (!hTaskbar || !IsWindow(hTaskbar)) return;
+    
+    DWORD procId = 0;
+    GetWindowThreadProcessId(hTaskbar, &procId);
+    if (procId != GetCurrentProcessId()) return;
 
     Settings settings = GetSettingsSnapshot();
     if (!settings.showOverlay) return;
@@ -452,13 +450,6 @@ void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
     g_lastCursorPt = cursorPt;
     g_targetPercent = percent;
     g_targetOpacity = 255.0f;
-
-    if (!hTaskbar || !IsWindow(hTaskbar)) return;
-    
-    DWORD procId = 0;
-    GetWindowThreadProcessId(hTaskbar, &procId);
-    if (procId != GetCurrentProcessId()) return;
-
     g_hTargetTaskbar = hTaskbar;
 
     if (g_currentMode != mode) {
@@ -478,7 +469,7 @@ void ShowOverlay(HWND hTaskbar, int percent, POINT cursorPt, OverlayMode mode) {
                 int maxBottom = std::max((int)tbRect.top, (int)(tbRect.bottom - g_scaledH));
                 g_currentY = std::clamp((int)(g_lastCursorPt.y - (g_scaledH / 2)), (int)tbRect.top, maxBottom);
             }
-            SetWindowPos(g_hOverlayWnd, nullptr, g_currentX, g_currentY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, g_currentX, g_currentY, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
         }
         InvalidateRect(g_hOverlayWnd, nullptr, FALSE);
     }
@@ -779,13 +770,13 @@ bool HandleTaskbarScroll(HWND hTaskbar, POINT pt, short delta) {
     HMONITOR hMon = MonitorFromWindow(hTaskbar, MONITOR_DEFAULTTONEAREST);
 
     if (rightSide) {
-        if (g_workerThreadId) {
+        if (g_workerThreadId.load()) {
             ScrollRequest* req = new ScrollRequest{scrollUp, absNotches, hMon, hTaskbar, pt};
-            if (!PostThreadMessageW(g_workerThreadId, WM_APP_VOLUME_REQUEST, 0, (LPARAM)req)) delete req;
+            if (!PostThreadMessageW(g_workerThreadId.load(), WM_APP_VOLUME_REQUEST, 0, (LPARAM)req)) delete req;
         }
-    } else if (g_monitorThreadId) {
+    } else if (g_monitorThreadId.load()) {
         ScrollRequest* req = new ScrollRequest{scrollUp, absNotches, hMon, hTaskbar, pt};
-        if (!PostThreadMessageW(g_monitorThreadId, WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)req)) delete req;
+        if (!PostThreadMessageW(g_monitorThreadId.load(), WM_APP_BRIGHTNESS_REQUEST, 0, (LPARAM)req)) delete req;
     }
 
     return true;
@@ -797,11 +788,9 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         short delta = GET_WHEEL_DELTA_WPARAM(wParam);
         if (HandleTaskbarScroll(hWnd, pt, delta)) return 0;
     } else if (uMsg == WM_DISPLAYCHANGE) {
-        if (g_monitorThreadId) {
-            PostThreadMessageW(g_monitorThreadId, WM_APP_CLEAR_MONITOR_CACHE, 0, 0);
+        if (g_monitorThreadId.load()) {
+            PostThreadMessageW(g_monitorThreadId.load(), WM_APP_CLEAR_MONITOR_CACHE, 0, 0);
         }
-    } else if (uMsg == WM_NCDESTROY) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -919,9 +908,9 @@ DWORD WINAPI MonitorThreadProc(LPVOID lpParam) {
                         percent = AdjustBrightnessWMI(req->scrollUp, req->notches, settings.brightnessStep);
                     }
 
-                    if (percent >= 0 && g_workerThreadId) {
+                    if (percent >= 0 && g_workerThreadId.load()) {
                         ScrollResult* res = new ScrollResult{percent, req->hMonitor, req->hTaskbar, req->cursorPt, OverlayMode::Brightness};
-                        if (!PostThreadMessageW(g_workerThreadId, WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) {
+                        if (!PostThreadMessageW(g_workerThreadId.load(), WM_APP_BRIGHTNESS_RESULT, 0, (LPARAM)res)) {
                             delete res;
                         }
                     }
@@ -1094,22 +1083,44 @@ BOOL CALLBACK EnumWindowsUninitProc(HWND hWnd, LPARAM) {
 // Mod entry points
 // -----------------------------------------------------------------------
 
+void EnsureWorkersInitialized() {
+    static std::once_flag s_initFlag;
+    std::call_once(s_initFlag, []{
+        Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+
+        HANDLE hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        
+        DWORD wTid = 0, mTid = 0;
+        g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, hReadyEvent, 0, &wTid);
+        if (g_hWorkerThread) {
+            WaitForSingleObject(hReadyEvent, INFINITE);
+            ResetEvent(hReadyEvent);
+            g_workerThreadId = wTid;
+        }
+
+        g_hMonitorThread = CreateThread(nullptr, 0, MonitorThreadProc, hReadyEvent, 0, &mTid);
+        if (g_hMonitorThread) {
+            WaitForSingleObject(hReadyEvent, INFINITE);
+            CloseHandle(hReadyEvent);
+            g_monitorThreadId = mTid;
+        } else {
+            CloseHandle(hReadyEvent);
+        }
+    });
+}
+
 void Wh_ModAfterInit() {
+    EnsureWorkersInitialized();
     EnumWindows(EnumWindowsInitProc, 0);
 }
 
 BOOL Wh_ModInit() {
     g_initialized = false;
     g_stopping = false;
-    InitializeCriticalSection(&g_settingsLock);
     LoadSettings();
 
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::Status gdiStatus = Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
-
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original)) {
-        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        DeleteCriticalSection(&g_settingsLock);
         return FALSE;
     }
 
@@ -1118,34 +1129,6 @@ BOOL Wh_ModInit() {
         auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) WindhawkUtils::SetFunctionHook(pCreateWindowInBand, CreateWindowInBand_Hook, &CreateWindowInBand_Original);
     }
-
-    HANDLE hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, hReadyEvent, 0, &g_workerThreadId);
-    if (!g_hWorkerThread) {
-        CloseHandle(hReadyEvent);
-        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        DeleteCriticalSection(&g_settingsLock);
-        return FALSE;
-    }
-    WaitForSingleObject(hReadyEvent, INFINITE);
-    ResetEvent(hReadyEvent);
-
-    g_hMonitorThread = CreateThread(nullptr, 0, MonitorThreadProc, hReadyEvent, 0, &g_monitorThreadId);
-    if (!g_hMonitorThread) {
-        g_stopping = true;
-        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = nullptr;
-        g_workerThreadId = 0;
-        CloseHandle(hReadyEvent);
-        if (gdiStatus == Gdiplus::Ok) Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        DeleteCriticalSection(&g_settingsLock);
-        return FALSE;
-    }
-    WaitForSingleObject(hReadyEvent, INFINITE);
-    CloseHandle(hReadyEvent);
 
     g_initialized = true;
     return TRUE;
@@ -1156,8 +1139,8 @@ void Wh_ModUninit() {
     g_stopping = true;
     EnumWindows(EnumWindowsUninitProc, 0);
 
-    if (g_monitorThreadId) {
-        PostThreadMessageW(g_monitorThreadId, WM_QUIT, 0, 0);
+    if (g_monitorThreadId.load()) {
+        PostThreadMessageW(g_monitorThreadId.load(), WM_QUIT, 0, 0);
     }
     if (g_hMonitorThread) {
         WaitForSingleObject(g_hMonitorThread, INFINITE);
@@ -1166,8 +1149,8 @@ void Wh_ModUninit() {
         g_monitorThreadId = 0;
     }
 
-    if (g_workerThreadId) {
-        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+    if (g_workerThreadId.load()) {
+        PostThreadMessageW(g_workerThreadId.load(), WM_QUIT, 0, 0);
     }
     if (g_hWorkerThread) {
         WaitForSingleObject(g_hWorkerThread, INFINITE);
@@ -1183,7 +1166,6 @@ void Wh_ModUninit() {
 
     UnregisterClassW(kOverlayClassName, GetCurrentModuleHandle());
     g_classRegistered = false;
-    DeleteCriticalSection(&g_settingsLock);
 }
 
 void Wh_ModSettingsChanged() {
