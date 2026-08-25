@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.4
+// @version         0.18.5
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -59,9 +59,11 @@ While the popup is turned on, SnapSentry leaves two things on your machine so th
 notification buttons work, a SnapSentry shortcut in your Start Menu programs
 folder and one registry entry. Turning the popup off or disabling the mod removes
 both again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. If you have turned its notifications off, it takes that as a
-cue to stay quiet: it still copies to the clipboard but shows no dialog and never
-auto deletes.
+to a standard dialog. A multi-page or animated image is kept rather than deleted,
+because only its first frame can go on the clipboard, and a short notice says so
+instead of the usual buttons. If you have turned its notifications off, it takes
+that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
+and never auto deletes.
 
 ## Privacy
 
@@ -106,7 +108,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. A multi-page or animated image gets a short notice instead, saying it was kept, since only its first frame can go on the clipboard. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
@@ -317,6 +319,13 @@ static void LoadSettings() {
         if (n > 0 && n <= ARRAYSIZE(expanded)) {
             s.folder = expanded;
         }
+    }
+    // Canonicalize once: this also turns '/' into '\' and resolves '.' and '..',
+    // so nothing downstream has to cope with a path the shell parser rejects.
+    WCHAR full[MAX_PATH];
+    DWORD fn = GetFullPathNameW(s.folder.c_str(), ARRAYSIZE(full), full, nullptr);
+    if (fn > 0 && fn < ARRAYSIZE(full)) {
+        s.folder.assign(full);
     }
 
     EnterCriticalSection(&g_lock);
@@ -1466,7 +1475,7 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
 // the action toast this adds no listeners and does not wait, so it never parks the
 // worker. Purely informational, so there is nothing to fall back to: if it can't be
 // shown (registration gone, notifications off), the caller's log line stands alone.
-static bool ShowKeptToast(const std::wstring& name) {
+static void ShowKeptToast(const std::wstring& name) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Data::Xml::Dom;
     using namespace ABI::Windows::Foundation;
@@ -1474,7 +1483,13 @@ static bool ShowKeptToast(const std::wstring& name) {
     using Microsoft::WRL::Wrappers::HStringReference;
 
     if (!g_toastRegistered.load()) {
-        return false;
+        return;
+    }
+    // Don't put up UI during teardown: the registration this toast needs is about
+    // to be removed, and a notification that outlives the mod would leave exactly
+    // the residue the mod exists to avoid.
+    if (WaitStop(0)) {
+        return;
     }
     std::wstring xml =
         L"<toast duration=\"short\" activationType=\"background\">"
@@ -1492,45 +1507,45 @@ static bool ShowKeptToast(const std::wstring& name) {
                 RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
                 .Get(),
             IID_PPV_ARGS(&toastStatics)))) {
-        return false;
+        return;
     }
     ComPtr<IToastNotifier> notifier;
     if (FAILED(toastStatics->CreateToastNotifierWithId(
             HStringReference(kAppUserModelId).Get(), &notifier))) {
-        return false;
+        return;
     }
     // Respect the user's notification choice; nothing to substitute for an
     // informational message if they've turned notifications off.
     NotificationSetting setting = NotificationSetting_Enabled;
     if (FAILED(notifier->get_Setting(&setting)) ||
         setting != NotificationSetting_Enabled) {
-        return false;
+        return;
     }
 
     ComPtr<IInspectable> docInspectable;
     if (FAILED(RoActivateInstance(
             HStringReference(RuntimeClass_Windows_Data_Xml_Dom_XmlDocument).Get(),
             &docInspectable))) {
-        return false;
+        return;
     }
     ComPtr<IXmlDocument> doc;
     ComPtr<IXmlDocumentIO> docIO;
     if (FAILED(docInspectable.As(&doc)) || FAILED(docInspectable.As(&docIO)) ||
         FAILED(docIO->LoadXml(HStringReference(xml.c_str()).Get()))) {
-        return false;
+        return;
     }
     ComPtr<IToastNotificationFactory> toastFactory;
     if (FAILED(RoGetActivationFactory(
             HStringReference(RuntimeClass_Windows_UI_Notifications_ToastNotification)
                 .Get(),
             IID_PPV_ARGS(&toastFactory)))) {
-        return false;
+        return;
     }
     ComPtr<IToastNotification> toast;
     if (FAILED(toastFactory->CreateToastNotification(doc.Get(), &toast))) {
-        return false;
+        return;
     }
-    return SUCCEEDED(notifier->Show(toast.Get()));
+    notifier->Show(toast.Get());
 }
 
 // ============================================================================
@@ -1554,13 +1569,6 @@ static bool ShowKeptToast(const std::wstring& name) {
 // PerformOperations returns S_OK for "carried out or aborted" alike, so success
 // on its own doesn't mean the file actually moved.
 static bool RecycleFile(const std::wstring& path) {
-    // The shell parser rejects a path that isn't canonical, and a watched folder
-    // ending in a separator composes one with a doubled separator, so hand it a
-    // normalized full path rather than the composed one.
-    wchar_t full[MAX_PATH];
-    DWORD n = GetFullPathNameW(path.c_str(), MAX_PATH, full, nullptr);
-    const wchar_t* target = (n > 0 && n < MAX_PATH) ? full : path.c_str();
-
     IFileOperation* op = nullptr;
     if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(&op)))) {
@@ -1570,7 +1578,7 @@ static bool RecycleFile(const std::wstring& path) {
     if (SUCCEEDED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NO_UI |
                                         FOFX_RECYCLEONDELETE))) {
         IShellItem* item = nullptr;
-        if (SUCCEEDED(SHCreateItemFromParsingName(target, nullptr,
+        if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
                                                   IID_PPV_ARGS(&item)))) {
             BOOL aborted = FALSE;
             if (SUCCEEDED(op->DeleteItem(item, nullptr)) &&
@@ -1725,8 +1733,7 @@ static void ProcessOne(std::wstring path) {
         (forceImage || (s.deleteFile && !payloadReferencesFile));
     // A multi-page or animated image copied only part of itself (frame 0), so
     // deleting the file would lose the rest. Keep it, the same treatment file/path
-    // payloads get. The keep is recorded in the log; a user-facing notification is
-    // a separately tested follow-up, so it isn't surfaced on screen here.
+    // payloads get.
     if (deleteRequested && multiFrame) {
         Wh_Log(L"Multi-frame image: copied the first frame only, keeping the file%s",
                s.logDetails ? (L": " + path).c_str() : L"");
@@ -1942,11 +1949,22 @@ static bool JustCreated(const std::wstring& path) {
     return true;
 }
 
+// Joins a child name to a folder without doubling the separator, which also
+// keeps a watched drive root such as D:\ correct. A doubled separator is not a
+// form the shell parser accepts, and the composed path feeds the clipboard
+// payloads and the delete alike.
+static std::wstring JoinChild(const std::wstring& dir, const std::wstring& name) {
+    if (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) {
+        return dir + name;
+    }
+    return dir + L'\\' + name;
+}
+
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
         return;
     }
-    if (!JustCreated(folder + L"\\" + name)) {
+    if (!JustCreated(JoinChild(folder, name))) {
         return;
     }
     ULONGLONG now = GetTickCount64();
@@ -1958,7 +1976,7 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     bool added = !SeenRecently(name, now) && g_preexisting.count(name) == 0 &&
                  g_inflight.insert(name).second;
     if (added) {
-        g_queue.push_back(folder + L"\\" + name);
+        g_queue.push_back(JoinChild(folder, name));
     }
     bool logDetails = g_settings.logDetails;
     LeaveCriticalSection(&g_lock);
