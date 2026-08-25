@@ -3373,13 +3373,17 @@ long __fastcall BlockedShutdownUXImpl_Stop_hook(void* thisPtr) {
     return S_OK;
 }
 
+// Unused variable that only exists to make Windhawk 1.6.1 happy
+// Putting nullptr in originalFunction only works on WH 1.7 somehow (unlike what the SYMBOL_HOOK comment says)
+void** dummyOrig = nullptr;
+
 // Windows.UI.BlockedShutdown.dll
 WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Start(struct Windows::Internal::UI::Logon::Controller::IUserSettingManager *,struct Windows::Internal::UI::Logon::Controller::ILogonUIStateInfo *)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_Start_hook,
         FALSE
     },
@@ -3387,7 +3391,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::get_ScaleFactor(unsigned int *)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_get_ScaleFactor_hook,
         FALSE
     },
@@ -3395,7 +3399,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::get_WasClicked(unsigned char *)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_get_WasClicked_hook,
         FALSE
     },
@@ -3403,7 +3407,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::AddApplication(struct Windows::Internal::UI::Logon::Controller::IShutdownBlockingApp *)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_AddApplication_hook,
         FALSE
     },
@@ -3411,7 +3415,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::RemoveApplication(unsigned int)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_RemoveApplication_hook,
         FALSE
     },
@@ -3419,7 +3423,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::add_Resolved(struct Windows::Foundation::ITypedEventHandler<struct Windows::Internal::UI::Logon::Controller::IBlockedShutdownResolverUX *,enum Windows::Internal::UI::Logon::Controller::BlockedShutdownResolution> *,struct EventRegistrationToken *)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_add_Resolved_hook,
         FALSE
     },
@@ -3427,7 +3431,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::remove_Resolved(struct EventRegistrationToken)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_remove_Resolved_hook,
         FALSE
     },
@@ -3435,7 +3439,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Hide(void)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_Hide_hook,
         FALSE
     },
@@ -3443,7 +3447,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Stop(void)",
         },
-        NULL,
+        dummyOrig,
         (void*)BlockedShutdownUXImpl_Stop_hook,
         FALSE
     }
