@@ -11,7 +11,7 @@
 // @include         winlogon.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore -luuid
-// @license         GPLv3
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
