@@ -29,6 +29,8 @@
     * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
     * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
+* Known issues
+    * If you are using the AuthUX logon screen and your account has no password, enabling the logoff sequence option will make the system automatically log on again after logging off.
 ## ⚠ Important usage note ⚠
 
 In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
