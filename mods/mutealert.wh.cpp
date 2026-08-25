@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.6
+// @version         0.9.7
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -548,6 +548,7 @@ static std::atomic<int> g_pendingMuteSet{-1};
 static std::atomic<int> g_pendingSlackCommand{-1};
 static std::atomic<int> g_pendingTeamsCommand{-1};
 static std::atomic<int> g_pendingZoomCommand{-1};
+static std::atomic<int> g_pendingFocusCall{-1};
 static std::atomic<bool> g_slackCallActive{false};
 static std::atomic<bool> g_slackMuted{false};
 static std::atomic<bool> g_slackWarningActive{false};
@@ -866,23 +867,10 @@ static int GetSelectedActiveCallIndex() {
     return -1;
 }
 
-static bool FocusSelectedCallWindow() {
+static bool QueueFocusSelectedCallWindow() {
     int selected = GetSelectedActiveCallIndex();
-    HWND callWindow = selected == 0   ? g_slackCallWindow.load()
-                      : selected == 1 ? g_teamsCallWindow.load()
-                      : selected == 2 ? g_zoomCallWindow.load()
-                                      : nullptr;
-    if (!callWindow || !IsWindow(callWindow)) return false;
-
-    if (IsIconic(callWindow)) {
-        ShowWindowAsync(callWindow, SW_RESTORE);
-    } else if (!IsWindowVisible(callWindow)) {
-        ShowWindowAsync(callWindow, SW_SHOW);
-    }
-    BringWindowToTop(callWindow);
-    bool focused = SetForegroundWindow(callWindow) != FALSE;
-    Wh_Log(L"[Call apps] Focus %s for window %p",
-           focused ? L"requested" : L"was denied by Windows", callWindow);
+    if (selected < 0) return false;
+    g_pendingFocusCall.store(selected);
     return true;
 }
 
@@ -1155,9 +1143,17 @@ static bool RequestForegroundWindow(HWND hWnd) {
     hWnd = GetAncestor(hWnd, GA_ROOT);
     if (!hWnd || !IsWindow(hWnd)) return false;
 
+    DWORD_PTR probeResult = 0;
+    if (!SendMessageTimeoutW(hWnd, WM_NULL, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200,
+                             &probeResult)) {
+        Wh_Log(L"[Call apps] Refusing to activate unresponsive window %p",
+               hWnd);
+        return false;
+    }
     if (IsIconic(hWnd)) ShowWindowAsync(hWnd, SW_RESTORE);
-    BringWindowToTop(hWnd);
-    SetForegroundWindow(hWnd);
+    if (!IsWindowVisible(hWnd)) ShowWindowAsync(hWnd, SW_SHOW);
+    bool focusRequested = SetForegroundWindow(hWnd) != FALSE;
 
     HWND actualForeground = GetForegroundWindow();
     DWORD requestedProcess = 0;
@@ -1167,7 +1163,12 @@ static bool RequestForegroundWindow(HWND hWnd) {
         GetWindowThreadProcessId(actualForeground, &actualProcess);
     }
 
-    return requestedProcess && requestedProcess == actualProcess;
+    bool focused = requestedProcess && requestedProcess == actualProcess;
+    Wh_Log(L"[Call apps] Focus %s for window %p",
+           focused ? L"requested" : focusRequested ? L"pending"
+                                                 : L"was denied by Windows",
+           hWnd);
+    return focused;
 }
 
 static bool SendZoomMuteShortcut(HWND callWindow) {
@@ -1492,6 +1493,14 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     while (!IsStopping() &&
            WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT) {
         ULONGLONG now = GetTickCount64();
+        bool notify = false;
+        auto publishBool = [&notify](std::atomic<bool>& target, bool value) {
+            if (target.exchange(value) != value) notify = true;
+        };
+        auto publishWindow = [&notify](std::atomic<HWND>& target,
+                                       HWND value) {
+            if (target.exchange(value) != value) notify = true;
+        };
         if (lastCaptureSessionCheck == 0 ||
             now - lastCaptureSessionCheck >= 2000) {
             captureAppMask = gateOnCaptureSessions
@@ -1518,9 +1527,10 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                              : CallState::NotInCall;
             now = GetTickCount64();
             lastSlackCheck = now;
-            g_slackCallActive.store(slackState != CallState::NotInCall);
-            g_slackMuted.store(slackState == CallState::Muted);
-            g_slackCallWindow.store(callWindow);
+            publishBool(g_slackCallActive,
+                        slackState != CallState::NotInCall);
+            publishBool(g_slackMuted, slackState == CallState::Muted);
+            publishWindow(g_slackCallWindow, callWindow);
         }
 
         int teamsCommand =
@@ -1540,9 +1550,10 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                              : CallState::NotInCall;
             now = GetTickCount64();
             lastTeamsCheck = now;
-            g_teamsCallActive.store(teamsState != CallState::NotInCall);
-            g_teamsMuted.store(teamsState == CallState::Muted);
-            g_teamsCallWindow.store(callWindow);
+            publishBool(g_teamsCallActive,
+                        teamsState != CallState::NotInCall);
+            publishBool(g_teamsMuted, teamsState == CallState::Muted);
+            publishWindow(g_teamsCallWindow, callWindow);
         }
 
         int requestedZoomCommand =
@@ -1600,18 +1611,31 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
             }
             now = GetTickCount64();
             lastZoomCheck = now;
-            g_zoomCallActive.store(zoomState != CallState::NotInCall);
-            g_zoomMuted.store(zoomState == CallState::Muted);
-            g_zoomStateKnown.store(zoomState == CallState::Muted ||
-                                   zoomState == CallState::Unmuted);
-            g_zoomCallWindow.store(callWindow);
+            publishBool(g_zoomCallActive,
+                        zoomState != CallState::NotInCall);
+            publishBool(g_zoomMuted, zoomState == CallState::Muted);
+            publishBool(g_zoomStateKnown,
+                        zoomState == CallState::Muted ||
+                            zoomState == CallState::Unmuted);
+            publishWindow(g_zoomCallWindow, callWindow);
+        }
+
+        int focusRequest = g_pendingFocusCall.exchange(-1);
+        if (focusRequest >= 0) {
+            HWND callWindow =
+                focusRequest == 0   ? g_slackCallWindow.load()
+                : focusRequest == 1 ? g_teamsCallWindow.load()
+                : focusRequest == 2 ? g_zoomCallWindow.load()
+                                    : nullptr;
+            if (callWindow && IsWindow(callWindow)) {
+                RequestForegroundWindow(callWindow);
+            }
         }
 
         bool windowsCanHear =
             g_audioAvailable.load() && !g_audioMuted.load();
         float currentPeak = g_audioPeak.load();
         bool playCue = false;
-        bool notify = false;
 
         auto updateWarning = [&](CallState state, bool warningEnabled,
                                  bool audioCue, int speechThreshold,
@@ -1673,6 +1697,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     g_zoomStateKnown.store(false);
     g_zoomWarningActive.store(false);
     g_zoomCallWindow.store(nullptr);
+    g_pendingFocusCall.store(-1);
     g_processImageCache.clear();
     NotifyTaskbar();
     automation = nullptr;
@@ -3871,7 +3896,7 @@ static Button BuildCallStateButton(WidgetState* state) {
     state->callTooltipText = tooltipText;
     state->callTooltip = tooltip;
     state->callClickToken = button.Click([](auto const&, auto const&) {
-        if (!g_unloading.load()) FocusSelectedCallWindow();
+        if (!g_unloading.load()) QueueFocusSelectedCallWindow();
     });
     state->callRightTappedToken = button.RightTapped(
         [](auto const&, RightTappedRoutedEventArgs const& args) {
