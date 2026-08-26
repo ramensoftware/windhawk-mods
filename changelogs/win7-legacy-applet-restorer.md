@@ -1,3 +1,8 @@
+## 2.1.0 ([Aug 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d5ad396ef8daa09e01e7a6bf3e110770b6550bf8/mods/win7-legacy-applet-restorer.wh.cpp))
+
+- Applied minor improvements
+- Updated the README to clarify a mod suggestion
+
 ## 2.0.0 ([Aug 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/09aae2e001dcb5b3af2ef87e2b7ff58bc848d1a5/mods/win7-legacy-applet-restorer.wh.cpp))
 
 - Added the BitLocker link in Control Panel

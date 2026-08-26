@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-25T21:41:23.000Z</updated>
+    <updated>2026-08-26T10:15:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 2.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#d5ad396ef8daa09e01e7a6bf3e110770b6550bf8</id>
+        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
+        <updated>2026-08-26T10:15:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Applied minor improvements</li>
+<li>Updated the README to clarify a mod suggestion</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.36]]></title>
+        <id>https://windhawk.net/mods/settings-to-control-panel#65a796cb19f248d5d5cd06c3ad76619efed32102</id>
+        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
+        <updated>2026-08-26T10:14:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a bug where some hooks were registered but never actually turned on, so a few features could silently stop working after Explorer restarted or after changing a setting</li>
+<li>Cleaned up some unnecessary error-handling code that wasn't actually protecting against anything</li>
+<li>Fixed the "Display" settings redirect being removed by accident, and added a toggle so this mod works together with the Classic Display Control Panel Restorer mod instead of conflicting with it</li>
+<li>Updated the README to be more accurate about what the mod actually protects against</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Update Control Panel Page Restorer 1.1.0]]></title>
         <id>https://windhawk.net/mods/windows-update-control-panel-restorer#521269c59796b23e265e4cb38f0be3daf0d84ad8</id>
@@ -968,55 +998,6 @@ both target the same function and work out the origin handling.</p>]]></content>
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Window Activation from Stealing Virtual Desktop 0.3.14]]></title>
-        <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#bbaa6505ffc05ac4f3add9b22f0787565ec7ebfd</id>
-        <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
-        <updated>2026-08-20T17:55:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="preventwindowactivationfromstealingvirtualdesktop">Prevent Window Activation from Stealing Virtual Desktop</h1>
-<p>Take back control over your virtual desktops!</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif" alt="Screenshot" />
-<em>Effect of redirecting window activation</em></p>
-<p>Windows can switch you to another virtual desktop just because a window that was left open on that
-desktop is activated.</p>
-<p>Clicking a flashing taskbar button, following a notification, opening an app through its tray icon,
-or launching something that insists on reusing an existing window can all unexpectedly pull you away
-from your current desktop. This mod keeps you where you are and brings the activated window to you instead.</p>
-<p>If you don't know what "virtual desktop stealing" is, try this small experiment:</p>
-<ul>
-<li>Open Windhawk on your first virtual desktop.</li>
-<li>Switch to another virtual desktop.</li>
-<li>Click the Windhawk tray icon.</li>
-</ul>
-<p>Normally, Windows jumps back to the first desktop - not anymore with this mod.</p>
-<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right and
-Task View. The mod also remains compatible with <strong>Disable Virtual Desktop
-Transition Animation</strong>.</p>
-<h3 id="notes">Notes</h3>
-<p>Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
-shell interfaces, including the private IApplicationView layout, so future
-Windows updates may require adjustments.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Run command on window focus 0.1]]></title>
-        <id>https://windhawk.net/mods/command-on-window-focus#bff5e642356ced63e4d751cfc83003137f812c16</id>
-        <link href="https://windhawk.net/mods/command-on-window-focus"/>
-        <updated>2026-08-20T17:26:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="commandonwindowfocus">Command On Window Focus</h1>
-<p>This mod observes a window focus and will run any command on window focus. 
-This mod has a filter which lets you specify which windows will be allowed to have focus based on the path of the executable
-running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript) so providing a window title or something like "steam" will not work. 
-An example use case for me personally is running a script that sets the scroll wheel on my mouse to a different scroll type every time 
-I focus a game (and the alternate command will reset it to the original type).</p>]]></content>
-        <author>
-            <name>rom4ster</name>
-            <uri>https://github.com/rom4ster</uri>
         </author>
     </entry>
 </feed>

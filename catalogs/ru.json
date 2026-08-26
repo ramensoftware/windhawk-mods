@@ -11098,7 +11098,7 @@
           4
         ],
         "ratingUsers": 5,
-        "updated": 1784292238000,
+        "updated": 1787739253000,
         "users": 215
       },
       "metadata": {
@@ -11107,13 +11107,13 @@
         ],
         "author": "babamohammed",
         "compilerOptions": "-lcomctl32 -lpsapi -lole32",
-        "description": "This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components.",
+        "description": "This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe"
         ],
         "name": "Redirect Settings to Control Panel",
-        "version": "10.0.35"
+        "version": "10.0.36"
       }
     },
     "shadowplay-do-not-disable": {
@@ -15982,7 +15982,7 @@
           5
         ],
         "ratingUsers": 6,
-        "updated": 1787156544000,
+        "updated": 1787739325000,
         "users": 214
       },
       "metadata": {
@@ -15998,7 +15998,7 @@
           "control.exe"
         ],
         "name": "Windows 7 Legacy Applet Restorer",
-        "version": "2.0.0"
+        "version": "2.1.0"
       }
     },
     "win7-login-fade": {
