@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              neiz-supersmile-audio-visualizer
 // @name            Desktop Audio Visualizer Plus
-// @description     A highly customizable desktop audio visualizer
+// @description     A highly customizable audio visualizer
 // @version         1.0.0
-// @author          NeiZ & SuperSmile123
+// @author          NeiZ
 // @github          https://github.com/NeiZqwe
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp
@@ -11,25 +11,91 @@
 
 // ==WindhawkModReadme==
 /*
-**Desktop Audio Visualizer** — is a Windhawk mod that renders a highly customizable audio visualizer and synced lyrics widget directly on your Windows desktop.
+# Desktop Audio Visualizer Plus
 
-### Key Features:
-* **Real-time Audio Visualizer —** WASAPI loopback capture with customizable spectrum bars, shapes, and smooth rendering.
-* **Synced Lyrics Widget —** Automatically fetches and displays synced lyrics for the currently playing media session.
-* **Fluent & Custom Visuals —** Full control over colors, gradients, bar count, spacing, corner radius, and orientation.
-* **Desktop Integration —** Position the visualizer anywhere on your desktop with precise x/y coordinates and sizing.
+Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.
 
-### Advanced Customization:
-* **Visualizer Engine —** Fine-tune FFT settings, bar shapes, interpolation modes, and audio sensitivity.
-* **Lyrics & Text —** Customize font style, size, active line highlights, and scroll responsiveness.
-* **Performance —** Lightweight WASAPI audio capture designed for low CPU and memory usage.
+## Features
 
-### Credits:
-* **NeiZ & SuperSmile123** — Authors of Desktop Audio Visualizer.
-* **Salyts** — Author of [Taskbar Fluent Media Player](https://windhawk.net/mods/taskbar-fluent-media-player) (code references and inspiration).
+### Audio
 
-### Report a Bug:
-If you encounter any issues or have a feature suggestion, please open a report on the project's GitHub page: 👉 [Report an Issue on GitHub](https://github.com/NeiZqwe)
+- WASAPI loopback capture for system audio
+- Optional per-application audio source
+- 1024-point FFT
+- 32 logarithmic frequency bands
+- Up to 256 rendered visual bars
+- Auto-Gain normalization
+- Attack / decay controls
+- Optional CAVA-style smoothing
+- EQ presets including Bass Cut, Bass Boost, Rock, Pop, Electronic, Vocal, Bright, Acoustic, Loudness and Cinematic
+
+### Visualization
+
+- Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types
+- Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles
+- Linear, Step, Cosine and Catmull-Rom interpolation
+- Vertical and horizontal orientations
+- Mirrored visualization pass
+- Configurable bar count, width, spacing, height and corner radius
+- Circular radius and start-angle controls
+
+### Appearance
+
+- Solid colors and gradients
+- Album-derived colors and album gradients
+- Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering
+- Configurable opacity and dynamic opacity curves
+- Dynamic color curves
+- Bar borders with visualizer, album and custom hex colors
+- Optional visualizer backgrounds: solid, gradient, album color and album gradient
+
+### Lyrics
+
+Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.
+
+The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.
+
+## Lyrics data source
+
+When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.
+
+## Performance
+
+The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.
+
+The visualizer frame rate can be configured independently. A value of `0` removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.
+
+Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.
+
+
+---
+
+## Preview
+
+![1](https://i.imgur.com/TU0iXkc.gif)
+
+![2](https://i.imgur.com/8NllN1h.gif)
+
+![3](https://i.imgur.com/VNz6GOi.gif)
+
+![4](https://i.imgur.com/aqXU5Fa.gif)
+
+---
+
+# Credits
+
+- **NeiZ** — Author and maintainer.
+- **SuperSmile123** — Contributor.
+- **Salyts** — Reference / upstream desktop audio visualizer implementation.
+- **GR0UD** — Upstream audio capture / FFT implementation reference.
+
+---
+
+## Report a Bug
+
+Please report bugs and feature requests through the repository issue tracker: [Report an Issue on GitHub](https://github.com/NeiZqwe/windhawk-mods/issues)
+
+
 */
 // ==/WindhawkModReadme==
 
@@ -80,14 +146,18 @@ If you encounter any issues or have a feature suggestion, please open a report o
       $description: Smooths the transition between neighboring bars
       $description:ru-RU: Сглаживает переходы между соседними полосами
       $options:
-        - smooth: Curve
+        - smooth: Linear
         - step: Step
+        - cosine: Cosine
+        - catmull_rom: Catmull-Rom
       $options:ru-RU:
-        - smooth: Кривая
+        - smooth: Линейная
         - step: Ступенчатая
+        - cosine: Косинусная
+        - catmull_rom: Catmull-Rom
 
     - barShape: stereo
-      $name: Visualization Type
+      $name: Visualization type
       $name:ru-RU: Тип визуализации
       $description: Selects how the audio spectrum is arranged and displayed
       $description:ru-RU: Определяет, как аудиоспектр располагается и отображается
@@ -97,12 +167,17 @@ If you encounter any issues or have a feature suggestion, please open a report o
         - mirror: Mirror
         - wave: Wave
         - circular: Circular
+        - dots: Dots
+        - area: Area
       $options:ru-RU:
         - stereo: Стерео
         - mountain: Гора
         - mirror: Зеркало
         - wave: Волна
         - circular: Круговая
+        - dots: Точки
+        - area: Область
+
 
     - mirroredVisualizer: false
       $name: Mirrored visualizer
@@ -123,12 +198,12 @@ If you encounter any issues or have a feature suggestion, please open a report o
       $name: Circular type settings
       $name:ru-RU: Настройки кругового визуализатора
     - positionX: 50
-      $name: X position
+      $name: X position (px)
       $description: Adjusts the horizontal position of the visualizer
       $name:ru-RU: X позиция
       $description:ru-RU: Изменяет горизонтальное положение визуализатора
     - positionY: 900
-      $name: Y position
+      $name: Y position (px)
       $description: Adjusts the vertical position of the visualizer
       $name:ru-RU: Y позиция
       $description:ru-RU: Изменяет вертикальное положение визуализатора
@@ -148,7 +223,20 @@ If you encounter any issues or have a feature suggestion, please open a report o
   $description: Customize the layout, position, and geometry of the audio visualizer
   $description:ru-RU: Настройка расположения, положения и геометрии аудиовизуализатора
 
-
+- Performance:
+    - targetFps: 60
+      $name: Visualizer frame rate
+      $name:ru-RU: Частота кадров визуализатора
+      $description: >-
+        Limits the visualizer refresh rate. 0 = no software FPS cap; the
+        effective limit is the current display refresh rate. Higher refresh
+        rates can make the animation smoother but may increase CPU/GPU usage
+        and power consumption.
+      $description:ru-RU: >-
+        Ограничивает частоту обновления визуализатора. 0 = без программного
+        ограничения FPS; фактический предел определяется текущей частотой
+        обновления дисплея. Высокая герцовка может сделать анимацию плавнее,
+        но способна увеличить нагрузку на CPU/GPU и энергопотребление.
 
 - Audio:
     - Source:
@@ -167,8 +255,8 @@ If you encounter any issues or have a feature suggestion, please open a report o
         - audioApplicationName: ""
           $name: Application executable
           $name:ru-RU: Исполняемый файл приложения
-          $description: Executable name, for example Spotify.exe. Leave empty to use the whole system
-          $description:ru-RU: Имя .exe, например Spotify.exe. Оставьте пустым для всей системы
+          $description: Executable name, for example Spotify.exe
+          $description:ru-RU: Имя .exe, например Spotify.exe
       $name: Audio source
       $name:ru-RU: Источник аудио
 
@@ -199,20 +287,32 @@ If you encounter any issues or have a feature suggestion, please open a report o
     - eqPreset: balanced
       $name: EQ preset
       $name:ru-RU: Пресет EQ
-      $description: Changes how different audio frequencies affect the visualizer
-      $description:ru-RU: Изменяет влияние разных частот звука на визуализатор
+      $description: Applies a frequency-shaped response to the spectrum before visualization
+      $description:ru-RU: Применяет частотную кривую к спектру перед визуализацией
       $options:
         - balanced: Balanced
+        - bass_boost: Bass Boost
         - rock: Rock
         - pop: Pop
-        - jazz: Jazz
         - electronic: Electronic
-        - bass: Bass
-        - bass_cut: No Bass
-        - vocal_boost: Vocal Boost
-        - high_boost: High Boost
-        - no_bass_vocal: No Bass + Vocal Boost
-        - no_bass_high: No Bass + High Boost
+        - vocal: Vocal
+        - bright: Bright
+        - acoustic: Acoustic
+        - bass_cut: Bass Cut
+        - loudness: Loudness
+        - cinematic: Cinematic
+      $options:ru-RU:
+        - balanced: Сбалансированный
+        - bass_boost: Усиление баса
+        - rock: Рок
+        - pop: Поп
+        - electronic: Электронный
+        - vocal: Вокал
+        - bright: Яркий
+        - acoustic: Акустика
+        - bass_cut: Срез баса
+        - loudness: Громкость
+        - cinematic: Кинематографический
 
     - Dynamics:
         - attackSpeed: 40
@@ -359,11 +459,15 @@ If you encounter any issues or have a feature suggestion, please open a report o
           $description: Selects how the bar border color is generated
           $description:ru-RU: Выбирает способ формирования цвета рамки полос
           $options:
+            - solid: Visualizer color
+            - gradient: Visualizer gradient
             - solid_album: Solid album
             - gradient_album: Gradient album
             - hex: Hex
             - hex_gradient: Hex (gradient)
           $options:ru-RU:
+            - solid: Цвет визуализатора
+            - gradient: Градиент визуализатора
             - solid_album: Сплошной от обложки
             - gradient_album: Градиент от обложки
             - hex: Hex
@@ -445,11 +549,14 @@ If you encounter any issues or have a feature suggestion, please open a report o
             - gradient: Gradient
             - album: Album color
             - album_gradient: Album gradient
+            - blur: Blur
           $options:ru-RU:
             - solid: Сплошной
             - gradient: Градиент
             - album: Цвет обложки
             - album_gradient: Градиент от обложки
+            - blur: Размытие обоев
+
 
         - backgroundColorHex: "#7C68E8"
           $name: Background color (Hex)
@@ -486,6 +593,53 @@ If you encounter any issues or have a feature suggestion, please open a report o
           $name:ru-RU: Высота фона
           $description: Adjusts the background height relative to the maximum bar height (px). 0 = no change
           $description:ru-RU: Дополнительно изменяет высоту фона относительно максимальной высоты полос (px). 0 = без изменений
+
+        - backgroundBorderEnabled: false
+          $name: Background border
+          $name:ru-RU: Рамка фона
+          $description: Enables a border around the visualizer background
+          $description:ru-RU: Включает рамку вокруг фона визуализатора
+
+        - backgroundBorderMode: solid_album
+          $name: Border preset
+          $name:ru-RU: Пресет рамки
+          $description: Selects how the background border color is generated
+          $description:ru-RU: Выбирает способ формирования цвета рамки фона
+          $options:
+            - solid_album: Solid album
+            - gradient_album: Gradient album
+            - hex: Hex
+            - hex_gradient: Hex gradient
+          $options:ru-RU:
+            - solid_album: Сплошной от обложки
+            - gradient_album: Градиент от обложки
+            - hex: Hex
+            - hex_gradient: Градиент Hex
+
+        - backgroundBorderThickness: 1
+          $name: Border thickness
+          $name:ru-RU: Толщина рамки
+          $description: Width of the background border in pixels
+          $description:ru-RU: Толщина рамки вокруг фона в пикселях
+
+        - backgroundBorderColorHex: "#808080"
+          $name: Border color (Hex)
+          $name:ru-RU: Цвет рамки (Hex)
+          $description: Main border color used by Hex presets
+          $description:ru-RU: Основной цвет рамки для режимов Hex
+
+        - backgroundBorderGradientColorHex: "#C0C0C0"
+          $name: Border gradient color (Hex)
+          $name:ru-RU: Цвет градиента рамки (Hex)
+          $description: Second border color used by the Hex gradient preset
+          $description:ru-RU: Второй цвет рамки для режима «Градиент Hex»
+
+        - backgroundBorderOpacity: 100
+          $name: Border opacity
+          $name:ru-RU: Прозрачность рамки
+          $description: Opacity of the background border (0-100)
+          $description:ru-RU: Прозрачность рамки вокруг фона (0-100)
+
       $name: Background settings
       $name:ru-RU: Настройки фона
 
@@ -890,12 +1044,12 @@ struct WH_AUDIOCLIENT_ACTIVATION_PARAMS {
 #include <vector>
 #include <array>
 #include <memory>
+#include <new>
 #include <mutex>
+#include <thread>
 #include <shared_mutex>
-//#include <thread>
 #include <objidl.h>
 #include <cwctype>
-//#include <new>
 
 struct VisualizerSettings {
     int barCount;
@@ -911,6 +1065,7 @@ struct VisualizerSettings {
     int positionY;
     int maxBarHeight;
     int minBarHeight;
+    int targetFps;
     int sensitivity;
     int audioSource; // 0 = system, 1 = application
     std::wstring audioApplicationName;
@@ -944,6 +1099,12 @@ struct VisualizerSettings {
     int backgroundCornerRadius;
     int backgroundPadding;
     int backgroundHeightAdjustment;
+    bool backgroundBorderEnabled;
+    int backgroundBorderMode; // 0 = solid album, 1 = gradient album, 2 = hex, 3 = hex gradient
+    int backgroundBorderThickness;
+    int backgroundBorderOpacity;
+    DWORD backgroundBorderColor1;
+    DWORD backgroundBorderColor2;
     DWORD backgroundColor1;
     DWORD backgroundColor2;
     DWORD color1;
@@ -993,7 +1154,6 @@ struct VisualizerSettings {
     DWORD lyricsBorderColor2;
 } g_settings{};
 
-
 struct AlbumPaletteGdi {
     DWORD primary = RGB(18, 18, 18);
     DWORD secondary = RGB(45, 45, 45);
@@ -1006,8 +1166,6 @@ static size_t g_albumPaletteHash = 0;
 static HANDLE g_hAlbumColorThread = nullptr;
 static HANDLE g_hAlbumColorStopEvent = nullptr;
 static std::atomic<bool> g_albumColorRunning{false};
-
-[[clang::no_destroy]] static winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager g_albumSessionManager{nullptr};
 
 struct LyricsLine {
     double timeSeconds = 0.0;
@@ -1031,7 +1189,7 @@ static HANDLE g_hLyricsStopEvent = nullptr;
 static std::atomic<bool> g_lyricsRunning{false};
 
 static constexpr int VIZ_FFT_SIZE = 1024;
-static constexpr int VIZ_NUM_BANDS = 7;
+static constexpr int VIZ_NUM_BANDS = 32;
 static constexpr int VIZ_BANDS_MAX = 256;
 static constexpr float VIZ_PI = 3.14159265358979323846f;
 
@@ -1048,6 +1206,9 @@ static HWND g_hwndOverlay = nullptr;
 static HANDLE g_hOverlayThread = nullptr;
 static HANDLE g_hOverlayStopEvent = nullptr;
 static DWORD g_overlayThreadId = 0;
+static std::atomic<bool> g_overlayIdle{false};
+static std::atomic<HWND> g_overlayWakeHwnd{nullptr};
+static constexpr UINT WM_VIZ_AUDIO_WAKE = WM_APP + 0x2A1;
 static ULONG_PTR g_gdiplusToken = 0;
 
 static HDC g_renderMemDC = nullptr;
@@ -1059,6 +1220,11 @@ static int g_renderHeight = 0;
 
 static std::shared_mutex g_settingsMutex;
 
+static VisualizerSettings GetSettingsSnapshot() {
+    std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+    return g_settings;
+}
+
 static HANDLE g_hAudioThread = nullptr;
 static HANDLE g_hAudioEvent = nullptr;
 static std::atomic<bool> g_running{false};
@@ -1066,6 +1232,12 @@ static std::atomic<bool> g_audioRunning{false};
 
 static Gdiplus::Image* g_pForegroundImage = nullptr;
 static std::atomic<bool> g_imageNeedsReload{true};
+
+static Gdiplus::Bitmap* g_pBackgroundBlurBitmap = nullptr;
+static RECT g_backgroundBlurRect{};
+static int g_backgroundBlurWidth = 0;
+static int g_backgroundBlurHeight = 0;
+static std::atomic<bool> g_backgroundBlurNeedsReload{true};
 
 static void LoadForegroundImage() {
     g_imageNeedsReload.store(true, std::memory_order_release);
@@ -1090,6 +1262,194 @@ static void EnsureForegroundImageLoaded() {
     }
 }
 
+static void DestroyBackgroundBlurBitmap() {
+    if (g_pBackgroundBlurBitmap) {
+        delete g_pBackgroundBlurBitmap;
+        g_pBackgroundBlurBitmap = nullptr;
+    }
+
+    g_backgroundBlurRect = {};
+    g_backgroundBlurWidth = 0;
+    g_backgroundBlurHeight = 0;
+}
+
+static void ApplyBoxBlurGdiPlus(Gdiplus::Bitmap& bitmap, int radius) {
+    if (radius <= 0)
+        return;
+
+    const UINT width = bitmap.GetWidth();
+    const UINT height = bitmap.GetHeight();
+    if (width == 0 || height == 0)
+        return;
+
+    Gdiplus::Rect rect(0, 0, static_cast<INT>(width), static_cast<INT>(height));
+    Gdiplus::BitmapData data{};
+    if (bitmap.LockBits(
+            &rect,
+            Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
+            PixelFormat32bppARGB,
+            &data) != Gdiplus::Ok)
+        return;
+
+    std::vector<BYTE> src(static_cast<size_t>(width) * height * 4);
+    std::vector<BYTE> tmp(src.size());
+
+    for (UINT y = 0; y < height; ++y) {
+        std::memcpy(
+            src.data() + static_cast<size_t>(y) * width * 4,
+            static_cast<BYTE*>(data.Scan0) + static_cast<size_t>(y) * data.Stride,
+            static_cast<size_t>(width) * 4);
+    }
+
+    const int r = std::clamp(radius, 1, 24);
+
+    // Horizontal pass.
+    for (UINT y = 0; y < height; ++y) {
+        for (UINT x = 0; x < width; ++x) {
+            uint32_t sum[4] = {};
+            int count = 0;
+            const int x0 = std::max<int>(0, static_cast<int>(x) - r);
+            const int x1 = std::min<int>(static_cast<int>(width) - 1, static_cast<int>(x) + r);
+
+            for (int sx = x0; sx <= x1; ++sx) {
+                const BYTE* p = src.data() + (static_cast<size_t>(y) * width + sx) * 4;
+                for (int c = 0; c < 4; ++c)
+                    sum[c] += p[c];
+                ++count;
+            }
+
+            BYTE* out = tmp.data() + (static_cast<size_t>(y) * width + x) * 4;
+            for (int c = 0; c < 4; ++c)
+                out[c] = static_cast<BYTE>(sum[c] / count);
+        }
+    }
+
+    // Vertical pass.
+    for (UINT y = 0; y < height; ++y) {
+        for (UINT x = 0; x < width; ++x) {
+            uint32_t sum[4] = {};
+            int count = 0;
+            const int y0 = std::max<int>(0, static_cast<int>(y) - r);
+            const int y1 = std::min<int>(static_cast<int>(height) - 1, static_cast<int>(y) + r);
+
+            for (int sy = y0; sy <= y1; ++sy) {
+                const BYTE* p = tmp.data() + (static_cast<size_t>(sy) * width + x) * 4;
+                for (int c = 0; c < 4; ++c)
+                    sum[c] += p[c];
+                ++count;
+            }
+
+            BYTE* out = static_cast<BYTE*>(data.Scan0) +
+                        static_cast<size_t>(y) * data.Stride + x * 4;
+            for (int c = 0; c < 4; ++c)
+                out[c] = static_cast<BYTE>(sum[c] / count);
+        }
+    }
+
+    bitmap.UnlockBits(&data);
+}
+
+static Gdiplus::Bitmap* CreateBackgroundBlurBitmap(const RECT& rect) {
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0)
+        return nullptr;
+
+    WCHAR wallpaperPath[MAX_PATH] = {};
+    if (!SystemParametersInfoW(
+            SPI_GETDESKWALLPAPER,
+            MAX_PATH,
+            wallpaperPath,
+            0) ||
+        !wallpaperPath[0]) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Gdiplus::Image> wallpaper(
+        Gdiplus::Image::FromFile(wallpaperPath, FALSE));
+    if (!wallpaper || wallpaper->GetLastStatus() != Gdiplus::Ok)
+        return nullptr;
+
+    const UINT sourceWidth = wallpaper->GetWidth();
+    const UINT sourceHeight = wallpaper->GetHeight();
+    if (sourceWidth == 0 || sourceHeight == 0)
+        return nullptr;
+
+    auto* result = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+    if (!result || result->GetLastStatus() != Gdiplus::Ok) {
+        delete result;
+        return nullptr;
+    }
+
+    Gdiplus::Graphics g(result);
+    g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+    g.Clear(Gdiplus::Color(0, 0, 0, 0));
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+    const int virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int virtualW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    const int virtualH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
+
+    const float scale = std::max(
+        static_cast<float>(virtualW) / static_cast<float>(sourceWidth),
+        static_cast<float>(virtualH) / static_cast<float>(sourceHeight));
+
+    const float drawW = static_cast<float>(sourceWidth) * scale;
+    const float drawH = static_cast<float>(sourceHeight) * scale;
+    const float drawX = (static_cast<float>(virtualW) - drawW) * 0.5f -
+                        static_cast<float>(virtualX) * 0.0f;
+    const float drawY = (static_cast<float>(virtualH) - drawH) * 0.5f;
+
+    const float localX =
+        static_cast<float>(rect.left + virtualX);
+    const float localY =
+        static_cast<float>(rect.top + virtualY);
+
+    g.DrawImage(
+        wallpaper.get(),
+        Gdiplus::RectF(
+            -localX + drawX,
+            -localY + drawY,
+            drawW,
+            drawH));
+
+    ApplyBoxBlurGdiPlus(*result, 12);
+    return result;
+}
+
+static void EnsureBackgroundBlurBitmap(const RECT& rect) {
+    if (g_settings.backgroundMode != 5 ||
+        g_settings.backgroundOpacity <= 0) {
+        DestroyBackgroundBlurBitmap();
+        return;
+    }
+
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
+
+    if (!g_backgroundBlurNeedsReload.load(std::memory_order_acquire) &&
+        g_pBackgroundBlurBitmap &&
+        g_backgroundBlurRect.left == rect.left &&
+        g_backgroundBlurRect.top == rect.top &&
+        g_backgroundBlurRect.right == rect.right &&
+        g_backgroundBlurRect.bottom == rect.bottom &&
+        g_backgroundBlurWidth == width &&
+        g_backgroundBlurHeight == height) {
+        return;
+    }
+
+    DestroyBackgroundBlurBitmap();
+    g_pBackgroundBlurBitmap = CreateBackgroundBlurBitmap(rect);
+    if (g_pBackgroundBlurBitmap) {
+        g_backgroundBlurRect = rect;
+        g_backgroundBlurWidth = width;
+        g_backgroundBlurHeight = height;
+        g_backgroundBlurNeedsReload.store(false, std::memory_order_release);
+    }
+}
+
 static DWORD ParseHexColorGDI(LPCWSTR hexStr, DWORD fallback) {
     if (!hexStr || !*hexStr)
         return fallback;
@@ -1097,9 +1457,17 @@ static DWORD ParseHexColorGDI(LPCWSTR hexStr, DWORD fallback) {
     if (hexStr[0] == L'#')
         ++hexStr;
 
+    if (wcslen(hexStr) != 6)
+        return fallback;
+
+    for (const wchar_t* p = hexStr; *p; ++p) {
+        if (!iswxdigit(*p))
+            return fallback;
+    }
+
     wchar_t* end = nullptr;
     unsigned long rgb = wcstoul(hexStr, &end, 16);
-    if (end == hexStr)
+    if (end == hexStr || *end != L'\0')
         return fallback;
 
     return RGB(
@@ -1116,6 +1484,7 @@ static void LoadSettings() {
     g_settings.positionY = Wh_GetIntSetting(L"Visualizer.positionY");
     g_settings.maxBarHeight = std::clamp(Wh_GetIntSetting(L"Visualizer.maxBarHeight"), 1, 2000);
     g_settings.minBarHeight = std::clamp(Wh_GetIntSetting(L"Visualizer.minBarHeight"), 0, 1000);
+    g_settings.targetFps = std::max(0, Wh_GetIntSetting(L"Performance.targetFps"));
     g_settings.sensitivity = std::clamp(Wh_GetIntSetting(L"Audio.sensitivity"), 0, 300);
 
     PCWSTR audioSourceStr = Wh_GetStringSetting(L"Audio.Source.audioSource");
@@ -1174,12 +1543,12 @@ static void LoadSettings() {
     if (backgroundModeStr) {
         if (wcscmp(backgroundModeStr, L"gradient") == 0)
             g_settings.backgroundMode = 1;
-        else if (wcscmp(backgroundModeStr, L"peak") == 0)
-            g_settings.backgroundMode = 2;
         else if (wcscmp(backgroundModeStr, L"album") == 0)
             g_settings.backgroundMode = 3;
         else if (wcscmp(backgroundModeStr, L"album_gradient") == 0)
             g_settings.backgroundMode = 4;
+        else if (wcscmp(backgroundModeStr, L"blur") == 0)
+            g_settings.backgroundMode = 5;
         else
             g_settings.backgroundMode = 0;
         Wh_FreeStringSetting(backgroundModeStr);
@@ -1201,22 +1570,56 @@ static void LoadSettings() {
     if (backgroundColor2Str)
         Wh_FreeStringSetting(backgroundColor2Str);
 
+    g_settings.backgroundBorderEnabled =
+        Wh_GetIntSetting(L"Appearance.Background.backgroundBorderEnabled") != 0;
+    g_settings.backgroundBorderThickness = std::clamp(
+        Wh_GetIntSetting(L"Appearance.Background.backgroundBorderThickness"), 1, 10);
+    g_settings.backgroundBorderOpacity = std::clamp(
+        Wh_GetIntSetting(L"Appearance.Background.backgroundBorderOpacity"), 0, 100);
+
+    PCWSTR backgroundBorderModeStr =
+        Wh_GetStringSetting(L"Appearance.Background.backgroundBorderMode");
+    g_settings.backgroundBorderMode = 0;
+    if (backgroundBorderModeStr) {
+        if (wcscmp(backgroundBorderModeStr, L"gradient_album") == 0)
+            g_settings.backgroundBorderMode = 1;
+        else if (wcscmp(backgroundBorderModeStr, L"hex") == 0)
+            g_settings.backgroundBorderMode = 2;
+        else if (wcscmp(backgroundBorderModeStr, L"hex_gradient") == 0)
+            g_settings.backgroundBorderMode = 3;
+        Wh_FreeStringSetting(backgroundBorderModeStr);
+    }
+
+    PCWSTR backgroundBorderColor1Str =
+        Wh_GetStringSetting(L"Appearance.Background.backgroundBorderColorHex");
+    g_settings.backgroundBorderColor1 = ParseHexColorGDI(
+        backgroundBorderColor1Str, RGB(128, 128, 128));
+    if (backgroundBorderColor1Str)
+        Wh_FreeStringSetting(backgroundBorderColor1Str);
+
+    PCWSTR backgroundBorderColor2Str =
+        Wh_GetStringSetting(L"Appearance.Background.backgroundBorderGradientColorHex");
+    g_settings.backgroundBorderColor2 = ParseHexColorGDI(
+        backgroundBorderColor2Str, RGB(192, 192, 192));
+    if (backgroundBorderColor2Str)
+        Wh_FreeStringSetting(backgroundBorderColor2Str);
+
+    g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+
     PCWSTR eqPresetStr = Wh_GetStringSetting(L"Audio.eqPreset");
+    g_settings.eqPreset = 0;
     if (eqPresetStr) {
-        if (wcscmp(eqPresetStr, L"bass") == 0) g_settings.eqPreset = 1;
+        if (wcscmp(eqPresetStr, L"bass_boost") == 0) g_settings.eqPreset = 1;
         else if (wcscmp(eqPresetStr, L"rock") == 0) g_settings.eqPreset = 2;
         else if (wcscmp(eqPresetStr, L"pop") == 0) g_settings.eqPreset = 3;
-        else if (wcscmp(eqPresetStr, L"jazz") == 0) g_settings.eqPreset = 4;
-        else if (wcscmp(eqPresetStr, L"electronic") == 0) g_settings.eqPreset = 5;
-        else if (wcscmp(eqPresetStr, L"bass_cut") == 0) g_settings.eqPreset = 6;
-        else if (wcscmp(eqPresetStr, L"vocal_boost") == 0) g_settings.eqPreset = 7;
-        else if (wcscmp(eqPresetStr, L"high_boost") == 0) g_settings.eqPreset = 8;
-        else if (wcscmp(eqPresetStr, L"no_bass_vocal") == 0) g_settings.eqPreset = 9;
-        else if (wcscmp(eqPresetStr, L"no_bass_high") == 0) g_settings.eqPreset = 10;
-        else g_settings.eqPreset = 0; // balanced
+        else if (wcscmp(eqPresetStr, L"electronic") == 0) g_settings.eqPreset = 4;
+        else if (wcscmp(eqPresetStr, L"vocal") == 0) g_settings.eqPreset = 5;
+        else if (wcscmp(eqPresetStr, L"bright") == 0) g_settings.eqPreset = 6;
+        else if (wcscmp(eqPresetStr, L"acoustic") == 0) g_settings.eqPreset = 7;
+        else if (wcscmp(eqPresetStr, L"bass_cut") == 0) g_settings.eqPreset = 8;
+        else if (wcscmp(eqPresetStr, L"loudness") == 0) g_settings.eqPreset = 9;
+        else if (wcscmp(eqPresetStr, L"cinematic") == 0) g_settings.eqPreset = 10;
         Wh_FreeStringSetting(eqPresetStr);
-    } else {
-        g_settings.eqPreset = 0;
     }
 
     PCWSTR barShapeStr = Wh_GetStringSetting(L"Visualizer.barShape");
@@ -1225,6 +1628,8 @@ static void LoadSettings() {
         else if (wcscmp(barShapeStr, L"mirror") == 0) g_settings.barShape = 2;
         else if (wcscmp(barShapeStr, L"wave") == 0) g_settings.barShape = 3;
         else if (wcscmp(barShapeStr, L"circular") == 0) g_settings.barShape = 4;
+        else if (wcscmp(barShapeStr, L"dots") == 0) g_settings.barShape = 5;
+        else if (wcscmp(barShapeStr, L"area") == 0) g_settings.barShape = 6;
         else g_settings.barShape = 0; // stereo
         Wh_FreeStringSetting(barShapeStr);
     } else {
@@ -1233,8 +1638,14 @@ static void LoadSettings() {
 
     PCWSTR interpolationStr = Wh_GetStringSetting(L"Visualizer.interpolationMode");
     if (interpolationStr) {
-        g_settings.interpolationMode =
-            (wcscmp(interpolationStr, L"step") == 0) ? 1 : 0;
+        if (wcscmp(interpolationStr, L"step") == 0)
+            g_settings.interpolationMode = 1;
+        else if (wcscmp(interpolationStr, L"cosine") == 0)
+            g_settings.interpolationMode = 2;
+        else if (wcscmp(interpolationStr, L"catmull_rom") == 0)
+            g_settings.interpolationMode = 3;
+        else
+            g_settings.interpolationMode = 0;
         Wh_FreeStringSetting(interpolationStr);
     } else {
         g_settings.interpolationMode = 0;
@@ -1340,22 +1751,22 @@ static void LoadSettings() {
     if (g_settings.barStyle == 0)
         g_settings.cornerRadius = 0;
     
-    g_settings.imageX = Wh_GetIntSetting(L"ForegroundImage.imageX");
-    g_settings.imageY = Wh_GetIntSetting(L"ForegroundImage.imageY");
-    g_settings.imageWidth = Wh_GetIntSetting(L"ForegroundImage.imageWidth");
-    g_settings.imageHeight = Wh_GetIntSetting(L"ForegroundImage.imageHeight");
+    g_settings.imageX = Wh_GetIntSetting(L"Advanced.ForegroundImage.imageX");
+    g_settings.imageY = Wh_GetIntSetting(L"Advanced.ForegroundImage.imageY");
+    g_settings.imageWidth = Wh_GetIntSetting(L"Advanced.ForegroundImage.imageWidth");
+    g_settings.imageHeight = Wh_GetIntSetting(L"Advanced.ForegroundImage.imageHeight");
 
-    PCWSTR imgPathStr = Wh_GetStringSetting(L"ForegroundImage.imagePath");
+    PCWSTR imgPathStr = Wh_GetStringSetting(L"Advanced.ForegroundImage.imagePath");
     if (imgPathStr) {
         g_settings.imagePath = imgPathStr;
         Wh_FreeStringSetting(imgPathStr);
     } else {
         g_settings.imagePath.clear();
     }
-    g_settings.dynamicWidthEnabled = Wh_GetIntSetting(L"CursorInteraction.dynamicWidthEnabled") != 0;
-    g_settings.dynamicWidthRadiusX = std::clamp(Wh_GetIntSetting(L"CursorInteraction.dynamicWidthRadiusX"), 10, 3000);
-    g_settings.dynamicWidthRadiusY = std::clamp(Wh_GetIntSetting(L"CursorInteraction.dynamicWidthRadiusY"), 10, 3000);
-    g_settings.dynamicWidthMaxBonus = std::clamp(Wh_GetIntSetting(L"CursorInteraction.dynamicWidthMaxBonus"), 0, 100);
+    g_settings.dynamicWidthEnabled = Wh_GetIntSetting(L"Advanced.CursorInteraction.dynamicWidthEnabled") != 0;
+    g_settings.dynamicWidthRadiusX = std::clamp(Wh_GetIntSetting(L"Advanced.CursorInteraction.dynamicWidthRadiusX"), 10, 3000);
+    g_settings.dynamicWidthRadiusY = std::clamp(Wh_GetIntSetting(L"Advanced.CursorInteraction.dynamicWidthRadiusY"), 10, 3000);
+    g_settings.dynamicWidthMaxBonus = std::clamp(Wh_GetIntSetting(L"Advanced.CursorInteraction.dynamicWidthMaxBonus"), 0, 100);
     g_settings.lyricsEnabled = Wh_GetIntSetting(L"Lyrics.enabled") != 0;
     g_settings.lyricsLimitBars =
         Wh_GetIntSetting(L"Lyrics.limitBars") != 0;
@@ -1559,26 +1970,24 @@ static void BuildTwiddleFactors() {
 }
 
 static void BuildLogBins(UINT32 sampleRate) {
-    static constexpr float FREQ_EDGES[VIZ_NUM_BANDS + 1] = {
-        20.0f, 120.0f, 300.0f, 800.0f,
-        2500.0f, 6000.0f, 14000.0f, 20000.0f
-    };
-
     if (sampleRate == 0)
         sampleRate = 48000;
 
+    constexpr float minFreq = 20.0f;
+    constexpr float maxFreq = 20000.0f;
+    const float logRatio = logf(maxFreq / minFreq);
+
     for (int b = 0; b <= VIZ_NUM_BANDS; ++b) {
-        int bin = static_cast<int>(FREQ_EDGES[b] * VIZ_FFT_SIZE /
-                                   static_cast<float>(sampleRate));
-        g_logBinStart[b] = std::max(
-            1,
-            std::min(VIZ_FFT_SIZE / 2 - 1, bin));
+        const float t = b / static_cast<float>(VIZ_NUM_BANDS);
+        const float frequency = minFreq * expf(logRatio * t);
+        const int bin = static_cast<int>(frequency * VIZ_FFT_SIZE /
+                                         static_cast<float>(sampleRate));
+        g_logBinStart[b] = std::clamp(bin, 1, VIZ_FFT_SIZE / 2 - 1);
     }
 
-    for (int b = 1; b <= VIZ_NUM_BANDS; ++b) {
+    for (int b = 1; b <= VIZ_NUM_BANDS; ++b)
         g_logBinStart[b] = std::max(g_logBinStart[b], g_logBinStart[b - 1] + 1);
-        g_logBinStart[b] = std::min(g_logBinStart[b], VIZ_FFT_SIZE / 2 - 1);
-    }
+
 }
 
 static void VizFFT(std::vector<float>& re, std::vector<float>& im) {
@@ -1621,38 +2030,68 @@ static void VizFFT(std::vector<float>& re, std::vector<float>& im) {
     }
 }
 
-struct VizEQMul {
-    float low;
-    float mid;
-    float high;
-};
+static float GaussianBand(float x, float center, float width) {
+    const float d = (x - center) / std::max(width, 0.001f);
+    return expf(-(d * d));
+}
 
-static VizEQMul GetVizEQMultipliers() {
-    switch (g_settings.eqPreset) {
-        case 1: // Bass
-            return {1.6f, 0.9f, 1.0f};
-        case 2: // Rock
-            return {1.3f, 1.1f, 1.3f};
-        case 3: // Pop
-            return {1.1f, 1.3f, 1.1f};
-        case 4: // Jazz
-            return {1.2f, 1.0f, 1.4f};
-        case 5: // Electronic
-            return {1.5f, 0.9f, 1.4f};
-        case 6: // No Bass (bass_cut) - возвращен 0.5f
-            return {0.5f, 1.0f, 1.0f};
-        case 7: // Vocal Boost
-            return {0.9f, 1.6f, 1.1f};
-        case 8: // High Boost
-            return {0.9f, 1.1f, 1.6f};
-        case 9: // No Bass + Vocal Boost
-            return {0.5f, 1.8f, 1.1f};
-        case 10: // No Bass + High Boost
-            return {0.5f, 1.1f, 1.8f};
-        case 0: // Balanced
-        default:
-            return {1.0f, 1.0f, 1.0f};
+static float GetVizEQMultiplier(int preset, int band) {
+    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
+    const float low = GaussianBand(t, 0.12f, 0.18f);
+    const float lowMid = GaussianBand(t, 0.34f, 0.16f);
+    const float presence = GaussianBand(t, 0.58f, 0.14f);
+    const float high = GaussianBand(t, 0.86f, 0.18f);
+
+    float gain = 1.0f;
+    switch (preset) {
+    case 1: gain = 1.0f + 0.75f * low; break;              // Bass Boost
+    case 2: gain = 1.0f + 0.28f * low + 0.18f * lowMid + 0.25f * high; break; // Rock
+    case 3: gain = 1.0f + 0.14f * low + 0.26f * presence + 0.12f * high; break; // Pop
+    case 4: gain = 1.0f + 0.42f * low + 0.24f * high - 0.08f * lowMid; break; // Electronic
+    case 5: gain = 1.0f - 0.18f * low + 0.52f * presence; break; // Vocal
+    case 6: gain = 1.0f - 0.10f * low + 0.52f * high; break; // Bright
+    case 7: gain = 1.0f + 0.12f * low + 0.18f * lowMid + 0.22f * high; break; // Acoustic
+    case 8: {
+        // Bass Cut intentionally affects only the lowest part of the spectrum.
+        // The gain is strongest in the sub-bass/bass region and smoothly returns
+        // to unity before the low-mid region, so frequencies above the bass
+        // cutoff are not attenuated.
+        constexpr float kBassStart = 0.00f;
+        constexpr float kBassFullCutEnd = 0.20f;
+        constexpr float kBassCutoffEnd = 0.30f;
+
+        if (t <= kBassFullCutEnd) {
+            const float u = std::clamp(
+                (t - kBassStart) / (kBassFullCutEnd - kBassStart),
+                0.0f, 1.0f);
+            gain = 0.18f + (0.31f - 0.18f) * u;
+        } else if (t < kBassCutoffEnd) {
+            const float u = std::clamp(
+                (t - kBassFullCutEnd) / (kBassCutoffEnd - kBassFullCutEnd),
+                0.0f, 1.0f);
+            // Smoothly release the bass cut from 0.31x back to unity.
+            const float smoothU = u * u * (3.0f - 2.0f * u);
+            gain = 0.31f + (1.0f - 0.31f) * smoothU;
+        } else {
+            gain = 1.0f;
+        }
+        break; // Bass Cut: bass only, approximately 0.18x-0.31x before the cutoff
     }
+    case 9: gain = 1.0f + 0.38f * low + 0.30f * high; break; // Loudness
+    case 10: gain = 1.0f + 0.55f * low + 0.20f * lowMid + 0.38f * high; break; // Cinematic
+    default: break;
+    }
+    return std::clamp(gain, 0.18f, 2.0f);
+}
+
+static float GetBandGravity(int band) {
+    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
+    return 0.012f + t * 0.030f;
+}
+
+static float GetBandSensitivity(int band) {
+    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
+    return 0.28f * powf(0.045f / 0.28f, t);
 }
 
 static void ClearAudioBands() {
@@ -1665,7 +2104,7 @@ class AudioInterfaceActivationHandler final
       public IAgileObject {
 private:
     std::atomic<ULONG> m_refCount{1};
-    HANDLE m_event = nullptr;
+    std::atomic<HANDLE> m_event{nullptr};
     IAudioClient* m_audioClient = nullptr;
     HRESULT m_result = E_FAIL;
 
@@ -1731,10 +2170,15 @@ public:
             }
         }
 
-        if (m_event)
-            SetEvent(m_event);
+        HANDLE event = m_event.load(std::memory_order_acquire);
+        if (event)
+            SetEvent(event);
 
         return S_OK;
+    }
+
+    void DisableEvent() {
+        m_event.store(nullptr, std::memory_order_release);
     }
 
     HRESULT Result() const {
@@ -2010,10 +2454,6 @@ static bool InitProcessAudioClient(
 
     AudioInterfaceActivationHandler* handler =
         new AudioInterfaceActivationHandler(completedEvent);
-    if (!handler) {
-        CloseHandle(completedEvent);
-        return false;
-    }
     WH_AUDIOCLIENT_ACTIVATION_PARAMS activationParams{};
     activationParams.ActivationType = WH_AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
     activationParams.ProcessLoopbackParams.TargetProcessId = processId;
@@ -2046,7 +2486,17 @@ static bool InitProcessAudioClient(
         return false;
     }
 
-    WaitForSingleObject(completedEvent, INFINITE);
+    for (;;) {
+        const DWORD waitResult = WaitForSingleObject(completedEvent, 50);
+        if (waitResult == WAIT_OBJECT_0)
+            break;
+        if (g_audioRunning.load(std::memory_order_acquire) == false) {
+            handler->DisableEvent();
+            handler->Release();
+            CloseHandle(completedEvent);
+            return false;
+        }
+    }
 
     const HRESULT activationResult = handler->Result();
     if (FAILED(activationResult)) {
@@ -2129,17 +2579,18 @@ static bool InitProcessAudioClient(
 
 static bool InitAudioClient(
     IMMDeviceEnumerator* enumerator,
+    const VisualizerSettings& settings,
     IAudioClient** outClient,
     IAudioCaptureClient** outCapture,
     UINT32* outSampleRate,
     UINT32* outChannels,
     bool* outIsFloat) {
 
-    if (g_settings.audioSource == 1) {
-        DWORD pid = FindAudioProcessIdByExecutable(enumerator, g_settings.audioApplicationName);
+    if (settings.audioSource == 1) {
+        DWORD pid = FindAudioProcessIdByExecutable(enumerator, settings.audioApplicationName);
         if (!pid) {
             Wh_Log(L"Selected audio application not found: %s",
-                   g_settings.audioApplicationName.c_str());
+                   settings.audioApplicationName.c_str());
             return false;
         }
         return InitProcessAudioClient(
@@ -2153,10 +2604,20 @@ static bool InitAudioClient(
 }
 
 static void PublishAudioBands(const float bands[VIZ_NUM_BANDS]) {
-    for (int i = 0; i < VIZ_NUM_BANDS; ++i)
+    float peak = 0.0f;
+    for (int i = 0; i < VIZ_NUM_BANDS; ++i) {
         g_audioBands[i].store(bands[i], std::memory_order_relaxed);
+        peak = std::max(peak, bands[i]);
+    }
 
     g_lastAudioUpdateMs.store(GetTickCount64(), std::memory_order_release);
+
+    if (peak > 0.025f &&
+        g_overlayIdle.exchange(false, std::memory_order_acq_rel)) {
+        HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+        if (overlay)
+            PostMessageW(overlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+    }
 }
 
 static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
@@ -2185,12 +2646,13 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
     bool isFloat = true;
     DWORD targetProcessId = 0;
     ULONGLONG lastTargetCheckMs = 0;
+    const VisualizerSettings initialSettings = GetSettingsSnapshot();
 
-    if (g_settings.audioSource == 1)
-        targetProcessId = FindAudioProcessIdByExecutable(enumerator, g_settings.audioApplicationName);
+    if (initialSettings.audioSource == 1)
+        targetProcessId = FindAudioProcessIdByExecutable(enumerator, initialSettings.audioApplicationName);
 
     if (InitAudioClient(
-            enumerator,
+            enumerator, initialSettings,
             &client,
             &capture,
             &sampleRate,
@@ -2208,23 +2670,16 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
     std::vector<float> im(VIZ_FFT_SIZE, 0.0f);
 
     float bandEnv[VIZ_NUM_BANDS] = {};
-    static constexpr float GRAVITY[VIZ_NUM_BANDS] = {
-        0.018f, 0.020f, 0.022f, 0.025f, 0.030f, 0.036f, 0.042f
-    };
-    static constexpr float BAND_SENSITIVITY[VIZ_NUM_BANDS] = {
-        0.30f, 0.22f, 0.12f, 0.06f, 0.030f, 0.018f, 0.010f
-    };
-    static constexpr int BAND_EQ_ZONE[VIZ_NUM_BANDS] = {
-        0, 0, 1, 1, 2, 2, 2
-    };
+    
 
     while (g_audioRunning.load(std::memory_order_acquire)) {
-        if (g_settings.audioSource == 1) {
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        if (settings.audioSource == 1) {
             const ULONGLONG now = GetTickCount64();
             if (now - lastTargetCheckMs >= 500) {
                 lastTargetCheckMs = now;
                 const DWORD newTargetProcessId =
-                    FindAudioProcessIdByExecutable(enumerator, g_settings.audioApplicationName);
+                    FindAudioProcessIdByExecutable(enumerator, settings.audioApplicationName);
 
                 if (newTargetProcessId != targetProcessId) {
                     if (client) {
@@ -2272,6 +2727,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
 
             if (InitAudioClient(
                     enumerator,
+                    settings,
                     &client,
                     &capture,
                     &sampleRate,
@@ -2279,7 +2735,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
                     &isFloat)) {
                 BuildLogBins(sampleRate);
             } else {
-                Sleep(g_settings.audioSource == 1 ? 100 : 20);
+                Sleep(settings.audioSource == 1 ? 100 : 20);
                 continue;
             }
         }
@@ -2302,7 +2758,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
 
         if (packetSize == 0) {
             for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
-                bandEnv[b] = std::max(0.0f, bandEnv[b] - GRAVITY[b]);
+                bandEnv[b] = std::max(0.0f, bandEnv[b] - GetBandGravity(b));
                 g_audioBands[b].store(bandEnv[b], std::memory_order_relaxed);
             }
             g_lastAudioUpdateMs.store(GetTickCount64(), std::memory_order_release);
@@ -2336,7 +2792,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
 
             if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
                 for (int b = 0; b < VIZ_NUM_BANDS; ++b)
-                    bandEnv[b] = std::max(0.0f, bandEnv[b] - GRAVITY[b]);
+                    bandEnv[b] = std::max(0.0f, bandEnv[b] - GetBandGravity(b));
                 PublishAudioBands(bandEnv);
             } else if (data && numFrames > 0) {
                 if (isFloat) {
@@ -2392,14 +2848,13 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
             ringCount -= VIZ_FFT_SIZE / 2;
             VizFFT(re, im);
 
-            const float tSens = g_settings.sensitivity / 100.0f;
+            const float tSens = settings.sensitivity / 100.0f;
             const float sliderGain =
                 (tSens <= 1.0f)
                     ? 0.25f + tSens * tSens * 2.75f
                     : 3.0f + (tSens - 1.0f) * 4.0f;
 
-            const VizEQMul eq = GetVizEQMultipliers();
-            float nextBands[VIZ_NUM_BANDS] = {};
+                        float nextBands[VIZ_NUM_BANDS] = {};
 
             float rawMags[VIZ_NUM_BANDS] = {};
             float frameMax = 0.0f;
@@ -2422,12 +2877,10 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
                     ? sqrtf(sumSq / static_cast<float>(count))
                     : 0.0f;
 
-                const float eqM =
-                    (BAND_EQ_ZONE[b] == 0) ? eq.low :
-                    (BAND_EQ_ZONE[b] == 1) ? eq.mid : eq.high;
+                const float eqM = GetVizEQMultiplier(settings.eqPreset, b);
 
                 const float mag = (rms / (VIZ_FFT_SIZE * 0.5f)) /
-                        BAND_SENSITIVITY[b] * sliderGain * eqM;
+                        GetBandSensitivity(b) * sliderGain * eqM;
 
                 rawMags[b] = mag;
                 frameMax = std::max(frameMax, mag);
@@ -2437,9 +2890,9 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
             static float s_smoothMax = 0.01f;
 
             const float autoGainStrength =
-                std::clamp(g_settings.autoGainStrength, 0, 100) / 100.0f;
+                std::clamp(settings.autoGainStrength, 0, 100) / 100.0f;
 
-            if (g_settings.autoGainEnabled && autoGainStrength > 0.0f) {
+            if (settings.autoGainEnabled && autoGainStrength > 0.0f) {
                 if (frameMax > s_smoothMax) {
                     s_smoothMax += (frameMax - s_smoothMax) * 0.5f;
                 } else {
@@ -2465,7 +2918,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
             for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
                 float m = rawMags[b];
 
-                if (g_settings.autoGainEnabled && s_smoothMax > 0.0001f) {
+                if (settings.autoGainEnabled && s_smoothMax > 0.0001f) {
                     float ratio = std::clamp(m / s_smoothMax, 0.0f, 1.0f);
                     ratio = ratio * ratio * ratio;
 
@@ -2479,7 +2932,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
                 bandEnv[b] =
                     (m >= bandEnv[b])
                         ? m
-                        : std::max(0.0f, bandEnv[b] - GRAVITY[b]);
+                        : std::max(0.0f, bandEnv[b] - GetBandGravity(b));
 
                 nextBands[b] = bandEnv[b];
             }
@@ -2536,7 +2989,7 @@ static void StopAudioCapture() {
         SetEvent(g_hAudioEvent);
 
     if (g_hAudioThread) {
-        WaitForSingleObject(g_hAudioThread, 3000);
+        WaitForSingleObject(g_hAudioThread, INFINITE);
         CloseHandle(g_hAudioThread);
         g_hAudioThread = nullptr;
     }
@@ -2643,6 +3096,30 @@ static void UpdateAnimationFromAudio() {
         const int lo = std::clamp(static_cast<int>(pos), 0, VIZ_NUM_BANDS - 1);
         const int hi = std::min(lo + 1, VIZ_NUM_BANDS - 1);
         const float frac = pos - static_cast<float>(lo);
+
+        if (g_settings.interpolationMode == 2) {
+            const float eased = 0.5f - 0.5f * cosf(frac * VIZ_PI);
+            return bands[lo] * (1.0f - eased) + bands[hi] * eased;
+        }
+
+        if (g_settings.interpolationMode == 3) {
+            const int i0 = std::max(0, lo - 1);
+            const int i1 = lo;
+            const int i2 = hi;
+            const int i3 = std::min(VIZ_NUM_BANDS - 1, hi + 1);
+            const float p0 = bands[i0];
+            const float p1 = bands[i1];
+            const float p2 = bands[i2];
+            const float p3 = bands[i3];
+            const float f2 = frac * frac;
+            const float f3 = f2 * frac;
+            const float value = 0.5f * ((2.0f * p1) +
+                (-p0 + p2) * frac +
+                (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * f2 +
+                (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * f3);
+            return std::clamp(value, 0.0f, 1.0f);
+        }
+
         return bands[lo] * (1.0f - frac) + bands[hi] * frac;
     };
 
@@ -2667,12 +3144,9 @@ static void UpdateAnimationFromAudio() {
             0.0f, 8.0f);
 
         if (dtFrames > 0.0f) {
-            static constexpr float FALLBACK_GRAVITY[VIZ_NUM_BANDS] = {
-                0.018f, 0.020f, 0.022f, 0.025f, 0.030f, 0.036f, 0.042f
-            };
             for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
                 float v = g_audioBands[b].load(std::memory_order_relaxed);
-                v = std::max(0.0f, v - FALLBACK_GRAVITY[b] * dtFrames);
+                v = std::max(0.0f, v - GetBandGravity(b) * dtFrames);
                 g_audioBands[b].store(v, std::memory_order_relaxed);
             }
             fallbackLastMs = nowMs;
@@ -4301,30 +4775,55 @@ FindLyricsSession(
     const std::wstring& executableName,
     std::wstring& pinnedSourceAppUserModelId);
 
+template <typename TAsync>
+static bool WaitWinrtAsync(
+    const TAsync& operation,
+    HANDLE stopEvent,
+    std::chrono::milliseconds timeout) {
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
+        operation.Cancel();
+        return false;
+    }
+
+    const winrt::Windows::Foundation::AsyncStatus status =
+        operation.wait_for(timeout);
+
+    if (status == winrt::Windows::Foundation::AsyncStatus::Completed)
+        return true;
+
+    operation.Cancel();
+    return false;
+}
+
 static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
+    bool winrtApartmentInitialized = false;
     Gdiplus::GdiplusStartupInput gdiplusInput;
     ULONG_PTR albumGdiplusToken = 0;
     if (Gdiplus::GdiplusStartup(&albumGdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok)
         albumGdiplusToken = 0;
 
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-
     try {
-        auto manager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        g_albumSessionManager = manager;
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        winrtApartmentInitialized = true;
+        auto managerOperation =
+            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager::RequestAsync();
+        if (!WaitWinrtAsync(managerOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
+            throw winrt::hresult_canceled();
+        auto manager = managerOperation.GetResults();
 
         std::wstring pinnedSourceAppUserModelId;
 
         while (g_albumColorRunning.load(std::memory_order_acquire)) {
+            const VisualizerSettings settings = GetSettingsSnapshot();
             try {
                 winrt::Windows::Media::Control::
                     GlobalSystemMediaTransportControlsSession session = nullptr;
 
-                if (g_settings.audioSource == 1 &&
-                    !g_settings.audioApplicationName.empty()) {
+                if (settings.audioSource == 1 &&
+                    !settings.audioApplicationName.empty()) {
                     session = FindLyricsSession(
                         manager,
-                        g_settings.audioApplicationName,
+                        settings.audioApplicationName,
                         pinnedSourceAppUserModelId);
                 } else {
                     session = manager.GetCurrentSession();
@@ -4334,16 +4833,24 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
                 std::vector<BYTE> thumbBytes;
 
                 if (session) {
-                    auto props = session.TryGetMediaPropertiesAsync().get();
+                    auto propsOperation = session.TryGetMediaPropertiesAsync();
+                    if (!WaitWinrtAsync(propsOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
+                        throw winrt::hresult_canceled();
+                    auto props = propsOperation.GetResults();
                     if (props) {
                         if (auto thumbRef = props.Thumbnail()) {
                             try {
-                                auto stream = thumbRef.OpenReadAsync().get();
+                                auto streamOperation = thumbRef.OpenReadAsync();
+                                if (!WaitWinrtAsync(streamOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
+                                    throw winrt::hresult_canceled();
+                                auto stream = streamOperation.GetResults();
                                 if (stream) {
                                     const UINT64 size = stream.Size();
                                     if (size > 0 && size < 4ULL * 1024ULL * 1024ULL) {
                                         winrt::Windows::Storage::Streams::DataReader reader(stream);
-                                        reader.LoadAsync(static_cast<UINT32>(size)).get();
+                                        auto loadOperation = reader.LoadAsync(static_cast<UINT32>(size));
+                                        if (!WaitWinrtAsync(loadOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
+                                            throw winrt::hresult_canceled();
                                         thumbBytes.resize(static_cast<size_t>(size));
                                         reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
                                         reader.DetachStream();
@@ -4374,8 +4881,8 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
         UpdateAlbumPaletteFromBytes({}, 0);
     }
 
-    g_albumSessionManager = nullptr;
-    winrt::uninit_apartment();
+    if (winrtApartmentInitialized)
+        winrt::uninit_apartment();
 
     if (albumGdiplusToken)
         Gdiplus::GdiplusShutdown(albumGdiplusToken);
@@ -4388,7 +4895,7 @@ static void StartAlbumColorCapture() {
         return;
 
     if (!g_hAlbumColorStopEvent)
-        g_hAlbumColorStopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        g_hAlbumColorStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     if (!g_hAlbumColorStopEvent) {
         g_albumColorRunning.store(false, std::memory_order_release);
@@ -4412,7 +4919,7 @@ static void StopAlbumColorCapture() {
         SetEvent(g_hAlbumColorStopEvent);
 
     if (g_hAlbumColorThread) {
-        WaitForSingleObject(g_hAlbumColorThread, 3000);
+        WaitForSingleObject(g_hAlbumColorThread, INFINITE);
         CloseHandle(g_hAlbumColorThread);
         g_hAlbumColorThread = nullptr;
     }
@@ -4471,10 +4978,12 @@ static std::string PercentEncodeUtf8(const std::wstring& value) {
 }
 
 static bool HttpGetUtf8(const std::wstring& host, const std::wstring& path,
-                        std::string& response) {
+                        std::string& response, HANDLE stopEvent) {
     response.clear();
+
+    constexpr DWORD kHttpTimeoutMs = 1000;
     HINTERNET session = WinHttpOpen(
-        L"Windhawk Desktop Audio Visualizer/0.6 (lyrics widget)",
+        L"Windhawk Desktop Audio Visualizer/1.1 (lyrics widget)",
         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME,
         WINHTTP_NO_PROXY_BYPASS,
@@ -4482,7 +4991,16 @@ static bool HttpGetUtf8(const std::wstring& host, const std::wstring& path,
     if (!session)
         return false;
 
-    HINTERNET connect = WinHttpConnect(session, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    WinHttpSetTimeouts(session, kHttpTimeoutMs, kHttpTimeoutMs,
+                       kHttpTimeoutMs, kHttpTimeoutMs);
+
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
+        WinHttpCloseHandle(session);
+        return false;
+    }
+
+    HINTERNET connect = WinHttpConnect(
+        session, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!connect) {
         WinHttpCloseHandle(session);
         return false;
@@ -4498,32 +5016,54 @@ static bool HttpGetUtf8(const std::wstring& host, const std::wstring& path,
         return false;
     }
 
-    const bool sent = WinHttpSendRequest(
-        request,
-        L"Accept: application/json\r\n",
-        -1L,
-        WINHTTP_NO_REQUEST_DATA,
-        0,
-        0,
-        0) && WinHttpReceiveResponse(request, nullptr);
+    WinHttpSetTimeouts(request, kHttpTimeoutMs, kHttpTimeoutMs,
+                       kHttpTimeoutMs, kHttpTimeoutMs);
+
+    const bool sent =
+        WinHttpSendRequest(
+            request,
+            L"Accept: application/json\r\n",
+            -1L,
+            WINHTTP_NO_REQUEST_DATA,
+            0,
+            0,
+            0) &&
+        WinHttpReceiveResponse(request, nullptr);
 
     DWORD statusCode = 0;
     DWORD statusSize = sizeof(statusCode);
-    if (sent)
-        WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &statusSize,
+    if (sent && !(stopEvent &&
+                  WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)) {
+        WinHttpQueryHeaders(
+            request,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX,
+            &statusCode,
+            &statusSize,
             WINHTTP_NO_HEADER_INDEX);
+    }
 
-    bool ok = sent && statusCode == 200;
+    bool ok = sent && statusCode == 200 &&
+        !(stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0);
+
     if (ok) {
         for (;;) {
+            if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
+                ok = false;
+                break;
+            }
+
             DWORD available = 0;
             if (!WinHttpQueryDataAvailable(request, &available) || available == 0)
                 break;
+
             std::string chunk(static_cast<size_t>(available), '\0');
             DWORD read = 0;
-            if (!WinHttpReadData(request, chunk.data(), available, &read) || read == 0)
+            if (!WinHttpReadData(request, chunk.data(), available, &read) || read == 0) {
+                ok = false;
                 break;
+            }
+
             chunk.resize(read);
             response += chunk;
             if (response.size() > 2 * 1024 * 1024) {
@@ -4537,7 +5077,7 @@ static bool HttpGetUtf8(const std::wstring& host, const std::wstring& path,
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connect);
     WinHttpCloseHandle(session);
-    return ok;
+    return ok && !response.empty();
 }
 
 static bool JsonGetString(const std::string& json, const char* key, std::string& out) {
@@ -4832,7 +5372,10 @@ static void FetchLyricsForTrack(
             L"&album_name=" + albumEncoded +
             L"&duration=" + std::to_wstring(candidate);
 
-        if (HttpGetUtf8(host, path, response))
+        if (g_hLyricsStopEvent && WaitForSingleObject(g_hLyricsStopEvent, 0) == WAIT_OBJECT_0)
+            return;
+
+        if (HttpGetUtf8(host, path, response, g_hLyricsStopEvent))
             break;
 
         response.clear();
@@ -5012,19 +5555,26 @@ FindLyricsSession(
 }
 
 static DWORD WINAPI LyricsThreadProc(LPVOID) {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    bool winrtApartmentInitialized = false;
 
     try {
-        auto manager =
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        winrtApartmentInitialized = true;
+        auto managerOperation =
             winrt::Windows::Media::Control::
                 GlobalSystemMediaTransportControlsSessionManager::
-                    RequestAsync().get();
+                    RequestAsync();
+        if (!WaitWinrtAsync(managerOperation, g_hLyricsStopEvent,
+                            std::chrono::milliseconds(1500)))
+            throw winrt::hresult_canceled();
+        auto manager = managerOperation.GetResults();
 
         std::wstring lastTrackKey;
         ULONGLONG lastFetchMs = 0;
         std::wstring pinnedSourceAppUserModelId;
 
         while (g_lyricsRunning.load(std::memory_order_acquire)) {
+            const VisualizerSettings settings = GetSettingsSnapshot();
             std::wstring title;
             std::wstring artist;
             std::wstring album;
@@ -5040,11 +5590,11 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                 winrt::Windows::Media::Control::
                     GlobalSystemMediaTransportControlsSession session = nullptr;
 
-                if (g_settings.audioSource == 1 &&
-                    !g_settings.audioApplicationName.empty()) {
+                if (settings.audioSource == 1 &&
+                    !settings.audioApplicationName.empty()) {
                     session = FindLyricsSession(
                         manager,
-                        g_settings.audioApplicationName,
+                        settings.audioApplicationName,
                         pinnedSourceAppUserModelId);
                 } else {
                     session = manager.GetCurrentSession();
@@ -5055,8 +5605,10 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                     haveSession = true;
 
                     try {
-                        auto props =
-                            session.TryGetMediaPropertiesAsync().get();
+                        auto propsOperation = session.TryGetMediaPropertiesAsync();
+                        if (!WaitWinrtAsync(propsOperation, g_hLyricsStopEvent, std::chrono::milliseconds(1500)))
+                            throw winrt::hresult_canceled();
+                        auto props = propsOperation.GetResults();
                         if (props) {
                             title = props.Title().c_str();
                             artist = props.Artist().c_str();
@@ -5197,7 +5749,8 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
         ClearLyricsState();
     }
 
-    winrt::uninit_apartment();
+    if (winrtApartmentInitialized)
+        winrt::uninit_apartment();
     return 0;
 }
 
@@ -5205,8 +5758,10 @@ static void StartLyricsCapture() {
     if (g_lyricsRunning.exchange(true, std::memory_order_acq_rel))
         return;
 
+    if (g_hLyricsStopEvent)
+        CloseHandle(g_hLyricsStopEvent);
     g_hLyricsStopEvent =
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     if (!g_hLyricsStopEvent) {
         g_lyricsRunning.store(false, std::memory_order_release);
@@ -5231,7 +5786,7 @@ static void StopLyricsCapture() {
         SetEvent(g_hLyricsStopEvent);
 
     if (g_hLyricsThread) {
-        WaitForSingleObject(g_hLyricsThread, 5000);
+        WaitForSingleObject(g_hLyricsThread, INFINITE);
         CloseHandle(g_hLyricsThread);
         g_hLyricsThread = nullptr;
     }
@@ -5263,6 +5818,109 @@ static int GetCurrentLyricsLineIndex(
     }
 
     return lo == 0 ? -1 : static_cast<int>(lo - 1);
+}
+
+struct LyricsFontCache {
+    std::wstring artistFontId;
+    std::wstring lyricsFontId;
+    int fontSize = 0;
+    std::unique_ptr<Gdiplus::FontFamily> fallbackFamily;
+    std::unique_ptr<Gdiplus::FontFamily> artistFamily;
+    std::unique_ptr<Gdiplus::FontFamily> lyricsFamily;
+    std::unique_ptr<Gdiplus::Font> lyricsFont;
+    std::unique_ptr<Gdiplus::Font> artistFont;
+    std::unique_ptr<Gdiplus::Font> titleFont;
+    std::unique_ptr<Gdiplus::Font> aboveFont;
+    std::unique_ptr<Gdiplus::Font> belowFont;
+
+    void Clear() {
+        belowFont.reset();
+        aboveFont.reset();
+        titleFont.reset();
+        artistFont.reset();
+        lyricsFont.reset();
+        lyricsFamily.reset();
+        artistFamily.reset();
+        fallbackFamily.reset();
+        artistFontId.clear();
+        lyricsFontId.clear();
+        fontSize = 0;
+    }
+};
+
+static LyricsFontCache g_lyricsFontCache;
+
+static const wchar_t* ResolveLyricsFontName(const std::wstring& id) {
+    if (id == L"arial") return L"Arial";
+    if (id == L"calibri") return L"Calibri";
+    if (id == L"tahoma") return L"Tahoma";
+    if (id == L"verdana") return L"Verdana";
+    if (id == L"trebuchet_ms") return L"Trebuchet MS";
+    if (id == L"georgia") return L"Georgia";
+    if (id == L"consolas") return L"Consolas";
+    if (id == L"times_new_roman") return L"Times New Roman";
+    if (id == L"meiryo") return L"Meiryo";
+    return L"Segoe UI";
+}
+
+static bool EnsureLyricsFontCache() {
+    if (g_lyricsFontCache.lyricsFont &&
+        g_lyricsFontCache.artistFont &&
+        g_lyricsFontCache.titleFont &&
+        g_lyricsFontCache.aboveFont &&
+        g_lyricsFontCache.belowFont &&
+        g_lyricsFontCache.artistFontId == g_settings.lyricsArtistFont &&
+        g_lyricsFontCache.lyricsFontId == g_settings.lyricsLyricsFont &&
+        g_lyricsFontCache.fontSize == g_settings.lyricsFontSize) {
+        return true;
+    }
+
+    LyricsFontCache cache;
+    cache.artistFontId = g_settings.lyricsArtistFont;
+    cache.lyricsFontId = g_settings.lyricsLyricsFont;
+    cache.fontSize = g_settings.lyricsFontSize;
+
+    cache.fallbackFamily = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI");
+    cache.artistFamily = std::make_unique<Gdiplus::FontFamily>(
+        ResolveLyricsFontName(cache.artistFontId));
+    cache.lyricsFamily = std::make_unique<Gdiplus::FontFamily>(
+        ResolveLyricsFontName(cache.lyricsFontId));
+
+    const Gdiplus::FontFamily* artistFamily =
+        cache.artistFamily->GetLastStatus() == Gdiplus::Ok
+            ? cache.artistFamily.get() : cache.fallbackFamily.get();
+    const Gdiplus::FontFamily* lyricsFamily =
+        cache.lyricsFamily->GetLastStatus() == Gdiplus::Ok
+            ? cache.lyricsFamily.get() : cache.fallbackFamily.get();
+
+    cache.lyricsFont = std::make_unique<Gdiplus::Font>(
+        lyricsFamily, static_cast<Gdiplus::REAL>(cache.fontSize),
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    cache.artistFont = std::make_unique<Gdiplus::Font>(
+        artistFamily,
+        static_cast<Gdiplus::REAL>(std::max(10, cache.fontSize - 5)),
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    cache.titleFont = std::make_unique<Gdiplus::Font>(
+        artistFamily,
+        static_cast<Gdiplus::REAL>(std::max(10, cache.fontSize - 5)),
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    cache.aboveFont = std::make_unique<Gdiplus::Font>(
+        lyricsFamily, static_cast<Gdiplus::REAL>(cache.fontSize) * 0.88f,
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    cache.belowFont = std::make_unique<Gdiplus::Font>(
+        lyricsFamily, static_cast<Gdiplus::REAL>(cache.fontSize) * 0.92f,
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+
+    if (!cache.lyricsFont || cache.lyricsFont->GetLastStatus() != Gdiplus::Ok ||
+        !cache.artistFont || cache.artistFont->GetLastStatus() != Gdiplus::Ok ||
+        !cache.titleFont || cache.titleFont->GetLastStatus() != Gdiplus::Ok ||
+        !cache.aboveFont || cache.aboveFont->GetLastStatus() != Gdiplus::Ok ||
+        !cache.belowFont || cache.belowFont->GetLastStatus() != Gdiplus::Ok) {
+        return false;
+    }
+
+    g_lyricsFontCache = std::move(cache);
+    return true;
 }
 
 static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
@@ -5314,15 +5972,9 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
         Gdiplus::GraphicsPath path;
         const float r = static_cast<float>(
             std::min(g_settings.lyricsRounding, std::min(w, h) / 2));
-        path.AddArc(static_cast<float>(x), static_cast<float>(y), 2 * r, 2 * r,
-                    180, 90);
-        path.AddArc(static_cast<float>(x + w - 2 * r), static_cast<float>(y),
-                    2 * r, 2 * r, 270, 90);
-        path.AddArc(static_cast<float>(x + w - 2 * r),
-                    static_cast<float>(y + h - 2 * r), 2 * r, 2 * r, 0, 90);
-        path.AddArc(static_cast<float>(x), static_cast<float>(y + h - 2 * r),
-                    2 * r, 2 * r, 90, 90);
-        path.CloseFigure();
+        AddRoundedRectSubpath(
+            path, static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(w), static_cast<float>(h), r);
         if (g_settings.lyricsBackgroundMode == 2 ||
             g_settings.lyricsBackgroundMode == 3) {
             const DWORD albumPrimary = GetAlbumPalettePrimary();
@@ -5424,43 +6076,16 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
         }
     }
 
-    auto ResolveLyricsFontName = [](const std::wstring& id) -> const wchar_t* {
-        if (id == L"arial") return L"Arial";
-        if (id == L"calibri") return L"Calibri";
-        if (id == L"tahoma") return L"Tahoma";
-        if (id == L"verdana") return L"Verdana";
-        if (id == L"trebuchet_ms") return L"Trebuchet MS";
-        if (id == L"georgia") return L"Georgia";
-        if (id == L"consolas") return L"Consolas";
-        if (id == L"times_new_roman") return L"Times New Roman";
-        if (id == L"meiryo") return L"Meiryo";
-        return L"Segoe UI";
-    };
+    if (!EnsureLyricsFontCache()) {
+        graphics.Restore(state);
+        return;
+    }
 
-    Gdiplus::FontFamily fallbackFamily(L"Segoe UI");
-    Gdiplus::FontFamily artistFamily(ResolveLyricsFontName(g_settings.lyricsArtistFont));
-    Gdiplus::FontFamily lyricsFamily(ResolveLyricsFontName(g_settings.lyricsLyricsFont));
-
-    const Gdiplus::FontFamily* artistFamilyPtr =
-        artistFamily.GetLastStatus() == Gdiplus::Ok ? &artistFamily : &fallbackFamily;
-    const Gdiplus::FontFamily* lyricsFamilyPtr =
-        lyricsFamily.GetLastStatus() == Gdiplus::Ok ? &lyricsFamily : &fallbackFamily;
-
-    Gdiplus::Font font(
-        lyricsFamilyPtr,
-        static_cast<Gdiplus::REAL>(g_settings.lyricsFontSize),
-        Gdiplus::FontStyleRegular,
-        Gdiplus::UnitPixel);
-    Gdiplus::Font artistFont(
-        artistFamilyPtr,
-        static_cast<Gdiplus::REAL>(std::max(10, g_settings.lyricsFontSize - 5)),
-        Gdiplus::FontStyleRegular,
-        Gdiplus::UnitPixel);
-    Gdiplus::Font titleFont(
-        artistFamilyPtr,
-        static_cast<Gdiplus::REAL>(std::max(10, g_settings.lyricsFontSize - 5)),
-        Gdiplus::FontStyleRegular,
-        Gdiplus::UnitPixel);
+    const Gdiplus::Font& font = *g_lyricsFontCache.lyricsFont;
+    const Gdiplus::Font& artistFont = *g_lyricsFontCache.artistFont;
+    const Gdiplus::Font& titleFont = *g_lyricsFontCache.titleFont;
+    const Gdiplus::Font& aboveFont = *g_lyricsFontCache.aboveFont;
+    const Gdiplus::Font& belowFont = *g_lyricsFontCache.belowFont;
 
     Gdiplus::StringFormat textFormat;
     if (g_settings.lyricsTextAlignment == 0)
@@ -5566,17 +6191,6 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
         wrapFormat.SetAlignment(textFormat.GetAlignment());
         wrapFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
         wrapFormat.SetTrimming(Gdiplus::StringTrimmingNone);
-
-        Gdiplus::Font aboveFont(
-            lyricsFamilyPtr,
-            static_cast<Gdiplus::REAL>(g_settings.lyricsFontSize) * 0.88f,
-            Gdiplus::FontStyleRegular,
-            Gdiplus::UnitPixel);
-        Gdiplus::Font belowFont(
-            lyricsFamilyPtr,
-            static_cast<Gdiplus::REAL>(g_settings.lyricsFontSize) * 0.92f,
-            Gdiplus::FontStyleRegular,
-            Gdiplus::UnitPixel);
 
         float currentBlockHeight = lineHeight;
         if (haveLyrics && g_settings.lyricsLongLineWrapEnabled && current >= 0 &&
@@ -5856,9 +6470,7 @@ static void RenderVisualizerBackground(
     if (!g_settings.backgroundEnabled || g_settings.backgroundOpacity <= 0)
         return;
 
-    const float peakRatio = GetCurrentVisualizerPeakRatio(barCount);
-    const float heightRatio =
-        (g_settings.backgroundMode == 2) ? peakRatio : 1.0f;
+    const float heightRatio = 1.0f;
 
     RECT rect = GetVisualizerBackgroundRect(
         barCount,
@@ -5875,16 +6487,10 @@ static void RenderVisualizerBackground(
     DWORD c1 = g_settings.backgroundColor1;
     DWORD c2 = g_settings.backgroundColor2;
 
-    if (g_settings.backgroundMode == 2) {
-
-        const float peakColorT = peakRatio;
-        c2 = LerpColor(c1, c2, peakColorT);
-    } else if (g_settings.backgroundMode == 3) {
-
+    if (g_settings.backgroundMode == 3) {
         c1 = GetAlbumPalettePrimary();
         c2 = c1;
     } else if (g_settings.backgroundMode == 4) {
-
         c1 = GetAlbumPalettePrimary();
         c2 = GetAlbumPaletteSecondary();
     }
@@ -5897,6 +6503,7 @@ static void RenderVisualizerBackground(
         0,
         std::min(g_settings.backgroundCornerRadius, maxRadius));
     const float radius = static_cast<float>(safeRadius);
+
     AddRoundedRectSubpath(
         path,
         static_cast<float>(rect.left),
@@ -5905,43 +6512,139 @@ static void RenderVisualizerBackground(
         static_cast<float>(rect.bottom - rect.top),
         radius);
 
-    Gdiplus::Color color1(
-        alpha,
-        GetRValue(c1), GetGValue(c1), GetBValue(c1));
+    if (g_settings.backgroundMode == 5) {
+        EnsureBackgroundBlurBitmap(rect);
 
-    if (g_settings.backgroundMode == 0 || g_settings.backgroundMode == 3) {
-        Gdiplus::SolidBrush brush(color1);
-        graphics.FillPath(&brush, &path);
-        return;
+        if (g_pBackgroundBlurBitmap) {
+            Gdiplus::GraphicsState clipState = graphics.Save();
+            graphics.SetClip(&path, Gdiplus::CombineModeReplace);
+
+            Gdiplus::ImageAttributes imageAttributes;
+            Gdiplus::ColorMatrix colorMatrix = {
+                1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, alpha / 255.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+            };
+            imageAttributes.SetColorMatrix(
+                &colorMatrix,
+                Gdiplus::ColorMatrixFlagsDefault,
+                Gdiplus::ColorAdjustTypeBitmap);
+
+            graphics.DrawImage(
+                g_pBackgroundBlurBitmap,
+                Gdiplus::Rect(
+                    rect.left,
+                    rect.top,
+                    rect.right - rect.left,
+                    rect.bottom - rect.top),
+                0, 0,
+                g_pBackgroundBlurBitmap->GetWidth(),
+                g_pBackgroundBlurBitmap->GetHeight(),
+                Gdiplus::UnitPixel,
+                &imageAttributes);
+
+            graphics.Restore(clipState);
+        }
+    } else {
+        Gdiplus::Color color1(
+            alpha,
+            GetRValue(c1), GetGValue(c1), GetBValue(c1));
+
+        if (g_settings.backgroundMode == 0 || g_settings.backgroundMode == 3) {
+            Gdiplus::SolidBrush brush(color1);
+            graphics.FillPath(&brush, &path);
+        } else {
+            Gdiplus::Color color2(
+                alpha,
+                GetRValue(c2), GetGValue(c2), GetBValue(c2));
+
+            const bool horizontalAxis = g_settings.orientation > 2;
+            Gdiplus::LinearGradientBrush gradient(
+                horizontalAxis
+                    ? Gdiplus::PointF(
+                        static_cast<float>(rect.left),
+                        static_cast<float>(rect.top))
+                    : Gdiplus::PointF(
+                        static_cast<float>(rect.left),
+                        static_cast<float>(rect.bottom)),
+                horizontalAxis
+                    ? Gdiplus::PointF(
+                        static_cast<float>(rect.right),
+                        static_cast<float>(rect.top))
+                    : Gdiplus::PointF(
+                        static_cast<float>(rect.left),
+                        static_cast<float>(rect.top)),
+                color1,
+                color2);
+
+            graphics.FillPath(&gradient, &path);
+        }
     }
 
-    Gdiplus::Color color2(
-        alpha,
-        GetRValue(c2), GetGValue(c2), GetBValue(c2));
+    if (g_settings.backgroundBorderEnabled &&
+        g_settings.backgroundBorderOpacity > 0) {
+        const BYTE borderAlpha = static_cast<BYTE>(
+            std::clamp(g_settings.backgroundBorderOpacity, 0, 100) * 255 / 100);
 
-    const bool horizontalAxis = g_settings.orientation > 2;
-    Gdiplus::LinearGradientBrush gradient(
-        horizontalAxis
-            ? Gdiplus::PointF(
-                static_cast<float>(rect.left),
-                static_cast<float>(rect.top))
-            : Gdiplus::PointF(
-                static_cast<float>(rect.left),
-                static_cast<float>(rect.bottom)),
-        horizontalAxis
-            ? Gdiplus::PointF(
-                static_cast<float>(rect.right),
-                static_cast<float>(rect.top))
-            : Gdiplus::PointF(
-                static_cast<float>(rect.left),
-                static_cast<float>(rect.top)),
-        color1,
-        color2);
+        const DWORD albumPrimary = GetAlbumPalettePrimary();
+        const DWORD albumSecondary = GetAlbumPaletteSecondary();
 
-    graphics.FillPath(&gradient, &path);
+        if (g_settings.backgroundBorderMode == 1 ||
+            g_settings.backgroundBorderMode == 3) {
+            const DWORD border1 = (g_settings.backgroundBorderMode == 1)
+                ? albumPrimary
+                : g_settings.backgroundBorderColor1;
+            const DWORD border2 = (g_settings.backgroundBorderMode == 1)
+                ? albumSecondary
+                : g_settings.backgroundBorderColor2;
+
+            Gdiplus::LinearGradientBrush borderBrush(
+                Gdiplus::PointF(
+                    static_cast<float>(rect.left),
+                    static_cast<float>(rect.top)),
+                Gdiplus::PointF(
+                    static_cast<float>(rect.right),
+                    static_cast<float>(rect.bottom)),
+                Gdiplus::Color(
+                    borderAlpha,
+                    GetRValue(border1),
+                    GetGValue(border1),
+                    GetBValue(border1)),
+                Gdiplus::Color(
+                    borderAlpha,
+                    GetRValue(border2),
+                    GetGValue(border2),
+                    GetBValue(border2)));
+
+            Gdiplus::Pen pen(
+                &borderBrush,
+                static_cast<Gdiplus::REAL>(g_settings.backgroundBorderThickness));
+            graphics.DrawPath(&pen, &path);
+        } else {
+            const DWORD borderColor =
+                (g_settings.backgroundBorderMode == 0)
+                    ? albumPrimary
+                    : g_settings.backgroundBorderColor1;
+
+            Gdiplus::Pen pen(
+                Gdiplus::Color(
+                    borderAlpha,
+                    GetRValue(borderColor),
+                    GetGValue(borderColor),
+                    GetBValue(borderColor)),
+                static_cast<Gdiplus::REAL>(
+                    g_settings.backgroundBorderThickness));
+            graphics.DrawPath(&pen, &path);
+        }
+    }
 }
 
+
 static void DestroyRenderTarget() {
+    DestroyBackgroundBlurBitmap();
+
     if (g_renderMemDC) {
         if (g_renderOldBitmap) {
             SelectObject(g_renderMemDC, g_renderOldBitmap);
@@ -6110,6 +6813,137 @@ static int LimitBarLengthByLyricsWidget(
     return barLen;
 }
 
+static bool RenderSpecialVisualization(
+    Gdiplus::Graphics& graphics,
+    int w,
+    int h,
+    int barCount,
+    DWORD primaryColor,
+    DWORD secondaryColor) {
+    if (g_settings.barShape != 5 && g_settings.barShape != 6)
+        return false;
+
+    const int radius = std::max(1, g_settings.barWidth / 2);
+    Gdiplus::GraphicsState state = graphics.Save();
+
+    if (g_settings.barShape == 5) {
+        for (int i = 0; i < barCount; ++i) {
+            const int barLen = std::max(1, static_cast<int>(g_currentHeights[i]));
+            const float t = barCount > 1
+                ? static_cast<float>(i) / static_cast<float>(barCount - 1)
+                : 0.0f;
+            DWORD color = (g_settings.colorMode == 1 || g_settings.colorMode == 6 ||
+                           g_settings.colorMode == 8)
+                ? LerpColor(primaryColor, secondaryColor, t)
+                : primaryColor;
+            const BYTE alpha = static_cast<BYTE>(std::clamp(
+                g_settings.acrylicOpacity * 2.55f, 0.0f, 255.0f));
+            Gdiplus::SolidBrush brush(Gdiplus::Color(
+                alpha, GetRValue(color), GetGValue(color), GetBValue(color)));
+
+            const int offset = i * (g_settings.barWidth + g_settings.barSpacing);
+            float cx = 0.0f;
+            float cy = 0.0f;
+            if (g_settings.orientation <= 2) {
+                cx = static_cast<float>(g_settings.positionX + offset + radius);
+                if (g_settings.orientation == 0)
+                    cy = static_cast<float>(g_settings.positionY - barLen);
+                else if (g_settings.orientation == 1)
+                    cy = static_cast<float>(g_settings.positionY + (barLen / 2));
+                else
+                    cy = static_cast<float>(g_settings.positionY + barLen);
+            } else {
+                cy = static_cast<float>(g_settings.positionY + offset + radius);
+                if (g_settings.orientation == 3)
+                    cx = static_cast<float>(g_settings.positionX + barLen);
+                else if (g_settings.orientation == 4)
+                    cx = static_cast<float>(g_settings.positionX + (barLen / 2));
+                else
+                    cx = static_cast<float>(g_settings.positionX - barLen);
+            }
+
+            graphics.FillEllipse(&brush,
+                cx - static_cast<float>(radius),
+                cy - static_cast<float>(radius),
+                static_cast<float>(radius * 2),
+                static_cast<float>(radius * 2));
+        }
+        graphics.Restore(state);
+        return true;
+    }
+
+    // Area visualization: one continuous filled spectrum surface.
+    Gdiplus::GraphicsPath path;
+    std::vector<Gdiplus::PointF> top;
+    top.reserve(static_cast<size_t>(barCount));
+
+    for (int i = 0; i < barCount; ++i) {
+        const float t = barCount > 1
+            ? static_cast<float>(i) / static_cast<float>(barCount - 1)
+            : 0.0f;
+        const float barLen = static_cast<float>(std::max(1, static_cast<int>(g_currentHeights[i])));
+        const float cross = static_cast<float>(
+            g_settings.barWidth / 2 + i * (g_settings.barWidth + g_settings.barSpacing));
+
+        if (g_settings.orientation <= 2) {
+            const float x = static_cast<float>(g_settings.positionX) + cross;
+            float y = static_cast<float>(g_settings.positionY);
+            if (g_settings.orientation == 0)
+                y -= barLen;
+            else if (g_settings.orientation == 1)
+                y -= barLen * 0.5f;
+            top.emplace_back(x, y);
+        } else {
+            const float y = static_cast<float>(g_settings.positionY) + cross;
+            float x = static_cast<float>(g_settings.positionX);
+            if (g_settings.orientation == 3)
+                x += barLen;
+            else if (g_settings.orientation == 4)
+                x += barLen * 0.5f;
+            else
+                x -= barLen;
+            top.emplace_back(x, y);
+        }
+    }
+
+    if (top.size() >= 2) {
+        path.StartFigure();
+        for (size_t i = 0; i < top.size(); ++i) {
+            if (i == 0)
+                path.AddLine(top[i], top[i]);
+            else
+                path.AddLine(top[i - 1], top[i]);
+        }
+
+        if (g_settings.orientation <= 2) {
+            path.AddLine(top.back().X, static_cast<float>(g_settings.positionY),
+                         top.front().X, static_cast<float>(g_settings.positionY));
+        } else {
+            path.AddLine(static_cast<float>(g_settings.positionX), top.back().Y,
+                         static_cast<float>(g_settings.positionX), top.front().Y);
+        }
+        path.CloseFigure();
+
+        Gdiplus::RectF bounds;
+        path.GetBounds(&bounds);
+        const float t1 = (g_settings.colorMode == 1 || g_settings.colorMode == 6 ||
+                          g_settings.colorMode == 8) ? 1.0f : 0.0f;
+        DWORD c1 = primaryColor;
+        DWORD c2 = LerpColor(primaryColor, secondaryColor, t1);
+        const BYTE alpha = static_cast<BYTE>(std::clamp(
+            g_settings.acrylicOpacity * 2.55f, 0.0f, 255.0f));
+        Gdiplus::LinearGradientBrush brush(
+            Gdiplus::PointF(bounds.X, bounds.Y),
+            Gdiplus::PointF(bounds.GetRight(), bounds.GetBottom()),
+            Gdiplus::Color(alpha, GetRValue(c1), GetGValue(c1), GetBValue(c1)),
+            Gdiplus::Color(alpha, GetRValue(c2), GetGValue(c2), GetBValue(c2)));
+        graphics.FillPath(&brush, &path);
+    }
+
+    graphics.Restore(state);
+    return true;
+}
+
 static void RenderVisualizerPass(
     Gdiplus::Graphics& graphics,
     int w,
@@ -6139,6 +6973,9 @@ static void RenderVisualizerPass(
         RenderVisualizerBackground(graphics, barCount);
     }
 
+    if (RenderSpecialVisualization(graphics, w, h, barCount, primaryColor, secondaryColor))
+        return;
+
     if (g_settings.barStyle == 3) {
 
         RenderCurveVisualizer(graphics, barCount);
@@ -6147,7 +6984,11 @@ static void RenderVisualizerPass(
 
 
     POINT ptCursor{};
-    GetCursorPos(&ptCursor);
+    if (g_settings.dynamicWidthEnabled) {
+        GetCursorPos(&ptCursor);
+        if (g_hwndOverlay)
+            ScreenToClient(g_hwndOverlay, &ptCursor);
+    }
     if (g_mirrorRenderPass) {
         if (g_mirrorRenderAxis == 1)
             ptCursor.y = h - ptCursor.y;
@@ -6833,6 +7674,8 @@ static void RenderOverlay(HWND hwnd) {
         ULW_ALPHA);
 }
 
+static UINT GetRenderIntervalMs(const VisualizerSettings& settings);
+
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_TIMER:
@@ -6840,6 +7683,30 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
             UpdateAnimationFromAudio();
             RenderOverlay(hwnd);
+
+            const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
+            const float peakRatio = GetCurrentVisualizerPeakRatio(barCount);
+            const float minRatio = static_cast<float>(g_settings.minBarHeight) /
+                static_cast<float>(std::max(1, g_settings.maxBarHeight));
+            const bool shouldIdle =
+                peakRatio <= std::min(1.0f, minRatio + 0.01f);
+            if (shouldIdle != g_overlayIdle.load(std::memory_order_acquire)) {
+                g_overlayIdle.store(shouldIdle, std::memory_order_release);
+                SetTimer(hwnd, 1,
+                         shouldIdle ? 200 : GetRenderIntervalMs(g_settings),
+                         nullptr);
+            } else if (!shouldIdle) {
+                // Keep the active timer synchronized with the current FPS setting.
+                SetTimer(hwnd, 1, GetRenderIntervalMs(g_settings), nullptr);
+            }
+        }
+        return 0;
+
+    case WM_VIZ_AUDIO_WAKE:
+        g_overlayIdle.store(false, std::memory_order_release);
+        {
+            const VisualizerSettings settings = GetSettingsSnapshot();
+            SetTimer(hwnd, 1, GetRenderIntervalMs(settings), nullptr);
         }
         return 0;
 
@@ -6858,11 +7725,79 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         break;
     }
 
+    case WM_SETTINGCHANGE:
+        // Wallpaper/theme changes invalidate the cached wallpaper blur.
+        g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+        return 0;
+
+    case WM_DISPLAYCHANGE:
+        g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+        if (GetParent(hwnd) == nullptr) {
+            SetWindowPos(hwnd, HWND_BOTTOM,
+                         GetSystemMetrics(SM_XVIRTUALSCREEN),
+                         GetSystemMetrics(SM_YVIRTUALSCREEN),
+                         std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN)),
+                         std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN)),
+                         SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+
     case WM_NCHITTEST:
         return HTTRANSPARENT;
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+static HMODULE GetCurrentModModuleHandle() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&OverlayProc), &module);
+    return module;
+}
+
+static UINT GetDisplayRefreshRateHz() {
+    HMONITOR monitor = nullptr;
+    if (g_hwndOverlay)
+        monitor = MonitorFromWindow(g_hwndOverlay, MONITOR_DEFAULTTOPRIMARY);
+    else
+        monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+
+    MONITORINFOEXW monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+
+    DEVMODEW devMode{};
+    devMode.dmSize = sizeof(devMode);
+
+    if (monitor &&
+        GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&monitorInfo)) &&
+        EnumDisplaySettingsW(
+            monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode) &&
+        devMode.dmDisplayFrequency > 1) {
+        return static_cast<UINT>(devMode.dmDisplayFrequency);
+    }
+
+    // 60 Hz is a safe fallback when the current display mode cannot be queried.
+    return 60;
+}
+
+static UINT GetRenderIntervalMs(const VisualizerSettings& settings) {
+    const UINT refreshRateHz = std::max<UINT>(1, GetDisplayRefreshRateHz());
+
+    int effectiveFps = settings.targetFps;
+    if (effectiveFps <= 0)
+        effectiveFps = static_cast<int>(refreshRateHz);
+    else
+        effectiveFps = std::min(effectiveFps, static_cast<int>(refreshRateHz));
+
+    effectiveFps = std::max(1, effectiveFps);
+
+    // Use a ceiling so the software timer never intentionally exceeds the
+    // requested/display refresh rate.
+    return std::max<UINT>(
+        1, static_cast<UINT>(std::ceil(1000.0 / effectiveFps)));
 }
 
 static DWORD WINAPI OverlayThreadProc(LPVOID) {
@@ -6877,24 +7812,49 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
 
     WNDCLASSW wc{};
     wc.lpfnWndProc = OverlayProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = GetCurrentModModuleHandle();
+    if (!wc.hInstance) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        return 0;
+    }
     wc.lpszClassName = L"WindhawkVisualizerOverlay";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 
     bool classRegistered = false;
     if (RegisterClassW(&wc)) {
         classRegistered = true;
-    } else if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    } else {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
         return 0;
     }
 
-    const int screenW = GetSystemMetrics(SM_CXSCREEN);
-    const int screenH = GetSystemMetrics(SM_CYSCREEN);
+    const int screenW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    const int screenH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
 
     HWND hProgman = FindWindowW(L"Progman", nullptr);
-    if (hProgman) {
+    if (!hProgman) {
+        if (classRegistered)
+            UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        return 0;
+    }
+
+    {
+        DWORD progmanProcessId = 0;
+        GetWindowThreadProcessId(hProgman, &progmanProcessId);
+        if (progmanProcessId != GetCurrentProcessId()) {
+            if (classRegistered)
+                UnregisterClassW(wc.lpszClassName, wc.hInstance);
+            Gdiplus::GdiplusShutdown(g_gdiplusToken);
+            g_gdiplusToken = 0;
+            return 0;
+        }
+
+        // Undocumented Progman message used by common desktop-overlay
+        // implementations to create/reposition the WorkerW behind icons.
         SendMessageTimeoutW(hProgman, 0x052C, 0, 0,
                             SMTO_ABORTIFHUNG, 1000, nullptr);
     }
@@ -6953,6 +7913,8 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
+    g_overlayWakeHwnd.store(g_hwndOverlay, std::memory_order_release);
+
     BOOL excludeFromPeek = TRUE;
     DwmSetWindowAttribute(g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
                           &excludeFromPeek, sizeof(excludeFromPeek));
@@ -6963,17 +7925,91 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
     }
 
-    SetTimer(g_hwndOverlay, 1, 16, nullptr);
+    g_overlayIdle.store(false, std::memory_order_release);
+    {
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        SetTimer(g_hwndOverlay, 1, GetRenderIntervalMs(settings), nullptr);
+    }
 
     MSG msg{};
     HANDLE stopEvent = g_hOverlayStopEvent;
     for (;;) {
         DWORD waitResult = MsgWaitForMultipleObjects(
             stopEvent ? 1 : 0, stopEvent ? &stopEvent : nullptr,
-            FALSE, INFINITE, QS_ALLINPUT);
+            FALSE, 250, QS_ALLINPUT);
 
         if (stopEvent && waitResult == WAIT_OBJECT_0)
             break;
+
+        if (g_running.load(std::memory_order_acquire)) {
+            const bool overlayMissing = !g_hwndOverlay || !IsWindow(g_hwndOverlay);
+            if (overlayMissing) {
+                g_hwndOverlay = nullptr;
+                g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
+
+                HWND recoveryProgman = FindWindowW(L"Progman", nullptr);
+                DWORD recoveryPid = 0;
+                if (recoveryProgman)
+                    GetWindowThreadProcessId(recoveryProgman, &recoveryPid);
+
+                if (recoveryProgman && recoveryPid == GetCurrentProcessId()) {
+                    HWND recoveryParent = FindWindowExW(
+                        recoveryProgman, nullptr, L"SHELLDLL_DefView", nullptr);
+                    if (!recoveryParent) {
+                        HWND worker = nullptr;
+                        while ((worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
+                            recoveryParent = FindWindowExW(
+                                worker, nullptr, L"SHELLDLL_DefView", nullptr);
+                            if (recoveryParent)
+                                break;
+                        }
+                    }
+
+                    RECT parentRect{};
+                    int recoveryW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
+                    int recoveryH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                    if (recoveryParent && GetClientRect(recoveryParent, &parentRect)) {
+                        recoveryW = std::max(1L, parentRect.right - parentRect.left);
+                        recoveryH = std::max(1L, parentRect.bottom - parentRect.top);
+                    }
+
+                    g_hwndOverlay = CreateWindowExW(
+                        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                        wc.lpszClassName,
+                        L"Desktop Audio Visualizer",
+                        recoveryParent ? (WS_CHILD | WS_VISIBLE) : WS_POPUP,
+                        0, 0, recoveryW, recoveryH,
+                        recoveryParent, nullptr, wc.hInstance, nullptr);
+
+                    if (g_hwndOverlay) {
+                        g_overlayWakeHwnd.store(g_hwndOverlay, std::memory_order_release);
+                        BOOL excludeFromPeek = TRUE;
+                        DwmSetWindowAttribute(
+                            g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
+                            &excludeFromPeek, sizeof(excludeFromPeek));
+                        g_overlayIdle.store(false, std::memory_order_release);
+                        const VisualizerSettings settings = GetSettingsSnapshot();
+                        SetTimer(g_hwndOverlay, 1, GetRenderIntervalMs(settings), nullptr);
+                    }
+                }
+            } else {
+                HWND parent = GetParent(g_hwndOverlay);
+                if (parent) {
+                    RECT parentRect{};
+                    if (GetClientRect(parent, &parentRect)) {
+                        const int pw = std::max(1L, parentRect.right - parentRect.left);
+                        const int ph = std::max(1L, parentRect.bottom - parentRect.top);
+                        RECT currentRect{};
+                        GetClientRect(g_hwndOverlay, &currentRect);
+                        if (currentRect.right - currentRect.left != pw ||
+                            currentRect.bottom - currentRect.top != ph) {
+                            SetWindowPos(g_hwndOverlay, nullptr, 0, 0, pw, ph,
+                                         SWP_NOACTIVATE | SWP_NOZORDER);
+                        }
+                    }
+                }
+            }
+        }
 
         if (waitResult == WAIT_OBJECT_0 + (stopEvent ? 1 : 0)) {
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -6989,6 +8025,7 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
 
 overlay_exit:
     if (g_hwndOverlay) {
+        g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
         KillTimer(g_hwndOverlay, 1);
         DestroyWindow(g_hwndOverlay);
         g_hwndOverlay = nullptr;
@@ -7000,6 +8037,11 @@ overlay_exit:
         delete g_pForegroundImage;
         g_pForegroundImage = nullptr;
     }
+
+    DestroyBackgroundBlurBitmap();
+    g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+
+    g_lyricsFontCache.Clear();
 
     if (classRegistered)
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -7104,6 +8146,8 @@ void Wh_ModSettingsChanged() {
         StartAudioCapture();
     }
 
-    if (g_hwndOverlay)
+    if (g_hwndOverlay) {
         InvalidateRect(g_hwndOverlay, nullptr, TRUE);
+        PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+    }
 }
