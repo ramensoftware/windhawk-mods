@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-26T11:42:44.000Z</updated>
+    <updated>2026-08-26T12:21:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Selection Style 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-selection-style#094b5d25a17c63b8b5ce9cd7f4d527bbdd66f10d</id>
+        <link href="https://windhawk.net/mods/desktop-icon-selection-style"/>
+        <updated>2026-08-26T12:21:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconselectionstyle">Desktop Icon Selection Style</h1>
+<p>The highlight behind a selected desktop icon is a plain slab as wide as the whole
+icon cell, so selections in neighbouring columns run together into one block.
+This mod replaces it with one you can actually style.</p>
+<p><strong>Before</strong> - two selected icons, stock highlight, touching edge to edge:</p>
+<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-before.png" alt="Two selected desktop icons with the stock highlight, a pair of rectangular slabs meeting with no gap between them" /></p>
+<p><strong>After</strong> - narrowed, rounded, with a dashed border and an accent glow:</p>
+<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-after.png" alt="The same two icons with the mod enabled, each highlight narrower than its cell with rounded corners, a dashed white border and a soft accent glow" /></p>
+<p>Everything in the after shot is configurable, and all of it can be turned off.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Narrow it.</strong> Plate width is a percentage of the icon cell, so it looks right
+at any DPI. The stock plate is 100%.</li>
+<li><strong>Transparency.</strong> Any fill colour and opacity, or <code>accent</code> to follow your
+system accent colour.</li>
+<li><strong>Rounded corners.</strong> Any radius, or 0 for sharp corners.</li>
+<li><strong>Borders.</strong> Solid, dashed, dotted or dash-dot, with your own colour, opacity,
+thickness and dash spacing.</li>
+<li><strong>Glow or drop shadow</strong> around the plate, in any colour.</li>
+<li><strong>Hover styling</strong>, with its own opacity. Turn it off to leave plain hover
+looking stock, or keep <em>Border on selection only</em> on so hovered icons get the
+fill but not the border.</li>
+<li><strong>Square shape</strong>, if you would rather have a square than a rectangle.</li>
+</ul>
+<p>Only selected icons are affected. Unselected icons keep their normal look, and
+File Explorer windows are untouched - this is the desktop only.</p>
+<h2 id="notesworthknowing">Notes worth knowing</h2>
+<p><strong>The plate follows the icon height on purpose.</strong> Windows makes a selected icon
+taller so its full file name can wrap onto extra lines, so the same icon needs a
+short plate with a short name and a much taller one with a long name. The plate
+grows with it, so a long name never runs out of the bottom of the highlight.
+Width is a different matter: it is a percentage of the cell, while Windows wraps
+the label to roughly the full cell, so a long name can overhang a narrow plate at
+the sides. Raise <strong>Plate width</strong> if that bothers you. <em>Square</em> shape is
+available, but it is capped at the size of the item, so a very large square comes
+out smaller than requested.</p>
+<p><strong>The glow is a fake, deliberately.</strong> It is stacked translucent rings, not a real
+blur, because a real blur is impossible here - the wallpaper simply is not
+available at the moment the highlight is drawn. It still looks good, but do not
+expect acrylic. It is also limited to roughly 10 pixels beyond the icon, which is
+all Windows repaints around it; a larger glow gets cut off rather than smeared.</p>
+<p><strong>Colours</strong> take <code>accent</code> to follow your system accent colour, or a hex value
+like <code>#3399FF</code> (the <code>#</code> is optional). Anything else is ignored, and the setting
+keeps its default - the mod log says which value it rejected. The accent is read through the immersive colour API, so it is
+the colour you actually picked in Settings rather than the blended colorization
+value. Changing it is picked up as plates are next repainted, so selecting a
+different icon shows the new colour; nothing is forced to redraw on a timer.</p>
+<p><strong>Mixed-DPI setups</strong> are fine, though not because anything is measured
+per-monitor. The pixel settings are scaled by a single DPI, read from the
+desktop's own window - but the icon rectangles the plate is drawn against come
+from that same window, so the plate and the icon are always scaled by the same
+number and stay in proportion to each other. Tested with a second display at a
+different resolution and scale factor.</p>
+<h2 id="credit">Credit</h2>
+<p>The approach for finding the desktop list view and attaching to it - a
+<code>CreateWindowExW</code> hook alongside <code>Wh_ModAfterInit</code> - follows
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/hide-desktop-icon-text.wh.cpp">Hide Desktop Icon Text and Shortcut Arrows</a>
+by kivsak.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Built and tested on Windows 11 build 26200. The highlight is intercepted through
+<code>DrawThemeBackground</code>, which is what the desktop was measured to use. That
+function is a wrapper over <code>DrawThemeBackgroundEx</code>, which is not hooked, so a
+Windows build that called the inner function directly would leave the mod inert.
+Inert, not broken: the stock highlight simply comes back.</p>]]></content>
+        <author>
+            <name>RiteshK</name>
+            <uri>https://github.com/RiteshKhandekar</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Action Center on Active Display 1.1.1]]></title>
         <id>https://windhawk.net/mods/action-center-active-display#69c690341417623064c34f367305fa71072824ac</id>
@@ -1176,65 +1250,6 @@ stored in clipboard history, cloud sync, backups, or other programs.</p>]]></con
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Performance Information and Tools Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/performance-info-tools-restorer#80cd389071afb4876534e924c9ee32a39377b5c1</id>
-        <link href="https://windhawk.net/mods/performance-info-tools-restorer"/>
-        <updated>2026-08-10T16:15:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="performanceinformationandtoolsrestorer">Performance Information and Tools Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.</p>
-<p>The mod has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>The mod includes <strong>3 skins</strong>: Windows 7, Windows 8, and Windows Vista.</p>
-<h3 id="windows7skin">Windows 7 skin</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows7perf.png" alt="Windows 7 skin" /></p>
-<h3 id="windows8skin">Windows 8 skin</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows8perf.png" alt="Windows 8 skin" /></p>
-<h3 id="windowsvistaskin">Windows Vista skin</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsvistaperf.png" alt="Windows Vista skin" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Classic WEI page</strong>: The mod restores "Performance Information and Tools" in Control Panel (Large/Small icons view)</li>
-<li><strong>Automatic setup</strong>: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually</li>
-<li><strong>Right DLL for the system</strong>: Uses the Windows 8 DLL on Windows 8.1/10/11</li>
-<li><strong>Built-in translations and language selector</strong>: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. </li>
-<li><strong>Conservative resource handling</strong>: The mod implements a conservative approach to be more stable</li>
-<li><strong>100% reversible</strong>: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.</li>
-</ul>
-<p><strong>Additional note</strong>: To open the "Performance and Informations tools" without having to go to the Control Panel, the <code>shell:::{78F3955E-3B90-4184-BD14-5397C15F1EFC}</code> command can be run when pressing Windows+R like in the classic versions of Windows.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li><strong>Windows 10 or Windows 11</strong> (64-bit) with the native Control Panel</li>
-<li>An internet connection the first time the mod runs (to download the DLL)</li>
-</ul>
-<h2 id="designandsafetynotes">Design and safety notes</h2>
-<ul>
-<li>The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place. The verification is performed through the pinned, already-open file handle (never re-resolved by path), and after <code>LoadLibraryExW</code> the loaded module is confirmed to map that same file object via <code>GetFileInformationByHandleEx(FileIdInfo)</code>; if the two don't match the module is unloaded and refused. The private resource module is rebuilt from the verified source on every load (a leftover file with a predictable name is never trusted) and its final on-disk bytes are SHA-256 compared against the build.</li>
-<li>The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.</li>
-<li>If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart explorer.exe to retry).</li>
-<li>The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through <code>Wh_GetModStoragePath</code>, so it also works with portable Windhawk installations.</li>
-<li>All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>"(unrated)" scores</strong>: If your PC has never been rated, plug in power and run <code>winsat formal</code> once as admin</li>
-<li><strong>On battery</strong>: The assessment is not applicable while running on battery</li>
-<li><strong>Windows 7 page on modern systems</strong>: The Windows 7 version of the page is not compatible with Windows 8.1/10/11 (It displays the "cannot load page" error), so the Windows 8 DLL is always used there</li>
-<li><strong>Windows 7 skin score scale</strong>: The optional Windows 7 skin is only a visual/layout recreation. The restored page still uses the Windows 8 scoring range, so ratings can go up to 9.9 rather than Windows 7's original 7.9 scale.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>Cips</strong> — Testing the mod on Windows 11 25H2</li>
-<li><strong>susiked</strong> — Testing the mod on Windows 10 22H2 and providing the Windows 8 skin screenshot</li>
-<li><strong>MzKo</strong> — Testing the mod on Windows 10 22H2, providing feedback, and providing the Windows Vista skin screenshot</li>
-</ul>
-<p>If any problems are encountered, please report them to the mod's author.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

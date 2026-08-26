@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-26T11:42:44.000Z</updated>
+    <updated>2026-08-26T12:21:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Selection Style 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-selection-style#094b5d25a17c63b8b5ce9cd7f4d527bbdd66f10d</id>
+        <link href="https://windhawk.net/mods/desktop-icon-selection-style"/>
+        <updated>2026-08-26T12:21:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconselectionstyle">Desktop Icon Selection Style</h1>
+<p>The highlight behind a selected desktop icon is a plain slab as wide as the whole
+icon cell, so selections in neighbouring columns run together into one block.
+This mod replaces it with one you can actually style.</p>
+<p><strong>Before</strong> - two selected icons, stock highlight, touching edge to edge:</p>
+<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-before.png" alt="Two selected desktop icons with the stock highlight, a pair of rectangular slabs meeting with no gap between them" /></p>
+<p><strong>After</strong> - narrowed, rounded, with a dashed border and an accent glow:</p>
+<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-after.png" alt="The same two icons with the mod enabled, each highlight narrower than its cell with rounded corners, a dashed white border and a soft accent glow" /></p>
+<p>Everything in the after shot is configurable, and all of it can be turned off.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Narrow it.</strong> Plate width is a percentage of the icon cell, so it looks right
+at any DPI. The stock plate is 100%.</li>
+<li><strong>Transparency.</strong> Any fill colour and opacity, or <code>accent</code> to follow your
+system accent colour.</li>
+<li><strong>Rounded corners.</strong> Any radius, or 0 for sharp corners.</li>
+<li><strong>Borders.</strong> Solid, dashed, dotted or dash-dot, with your own colour, opacity,
+thickness and dash spacing.</li>
+<li><strong>Glow or drop shadow</strong> around the plate, in any colour.</li>
+<li><strong>Hover styling</strong>, with its own opacity. Turn it off to leave plain hover
+looking stock, or keep <em>Border on selection only</em> on so hovered icons get the
+fill but not the border.</li>
+<li><strong>Square shape</strong>, if you would rather have a square than a rectangle.</li>
+</ul>
+<p>Only selected icons are affected. Unselected icons keep their normal look, and
+File Explorer windows are untouched - this is the desktop only.</p>
+<h2 id="notesworthknowing">Notes worth knowing</h2>
+<p><strong>The plate follows the icon height on purpose.</strong> Windows makes a selected icon
+taller so its full file name can wrap onto extra lines, so the same icon needs a
+short plate with a short name and a much taller one with a long name. The plate
+grows with it, so a long name never runs out of the bottom of the highlight.
+Width is a different matter: it is a percentage of the cell, while Windows wraps
+the label to roughly the full cell, so a long name can overhang a narrow plate at
+the sides. Raise <strong>Plate width</strong> if that bothers you. <em>Square</em> shape is
+available, but it is capped at the size of the item, so a very large square comes
+out smaller than requested.</p>
+<p><strong>The glow is a fake, deliberately.</strong> It is stacked translucent rings, not a real
+blur, because a real blur is impossible here - the wallpaper simply is not
+available at the moment the highlight is drawn. It still looks good, but do not
+expect acrylic. It is also limited to roughly 10 pixels beyond the icon, which is
+all Windows repaints around it; a larger glow gets cut off rather than smeared.</p>
+<p><strong>Colours</strong> take <code>accent</code> to follow your system accent colour, or a hex value
+like <code>#3399FF</code> (the <code>#</code> is optional). Anything else is ignored, and the setting
+keeps its default - the mod log says which value it rejected. The accent is read through the immersive colour API, so it is
+the colour you actually picked in Settings rather than the blended colorization
+value. Changing it is picked up as plates are next repainted, so selecting a
+different icon shows the new colour; nothing is forced to redraw on a timer.</p>
+<p><strong>Mixed-DPI setups</strong> are fine, though not because anything is measured
+per-monitor. The pixel settings are scaled by a single DPI, read from the
+desktop's own window - but the icon rectangles the plate is drawn against come
+from that same window, so the plate and the icon are always scaled by the same
+number and stay in proportion to each other. Tested with a second display at a
+different resolution and scale factor.</p>
+<h2 id="credit">Credit</h2>
+<p>The approach for finding the desktop list view and attaching to it - a
+<code>CreateWindowExW</code> hook alongside <code>Wh_ModAfterInit</code> - follows
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/hide-desktop-icon-text.wh.cpp">Hide Desktop Icon Text and Shortcut Arrows</a>
+by kivsak.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Built and tested on Windows 11 build 26200. The highlight is intercepted through
+<code>DrawThemeBackground</code>, which is what the desktop was measured to use. That
+function is a wrapper over <code>DrawThemeBackgroundEx</code>, which is not hooked, so a
+Windows build that called the inner function directly would leave the mod inert.
+Inert, not broken: the stock highlight simply comes back.</p>]]></content>
+        <author>
+            <name>RiteshK</name>
+            <uri>https://github.com/RiteshKhandekar</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Action Center on Active Display 1.1.1]]></title>
         <id>https://windhawk.net/mods/action-center-active-display#69c690341417623064c34f367305fa71072824ac</id>
@@ -972,20 +1046,6 @@ In these cases, please use the Windows Default Apps settings to make your change
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.1.1]]></title>
-        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#bd08bc5ccd5bf6006923944e660795e7e89d7444</id>
-        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
-        <updated>2026-08-21T09:33:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Resolved an issue where navigating back to an external drive from a pinned folder unexpectedly auto-expands the "This PC" item.</li>
-<li>Fixed a bug that caused OneDrive to crash during the sign-in process.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
