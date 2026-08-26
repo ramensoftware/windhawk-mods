@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.7
+// @version         0.18.8
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -1145,19 +1145,16 @@ static std::wstring XmlEscape(const std::wstring& in) {
     return out;
 }
 
-// Builds and shows the toast, then waits up to s.delaySeconds for a button
-// click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
-// or an explicit dismissal. Returns false -- meaning "use the dialog instead"
-// -- if registration hasn't succeeded or any WinRT step fails, so the mod stays
-// usable even where toast notifications don't work.
 // Builds the notifier and the toast object for a given XML payload: the
 // activation factory, the per-AUMID notifier, the current notification
 // setting, and the constructed toast document. Both toast paths need this
-// exact chain. Returns false if any step fails or notifications are off; on
-// a get_Setting failure *setting is left at its Enabled default, so a caller
-// that needs to tell "off" apart from "unreadable" can check *setting.
+// exact chain. Returns false if any step fails or notifications are off;
+// settingReadable reports whether get_Setting itself succeeded, so a caller
+// that needs to tell "notifications are off" apart from "couldn't find out"
+// doesn't have to infer it from setting alone.
 static bool BuildToast(const std::wstring& xml,
                        ABI::Windows::UI::Notifications::NotificationSetting& setting,
+                       bool& settingReadable,
                        Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier,
                        Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
     using namespace ABI::Windows::UI::Notifications;
@@ -1166,6 +1163,7 @@ static bool BuildToast(const std::wstring& xml,
     using Microsoft::WRL::ComPtr;
     using Microsoft::WRL::Wrappers::HStringReference;
 
+    settingReadable = false;
     ComPtr<IToastNotificationManagerStatics> toastStatics;
     if (FAILED(RoGetActivationFactory(
             HStringReference(
@@ -1180,8 +1178,8 @@ static bool BuildToast(const std::wstring& xml,
     }
 
     setting = NotificationSetting_Enabled;
-    if (FAILED(notifier->get_Setting(&setting)) ||
-        setting != NotificationSetting_Enabled) {
+    settingReadable = SUCCEEDED(notifier->get_Setting(&setting));
+    if (!settingReadable || setting != NotificationSetting_Enabled) {
         return false;
     }
 
@@ -1214,12 +1212,15 @@ static std::wstring BaseName(const std::wstring& path) {
     return path.substr(path.find_last_of(L"\\/") + 1);
 }
 
+// Builds and shows the toast, then waits up to s.delaySeconds for a button
+// click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
+// or an explicit dismissal. Returns false, meaning "use the dialog instead",
+// if registration hasn't succeeded or any WinRT step fails, so the mod stays
+// usable even where toast notifications don't work.
 static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
     using namespace ABI::Windows::UI::Notifications;
-    using namespace ABI::Windows::Data::Xml::Dom;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
-    using Microsoft::WRL::Wrappers::HStringReference;
 
     if (!g_toastRegistered.load()) {
         return false;
@@ -1250,10 +1251,11 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     // screenshot. Do the configured clipboard copy and never delete, since the
     // user was never actually prompted.
     NotificationSetting setting = NotificationSetting_Enabled;
+    bool settingReadable = false;
     ComPtr<IToastNotifier> notifier;
     ComPtr<IToastNotification> toast;
-    if (!BuildToast(xml, setting, notifier, toast)) {
-        if (setting != NotificationSetting_Enabled) {
+    if (!BuildToast(xml, setting, settingReadable, notifier, toast)) {
+        if (settingReadable && setting != NotificationSetting_Enabled) {
             Wh_Log(L"Notifications off (setting=%d); copy only, no dialog",
                    (int)setting);
             action = ACTION_COPY_ONLY;
@@ -1526,10 +1528,7 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
 // shown (registration gone, notifications off), the caller's log line stands alone.
 static void ShowKeptToast(const std::wstring& name) {
     using namespace ABI::Windows::UI::Notifications;
-    using namespace ABI::Windows::Data::Xml::Dom;
-    using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
-    using Microsoft::WRL::Wrappers::HStringReference;
 
     if (!g_toastRegistered.load()) {
         return;
@@ -1554,9 +1553,10 @@ static void ShowKeptToast(const std::wstring& name) {
     // informational message if they've turned notifications off. BuildToast
     // covers that check along with the rest of the chain.
     NotificationSetting setting = NotificationSetting_Enabled;
+    bool settingReadable = false;
     ComPtr<IToastNotifier> notifier;
     ComPtr<IToastNotification> toast;
-    if (!BuildToast(xml, setting, notifier, toast)) {
+    if (!BuildToast(xml, setting, settingReadable, notifier, toast)) {
         return;
     }
     notifier->Show(toast.Get());
@@ -1819,11 +1819,6 @@ static bool g_toastRegApplied = false;
 // one moment nothing would otherwise reclaim them.
 static bool g_toastRegSynced = false;
 
-// The shortcut and the registry key exist for one reason, to let a toast button
-// activate us, so they follow the settings instead of being written
-// unconditionally at startup. With processing or the popup off there is no
-// notification, and a SnapSentry entry sitting in Start and in Search would be
-// there for nothing.
 // Clears anything SnapSentry left in Action Center, such as a kept-file
 // notice. Must run while the AUMID is still registered: ClearWithId needs it
 // to resolve which app's history to clear. Idempotent, so it is safe to call
@@ -1852,6 +1847,11 @@ static void ClearToastHistory() {
     }
 }
 
+// The shortcut and the registry key exist for one reason, to let a toast button
+// activate us, so they follow the settings instead of being written
+// unconditionally at startup. With processing or the popup off there is no
+// notification, and a SnapSentry entry sitting in Start and in Search would be
+// there for nothing.
 static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
     // Clear Action Center and reclaim the per-AUMID notification key on unload,
     // unconditionally and before the early return below: with the popup already
@@ -1887,6 +1887,16 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
         g_toastRegistered = aumidOk && clsidOk && SUCCEEDED(regHr);
         if (g_toastRegistered.load()) {
             Wh_Log(L"Toast notifications ready");
+            // Reclaim anything an unclean exit left in Action Center: Windows
+            // persists it across reboots, and the popup-off first pass below is
+            // the only other place that clears it, so with the popup on nothing
+            // would. The AUMID is registered by this point, so the clear
+            // resolves. Once a session is enough.
+            static bool clearedStaleHistory = false;
+            if (!clearedStaleHistory) {
+                clearedStaleHistory = true;
+                ClearToastHistory();
+            }
             PrewarmToast();  // Avoid a slow first popup.
         } else {
             Wh_Log(
@@ -1903,10 +1913,14 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
         CoRevokeClassObject(g_toastActivatorCookie);
         g_toastActivatorCookie = 0;
     }
-    // On the unload path this repeats the call already made above, before the
-    // early-return check; harmless, since it is idempotent. On a plain popup-off
-    // (not unloading) this is the only place it runs.
-    ClearToastHistory();
+    // Unload already cleared it above, while the notification key was still
+    // there; repeating it here would run after RemoveNotificationSettings and
+    // could fail for that reason alone. Skip it when nothing was ever
+    // registered (the default popup-off first pass), since there is then no
+    // AUMID for ClearWithId to resolve and the failure means nothing.
+    if (!unloading && g_toastRegApplied) {
+        ClearToastHistory();
+    }
     RemoveAumidRegistration();
     RemoveClsidRegistration();
     // The per-AUMID Notifications\Settings key also holds the user's own per-app
