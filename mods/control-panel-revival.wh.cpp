@@ -124,9 +124,9 @@ void KillStringInModule(HMODULE hModule, LPCWSTR lpSearch) {
 const WindhawkUtils::SYMBOL_HOOK explorerControlHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
-    &COpenControlPanel__MapLegacyName_orig,
-    COpenControlPanel__Name_hook,
-    false
+        &COpenControlPanel__MapLegacyName_orig,
+        COpenControlPanel__MapLegacyName_hook, 
+        false
     }
 };
 
