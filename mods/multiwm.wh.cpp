@@ -516,6 +516,12 @@ struct VirtualDesktopRuntime {
   bool initialized = false;
 };
 
+enum class ReconciledDesktopState {
+  Unknown,
+  Settled,
+  TransitionPending,
+};
+
 // Serialized actor/thread state. Management mode affects admission/retention
 // policy only; observation, reconciliation, resize learning, and arrangement
 // remain live in both modes. Only threadId is observed outside the actor.
@@ -533,7 +539,8 @@ struct WmRuntime {
   bool forceMonitorReconcile = false;
   bool comInitialized = false;
   GUID reconciledDesktop{};
-  bool reconciledDesktopValid = false;
+  ReconciledDesktopState reconciledDesktopState =
+      ReconciledDesktopState::Unknown;
   bool pendingDesktopSwitchFlyouts = false;
   std::vector<HWND> lifecycleDirtyWindows;
   std::vector<PendingWorkspaceArrange> pendingDesktopArranges;
@@ -2342,14 +2349,6 @@ static const WindowRule* FindMatchingWindowRule(
   for (const auto& rule : g_settings.windowRules) {
     if (rule.treatment != treatment) continue;
 
-    if (!rule.process.empty()) {
-      if (!haveProcess) {
-        processName = GetWindowProcessName(hwnd);
-        haveProcess = true;
-      }
-      if (!EqualsInsensitive(processName, rule.process)) continue;
-    }
-
     if (!rule.className.empty()) {
       if (!haveClass) {
         wchar_t buffer[256]{};
@@ -2366,6 +2365,14 @@ static const WindowRule* FindMatchingWindowRule(
         haveTitle = true;
       }
       if (!ContainsInsensitive(title, rule.titleContains)) continue;
+    }
+
+    if (!rule.process.empty()) {
+      if (!haveProcess) {
+        processName = GetWindowProcessName(hwnd);
+        haveProcess = true;
+      }
+      if (!EqualsInsensitive(processName, rule.process)) continue;
     }
 
     return &rule;
@@ -2481,6 +2488,10 @@ static PlacementObservation PlaceWindowChecked(
     return finish(PlacementResult::Dead);
   }
   if (!canMove) {
+    ++Diagnostics::g_runtime.counters.placementPreflightStops;
+    return finish(PlacementResult::Refused);
+  }
+  if (IsHungAppWindow(hwnd)) {
     ++Diagnostics::g_runtime.counters.placementPreflightStops;
     return finish(PlacementResult::Refused);
   }
@@ -3737,6 +3748,14 @@ void Workspace::RepairForArrangement(
 static bool IsWorkspaceOnActiveDesktop(const DesktopMonitorKey& key) {
   GUID zeroGuid{};
   if (IsEqualGUID(key.desktopId, zeroGuid)) return false;
+
+  // The reconciled desktop is actor-owned and authoritative between transition
+  // signals. Avoid re-querying Explorer from high-frequency placement and
+  // LOCATIONCHANGE paths; a dirty transition deliberately retains the old GUID
+  // for comparison while falling through to the existing live query.
+  if (g_wm.reconciledDesktopState == ReconciledDesktopState::Settled) {
+    return IsEqualGUID(g_wm.reconciledDesktop, key.desktopId);
+  }
 
   GUID currentDesktop{};
   if (!GetCurrentDesktopId(&currentDesktop)) return false;
@@ -5232,7 +5251,7 @@ static void HandleVirtualDesktopChanged() {
   Diagnostics::RecordEvent(
       L"virtual desktop changed currentDesktop=%08X", currentDesktop.Data1);
   const bool desktopActuallyChanged =
-      !g_wm.reconciledDesktopValid ||
+      g_wm.reconciledDesktopState == ReconciledDesktopState::Unknown ||
       !IsEqualGUID(g_wm.reconciledDesktop, currentDesktop);
   if (desktopActuallyChanged) {
     // A lease describes post-placement behavior on one active desktop. Never carry
@@ -5242,7 +5261,7 @@ static void HandleVirtualDesktopChanged() {
     ScheduleNextConformanceTimer();
   }
   g_wm.reconciledDesktop = currentDesktop;
-  g_wm.reconciledDesktopValid = true;
+  g_wm.reconciledDesktopState = ReconciledDesktopState::Settled;
   // The visual transition belongs to the settled desktop state, not the raw COM
   // callback. Coalesce rapid switches and emit one monitor-local OSD per connected
   // display after reconciliation has finished. Duplicate callbacks for the already
@@ -5359,7 +5378,7 @@ static void ReconcileDeferredLifecycle() {
   // change as a real desktop transition: repair global desktop ownership and
   // reinforce all known/current monitors on the incoming desktop.
   const bool fallbackDesktopChange =
-      g_wm.reconciledDesktopValid &&
+      g_wm.reconciledDesktopState != ReconciledDesktopState::Unknown &&
       !IsEqualGUID(g_wm.reconciledDesktop, currentDesktop);
   if (fallbackDesktopChange) {
     // The native callback was missed, so this is the first point where the WM can
@@ -5380,7 +5399,7 @@ static void ReconcileDeferredLifecycle() {
     g_wm.pendingDesktopSwitchFlyouts = true;
   }
   g_wm.reconciledDesktop = currentDesktop;
-  g_wm.reconciledDesktopValid = true;
+  g_wm.reconciledDesktopState = ReconciledDesktopState::Settled;
 
   // Repair liveness/exclusions and settled hidden/minimized/maximized participation
   // globally before doing current-desktop discovery.
@@ -6190,6 +6209,15 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 
   // Accepted lifecycle events are serialized on the WM thread.
   // PostThreadMessage keeps model mutation out of the WinEvent callback.
+  if (event == EVENT_OBJECT_CLOAKED || event == EVENT_OBJECT_UNCLOAKED) {
+    // Older notification ABIs rely on the settled cloak/uncloak fallback to
+    // discover desktop switches. Until that pass completes, preserve the current
+    // behavior by making active-desktop checks query Explorer directly.
+    if (g_wm.reconciledDesktopState != ReconciledDesktopState::Unknown) {
+      g_wm.reconciledDesktopState =
+          ReconciledDesktopState::TransitionPending;
+    }
+  }
   QueueWindowEvent(event, hwnd);
 }
 
@@ -6514,6 +6542,13 @@ static bool IsCurrentNotificationInterface(REFIID riid) {
 static void QueueVirtualDesktopChangedNotification() {
   const DWORD threadId = g_wm.threadId.load(std::memory_order_acquire);
   if (!threadId) return;
+
+  // The callback is the transition boundary. Keep using the live shell query until
+  // the queued handler has reconciled the new desktop into actor-owned state.
+  if (g_wm.reconciledDesktopState != ReconciledDesktopState::Unknown) {
+    g_wm.reconciledDesktopState =
+        ReconciledDesktopState::TransitionPending;
+  }
 
   // COM can emit redundant desktop notifications. Collapse them before they
   // reach the WM core, just as FancyWM coalesces layout invalidations.
@@ -7083,7 +7118,7 @@ void NotifyShellRestarted() {
   if (shellReplaced) {
     Platform::VirtualDesktop::AbandonVirtualDesktopAPIForShellRestart();
     g_wm.reconciledDesktop = {};
-    g_wm.reconciledDesktopValid = false;
+    g_wm.reconciledDesktopState = ReconciledDesktopState::Unknown;
   }
 
   // A shell replacement can move/recreate windows asynchronously. Never let a
@@ -9803,7 +9838,12 @@ void LoadSettings() {
     auto treatment =
         StringSetting::make(L"windowRules.Rules[%d].Treatment", i);
     auto size = StringSetting::make(L"windowRules.Rules[%d].Size", i);
-    if (!*process.get() && !*className.get() && !*titleContains.get()) break;
+    if (!*process.get() && !*className.get() && !*titleContains.get()) {
+      Wh_Log(
+          L"Window rule %d is blank; later rules will not be loaded",
+          i + 1);
+      break;
+    }
 
     WindowRule rule;
     if (_wcsicmp(treatment.get(), L"trace_to_owner") == 0) {
@@ -10024,6 +10064,10 @@ static WmMessageDisposition HandleWmThreadMessage(const MSG& msg) {
       return WmMessageDisposition::Handled;
 
     case WM_TIMER:
+      // Actor timers are created with SetTimer(nullptr, ...). A window timer can
+      // use the same numeric ID and must still reach its WndProc.
+      if (msg.hwnd) return WmMessageDisposition::DispatchToWindows;
+
       if (g_wm.lifecycleTimer &&
           static_cast<UINT_PTR>(msg.wParam) == g_wm.lifecycleTimer) {
         Reconcile::ReconcileDeferredLifecycle();
@@ -10125,7 +10169,7 @@ static void CleanupWmThread() {
   g_wm.lifecycleRetryAfterPlatformRecovery = false;
   g_wm.forceMonitorReconcile = false;
   g_wm.reconciledDesktop = {};
-  g_wm.reconciledDesktopValid = false;
+  g_wm.reconciledDesktopState = ReconciledDesktopState::Unknown;
   g_wm.pendingDesktopSwitchFlyouts = false;
   ClearAllConformanceLeases();
   ClearAllMoveSizeSamples();
