@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.2.2
+// @version         1.2.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -52,6 +52,11 @@ plain text indicator can each be given their own position. Anything left on **Sa
 as the main position** follows the setting above, so you only have to touch the ones
 you want somewhere else. Handy if you want the volume indicator out of the way at the
 bottom but still want the camera one where you will notice it.
+
+Volume kept at the top left while brightness sits in the middle. Only one of them is
+ever on screen at a time, so this is the same desktop photographed twice:
+
+![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
 ## Choosing a monitor
 
@@ -243,9 +248,8 @@ enum class Indicator {
     microphone,
     text,
     count,
-    // Nothing is on screen, or the entry point for whatever is on screen isn't
-    // hooked. Either way there is no kind to look up, so the main position is
-    // used rather than whatever happened to be shown last.
+    // Nothing has been shown yet, so there is no kind to look up and the main
+    // position is used.
     unknown,
 };
 
@@ -262,20 +266,22 @@ struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
-    // Position::windowsDefault here means "no override", so the main position is
-    // used. The main position keeps its own meaning of leaving Windows' spot be.
-    std::atomic<bool> perIndicatorSet[(size_t)Indicator::count];
+    // Position::windowsDefault means "no override", so the main position is used.
+    // It is never offered as a per-indicator choice, which leaves it free to be
+    // the sentinel. The main position keeps its own meaning of leaving Windows'
+    // spot alone.
     std::atomic<Position> perIndicator[(size_t)Indicator::count];
 } g_settings;
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
     size_t i = (size_t)g_currentIndicator.load();
-    if (i < (size_t)Indicator::count && g_settings.perIndicatorSet[i].load()) {
-        return g_settings.perIndicator[i].load();
-    }
+    Position perIndicator = i < (size_t)Indicator::count
+                                ? g_settings.perIndicator[i].load()
+                                : Position::windowsDefault;
 
-    return g_settings.position.load();
+    return perIndicator != Position::windowsDefault ? perIndicator
+                                                    : g_settings.position.load();
 }
 
 HMODULE g_hardwareConfirmatorModule;
@@ -368,8 +374,12 @@ void PlaceInArea(const WinrtRect& area,
 // recorded as one is asked for and read back when the position is worked out.
 // They are private coroutines returning winrt::fire_and_forget, an empty struct,
 // so the return is passed through as the single byte it occupies. Every one is
-// hooked as optional: if a name stops resolving on some build, that kind just
-// falls back to the main position instead of the mod failing to load.
+// hooked as optional, so a name that stops resolving on some build costs that one
+// kind rather than the whole mod. Such a kind is placed using whichever kind was
+// recorded before it, or the main position if none has been shown yet. Clearing
+// the record on hide would make that exact, but a hide landing between a show and
+// the placement would then misplace a perfectly normal indicator, which is the
+// worse trade.
 
 using ShowVolumeAsync_t = char(WINAPI*)(void* pThis, int value);
 ShowVolumeAsync_t ShowVolumeAsync_Original;
@@ -425,21 +435,6 @@ ShowTextAsync_t ShowTextAsync_Original;
 char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
     g_currentIndicator.store(Indicator::text);
     return ShowTextAsync_Original(pThis, text, value);
-}
-
-// Clearing the kind on hide is what makes the fallback above true: without it an
-// unhooked kind would inherit the position of whichever kind was shown last.
-using HideConfirmator_t = void(WINAPI*)(void* pThis);
-HideConfirmator_t HideConfirmator_Original;
-void WINAPI HideConfirmator_Hook(void* pThis) {
-    g_currentIndicator.store(Indicator::unknown);
-    return HideConfirmator_Original(pThis);
-}
-
-HideConfirmator_t HideConfirmatorWithoutAnimation_Original;
-void WINAPI HideConfirmatorWithoutAnimation_Hook(void* pThis) {
-    g_currentIndicator.store(Indicator::unknown);
-    return HideConfirmatorWithoutAnimation_Original(pThis);
 }
 
 using HardwareConfirmatorHost_GetPositionRect_t =
@@ -540,6 +535,7 @@ void LoadSettings() {
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
 
+
     static const PCWSTR kIndicatorSettings[] = {
         L"perIndicator.volume",       L"perIndicator.brightness",
         L"perIndicator.keyboardBrightness", L"perIndicator.airplaneMode",
@@ -557,7 +553,6 @@ void LoadSettings() {
         // main position stops applying to any of them.
         PCWSTR stored = value.get();
         bool isSame = !*stored || wcscmp(stored, L"same") == 0;
-        g_settings.perIndicatorSet[i] = !isSame;
         g_settings.perIndicator[i] =
             isSame ? Position::windowsDefault : PositionFromString(stored);
     }
@@ -573,7 +568,7 @@ BOOL Wh_ModInit() {
     // mod after a settings change, so it comes back as soon as there is work.
     bool anyPerIndicator = false;
     for (size_t i = 0; i < (size_t)Indicator::count; i++) {
-        if (g_settings.perIndicatorSet[i]) {
+        if (g_settings.perIndicator[i] != Position::windowsDefault) {
             anyPerIndicator = true;
             break;
         }
@@ -599,18 +594,6 @@ BOOL Wh_ModInit() {
             {LR"(private: struct winrt::Windows::Foundation::Rect __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::GetPositionRect(struct winrt::Windows::Foundation::Rect const &))"},
             &HardwareConfirmatorHost_GetPositionRect_Original,
             HardwareConfirmatorHost_GetPositionRect_Hook,
-        },
-        {
-            {LR"(public: void __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::HideConfirmator(void))"},
-            &HideConfirmator_Original,
-            HideConfirmator_Hook,
-            true,  // optional
-        },
-        {
-            {LR"(public: void __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::HideConfirmatorWithoutAnimation(void))"},
-            &HideConfirmatorWithoutAnimation_Original,
-            HideConfirmatorWithoutAnimation_Hook,
-            true,  // optional
         },
         {
             {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowVolumeAsync(int))"},
