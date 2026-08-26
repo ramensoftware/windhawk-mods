@@ -2,7 +2,7 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        2.1.0
+// @version        2.2.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -41,6 +41,7 @@ Windows 8.1 theme
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
 - **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
+- **Icon-relative placement**: The flyout appears next to the Action Center tray icon on any taskbar edge (bottom, top, left or right) and follows the icon if you drag it to another slot. It is centered on the icon (like the network flyout recreation mod) and falls back to the last known icon position when the icon is hidden in the notification overflow.
 - **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian and Turkish are currently supported.
 - **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO/TR). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
@@ -58,12 +59,11 @@ The mod monitors the system's security settings including Firewall, Antivirus, W
 The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 and it is compatible with the native Windows 10 taskbar (native on Windows 10 and using ExplorerPatcher or similar methods on Windows 11).
 
 ## Known Limitations
-- **Vertical taskbar (left/right edge)**: Flyout positioning on vertical taskbars 
-  is best-effort as Windows 10's taskbar itself has inconsistent flyout behavior on vertical 
-  taskbars, so perfect placement cannot be guaranteed in all configurations.
+- **Vertical taskbar (left/right edge)**: The flyout is centered on the icon and opens toward the screen center. Windows 10's taskbar itself has inconsistent flyout behavior on vertical taskbars, so perfect placement cannot be guaranteed in all configurations.
 - **Hidden tray icon**: It is recommended to keep the Action Center icon visible 
   in the system tray rather than hidden in the notification overflow. When hidden, 
-  positioning may be less accurate depending on the Windows version.
+  the flyout falls back to the last known icon position, which may be less accurate 
+  depending on the Windows version.
 ## Notes
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
@@ -125,6 +125,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 */
 // ==/WindhawkModSettings==
 
+// 2.2.0 -> Fixed the position of the flyout
 
 #ifndef UNICODE
 #define UNICODE
@@ -154,8 +155,6 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 
 #define FLYOUT_OFFSET 8
 
-/* Restituisce il DPI effettivo della finestra tramite GetDpiForWindow (Win10 1607+),
-   con fallback a GetDeviceCaps per compatibilita' con versioni precedenti. */
 static UINT GetWindowDpi(HWND hwnd) {
     typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
     static auto pfn = (GetDpiForWindow_t)GetProcAddress(
@@ -3789,6 +3788,47 @@ static BOOL GetWorkAreaFromMonitor(HMONITOR hMonitor, RECT* outWorkArea) {
     return FALSE;
 }
 
+/* Restituisce il rettangolo a schermo dell'icona tray del Centro Operativo.
+   Fonte primaria: Shell_NotifyIconGetRect (per GUID) con fallback senza GUID.
+   Se entrambe falliscono, riusa l'ultimo rettangolo valido in cache, cosi' il
+   flyout continua a seguire l'icona anche se questa e' momentaneamente non
+   raggiungibile (es. nascosta nell'overflow). Stesso principio della mod del
+   flyout di connessione: il flyout si adatta alla posizione dell'icona. */
+static BOOL GetTrayIconScreenRect(RECT* outRect) {
+    if (!outRect) return FALSE;
+    SetRectEmpty(outRect);
+
+    if (g_Ctx.hWndMsgHandler && g_Ctx.trayIconAdded) {
+        NOTIFYICONIDENTIFIER nidIcon = { sizeof(NOTIFYICONIDENTIFIER) };
+        nidIcon.hWnd = g_Ctx.hWndMsgHandler;
+        nidIcon.uID = TRAY_ICON_ID;
+        nidIcon.guidItem = TRAY_ICON_GUID;
+        RECT rc = { 0 };
+        HRESULT hr = Shell_NotifyIconGetRect(&nidIcon, &rc);
+        if (hr == S_OK && !IsRectEmpty(&rc)) {
+            *outRect = rc;
+            g_CachedTrayIconRect = rc;
+            return TRUE;
+        }
+        // Fallback senza GUID (usato quando NIM_ADD e' riuscito solo senza GUID)
+        ZeroMemory(&nidIcon.guidItem, sizeof(nidIcon.guidItem));
+        hr = Shell_NotifyIconGetRect(&nidIcon, &rc);
+        if (hr == S_OK && !IsRectEmpty(&rc)) {
+            *outRect = rc;
+            g_CachedTrayIconRect = rc;
+            return TRUE;
+        }
+    }
+
+    // Icona temporaneamente non raggiungibile: riusa l'ultimo rettangolo noto
+    // invece di tornare ad ancorare il flyout al bordo della taskbar.
+    if (!IsRectEmpty(&g_CachedTrayIconRect)) {
+        *outRect = g_CachedTrayIconRect;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 void PositionWindowNearTray(HWND hwnd) {
     // Rileva il DPI effettivo della finestra (non il globale g_dpi che potrebbe
     // essere stantio) e ricalcola le metriche prima di posizionare.
@@ -3798,151 +3838,113 @@ void PositionWindowNearTray(HWND hwnd) {
     { SRWGuard guard(g_Ctx.srwLock, false); activeProblems = g_ActiveProblems; }
     RecalcDpiMetrics(dpi, activeProblems);
 
-    // Determina il bordo della taskbar e il monitor corretto per supporto multimonitor.
-    // CRITICO: usiamo il monitor della taskbar, non quello della finestra (che potrebbe essere a (0,0))
+    int winW = g_ScaledWidth;
+    int winH = g_ScaledHeight;
+
+    // Bordo della taskbar + monitor (solo come fallback, vedi sotto).
     RECT taskbarRect = {};
     HMONITOR hTaskbarMonitor = NULL;
     UINT edge = GetTaskbarEdge(&taskbarRect, &hTaskbarMonitor);
-    
-    // Ottieni l'area di lavoro dal monitor della taskbar (fondamentale per multimonitor)
+
+    // Rettangolo dell'icona: e' la fonte primaria, cosi' il flyout si adatta
+    // alla posizione dell'icona e la segue su qualunque bordo (stesso approccio
+    // della mod del flyout di connessione: il flyout e' centrato sull'icona).
+    RECT rcIcon = {};
+    BOOL haveIcon = GetTrayIconScreenRect(&rcIcon);
+
+    // Monitor: preferisci quello dell'icona, altrimenti quello della taskbar.
+    HMONITOR hMon = NULL;
+    if (haveIcon)
+        hMon = MonitorFromRect(&rcIcon, MONITOR_DEFAULTTONEAREST);
+    if (!hMon)
+        hMon = hTaskbarMonitor;
+    if (!hMon)
+        hMon = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
+
     RECT rcWork = {};
-    if (!GetWorkAreaFromMonitor(hTaskbarMonitor, &rcWork)) {
-        // Fallback se GetMonitorInfo fallisce
+    if (!GetWorkAreaFromMonitor(hMon, &rcWork))
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+
+    // Preferisci la geometria dell'icona ad ABM_GETTASKBARPOS: cosi' il flyout
+    // finisce sul lato corretto dell'icona anche con taskbar auto-hide o DPI
+    // misti (identico a quanto fa la mod del flyout di connessione).
+    if (haveIcon) {
+        if (rcIcon.top >= rcWork.bottom - 2)       edge = ABE_BOTTOM;
+        else if (rcIcon.bottom <= rcWork.top + 2)  edge = ABE_TOP;
+        else if (rcIcon.left >= rcWork.right - 2)  edge = ABE_RIGHT;
+        else if (rcIcon.right <= rcWork.left + 2)  edge = ABE_LEFT;
     }
 
-    NOTIFYICONIDENTIFIER nidIcon = { sizeof(NOTIFYICONIDENTIFIER) };
-    nidIcon.hWnd = g_Ctx.hWndMsgHandler; nidIcon.uID = TRAY_ICON_ID; nidIcon.guidItem = TRAY_ICON_GUID;
-    RECT rcIcon = { 0 };
-    HRESULT hrRect = Shell_NotifyIconGetRect(&nidIcon, &rcIcon);
-    Wh_Log(L"PositionWindowNearTray: dpi=%u ScaledSize=%dx%d edge=%u monitor=%p",
-           dpi, g_ScaledWidth, g_ScaledHeight, edge, (void*)hTaskbarMonitor);
-    Wh_Log(L"Shell_NotifyIconGetRect hr=0x%08X rcIcon={%d,%d,%d,%d}",
-           (unsigned)hrRect, rcIcon.left, rcIcon.top, rcIcon.right, rcIcon.bottom);
-    Wh_Log(L"Work area={%d,%d,%d,%d} taskbarRect={%d,%d,%d,%d}",
-           rcWork.left, rcWork.top, rcWork.right, rcWork.bottom,
-           taskbarRect.left, taskbarRect.top, taskbarRect.right, taskbarRect.bottom);
+    const int gap = MulDiv(8, (int)dpi, 96);
 
-    // Usa l'icona tray se disponibile, altrimenti ancona al bordo della taskbar.
-    // Questo assicura che il flyout appaia sullo stesso monitor dell'icona.
-    POINT ptAnchor = { 0 };
-    BOOL useIconPosition = (hrRect == S_OK && 
-                           rcIcon.left != 0 && rcIcon.top != 0 &&
-                           (rcIcon.right - rcIcon.left) > 0 && 
-                           (rcIcon.bottom - rcIcon.top) > 0);
-    
-    if (useIconPosition) {
-        // Posiziona l'anchor vicino all'icona tray (comportamento classico Win7)
+    int x = 0, y = 0;
+    if (haveIcon) {
+        // Centra il flyout sull'icona: orizzontalmente con taskbar in alto/basso,
+        // verticalmente con taskbar laterale (come il flyout di rete).
+        int iconCx = rcIcon.left + (rcIcon.right - rcIcon.left) / 2;
+        int iconCy = rcIcon.top  + (rcIcon.bottom - rcIcon.top) / 2;
         switch (edge) {
-            case ABE_TOP:
-                ptAnchor.x = rcIcon.left;
-                ptAnchor.y = rcIcon.bottom;
-                break;
-            case ABE_LEFT:
-                ptAnchor.x = rcIcon.right;
-                ptAnchor.y = (rcIcon.top + rcIcon.bottom) / 2;
-                break;
-            case ABE_RIGHT:
-                ptAnchor.x = rcIcon.left;
-                ptAnchor.y = (rcIcon.top + rcIcon.bottom) / 2;
-                break;
-            default: // ABE_BOTTOM
-                ptAnchor.x = rcIcon.left;
-                ptAnchor.y = rcIcon.top;
-                break;
+        case ABE_TOP:
+            x = iconCx - winW / 2;
+            y = rcIcon.bottom + gap;
+            break;
+        case ABE_LEFT:
+            x = rcIcon.right + gap;
+            y = iconCy - winH / 2;
+            break;
+        case ABE_RIGHT:
+            x = rcIcon.left - winW - gap;
+            y = iconCy - winH / 2;
+            break;
+        case ABE_BOTTOM:
+        default:
+            x = iconCx - winW / 2;
+            y = rcIcon.top - winH - gap;
+            break;
         }
-        Wh_Log(L"Using tray icon position: anchor={%d,%d}", ptAnchor.x, ptAnchor.y);
     } else {
-        // Fallback: ancora al bordo della taskbar (angolo vicino alla system tray)
-        switch (edge) {
-            case ABE_TOP:
-                ptAnchor.x = taskbarRect.right;
-                ptAnchor.y = taskbarRect.bottom;
-                break;
-            case ABE_LEFT:
-                ptAnchor.x = taskbarRect.right;
-                ptAnchor.y = taskbarRect.bottom;
-                break;
-            case ABE_RIGHT:
-                ptAnchor.x = taskbarRect.left;
-                ptAnchor.y = taskbarRect.bottom;
-                break;
-            default: // ABE_BOTTOM
-                ptAnchor.x = taskbarRect.right;
-                ptAnchor.y = taskbarRect.top;
-                break;
-        }
-        Wh_Log(L"Using taskbar edge position: anchor={%d,%d}", ptAnchor.x, ptAnchor.y);
-    }
-
-    // Flag TPM adattati al bordo: il flyout si apre sempre verso l'interno dello schermo.
-    UINT tpmFlags;
-    switch (edge) {
-        case ABE_TOP:   tpmFlags = TPM_LEFTALIGN  | TPM_TOPALIGN    | TPM_VERTICAL; break;
-        case ABE_LEFT:  tpmFlags = TPM_LEFTALIGN  | TPM_BOTTOMALIGN | TPM_VERTICAL; break;
-        case ABE_RIGHT: tpmFlags = TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_VERTICAL; break;
-        default:        tpmFlags = TPM_LEFTALIGN  | TPM_BOTTOMALIGN | TPM_VERTICAL; break;
-    }
-
-    SIZE szFlyout = { g_ScaledWidth, g_ScaledHeight };
-    RECT rcExclude = taskbarRect;
-    RECT rcResult = { 0 };
-    BOOL bPopup = CalculatePopupWindowPosition(&ptAnchor, &szFlyout, tpmFlags, &rcExclude, &rcResult);
-    Wh_Log(L"CalculatePopupWindowPosition ok=%d tpmFlags=0x%X anchor={%d,%d} rcResult={%d,%d,%d,%d}",
-           bPopup, tpmFlags, ptAnchor.x, ptAnchor.y, rcResult.left, rcResult.top, rcResult.right, rcResult.bottom);
-    
-    if (bPopup) {
-        // Verifica che il risultato sia sul monitor corretto (multimonitor safety check)
-        HMONITOR hResultMonitor = MonitorFromPoint({rcResult.left, rcResult.top}, MONITOR_DEFAULTTONEAREST);
-        if (hResultMonitor != hTaskbarMonitor && hTaskbarMonitor != NULL) {
-            Wh_Log(L"Warning: popup on wrong monitor, using fallback positioning");
-            bPopup = FALSE; // Forza fallback
-        }
-    }
-    
-    if (bPopup) {
-        SetWindowPos(hwnd, HWND_TOPMOST, rcResult.left, rcResult.top, g_ScaledWidth, g_ScaledHeight, SWP_NOACTIVATE);
-    } else {
-        // Fallback manuale per ogni bordo - USA SEMPRE l'area di lavoro del monitor della taskbar
-        int x, y;
+        // Fallback senza icona: ancora al bordo della taskbar (come prima).
         int offsetX = MulDiv(10, (int)dpi, 96);
         int offsetY = MulDiv(6, (int)dpi, 96);
-        
         switch (edge) {
             case ABE_TOP:
-                x = rcWork.right - g_ScaledWidth - offsetX;
+                x = rcWork.right - winW - offsetX;
                 y = taskbarRect.bottom + offsetY;
                 break;
             case ABE_LEFT:
                 x = taskbarRect.right + offsetY;
-                y = rcWork.bottom - g_ScaledHeight - offsetX;
+                y = rcWork.bottom - winH - offsetX;
                 break;
             case ABE_RIGHT:
-                x = taskbarRect.left - g_ScaledWidth - offsetY;
-                y = rcWork.bottom - g_ScaledHeight - offsetX;
+                x = taskbarRect.left - winW - offsetY;
+                y = rcWork.bottom - winH - offsetX;
                 break;
             default: // ABE_BOTTOM
-                x = rcWork.right - g_ScaledWidth - offsetX;
-                y = taskbarRect.top - g_ScaledHeight - offsetY;
+                x = rcWork.right - winW - offsetX;
+                y = taskbarRect.top - winH - offsetY;
                 break;
         }
-        
-        // Multimonitor safety: assicurati che la finestra sia visibile sul monitor
-        // Se x/y sono fuori dal work area, clampali
-        if (x < rcWork.left) x = rcWork.left + offsetX;
-        if (y < rcWork.top) y = rcWork.top + offsetY;
-        if (x + g_ScaledWidth > rcWork.right) x = rcWork.right - g_ScaledWidth - offsetX;
-        if (y + g_ScaledHeight > rcWork.bottom) y = rcWork.bottom - g_ScaledHeight - offsetY;
-        
-        Wh_Log(L"Fallback positioning: pos={%d,%d} workArea={%d,%d,%d,%d}", 
-               x, y, rcWork.left, rcWork.top, rcWork.right, rcWork.bottom);
-        SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_ScaledWidth, g_ScaledHeight, SWP_NOACTIVATE);
     }
 
-    // Applica sempre l'offset bordo taskbar usando il monitor corretto
-    POINT pt = AdjustWindowPosForTaskbar(hwnd);
-    SetWindowPos(hwnd, NULL, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    // Clamp dentro l'area di lavoro del monitor dell'icona.
+    if (x + winW > rcWork.right)  x = rcWork.right - winW;
+    if (y + winH > rcWork.bottom) y = rcWork.bottom - winH;
+    if (x < rcWork.left) x = rcWork.left;
+    if (y < rcWork.top)  y = rcWork.top;
+
+    Wh_Log(L"PositionWindowNearTray: dpi=%u size=%dx%d edge=%u icon={%d,%d,%d,%d} pos={%d,%d}",
+           dpi, winW, winH, edge, rcIcon.left, rcIcon.top, rcIcon.right, rcIcon.bottom, x, y);
+
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, winW, winH, SWP_NOACTIVATE);
+
+    // Solo nel percorso di fallback (senza icona) mantieni la spinta lontano
+    // dalla taskbar; con l'icona il gap e' gia' calcolato sopra.
+    if (!haveIcon) {
+        POINT pt = AdjustWindowPosForTaskbar(hwnd);
+        SetWindowPos(hwnd, NULL, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
 }
+
 void ToggleFlyout() {
     if (g_Ctx.isUninitializing) return;
 
