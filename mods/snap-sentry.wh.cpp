@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.6
+// @version         0.18.7
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -312,12 +312,19 @@ static void LoadSettings() {
     if (s.folder.empty()) {
         s.folder = DefaultScreenshotsFolder();
     } else {
-        // Expand things like %USERPROFILE% so a pasted path with env vars resolves.
-        WCHAR expanded[MAX_PATH * 2];
-        DWORD n = ExpandEnvironmentStringsW(s.folder.c_str(), expanded,
-                                            ARRAYSIZE(expanded));
-        if (n > 0 && n <= ARRAYSIZE(expanded)) {
-            s.folder = expanded;
+        // Expand things like %USERPROFILE% so a pasted path with env vars
+        // resolves. The two-call form avoids a length cliff: the first call
+        // with no buffer returns the size actually needed, so a long expansion
+        // isn't silently left unexpanded.
+        DWORD need = ExpandEnvironmentStringsW(s.folder.c_str(), nullptr, 0);
+        if (need > 0) {
+            std::wstring expanded(need, L'\0');
+            DWORD got = ExpandEnvironmentStringsW(s.folder.c_str(),
+                                                  expanded.data(), need);
+            if (got > 0 && got <= need) {
+                expanded.resize(got - 1);  // Drop the terminator counted in got.
+                s.folder = std::move(expanded);
+            }
         }
     }
     // Canonicalize once: this also turns '/' into '\' and resolves '.' and '..',
@@ -325,12 +332,19 @@ static void LoadSettings() {
     // Skipped when empty (DefaultScreenshotsFolder() can return "" when neither
     // known folder resolves): GetFullPathNameW treats "" as a relative path and
     // resolves it against the current directory instead of leaving it empty,
-    // which would defeat WatchThread's empty-folder idle check.
+    // which would defeat WatchThread's empty-folder idle check. Two-call form
+    // for the same reason as above: a long path shouldn't silently skip
+    // normalization.
     if (!s.folder.empty()) {
-        WCHAR full[MAX_PATH * 2];
-        DWORD fn = GetFullPathNameW(s.folder.c_str(), ARRAYSIZE(full), full, nullptr);
-        if (fn > 0 && fn < ARRAYSIZE(full)) {
-            s.folder.assign(full);
+        DWORD need = GetFullPathNameW(s.folder.c_str(), 0, nullptr, nullptr);
+        if (need > 0) {
+            std::wstring full(need, L'\0');
+            DWORD got =
+                GetFullPathNameW(s.folder.c_str(), need, full.data(), nullptr);
+            if (got > 0 && got < need) {
+                full.resize(got);
+                s.folder = std::move(full);
+            }
         }
     }
 
@@ -1136,32 +1150,21 @@ static std::wstring XmlEscape(const std::wstring& in) {
 // or an explicit dismissal. Returns false -- meaning "use the dialog instead"
 // -- if registration hasn't succeeded or any WinRT step fails, so the mod stays
 // usable even where toast notifications don't work.
-static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+// Builds the notifier and the toast object for a given XML payload: the
+// activation factory, the per-AUMID notifier, the current notification
+// setting, and the constructed toast document. Both toast paths need this
+// exact chain. Returns false if any step fails or notifications are off; on
+// a get_Setting failure *setting is left at its Enabled default, so a caller
+// that needs to tell "off" apart from "unreadable" can check *setting.
+static bool BuildToast(const std::wstring& xml,
+                       ABI::Windows::UI::Notifications::NotificationSetting& setting,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Data::Xml::Dom;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
     using Microsoft::WRL::Wrappers::HStringReference;
-
-    if (!g_toastRegistered.load()) {
-        return false;
-    }
-
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
-    ULONGLONG toastId = GetTickCount64();
-    std::wstring id = std::to_wstring(toastId);
-    std::wstring xml =
-        L"<toast scenario=\"reminder\" duration=\"long\" "
-        L"activationType=\"background\" launch=\"body|" + id + L"\">"
-        L"<visual><binding template=\"ToastGeneric\">"
-        L"<text>Screenshot saved</text><text>" +
-        XmlEscape(name) +
-        L"</text><text placement=\"attribution\">SnapSentry</text>"
-        L"</binding></visual><actions>"
-        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
-        L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
-        L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
-        L"</actions></toast>";
 
     ComPtr<IToastNotificationManagerStatics> toastStatics;
     if (FAILED(RoGetActivationFactory(
@@ -1171,27 +1174,15 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             IID_PPV_ARGS(&toastStatics)))) {
         return false;
     }
-    ComPtr<IToastNotifier> notifier;
     if (FAILED(toastStatics->CreateToastNotifierWithId(
             HStringReference(kAppUserModelId).Get(), &notifier))) {
         return false;
     }
 
-    // Show() reports success even when notifications are switched off for us, and
-    // then nothing is ever delivered and no answer can arrive. Ask first. If we
-    // genuinely can't tell why, fall back to the dialog; but if notifications are
-    // switched off (system-wide, by policy, or for this app), the user has said
-    // "stop popping things up", so don't substitute a modal dialog on every
-    // screenshot. Do the configured clipboard copy and never delete, since the user
-    // was never actually prompted.
-    NotificationSetting setting = NotificationSetting_Enabled;
-    if (FAILED(notifier->get_Setting(&setting))) {
-        return false;  // Can't tell: fall back to the dialog.
-    }
-    if (setting != NotificationSetting_Enabled) {
-        Wh_Log(L"Notifications off (setting=%d); copy only, no dialog", (int)setting);
-        action = ACTION_COPY_ONLY;
-        return true;
+    setting = NotificationSetting_Enabled;
+    if (FAILED(notifier->get_Setting(&setting)) ||
+        setting != NotificationSetting_Enabled) {
+        return false;
     }
 
     ComPtr<IInspectable> docInspectable;
@@ -1214,9 +1205,61 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             IID_PPV_ARGS(&toastFactory)))) {
         return false;
     }
-    ComPtr<IToastNotification> toast;
-    if (FAILED(toastFactory->CreateToastNotification(doc.Get(), &toast))) {
+    return SUCCEEDED(toastFactory->CreateToastNotification(doc.Get(), &toast));
+}
+
+// Returns the final path segment: what should appear on screen instead of the
+// full path.
+static std::wstring BaseName(const std::wstring& path) {
+    return path.substr(path.find_last_of(L"\\/") + 1);
+}
+
+static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+    using namespace ABI::Windows::UI::Notifications;
+    using namespace ABI::Windows::Data::Xml::Dom;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+
+    if (!g_toastRegistered.load()) {
         return false;
+    }
+
+    std::wstring name = BaseName(path);
+    ULONGLONG toastId = GetTickCount64();
+    std::wstring id = std::to_wstring(toastId);
+    std::wstring xml =
+        L"<toast scenario=\"reminder\" duration=\"long\" "
+        L"activationType=\"background\" launch=\"body|" + id + L"\">"
+        L"<visual><binding template=\"ToastGeneric\">"
+        L"<text>Screenshot saved</text><text>" +
+        XmlEscape(name) +
+        L"</text><text placement=\"attribution\">SnapSentry</text>"
+        L"</binding></visual><actions>"
+        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
+        L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
+        L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
+        L"</actions></toast>";
+
+    // Show() reports success even when notifications are switched off for us, and
+    // then nothing is ever delivered and no answer can arrive. BuildToast asks
+    // first, so we can tell the two failure shapes apart. If we genuinely can't
+    // tell why it failed, fall back to the dialog; but if notifications are
+    // switched off (system-wide, by policy, or for this app), the user has said
+    // "stop popping things up", so don't substitute a modal dialog on every
+    // screenshot. Do the configured clipboard copy and never delete, since the
+    // user was never actually prompted.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    ComPtr<IToastNotifier> notifier;
+    ComPtr<IToastNotification> toast;
+    if (!BuildToast(xml, setting, notifier, toast)) {
+        if (setting != NotificationSetting_Enabled) {
+            Wh_Log(L"Notifications off (setting=%d); copy only, no dialog",
+                   (int)setting);
+            action = ACTION_COPY_ONLY;
+            return true;
+        }
+        return false;  // Can't tell: fall back to the dialog.
     }
 
     ResetEvent(g_toastActionEvent);
@@ -1395,7 +1438,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
         return ACTION_KEEP;  // Don't put up UI during teardown.
     }
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    std::wstring name = BaseName(path);
     DialogState state;
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
@@ -1507,48 +1550,13 @@ static void ShowKeptToast(const std::wstring& name) {
         L"<text placement=\"attribution\">SnapSentry</text>"
         L"</binding></visual></toast>";
 
-    ComPtr<IToastNotificationManagerStatics> toastStatics;
-    if (FAILED(RoGetActivationFactory(
-            HStringReference(
-                RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
-                .Get(),
-            IID_PPV_ARGS(&toastStatics)))) {
-        return;
-    }
-    ComPtr<IToastNotifier> notifier;
-    if (FAILED(toastStatics->CreateToastNotifierWithId(
-            HStringReference(kAppUserModelId).Get(), &notifier))) {
-        return;
-    }
     // Respect the user's notification choice; nothing to substitute for an
-    // informational message if they've turned notifications off.
+    // informational message if they've turned notifications off. BuildToast
+    // covers that check along with the rest of the chain.
     NotificationSetting setting = NotificationSetting_Enabled;
-    if (FAILED(notifier->get_Setting(&setting)) ||
-        setting != NotificationSetting_Enabled) {
-        return;
-    }
-
-    ComPtr<IInspectable> docInspectable;
-    if (FAILED(RoActivateInstance(
-            HStringReference(RuntimeClass_Windows_Data_Xml_Dom_XmlDocument).Get(),
-            &docInspectable))) {
-        return;
-    }
-    ComPtr<IXmlDocument> doc;
-    ComPtr<IXmlDocumentIO> docIO;
-    if (FAILED(docInspectable.As(&doc)) || FAILED(docInspectable.As(&docIO)) ||
-        FAILED(docIO->LoadXml(HStringReference(xml.c_str()).Get()))) {
-        return;
-    }
-    ComPtr<IToastNotificationFactory> toastFactory;
-    if (FAILED(RoGetActivationFactory(
-            HStringReference(RuntimeClass_Windows_UI_Notifications_ToastNotification)
-                .Get(),
-            IID_PPV_ARGS(&toastFactory)))) {
-        return;
-    }
+    ComPtr<IToastNotifier> notifier;
     ComPtr<IToastNotification> toast;
-    if (FAILED(toastFactory->CreateToastNotification(doc.Get(), &toast))) {
+    if (!BuildToast(xml, setting, notifier, toast)) {
         return;
     }
     notifier->Show(toast.Get());
@@ -1747,7 +1755,7 @@ static void ProcessOne(std::wstring path) {
         // run), so tell the user the file was kept instead of deleted, otherwise the
         // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
         if (s.popup) {
-            ShowKeptToast(path.substr(path.find_last_of(L"\\/") + 1));
+            ShowKeptToast(BaseName(path));
         }
     }
     bool wantsDelete = deleteRequested && !multiFrame;
@@ -1793,7 +1801,7 @@ static bool SeenRecently(const std::wstring& name, ULONGLONG now) {
 }
 
 static void ReleaseInflight(const std::wstring& path) {
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    std::wstring name = BaseName(path);
     ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
     g_inflight.erase(name);
@@ -1816,11 +1824,43 @@ static bool g_toastRegSynced = false;
 // unconditionally at startup. With processing or the popup off there is no
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
+// Clears anything SnapSentry left in Action Center, such as a kept-file
+// notice. Must run while the AUMID is still registered: ClearWithId needs it
+// to resolve which app's history to clear. Idempotent, so it is safe to call
+// on both the unload path and the popup-off path.
+static void ClearToastHistory() {
+    using namespace ABI::Windows::UI::Notifications;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+    ComPtr<IToastNotificationManagerStatics> statics;
+    ComPtr<IToastNotificationManagerStatics2> statics2;
+    ComPtr<IToastNotificationHistory> history;
+    HRESULT hr = E_FAIL;
+    if (SUCCEEDED(RoGetActivationFactory(
+            HStringReference(
+                RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
+                .Get(),
+            IID_PPV_ARGS(&statics))) &&
+        SUCCEEDED(statics.As(&statics2)) &&
+        SUCCEEDED(statics2->get_History(&history))) {
+        hr = history->ClearWithId(HStringReference(kAppUserModelId).Get());
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"ClearToastHistory failed (0x%08lx); a kept-file notice may "
+               L"outlive the mod",
+               hr);
+    }
+}
+
 static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
-    // Reclaim the per-AUMID notification key on unload before the early return
-    // below: with the popup already off at unload the requested state matches and
-    // we would otherwise return without ever clearing it, stranding the key.
+    // Clear Action Center and reclaim the per-AUMID notification key on unload,
+    // unconditionally and before the early return below: with the popup already
+    // off at unload the requested state matches, and we would otherwise return
+    // without ever running either. The AUMID registration is still intact here,
+    // which ClearToastHistory needs; RemoveNotificationSettings only touches the
+    // separate per-app notification-settings key, not the AUMID itself.
     if (unloading) {
+        ClearToastHistory();
         RemoveNotificationSettings();
     }
     // Skip only when nothing needs to change: the state matches and, when the popup
@@ -1863,26 +1903,10 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
         CoRevokeClassObject(g_toastActivatorCookie);
         g_toastActivatorCookie = 0;
     }
-    // Clear anything SnapSentry left in Action Center, such as a kept-file
-    // notice, before the AUMID it was posted under is torn down. Must run
-    // first: ClearWithId needs the AUMID still registered to resolve it.
-    {
-        using namespace ABI::Windows::UI::Notifications;
-        using Microsoft::WRL::ComPtr;
-        using Microsoft::WRL::Wrappers::HStringReference;
-        ComPtr<IToastNotificationManagerStatics> statics;
-        ComPtr<IToastNotificationManagerStatics2> statics2;
-        ComPtr<IToastNotificationHistory> history;
-        if (SUCCEEDED(RoGetActivationFactory(
-                HStringReference(
-                    RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
-                    .Get(),
-                IID_PPV_ARGS(&statics))) &&
-            SUCCEEDED(statics.As(&statics2)) &&
-            SUCCEEDED(statics2->get_History(&history))) {
-            history->ClearWithId(HStringReference(kAppUserModelId).Get());
-        }
-    }
+    // On the unload path this repeats the call already made above, before the
+    // early-return check; harmless, since it is idempotent. On a plain popup-off
+    // (not unloading) this is the only place it runs.
+    ClearToastHistory();
     RemoveAumidRegistration();
     RemoveClsidRegistration();
     // The per-AUMID Notifications\Settings key also holds the user's own per-app
