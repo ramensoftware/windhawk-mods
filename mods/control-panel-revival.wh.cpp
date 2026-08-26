@@ -2,7 +2,7 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by safely unhiding legacy elements.
-// @version         1.1.2
+// @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
