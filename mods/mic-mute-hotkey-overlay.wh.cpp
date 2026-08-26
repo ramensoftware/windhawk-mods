@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          Farel Hanafi
 // @github          https://github.com/Eliasilyz
+// @homepage        https://farelhanafi.my.id/
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -luser32 -lgdi32 -lgdiplus -ldwmapi -lpropsys
 // ==/WindhawkMod==
@@ -22,6 +23,12 @@ Registers a global hotkey to toggle mute on the system's default microphone
 - Overlay auto-hides after a short delay unless "always show" is enabled.
 
 Default hotkey: Ctrl+Alt+M
+
+---
+
+### Report a Bug
+If you encounter any issues or have a feature suggestion, please open a report on the project's GitHub page:
+👉 **[Report an Issue on GitHub](https://github.com/Eliasilyz/global-hotkey-mute/issues)**
 */
 // ==/WindhawkModReadme==
 
