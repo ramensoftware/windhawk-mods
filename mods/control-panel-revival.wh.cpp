@@ -1,32 +1,29 @@
 // ==WindhawkMod==
 // @id              control-panel-revival
-// @name            Control Panel Revival
+// @name            Control Panel Revival 
 // @description     control panel unhider designed to work smoothly alongside ExplorerPatcher
 // @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         control.exe
-// @compilerOptions -lpsapi -lcomctl32 -lshlwapi
+// @compilerOptions -lpsapi
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Control Panel Revival
 
-Control Panel Revival is a lightweight Windhawk mod designed to restore legacy Control Panel applets in Windows 11 by bypassing modern Settings app redirection
+Control Panel Revival is a lightweight Windhawk mod designed to restore legacy Control Panel applets in Windows 11 by bypassing modern Settings app redirection.
 
 **Important! Installing ExplorerPatcher is necessary for this mod to work.**
-
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <psapi.h>
-#include <shlwapi.h>
 #include <windhawk_utils.h>
 
-//GUID list of applets you want to revert to Control Panel
-
+// GUID list of applets you want to revert to Control Panel
 LPCWSTR g_szAppletsToUnhide[] = {
     L"::{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}", // Language Settings
     L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
@@ -61,97 +58,105 @@ LPCWSTR g_szCanonicalNames[] = {
     L"Microsoft.Fonts"
 };
 
-bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *);
+HMODULE g_hWinStorage = nullptr;
+
+// Safe MapLegacyName hook
+bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
-    if (nameChanged) *nameChanged = false;
-    if (pszNewName) *pszNewName = L'\0';
-    return false;
+    if (pszLegacyName) {
+        for (size_t i = 0; i < ARRAYSIZE(g_szCanonicalNames); i++) {
+            if (g_szCanonicalNames[i] && _wcsicmp(pszLegacyName, g_szCanonicalNames[i]) == 0) {
+                if (nameChanged) *nameChanged = false;
+                if (pszNewName && uUnused > 0) {
+                    *pszNewName = L'\0';
+                }
+                return false;
+            }
+        }
+    }
+    return COpenControlPanel__MapLegacyName_orig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
 }
 
-using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
-CompareStringOrdinal_t CompareStringOrdinal_orig;
+// Safe CompareStringOrdinal hook targeting kernelbase.dll
+decltype(&CompareStringOrdinal) CompareStringOrdinal_orig = nullptr;
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
-    if (!lpString1 || !lpString2) return ERROR_INVALID_PARAMETER;
+    if (!lpString1 || !lpString2) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
 
-    auto pCompFunc = bIgnoreCase ? wcsicmp : wcscmp;
-    for (UINT i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-        if (0 == pCompFunc(lpString1, g_szAppletsToUnhide[i]) || 0 == pCompFunc(lpString2, g_szAppletsToUnhide[i])) {
-            return CSTR_LESS_THAN; 
+    if (cchCount1 == -1 && cchCount2 == -1) {
+        auto pCompFunc = bIgnoreCase ? _wcsicmp : wcscmp;
+        for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
+            if (g_szAppletsToUnhide[i] && (0 == pCompFunc(lpString1, g_szAppletsToUnhide[i]) || 0 == pCompFunc(lpString2, g_szAppletsToUnhide[i]))) {
+                return CSTR_LESS_THAN; 
+            }
+        }
+        for (size_t i = 0; i < ARRAYSIZE(g_szCanonicalNames); i++) {
+            // Fixed parenthesis error here
+            if (g_szCanonicalNames[i] && (0 == pCompFunc(lpString1, g_szCanonicalNames[i]) || 0 == pCompFunc(lpString2, g_szCanonicalNames[i]))) {
+                return CSTR_LESS_THAN;
+            }
         }
     }
-    for (UINT i = 0; i < ARRAYSIZE(g_szCanonicalNames); i++) {
-        if (0 == pCompFunc(lpString1, g_szCanonicalNames[i]) || 0 == pCompFunc(lpString2, g_szCanonicalNames[i])) {
-            return CSTR_LESS_THAN;
-        }
+
+    if (!CompareStringOrdinal_orig) {
+        return 0;
     }
+
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-void KillStringInModule(HMODULE hModule, LPCWSTR lpSearch) {
-    if (!hModule || !lpSearch) return;
-
-    MODULEINFO info = { 0 };
-    GetModuleInformation(GetCurrentProcess(), hModule, &info, sizeof(MODULEINFO));
-
-    DWORD_PTR base = (size_t)info.lpBaseOfDll;
-    size_t size = (size_t)info.SizeOfImage;
-    size_t patternLen = wcslen(lpSearch) * 2;
-
-    for (size_t i = 0; i < size - patternLen; i++) {
-        bool found = true;
-        for (size_t j = 0; j < patternLen; j++) {
-            if (*((char *)lpSearch + j) != *(char *)(base + i + j)) {
-                found = false;
-                break;
-            }
-        }
-
-        if (found) {
-            size_t ptr = base + i;
-            MEMORY_BASIC_INFORMATION mbi;
-            VirtualQuery((wchar_t *)ptr, &mbi, sizeof(MEMORY_BASIC_INFORMATION));
-            if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &mbi.Protect)) {
-                ZeroMemory((void *)ptr, patternLen); 
-                DWORD dwOldProtect;
-                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, mbi.Protect, &dwOldProtect);
-                return;
-            }
-        }
-    }
-}
-
-// explorer.exe, control.exe
-const WindhawkUtils::SYMBOL_HOOK explorerControlHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
-        &COpenControlPanel__MapLegacyName_orig,
-        COpenControlPanel__MapLegacyName_hook, 
+        (void**)&COpenControlPanel__MapLegacyName_orig,
+        (void*)COpenControlPanel__MapLegacyName_hook,
         false
     }
 };
 
 BOOL Wh_ModInit(void) {
+    Wh_Log(L"Initializing Control Panel Revival mod");
+
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    HMODULE hWinStorage = LoadLibraryW(L"windows.storage.dll"); 
-    
-    for (size_t i = 50; i < ARRAYSIZE(g_szAppletsToUnhide); i++) { 
-        // Loop placeholder check handled safely below
+    if (!hShell32) {
+        Wh_Log(L"Failed to get handle for shell32.dll");
+        return FALSE;
     }
 
-    for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-        if (hShell32) KillStringInModule(hShell32, g_szAppletsToUnhide[i]);
-        if (hWinStorage) KillStringInModule(hWinStorage, g_szAppletsToUnhide[i]);
+    g_hWinStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBaseModule) {
+        Wh_Log(L"Failed to get handle for kernelbase.dll");
+        return FALSE;
     }
 
-    Wh_SetFunctionHook(
-        (void *)CompareStringOrdinal,
-        (void *)CompareStringOrdinal_hook,
-        (void **)&CompareStringOrdinal_orig
-    );
+    auto pCompareStringOrdinal = (decltype(&CompareStringOrdinal))GetProcAddress(kernelBaseModule, "CompareStringOrdinal");
+    if (!pCompareStringOrdinal) {
+        Wh_Log(L"Failed to resolve CompareStringOrdinal address");
+        return FALSE;
+    }
 
-    if (hShell32) {
-        WindhawkUtils::HookSymbols(hShell32, explorerControlHooks, ARRAYSIZE(explorerControlHooks));
+    // Fixed SetFunctionHook types without casting to void*
+    if (!WindhawkUtils::SetFunctionHook(pCompareStringOrdinal, CompareStringOrdinal_hook, &CompareStringOrdinal_orig)) {
+        Wh_Log(L"Failed to hook CompareStringOrdinal");
+        return FALSE;
+    }
+
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
+        Wh_Log(L"Failed to hook shell32 symbols");
+        return FALSE;
     }
 
     return TRUE;
+}
+
+void Wh_ModUninit(void) {
+    Wh_Log(L"Uninitializing Control Panel Revival mod");
+    if (g_hWinStorage) {
+        FreeLibrary(g_hWinStorage);
+        g_hWinStorage = nullptr;
+    }
 }
