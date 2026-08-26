@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.5
+// @version         0.18.6
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -59,11 +59,11 @@ While the popup is turned on, SnapSentry leaves two things on your machine so th
 notification buttons work, a SnapSentry shortcut in your Start Menu programs
 folder and one registry entry. Turning the popup off or disabling the mod removes
 both again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. A multi-page or animated image is kept rather than deleted,
-because only its first frame can go on the clipboard, and a short notice says so
-instead of the usual buttons. If you have turned its notifications off, it takes
+to a standard dialog. If you have turned its notifications off, it takes
 that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
-and never auto deletes.
+and never auto deletes. A multi-page or animated image is kept rather than
+deleted, because only its first frame can go on the clipboard, and afterwards a
+short notice says so, when the notification is available.
 
 ## Privacy
 
@@ -108,7 +108,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. A multi-page or animated image gets a short notice instead, saying it was kept, since only its first frame can go on the clipboard. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
@@ -322,10 +322,16 @@ static void LoadSettings() {
     }
     // Canonicalize once: this also turns '/' into '\' and resolves '.' and '..',
     // so nothing downstream has to cope with a path the shell parser rejects.
-    WCHAR full[MAX_PATH];
-    DWORD fn = GetFullPathNameW(s.folder.c_str(), ARRAYSIZE(full), full, nullptr);
-    if (fn > 0 && fn < ARRAYSIZE(full)) {
-        s.folder.assign(full);
+    // Skipped when empty (DefaultScreenshotsFolder() can return "" when neither
+    // known folder resolves): GetFullPathNameW treats "" as a relative path and
+    // resolves it against the current directory instead of leaving it empty,
+    // which would defeat WatchThread's empty-folder idle check.
+    if (!s.folder.empty()) {
+        WCHAR full[MAX_PATH * 2];
+        DWORD fn = GetFullPathNameW(s.folder.c_str(), ARRAYSIZE(full), full, nullptr);
+        if (fn > 0 && fn < ARRAYSIZE(full)) {
+            s.folder.assign(full);
+        }
     }
 
     EnterCriticalSection(&g_lock);
@@ -1857,6 +1863,26 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
         CoRevokeClassObject(g_toastActivatorCookie);
         g_toastActivatorCookie = 0;
     }
+    // Clear anything SnapSentry left in Action Center, such as a kept-file
+    // notice, before the AUMID it was posted under is torn down. Must run
+    // first: ClearWithId needs the AUMID still registered to resolve it.
+    {
+        using namespace ABI::Windows::UI::Notifications;
+        using Microsoft::WRL::ComPtr;
+        using Microsoft::WRL::Wrappers::HStringReference;
+        ComPtr<IToastNotificationManagerStatics> statics;
+        ComPtr<IToastNotificationManagerStatics2> statics2;
+        ComPtr<IToastNotificationHistory> history;
+        if (SUCCEEDED(RoGetActivationFactory(
+                HStringReference(
+                    RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
+                    .Get(),
+                IID_PPV_ARGS(&statics))) &&
+            SUCCEEDED(statics.As(&statics2)) &&
+            SUCCEEDED(statics2->get_History(&history))) {
+            history->ClearWithId(HStringReference(kAppUserModelId).Get());
+        }
+    }
     RemoveAumidRegistration();
     RemoveClsidRegistration();
     // The per-AUMID Notifications\Settings key also holds the user's own per-app
@@ -1964,7 +1990,8 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
         return;
     }
-    if (!JustCreated(JoinChild(folder, name))) {
+    std::wstring path = JoinChild(folder, name);
+    if (!JustCreated(path)) {
         return;
     }
     ULONGLONG now = GetTickCount64();
@@ -1976,7 +2003,7 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     bool added = !SeenRecently(name, now) && g_preexisting.count(name) == 0 &&
                  g_inflight.insert(name).second;
     if (added) {
-        g_queue.push_back(JoinChild(folder, name));
+        g_queue.push_back(std::move(path));
     }
     bool logDetails = g_settings.logDetails;
     LeaveCriticalSection(&g_lock);
@@ -2029,7 +2056,7 @@ static void ParseNotifications(const std::wstring& folder, const BYTE* buffer,
 static void SnapshotExistingNames(const std::wstring& folder) {
     std::set<std::wstring> names;
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &fd);
+    HANDLE h = FindFirstFileW(JoinChild(folder, L"*").c_str(), &fd);
     if (h != INVALID_HANDLE_VALUE) {
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
