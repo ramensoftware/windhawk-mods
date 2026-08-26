@@ -2,7 +2,7 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by safely unhiding legacy elements.
-// @version         1.1.1
+// @version         1.1.2
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -18,8 +18,6 @@ Control Panel Revival is a specialized Windhawk mod designed to restore legacy C
 
 ### Why this mod?
 Unlike older catalog mods built for initial Windows 11 releases, newer Windows 11 builds implement aggressive redirection logic. This mod uses a precise, **reversible** memory patching mechanism combined with symbol and string hooks to neutralize redirection strings in system binaries safely.
-
-**Important! Installing ExplorerPatcher is necessary for this mod to work seamlessly with shell overrides.**
 */
 // ==/WindhawkModReadme==
 
@@ -29,7 +27,6 @@ Unlike older catalog mods built for initial Windows 11 releases, newer Windows 1
 #include <windhawk_utils.h>
 
 // GUID list of legacy Control Panel applets to unhide/protect from redirection
-//Here is a list of applets that may have been removed depending on the windows version; the presence of these IDs has no effect on the mod if the applet itself is missing
 LPCWSTR g_szAppletsToUnhide[] = {
     L"::{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}", // Language Settings
     L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
@@ -65,7 +62,7 @@ LPCWSTR g_szCanonicalNames[] = {
     L"Microsoft.Fonts"
 };
 
-// Structure to store original memory bytes for safe reversibility (satisfying Wh_ModUninit requirement)
+// Structure to store original memory bytes for safe reversibility
 struct PatchRecord {
     void* address;
     BYTE originalBytes[128];
@@ -76,7 +73,29 @@ PatchRecord g_appliedPatches[64];
 size_t g_appliedPatchCount = 0;
 HMODULE g_hWinStorage = nullptr;
 
-// Safe, Reversible Memory Patching implementation to bypass modern Windows 11 redirection
+// Centralized cleanup function to restore all patches and free handles on failure or uninit
+void RestoreAllPatchesAndState(void) {
+    for (size_t i = 0; i < g_appliedPatchCount; i++) {
+        PatchRecord& patch = g_appliedPatches[i];
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery(patch.address, &mbi, sizeof(MEMORY_BASIC_INFORMATION))) {
+            DWORD oldProtect;
+            if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
+                memcpy(patch.address, patch.originalBytes, patch.length);
+                DWORD tempProtect;
+                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &tempProtect);
+            }
+        }
+    }
+    g_appliedPatchCount = 0;
+
+    if (g_hWinStorage) {
+        FreeLibrary(g_hWinStorage);
+        g_hWinStorage = nullptr;
+    }
+}
+
+// Safe, Reversible Memory Patching implementation
 void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
     if (!hModule || !lpSearch) return;
 
@@ -109,7 +128,6 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
                 DWORD oldProtect;
                 if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
                     
-                    // Backup original bytes before modifying so they can be restored in Wh_ModUninit
                     if (g_appliedPatchCount < ARRAYSIZE(g_appliedPatches)) {
                         g_appliedPatches[g_appliedPatchCount].address = targetAddress;
                         g_appliedPatches[g_appliedPatchCount].length = patternLen;
@@ -117,7 +135,6 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
                         g_appliedPatchCount++;
                     }
 
-                    // Zero out the matched redirection string safely
                     ZeroMemory(targetAddress, patternLen); 
 
                     DWORD dwOldProtect;
@@ -129,7 +146,7 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
     }
 }
 
-// Hook for COpenControlPanel::_MapLegacyName to intercept legacy name resolutions safely
+// Hook for COpenControlPanel::_MapLegacyName
 bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
     if (pszLegacyName) {
@@ -146,7 +163,7 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
     return COpenControlPanel__MapLegacyName_orig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
 }
 
-// Safe hook for CompareStringOrdinal targeting kernelbase.dll with strict bounds checking
+// Safe hook for CompareStringOrdinal targeting kernelbase.dll
 decltype(&CompareStringOrdinal) CompareStringOrdinal_orig = nullptr;
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!lpString1 || !lpString2) {
@@ -175,18 +192,18 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-// Shell32 symbol hook definition
+// Shell32 symbol hook definition (marked optional = true to prevent init failure crashes)
 const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
         (void**)&COpenControlPanel__MapLegacyName_orig,
         (void*)COpenControlPanel__MapLegacyName_hook,
-        false
+        true // Optional to prevent permanent patching leaks on minor Windows build discrepancies
     }
 };
 
 BOOL Wh_ModInit(void) {
-    Wh_Log(L"Initializing Control Panel Revival mod with reversible memory patching and hooks");
+    Wh_Log(L"Initializing Control Panel Revival mod with robust initialization guards");
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) {
@@ -194,10 +211,9 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    // Safely load windows.storage.dll using system directory search order
     g_hWinStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    // Apply reversible memory patches to neutralize redirection strings
+    // Apply memory patches
     for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
         KillStringInModuleReversible(hShell32, g_szAppletsToUnhide[i]);
         if (g_hWinStorage) {
@@ -205,27 +221,31 @@ BOOL Wh_ModInit(void) {
         }
     }
 
-    // Securely hook CompareStringOrdinal from kernelbase.dll
+    // Hook CompareStringOrdinal with strict failure cleanup checks
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     if (!kernelBaseModule) {
         Wh_Log(L"Failed to get handle for kernelbase.dll");
+        RestoreAllPatchesAndState();
         return FALSE;
     }
 
     auto pCompareStringOrdinal = (decltype(&CompareStringOrdinal))GetProcAddress(kernelBaseModule, "CompareStringOrdinal");
     if (!pCompareStringOrdinal) {
         Wh_Log(L"Failed to resolve CompareStringOrdinal address");
+        RestoreAllPatchesAndState();
         return FALSE;
     }
 
     if (!WindhawkUtils::SetFunctionHook(pCompareStringOrdinal, CompareStringOrdinal_hook, &CompareStringOrdinal_orig)) {
         Wh_Log(L"Failed to hook CompareStringOrdinal");
+        RestoreAllPatchesAndState();
         return FALSE;
     }
 
-    // Apply shell32 symbol hooks
+    // Apply shell32 symbol hooks safely
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to hook shell32 symbols");
+        RestoreAllPatchesAndState();
         return FALSE;
     }
 
@@ -233,25 +253,6 @@ BOOL Wh_ModInit(void) {
 }
 
 void Wh_ModUninit(void) {
-    Wh_Log(L"Uninitializing Control Panel Revival mod - restoring original memory bytes");
-
-    // Revert all modified memory bytes to fully satisfy Windhawk's clean uninit rule
-    for (size_t i = 0; i < g_appliedPatchCount; i++) {
-        PatchRecord& patch = g_appliedPatches[i];
-        MEMORY_BASIC_INFORMATION mbi;
-        if (VirtualQuery(patch.address, &mbi, sizeof(MEMORY_BASIC_INFORMATION))) {
-            DWORD oldProtect;
-            if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
-                memcpy(patch.address, patch.originalBytes, patch.length);
-                DWORD tempProtect;
-                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &tempProtect);
-            }
-        }
-    }
-    g_appliedPatchCount = 0;
-
-    if (g_hWinStorage) {
-        FreeLibrary(g_hWinStorage);
-        g_hWinStorage = nullptr;
-    }
+    Wh_Log(L"Uninitializing Control Panel Revival mod - cleaning up state and memory");
+    RestoreAllPatchesAndState();
 }
