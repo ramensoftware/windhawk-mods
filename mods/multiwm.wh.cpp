@@ -55,7 +55,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 
 ## Notes
 - MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).
-- Windhawk 2.0 paird with a 64-bit system is recommended for the best experience; for x86 builds, virtual desktop switch events are inferred rather than directly tracked. 
+- Windhawk 2.0 (or higher) on a 64-bit system is recommended for the best experience; for x86 builds, virtual desktop switch events are inferred at best effort due to the lack of documented ABIs. 
 
 */
 // ==/WindhawkModReadme==
