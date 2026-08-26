@@ -1649,6 +1649,8 @@ static RECT g_CachedTrayIconRect = {0}; // Cached tray icon rect for mouse hook
 // flyout blinks and clicking the icon can only ever open it (review issue #1).
 static BOOL g_TrayClickWhileFlyoutOpen = FALSE;
 static DWORD g_LastProblemBalloonTick = 0;
+// Require repeated failed reachability probes before destructive tray recovery.
+static UINT g_TrayHealthFailureCount = 0;
 static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
@@ -3608,6 +3610,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
     HICON hOldIcon = g_nid.hIcon;
     g_nid = nid;
     g_Ctx.trayIconAdded = TRUE;
+    g_TrayHealthFailureCount = 0;
     if (hOldIcon && hOldIcon != hNewIcon) DestroyIcon(hOldIcon);
     return TRUE;
 }
@@ -4083,41 +4086,6 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
                         g_TrayClickWhileFlyoutOpen = TRUE;
                     }
                 } else {
-                    // --- MITIGATION FOR MULTI-ROW SYSTEM TRAY (Windows 10 22h2) ---
-                    // In some configurations with a 2-row taskbar, clicks on the second row
-                    // of the system tray are incorrectly interpreted as "outside clicks"
-                    // and close the flyout, preventing interaction with tray icons.
-                    // This mitigation checks if the click is on the taskbar and, if so,
-                    // keeps the flyout open to allow interaction.
-                    //
-                    // Note: This is a best-effort attempt to mitigate the issue.
-                    // The problem has been reported but could not be reproduced
-                    // in the development environment, so the fix is applied
-                    // conservatively to avoid regressions.
-                    BOOL isOnTaskbar = FALSE;
-                    
-                    try {
-                        APPBARDATA abd = {};
-                        abd.cbSize = sizeof(APPBARDATA);
-                        abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-                        if (abd.hWnd && SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
-                            isOnTaskbar = PtInRect(&abd.rc, pMouse->pt);
-                            if (isOnTaskbar) {
-                                // Click on taskbar but not on AC icon:
-                                // update cache and keep flyout open
-                                UpdateCachedTrayIconRect();
-                                Wh_Log(L"Click on taskbar detected - flyout kept open (mitigation for multi-row tray)");
-                                return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
-                            }
-                        }
-                    }
-                    catch (...) {
-                        // Exception occurred while checking taskbar position.
-                        // Fall back to original behavior: close the flyout.
-                        Wh_Log(L"Exception in ClickOutsideMouseHookProc taskbar check");
-                        // Continue to original close behavior below
-                    }
-                    
                     // Click outside flyout, not on AC icon, and (either not on taskbar
                     // or exception occurred during taskbar check) -> close flyout
                     PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
@@ -4968,8 +4936,19 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             return 0;
         }
         if (wParam == TRAY_HEALTH_TIMER_ID) {
-            if (!g_Ctx.isUninitializing && !IsTrayIconReachable())
-                ScheduleTrayIconRecovery();
+            if (!g_Ctx.isUninitializing) {
+                if (IsTrayIconReachable()) {
+                    g_TrayHealthFailureCount = 0;
+                } else if (++g_TrayHealthFailureCount >= 3) {
+                    // Shell_NotifyIconGetRect can fail transiently while Explorer
+                    // relays out the notification area. Do not delete/re-add our
+                    // icon on a single probe failure, since NIM_DELETE/NIM_ADD
+                    // needlessly reflows every other tray icon.
+                    Wh_Log(L"Tray reachability failed %u consecutive probes; scheduling recovery", g_TrayHealthFailureCount);
+                    g_TrayHealthFailureCount = 0;
+                    ScheduleTrayIconRecovery();
+                }
+            }
             return 0;
         }
     }
@@ -5017,7 +4996,15 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
 if (trayEvent == NIN_BALLOONUSERCLICK) {
     try {
         RemoveProblemBalloon();
-        // A click must open the flyout
+        // A balloon click must open the flyout. The low-level mouse hook can
+        // have queued WM_SAFE_CLOSE before this notification reaches the tray
+        // window, so do not let the visibility check suppress the open request.
+        // If it is still visible, queue the close first; the subsequent trigger
+        // then re-opens it through the normal ToggleFlyout path.
+        if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) &&
+            IsWindowVisible(g_Ctx.hWndFlyout)) {
+            PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
+        }
         PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0);
     }
     catch (...) {
