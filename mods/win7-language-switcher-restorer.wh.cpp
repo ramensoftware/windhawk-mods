@@ -2,7 +2,7 @@
 // @id             win7-language-switcher-restorer
 // @name           Windows 7/8.1 Language Switcher Restorer
 // @description    This mod restores the classic Windows 7 and Windows 8.1 language switcher on Windows 10 and 11
-// @version        1.0.1
+// @version        1.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -208,10 +208,19 @@ typedef struct {
     DWORD dwWorkerThreadId;
     HANDLE hHookThread;
     DWORD dwHookThreadId;
+    HANDLE hWorkerReadyEvent;
+    HANDLE hHookReadyEvent;
     volatile LONG refCount;
     volatile LONG isUninitializing;
     CRITICAL_SECTION csLock;
 } ModContext;
+
+// Per-load flag: the flyout window class must only be registered once per
+// mod load. If a previous load's UnregisterClassW failed (a window of the
+// class was still alive), the next load's RegisterClassW will fail with
+// ERROR_CLASS_ALREADY_EXISTS — in that case we must NOT reuse the stale
+// class, since its WNDPROC points into a previous, by-then-unmapped image.
+static bool g_flyoutClassRegistered = false;
 
 static ModContext g_Ctx;
 static BOOL g_Initialized = FALSE;
@@ -832,7 +841,14 @@ static void RefreshKeyboardLayouts() {
 
         EnterCriticalSection(&g_Ctx.csLock);
         g_layouts = std::move(newLayouts);
-        g_selectedIndex = (foundActiveIndex < g_layouts.size()) ? foundActiveIndex : 0;
+        // While a Win+Space cycle is in progress, the target app's layout
+        // hasn't actually changed yet (switchImmediately is false for that
+        // path), so re-syncing here would keep snapping g_selectedIndex
+        // back to the still-active layout and make cycling a no-op. Only
+        // re-sync from the system's active layout outside of a cycle.
+        if (!g_isWinSpaceCycling.load(std::memory_order_relaxed)) {
+            g_selectedIndex = (foundActiveIndex < g_layouts.size()) ? foundActiveIndex : 0;
+        }
         LeaveCriticalSection(&g_Ctx.csLock);
     } catch (...) {}
 }
@@ -871,9 +887,7 @@ static void SwitchToLayout(size_t index) {
 
 void ToggleFlyoutWindow();
 void ShowFlyoutWindow();
-static void CycleSwitcher(bool forward, bool switchImmediately);
-static void ApplySelection();
-
+static void CycleSwitcher(bool forward, bool switchImmediately, bool showFlyout);
 static void PaintWin8Flyout(HWND hwnd, HDC hdc) {
     RECT clientRect{};
     if (!GetClientRect(hwnd, &clientRect)) return;
@@ -1712,7 +1726,14 @@ void ShowFlyoutWindow() {
     DWORD dwTargetOwnerThreadId = flyoutAlreadyExists
         ? g_dwFlyoutOwnerThreadId.load(std::memory_order_acquire)
         : g_Ctx.dwWorkerThreadId;
-    if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
+    // A owner thread id of 0 means SafeCleanup already zeroed it out (the
+    // worker thread is gone or going away) — never fall through and create
+    // a window on the calling thread in that case, or it will outlive
+    // Wh_ModUninit and get orphaned when the image is unmapped.
+    if (dwTargetOwnerThreadId == 0) {
+        return;
+    }
+    if (dwTargetOwnerThreadId != dwCurrentThreadId) {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_SHOW_FLYOUT, 0, 0);
         return;
     }
@@ -1720,21 +1741,29 @@ void ShowFlyoutWindow() {
     HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
     if (!hFlyout || !IsWindow(hFlyout)) {
         HINSTANCE hInst = GetModInstance();
-        WNDCLASSW wc = {0};
-        wc.lpfnWndProc   = FlyoutWndProc;
-        wc.hInstance     = hInst;
-        wc.lpszClassName = kFlyoutClassName;
-        wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-        wc.hbrBackground = NULL;
-        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"Win78LangSwitcher: RegisterClassW failed (%lu)", GetLastError());
-            return;
+        if (!g_flyoutClassRegistered) {
+            WNDCLASSW wc = {0};
+            wc.lpfnWndProc   = FlyoutWndProc;
+            wc.hInstance     = hInst;
+            wc.lpszClassName = kFlyoutClassName;
+            wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+            wc.hbrBackground = NULL;
+            if (!RegisterClassW(&wc)) {
+                // Do NOT treat ERROR_CLASS_ALREADY_EXISTS as success here: it
+                // means a previous load's class (and stale WNDPROC pointing
+                // into an unmapped image) is still registered because that
+                // load's UnregisterClassW failed. Reusing it would crash
+                // Explorer on the first message to the new window.
+                Wh_Log(L"Win78LangSwitcher: RegisterClassW failed (%lu)", GetLastError());
+                return;
+            }
+            g_flyoutClassRegistered = true;
         }
 
         DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
         DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER;
 
-        hFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"Windows Language Switcher", dwStyle,
+        hFlyout = CreateWindowExW(dwExStyle, kFlyoutClassName, L"Windows Language Switcher", dwStyle,
             0, 0, 100, 100,
             NULL, NULL, hInst, NULL);
         if (hFlyout) {
@@ -1773,7 +1802,10 @@ void ToggleFlyoutWindow() {
     DWORD dwTargetOwnerThreadId = flyoutAlreadyExists
         ? g_dwFlyoutOwnerThreadId.load(std::memory_order_acquire)
         : g_Ctx.dwWorkerThreadId;
-    if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
+    if (dwTargetOwnerThreadId == 0) {
+        return;
+    }
+    if (dwTargetOwnerThreadId != dwCurrentThreadId) {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
         return;
     }
@@ -1786,7 +1818,7 @@ void ToggleFlyoutWindow() {
     }
 }
 
-static void CycleSwitcher(bool forward, bool switchImmediately) {
+static void CycleSwitcher(bool forward, bool switchImmediately, bool showFlyout = true) {
     try {
         RefreshKeyboardLayouts();
         size_t count = 0;
@@ -1807,6 +1839,13 @@ static void CycleSwitcher(bool forward, bool switchImmediately) {
         if (switchImmediately) {
             SwitchToLayout(sel);
         }
+
+        // Windows 7/8.1 switch silently on Alt+Shift / Ctrl+Shift and only
+        // show the overlay for Win+Space. Showing it here too would leave a
+        // topmost window sitting over the app with no reliable auto-hide,
+        // since SetForegroundWindow can't steal focus from whatever the
+        // user was typing into.
+        if (!showFlyout) return;
 
         HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
         if (hFlyout && IsWindow(hFlyout) && IsWindowVisible(hFlyout)) {
@@ -2424,7 +2463,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
             CycleSwitcher(forward, false);
         } else if (msg.message == WM_APP_CYCLE_AND_SWITCH && !ctx->isUninitializing) {
             bool forward = (msg.wParam != 0);
-            CycleSwitcher(forward, true);
+            CycleSwitcher(forward, true, /*showFlyout=*/false);
         } else if (msg.message == WM_APP_APPLY_SELECTION && !ctx->isUninitializing) {
             ApplySelection();
         } else if (msg.message == WM_APP_HIDE_SWITCHER && !ctx->isUninitializing) {
