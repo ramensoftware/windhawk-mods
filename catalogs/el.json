@@ -95,6 +95,39 @@
         "version": "1.1.0"
       }
     },
+    "action-center-active-display": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787744564000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787744564000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ereinaimer",
+        "compilerOptions": "-lshcore",
+        "description": "Opens Action Center (Win + A), Cast pane (Win + K), and Project pane (Win + P) on the monitor where the mouse cursor is currently located.",
+        "github": "https://github.com/ereinaimer",
+        "include": [
+          "ShellHost.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "license": "MIT",
+        "name": "Action Center on Active Display",
+        "version": "1.1.1"
+      }
+    },
     "adaptive-microphone-icon-visibility": {
       "details": {
         "defaultSorting": 1030,

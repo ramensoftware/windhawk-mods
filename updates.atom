@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-26T10:28:50.000Z</updated>
+    <updated>2026-08-26T11:42:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Action Center on Active Display 1.1.1]]></title>
+        <id>https://windhawk.net/mods/action-center-active-display#69c690341417623064c34f367305fa71072824ac</id>
+        <link href="https://windhawk.net/mods/action-center-active-display"/>
+        <updated>2026-08-26T11:42:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="actioncenteronactivedisplay">Action Center on Active Display</h1>
+<p>Opens the Windows Action Center (Quick Settings, <code>Win + A</code>), Cast pane (<code>Win + K</code>), and Project pane (<code>Win + P</code>) on the monitor where your mouse cursor is currently located.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>SetWindowPos</code> inside ShellExperienceHost.exe (pre-24H2) and ShellHost.exe (24H2+). 
+When any of these windows are positioned, the mod intercepts the call, 
+determines the target monitor using the cursor position, and repositions the window with proper DPI scaling to the active display.</p>
+<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
+<ul>
+<li>Windows 11 22H2 and 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>ereinaimer</name>
+            <uri>https://github.com/ereinaimer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Button Replacer 0.12.4]]></title>
         <id>https://windhawk.net/mods/start-button-replacer#245e2afbfc6630d0dbda09e94d1fd7ebbce4e191</id>
@@ -966,26 +986,6 @@ In these cases, please use the Windows Default Apps settings to make your change
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always Allow CTRL+SHIFT+ENTER 1.0.0]]></title>
-        <id>https://windhawk.net/mods/always-allow-ctrl-shift-enter#75b8cc7e573ac73efbc9e9df7fd768f3510a5530</id>
-        <link href="https://windhawk.net/mods/always-allow-ctrl-shift-enter"/>
-        <updated>2026-08-20T18:23:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alwaysallowctrlshiftenter">Always Allow CTRL+SHIFT+ENTER</h1>
-<p>The system run dialog (most commonly WIN+R) allows you to press CTRL+SHIFT+ENTER
-to run the command as administrator. However, this feature needs to be
-explicitly enabled by the program.</p>
-<p>This mod makes it always enabled, so that it works everywhere, including but not
-limited to:</p>
-<ul>
-<li>Explorer7</li>
-<li>Old versions of Task Manager</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
