@@ -14,8 +14,11 @@
 /*
 
 # Windows 7/8.1 Action Center Recreation
+
 This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout for modern Windows versions.
+
 ## Screenshots
+
 Windows 7 theme
 
 ![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/action.png)
@@ -56,7 +59,7 @@ These are the hotkeys that can be configured in the mod.
 ## How It Works
 
 The mod monitors the system's security settings including Firewall, Antivirus, Windows Update, UAC, Windows Defender and other settings. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
-The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 and it is compatible with the native Windows 10 taskbar (native on Windows 10 and using ExplorerPatcher or similar methods on Windows 11).
+The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 10 22H2, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2 and it is compatible with the native Windows 10 taskbar (native on Windows 10 and using ExplorerPatcher or similar methods on Windows 11).
 
 ## Known Limitations
 - **Vertical taskbar (left/right edge)**: The flyout is centered on the icon and opens toward the screen center. Windows 10's taskbar itself has inconsistent flyout behavior on vertical taskbars, so perfect placement cannot be guaranteed in all configurations.
@@ -73,6 +76,8 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - TheWolf - Testing on Windows 11 23H2
 - cips_35 - Testing on Windows 11 25H2 and Turkish Translation
+- pyrates999 - Bug Reporting on Windows 10 22H2
+- m417z - Code review
 - ✮⋆˙ Holly B!!──★ ˙🍓 ̟ ˙✧˖°🪼⋆.ೃ [NURO] - Screenshot of the mod under a Windows 7 theme
 */
 // ==/WindhawkModReadme==
