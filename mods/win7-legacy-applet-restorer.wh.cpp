@@ -1,56 +1,61 @@
 // ==WindhawkMod==
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
-// @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         2.1.0
+// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11
+// @version         3.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshlwapi -lole32
+// @compilerOptions -lcomctl32 -lshlwapi -lole32 -lpsapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 ## About
-This mod restores classic Control Panel applets and classic task links in Category View, including:
+This mod restores a selection of classic Control Panel applets and task links in Category View, including:
 
-* Personalization, with localized classic Windows 7 task links
-* Notification area icons (intended for the Windows 10 taskbar)
+* Personalization 
+* Notification area icons (intended for use with the Windows 10 taskbar)
 * Network Connections
 * Printers and Faxes
-* HomeGroup (partially functional, read the note below)
+* HomeGroup (partially functional, see the note below)
 * BitLocker Drive Encryption
 * Tablet PC Settings
+* Speech Recognition
 
-Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
+The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
+
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
+
 ## Screenshot of the Restored Applets
 
 ![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
 
-## Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)
+## Screenshot of HomeGroup and Network Connections with Task Links
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-HomeGroup is disabled by default because the page was removed from Windows 11. To restore it there, use the [Windows 11 HomeGroup Page Restorer](https://windhawk.net/mods/win11-home-group-restorer) mod.
+This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
+HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
-If the automatic detection is wrong on your edition, each of the two applets has an **Always add** / **Never add** override in the settings. "Always add" still does nothing when the applet is genuinely not installed (e.g. Windows Home), since the entry would have no name, icon or target.
+BitLocker Drive Encryption and Tablet PC Settings are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attemping to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
-**⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.
+If the automatic detection proves incorrect for a particular edition, each of the two applets offers an override: **Always add** or **Never add**. It should be noted that "Always add" has no effect when the applet is not actually installed (e.g., on Windows Home), as the entry would lack a name, icon, and target.
 
-The mod does not commit to restoring task links that open the Settings app instead of the classic Control Panel UI, because restoring such links would defeat the mod's purpose (contributing to the Control Panel restoration).
+**⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
+
+The mod does not commit to restore task links that would open the Settings app rather than the classic Control Panel interface, as doing so would be contrary to the mod's objective of preserving the traditional Control Panel experience.
 
 ## Credits
-This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
-Credits to m417z for the code review and enhancing the mod.
 
+This mod is based on a fork of the original work by Anixx (https://github.com/Anixx), with portions of the implementation derived from aubymori's Control Panel script.
+Credits to m417z for the code review and various enhancements.
+Credits to AdministratoX for the improvements and for restoring Speech Recognition in Control Panel.
 */
 // ==/WindhawkModReadme==
 
@@ -58,54 +63,79 @@ Credits to m417z for the code review and enhancing the mod.
 /*
 - enablePersonalization: true
   $name: Personalization
-  $description: This setting adds the "Personalization" icon to the Control Panel
+  $description: This setting adds the "Personalization" icon to Control Panel
+
 - enableNotificationIcons: true
   $name: Notification area icons
-  $description: This setting adds the "Notification area icons" icon to the Control Panel (intended for Windows 10 taskbar)
+  $description: This setting adds the "Notification area icons" icon to Control Panel (intended for the Windows 10 taskbar)
+
 - enableNetworkConnections: true
   $name: Network connections
-  $description: This setting adds the "Network connections" icon to the Control Panel
+  $description: This setting adds the "Network connections" icon to Control Panel
+
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
-  $description: This setting adds the "Printers and Faxes" icon to the Control Panel
+  $description: This setting adds the "Printers and Faxes" icon to Control Panel
+
 - enableHomeGroup: false
   $name: HomeGroup
-  $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, the HomeGroup networking was removed in Windows 10 1803+). On Windows 11 use the "Windows 11 HomeGroup Page Restorer" mod instead.
+  $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, HomeGroup networking functionality was removed in Windows 10 1803 and later). On Windows 11, the "Windows 11 HomeGroup Page Restorer" mod is recommended instead.
+
 - bitLockerMode: auto
   $name: BitLocker Drive Encryption
-  $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
+  $description: This setting adds the "BitLocker Drive Encryption" icon to Control Panel (under System and Security). The "Automatic" setting adds it only if the applet exists and Control Panel does not already display it, so as to avoid duplicate entries. If the automatic detection is incorrect for your edition, select "Always add" or "Never add" to override it.
   $options:
-  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - auto: Automatic (add only if not already displayed)
   - always: Always add
   - never: Never add
+
 - tabletPcMode: auto
   $name: Tablet PC Settings
-  $description: Adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your device, force it with "Always add" or "Never add".
+  $description: This setting adds the "Tablet PC Settings" icon to Control Panel (under Hardware and Sound). The "Automatic" setting adds it only if the applet exists and Control Panel does not already display it, so as to avoid duplicate entries. If the automatic detection is incorrect for your device, select "Always add" or "Never add" to override it.
   $options:
-  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - auto: Automatic (add only if not already displayed)
   - always: Always add
   - never: Never add
+
+- speechMode: auto
+  $name: Speech Recognition (Text to Speech)
+  $description: This setting adds the "Speech Recognition" icon to Control Panel (under Hardware and Sound). It follows the same Auto/Always/Never logic as BitLocker and "Automatic" adds it only if the applet exists and Control Panel does not already display it.
+  $options:
+  - auto: Automatic (add only if not already displayed)
+  - always: Always add
+  - never: Never add
+
+- preventSettingsRedirect: true
+  $name: Control Panel Revival guard (unhide applets and block Settings redirects)
+  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Speech Recognition, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
+
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
-  $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
+  $description: This setting restores the classic links "Change the theme", "Change desktop background", and "Adjust screen resolution" beneath the Appearance and Personalization category on the main Control Panel home page.
+
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
-  $description: This setting removes the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} non-functional icon
+  $description: This setting removes the non-functional {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} icon from Control Panel
+
 - suppressWindowsToGo: false
   $name: Suppress Windows To Go
-  $description: This setting hides Windows To Go when that legacy Control Panel item is registered on this Windows installation
+  $description: This setting hides Windows To Go when that legacy Control Panel item is registered on the system
+
 - suppressInfrared: false
   $name: Suppress Infrared
-  $description: This setting hides the legacy Infrared Control Panel item when it is registered on this Windows installation
+  $description: This setting hides the legacy Infrared Control Panel item when it is registered on the system
+
 - suppressWorkFolders: false
   $name: Suppress Work Folders
-  $description: This setting hides the legacy Work Folders Control Panel item when it is registered on this Windows installation
+  $description: This setting hides the legacy Work Folders Control Panel item when it is registered on the system
+
 - restoreClassicTaskLinks: true
   $name: Restore Classic Task Links
-  $description: This setting restores the localized, classic task links for Personalization and other sections in category view
+  $description: This setting restores localized, classic task links for Personalization and other sections in Category View
+
 - restoreWin7CategoryTaskLinks: true
   $name: Restore Windows 7 Category Task Links
-  $description: This setting restores the classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) like Windows 7 had
+  $description: This setting restores classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) as they appeared in Windows 7
 */
 // ==/WindhawkModSettings==
 
@@ -116,8 +146,7 @@ This mod enhances Anixx's "Restore the classic Personalization and other CPLs"
 category task links, and a shell::: command redirect hook.
 
 Based on a fork of Anixx's work, its primary goal is to restore Windows 7-style 
-links on Windows 10/11. Currently tested only on Windows 10 1809 (hardware limited 
-to 4 GB RAM, HDD; unable to run Windows 11).
+links on Windows 10/11. 
 
 New features include the reintroduction of HomeGroup in Control Panel — absent 
 from the original mod. To prevent conflicts, this mod will auto-disable if 
@@ -152,6 +181,7 @@ runs with stock applet ordering.
 #include <optional>
 #include <thread>
 #include <shellapi.h>
+#include <psapi.h>
 #include <shobjidl.h>   // IOpenControlPanel, CLSID_OpenControlPanel
 #include <shlwapi.h>
 #include <commctrl.h>
@@ -168,6 +198,8 @@ struct Settings {
     // cannot be answered with total confidence on every edition.
     std::atomic<int> bitLockerMode;
     std::atomic<int> tabletPcMode;
+    std::atomic<int> speechMode;
+    std::atomic<bool> preventSettingsRedirect;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -244,6 +276,31 @@ static std::atomic<bool> g_tabletPcClsidRegistered{ false };
 // settings change.
 static std::atomic<bool> g_injectBitlockerApplet{ false };
 static std::atomic<bool> g_injectTabletPcApplet{ false };
+static std::atomic<bool> g_speechClsidRegistered{ false };
+static std::atomic<bool> g_speechAutoDetected{ false };
+static std::atomic<bool> g_injectSpeechApplet{ false };
+static std::atomic<int> g_prevSpeechMode{ -1 };
+// Whether the REAL Personalization CLSID is registered on this machine.
+// When the Control Panel Revival guard below unhides it, the mod's own
+// virtual Personalization entry must be suppressed (duplicate entries).
+static std::atomic<bool> g_realPersonalizationRegistered{ false };
+// Whether the REAL System CLSID is registered (it is on every supported
+// build; kept as a flag for the same task-links gating logic).
+static std::atomic<bool> g_realSystemRegistered{ false };
+// Master switch for the Control Panel Revival guard (string patches +
+// hooks). Declared up here because the injection sites (ClassifyPath,
+// GetNamespaceClsids, task-links XML) consult it; it is set by
+// SetupRevivalGuard() / Wh_ModSettingsChanged and cleared in Wh_ModUninit.
+static std::atomic<bool> g_revivalGuardActive{ false };
+
+// When the Control Panel Revival guard is active, Windows shows the real
+// applets itself (the guard unhid them), so the virtual twins this mod
+// injects for the same applets must be suppressed, otherwise the user sees
+// duplicate entries (the twin's open command is a "shell:::{...}" launch).
+// The twin is suppressed only when the real applet is actually present.
+static bool VirtualTwinSuppressed(std::atomic<bool>& realPresent) {
+    return g_revivalGuardActive.load() && realPresent.load();
+}
 
 // --- Lazy/virtual-applet probe state (fixes startup-path cost) ---
 static std::atomic<bool> g_lazyDetectionDone{ false };
@@ -434,6 +491,9 @@ std::wstring g_personalizationNsSuffix;
 
 std::wstring g_realPersonalizationClsidSuffix;
 std::wstring g_displayClsidSuffix;
+std::wstring g_realBitLockerClsidSuffix;
+std::wstring g_realSpeechClsidSuffix;
+std::wstring g_realSystemClsidSuffix;
 
 std::wstring g_suppressedClsidSuffix,  g_suppressedNsSuffix;
 std::wstring g_windowsToGoClsidSuffix, g_windowsToGoNsSuffix;
@@ -474,6 +534,18 @@ static const std::wstring kTabletPcCanonicalName    = L"Microsoft.TabletPCSettin
 // used for the HomeGroup task links.
 static const std::wstring kBitLockerVirtualGuid     = L"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}";
 static const std::wstring kTabletPcVirtualGuid      = L"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}";
+static const std::wstring kSpeechGuid               = L"{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}";
+// Canonical name of the Speech Recognition applet; the
+// IOpenControlPanel::GetPath probe also tries ::{GUID} and the bare GUID,
+// so a wrong guess here only costs one extra probe attempt.
+static const std::wstring kSpeechCanonicalName      = L"Microsoft.SpeechRecognition";
+// Virtual CLSID mirroring the real Speech Recognition applet (same reason as
+// kBitLockerVirtualGuid: Explorer's Category View never probes the real GUID).
+static const std::wstring kSpeechVirtualGuid        = L"{e4a1c6d8-3b7f-4e2a-8c5d-9f1b6a7c2d45}";
+// The real "System" applet (sysdm.cpl): unhidden by the Control Panel Revival
+// guard like the other legacy items above; while the guard is active it also
+// gets the classic Windows 7 task links (see EnsureClassicTaskLinksFile).
+static const std::wstring kSystemGuid               = L"{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}";
 
 static const DWORD kCategoryAppearance      = 1;
 static const DWORD kCategoryHardware        = 2;
@@ -489,6 +561,15 @@ std::wstring ToLower(const std::wstring& str) {
 bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     if (str.size() < suffix.size()) return false;
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// ASCII-only narrow conversion for embedding pre-computed lowercase GUIDs
+// into the (UTF-8) task-links XML.
+std::string NarrowAscii(const std::wstring& w) {
+    std::string s;
+    s.reserve(w.size());
+    for (wchar_t c : w) s += (char)c;
+    return s;
 }
 
 // Minimal RAII wrapper around HKEY: closes the key on scope exit no matter
@@ -769,19 +850,24 @@ void RunLazyVirtualAppletDetection() {
 
     AppletMode bitMode = (AppletMode)g_settings.bitLockerMode.load();
     AppletMode tabMode = (AppletMode)g_settings.tabletPcMode.load();
+    AppletMode spMode  = (AppletMode)g_settings.speechMode.load();
     bool needBit = (bitMode == AppletMode::Auto) && g_bitlockerClsidRegistered.load();
     bool needTab = (tabMode == AppletMode::Auto) && g_tabletPcClsidRegistered.load();
-    if (!needBit && !needTab) {
+    bool needSp  = (spMode == AppletMode::Auto) && g_speechClsidRegistered.load();
+    if (!needBit && !needTab && !needSp) {
         g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
             g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
         g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
             g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+        g_injectSpeechApplet.store(ResolveAppletInjection(spMode, g_speechAutoDetected.load(),
+            g_speechClsidRegistered.load(), L"Speech Recognition"));
         g_lazyDetectionDone.store(true, std::memory_order_release);
         return;
     }
     
     bool bitAuto = g_bitlockerAutoDetected.load();
     bool tabAuto = g_tabletPcAutoDetected.load();
+    bool spAuto  = g_speechAutoDetected.load();
     if (needBit) {
         bitAuto = DetectVirtualAppletNeededCached(kBitLockerGuid, kBitLockerCanonicalName,
             L"bitlocker", L"BitLocker Drive Encryption", g_bitlockerClsidRegistered, bitMode);
@@ -792,15 +878,22 @@ void RunLazyVirtualAppletDetection() {
             L"tabletpc", L"Tablet PC Settings", g_tabletPcClsidRegistered, tabMode);
         g_tabletPcAutoDetected.store(tabAuto);
     }
+    if (needSp) {
+        spAuto = DetectVirtualAppletNeededCached(kSpeechGuid, kSpeechCanonicalName,
+            L"speech", L"Speech Recognition", g_speechClsidRegistered, spMode);
+        g_speechAutoDetected.store(spAuto);
+    }
     g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
         g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
     g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
         g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_injectSpeechApplet.store(ResolveAppletInjection(spMode, g_speechAutoDetected.load(),
+        g_speechClsidRegistered.load(), L"Speech Recognition"));
     g_lazyDetectionDone.store(true, std::memory_order_release);
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d",
-        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load());
+    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d Speech inject=%d",
+        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(), g_injectSpeechApplet.load());
 }
 
 // Combines the automatic detection with the user's explicit override.
@@ -911,6 +1004,10 @@ struct VirtualApplet {
     std::wstring openCommand;
     DWORD category = 0;
     std::atomic<bool>* enabledSetting = nullptr;
+    // Points at the "real CLSID is registered" flag: when the Revival guard
+    // is active and the real applet exists, this virtual twin is suppressed
+    // (see VirtualTwinSuppressed) so the user doesn't get duplicate entries.
+    std::atomic<bool>* realPresent = nullptr;
 };
 
 static std::vector<VirtualApplet> g_virtualApplets;
@@ -945,7 +1042,8 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
                       DWORD category, std::atomic<bool>* enabledSetting,
                       const std::wstring& fallbackNameIndirect = L"",
                       const std::wstring& fallbackIcon = L"",
-                      const std::wstring& fallbackInfoTip = L"") {
+                      const std::wstring& fallbackInfoTip = L"",
+                      std::atomic<bool>* realPresent = nullptr) {
     std::wstring name, icon;
     bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
     if (!gotFromRegistry || name.empty()) {
@@ -1000,6 +1098,7 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
     applet.openCommand = L"explorer.exe shell:::" + realGuid;
     applet.category = category;
     applet.enabledSetting = enabledSetting;
+    applet.realPresent = realPresent;
     g_virtualApplets.push_back(std::move(applet));
     return true;
 }
@@ -1103,6 +1202,10 @@ bool EnsureClassicTaskLinksFile() {
         const char* bitlockerManage;
         const char* tabletCalibrate;
         const char* tabletPenTouch;
+        const char* speechConfigure;
+        const char* systemBasic;
+        const char* systemStatus;
+        const char* systemPerformance;
     };
 
     // Hard-coded localized Windows 7-style labels. The selected entry follows
@@ -1111,11 +1214,11 @@ bool EnsureClassicTaskLinksFile() {
     // MUI/resource dependency; English remains the fallback for other locales.
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
-        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco" },
-        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil" },
-        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile" },
-        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen" },
+        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings", "Configure speech recognition", "View basic information about your computer", "Review your computer's status", "Review your computer's performance" },
+        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura il riconoscimento vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
+        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil", "Configurar el reconocimiento de voz", "Ver información básica sobre el equipo", "Revisar el estado del equipo", "Revisar el rendimiento del equipo" },
+        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile", "Configurer la reconnaissance vocale", "Afficher les informations de base sur l'ordinateur", "Vérifier l'état de votre ordinateur", "Vérifier les performances de votre ordinateur" },
+        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen", "Spracherkennung einrichten", "Grundlegende Informationen zum Computer anzeigen", "Computerstatus überprüfen", "Computerleistung überprüfen" },
         { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies", "Gerenciar BitLocker", "Calibrar a tela para entrada por caneta ou toque", "Configurações de Caneta e Toque" },
         { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies", "Gerir o BitLocker", "Calibrar o ecrã para entrada de caneta ou toque", "Definições de Caneta e Toque" },
         { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen", "BitLocker beheren", "Scherm kalibreren voor pen- of aanraakinvoer", "Instellingen voor pen en aanraking" },
@@ -1160,7 +1263,7 @@ bool EnsureClassicTaskLinksFile() {
     }
 
 
-    static const char kClassicTaskLinks[] = R"xml(  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
+    static const char kClassicTaskLinks[] = R"xml(  <application id="{PERSONALIZATION_TASKS_APP_ID}">
     <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
     <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
@@ -1225,6 +1328,14 @@ bool EnsureClassicTaskLinksFile() {
     
     replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
                g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+    // The five classic Personalization task links attach to the REAL
+    // Personalization applet while the Revival guard unhide it (the virtual
+    // twin is then suppressed, see VirtualTwinSuppressed), and to the
+    // virtual CLSID otherwise.
+    replaceAll("{PERSONALIZATION_TASKS_APP_ID}",
+        VirtualTwinSuppressed(g_realPersonalizationRegistered)
+            ? NarrowAscii(ToLower(kRealPersonalizationGuid)).c_str()
+            : NarrowAscii(ToLower(kPersonalizationGuid)).c_str());
 
     // Windows 7 Category Task Links
     if (g_settings.restoreWin7CategoryTaskLinks.load()) {
@@ -1306,14 +1417,60 @@ bool EnsureClassicTaskLinksFile() {
     // tasks attach to exactly the entries this mod injects.
     std::string virtualTaskBlock;
     if (g_settings.restoreClassicTaskLinks.load()) {
-        if (g_injectBitlockerApplet.load()) {
+        {
+            // While the Revival guard is active and the real applet exists,
+            // Windows shows the REAL BitLocker entry and the virtual twin is
+            // suppressed - so the task links must attach to the real CLSID.
+            const bool bitRealShown = VirtualTwinSuppressed(g_bitlockerClsidRegistered);
+            if (g_injectBitlockerApplet.load() || bitRealShown) {
+                const std::string bitAppId = bitRealShown
+                    ? NarrowAscii(ToLower(kBitLockerGuid))        // real CLSID
+                    : NarrowAscii(ToLower(kBitLockerVirtualGuid)); // virtual CLSID
+                virtualTaskBlock +=
+                    "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
+                    "  <application id=\"" + bitAppId + "\">\n"
+                    "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
+                    "<sh:keywords>bitlocker;encryption</sh:keywords>"
+                    "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
+                    "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                    "  </application>\n";
+            }
+        }
+        {
+            // Same real/virtual switching as the BitLocker block above.
+            const bool speechRealShown = VirtualTwinSuppressed(g_speechClsidRegistered);
+            if (g_injectSpeechApplet.load() || speechRealShown) {
+                const std::string speechAppId = speechRealShown
+                    ? NarrowAscii(ToLower(kSpeechGuid))          // real CLSID
+                    : NarrowAscii(ToLower(kSpeechVirtualGuid));  // virtual CLSID
+                virtualTaskBlock +=
+                    "  <!-- Speech Recognition / Sintesi vocale (Hardware and Sound, Category 2) -->\n"
+                    "  <application id=\"" + speechAppId + "\">\n"
+                    "    <sh:task id=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"><sh:name>{SPEECHCONFIGURE}</sh:name>"
+                    "<sh:keywords>speech;voice;speech recognition;synthesis;sintesi vocale</sh:keywords>"
+                    "<sh:command>explorer.exe shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}</sh:command></sh:task>\n"
+                    "    <category id=\"2\"><sh:task idref=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"/></category>\n"
+                    "  </application>\n";
+            }
+        }
+        // No virtual System twin exists: the classic links simply attach to
+        // the real System applet while the Revival guard unhide it.
+        if (VirtualTwinSuppressed(g_realSystemRegistered)) {
             virtualTaskBlock +=
-                "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
-                "  <application id=\"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}\">\n"
-                "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
-                "<sh:keywords>bitlocker;encryption</sh:keywords>"
-                "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
-                "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                "  <!-- System / Sistema (System and Security, Category 5) -->\n"
+                "  <application id=\"{bb06c0e4-d293-4f75-8a90-cb05b6477eee}\">\n"
+                "    <sh:task id=\"{D4F4A030-0D35-4CB6-A21F-BC1661200030}\"><sh:name>{SYSTEMBASIC}</sh:name>"
+                "<sh:keywords>system;computer;basic information</sh:keywords>"
+                "<sh:command>rundll32.exe shell32.dll,Control_RunDLL sysdm.cpl</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A031-0D35-4CB6-A21F-BC1661200031}\"><sh:name>{SYSTEMSTATUS}</sh:name>"
+                "<sh:keywords>system;status;action center</sh:keywords>"
+                "<sh:command>rundll32.exe shell32.dll,Control_RunDLL wscui.cpl</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A032-0D35-4CB6-A21F-BC1661200032}\"><sh:name>{SYSTEMPERF}</sh:name>"
+                "<sh:keywords>system;performance;performance monitor</sh:keywords>"
+                "<sh:command>perfmon.exe</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A030-0D35-4CB6-A21F-BC1661200030}\"/>"
+                "<sh:task idref=\"{D4F4A031-0D35-4CB6-A21F-BC1661200031}\"/>"
+                "<sh:task idref=\"{D4F4A032-0D35-4CB6-A21F-BC1661200032}\"/></category>\n"
                 "  </application>\n";
         }
         if (g_injectTabletPcApplet.load()) {
@@ -1334,13 +1491,19 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
     if (g_settings.enableCategoryAppearanceLinks.load()) {
-        replaceAll("{DISPLAY_APPLICATION_BLOCK}", 
+        std::string displayBlock =
             "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
             "    <sh:task id=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}</sh:command></sh:task>\n"
             "    <category id=\"1\">\n"
             "       <sh:task idref=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"/>\n"
             "    </category>\n"
-            "  </application>\n"
+            "  </application>\n";
+        // The theme/background links also attach to the REAL Personalization
+        // applet. While the Revival guard unhide it, the 5-task
+        // Personalization block already covers it, so skip this second block
+        // to avoid a duplicate application id in the XML.
+        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered)) {
+            displayBlock +=
             "  <application id=\"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\">\n"
             "    <sh:task id=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
             "    <sh:task id=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
@@ -1348,7 +1511,9 @@ bool EnsureClassicTaskLinksFile() {
             "       <sh:task idref=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"/>\n"
             "       <sh:task idref=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"/>\n"
             "    </category>\n"
-            "  </application>");
+            "  </application>";
+        }
+        replaceAll("{DISPLAY_APPLICATION_BLOCK}", displayBlock.c_str());
     } else {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", "");
     }
@@ -1389,6 +1554,19 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{BITLOCKERMANAGE}", texts->bitlockerManage);
     replaceAll("{TABLETCALIBRATE}", texts->tabletCalibrate);
     replaceAll("{TABLETPENTOUCH}", texts->tabletPenTouch);
+    // Locales without a dedicated translation fall back to the English text
+    // (same convention the rest of the table already documents).
+    const char* speechConfigureText = texts->speechConfigure ? texts->speechConfigure
+                                                             : kTaskLinkTexts[0].speechConfigure;
+    replaceAll("{SPEECHCONFIGURE}", speechConfigureText);
+    // System links: same English fallback for the other locales.
+    const char* systemBasicText = texts->systemBasic ? texts->systemBasic : kTaskLinkTexts[0].systemBasic;
+    const char* systemStatusText = texts->systemStatus ? texts->systemStatus : kTaskLinkTexts[0].systemStatus;
+    const char* systemPerfText = texts->systemPerformance ? texts->systemPerformance
+                                                          : kTaskLinkTexts[0].systemPerformance;
+    replaceAll("{SYSTEMBASIC}", systemBasicText);
+    replaceAll("{SYSTEMSTATUS}", systemStatusText);
+    replaceAll("{SYSTEMPERF}", systemPerfText);
 
 
     const std::wstring targetPath = g_classicTaskLinksFilePath;
@@ -1489,6 +1667,8 @@ void LoadSettings() {
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
+    g_settings.speechMode.store((int)ReadAppletMode(L"speechMode"));
+    g_settings.preventSettingsRedirect.store(Wh_GetIntSetting(L"preventSettingsRedirect"));
     // The effective verdicts depend on both the (fixed) auto detection and the
     // (changeable) override, so they are refreshed on every settings load.
     g_injectBitlockerApplet.store(ResolveAppletInjection(
@@ -1497,6 +1677,9 @@ void LoadSettings() {
     g_injectTabletPcApplet.store(ResolveAppletInjection(
         (AppletMode)g_settings.tabletPcMode.load(), g_tabletPcAutoDetected.load(),
         g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_injectSpeechApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.speechMode.load(), g_speechAutoDetected.load(),
+        g_speechClsidRegistered.load(), L"Speech Recognition"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
@@ -1545,6 +1728,9 @@ void InitDisplayNames() {
 
     g_realPersonalizationClsidSuffix = L"clsid\\" + g_realPersonalizationGuidLower;
     g_displayClsidSuffix             = L"clsid\\" + g_displayGuidLower;
+    g_realBitLockerClsidSuffix       = L"clsid\\" + ToLower(kBitLockerGuid);
+    g_realSpeechClsidSuffix          = L"clsid\\" + ToLower(kSpeechGuid);
+    g_realSystemClsidSuffix          = L"clsid\\" + ToLower(kSystemGuid);
 
     g_suppressedClsidSuffix  = L"clsid\\" + g_suppressedGuidLower;
     g_suppressedNsSuffix     = L"controlpanel\\namespace\\" + g_suppressedGuidLower;
@@ -1575,7 +1761,8 @@ void InitDisplayNames() {
                               &g_injectBitlockerApplet,
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"%SystemRoot%\\System32\\fvecpl.dll,-1",
-                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2"))
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2",
+                              &g_bitlockerClsidRegistered))
             Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
     }
     if (g_tabletPcClsidRegistered.load()) {
@@ -1587,6 +1774,18 @@ void InitDisplayNames() {
                               L"%SystemRoot%\\System32\\tabletpc.cpl,-10200",
                               L"@%SystemRoot%\\System32\\tabletpc.cpl,-10102"))
             Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
+    }
+    if (g_speechClsidRegistered.load()) {
+        // Speech Recognition (Sintesi vocale): the registry read is primary;
+        // the speechux.dll resource references are the fallback for the
+        // stub-CLSID builds where the key exists without name/icon values.
+        if (!AddVirtualApplet(kSpeechVirtualGuid, kSpeechGuid, kCategoryHardware,
+                              &g_injectSpeechApplet,
+                              L"@%SystemRoot%\\System32\\speechux.dll,-1",
+                              L"%SystemRoot%\\System32\\speechux.dll,-1",
+                              L"@%SystemRoot%\\System32\\speechux.dll,-2",
+                              &g_speechClsidRegistered))
+            Wh_Log(L"Could not read Speech Recognition's real name/icon; virtual entry not created");
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -1662,6 +1861,9 @@ ClassifyResult ClassifyVirtualApplets(const std::wstring& lower) {
     for (size_t i = 0; i < g_virtualApplets.size(); ++i) {
         const VirtualApplet& a = g_virtualApplets[i];
         if (!a.enabledSetting->load()) continue;
+        // Revival guard active + real applet present: Windows shows the real
+        // entry itself, so this virtual twin must not be served either.
+        if (a.realPresent && VirtualTwinSuppressed(*a.realPresent)) continue;
         if (EndsWith(lower, a.clsidSuffix))       return { VNode::ClsidRoot,     ItemKind::VirtualApplet, a.category, (int)i };
         if (EndsWith(lower, a.defaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::VirtualApplet, a.category, (int)i };
         if (EndsWith(lower, a.shellSuffix))       return { VNode::Shell,        ItemKind::VirtualApplet, a.category, (int)i };
@@ -1692,7 +1894,8 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
             return { VNode::Suppressed, ItemKind::Suppressed, 0 };
     }
 
-    if (g_settings.enablePersonalization.load()) {
+    if (g_settings.enablePersonalization.load() &&
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered)) {
         auto cr = ClassifyPersonalizationVirtual(lower);
         if (cr.node != VNode::None) return cr;
     }
@@ -1702,9 +1905,19 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         if (cr.node != VNode::None) return cr;
     }
 
-    if (g_settings.enableCategoryAppearanceLinks.load()) {
+    if (g_settings.enableCategoryAppearanceLinks.load() || g_revivalGuardActive.load()) {
         if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
             EndsWith(lower, g_displayClsidSuffix)) {
+            return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
+        }
+        // With the Revival guard active the real BitLocker / Speech / System
+        // applets are unhidden by Windows, so the classic task links attach
+        // to them. cr.category stays 0: the category is NOT overridden,
+        // Windows already knows the real applet's own category.
+        if (g_revivalGuardActive.load() &&
+            (EndsWith(lower, g_realBitLockerClsidSuffix) ||
+             EndsWith(lower, g_realSpeechClsidSuffix) ||
+             EndsWith(lower, g_realSystemClsidSuffix))) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
         }
     }
@@ -1809,9 +2022,9 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 return true;
             }
         }
-        if (valueName == L"System.ControlPanel.Category") {
+        if (cr.category != 0 && valueName == L"System.ControlPanel.Category") {
             if (lpType) *lpType = REG_DWORD;
-            outStatus = ProvideDwordValue(lpData, lpcbData, kCategoryAppearance);
+            outStatus = ProvideDwordValue(lpData, lpcbData, cr.category);
             return true;
         }
         return false;
@@ -1963,14 +2176,18 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 // actually built before advertising it.
 static bool VirtualAppletPresent(const std::wstring& guidLower) {
     for (const auto& a : g_virtualApplets)
-        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load()) return true;
+        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load() &&
+            !(a.realPresent && VirtualTwinSuppressed(*a.realPresent))) return true;
     return false;
 }
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    result.reserve(7);
-    if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
+    result.reserve(8);
+    // The virtual Personalization twin is suppressed while the Revival guard
+    // shows the real applet (guard active + real CLSID registered).
+    if (g_settings.enablePersonalization.load() &&
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered)) result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
@@ -1979,6 +2196,8 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kBitLockerVirtualGuid);
     if (g_injectTabletPcApplet.load() && VirtualAppletPresent(kTabletPcVirtualGuid))
         result.push_back(kTabletPcVirtualGuid);
+    if (g_injectSpeechApplet.load() && VirtualAppletPresent(kSpeechVirtualGuid))
+        result.push_back(kSpeechVirtualGuid);
     return result;
 }
 
@@ -2411,6 +2630,11 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
 LPCWSTR g_szAppletOrder[] = {
     /* Appearance and Personalization */
     L"::{580722ff-16a7-44c1-bf74-7e1acd00f4f9}", // Personalization (fake GUID)
+    // The REAL Personalization applet, which is what shows while the Control
+    // Panel Revival guard is active (the virtual twin is then suppressed).
+    // Only one of the two entries is ever in the category list at a time, so
+    // the extra rank costs nothing.
+    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization (real)
 };
 
 // Control Panel item monikers appear both bare and with a leading "::", so
@@ -2634,14 +2858,316 @@ void InvalidateClassicTaskLinksFile() {
     g_taskLinksLastCheckTick.store(0, std::memory_order_relaxed);
 }
 
+// ===========================================================================
+// Control Panel Revival approach (ported from the "control-panel-revival"
+// mod by AdmXP8), rebuilt around RAII + try/catch:
+//
+//  * ReversiblePatcher owns every in-memory string patch and restores the
+//    original bytes from a single place (its destructor and Wh_ModUninit),
+//    so no manual restore can ever be forgotten;
+//  * ScopedLibrary owns the windows.storage.dll load the same way;
+//  * every entry point below is try/catch guarded, so no C++ exception can
+//    ever unwind into Explorer's non-exception-aware call stack.
+//
+// What it does, exactly like the original mod:
+//  1. zeroes the hidden-applet monikers inside shell32.dll /
+//     windows.storage.dll so Windows 11 stops hiding Personalization,
+//     BitLocker Drive Encryption, Speech Recognition (Text to Speech) and
+//     System;
+//  2. hooks CompareStringOrdinal to break the redirect-to-Settings match;
+//  3. hooks COpenControlPanel::_MapLegacyName so the legacy names are kept
+//     unmapped and the classic applets stay addressable by moniker.
+// ===========================================================================
+
+struct PatchRecord {
+    void* address;
+    BYTE originalBytes[128];
+    size_t length;
+};
+
+class ReversiblePatcher {
+public:
+    ReversiblePatcher() = default;
+    ReversiblePatcher(const ReversiblePatcher&) = delete;
+    ReversiblePatcher& operator=(const ReversiblePatcher&) = delete;
+    ~ReversiblePatcher() { RestoreAll(); }
+
+    // Zeroes the first exact occurrence of lpSearch inside the module image,
+    // recording the original bytes so RestoreAll() can put them back.
+    bool PatchStringInModule(HMODULE hModule, LPCWSTR lpSearch) {
+        if (!hModule || !lpSearch) return false;
+
+        MODULEINFO info = { 0 };
+        if (!GetModuleInformation(GetCurrentProcess(), hModule, &info, sizeof(MODULEINFO)))
+            return false;
+
+        const DWORD_PTR base = (DWORD_PTR)info.lpBaseOfDll;
+        const size_t size = (size_t)info.SizeOfImage;
+        const size_t patternLen = wcslen(lpSearch) * sizeof(WCHAR);
+        if (patternLen == 0 || patternLen > size ||
+            patternLen > sizeof(PatchRecord::originalBytes))
+            return false;
+
+        for (size_t i = 0; i + patternLen <= size; i++) {
+            bool found = true;
+            for (size_t j = 0; j < patternLen; j++) {
+                if (*((const char*)lpSearch + j) != *(const char*)(base + i + j)) {
+                    found = false;
+                    break;
+                }
+            }
+            if (!found) continue;
+
+            void* targetAddress = (void*)(base + i);
+            MEMORY_BASIC_INFORMATION mbi = {};
+            if (!VirtualQuery(targetAddress, &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
+                return false;
+
+            DWORD oldProtect = 0;
+            if (!VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect))
+                return false;
+
+            if (patches_.size() >= 64) {  // same capacity as the original mod
+                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
+                return false;
+            }
+
+            PatchRecord record = {};
+            record.address = targetAddress;
+            record.length = patternLen;
+            memcpy(record.originalBytes, targetAddress, patternLen);
+            ZeroMemory(targetAddress, patternLen);
+
+            VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
+            patches_.push_back(record);
+            Wh_Log(L"Revival guard: patched moniker in module %p", (void*)hModule);
+            return true;
+        }
+        return false;
+    }
+
+    // Puts every recorded byte back. Safe to call multiple times.
+    void RestoreAll() {
+        for (const auto& patch : patches_) {
+            MEMORY_BASIC_INFORMATION mbi = {};
+            if (!VirtualQuery(patch.address, &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
+                continue;
+            DWORD oldProtect = 0;
+            if (!VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect))
+                continue;
+            memcpy(patch.address, patch.originalBytes, patch.length);
+            VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
+        }
+        const size_t count = patches_.size();
+        patches_.clear();
+        if (count) Wh_Log(L"Revival guard: restored %zu patched region(s)", count);
+    }
+
+private:
+    std::vector<PatchRecord> patches_;
+};
+
+static ReversiblePatcher g_revivalPatcher;
+
+// RAII wrapper for a module this mod loads on its own (windows.storage.dll):
+// the FreeLibrary runs on scope exit no matter how the scope is left.
+class ScopedLibrary {
+public:
+    ScopedLibrary() = default;
+    explicit ScopedLibrary(HMODULE module) : module_(module) {}
+    ScopedLibrary(const ScopedLibrary&) = delete;
+    ScopedLibrary& operator=(const ScopedLibrary&) = delete;
+    ~ScopedLibrary() { if (module_) FreeLibrary(module_); }
+
+    HMODULE Get() const { return module_; }
+    explicit operator bool() const { return module_ != nullptr; }
+
+private:
+    HMODULE module_ = nullptr;
+};
+
+// Master switch for the whole revival guard: when false the two hooks below
+// pass straight through to the original functions. (g_revivalGuardActive is
+// declared up top together with the other mod state.)
+static std::atomic<bool> g_revivalCsoHooked{ false };
+static std::atomic<bool> g_revivalMapNameHooked{ false };
+
+// The hidden-applet monikers to unhide (copied from the control-panel-revival
+// mod), narrowed to the applets this mod manages.
+static const LPCWSTR kRevivalAppletMonikers[] = {
+    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization (Personalizzazione)
+    L"::{D9EF8727-CAC2-4e60-809E-86F80A666C91}", // BitLocker Drive Encryption
+    L"::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}", // Text to Speech (Sintesi vocale)
+    L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System (Sistema)
+};
+
+// Copied from the control-panel-revival mod: the canonical names whose
+// legacy-to-modern mapping is short-circuited by the _MapLegacyName hook.
+static const LPCWSTR kRevivalCanonicalNames[] = {
+    L"Microsoft.Display",
+    L"Microsoft.Personalization",
+    L"Microsoft.Language",
+    L"Microsoft.LocationAndOtherSensors",
+    L"Microsoft.LocationSettings",
+    L"Microsoft.WindowsUpdate",
+    L"Microsoft.Troubleshooting",
+    L"Microsoft.DevicesAndPrinters",
+    L"Microsoft.RegionalAndLanguageOptions",
+    L"Microsoft.System",
+    L"Microsoft.Printers",
+    L"Microsoft.InstalledUpdates",
+    L"Microsoft.DefaultPrograms",
+    L"Microsoft.Fonts"
+};
+
+// Helper function to match target strings regardless of length format
+// (copied from the control-panel-revival mod, renamed to avoid collisions).
+static bool IsRevivalTargetApplet(LPCWCH lpString, int cchCount) {
+    if (!lpString) return false;
+    const size_t len = (cchCount == -1) ? wcslen(lpString) : (size_t)cchCount;
+
+    for (UINT i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
+        const size_t targetLen = wcslen(kRevivalAppletMonikers[i]);
+        if (len == targetLen && _wcsnicmp(lpString, kRevivalAppletMonikers[i], len) == 0) {
+            return true;
+        }
+    }
+    for (UINT i = 0; i < ARRAYSIZE(kRevivalCanonicalNames); i++) {
+        const size_t targetLen = wcslen(kRevivalCanonicalNames[i]);
+        if (len == targetLen && _wcsnicmp(lpString, kRevivalCanonicalNames[i], len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Hook for COpenControlPanel::_MapLegacyName (ported, try/catch guarded).
+// While this mod's own shell probe (IsShownByControlPanel) runs, the
+// g_inShellProbeBypass flag is set, so the probe always sees stock behaviour.
+static bool (*g_revivalMapLegacyNameOrig)(void*, LPCWSTR, LPWSTR, UINT, bool*) = nullptr;
+static bool COpenControlPanel__MapLegacyName_revivalHook(void* pThis, LPCWSTR pszLegacyName,
+                                                         LPWSTR pszNewName, UINT uUnused,
+                                                         bool* nameChanged) {
+    try {
+        if (g_revivalGuardActive.load() && !g_inShellProbeBypass && pszLegacyName) {
+            for (size_t i = 0; i < ARRAYSIZE(kRevivalCanonicalNames); i++) {
+                if (kRevivalCanonicalNames[i] &&
+                    _wcsicmp(pszLegacyName, kRevivalCanonicalNames[i]) == 0) {
+                    if (nameChanged) *nameChanged = false;
+                    if (pszNewName && uUnused > 0) {
+                        *pszNewName = L'\0';
+                    }
+                    return false;
+                }
+            }
+        }
+        if (!g_revivalMapLegacyNameOrig) return true;
+        return g_revivalMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
+    } catch (...) {
+        Wh_Log(L"Exception in _MapLegacyName revival hook, passing through");
+        return g_revivalMapLegacyNameOrig
+            ? g_revivalMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged)
+            : true;
+    }
+}
+
+// Direct CompareStringOrdinal hook (ported, try/catch guarded).
+static decltype(&CompareStringOrdinal) g_revivalCompareStringOrdinalOrig = nullptr;
+static int WINAPI CompareStringOrdinal_revivalHook(LPCWCH lpString1, int cchCount1,
+                                                   LPCWCH lpString2, int cchCount2,
+                                                   BOOL bIgnoreCase) {
+    try {
+        // Never interfere with this mod's own IOpenControlPanel::GetPath probe.
+        if (g_revivalGuardActive.load() && !g_inShellProbeBypass &&
+            (IsRevivalTargetApplet(lpString1, cchCount1) ||
+             IsRevivalTargetApplet(lpString2, cchCount2))) {
+            return CSTR_LESS_THAN; // Break redirection match
+        }
+        if (!g_revivalCompareStringOrdinalOrig) return 0;
+        return g_revivalCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
+                                                 bIgnoreCase);
+    } catch (...) {
+        Wh_Log(L"Exception in CompareStringOrdinal revival hook, passing through");
+        return g_revivalCompareStringOrdinalOrig
+            ? g_revivalCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
+                                                bIgnoreCase)
+            : 0;
+    }
+}
+
+static const WindhawkUtils::SYMBOL_HOOK g_revivalShell32Hooks[] = {
+    {
+        { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
+        (void**)&g_revivalMapLegacyNameOrig,
+        (void*)COpenControlPanel__MapLegacyName_revivalHook,
+        true
+    }
+};
+
+// Patches the hidden monikers and installs the two hooks. Idempotent: a second
+// call (e.g. after re-enabling the setting) only re-applies the string
+// patches, never re-installs a hook that is already in place.
+static void SetupRevivalGuard() {
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32) {
+        Wh_Log(L"Revival guard: shell32.dll not found, skipping");
+        return;
+    }
+
+    for (const LPCWSTR moniker : kRevivalAppletMonikers) {
+        g_revivalPatcher.PatchStringInModule(hShell32, moniker);
+    }
+
+    {
+        ScopedLibrary winStorage(
+            LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32));
+        if (winStorage) {
+            for (const LPCWSTR moniker : kRevivalAppletMonikers) {
+                g_revivalPatcher.PatchStringInModule(winStorage.Get(), moniker);
+            }
+        }
+    }
+
+    if (!g_revivalCsoHooked.load()) {
+        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto pCso = hKernelBase
+            ? (decltype(&CompareStringOrdinal))GetProcAddress(hKernelBase,
+                                                              "CompareStringOrdinal")
+            : nullptr;
+        if (pCso && WindhawkUtils::SetFunctionHook(pCso, CompareStringOrdinal_revivalHook,
+                                                   &g_revivalCompareStringOrdinalOrig)) {
+            g_revivalCsoHooked.store(true);
+            Wh_Log(L"Revival guard: CompareStringOrdinal hooked");
+        } else {
+            Wh_Log(L"Revival guard: CompareStringOrdinal hook failed; moniker patching still active");
+        }
+    }
+
+    if (!g_revivalMapNameHooked.load()) {
+        if (WindhawkUtils::HookSymbols(hShell32, g_revivalShell32Hooks,
+                                       ARRAYSIZE(g_revivalShell32Hooks))) {
+            g_revivalMapNameHooked.store(true);
+            Wh_Log(L"Revival guard: _MapLegacyName hooked");
+        } else {
+            Wh_Log(L"Revival guard: _MapLegacyName symbol not found on this build; moniker patching still active");
+        }
+    }
+
+    g_revivalGuardActive.store(true);
+}
+
 void Wh_ModSettingsChanged() {
   try {
     AppletMode oldBitMode = (AppletMode)g_prevBitLockerMode.load();
     AppletMode oldTabMode = (AppletMode)g_prevTabletPcMode.load();
+    AppletMode oldSpeechMode = (AppletMode)g_prevSpeechMode.load();
     AppletMode newBitMode = ReadAppletMode(L"bitLockerMode");
     AppletMode newTabMode = ReadAppletMode(L"tabletPcMode");
+    AppletMode newSpeechMode = ReadAppletMode(L"speechMode");
     bool bitChanged = (oldBitMode != newBitMode);
     bool tabChanged = (oldTabMode != newTabMode);
+    bool speechChanged = (oldSpeechMode != newSpeechMode);
+    const bool prevRedirectGuard = g_settings.preventSettingsRedirect.load();
     if (bitChanged) {
         Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
         Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
@@ -2656,26 +3182,51 @@ void Wh_ModSettingsChanged() {
         g_lazyDetectionDone.store(false, std::memory_order_release);
         g_tabletPcAutoDetected.store(false);
     }
+    if (speechChanged) {
+        Wh_Log(L"speechMode changed %d -> %d, clearing cached verdict", (int)oldSpeechMode, (int)newSpeechMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"speech").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"speech").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_speechAutoDetected.store(false);
+    }
     LoadSettings();
     g_prevBitLockerMode.store((int)newBitMode);
     g_prevTabletPcMode.store((int)newTabMode);
+    g_prevSpeechMode.store((int)newSpeechMode);
+    // The Control Panel Revival guard can be toggled live: re-apply the string
+    // patches and hooks, or restore the original bytes. try/catch protected so
+    // a failure can never leak into Explorer.
+    if (prevRedirectGuard != g_settings.preventSettingsRedirect.load()) {
+        try {
+            if (g_settings.preventSettingsRedirect.load()) {
+                Wh_Log(L"Control Panel Revival guard re-enabled by settings");
+                SetupRevivalGuard();
+            } else {
+                Wh_Log(L"Control Panel Revival guard disabled by settings; restoring patched bytes");
+                g_revivalGuardActive.store(false);
+                g_revivalPatcher.RestoreAll();
+            }
+        } catch (...) {
+            Wh_Log(L"Exception while toggling the Control Panel Revival guard");
+        }
+    }
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
     // Re-arm the lazy-detection worker if a mode change invalidated the
     // cached verdict, instead of waiting for the next incidental registry
     // access to request it.
-    if ((bitChanged || tabChanged) && g_lazyDetectionWakeEvent) {
+    if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Revival=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
-        g_settings.enableCategoryAppearanceLinks.load(),
+        g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.preventSettingsRedirect.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -2712,8 +3263,14 @@ BOOL Wh_ModInit() {
 
     g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
     g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
+    g_speechClsidRegistered.store(IsRegisteredClsid(kSpeechGuid));
+    Wh_Log(L"Speech Recognition CLSID %s", g_speechClsidRegistered.load()
+        ? L"is registered" : L"is absent on this edition; applet will not be injected");
+    g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
+    g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
     g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
     g_prevTabletPcMode.store(g_settings.tabletPcMode.load());
+    g_prevSpeechMode.store(g_settings.speechMode.load());
     {
         auto tryLoadCachedVerdict = [&](const wchar_t* key, std::atomic<bool>& outAutoDetected) -> bool {
             const std::wstring verdictName = MakeVerdictValueName(key);
@@ -2730,7 +3287,7 @@ BOOL Wh_ModInit() {
             outAutoDetected.store(false);
             return false;
         };
-        bool bitCached = false, tabCached = false;
+        bool bitCached = false, tabCached = false, speechCached = false;
         if ((AppletMode)g_settings.bitLockerMode.load() == AppletMode::Auto && g_bitlockerClsidRegistered.load()) {
             bitCached = tryLoadCachedVerdict(L"bitlocker", g_bitlockerAutoDetected);
             if (!bitCached) Wh_Log(L"BitLocker: no cached verdict, will probe lazily on first registry access");
@@ -2745,7 +3302,14 @@ BOOL Wh_ModInit() {
             g_tabletPcAutoDetected.store(false);
             tabCached = true;
         }
-        bool needLazy = !bitCached || !tabCached;
+        if ((AppletMode)g_settings.speechMode.load() == AppletMode::Auto && g_speechClsidRegistered.load()) {
+            speechCached = tryLoadCachedVerdict(L"speech", g_speechAutoDetected);
+            if (!speechCached) Wh_Log(L"Speech: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_speechAutoDetected.store(false);
+            speechCached = true;
+        }
+        bool needLazy = !bitCached || !tabCached || !speechCached;
         g_lazyDetectionDone.store(!needLazy, std::memory_order_release);
     }
     LoadSettings();
@@ -2762,13 +3326,13 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Revival=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
-        g_settings.enableCategoryAppearanceLinks.load(),
+        g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.preventSettingsRedirect.load());
 
     void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
     void* pRegCloseKey        = GetRegFunc("RegCloseKey");
@@ -2839,6 +3403,27 @@ BOOL Wh_ModInit() {
             }
         }
 
+    }
+
+    // Control Panel Revival guard (ported approach): unhide the legacy
+    // applets and break the Settings-app redirect. The whole block is
+    // try/catch protected; a failure here never takes the rest of the mod down.
+    if (g_settings.preventSettingsRedirect.load()) {
+        try {
+            SetupRevivalGuard();
+        } catch (...) {
+            Wh_Log(L"Exception during Control Panel Revival guard setup; guard disabled, rest of the mod active");
+            g_revivalGuardActive.store(false);
+        }
+    }
+
+    // The Revival guard changes which entries receive the classic task links
+    // (real applets instead of the virtual twins) and which virtual twins are
+    // hidden, so regenerate the XML now that g_revivalGuardActive has its
+    // final value (the earlier eager generation ran before the guard existed).
+    if (g_revivalGuardActive.load()) {
+        InvalidateClassicTaskLinksFile();
+        EnsureClassicTaskLinksFile();
     }
 
     Wh_Log(L"All hooks set successfully");
@@ -2930,6 +3515,10 @@ void Wh_ModUninit() {
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
         g_keyTracker.ClearWithoutFreeing();
+        // Control Panel Revival guard: deactivate the hooks (they now pass
+        // straight through) and restore every patched byte.
+        g_revivalGuardActive.store(false);
+        g_revivalPatcher.RestoreAll();
         Wh_Log(L"Cleanup completed");
     } catch (...) {
         Wh_Log(L"Exception during cleanup, continuing anyway");
