@@ -3542,19 +3542,17 @@ bool IsLogonUiInjectionEnabled() {
     res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, nullptr, &size);
     if (res != ERROR_SUCCESS && res != ERROR_MORE_DATA) {
         Wh_Log(L"WH inclusion check failed (size query), GLE=%d", res);
+        RegCloseKey(hKey);
         return false;
     }
 
     wchar_t* data = new wchar_t[size / sizeof(wchar_t) + 1];
     res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)data, &size);
+    RegCloseKey(hKey);
     if (res != ERROR_SUCCESS) {
         Wh_Log(L"WH inclusion check failed, error=%d", res);
+        delete[] data;
         return false;
-    }
-
-    res = RegCloseKey(hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"WH inclusion check RegCloseKey failed, error=%d", res);
     }
 
     data[size / sizeof(wchar_t)] = L'\0';
