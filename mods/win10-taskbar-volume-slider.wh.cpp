@@ -2,22 +2,45 @@
 // @id win10-taskbar-volume-slider
 // @name Windows 10 Taskbar Volume Slider
 // @description Adds a permanently visible volume slider inside the Windows 10 taskbar.
-// @version 1.0.0
-// @author didrmt1 (Prompt: Gemini)
+// @version 1.0.1
+// @author didrmt1
 // @github https://github.com/didrmt1
 // @include explorer.exe
 // @compilerOptions -lole32 -lgdi32 -lcomctl32 -luxtheme
 // ==/WindhawkMod==
 
+// ==WindhawkModSettings==
+/*
+- width: 200
+  $name: Slider width
+  $description: Width of the volume slider in pixels.
+- showPercent: true
+  $name: Show volume percentage
+  $description: Display numeric percentage next to the slider.
+*/
+// ==/WindhawkModSettings==
+
+// ==WindhawkModReadme==
+/*
+# Windows 10 Taskbar Volume Slider
+
+Adds a permanently visible volume slider directly on the Windows 10 taskbar (left side of the system tray).
+
+### Features
+- Real-time master volume control via mouse drag directly on the taskbar.
+- Displays volume percentage text.
+- Synchronizes with theme/accent background of the taskbar.
+
+*Developed with AI assistance (Prompt: Gemini).*
+*/
+// ==/WindhawkModReadme==
+
 #include <windows.h>
 #include <windowsx.h>
-#include <commctrl.h>
 #include <uxtheme.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <algorithm>
-
-#include <windhawk_utils.h>
 
 static int g_width = 200;
 static bool g_showPercent = true;
@@ -26,50 +49,72 @@ static HWND g_taskbar = nullptr;
 static HWND g_slider = nullptr;
 static float g_currentVolume = 0.0f;
 static HANDLE g_hThread = nullptr;
-static IAudioEndpointVolume* g_volumeEndpoint = nullptr;
+static HANDLE g_hStopEvent = nullptr;
 
-static void InitAudioEndpoint()
+static bool IsWindows10()
 {
-    if (g_volumeEndpoint) return;
+    typedef NTSTATUS(WINAPI* pfnRtlGetVersion)(PRTL_OSVERSIONINFOW);
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    if (!hNtdll) return true;
+
+    pfnRtlGetVersion RtlGetVersion = (pfnRtlGetVersion)GetProcAddress(hNtdll, "RtlGetVersion");
+    if (!RtlGetVersion) return true;
+
+    RTL_OSVERSIONINFOW rovi = { sizeof(rovi) };
+    if (RtlGetVersion(&rovi) == 0)
+    {
+        return (rovi.dwMajorVersion == 10 && rovi.dwBuildNumber < 22000);
+    }
+    return true;
+}
+
+static float GetMasterVolume()
+{
+    float vol = 0.0f;
     IMMDeviceEnumerator* enumerator = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))))
     {
         IMMDevice* device = nullptr;
         if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)))
         {
-            device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&g_volumeEndpoint);
+            IAudioEndpointVolume* endpoint = nullptr;
+            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&endpoint)))
+            {
+                endpoint->GetMasterVolumeLevelScalar(&vol);
+                endpoint->Release();
+            }
+            device->Release();
+        }
+        enumerator->Release();
+    }
+    return vol;
+}
+
+static void SetMasterVolume(float value)
+{
+    value = std::clamp(value, 0.0f, 1.0f);
+    IMMDeviceEnumerator* enumerator = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))))
+    {
+        IMMDevice* device = nullptr;
+        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)))
+        {
+            IAudioEndpointVolume* endpoint = nullptr;
+            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&endpoint)))
+            {
+                endpoint->SetMasterVolumeLevelScalar(value, nullptr);
+                endpoint->Release();
+            }
             device->Release();
         }
         enumerator->Release();
     }
 }
 
-static void UninitAudioEndpoint()
+static void LoadSettings()
 {
-    if (g_volumeEndpoint)
-    {
-        g_volumeEndpoint->Release();
-        g_volumeEndpoint = nullptr;
-    }
-}
-
-static float GetVolume()
-{
-    if (!g_volumeEndpoint) InitAudioEndpoint();
-    if (!g_volumeEndpoint) return g_currentVolume;
-
-    float volume = g_currentVolume;
-    g_volumeEndpoint->GetMasterVolumeLevelScalar(&volume);
-    return volume;
-}
-
-static void SetVolume(float value)
-{
-    if (!g_volumeEndpoint) InitAudioEndpoint();
-    if (!g_volumeEndpoint) return;
-
-    value = std::clamp(value, 0.0f, 1.0f);
-    g_volumeEndpoint->SetMasterVolumeLevelScalar(value, nullptr);
+    g_width = Wh_GetIntSetting(L"width");
+    g_showPercent = Wh_GetIntSetting(L"showPercent") != 0;
 }
 
 static void PositionSlider()
@@ -113,7 +158,8 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             int track = std::max(1, (int)(rc.right - (g_showPercent ? 45 : 20)));
             int x = GET_X_LPARAM(lParam);
             float v = (float)(x - 10) / track;
-            SetVolume(v);
+            v = std::clamp(v, 0.0f, 1.0f);
+            SetMasterVolume(v);
             g_currentVolume = v;
             InvalidateRect(hwnd, nullptr, FALSE);
         }
@@ -127,7 +173,8 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             int track = std::max(1, (int)(rc.right - (g_showPercent ? 45 : 20)));
             int x = GET_X_LPARAM(lParam);
             float v = (float)(x - 10) / track;
-            SetVolume(v);
+            v = std::clamp(v, 0.0f, 1.0f);
+            SetMasterVolume(v);
             g_currentVolume = v;
             InvalidateRect(hwnd, nullptr, FALSE);
         }
@@ -139,6 +186,10 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             dragging = false;
             ReleaseCapture();
         }
+        return 0;
+
+    case WM_CAPTURECHANGED:
+        dragging = false;
         return 0;
 
     case WM_PAINT:
@@ -173,16 +224,22 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         RECT fillRc{10, cy - 1, pos, cy + 2};
         FillRect(memDC, &fillRc, fill);
 
+        HPEN thumbPen = CreatePen(PS_SOLID, 1, RGB(0, 120, 215));
+        HPEN oldThumbPen = (HPEN)SelectObject(memDC, thumbPen);
+        HBRUSH oldBrush = (HBRUSH)SelectObject(memDC, fill);
         Ellipse(memDC, pos - 5, cy - 5, pos + 5, cy + 5);
+        SelectObject(memDC, oldBrush);
+        SelectObject(memDC, oldThumbPen);
+        DeleteObject(thumbPen);
         DeleteObject(fill);
 
         if (g_showPercent)
         {
             wchar_t text[16];
-            wsprintfW(text, L"%d", (int)(g_currentVolume * 100.0f + 0.5f));
+            wsprintfW(text, L"%d%%", (int)(g_currentVolume * 100.0f + 0.5f));
             SetBkMode(memDC, TRANSPARENT);
             SetTextColor(memDC, RGB(235, 235, 235));
-            RECT textRc{rc.right - 32, 0, rc.right, rc.bottom};
+            RECT textRc{rc.right - 35, 0, rc.right, rc.bottom};
             DrawTextW(memDC, text, -1, &textRc, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
         }
 
@@ -201,7 +258,7 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     case WM_TIMER:
         if (!dragging)
         {
-            float v = GetVolume();
+            float v = GetMasterVolume();
             if (v != g_currentVolume)
             {
                 g_currentVolume = v;
@@ -220,34 +277,36 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 
 static DWORD WINAPI SliderThreadProc(LPVOID)
 {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    for (int i = 0; i < 20; ++i)
+    while (WaitForSingleObject(g_hStopEvent, 250) == WAIT_TIMEOUT)
     {
         g_taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
         if (g_taskbar) break;
-        Sleep(250);
     }
 
-    if (!g_taskbar)
+    if (!g_taskbar || WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0)
     {
-        CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
     }
 
     HINSTANCE hInst = GetModuleHandleW(nullptr);
-    UnregisterClassW(L"WindhawkTaskbarSliderClass", hInst);
 
     WNDCLASSW wc{};
     wc.lpfnWndProc = SliderProc;
     wc.hInstance = hInst;
     wc.lpszClassName = L"WindhawkTaskbarSliderClass";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    {
+        if (SUCCEEDED(hrCo)) CoUninitialize();
+        return 0;
+    }
 
     g_slider = CreateWindowExW(
         WS_EX_NOACTIVATE,
-        wc.lpszClassName,
+        L"WindhawkTaskbarSliderClass",
         L"VolumeSlider",
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
         0, 0, g_width, 30,
@@ -255,8 +314,7 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
 
     if (g_slider)
     {
-        InitAudioEndpoint();
-        g_currentVolume = GetVolume();
+        g_currentVolume = GetMasterVolume();
         SetTimer(g_slider, 1, 1000, nullptr);
         PositionSlider();
 
@@ -268,32 +326,58 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
         }
     }
 
-    UninitAudioEndpoint();
-    CoUninitialize();
+    UnregisterClassW(L"WindhawkTaskbarSliderClass", hInst);
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
 BOOL Wh_ModInit()
 {
-    g_width = Wh_GetIntValue(L"width", 200);
-    g_showPercent = Wh_GetIntValue(L"showPercent", 1) != 0;
+    if (!IsWindows10())
+    {
+        Wh_Log(L"This mod is intended for Windows 10 only.");
+        return FALSE;
+    }
 
+    LoadSettings();
+
+    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(nullptr, 0, SliderThreadProc, nullptr, 0, nullptr);
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
+    if (g_hStopEvent)
+    {
+        SetEvent(g_hStopEvent);
+    }
+
     if (g_slider && IsWindow(g_slider))
     {
         SendMessageW(g_slider, WM_CLOSE, 0, 0);
     }
+
     if (g_hThread)
     {
-        WaitForSingleObject(g_hThread, 1000);
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = nullptr;
     }
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-    UnregisterClassW(L"WindhawkTaskbarSliderClass", hInst);
+
+    if (g_hStopEvent)
+    {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
+    }
+}
+
+void Wh_ModSettingsChanged()
+{
+    LoadSettings();
+    if (g_slider && IsWindow(g_slider))
+    {
+        PositionSlider();
+        InvalidateRect(g_slider, nullptr, FALSE);
+    }
 }
