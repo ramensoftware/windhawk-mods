@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.2.0
+// @version         1.2.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -505,7 +505,8 @@ Position PositionFromString(PCWSTR value) {
 
     // A stale or mistyped stored value would otherwise look like the mod simply
     // isn't working. "same" is a valid per-indicator value, handled by the caller.
-    if (wcscmp(value, L"windowsDefault") != 0 && wcscmp(value, L"same") != 0) {
+    if (*value && wcscmp(value, L"windowsDefault") != 0 &&
+        wcscmp(value, L"same") != 0) {
         Wh_Log(L"Unknown position \"%s\", using the Windows default", value);
     }
 
@@ -531,10 +532,15 @@ void LoadSettings() {
     for (size_t i = 0; i < ARRAYSIZE(kIndicatorSettings); i++) {
         WindhawkUtils::StringSetting value =
             WindhawkUtils::StringSetting::make(kIndicatorSettings[i]);
-        bool isSame = wcscmp(value.get(), L"same") == 0;
+        // An unset setting reads back empty rather than as the declared
+        // default, so empty has to mean the same thing as "same". Without this
+        // every untouched indicator is pinned to the Windows default and the
+        // main position stops applying to any of them.
+        PCWSTR stored = value.get();
+        bool isSame = !*stored || wcscmp(stored, L"same") == 0;
         g_settings.perIndicatorSet[i] = !isSame;
         g_settings.perIndicator[i] =
-            isSame ? Position::windowsDefault : PositionFromString(value.get());
+            isSame ? Position::windowsDefault : PositionFromString(stored);
     }
 }
 
