@@ -2673,6 +2673,8 @@ void CustomBSDR::UpdateAppListLayout() {
         wstring titleText = regex_replace(titleFormat, wregex(L"%d"), to_wstring(appTiles->size()));
         SetWindowTextW(hTitleText, titleText.c_str());
     }
+
+    RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
 
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
