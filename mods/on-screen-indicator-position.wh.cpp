@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.2.3
+// @version         1.2.4
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -369,7 +369,6 @@ void PlaceInArea(const WinrtRect& area,
     }
 }
 
-
 // Each kind of indicator has its own entry point on the host, so the kind is
 // recorded as one is asked for and read back when the position is worked out.
 // They are private coroutines returning winrt::fire_and_forget, an empty struct,
@@ -530,16 +529,25 @@ Position PositionFromString(PCWSTR value) {
 void LoadSettings() {
     WindhawkUtils::StringSetting position =
         WindhawkUtils::StringSetting::make(L"position");
-    g_settings.position = PositionFromString(position.get());
+    // Same reasoning as the per-indicator settings below. A setting that was
+    // never written reads back empty, which happens to every setting added by an
+    // update, so empty has to mean the default declared in the block rather than
+    // windowsDefault. Left as windowsDefault it would trip the "nothing to do"
+    // check in Wh_ModInit and the mod would sit there doing nothing.
+    PCWSTR storedPosition = position.get();
+    g_settings.position = *storedPosition ? PositionFromString(storedPosition)
+                                          : Position::topRight;
 
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
 
-
     static const PCWSTR kIndicatorSettings[] = {
-        L"perIndicator.volume",       L"perIndicator.brightness",
-        L"perIndicator.keyboardBrightness", L"perIndicator.airplaneMode",
-        L"perIndicator.camera",       L"perIndicator.microphone",
+        L"perIndicator.volume",
+        L"perIndicator.brightness",
+        L"perIndicator.keyboardBrightness",
+        L"perIndicator.airplaneMode",
+        L"perIndicator.camera",
+        L"perIndicator.microphone",
         L"perIndicator.text",
     };
     static_assert(ARRAYSIZE(kIndicatorSettings) == (size_t)Indicator::count);
