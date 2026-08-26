@@ -7,7 +7,7 @@
 // @github          https://github.com/LarsGudm
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -2208,7 +2208,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
             &TaskbarFrame_OnPointerMoved_Original,
@@ -2234,8 +2235,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
-                                    ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
+                                    ARRAYSIZE(taskbarViewDllHooks))) {
         DebugFileLog(L"HookSymbols FAILED - mod will not load");
         return false;
     }
