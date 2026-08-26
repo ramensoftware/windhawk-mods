@@ -31,11 +31,16 @@
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
+
+![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 ## ⚠ Important usage note ⚠
 
 In order to use this mod, you must allow Windhawk to inject into the **LogonUI.exe**
 system process. To do so, add it to the process inclusion list in the advanced
 settings. If you do not do this, it will silently fail to inject.
+
+You must add it to the inclusion list even if you have disabled the critical system process
+exclusion option. Otherwise the logoff sequence portion of mod will not function.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
@@ -50,6 +55,7 @@ settings. If you do not do this, it will silently fail to inject.
 - themeScrollbar: false
   $name: Apply visual styles to the scroll bar
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
+  $description: The original Windows 7 blocked shutdown resolver had an unthemed scroll bar. Enable this if you find it ugly.
 - disableAsyncLogoff: true
   $name: Restore Windows 7's logoff sequence
   $name:ko-KR: Windows 7의 로그오프 절차 복원
@@ -59,6 +65,7 @@ settings. If you do not do this, it will silently fail to inject.
 #include <windhawk_utils.h>
 #include <wrl/module.h>
 #include <mutex>
+#include <regex>
 #include <vector>
 #include <wincodec.h>
 #include <shcore.h>
@@ -2029,6 +2036,7 @@ bool CustomBSDR::IsHighContrast() {
 
 // Load winsrv alpha bitmaps properly
 HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
+    HRSRC hResource = nullptr;
     const void* pResourceData = nullptr;
 
     if (forceHardcoded) {
@@ -2060,7 +2068,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
                 return nullptr;
         }
     } else {
-        HRSRC hResource = FindResourceW(hResDll, MAKEINTRESOURCEW(resourceId), RT_BITMAP);
+        hResource = FindResourceW(hResDll, MAKEINTRESOURCEW(resourceId), RT_BITMAP);
         if (!hResource)
             return CustomBSDR::LoadAlphaBitmap(resourceId, true);
 
@@ -2106,7 +2114,12 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
         }
 
         const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
-        DWORD dwSize = width * height * 4;
+        DWORD dwSize = 0;
+        if (isUsingHardcodedRes) { // Don't trust bmp header from external dll
+            dwSize = SizeofResource(hResDll, hResource) - sizeof(BITMAPINFOHEADER);
+        } else {
+            dwSize = width * height * 4;
+        }
 
         if (isTopDown) {
             memcpy(pBits, pSrc, dwSize);
@@ -2383,13 +2396,11 @@ LRESULT CALLBACK CustomBSDR::ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPa
         break;
     }
     case WM_UPDATEUISTATE: {
-        switch (HIWORD(wParam)) {
-        case UISF_HIDEFOCUS:
-            SetPropW(hWnd, L"CustomBSDR_HideFocus", (HANDLE)(LOWORD(wParam) == UIS_SET));
-            break;
-        case UISF_HIDEACCEL:
-            SetPropW(hWnd, L"CustomBSDR_HideAccel", (HANDLE)(LOWORD(wParam) == UIS_SET));
-            break;
+        if ((HIWORD(wParam) & UISF_HIDEFOCUS) == UISF_HIDEFOCUS) {
+            SetPropW(hWnd, L"CustomBSDR_HideFocus", (HANDLE)((LOWORD(wParam) & UIS_SET) == UIS_SET));
+        }
+        if ((HIWORD(wParam) & UISF_HIDEACCEL) == UISF_HIDEACCEL) {
+            SetPropW(hWnd, L"CustomBSDR_HideAccel", (HANDLE)((LOWORD(wParam) & UIS_SET) == UIS_SET));
         }
         break;
     }
@@ -2649,7 +2660,6 @@ void CustomBSDR::UpdateAppListLayout() {
     // Set the title text based on the number of apps on the list
     if (hTitleText) {
         wchar_t titleFormat[256] = {};
-        wchar_t titleText[256] = {};
         // Redraw the entire title control area to prevent artifacts from previous longer text when the number of apps decreases
         InvalidateRect(hTitleText, nullptr, TRUE);
         if (appTiles->size() == 1) {
@@ -2659,8 +2669,9 @@ void CustomBSDR::UpdateAppListLayout() {
         } else {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_MULTI, titleFormat, _countof(titleFormat));
         }
-        swprintf_s(titleText, _countof(titleText), titleFormat, (int)appTiles->size());
-        SetWindowTextW(hTitleText, titleText);
+        // Avoid swprintf with format string from user supplied dll
+        wstring titleText = regex_replace(titleFormat, wregex(L"%d"), to_wstring(appTiles->size()));
+        SetWindowTextW(hTitleText, titleText.c_str());
     }
 }
 
@@ -2892,8 +2903,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         switch (LOWORD(wParam)) {
         case IDCANCEL:
             Resolve(BlockedShutdownResolution_Cancel);
-            DestroyWindow(hDlg);
-            DestroyWindow(hBgWnd);
+            ShowWindow(hBgWnd, SW_HIDE);
             if (!isOnSecureDesktop) {
                 // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
                 // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
@@ -2905,6 +2915,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
                 // Still haven't figured out the culprit yet
                 ExitProcess(0);
             }
+            SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -2916,8 +2927,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             return TRUE;
         case IDYES:
             Resolve(BlockedShutdownResolution_Force);
-            DestroyWindow(hDlg);
-            DestroyWindow(hBgWnd);
+            SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
             return TRUE;
         case IDNO:
             ShowWindow(hWarningText, SW_HIDE);
@@ -3029,7 +3039,8 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         } else {
             // Bail out
             Wh_Log(L"Dialog creation failed!!");
-            MessageBoxW(nullptr, L"Dialog creation failed!", L"Windows 7 Blocked Shutdown UX & Logoff Sequence", MB_OK);
+            // Note: Windows also does force logoff when the BSDR is not available, e.g. the BSDR DLL is missing, on Server Core, etc.
+            // Probably this is better than leaving a system that never shuts down (if the mod is repeatedly failing)
             Resolve(BlockedShutdownResolution_Force);
             return 0;
         }
@@ -3087,6 +3098,8 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         CenterWindow(hDlg);
         UpdateAppListLayout();
         RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW);
+        // Retaking screenshot requires temporarily hiding the window
+        // Windows 7 doesn't do that either so skip that
         return 0;
     }
     case WM_CLOSE: {
@@ -3171,78 +3184,80 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     WNDCLASSEXW wndClass = {};
 
     wndClass.cbSize = sizeof(WNDCLASSEXW);
-    wndClass.style = CS_GLOBALCLASS;
     wndClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wndClass.hInstance = HINST_THISCOMPONENT;
     wndClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wndClass.lpfnWndProc = WndProc;
     wndClass.lpszClassName = BSDR_CLASSNAME;
 
-    if (RegisterClassExW(&wndClass) == 0) {
+    if (RegisterClassExW(&wndClass)) {
+        bgOffsetX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        bgOffsetY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        bgWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        bgHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+        hBgWnd = CreateWindowExW(WS_EX_TOPMOST, wndClass.lpszClassName, NULL, WS_POPUP | WS_VISIBLE, bgOffsetX, bgOffsetY, bgWidth, bgHeight, NULL, NULL, NULL, NULL);
+
+        if (hBgWnd) {
+            HANDLE waitHandles[1] = { hStopEvent };
+            BOOL bQuit = FALSE;
+            while (TRUE) {
+                DWORD result = MsgWaitForMultipleObjects(
+                    1,
+                    waitHandles,
+                    FALSE,
+                    INFINITE,
+                    QS_ALLINPUT
+                );
+
+                if (result == WAIT_OBJECT_0) { // hStopEvent
+                    if (hBgWnd && IsWindow(hBgWnd)) {
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+                    } else {
+                        break;
+                    }
+                } else if (result == WAIT_OBJECT_0 + 1) {
+                    MSG msg;
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        if (msg.message == WM_QUIT) {
+                            bQuit = TRUE;
+                            break;
+                        }
+                        if (msg.message == WM_SYSKEYDOWN && msg.wParam == VK_MENU) {
+                            SetPropW(hForceButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            SetPropW(hCancelButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
+                        }
+                        if (!IsDialogMessageW(hDlg, &msg)) {
+                            TranslateMessage(&msg);
+                            DispatchMessageW(&msg);
+                        }
+                    }
+                    if (bQuit) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            int gle = GetLastError();
+            Wh_Log(L"CreateWindowExW failed, GLE=%d", gle);
+            return gle;
+        }
+
+        if (UnregisterClassW(BSDR_CLASSNAME, HINST_THISCOMPONENT) == 0) {
+            Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
+        }
+    } else {
         int gle = GetLastError();
         Wh_Log(L"RegisterClassExW failed, GLE=%d", gle);
         return gle;
     }
 
-    bgOffsetX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    bgOffsetY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    bgWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    bgHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-    hBgWnd = CreateWindowExW(WS_EX_TOPMOST, wndClass.lpszClassName, NULL, WS_POPUP | WS_VISIBLE, bgOffsetX, bgOffsetY, bgWidth, bgHeight, NULL, NULL, NULL, NULL);
-
-    if (!hBgWnd) {
-        int gle = GetLastError();
-        Wh_Log(L"CreateWindowExW failed, GLE=%d", gle);
-        return gle;
+    if (SUCCEEDED(hrCo)) {
+        CoUninitialize();
     }
-
-    HANDLE waitHandles[1] = { hStopEvent };
-    BOOL bQuit = FALSE;
-    while (TRUE) {
-        DWORD result = MsgWaitForMultipleObjects(
-            1,
-            waitHandles,
-            FALSE,
-            INFINITE,
-            QS_ALLINPUT
-        );
-
-        if (result == WAIT_OBJECT_0) { // hStopEvent
-            if (hBgWnd && IsWindow(hBgWnd)) {
-                SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
-            } else {
-                break;
-            }
-        } else if (result == WAIT_OBJECT_0 + 1) {
-            MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                if (msg.message == WM_QUIT) {
-                    bQuit = TRUE;
-                    break;
-                }
-                if (msg.message == WM_SYSKEYDOWN && msg.wParam == VK_MENU) {
-                    SetPropW(hForceButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                    SetPropW(hCancelButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                    SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                    SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                    RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
-                }
-                if (!IsDialogMessageW(hDlg, &msg)) {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-            }
-            if (bQuit) {
-                break;
-            }
-        }
-    }
-    if (UnregisterClassW(BSDR_CLASSNAME, HINST_THISCOMPONENT) == 0) {
-        Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
-    }
-
-    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -3482,23 +3497,70 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
 #pragma endregion LogonUI BSDR Hooks (Interface)
 
 #pragma region Winlogon hooks (disable async logoff)
+// Safeguard: check if user read the readme
+// The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
+// it will get stuck in the invisible secure desktop, and users can become clueless.
+// Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
+//
+// Can't think of better appraoch because of the execution sequence mentioned in CustomBSDR::Start
+// ShutdownWindowsWorkerThread runs before LogonUI exec so checking live LUI injection status isn't possible
+// and will be always one step behind (e.g. will detect as LUI not injected on first logoff after mod install)
+// I know the global inclusion key is not everything that affects that injection but this is minimal safeguard anyway
+// Let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
+bool IsLogonUiInjectionEnabled() {
+    HKEY hKey;
+    int res = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Windhawk\\Engine\\Settings", 0, KEY_READ, &hKey);
+    if (res != ERROR_SUCCESS) {
+        Wh_Log(L"WH inclusion check failed (RegOpenKeyExW), error=%d", res);
+        return false;
+    }
+
+    DWORD size = 0;
+    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, nullptr, &size);
+    if (res != ERROR_SUCCESS && res != ERROR_MORE_DATA) {
+        Wh_Log(L"WH inclusion check failed (size query), GLE=%d", res);
+        return false;
+    }
+
+    wchar_t* data = new wchar_t[size / sizeof(wchar_t) + 1];
+    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)data, &size);
+    if (res != ERROR_SUCCESS) {
+        Wh_Log(L"WH inclusion check failed, error=%d", res);
+        return false;
+    }
+
+    res = RegCloseKey(hKey);
+    if (res != ERROR_SUCCESS) {
+        Wh_Log(L"WH inclusion check RegCloseKey failed, error=%d", res);
+    }
+
+    data[size / sizeof(wchar_t)] = L'\0';
+    int isLogonUiThere = wcsstr(_wcsupr(data), L"LOGONUI.EXE") != NULL;
+    delete[] data;
+
+    return isLogonUiThere;
+}
+
 int* p_g_fShutdownResolverDisabled = nullptr;
 
 typedef void __fastcall (*ShutdownWindowsWorkerThread_t)(void* Instance, void* Context);
 ShutdownWindowsWorkerThread_t ShutdownWindowsWorkerThread_original;
 void __fastcall ShutdownWindowsWorkerThread_hook(void* Instance, void* Context) {
+    if (!p_g_fShutdownResolverDisabled) {
+        return ShutdownWindowsWorkerThread_original(Instance, Context);
+    }
+
     int origResolverDisabledState = *p_g_fShutdownResolverDisabled;
-    if (p_g_fShutdownResolverDisabled) {
-        if (Wh_GetIntValue(L"LogonUIHookOK", 0)) {
-            *p_g_fShutdownResolverDisabled = 1; // Disable the async logoff resolver
-            Wh_Log(L"ShutdownWindowsWorkerThread_hook: Set g_fShutdownResolverDisabled to 1");
-        } else {
-            // User did not read the instruction and LogonUI is not added to the inclusion list
-            // The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
-            // it will get stuck in the invisible secure desktop, and users can become clueless.
-            // Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
-            Wh_Log(L"ShutdownWindowsWorkerThread_hook: Not setting g_fShutdownResolverDisabled as LogonUI hooks are not ready");
-        }
+    if (IsLogonUiInjectionEnabled()) {
+        *p_g_fShutdownResolverDisabled = 1; // Disable the async logoff resolver
+        Wh_Log(L"ShutdownWindowsWorkerThread_hook: Set g_fShutdownResolverDisabled to 1");
+    } else {
+        // User did not read the instruction and LogonUI is not added to the inclusion list
+        // The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
+        // it will get stuck in the invisible secure desktop, and users can become clueless.
+        // Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
+        // This is 
+        Wh_Log(L"ShutdownWindowsWorkerThread_hook: Not setting g_fShutdownResolverDisabled as LogonUI hooks are not ready");
     }
     ShutdownWindowsWorkerThread_original(Instance, Context);
     *p_g_fShutdownResolverDisabled = origResolverDisabledState;
@@ -3548,8 +3610,11 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
+    CustomBSDR::appTiles.emplace();
+    CustomBSDR::pendingApps.emplace();
+
     LPCWSTR dllPath = Wh_GetStringSetting(L"resDllPath");
-    if (dllPath && *dllPath != L'\0') {
+    if (*dllPath != L'\0') {
         hResDll = LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
         Wh_FreeStringSetting(dllPath);
         if (hResDll) {
@@ -3560,43 +3625,56 @@ BOOL Wh_ModInit() {
     } else {
         Wh_Log(L"Using hardcoded resources...");
     }
-    
+
+    HMODULE blockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (blockedShutdownDll) {
+        if (!WindhawkUtils::HookSymbols(blockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
+            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
+        return FALSE;
+    }
+
     CustomBSDR::hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!CustomBSDR::hStopEvent) {
         Wh_Log(L"CreateEventW failed, GLE=%u", GetLastError());
         return FALSE;
     }
 
-    HMODULE blockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (blockedShutdownDll) {
-        if (!WindhawkUtils::HookSymbols(blockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
-            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
-            Wh_SetIntValue(L"LogonUIHookOK", 0);
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
-        Wh_SetIntValue(L"LogonUIHookOK", 0);
-        return FALSE;
-    }
-
-    Wh_SetIntValue(L"LogonUIHookOK", 1);
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+
     if (CustomBSDR::hThread) {
+        bool needsResolve;
+        {
+            lock_guard lock(resolvedMutex);
+            needsResolve = resolvedValue == BlockedShutdownResolution_None;
+        }
+        if (needsResolve) {
+            Resolve(BlockedShutdownResolution_Cancel);
+        }
+
         if (CustomBSDR::hStopEvent) {
             SetEvent(CustomBSDR::hStopEvent);
         }
         WaitForSingleObject(CustomBSDR::hThread, INFINITE);
         CloseHandle(CustomBSDR::hThread);
     }
+
+    CustomBSDR::appTiles.reset();
+    CustomBSDR::pendingApps.reset();
+
     if (CustomBSDR::hStopEvent) {
         CloseHandle(CustomBSDR::hStopEvent);
     }
+
     _Resolved.Reset();
+
     if (hResDll) {
         FreeLibrary(hResDll);
     }
