@@ -31,7 +31,7 @@ and migrate windows, or keep explicitly tiled groups under your control.
 - **True virtual-desktop layouts** - uses Windows' existing virtual desktops 
 instead of implementing a separate desktop system.
 - **Event-driven** - changes are signaled through native events rather than 
-continuous polling. 
+continuous polling.
 
 ## Layouts
 - Floating
@@ -60,163 +60,175 @@ MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop 
 
 // ==WindhawkModSettings==
 /*
-- DefaultWindowManagementMode: automatic
-  $name: '[General] Default Window Management Mode'
-  $description: 'Choose membership policy after startup. Manual keeps Alt+T groups contained: new windows are not admitted, minimizing / moving to another desktop releases membership. Maximized windows still preserve their slot. Automatic continuously discovers and migrates managed windows.'
-  $options:
-    - manual: Manual
-    - automatic: Automatic
+- general:
+  - DefaultWindowManagementMode: automatic
+    $name: Default Window Management Mode
+    $description: 'Choose membership policy after startup. Manual keeps Alt+T groups contained: new windows are not admitted, minimizing / moving to another desktop releases membership. Maximized windows still preserve their slot. Automatic continuously discovers and migrates managed windows.'
+    $options:
+      - manual: Manual
+      - automatic: Automatic
+  - AutomaticNewWindowPosition: last_slot
+    $name: Automatic Window Insertion Position
+    $description: 'Choose where Automatic mode inserts newly discovered windows and migrated windows from another workspace. Maximized / minimized windows are restored in-place.'
+    $options:
+      - last_slot: Last slot
+      - after_focused: After focused window
+  $name: General
 
-- AutomaticNewWindowPosition: last_slot
-  $name: '[Automatic] Window Insertion Position'
-  $description: 'Choose where Automatic mode inserts newly discovered windows and migrated windows from another workspace. Maximized / minimized windows are restored in-place.'
-  $options:
-    - last_slot: Last slot
-    - after_focused: After focused window
+- workspace:
+  - DefaultLayout: master_stack
+    $name: Default Layout
+    $description: Initial layout used when a new desktop + monitor workspace is created.
+    $options:
+      - master_stack: Master + Stack (Vertical)
+      - master_stack_h: Master + Stack (Horizontal)
+      - columns: Columns
+      - rows: Rows
+      - bsp: BSP (Binary Space Partitioning)
+      - monocle: Monocle (Fullscreen)
+      - floating: Floating (No tiling)
+  - LayoutCycle: [master_stack, master_stack_h, bsp, columns, rows, monocle, floating]
+    $name: Layout Cycle
+    $description: 'Layouts visited by the Cycle Layout hotkey, in order. Remove layouts you never want to cycle through, or re-order entries as you wish.'
+    $options:
+      - master_stack: Master + Stack (Vertical)
+      - master_stack_h: Master + Stack (Horizontal)
+      - columns: Columns
+      - rows: Rows
+      - bsp: BSP (Binary Space Partitioning)
+      - monocle: Monocle (Fullscreen)
+      - floating: Floating (No tiling)
+  - TileGap: 6
+    $name: Window Gap (DPI-scaled pixels)
+    $description: Gap between adjacent tiled windows, scaled per monitor.
+  - WorkspaceInsets: "6, 6, 6, 6"
+    $name: Insets (DPI-scaled pixels)
+    $description: 'Left, Top, Right, Bottom (0-500), scaled per monitor. Positive values inset the workspace from that edge. Example: 4, 4, 4, 4'
+  - MasterPercent: 50
+    $name: Master Size (%)
+    $description: Default master share in Master + Stack layouts (1-99).
+  $name: Workspace
 
-- DefaultLayout: master_stack
-  $name: '[General] Default Workspace Layout'
-  $description: Initial layout used when a new desktop + monitor workspace is created.
-  $options:
-    - master_stack: Master + Stack (Vertical)
-    - master_stack_h: Master + Stack (Horizontal)
-    - columns: Columns
-    - rows: Rows
-    - bsp: BSP (Binary Space Partitioning)
-    - monocle: Monocle (Fullscreen)
-    - floating: Floating (No tiling)
+- appearance:
+  - FlyoutPosition: top
+    $name: Status Flyout Position
+    $description: Show layout and mode flyout at the top or bottom center of the active monitor.
+    $options:
+      - top: Top
+      - bottom: Bottom
+  - FlyoutOffsetX: 0
+    $name: Status Flyout X Offset
+    $description: Horizontal offset in DPI-scaled pixels (positive moves right).
+  - FlyoutOffsetY: 0
+    $name: Status Flyout Y Offset
+    $description: Vertical offset in DPI-scaled pixels (positive moves down).
+  - CustomIcons:
+      - - Layout: master_stack
+          $name: Layout
+          $options:
+            - master_stack: Master + Stack (Vertical)
+            - master_stack_h: Master + Stack (Horizontal)
+            - columns: Columns
+            - rows: Rows
+            - bsp: BSP
+            - monocle: Monocle
+            - floating: Floating
+        - Path: ""
+          $name: Icon path (.ico)
+    $name: Custom Tray Layout Icons
+    $description: Optional per-layout .ico overrides. Failed or empty paths use the generated text icon.
+  $name: Appearance
 
-- LayoutCycle: [master_stack, master_stack_h, bsp, columns, rows,  monocle, floating]
-  $name: '[Workspace] Layout Cycle'
-  $description: 'Layouts visited by the Cycle Layout hotkey, in order. Remove layouts you never want to cycle through, or re-order entries as you wish.'
-  $options:
-    - master_stack: Master + Stack (Vertical)
-    - master_stack_h: Master + Stack (Horizontal)
-    - columns: Columns
-    - rows: Rows
-    - bsp: BSP (Binary Space Partitioning)
-    - monocle: Monocle (Fullscreen)
-    - floating: Floating (No tiling)
+- hotkeys:
+  - TilingModifier: alt
+    $name: Modifier
+    $description: Modifier used by all window-manager hotkeys.
+    $options:
+      - alt: Alt
+      - ctrl: Ctrl
+      - alt+shift: Alt + Shift
+      - ctrl+alt: Ctrl + Alt
+      - ctrl+shift: Ctrl + Shift
+  - TileKey: "T"
+    $name: Tile Workspace
+    $description: 'Reconcile and tile windows on the current monitor. Leave blank to disable. Examples: T, D, Space, `, -'
+  - LayoutKey: "L"
+    $name: Cycle Layout
+    $description: 'Cycle the current workspace layout. Leave blank to disable. Examples: L, Tab, =, ], /'
+  - SwapMasterKey: "M"
+    $name: Set Master Window
+    $description: 'Set another tiled window as the master. Leave blank to disable.'
+  - PromoteWindowKey: ","
+    $name: Promote Focused Window
+    $description: 'Move the focused tiled window one logical slot earlier. Does nothing in the first slot. Leave blank to disable.'
+  - DemoteWindowKey: "."
+    $name: Demote Focused Window
+    $description: 'Move the focused tiled window one logical slot later. Does nothing in the last slot. Leave blank to disable.'
+  - ManagementModeToggleKey: "R"
+    $name: Toggle Window Management Mode
+    $description: 'Switch between Automatic and Manual modes at runtime. Leave blank to disable.'
+  - FloatFocusedKey: "F"
+    $name: Float Focused Window
+    $description: 'Float the focused tiled window. Leave blank to disable.'
+  - DiagnosticDumpKey: ""
+    $name: Write Diagnostic Report
+    $description: 'Write a formatted state, health, churn, and invariant report to the configured output directory. Uses the configured modifier. Leave blank to disable.'
+  $name: Hotkeys
 
-- TileGap: 6
-  $name: '[Workspace] Window Gap (DPI-scaled pixels)'
-  $description: Gap between adjacent tiled windows, scaled per monitor.
+- diagnostics:
+  - DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\MultiWMDiagnostics"
+    $name: Output Directory
+    $description: 'Directory for timestamped UTF-8 .txt diagnostic reports. Environment variables such as %USERPROFILE% are supported and missing directories are created. Reports include window titles and executable paths, so review them before sharing.'
+  $name: Diagnostics
 
-- WorkspaceInsets: "6, 6, 6, 6"
-  $name: '[Workspace] Insets (DPI-scaled pixels)'
-  $description: 'Left, Top, Right, Bottom (0-500), scaled per monitor. Positive values inset the workspace from that edge. Example: 4, 4, 4, 4'
+- windowBehavior:
+  - MouseMoveBehavior: float
+    $name: Tiled Window Drag Action
+    $description: Action when a tiled window is dragged without resizing.
+    $options:
+      - float: Float moved window
+      - swap: Swap with tiled window under pointer
+  - FloatingDefaultSize: "960, 640"
+    $name: Floating Default Size (DPI-scaled pixels)
+    $description: 'Width, Height used for newly discovered windows in Floating workspaces (Automatic mode only). Values must be 100-4000. Scaled per monitor. Example: 960, 640'
+  $name: Window Behavior
 
-- MasterPercent: 50
-  $name: '[Workspace] Master Size (%)'
-  $description: Default master share in Master + Stack layouts (1-99).
+- windowRules:
+  - Rules:
+      - - Process: ""
+          $name: Process name
+          $description: Case-insensitive exact match. Leave blank to match any process.
+        - Class: ""
+          $name: Window class
+          $description: Case-insensitive exact match. Leave blank to match any class.
+        - TitleContains: ""
+          $name: Window title contains
+          $description: Case-insensitive substring. Leave blank to match any title.
+        - Treatment: exclude
+          $name: Treatment
+          $options:
+            - exclude: Exclude
+            - trace_to_owner: Trace to owner
+            - preserve_size_when_centering: Preserve size when centering
+            - override_size_when_centering: Override size when centering
+        - Size: ""
+          $name: Centering size override
+          $description: 'Only effective when "Override size" is selected. Example: 720, 480'
+    $name: Rules
+    $description: 'All populated match fields in a rule must match. Separate rules are alternatives. Exclude prevents management. Trace to owner retargets move/size boundaries from a matching helper window to its already-managed root owner. Centering treatments apply only when Automatic mode admits a new window in a Floating workspace. The first matching centering treatment wins.'
+  $name: Window Rules
 
-- MouseMoveBehavior: float
-  $name: '[Window Behavior] Tiled Window Drag Action'
-  $description: Action when a tiled window is dragged without resizing.
-  $options:
-    - float: Float moved window
-    - swap: Swap with tiled window under pointer
-
-- FloatingDefaultSize: "960, 640"
-  $name: '[Floating] Default Size (DPI-scaled pixels)'
-  $description: 'Width, Height used for newly discovered windows in Floating workspaces (Automatic mode only). Values must be 100-4000. Scaled per monitor. Example: 960, 640'
-
-- Exclusions:
-    - - Match: process
-        $name: Match by
-        $options:
-          - process: Process name
-          - class: Window class
-          - title: Window title contains
-      - Value: ""
-        $name: Value
-  $name: '[Window Rules] Window Exclusions'
-  $description: There's no one-fits-all shoe. Process/class are case-insensitive exact matches; title is a case-insensitive substring.
-
-- TilingModifier: alt
-  $name: '[Hotkeys - General] Modifier'
-  $description: Modifier used by all window-manager hotkeys.
-  $options:
-    - alt: Alt
-    - ctrl: Ctrl
-    - alt+shift: Alt + Shift
-    - ctrl+alt: Ctrl + Alt
-    - ctrl+shift: Ctrl + Shift
-
-- TileKey: "T"
-  $name: '[Hotkeys - Workspace] Tile Workspace'
-  $description: 'Reconcile and tile windows on the current monitor. Leave blank to disable. Examples: T, D, Space, `, -'
-
-- LayoutKey: "L"
-  $name: '[Hotkeys - Workspace] Cycle Layout'
-  $description: 'Cycle the current workspace layout. Leave blank to disable. Examples: L, Tab, =, ], /'
-
-- SwapMasterKey: "M"
-  $name: '[Hotkeys - Window] Set Master Window'
-  $description: 'Set another tiled window as the master. Leave blank to disable.'
-
-- PromoteWindowKey: ","
-  $name: '[Hotkeys - Window] Promote Focused Window'
-  $description: 'Move the focused tiled window one logical slot earlier. Does nothing in the first slot. Leave blank to disable.'
-
-- DemoteWindowKey: "."
-  $name: '[Hotkeys - Window] Demote Focused Window'
-  $description: 'Move the focused tiled window one logical slot later. Does nothing in the last slot. Leave blank to disable.'
-
-- ManagementModeToggleKey: "R"
-  $name: '[Hotkeys - General] Toggle Window Management Mode'
-  $description: 'Switch between Automatic and Manual modes at runtime. Leave blank to disable.'
-
-- FloatFocusedKey: "F"
-  $name: '[Hotkeys - Window] Float Focused Window'
-  $description: 'Float the focused tiled window. Leave blank to disable.'
-
-- FlyoutPosition: top
-  $name: '[Appearance] Status Flyout Position'
-  $description: Show layout and mode flyout at the top or bottom center of the active monitor.
-  $options:
-    - top: Top
-    - bottom: Bottom
-
-- FlyoutOffsetX: 0
-  $name: '[Appearance] Status Flyout X Offset'
-  $description: Horizontal offset in DPI-scaled pixels (positive moves right).
-
-- FlyoutOffsetY: 0
-  $name: '[Appearance] Status Flyout Y Offset'
-  $description: Vertical offset in DPI-scaled pixels (positive moves down).
-
-- CustomIcons:
-    - - Layout: master_stack
-        $name: Layout
-        $options:
-          - master_stack: Master + Stack (Vertical)
-          - master_stack_h: Master + Stack (Horizontal)
-          - columns: Columns
-          - rows: Rows
-          - bsp: BSP
-          - monocle: Monocle
-          - floating: Floating
-      - Path: ""
-        $name: Icon path (.ico)
-  $name: '[Appearance] Custom Tray Layout Icons'
-  $description: Optional per-layout .ico overrides. Failed or empty paths use the generated text icon.
-
-- ConformanceLeaseMs: 3000
-  $name: '[Advanced] Tiled Window Conformance Lease (ms)'
-  $description: 'Briefly reinforces the assigned rectangle after placement in case the application moves itself again. A still-tiled window that remains outside its tile is floated and the remaining layout reflows. Set to 0 to disable (0-10000 ms). [Default 3000]'
-
-- ReconcileDelayMs: 50
-  $name: '[Advanced] Lifecycle Settle Delay (ms)'
-  $description: Delay before visibility/lifecycle bursts are reconciled. Increase only if shell transitions are unusually slow (20-2000 ms).
-
-- DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\MultiWMDiagnostics"
-  $name: '[Diagnostics] Output Directory'
-  $description: 'Directory for timestamped UTF-8 .txt diagnostic reports. Environment variables such as %USERPROFILE% are supported and missing directories are created. Reports include window titles and executable paths, so review them before sharing.'
-
-- DiagnosticDumpKey: ""
-  $name: '[Hotkeys - General] Write Diagnostic Report'
-  $description: 'Write a formatted state, health, churn, and invariant report to the configured output directory. Uses the configured modifier. Leave blank to disable.'
+- advanced:
+  - ConformanceLeaseMs: 3000
+    $name: Tiled Window Conformance Lease (ms)
+    $description: 'Briefly reinforces the assigned rectangle after placement in case the application moves itself again. A still-tiled window that remains outside its tile is floated and the remaining layout reflows. Set to 0 to disable (0-10000 ms). [Default 3000]'
+  - ConformanceRepairIntervalMs: 75
+    $name: Conformance Repair Interval (ms)
+    $description: 'Minimum delay between attempts to return a tiled window to its assigned rectangle during the conformance lease (20-2000 ms). [Default 75]'
+  - ReconcileDelayMs: 50
+    $name: Lifecycle Settle Delay (ms)
+    $description: Delay before visibility/lifecycle bursts are reconciled. Increase only if shell transitions are unusually slow (20-2000 ms).
+  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
@@ -404,7 +416,11 @@ static WmMessageDisposition HandleWmThreadMessage(const MSG& msg);
 
 enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, BSP, Monocle, Floating, COUNT };
 enum class MouseMoveBehavior { Float, Swap };
-enum class ExclusionMatch { Process, Class, Title };
+enum class WindowRuleTreatment {
+  Exclude,
+  TraceToOwner,
+  FloatingPlacementOverride,
+};
 enum class ManagementMode { Manual, Automatic };
 enum class AutomaticNewWindowPosition { LastSlot, AfterFocused };
 
@@ -419,11 +435,6 @@ static std::vector<TileLayout> MakeBuiltInLayoutCycle() {
       TileLayout::Floating};
 }
 
-struct ExclusionRule {
-  ExclusionMatch match = ExclusionMatch::Process;
-  std::wstring value;
-};
-
 struct WorkspaceInsets {
   LONG left = 6;
   LONG top = 6;
@@ -436,11 +447,21 @@ struct FloatingDefaultSize {
   LONG height = 640;
 };
 
+struct WindowRule {
+  WindowRuleTreatment treatment = WindowRuleTreatment::Exclude;
+  std::wstring process;
+  std::wstring className;
+  std::wstring titleContains;
+  bool preserveFloatingSize = true;
+  FloatingDefaultSize floatingSizeDip{};
+};
+
 // Windhawk settings and immutable-at-runtime policy values. Settings reloads
 // replace these fields; transient WM state lives in WmRuntime instead.
 struct SettingsState {
   UINT reconcileDelayMs = 50;
   UINT conformanceLeaseMs = 3000;
+  UINT conformanceRepairIntervalMs = 75;
 
   UINT tilingModifiers = MOD_ALT;
   UINT tileKey = 'T';
@@ -464,7 +485,7 @@ struct SettingsState {
       AutomaticNewWindowPosition::LastSlot;
   TileLayout defaultLayout = TileLayout::MasterStack;
   std::vector<TileLayout> layoutCycle = MakeBuiltInLayoutCycle();
-  std::vector<ExclusionRule> exclusionRules;
+  std::vector<WindowRule> windowRules;
   std::wstring diagnosticsOutputPath =
       L"%USERPROFILE%\\Documents\\MultiWMDiagnostics";
 };
@@ -832,11 +853,6 @@ struct WindowRecord {
   bool canResize = true;
   bool topmost = false;
 
-  int placementFailures = 0;
-  // Anchor of the current consecutive-failure streak. Unlike lastRequestedRect,
-  // this does not walk forward with each near-equal request; it changes only
-  // when a materially different failed target starts a new streak.
-  RECT placementFailureTarget{};
   PlacementResult lastPlacementResult = PlacementResult::Success;
   RECT lastRequestedRect{};
   RECT lastObservedRect{};
@@ -906,12 +922,11 @@ class Workspace {
   void SetMasterRatio(double ratio);
   bool MakeMaster(HWND hwnd, HWND* oldMaster = nullptr);
   bool SwapTiled(HWND first, HWND second);
-  bool ResetPlacementFailures(HWND hwnd);
   bool RememberFloatingGeometry(
       HWND hwnd, const RECT& frame, HMONITOR monitor, UINT dpi);
 
-  bool ActivateTiled(HWND hwnd, bool resetPlacementFailures = false);
-  bool AdmitTiled(WindowRecord record, bool resetPlacementFailures = false);
+  bool ActivateTiled(HWND hwnd);
+  bool AdmitTiled(WindowRecord record);
   bool AdmitTiledAfter(WindowRecord record, HWND anchor);
   bool AdmitInitial(WindowRecord record, SuspensionReason reason);
   bool AdmitInitialAfter(
@@ -969,7 +984,6 @@ class Workspace {
   HWND lastFocusedWindow_ = nullptr;
 };
 
-constexpr int kPlacementFailureLimit = 3;
 constexpr LONG kPlacementTolerancePx = 4;
 
 using WorkspaceMap = std::unordered_map<
@@ -983,6 +997,7 @@ class WorkspaceRepository {
   bool Load(const DesktopMonitorKey& key, Workspace* workspace) const;
   void Save(const DesktopMonitorKey& key, const Workspace& workspace);
   bool IsTracked(HWND hwnd) const;
+  bool IsTiled(HWND hwnd) const;
   bool IsSuspendedMaximized(HWND hwnd) const;
   std::vector<DesktopMonitorKey> OwnersOf(HWND hwnd) const;
   std::vector<HWND> KnownWindows() const;
@@ -1067,9 +1082,6 @@ struct ConformanceLeaseTracker {
 };
 
 static ConformanceLeaseTracker g_conformanceLeases;
-// Cap repeated app-vs-WM ping-pong at roughly 13 reinforcements/second without
-// turning the cadence into another user-facing policy knob.
-static constexpr UINT kConformanceRepairMinIntervalMs = 75;
 
 enum class ConformanceLeaseReadResult {
   Missing,
@@ -1194,7 +1206,8 @@ static uint64_t AllocateConformanceLeaseGeneration() {
   return generation;
 }
 
-static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
+static void BeginConformanceLease(
+    HWND hwnd, const RECT& expectedRect, bool scheduleRepair = false) {
   AssertWmThread(L"BeginConformanceLease");
   if (!hwnd || g_settings.conformanceLeaseMs == 0 ||
       expectedRect.right <= expectedRect.left ||
@@ -1211,6 +1224,11 @@ static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
   if (it != g_conformanceLeases.leases.end() &&
       now < it->second.expiresAtTickMs &&
       EqualRect(&it->second.expectedRect, &expectedRect)) {
+    if (scheduleRepair && !it->second.repairDueTickMs) {
+      it->second.repairDueTickMs = std::min(
+          it->second.expiresAtTickMs,
+          now + g_settings.conformanceRepairIntervalMs);
+    }
     ScheduleNextConformanceTimer();
     return;
   }
@@ -1218,6 +1236,11 @@ static void BeginConformanceLease(HWND hwnd, const RECT& expectedRect) {
   ConformanceLease lease;
   lease.expectedRect = expectedRect;
   lease.expiresAtTickMs = now + g_settings.conformanceLeaseMs;
+  if (scheduleRepair) {
+    lease.repairDueTickMs = std::min(
+        lease.expiresAtTickMs,
+        now + g_settings.conformanceRepairIntervalMs);
+  }
   lease.generation = AllocateConformanceLeaseGeneration();
   g_conformanceLeases.leases[hwnd] = lease;
 
@@ -1670,8 +1693,6 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
     // capabilities/identity for an already-known record.
     WindowRecord& existing = it->second;
     const DWORD pid = it->second.pid;
-    const int failures = existing.placementFailures;
-    const RECT failureTarget = existing.placementFailureTarget;
     const PlacementResult lastResult = existing.lastPlacementResult;
     const RECT lastRequested = existing.lastRequestedRect;
     const RECT lastObserved = existing.lastObservedRect;
@@ -1686,8 +1707,6 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
 
     existing = std::move(record);
     existing.pid = existing.pid ? existing.pid : pid;
-    existing.placementFailures = failures;
-    existing.placementFailureTarget = failureTarget;
     existing.lastPlacementResult = lastResult;
     existing.lastRequestedRect = lastRequested;
     existing.lastObservedRect = lastObserved;
@@ -1705,7 +1724,7 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
   return it->second;
 }
 
-bool Workspace::ActivateTiled(HWND hwnd, bool resetPlacementFailures) {
+bool Workspace::ActivateTiled(HWND hwnd) {
   AssertWmThread(L"Workspace::ActivateTiled");
   WindowRecord* record = FindMutable(hwnd);
   if (!record) return false;
@@ -1719,11 +1738,6 @@ bool Workspace::ActivateTiled(HWND hwnd, bool resetPlacementFailures) {
     record->hasSavedSlot = false;
     changed = true;
   }
-  if (resetPlacementFailures && record->placementFailures != 0) {
-    record->placementFailures = 0;
-    record->placementFailureTarget = {};
-    changed = true;
-  }
   if (!ContainsWindow(windows_, hwnd)) {
     AppendTiledWithDefaultWeight(hwnd);
     changed = true;
@@ -1732,13 +1746,13 @@ bool Workspace::ActivateTiled(HWND hwnd, bool resetPlacementFailures) {
   return changed;
 }
 
-bool Workspace::AdmitTiled(WindowRecord record, bool resetPlacementFailures) {
+bool Workspace::AdmitTiled(WindowRecord record) {
   AssertWmThread(L"Workspace::AdmitTiled");
   if (!record.hwnd) return false;
   const HWND hwnd = record.hwnd;
   const bool existed = HasRecord(hwnd);
   UpsertRecord(std::move(record));
-  const bool activated = ActivateTiled(hwnd, resetPlacementFailures);
+  const bool activated = ActivateTiled(hwnd);
   return !existed || activated;
 }
 
@@ -1791,16 +1805,6 @@ bool Workspace::AdmitTiledAfter(WindowRecord record, HWND anchor) {
   records_.emplace(hwnd, std::move(record));
   EnsureWeights();
   DebugValidateMutation(L"Workspace::AdmitTiledAfter");
-  return true;
-}
-
-bool Workspace::ResetPlacementFailures(HWND hwnd) {
-  AssertWmThread(L"Workspace::ResetPlacementFailures");
-  WindowRecord* record = FindMutable(hwnd);
-  if (!record || record->placementFailures == 0) return false;
-  record->placementFailures = 0;
-  record->placementFailureTarget = {};
-  DebugValidateMutation(L"Workspace::ResetPlacementFailures");
   return true;
 }
 
@@ -2322,8 +2326,9 @@ static std::wstring GetWindowProcessName(HWND hwnd) {
   return result;
 }
 
-static bool IsWindowExcludedByRules(HWND hwnd) {
-  if (!hwnd || g_settings.exclusionRules.empty()) return false;
+static const WindowRule* FindMatchingWindowRule(
+    HWND hwnd, WindowRuleTreatment treatment) {
+  if (!hwnd || g_settings.windowRules.empty()) return nullptr;
 
   std::wstring processName;
   std::wstring className;
@@ -2332,36 +2337,42 @@ static bool IsWindowExcludedByRules(HWND hwnd) {
   bool haveClass = false;
   bool haveTitle = false;
 
-  for (const auto& rule : g_settings.exclusionRules) {
-    switch (rule.match) {
-      case ExclusionMatch::Process:
-        if (!haveProcess) {
-          processName = GetWindowProcessName(hwnd);
-          haveProcess = true;
-        }
-        if (!processName.empty() && EqualsInsensitive(processName, rule.value)) return true;
-        break;
+  for (const auto& rule : g_settings.windowRules) {
+    if (rule.treatment != treatment) continue;
 
-      case ExclusionMatch::Class:
-        if (!haveClass) {
-          wchar_t buffer[256]{};
-          if (GetClassNameW(hwnd, buffer, ARRAYSIZE(buffer))) className = buffer;
-          haveClass = true;
-        }
-        if (!className.empty() && EqualsInsensitive(className, rule.value)) return true;
-        break;
-
-      case ExclusionMatch::Title:
-        if (!haveTitle) {
-          wchar_t buffer[512]{};
-          if (GetWindowTextW(hwnd, buffer, ARRAYSIZE(buffer))) title = buffer;
-          haveTitle = true;
-        }
-        if (!title.empty() && ContainsInsensitive(title, rule.value)) return true;
-        break;
+    if (!rule.process.empty()) {
+      if (!haveProcess) {
+        processName = GetWindowProcessName(hwnd);
+        haveProcess = true;
+      }
+      if (!EqualsInsensitive(processName, rule.process)) continue;
     }
+
+    if (!rule.className.empty()) {
+      if (!haveClass) {
+        wchar_t buffer[256]{};
+        if (GetClassNameW(hwnd, buffer, ARRAYSIZE(buffer))) className = buffer;
+        haveClass = true;
+      }
+      if (!EqualsInsensitive(className, rule.className)) continue;
+    }
+
+    if (!rule.titleContains.empty()) {
+      if (!haveTitle) {
+        wchar_t buffer[512]{};
+        if (GetWindowTextW(hwnd, buffer, ARRAYSIZE(buffer))) title = buffer;
+        haveTitle = true;
+      }
+      if (!ContainsInsensitive(title, rule.titleContains)) continue;
+    }
+
+    return &rule;
   }
-  return false;
+  return nullptr;
+}
+
+static bool IsWindowExcludedByRules(HWND hwnd) {
+  return FindMatchingWindowRule(hwnd, WindowRuleTreatment::Exclude) != nullptr;
 }
 
 // Applies stable structural and exclusion policy only; visibility, show state,
@@ -2626,11 +2637,14 @@ enum class FloatingPlacementIntent {
   PassiveRestore,
   PreserveAnchor,
   NewWindowDefault,
+  NewWindowPreserveSize,
+  NewWindowCustomSize,
 };
 
 struct FloatingPlacementHint {
   FloatingPlacementIntent intent = FloatingPlacementIntent::PassiveRestore;
   POINT anchor{};
+  FloatingDefaultSize customSizeDip{};
 };
 
 static POINT RectCenter(const RECT& rect) {
@@ -2723,10 +2737,22 @@ static bool RepairFloatingGeometry(
 
   const bool useNewWindowDefault =
       hint.intent == FloatingPlacementIntent::NewWindowDefault;
+  const bool preserveNewWindowSize =
+      hint.intent == FloatingPlacementIntent::NewWindowPreserveSize;
+  const bool useNewWindowCustomSize =
+      hint.intent == FloatingPlacementIntent::NewWindowCustomSize;
+  const bool centerNewWindow = useNewWindowDefault || preserveNewWindowSize ||
+                               useNewWindowCustomSize;
 
   LONG width = 0;
   LONG height = 0;
-  if (!useNewWindowDefault && record->hasFloatingRect) {
+  if (preserveNewWindowSize && haveCurrent) {
+    width = current.right - current.left;
+    height = current.bottom - current.top;
+  } else if (useNewWindowCustomSize) {
+    width = ScaleDip(hint.customSizeDip.width, targetDpi);
+    height = ScaleDip(hint.customSizeDip.height, targetDpi);
+  } else if (!useNewWindowDefault && record->hasFloatingRect) {
     const UINT sourceDpi = record->floatingDpi ? record->floatingDpi : 96;
     width = MulDiv(
         record->floatingRect.right - record->floatingRect.left,
@@ -2747,7 +2773,7 @@ static bool RepairFloatingGeometry(
   POINT center{};
   if (hint.intent == FloatingPlacementIntent::PreserveAnchor) {
     center = hint.anchor;
-  } else if (!useNewWindowDefault && record->hasFloatingRect &&
+  } else if (!centerNewWindow && record->hasFloatingRect &&
              ResolveRememberedFloatingMonitor(*record) == monitor) {
     center = RectCenter(record->floatingRect);
   } else {
@@ -3012,6 +3038,26 @@ bool WorkspaceRepository::IsTracked(HWND hwnd) const {
   const bool tracked = it != ownersByWindow_.end() && !it->second.empty();
   ReleaseSRWLockShared(&lock_);
   return tracked;
+}
+
+bool WorkspaceRepository::IsTiled(HWND hwnd) const {
+  if (!hwnd) return false;
+  bool found = false;
+  AcquireSRWLockShared(&lock_);
+
+  auto ownersIt = ownersByWindow_.find(hwnd);
+  if (ownersIt != ownersByWindow_.end()) {
+    for (const auto& key : ownersIt->second) {
+      auto stateIt = states_.find(key);
+      if (stateIt != states_.end() && stateIt->second.IsTiled(hwnd)) {
+        found = true;
+        break;
+      }
+    }
+  }
+
+  ReleaseSRWLockShared(&lock_);
+  return found;
 }
 
 bool WorkspaceRepository::IsSuspendedMaximized(HWND hwnd) const {
@@ -3917,38 +3963,19 @@ Workspace::PlacementAction Workspace::ApplyPlacementObservation(
   WindowRecord* record = FindMutable(hwnd);
   if (!record) return PlacementAction::Forget;
 
-  // placementFailures is a consecutive-failure streak for materially the same
-  // authoritative target, not a lifetime bad-window score. Compare against the
-  // fixed streak anchor rather than lastRequestedRect so repeated small target
-  // changes cannot walk the streak beyond the placement tolerance.
-  const bool sameFailureTarget =
-      record->placementFailures > 0 &&
-      RectsNear(record->placementFailureTarget, observation.requested);
-
   record->lastRequestedRect = observation.requested;
   record->lastObservedRect = observation.observed;
   record->lastPlacementResult = observation.result;
+  DebugValidateMutation(L"Workspace::ApplyPlacementObservation");
 
   switch (observation.result) {
     case PlacementResult::Success:
-      record->placementFailures = 0;
-      record->placementFailureTarget = {};
-      DebugValidateMutation(L"Workspace::ApplyPlacementObservation");
+    case PlacementResult::AdjustedByWindow:
+    case PlacementResult::Refused:
       return PlacementAction::None;
 
-    case PlacementResult::AdjustedByWindow:
     case PlacementResult::AccessDenied:
-    case PlacementResult::Refused:
-      if (sameFailureTarget) {
-        ++record->placementFailures;
-      } else {
-        record->placementFailures = 1;
-        record->placementFailureTarget = observation.requested;
-      }
-      DebugValidateMutation(L"Workspace::ApplyPlacementObservation");
-      return record->placementFailures >= Model::kPlacementFailureLimit
-                 ? PlacementAction::Float
-                 : PlacementAction::None;
+      return PlacementAction::Float;
 
     case PlacementResult::Dead:
       return PlacementAction::Forget;
@@ -4013,13 +4040,23 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
           PlacementObservation observation =
               PlaceWindowChecked(hwnd, record->canMove, rects[i]);
           action = workspace.ApplyPlacementObservation(hwnd, observation);
-          if (observation.result == PlacementResult::Success &&
-              observation.placementIssued &&
-              action == Workspace::PlacementAction::None) {
-            BeginConformanceLease(hwnd, rects[i]);
-          } else if (observation.result != PlacementResult::Success ||
-                     action != Workspace::PlacementAction::None) {
+          if (action != Workspace::PlacementAction::None) {
             CancelConformanceLease(hwnd);
+          } else {
+            switch (observation.result) {
+              case PlacementResult::Success:
+                if (observation.placementIssued) {
+                  BeginConformanceLease(hwnd, rects[i]);
+                }
+                break;
+              case PlacementResult::AdjustedByWindow:
+              case PlacementResult::Refused:
+                BeginConformanceLease(hwnd, rects[i], true);
+                break;
+              case PlacementResult::AccessDenied:
+              case PlacementResult::Dead:
+                break;
+            }
           }
         }
       }
@@ -4045,12 +4082,11 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
       const WindowRecord* record = workspace.Find(hwnd);
       if (!record || record->state != ManageState::Tiled) continue;
       Wh_Log(
-          L"Window %p failed checked placement %d times (last result=%d); switching it to Floating",
-          hwnd, record->placementFailures,
-          static_cast<int>(record->lastPlacementResult));
+          L"Window %p cannot be placed (result=%d); switching it to Floating",
+          hwnd, static_cast<int>(record->lastPlacementResult));
       Diagnostics::RecordEvent(
-          L"placement failures forced hwnd=%p to per-window Floating (failures=%d result=%d)",
-          hwnd, record->placementFailures, static_cast<int>(record->lastPlacementResult));
+          L"placement failure forced hwnd=%p to per-window Floating (result=%d)",
+          hwnd, static_cast<int>(record->lastPlacementResult));
       CancelConformanceLease(hwnd);
       participationChanged |= workspace.Float(hwnd);
     }
@@ -4193,36 +4229,43 @@ static void FinalizeExpiredConformanceLease(
   ArrangeWorkspace(owners.front());
 }
 
-// During a short post-placement lease, an application may accept our rectangle
-// synchronously and then restore its own startup/session geometry later. Repair
-// only that unexpected late movement; explicit user gestures cancel the lease at
-// MOVESIZESTART and normal tiled placement remains the authoritative source.
-static bool HandleConformanceLeaseLocationChange(HWND hwnd) {
+// A tracked tiled HWND either confirms its authoritative rectangle or opens/reuses
+// one bounded conformance lease. Native user gestures remain authoritative and
+// are handled separately after MOVESIZEEND.
+static bool HandleTiledWindowLocationChange(HWND hwnd) {
+  if (IsMoveSizeGestureInProgress(hwnd)) return true;
+
   ConformanceLease lease;
-  if (!ReadActiveConformanceLease(hwnd, &lease)) return false;
+  const ConformanceLeaseReadResult leaseState =
+      ReadConformanceLease(hwnd, &lease);
+  if (leaseState == ConformanceLeaseReadResult::Expired) {
+    ScheduleNextConformanceTimer();
+    return true;
+  }
+  const bool hasLease = leaseState == ConformanceLeaseReadResult::Active;
 
   if (!IsWindow(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
       !IsWindowVisible(hwnd) || IsWindowCloaked(hwnd)) {
-    CancelConformanceLease(hwnd, lease.generation);
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
 
   const std::vector<DesktopMonitorKey> owners = g_workspaces.OwnersOf(hwnd);
   if (owners.size() != 1 || !IsWorkspaceOnActiveDesktop(owners.front())) {
-    CancelConformanceLease(hwnd, lease.generation);
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
 
   Workspace workspace;
   if (!g_workspaces.Load(owners.front(), &workspace)) {
-    CancelConformanceLease(hwnd, lease.generation);
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
   const WindowRecord* record = workspace.Find(hwnd);
   if (!record || record->state != ManageState::Tiled ||
       workspace.Layout() == TileLayout::Floating ||
       !ConformanceWindowMatchesRecordIdentity(hwnd, *record)) {
-    CancelConformanceLease(hwnd, lease.generation);
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
 
@@ -4231,26 +4274,34 @@ static bool HandleConformanceLeaseLocationChange(HWND hwnd) {
   // the copied target until it is checked against the current layout plan.
   RECT authoritative{};
   if (!GetCurrentAuthoritativeTiledRect(
-          owners.front(), workspace, hwnd, &authoritative) ||
-      !RectsNear(authoritative, lease.expectedRect)) {
-    CancelConformanceLease(hwnd, lease.generation);
+          owners.front(), workspace, hwnd, &authoritative)) {
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
 
   RECT current{};
   if (!GetWindowFrameRect(hwnd, &current)) {
-    CancelConformanceLease(hwnd, lease.generation);
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
   if (RectsNear(current, authoritative)) {
     return true;  // Our own placement/event echo; nothing to repair.
   }
 
+  if (!hasLease || !RectsNear(authoritative, lease.expectedRect)) {
+    if (hasLease) CancelConformanceLease(hwnd, lease.generation);
+    BeginConformanceLease(hwnd, authoritative, true);
+    return true;
+  }
+
   const ULONGLONG now = GetTickCount64();
+  if (lease.repairDueTickMs && now < lease.repairDueTickMs) {
+    return true;
+  }
   if (lease.lastRepairTickMs &&
-      now - lease.lastRepairTickMs < kConformanceRepairMinIntervalMs) {
+      now - lease.lastRepairTickMs < g_settings.conformanceRepairIntervalMs) {
     const ULONGLONG due =
-        lease.lastRepairTickMs + kConformanceRepairMinIntervalMs;
+        lease.lastRepairTickMs + g_settings.conformanceRepairIntervalMs;
     // Do not simply drop a bursty snap-back event: schedule one delayed re-check
     // so a final app move inside the rate window cannot leave the tile displaced.
     if (DeferConformanceLeaseRepair(hwnd, lease.generation, due)) {
@@ -4261,9 +4312,8 @@ static bool HandleConformanceLeaseLocationChange(HWND hwnd) {
   }
 
   // A copied observation must still refer to the same active lease immediately
-  // before we act. MOVESIZESTART/topology/lifecycle cancellation can happen from
-  // another thread after the initial read; a generation check prevents stale work
-  // from deliberately reviving or accounting against a replacement lease.
+  // before we act. Earlier actor work can have cancelled or replaced it; the
+  // generation check prevents stale work from accounting against the replacement.
   if (!IsCurrentConformanceLease(hwnd, lease.generation)) return false;
 
   PlacementObservation observation =
@@ -4303,12 +4353,13 @@ static bool HandleConformanceLeaseLocationChange(HWND hwnd) {
     // Adjusted/refused placements are exactly the cases where relying on another
     // LOCATIONCHANGE is unsafe: the application may already be sitting at its
     // final self-selected rectangle. Keep the lease alive and schedule one more
-    // checked attempt at the normal cadence. Repeated checked failures may Float
-    // early; otherwise the hard deadline performs one passive final conformance
-    // verdict and Floats only if the HWND is still materially off its current tile.
+    // checked attempt at the configured cadence. The hard deadline performs the
+    // passive final verdict and Floats only if the HWND is still materially off
+    // its current tile. AccessDenied remains an immediate terminal result above.
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG due = std::min(
-        lease.expiresAtTickMs, now + kConformanceRepairMinIntervalMs);
+        lease.expiresAtTickMs,
+        now + g_settings.conformanceRepairIntervalMs);
     DeferConformanceLeaseRepair(hwnd, lease.generation, due);
   }
   return true;
@@ -4348,7 +4399,7 @@ static void ProcessConformanceTimer() {
     }
   }
   for (HWND hwnd : dueWindows) {
-    HandleConformanceLeaseLocationChange(hwnd);
+    HandleTiledWindowLocationChange(hwnd);
   }
   ScheduleNextConformanceTimer();
 }
@@ -4368,6 +4419,10 @@ static bool SnapshotLooksTiled(const std::vector<HWND>& windows, const RECT& wor
 //=============================================================================
 // Workspace reconciliation
 //=============================================================================
+
+namespace Platform::WindowEvents {
+static bool HasTrackedMonitorOwnershipMismatch(HWND hwnd);
+}
 
 namespace Reconcile {
 
@@ -4444,7 +4499,7 @@ static bool ReadoptFloatingSnapshot(
   for (HWND hwnd : snapshot) {
     const WindowRecord* record = workspace.Find(hwnd);
     if (record && record->state == ManageState::Floating) {
-      changed |= workspace.ActivateTiled(hwnd, true);
+      changed |= workspace.ActivateTiled(hwnd);
     }
   }
   return changed;
@@ -5040,12 +5095,21 @@ static bool DiscoverWorkspaceWindows(
   }
 
   // Automatic discovery owns the first floating geometry of a genuinely new
-  // restored window. Ignore the app/Windows stale restore rectangle and apply
-  // the configured default size centered in this workspace instead.
+  // restored window. Center it in this workspace, applying the configured
+  // default size unless a matching placement override preserves or replaces it.
   if (admitUntracked && workspace.Layout() == TileLayout::Floating) {
-    FloatingPlacementHint newWindowHint;
-    newWindowHint.intent = FloatingPlacementIntent::NewWindowDefault;
     for (HWND hwnd : newlyAdmittedWindows) {
+      FloatingPlacementHint newWindowHint;
+      const WindowRule* placementOverride = FindMatchingWindowRule(
+          hwnd, WindowRuleTreatment::FloatingPlacementOverride);
+      if (!placementOverride) {
+        newWindowHint.intent = FloatingPlacementIntent::NewWindowDefault;
+      } else if (placementOverride->preserveFloatingSize) {
+        newWindowHint.intent = FloatingPlacementIntent::NewWindowPreserveSize;
+      } else {
+        newWindowHint.intent = FloatingPlacementIntent::NewWindowCustomSize;
+        newWindowHint.customSizeDip = placementOverride->floatingSizeDip;
+      }
       RepairFloatingGeometry(key, workspace, hwnd, newWindowHint);
     }
   }
@@ -5307,7 +5371,10 @@ static void ReconcileDeferredLifecycle() {
         currentDesktop.Data1);
     // A missed native callback is also a high-confidence signal that an exhausted
     // subscription retry burst deserves one fresh attempt sequence.
-    if (!g_vd.notificationsRegistered) RuntimeLifecycle::RequestMaintenance(true);
+    if (g_vd.abi.notification.methodCount > 0 &&
+        !g_vd.notificationsRegistered) {
+      RuntimeLifecycle::RequestMaintenance(true);
+    }
     g_wm.pendingDesktopSwitchFlyouts = true;
   }
   g_wm.reconciledDesktop = currentDesktop;
@@ -5475,14 +5542,16 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
       break;
 
     case EVENT_OBJECT_LOCATIONCHANGE:
-      // A leased tiled window may have accepted our placement and moved itself
-      // later during startup/session restore. Consume that narrow case first.
-      if (HandleConformanceLeaseLocationChange(hwnd)) break;
+      // Cross-monitor movement remains ownership migration, not conformance drift.
+      // Otherwise a tiled HWND that leaves its authoritative rectangle opens or
+      // reuses one bounded lease; expected SetWindowPos echoes are consumed there.
+      if (!Platform::WindowEvents::HasTrackedMonitorOwnershipMismatch(hwnd) &&
+          HandleTiledWindowLocationChange(hwnd)) {
+        break;
+      }
 
-      // LOCATIONCHANGE is normally suppressed because our own SetWindowPos emits
-      // it. The WinEvent adapter only lets this non-lease path through for a
-      // maximized/restored tracked window or an actual monitor-owner mismatch, so
-      // repairing monitor ownership here is both cheap and non-recursive.
+      // Non-tiled/state transitions and monitor migration retain ordinary
+      // participation/ownership reconciliation.
       ReconcileManagedWindowStateNow(
           hwnd, ReconcileScope::Participation | ReconcileScope::Monitor);
       ScheduleLifecycleReconcile(hwnd);
@@ -5667,7 +5736,6 @@ void FloatFocusedWindow() {
 
   CancelConformanceLease(tiled);
   if (!workspace.Float(tiled)) return;
-  workspace.ResetPlacementFailures(tiled);
   RepairFloatingGeometry(key, workspace, tiled, hint);
   g_workspaces.Save(key, workspace);
   ArrangeWorkspace(key);
@@ -5793,7 +5861,6 @@ static void HandleUserMove(
   if (g_settings.mouseMoveBehavior == MouseMoveBehavior::Float) {
     CancelConformanceLease(hwnd);
     if (workspace.Float(hwnd)) {
-      workspace.ResetPlacementFailures(hwnd);
       RepairFloatingGeometry(
           key, workspace, hwnd, MakeFloatingPlacementHintFromGesture(gesture));
       g_workspaces.Save(key, workspace);
@@ -6034,11 +6101,24 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
   // For window-level events only.
   if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
 
+  // Opt-in rules can bridge custom frame/helper HWNDs to an already-managed root
+  // owner for native move/size boundaries. Lifecycle events retain exact identity.
+  if ((event == EVENT_SYSTEM_MOVESIZESTART ||
+       event == EVENT_SYSTEM_MOVESIZEEND) &&
+      !IsWindowTrackedInAnyState(hwnd) &&
+      FindMatchingWindowRule(
+          hwnd, WindowRuleTreatment::TraceToOwner)) {
+    HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
+    if (rootOwner && IsWindowTrackedInAnyState(rootOwner)) {
+      hwnd = rootOwner;
+    }
+  }
+
   const bool tracked = IsWindowTrackedInAnyState(hwnd);
 
-  // Normal layout placement itself produces LOCATIONCHANGE, so keep this path
-  // narrow. Besides maximized->restored detection, a short conformance lease may
-  // opt a tiled HWND into location observation while an app finishes startup.
+  // A tiled LOCATIONCHANGE is classified later on the WM actor. Expected placement
+  // echoes are cheap no-ops there; unexpected same-monitor drift opens a bounded
+  // conformance lease instead of being silently discarded.
   if (event == EVENT_OBJECT_LOCATIONCHANGE) {
     if (!tracked) {
       // A newly created window can already be minimized/maximized before the
@@ -6057,11 +6137,13 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 
     const bool stateOrLeaseNeedsObservation =
         IsWindowSuspendedMaximized(hwnd) ||
-        HasActiveConformanceLease(hwnd);
+        HasActiveConformanceLease(hwnd) ||
+        g_workspaces.IsTiled(hwnd);
     if (!stateOrLeaseNeedsObservation &&
         !HasTrackedMonitorOwnershipMismatch(hwnd)) {
       return;
     }
+
     QueueWindowEvent(event, hwnd);
     return;
   }
@@ -6336,7 +6418,10 @@ static bool SelectVirtualDesktopAbiProfile(
     return false;
   }
 
-  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table.
+  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table. Its
+  // manually assembled sink relies on the unified x64 calling convention; x86
+  // keeps the core desktop API but uses settled cloak/uncloak reconciliation.
+#if defined(_WIN64)
   if (build >= 22000) {
     if (build < 22483 ||
         (build == 22621 && revision < 2215)) {
@@ -6349,6 +6434,7 @@ static bool SelectVirtualDesktopAbiProfile(
       profile.notification = {IID_IVirtualDesktopNotification_Current, 14, 10, false};
     }
   }
+#endif
 
   *outProfile = profile;
   return true;
@@ -6475,7 +6561,7 @@ static HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_NoOp() {
 // GUID through its already-versioned manager interface. This follows Windhawk's
 // compatibility pattern and avoids COM lifetime/cross-thread pointer hazards.
 static HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_CurrentChanged(
-    VirtualDesktopNotificationObject*) {
+    VirtualDesktopNotificationObject*, void*, void*) {
   QueueVirtualDesktopChangedNotification();
   return S_OK;
 }
@@ -6561,7 +6647,9 @@ bool RegisterVirtualDesktopNotifications() {
 
   NotificationInterfaceConfig config = GetNotificationInterfaceConfig();
   if (config.methodCount == 0) {
-    return true;  // Supported core API with no known native notification ABI (Win10).
+    // Win10 has no selected native notification ABI. x86 also deliberately uses
+    // settled cloak/uncloak reconciliation instead of the x64-only manual sink.
+    return true;
   }
 
   ++Diagnostics::g_runtime.counters.vdNotificationRegisterAttempts;
@@ -7136,16 +7224,17 @@ static const wchar_t* LayoutFlyoutText(TileLayout layout) {
 
 static void LoadSettings() {
   using WindhawkUtils::StringSetting;
-  auto position = StringSetting::make(L"FlyoutPosition");
+  auto position = StringSetting::make(L"appearance.FlyoutPosition");
   g_flyoutTop = _wcsicmp(position.get(), L"top") == 0;
-  g_flyoutOffsetX = Wh_GetIntSetting(L"FlyoutOffsetX");
-  g_flyoutOffsetY = Wh_GetIntSetting(L"FlyoutOffsetY");
+  g_flyoutOffsetX = Wh_GetIntSetting(L"appearance.FlyoutOffsetX");
+  g_flyoutOffsetY = Wh_GetIntSetting(L"appearance.FlyoutOffsetY");
 
   for (auto& path : g_customIconPaths) path.clear();
   for (int i = 0; i < 32; ++i) {
-    auto layoutName = StringSetting::make(L"CustomIcons[%d].Layout", i);
+    auto layoutName =
+        StringSetting::make(L"appearance.CustomIcons[%d].Layout", i);
     if (!*layoutName.get()) break;
-    auto path = StringSetting::make(L"CustomIcons[%d].Path", i);
+    auto path = StringSetting::make(L"appearance.CustomIcons[%d].Path", i);
     size_t index = static_cast<size_t>(ParseLayoutSetting(layoutName.get()));
     if (*path.get() && index < g_customIconPaths.size() &&
         g_customIconPaths[index].empty()) {
@@ -8424,8 +8513,8 @@ static DiagnosticRecordAudit DiagnosticDumpWindowRecord(
   DiagnosticWindowIdentity identity = DiagnosticReadWindowIdentity(mapHwnd, record.pid);
   audit.deadHwnd = !identity.hwndAlive;
   audit.pidMismatch = identity.hwndAlive && record.pid != 0 && !identity.pidMatchesRecord;
-  audit.hasPlacementFailure = record.placementFailures > 0 ||
-                              record.lastPlacementResult != PlacementResult::Success;
+  audit.hasPlacementFailure =
+      record.lastPlacementResult != PlacementResult::Success;
 
   report.Line(
       L"      identity: hwndAlive=%d livePid=%lu pidMatchesRecord=%d process=%ls",
@@ -8453,13 +8542,8 @@ static DiagnosticRecordAudit DiagnosticDumpWindowRecord(
       L"      capabilities: move=%d resize=%d topmost=%d",
       record.canMove ? 1 : 0, record.canResize ? 1 : 0, record.topmost ? 1 : 0);
   report.Line(
-      L"      placement: result=%ls failures=%d",
-      DiagnosticPlacementResultName(record.lastPlacementResult), record.placementFailures);
-  if (record.placementFailures > 0) {
-    report.Line(
-        L"      failureTarget=%ls",
-        DiagnosticRectString(record.placementFailureTarget).c_str());
-  }
+      L"      placement: result=%ls",
+      DiagnosticPlacementResultName(record.lastPlacementResult));
   report.Line(L"      lastRequested=%ls", DiagnosticRectString(record.lastRequestedRect).c_str());
   report.Line(L"      lastObserved =%ls", DiagnosticRectString(record.lastObservedRect).c_str());
 
@@ -9048,9 +9132,11 @@ static void WriteDiagnosticReport() {
           ? L"After focused window"
           : L"Last slot");
   report.Line(L"Tiled conformance lease: %u ms", g_settings.conformanceLeaseMs);
-  report.Line(L"Conformance repair min interval: %u ms", kConformanceRepairMinIntervalMs);
+  report.Line(
+      L"Conformance repair interval: %u ms",
+      g_settings.conformanceRepairIntervalMs);
   report.Line(L"Lifecycle settle delay: %u ms", g_settings.reconcileDelayMs);
-  report.Line(L"Exclusion rules: %zu", g_settings.exclusionRules.size());
+  report.Line(L"Window rules: %zu", g_settings.windowRules.size());
   report.TextLine(L"Diagnostic output setting: ", g_settings.diagnosticsOutputPath);
   report.TextLine(L"Diagnostic output resolved: ", ExpandDiagnosticPath(g_settings.diagnosticsOutputPath));
 
@@ -9617,9 +9703,10 @@ static bool ParseFloatingDefaultSizeSetting(
 void LoadSettings() {
   using WindhawkUtils::StringSetting;
 
-  g_settings.tilingModifiers = ReadModifierSetting(L"TilingModifier", MOD_ALT);
+  g_settings.tilingModifiers =
+      ReadModifierSetting(L"hotkeys.TilingModifier", MOD_ALT);
 
-  auto insets = StringSetting::make(L"WorkspaceInsets");
+  auto insets = StringSetting::make(L"workspace.WorkspaceInsets");
   WorkspaceInsets parsedInsets{};
   if (ParseWorkspaceInsetsSetting(insets.get(), &parsedInsets)) {
     g_settings.insetsDip = parsedInsets;
@@ -9627,10 +9714,11 @@ void LoadSettings() {
     g_settings.insetsDip = {};
     Wh_Log(L"Invalid WorkspaceInsets setting; using 6, 6, 6, 6");
   }
-  g_settings.gapDip = Wh_GetIntSetting(L"TileGap");
+  g_settings.gapDip = Wh_GetIntSetting(L"workspace.TileGap");
   if (g_settings.gapDip < 0 || g_settings.gapDip > 100) g_settings.gapDip = 6;
 
-  auto floatingSize = StringSetting::make(L"FloatingDefaultSize");
+  auto floatingSize =
+      StringSetting::make(L"windowBehavior.FloatingDefaultSize");
   FloatingDefaultSize parsedFloatingSize{};
   if (ParseFloatingDefaultSizeSetting(floatingSize.get(), &parsedFloatingSize)) {
     g_settings.floatingDefaultSizeDip = parsedFloatingSize;
@@ -9638,15 +9726,16 @@ void LoadSettings() {
     g_settings.floatingDefaultSizeDip = {};
     Wh_Log(L"Invalid FloatingDefaultSize setting; using 960, 640");
   }
-  g_settings.masterPercent = Wh_GetIntSetting(L"MasterPercent");
+  g_settings.masterPercent = Wh_GetIntSetting(L"workspace.MasterPercent");
   if (g_settings.masterPercent < 1 || g_settings.masterPercent > 99) g_settings.masterPercent = 50;
 
-  auto layout = StringSetting::make(L"DefaultLayout");
+  auto layout = StringSetting::make(L"workspace.DefaultLayout");
   g_settings.defaultLayout = ParseLayoutSetting(layout.get());
 
   g_settings.layoutCycle.clear();
   for (int i = 0; i < 32; ++i) {
-    auto cycleEntry = StringSetting::make(L"LayoutCycle[%d]", i);
+    auto cycleEntry =
+        StringSetting::make(L"workspace.LayoutCycle[%d]", i);
     if (!*cycleEntry.get()) break;
 
     TileLayout cycleLayout{};
@@ -9664,69 +9753,102 @@ void LoadSettings() {
     Wh_Log(L"LayoutCycle is empty or invalid; using the built-in layout sequence");
   }
 
-  auto mouseBehavior = StringSetting::make(L"MouseMoveBehavior");
+  auto mouseBehavior =
+      StringSetting::make(L"windowBehavior.MouseMoveBehavior");
   g_settings.mouseMoveBehavior =
       _wcsicmp(mouseBehavior.get(), L"swap") == 0
           ? MouseMoveBehavior::Swap
           : MouseMoveBehavior::Float;
 
   auto automaticNewWindowPosition =
-      StringSetting::make(L"AutomaticNewWindowPosition");
+      StringSetting::make(L"general.AutomaticNewWindowPosition");
   g_settings.automaticNewWindowPosition =
       _wcsicmp(automaticNewWindowPosition.get(), L"after_focused") == 0
           ? AutomaticNewWindowPosition::AfterFocused
           : AutomaticNewWindowPosition::LastSlot;
 
   auto managementMode =
-      StringSetting::make(L"DefaultWindowManagementMode");
+      StringSetting::make(L"general.DefaultWindowManagementMode");
   g_wm.managementMode =
       _wcsicmp(managementMode.get(), L"manual") == 0
           ? ManagementMode::Manual
           : ManagementMode::Automatic;
 
-  int conformanceLease = Wh_GetIntSetting(L"ConformanceLeaseMs");
+  int conformanceLease = Wh_GetIntSetting(L"advanced.ConformanceLeaseMs");
   if (conformanceLease < 0 || conformanceLease > 10000) conformanceLease = 3000;
   g_settings.conformanceLeaseMs = static_cast<UINT>(conformanceLease);
 
-  int reconcileDelay = Wh_GetIntSetting(L"ReconcileDelayMs");
+  int conformanceRepairInterval =
+      Wh_GetIntSetting(L"advanced.ConformanceRepairIntervalMs");
+  if (conformanceRepairInterval < 20 || conformanceRepairInterval > 2000) {
+    conformanceRepairInterval = 75;
+  }
+  g_settings.conformanceRepairIntervalMs =
+      static_cast<UINT>(conformanceRepairInterval);
+
+  int reconcileDelay = Wh_GetIntSetting(L"advanced.ReconcileDelayMs");
   if (reconcileDelay < 20 || reconcileDelay > 2000) reconcileDelay = 50;
   g_settings.reconcileDelayMs = static_cast<UINT>(reconcileDelay);
 
-  g_settings.exclusionRules.clear();
+  g_settings.windowRules.clear();
   for (int i = 0; i < 64; ++i) {
-    auto match = StringSetting::make(L"Exclusions[%d].Match", i);
-    auto value = StringSetting::make(L"Exclusions[%d].Value", i);
-    if (!*match.get() && !*value.get()) break;
-    if (!*value.get()) continue;
+    auto process =
+        StringSetting::make(L"windowRules.Rules[%d].Process", i);
+    auto className =
+        StringSetting::make(L"windowRules.Rules[%d].Class", i);
+    auto titleContains =
+        StringSetting::make(L"windowRules.Rules[%d].TitleContains", i);
+    auto treatment =
+        StringSetting::make(L"windowRules.Rules[%d].Treatment", i);
+    auto size = StringSetting::make(L"windowRules.Rules[%d].Size", i);
+    if (!*process.get() && !*className.get() && !*titleContains.get()) break;
 
-    ExclusionRule rule;
-    if (_wcsicmp(match.get(), L"class") == 0) {
-      rule.match = ExclusionMatch::Class;
-    } else if (_wcsicmp(match.get(), L"title") == 0) {
-      rule.match = ExclusionMatch::Title;
+    WindowRule rule;
+    if (_wcsicmp(treatment.get(), L"trace_to_owner") == 0) {
+      rule.treatment = WindowRuleTreatment::TraceToOwner;
+    } else if (_wcsicmp(
+                   treatment.get(), L"preserve_size_when_centering") == 0) {
+      rule.treatment = WindowRuleTreatment::FloatingPlacementOverride;
+      rule.preserveFloatingSize = true;
+    } else if (_wcsicmp(
+                   treatment.get(), L"override_size_when_centering") == 0) {
+      rule.treatment = WindowRuleTreatment::FloatingPlacementOverride;
+      if (!ParseFloatingDefaultSizeSetting(
+              size.get(), &rule.floatingSizeDip)) {
+        Wh_Log(
+            L"Ignoring invalid centered size override at rule %d: %s",
+            i + 1, size.get());
+        continue;
+      }
+      rule.preserveFloatingSize = false;
     } else {
-      rule.match = ExclusionMatch::Process;
+      rule.treatment = WindowRuleTreatment::Exclude;
     }
-    rule.value = value.get();
-    g_settings.exclusionRules.push_back(std::move(rule));
+    rule.process = process.get();
+    rule.className = className.get();
+    rule.titleContains = titleContains.get();
+    g_settings.windowRules.push_back(std::move(rule));
   }
 
-  g_settings.tileKey = ReadHotkeySetting<UINT>(L"TileKey", ParseHotkeyKey);
-  g_settings.layoutKey = ReadHotkeySetting<UINT>(L"LayoutKey", ParseHotkeyKey);
+  g_settings.tileKey =
+      ReadHotkeySetting<UINT>(L"hotkeys.TileKey", ParseHotkeyKey);
+  g_settings.layoutKey =
+      ReadHotkeySetting<UINT>(L"hotkeys.LayoutKey", ParseHotkeyKey);
   g_settings.swapMasterKey =
-      ReadHotkeySetting<UINT>(L"SwapMasterKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.SwapMasterKey", ParseHotkeyKey);
   g_settings.promoteWindowKey =
-      ReadHotkeySetting<UINT>(L"PromoteWindowKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.PromoteWindowKey", ParseHotkeyKey);
   g_settings.demoteWindowKey =
-      ReadHotkeySetting<UINT>(L"DemoteWindowKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.DemoteWindowKey", ParseHotkeyKey);
   g_settings.managementModeToggleKey =
-      ReadHotkeySetting<UINT>(L"ManagementModeToggleKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.ManagementModeToggleKey", ParseHotkeyKey);
   g_settings.floatFocusedKey =
-      ReadHotkeySetting<UINT>(L"FloatFocusedKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.FloatFocusedKey", ParseHotkeyKey);
   g_settings.diagnosticDumpKey =
-      ReadHotkeySetting<UINT>(L"DiagnosticDumpKey", ParseHotkeyKey);
+      ReadHotkeySetting<UINT>(L"hotkeys.DiagnosticDumpKey", ParseHotkeyKey);
 
-  auto diagnosticsPath = StringSetting::make(L"DiagnosticsOutputPath");
+  auto diagnosticsPath =
+      StringSetting::make(L"diagnostics.DiagnosticsOutputPath");
   if (*diagnosticsPath.get()) {
     g_settings.diagnosticsOutputPath = diagnosticsPath.get();
   } else {
