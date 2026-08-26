@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.3.1
+// @version         1.3.2
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -56,19 +56,22 @@ stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 - RAM usage and capacity from Windows memory status.
 - GPU utilization and dedicated or shared GPU-memory usage from Windows PDH
   counters.
-- GPU-memory capacity and adapter identity from DXGI. Shared system memory is
-  used when an integrated adapter reports no dedicated video memory.
+- GPU-memory capacity and adapter identity from live D3DKMT enumeration, with
+  DXGI as a compatibility fallback. Shared system memory is used when an
+  integrated adapter reports no dedicated video memory.
 - CPU and GPU temperatures from HWiNFO when available.
 - GPU fallback from the Windows display-driver interface (D3DKMT).
 - CPU fallback from Windows ACPI thermal zones exposed through PDH.
 
 Metric collection runs on a worker thread. The taskbar UI thread only renders
-the latest completed snapshot. If a display-driver restart invalidates the
-active GPU performance counters, the mod rebuilds them automatically.
+the latest completed snapshot. If a display-driver restart changes an adapter
+LUID or invalidates the active performance counters, the mod refreshes the live
+adapter list and rebuilds the counters automatically.
 
 The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
-matched to the selected DXGI adapter by LUID.
+matched to the selected live adapter by LUID. Duplicate stale adapters without
+a driver name are ignored when a named adapter with the same capacity exists.
 
 ## Temperature providers
 
@@ -450,6 +453,7 @@ struct MetricsSnapshot {
     double ramUsedGb = 0.0;
     double ramTotalGb = 0.0;
     double gpu = 0.0;
+    bool gpuAvailable = false;
     double vram = 0.0;
     double vramUsedGb = 0.0;
     double vramTotalGb = 0.0;
@@ -1155,8 +1159,37 @@ struct D3DKMT_ADAPTER_PERFDATA {
     UCHAR PowerStateOverride;
 };
 
-constexpr UINT kAdapterPerfDataQueryType = 62;  // KMTQAITYPE_ADAPTERPERFDATA
+struct D3DKMT_ADAPTERINFO {
+    D3DKMT_HANDLE hAdapter;
+    LUID AdapterLuid;
+    ULONG NumOfSources;
+    BOOL bPresentMoveRegionsPreferred;
+};
 
+struct D3DKMT_ENUMADAPTERS2 {
+    ULONG NumAdapters;
+    D3DKMT_ADAPTERINFO* pAdapters;
+};
+
+struct D3DKMT_ADAPTERREGISTRYINFO {
+    WCHAR AdapterString[MAX_PATH];
+    WCHAR BiosString[MAX_PATH];
+    WCHAR DacType[MAX_PATH];
+    WCHAR ChipType[MAX_PATH];
+};
+
+struct D3DKMT_SEGMENTSIZEINFO {
+    ULONGLONG DedicatedVideoMemorySize;
+    ULONGLONG DedicatedSystemMemorySize;
+    ULONGLONG SharedSystemMemorySize;
+};
+
+constexpr UINT kAdapterRegistryInfoQueryType = 8;
+constexpr UINT kAdapterSegmentSizeQueryType = 3;
+constexpr UINT kAdapterPerfDataQueryType = 62;  // KMTQAITYPE_ADAPTERPERFDATA
+constexpr ULONG kMaxD3dkmtAdapters = 16;
+
+using D3DKMTEnumAdapters2_t = LONG(WINAPI*)(D3DKMT_ENUMADAPTERS2*);
 using D3DKMTOpenAdapterFromLuid_t =
     LONG(WINAPI*)(D3DKMT_OPENADAPTERFROMLUID*);
 using D3DKMTQueryAdapterInfo_t =
@@ -1164,11 +1197,12 @@ using D3DKMTQueryAdapterInfo_t =
 using D3DKMTCloseAdapter_t =
     LONG(WINAPI*)(const D3DKMT_CLOSEADAPTER*);
 
+D3DKMTEnumAdapters2_t g_d3dkmtEnumAdapters2 = nullptr;
 D3DKMTOpenAdapterFromLuid_t g_d3dkmtOpenAdapterFromLuid = nullptr;
 D3DKMTQueryAdapterInfo_t g_d3dkmtQueryAdapterInfo = nullptr;
 D3DKMTCloseAdapter_t g_d3dkmtCloseAdapter = nullptr;
 
-struct DxgiAdapterInfo {
+struct GpuAdapterInfo {
     std::wstring description;
     std::wstring luid;
     LUID luidValue{};
@@ -1176,24 +1210,118 @@ struct DxgiAdapterInfo {
     uint64_t sharedSystemMemory = 0;
 };
 
-std::optional<std::wstring> g_cachedDxgiAdapterFilter;
-std::optional<DxgiAdapterInfo> g_cachedDxgiAdapterInfo;
-bool g_cachedDxgiAdapterResolved = false;
+std::optional<std::wstring> g_cachedGpuAdapterFilter;
+std::optional<GpuAdapterInfo> g_cachedGpuAdapterInfo;
+bool g_cachedGpuAdapterResolved = false;
 
-void InvalidateDxgiAdapterCache() {
-    g_cachedDxgiAdapterFilter.reset();
-    g_cachedDxgiAdapterInfo.reset();
-    g_cachedDxgiAdapterResolved = false;
+void InvalidateGpuAdapterCache() {
+    g_cachedGpuAdapterFilter.reset();
+    g_cachedGpuAdapterInfo.reset();
+    g_cachedGpuAdapterResolved = false;
 }
 
-std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
-    const std::wstring& adapterFilter) {
-    std::wstring filterLower = ToLower(adapterFilter);
-    if (g_cachedDxgiAdapterResolved &&
-        g_cachedDxgiAdapterFilter == filterLower) {
-        return g_cachedDxgiAdapterInfo;
+std::wstring FormatAdapterLuid(const LUID& luid) {
+    wchar_t buffer[32];
+    swprintf(buffer, std::size(buffer), L"0x%08X_0x%08X",
+             static_cast<DWORD>(luid.HighPart), luid.LowPart);
+    return ToLower(buffer);
+}
+
+std::wstring FixedWideToString(const wchar_t* value, size_t capacity) {
+    size_t length = 0;
+    while (length < capacity && value[length]) {
+        length++;
+    }
+    return std::wstring(value, length);
+}
+
+std::optional<GpuAdapterInfo> GetLiveD3dkmtAdapterInfo(
+    const std::wstring& filterLower) {
+    if (!g_d3dkmtEnumAdapters2 || !g_d3dkmtQueryAdapterInfo ||
+        !g_d3dkmtCloseAdapter) {
+        return std::nullopt;
     }
 
+    D3DKMT_ADAPTERINFO adapters[kMaxD3dkmtAdapters]{};
+    D3DKMT_ENUMADAPTERS2 enumeration{};
+    enumeration.NumAdapters = std::size(adapters);
+    enumeration.pAdapters = adapters;
+    if (g_d3dkmtEnumAdapters2(&enumeration) != 0) {
+        return std::nullopt;
+    }
+
+    std::optional<GpuAdapterInfo> selected;
+    ULONG adapterCount = std::min<ULONG>(enumeration.NumAdapters,
+                                         std::size(adapters));
+    for (ULONG index = 0; index < adapterCount; index++) {
+        const auto& adapter = adapters[index];
+
+        D3DKMT_ADAPTERREGISTRYINFO registryInfo{};
+        D3DKMT_QUERYADAPTERINFO registryQuery{};
+        registryQuery.hAdapter = adapter.hAdapter;
+        registryQuery.Type = kAdapterRegistryInfoQueryType;
+        registryQuery.pPrivateDriverData = &registryInfo;
+        registryQuery.PrivateDriverDataSize = sizeof(registryInfo);
+        bool registryAvailable =
+            g_d3dkmtQueryAdapterInfo(&registryQuery) == 0;
+
+        D3DKMT_SEGMENTSIZEINFO segmentInfo{};
+        D3DKMT_QUERYADAPTERINFO segmentQuery{};
+        segmentQuery.hAdapter = adapter.hAdapter;
+        segmentQuery.Type = kAdapterSegmentSizeQueryType;
+        segmentQuery.pPrivateDriverData = &segmentInfo;
+        segmentQuery.PrivateDriverDataSize = sizeof(segmentInfo);
+        bool segmentsAvailable =
+            g_d3dkmtQueryAdapterInfo(&segmentQuery) == 0;
+
+        std::wstring description =
+            registryAvailable
+                ? FixedWideToString(registryInfo.AdapterString,
+                                    std::size(registryInfo.AdapterString))
+                : L"";
+        GpuAdapterInfo candidate{
+            description,
+            FormatAdapterLuid(adapter.AdapterLuid),
+            adapter.AdapterLuid,
+            segmentsAvailable ? segmentInfo.DedicatedVideoMemorySize : 0,
+            segmentsAvailable ? segmentInfo.SharedSystemMemorySize : 0,
+        };
+
+        bool matchesFilter =
+            filterLower.empty() ||
+            Contains(ToLower(candidate.description), filterLower);
+        bool betterCandidate =
+            !selected || candidate.dedicatedVideoMemory >
+                             selected->dedicatedVideoMemory ||
+            (candidate.dedicatedVideoMemory ==
+                 selected->dedicatedVideoMemory &&
+             !candidate.description.empty() &&
+             selected->description.empty()) ||
+            (candidate.dedicatedVideoMemory ==
+                 selected->dedicatedVideoMemory &&
+             candidate.description.empty() == selected->description.empty() &&
+             candidate.sharedSystemMemory > selected->sharedSystemMemory);
+        if (matchesFilter && betterCandidate) {
+            selected = std::move(candidate);
+        }
+    }
+
+    for (ULONG index = 0; index < adapterCount; index++) {
+        if (adapters[index].hAdapter) {
+            D3DKMT_CLOSEADAPTER closeAdapter{adapters[index].hAdapter};
+            g_d3dkmtCloseAdapter(&closeAdapter);
+        }
+    }
+
+    // Stale D3DKMT duplicates can retain the full memory sizes while losing
+    // their registry identity. Prefer the DXGI compatibility path instead of
+    // caching such an ambiguous adapter.
+    return selected && !selected->description.empty() ? selected
+                                                       : std::nullopt;
+}
+
+std::optional<GpuAdapterInfo> GetDxgiAdapterInfo(
+    const std::wstring& filterLower) {
     com_ptr<IDXGIFactory> factory;
     if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.put())))) {
         return std::nullopt;
@@ -1229,34 +1357,51 @@ std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(
         }
     }
 
-    g_cachedDxgiAdapterFilter = filterLower;
-    g_cachedDxgiAdapterInfo.reset();
-    g_cachedDxgiAdapterResolved = true;
     if (!found) {
-        if (filterLower.empty()) {
-            Wh_Log(L"No DXGI GPU adapter found");
-        } else {
-            Wh_Log(L"No DXGI GPU adapter matched: %s", filterLower.c_str());
-        }
-        return g_cachedDxgiAdapterInfo;
+        return std::nullopt;
     }
 
-    wchar_t luid[32];
-    swprintf(luid, std::size(luid), L"0x%08X_0x%08X",
-             static_cast<DWORD>(selected.AdapterLuid.HighPart),
-             selected.AdapterLuid.LowPart);
-    g_cachedDxgiAdapterInfo = DxgiAdapterInfo{
-        selected.Description, ToLower(luid), selected.AdapterLuid,
+    return GpuAdapterInfo{
+        selected.Description, FormatAdapterLuid(selected.AdapterLuid),
+        selected.AdapterLuid,
         selected.DedicatedVideoMemory, selected.SharedSystemMemory};
-    Wh_Log(L"Selected GPU: %s, LUID %s, dedicated %.1f GiB, shared %.1f "
+}
+
+std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
+    const std::wstring& adapterFilter) {
+    std::wstring filterLower = ToLower(adapterFilter);
+    if (g_cachedGpuAdapterResolved &&
+        g_cachedGpuAdapterFilter == filterLower) {
+        return g_cachedGpuAdapterInfo;
+    }
+
+    g_cachedGpuAdapterFilter = filterLower;
+    g_cachedGpuAdapterInfo = GetLiveD3dkmtAdapterInfo(filterLower);
+    PCWSTR provider = L"D3DKMT";
+    if (!g_cachedGpuAdapterInfo) {
+        g_cachedGpuAdapterInfo = GetDxgiAdapterInfo(filterLower);
+        provider = L"DXGI fallback";
+    }
+    g_cachedGpuAdapterResolved = true;
+
+    if (!g_cachedGpuAdapterInfo) {
+        if (filterLower.empty()) {
+            Wh_Log(L"No GPU adapter found");
+        } else {
+            Wh_Log(L"No GPU adapter matched: %s", filterLower.c_str());
+        }
+        return std::nullopt;
+    }
+
+    Wh_Log(L"Selected GPU (%s): %s, LUID %s, dedicated %.1f GiB, shared %.1f "
            L"GiB",
-           g_cachedDxgiAdapterInfo->description.c_str(),
-           g_cachedDxgiAdapterInfo->luid.c_str(),
-           static_cast<double>(g_cachedDxgiAdapterInfo->dedicatedVideoMemory) /
+           provider, g_cachedGpuAdapterInfo->description.c_str(),
+           g_cachedGpuAdapterInfo->luid.c_str(),
+           static_cast<double>(g_cachedGpuAdapterInfo->dedicatedVideoMemory) /
                kGiB,
-           static_cast<double>(g_cachedDxgiAdapterInfo->sharedSystemMemory) /
+           static_cast<double>(g_cachedGpuAdapterInfo->sharedSystemMemory) /
                kGiB);
-    return g_cachedDxgiAdapterInfo;
+    return g_cachedGpuAdapterInfo;
 }
 
 void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
@@ -1266,7 +1411,7 @@ void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
         return;
     }
 
-    auto adapter = GetDxgiAdapterInfo(settings.gpuAdapter);
+    auto adapter = GetGpuAdapterInfo(settings.gpuAdapter);
     if (!adapter) {
         return;
     }
@@ -1302,7 +1447,7 @@ void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
 }
 
 bool MatchesGpuAdapter(const std::wstring& instance,
-                       const std::optional<DxgiAdapterInfo>& adapter) {
+                       const std::optional<GpuAdapterInfo>& adapter) {
     return !adapter || Contains(ToLower(instance), adapter->luid);
 }
 
@@ -1347,8 +1492,10 @@ void RecordPdhReadFailure(PCWSTR reason,
     }
 
     ClosePdhQuery();
-    InvalidateDxgiAdapterCache();
+    InvalidateGpuAdapterCache();
     g_consecutivePdhReadFailures = 0;
+    g_pdhGpuSampleWasAvailable = false;
+    g_pdhVramSampleWasAvailable = false;
     g_nextPdhCounterRetry = now + kPdhRecoveryRetryDelay;
     g_nextPdhRecovery = now + kPdhRecoveryCooldown;
 }
@@ -1436,23 +1583,34 @@ void EnsurePdhQuery() {
     }
 }
 
-bool ReadPdhArray(PDH_HCOUNTER counter,
-                  std::vector<uint8_t>& buffer,
-                  DWORD& itemCount) {
+PDH_STATUS ReadPdhArray(PDH_HCOUNTER counter,
+                        std::vector<uint8_t>& buffer,
+                        DWORD& itemCount) {
     if (!counter) {
-        return false;
+        return PDH_CSTATUS_NO_COUNTER;
     }
     DWORD bufferSize = 0;
     PDH_STATUS status = PdhGetFormattedCounterArrayW(
         counter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, nullptr);
+    if (status == ERROR_SUCCESS && !bufferSize) {
+        buffer.clear();
+        itemCount = 0;
+        return ERROR_SUCCESS;
+    }
     if (status != static_cast<PDH_STATUS>(PDH_MORE_DATA) || !bufferSize) {
-        return false;
+        return status;
     }
 
     buffer.resize(bufferSize);
     auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
     return PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE, &bufferSize,
-                                        &itemCount, items) == ERROR_SUCCESS;
+                                        &itemCount, items);
+}
+
+bool IsHardPdhArrayFailure(PDH_STATUS status) {
+    return status != ERROR_SUCCESS &&
+           status != static_cast<PDH_STATUS>(PDH_NO_DATA) &&
+           status != static_cast<PDH_STATUS>(PDH_CSTATUS_NO_INSTANCE);
 }
 
 void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
@@ -1463,7 +1621,8 @@ void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
 
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
-    if (!ReadPdhArray(g_thermalZoneCounter, buffer, itemCount)) {
+    if (ReadPdhArray(g_thermalZoneCounter, buffer, itemCount) !=
+        ERROR_SUCCESS) {
         return;
     }
 
@@ -1516,10 +1675,16 @@ void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
 }
 
 std::optional<double> ReadGpuUsage(
-    const std::optional<DxgiAdapterInfo>& adapter) {
+    const std::optional<GpuAdapterInfo>& adapter,
+    PDH_STATUS& readStatus) {
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
-    if (!ReadPdhArray(g_gpuCounter, buffer, itemCount)) {
+    readStatus = ReadPdhArray(g_gpuCounter, buffer, itemCount);
+    if (readStatus == static_cast<PDH_STATUS>(PDH_NO_DATA) ||
+        readStatus == static_cast<PDH_STATUS>(PDH_CSTATUS_NO_INSTANCE)) {
+        return 0.0;
+    }
+    if (readStatus != ERROR_SUCCESS) {
         return std::nullopt;
     }
 
@@ -1533,7 +1698,6 @@ std::optional<double> ReadGpuUsage(
             !std::isfinite(value.doubleValue) || value.doubleValue < 0.0) {
             continue;
         }
-
         std::wstring instance = items[i].szName ? items[i].szName : L"";
         if (!MatchesGpuAdapter(instance, adapter)) {
             continue;
@@ -1546,23 +1710,22 @@ std::optional<double> ReadGpuUsage(
         found = true;
     }
 
-    if (!found) {
-        return std::nullopt;
-    }
-
     double busiestEngine = 0.0;
     for (const auto& [engine, usage] : engineTotals) {
         busiestEngine = std::max(busiestEngine, usage);
     }
-    return std::clamp(busiestEngine, 0.0, 100.0);
+    return found ? std::clamp(busiestEngine, 0.0, 100.0) : 0.0;
 }
 
 std::optional<double> ReadVramUsedBytes(
     PDH_HCOUNTER counter,
-    const std::optional<DxgiAdapterInfo>& adapter) {
+    const std::optional<GpuAdapterInfo>& adapter,
+    bool& anyValidSample,
+    PDH_STATUS& readStatus) {
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
-    if (!ReadPdhArray(counter, buffer, itemCount)) {
+    readStatus = ReadPdhArray(counter, buffer, itemCount);
+    if (readStatus != ERROR_SUCCESS) {
         return std::nullopt;
     }
 
@@ -1576,6 +1739,7 @@ std::optional<double> ReadVramUsedBytes(
             !std::isfinite(value.doubleValue) || value.doubleValue < 0.0) {
             continue;
         }
+        anyValidSample = true;
 
         std::wstring instance = items[i].szName ? items[i].szName : L"";
         if (!MatchesGpuAdapter(instance, adapter)) {
@@ -1595,16 +1759,16 @@ void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
 
     PDH_STATUS collectStatus = PdhCollectQueryData(g_pdhQuery);
     if (collectStatus != ERROR_SUCCESS) {
-        if (g_pdhGpuSampleWasAvailable || g_pdhVramSampleWasAvailable) {
-            RecordPdhReadFailure(L"collection", collectStatus);
-        }
+        RecordPdhReadFailure(L"collection", collectStatus);
         return;
     }
 
-    auto adapter = GetDxgiAdapterInfo(settings.gpuAdapter);
-    auto gpuUsage = ReadGpuUsage(adapter);
+    auto adapter = GetGpuAdapterInfo(settings.gpuAdapter);
+    PDH_STATUS gpuReadStatus = ERROR_SUCCESS;
+    auto gpuUsage = ReadGpuUsage(adapter, gpuReadStatus);
     if (gpuUsage) {
         snapshot.gpu = *gpuUsage;
+        snapshot.gpuAvailable = true;
     }
     uint64_t vramTotalBytes = 0;
     PDH_HCOUNTER vramCounter = nullptr;
@@ -1617,7 +1781,11 @@ void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
             vramCounter = g_sharedVramCounter;
         }
     }
-    auto vramUsedBytes = ReadVramUsedBytes(vramCounter, adapter);
+    bool vramCounterHasData = false;
+    PDH_STATUS vramReadStatus = ERROR_SUCCESS;
+    auto vramUsedBytes =
+        ReadVramUsedBytes(vramCounter, adapter, vramCounterHasData,
+                          vramReadStatus);
     bool vramAvailable = vramTotalBytes > 0 && vramUsedBytes.has_value();
     if (vramAvailable) {
         snapshot.vramUsedGb = *vramUsedBytes / kGiB;
@@ -1627,11 +1795,16 @@ void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
         snapshot.vramAvailable = true;
     }
 
-    bool lostGpuSample = g_pdhGpuSampleWasAvailable && !gpuUsage;
-    bool lostVramSample = g_pdhVramSampleWasAvailable && !vramAvailable;
-    if (lostGpuSample || lostVramSample) {
-        RecordPdhReadFailure(L"metric read");
-    } else if (gpuUsage || vramAvailable) {
+    bool hardReadFailure =
+        (g_gpuCounter && IsHardPdhArrayFailure(gpuReadStatus)) ||
+        (vramCounter && IsHardPdhArrayFailure(vramReadStatus));
+    bool adapterMismatch = adapter && vramReadStatus == ERROR_SUCCESS &&
+                           vramCounterHasData && !vramAvailable;
+    if (hardReadFailure) {
+        RecordPdhReadFailure(L"counter read");
+    } else if (adapterMismatch) {
+        RecordPdhReadFailure(L"adapter mismatch");
+    } else {
         RecordPdhReadSuccess(gpuUsage.has_value(), vramAvailable);
     }
 }
@@ -2195,7 +2368,9 @@ void UpdateWidgetText() {
         SetTextForeground(g_cpuTempText, g_cpuTemperatureAlert, settings);
     }
     if (g_gpuUsageText) {
-        g_gpuUsageText.Text(FormatPercent(snapshot.gpu));
+        g_gpuUsageText.Text(snapshot.gpuAvailable
+                                ? FormatPercent(snapshot.gpu)
+                                : L"--%");
     }
     if (g_gpuTempText) {
         g_gpuTempText.Text(FormatTemperature(snapshot.gpuTemp));
@@ -2224,7 +2399,11 @@ void UpdateWidgetText() {
     if (metricsSequence != g_lastRenderedMetricsSequence) {
         size_t historyCapacity = HistoryCapacity(settings);
         AppendHistory(g_cpuHistory, snapshot.cpu, historyCapacity);
-        AppendHistory(g_gpuHistory, snapshot.gpu, historyCapacity);
+        if (snapshot.gpuAvailable) {
+            AppendHistory(g_gpuHistory, snapshot.gpu, historyCapacity);
+        } else {
+            g_gpuHistory.clear();
+        }
         UpdateSparkline(g_cpuGraph, g_cpuHistory, historyCapacity);
         UpdateSparkline(g_gpuGraph, g_gpuHistory, historyCapacity);
         g_lastRenderedMetricsSequence = metricsSequence;
@@ -2947,7 +3126,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 
 void CloseMetricSources() {
     ClosePdhQuery();
-    InvalidateDxgiAdapterCache();
+    InvalidateGpuAdapterCache();
     g_nextPdhCounterRetry = {};
     g_nextPdhRecovery = {};
     g_consecutivePdhReadFailures = 0;
@@ -2976,6 +3155,8 @@ bool TearDownTaskbarUi() {
 BOOL Wh_ModInit() {
     g_uiTornDown = false;
     if (HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll")) {
+        g_d3dkmtEnumAdapters2 = reinterpret_cast<D3DKMTEnumAdapters2_t>(
+            GetProcAddress(gdi32, "D3DKMTEnumAdapters2"));
         g_d3dkmtOpenAdapterFromLuid =
             reinterpret_cast<D3DKMTOpenAdapterFromLuid_t>(
                 GetProcAddress(gdi32, "D3DKMTOpenAdapterFromLuid"));
