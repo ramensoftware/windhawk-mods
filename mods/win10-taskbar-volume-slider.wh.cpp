@@ -2,11 +2,11 @@
 // @id win10-taskbar-volume-slider
 // @name Windows 10 Taskbar Volume Slider
 // @description Adds a permanently visible volume slider inside the Windows 10 taskbar.
-// @version 1.0.1
+// @version 1.0.3
 // @author didrmt1
 // @github https://github.com/didrmt1
 // @include explorer.exe
-// @compilerOptions -lole32 -lgdi32 -lcomctl32 -luxtheme
+// @compilerOptions -lole32 -lgdi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -50,35 +50,59 @@ static HWND g_slider = nullptr;
 static float g_currentVolume = 0.0f;
 static HANDLE g_hThread = nullptr;
 static HANDLE g_hStopEvent = nullptr;
+static HMODULE g_hModule = nullptr;
 
 static bool IsWindows10()
 {
-    typedef NTSTATUS(WINAPI* pfnRtlGetVersion)(PRTL_OSVERSIONINFOW);
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (!hNtdll) return true;
+    OSVERSIONINFOEXW osvi = { sizeof(osvi) };
+    DWORDLONG const mask = VerSetConditionMask(
+        VerSetConditionMask(
+            VerSetConditionMask(0, VER_MAJORVERSION, VER_EQUAL),
+            VER_MINORVERSION, VER_EQUAL),
+        VER_BUILDNUMBER, VER_LESS);
+    osvi.dwMajorVersion = 10;
+    osvi.dwMinorVersion = 0;
+    osvi.dwBuildNumber = 22000;
+    return VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE;
+}
 
-    pfnRtlGetVersion RtlGetVersion = (pfnRtlGetVersion)GetProcAddress(hNtdll, "RtlGetVersion");
-    if (!RtlGetVersion) return true;
+struct EnumData {
+    HWND result;
+    DWORD pid;
+};
 
-    RTL_OSVERSIONINFOW rovi = { sizeof(rovi) };
-    if (RtlGetVersion(&rovi) == 0)
+static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
+{
+    EnumData* data = reinterpret_cast<EnumData*>(lParam);
+    DWORD pid = 0;
+    WCHAR cls[32] = {0};
+    if (GetWindowThreadProcessId(hWnd, &pid) && pid == data->pid &&
+        GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"Shell_TrayWnd") == 0)
     {
-        return (rovi.dwMajorVersion == 10 && rovi.dwBuildNumber < 22000);
+        data->result = hWnd;
+        return FALSE;
     }
-    return true;
+    return TRUE;
+}
+
+static HWND FindCurrentProcessTaskbarWnd()
+{
+    EnumData data{ nullptr, GetCurrentProcessId() };
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&data));
+    return data.result;
 }
 
 static float GetMasterVolume()
 {
     float vol = 0.0f;
     IMMDeviceEnumerator* enumerator = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))))
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator))))
     {
         IMMDevice* device = nullptr;
         if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)))
         {
             IAudioEndpointVolume* endpoint = nullptr;
-            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&endpoint)))
+            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, (void**)&endpoint)))
             {
                 endpoint->GetMasterVolumeLevelScalar(&vol);
                 endpoint->Release();
@@ -94,13 +118,13 @@ static void SetMasterVolume(float value)
 {
     value = std::clamp(value, 0.0f, 1.0f);
     IMMDeviceEnumerator* enumerator = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))))
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator))))
     {
         IMMDevice* device = nullptr;
         if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)))
         {
             IAudioEndpointVolume* endpoint = nullptr;
-            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&endpoint)))
+            if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, (void**)&endpoint)))
             {
                 endpoint->SetMasterVolumeLevelScalar(value, nullptr);
                 endpoint->Release();
@@ -113,7 +137,7 @@ static void SetMasterVolume(float value)
 
 static void LoadSettings()
 {
-    g_width = Wh_GetIntSetting(L"width");
+    g_width = std::clamp(Wh_GetIntSetting(L"width"), 50, 500);
     g_showPercent = Wh_GetIntSetting(L"showPercent") != 0;
 }
 
@@ -236,7 +260,7 @@ static LRESULT CALLBACK SliderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         if (g_showPercent)
         {
             wchar_t text[16];
-            wsprintfW(text, L"%d%%", (int)(g_currentVolume * 100.0f + 0.5f));
+            swprintf_s(text, L"%d%%", (int)(g_currentVolume * 100.0f + 0.5f));
             SetBkMode(memDC, TRANSPARENT);
             SetTextColor(memDC, RGB(235, 235, 235));
             RECT textRc{rc.right - 35, 0, rc.right, rc.bottom};
@@ -279,10 +303,13 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
 {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+    int retries = 0;
     while (WaitForSingleObject(g_hStopEvent, 250) == WAIT_TIMEOUT)
     {
-        g_taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        g_taskbar = FindCurrentProcessTaskbarWnd();
         if (g_taskbar) break;
+        if (++retries > 40)
+            break;
     }
 
     if (!g_taskbar || WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0)
@@ -291,14 +318,13 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
         return 0;
     }
 
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-
     WNDCLASSW wc{};
     wc.lpfnWndProc = SliderProc;
-    wc.hInstance = hInst;
+    wc.hInstance = g_hModule;
     wc.lpszClassName = L"WindhawkTaskbarSliderClass";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    
+    if (!RegisterClassW(&wc))
     {
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
@@ -310,7 +336,7 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
         L"VolumeSlider",
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
         0, 0, g_width, 30,
-        g_taskbar, nullptr, hInst, nullptr);
+        g_taskbar, nullptr, g_hModule, nullptr);
 
     if (g_slider)
     {
@@ -319,14 +345,27 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
         PositionSlider();
 
         MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0))
+        for (;;)
         {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+            DWORD w = MsgWaitForMultipleObjects(1, &g_hStopEvent, FALSE, INFINITE, QS_ALLINPUT);
+            if (w == WAIT_OBJECT_0) break;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
+            {
+                if (msg.message == WM_QUIT) goto done;
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
     }
 
-    UnregisterClassW(L"WindhawkTaskbarSliderClass", hInst);
+done:
+    if (g_slider)
+    {
+        DestroyWindow(g_slider);
+        g_slider = nullptr;
+    }
+
+    UnregisterClassW(L"WindhawkTaskbarSliderClass", g_hModule);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
@@ -334,10 +373,10 @@ static DWORD WINAPI SliderThreadProc(LPVOID)
 BOOL Wh_ModInit()
 {
     if (!IsWindows10())
-    {
-        Wh_Log(L"This mod is intended for Windows 10 only.");
         return FALSE;
-    }
+
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), &g_hModule);
 
     LoadSettings();
 
@@ -353,14 +392,18 @@ void Wh_ModUninit()
         SetEvent(g_hStopEvent);
     }
 
-    if (g_slider && IsWindow(g_slider))
-    {
-        SendMessageW(g_slider, WM_CLOSE, 0, 0);
-    }
-
     if (g_hThread)
     {
-        WaitForSingleObject(g_hThread, INFINITE);
+        DWORD r;
+        do {
+            r = MsgWaitForMultipleObjects(1, &g_hThread, FALSE, INFINITE, QS_SENDMESSAGE);
+            if (r == WAIT_OBJECT_0 + 1)
+            {
+                MSG m;
+                PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (r == WAIT_OBJECT_0 + 1);
+
         CloseHandle(g_hThread);
         g_hThread = nullptr;
     }
