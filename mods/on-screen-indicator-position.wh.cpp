@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.2.1
+// @version         1.2.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -243,11 +243,15 @@ enum class Indicator {
     microphone,
     text,
     count,
+    // Nothing is on screen, or the entry point for whatever is on screen isn't
+    // hooked. Either way there is no kind to look up, so the main position is
+    // used rather than whatever happened to be shown last.
+    unknown,
 };
 
 // Only one indicator is on screen at a time, and the entry point runs before the
 // position is worked out, so a single value is enough.
-std::atomic<Indicator> g_currentIndicator{Indicator::text};
+std::atomic<Indicator> g_currentIndicator{Indicator::unknown};
 
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
 // confirmator's UI thread, so the members are atomic. Each field is still read
@@ -423,6 +427,21 @@ char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
     return ShowTextAsync_Original(pThis, text, value);
 }
 
+// Clearing the kind on hide is what makes the fallback above true: without it an
+// unhooked kind would inherit the position of whichever kind was shown last.
+using HideConfirmator_t = void(WINAPI*)(void* pThis);
+HideConfirmator_t HideConfirmator_Original;
+void WINAPI HideConfirmator_Hook(void* pThis) {
+    g_currentIndicator.store(Indicator::unknown);
+    return HideConfirmator_Original(pThis);
+}
+
+HideConfirmator_t HideConfirmatorWithoutAnimation_Original;
+void WINAPI HideConfirmatorWithoutAnimation_Hook(void* pThis) {
+    g_currentIndicator.store(Indicator::unknown);
+    return HideConfirmatorWithoutAnimation_Original(pThis);
+}
+
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -552,8 +571,16 @@ BOOL Wh_ModInit() {
     // Nothing to place and nothing to nudge, so don't load the DLL or install a
     // hook that would only pass the rect straight through. Windhawk reloads the
     // mod after a settings change, so it comes back as soon as there is work.
-    if (g_settings.position == Position::windowsDefault && !g_settings.offsetX &&
-        !g_settings.offsetY) {
+    bool anyPerIndicator = false;
+    for (size_t i = 0; i < (size_t)Indicator::count; i++) {
+        if (g_settings.perIndicatorSet[i]) {
+            anyPerIndicator = true;
+            break;
+        }
+    }
+
+    if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
+        !g_settings.offsetX && !g_settings.offsetY) {
         Wh_Log(L"Nothing to do");
         return FALSE;
     }
@@ -572,6 +599,18 @@ BOOL Wh_ModInit() {
             {LR"(private: struct winrt::Windows::Foundation::Rect __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::GetPositionRect(struct winrt::Windows::Foundation::Rect const &))"},
             &HardwareConfirmatorHost_GetPositionRect_Original,
             HardwareConfirmatorHost_GetPositionRect_Hook,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::HideConfirmator(void))"},
+            &HideConfirmator_Original,
+            HideConfirmator_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: void __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::HideConfirmatorWithoutAnimation(void))"},
+            &HideConfirmatorWithoutAnimation_Original,
+            HideConfirmatorWithoutAnimation_Hook,
+            true,  // optional
         },
         {
             {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowVolumeAsync(int))"},
