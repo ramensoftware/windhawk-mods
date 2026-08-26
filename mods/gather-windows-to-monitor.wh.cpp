@@ -207,8 +207,9 @@ different scaling, even when **Preserve** is selected.
     Enter up to five comma-separated primary or display names such as DISPLAY4 or
     \\.\DISPLAY4. Example: primary,DISPLAY3 keeps display 1 tied to the current
     primary display and makes DISPLAY3 become display 2. Missing displays keep
-    their slots; unlisted displays follow in automatic order. An invalid override
-    uses automatic order. Leave empty to number connected displays by DISPLAY name.
+    their slots and their shortcuts do nothing; unlisted displays follow in
+    automatic order. An invalid override uses automatic order. Leave empty to
+    number connected displays by DISPLAY name.
 - MinimizedMode: skip
   $name: Minimized windows
   $description: Choose whether minimized windows stay minimized or are restored and moved.
@@ -864,19 +865,22 @@ const MonitorInfo* PrimaryMonitor(const std::vector<MonitorInfo>& monitors) {
 }
 
 const MonitorInfo* MonitorByHandle(const std::vector<MonitorInfo>& monitors, HMONITOR handle) {
-    for (const MonitorInfo& monitor : monitors) {
-        if (monitor.handle == handle) return &monitor;
+    if (handle) {
+        for (const MonitorInfo& monitor : monitors) {
+            if (monitor.handle == handle) return &monitor;
+        }
     }
     return PrimaryMonitor(monitors);
 }
 
 const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<MonitorInfo>& monitors) {
-    if (monitors.empty()) {
+    const MonitorInfo* primary = PrimaryMonitor(monitors);
+    if (!primary) {
         Wh_Log(L"No displays found");
         return nullptr;
     }
     if (mode == TargetMode::Primary || mode == TargetMode::ForegroundPrimary) {
-        return PrimaryMonitor(monitors);
+        return primary;
     }
     int numberedIndex = NumberedDisplayIndex(mode);
     if (numberedIndex >= 0) {
