@@ -22,7 +22,6 @@
     * This mod's UX part has no effect if AuthUX BSDR is installed.
 * This mod also optionally restores Windows 7's logoff sequence, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
-    * It may not work on the first logoff after installing the mod because of additional safety checks. It should work from then on.
 * Loading resources from an external DLL is supported for localization. This requires one of the following:
     * `winsrv.dll` and `winsrv.dll.mui` from Windows 7. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
     * `AuthUX.dll` from a build of AuthUX that supports BSDR.
@@ -51,7 +50,7 @@ exclusion option. Otherwise the logoff sequence portion of mod will not function
 - resDllPath: ""
   $name: AuthUX.dll/winsrv.dll path
   $name:ko-KR: AuthUX.dll/winsrv.dll 경로
-  $description: Path to your copy of winsrv.dll from Windows 7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing. 
+  $description: Path to your copy of winsrv.dll from Windows 7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
 - themeScrollbar: false
   $name: Apply visual styles to the scroll bar
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
@@ -1683,10 +1682,9 @@ namespace CustomBSDR {
         HWND hTitle;
         HWND hBlockReason;
         HBITMAP hIconBitmap;
-        Microsoft::WRL::ComPtr<IShutdownBlockingApp> app;
     };
-    static optional<vector<AppTile>> appTiles;
-    static optional<vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps;
+    [[clang::no_destroy]] static optional<vector<AppTile>> appTiles{in_place};
+    [[clang::no_destroy]] static optional<vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps{in_place};
     mutex pendingAppsMutex;
 };
 #pragma endregion logoncontroller.h and CustomBSDR.h
@@ -2114,15 +2112,16 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
         }
 
         const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
-        DWORD dwSize = 0;
-        if (isUsingHardcodedRes) { // Don't trust bmp header from external dll
-            dwSize = SizeofResource(hResDll, hResource) - sizeof(BITMAPINFOHEADER);
-        } else {
-            dwSize = width * height * 4;
+        if (!isUsingHardcodedRes) { // Don't trust bmp header from external dll
+            DWORD dwSize = SizeofResource(hResDll, hResource) - dwBitsOffset;
+            if (dwSize < 0 || (DWORD)width * height * 4 > dwSize) {
+                Wh_Log(L"Image load error: invalid size");
+                return nullptr;
+            }
         }
 
         if (isTopDown) {
-            memcpy(pBits, pSrc, dwSize);
+            memcpy(pBits, pSrc, width * height * 4);
         } else {
             for (int y = 0; y < height; y++) {
                 memcpy((unsigned char*)pBits + y * width * 4,
@@ -2456,7 +2455,6 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
     AppTile tile = {};
     blockingApp->get_Id(&tile.appId);
     blockingApp->get_IsBlocking(&tile.isBlocking);
-    tile.app = blockingApp;
     tile.hIconBitmap = nullptr;
 
     HSTRING caption, blockReason;
@@ -2612,7 +2610,7 @@ void CustomBSDR::UpdateAppListLayout() {
         si.cbSize = sizeof(SCROLLINFO);
         si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
         si.nMin = 0;
-        si.nMax = totalContentHeight;
+        si.nMax = totalContentHeight - 1;
         si.nPage = visibleHeight;
         si.nPos = scrollPos;
         SetScrollInfo(hScrollBar, SB_CTL, &si, TRUE);
@@ -2655,7 +2653,10 @@ void CustomBSDR::UpdateAppListLayout() {
         yPos += height;
     }
 
-    SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+    RECT rcAppList;
+    GetWindowRect(hAppList, &rcAppList);
+    int currentWidth = rcAppList.right - rcAppList.left;
+    SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, currentWidth, totalContentHeight, SWP_NOZORDER);
 
     // Set the title text based on the number of apps on the list
     if (hTitleText) {
@@ -3166,6 +3167,8 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 }
 
 DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
+    int ret = 0;
+
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
@@ -3178,9 +3181,11 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         }
         if (!SetThreadDesktop(hDesktop)) {
             CloseDesktop(hDesktop);
-            return GetLastError();
+            Wh_Log(L"SetThreadDesktop failed, GLE=%d", GetLastError());
         }
         CloseDesktop(hDesktop);
+    } else {
+        Wh_Log(L"OpenInputDesktop failed, GLE=%d", GetLastError());
     }
 
     WNDCLASSEXW wndClass = {};
@@ -3243,18 +3248,21 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 }
             }
         } else {
-            int gle = GetLastError();
-            Wh_Log(L"CreateWindowExW failed, GLE=%d", gle);
-            return gle;
+            int ret = GetLastError();
+            Wh_Log(L"CreateWindowExW failed, GLE=%d", ret);
         }
 
         if (UnregisterClassW(BSDR_CLASSNAME, HINST_THISCOMPONENT) == 0) {
             Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
         }
     } else {
-        int gle = GetLastError();
-        Wh_Log(L"RegisterClassExW failed, GLE=%d", gle);
-        return gle;
+        int ret = GetLastError();
+        Wh_Log(L"RegisterClassExW failed, GLE=%d", ret);
+    }
+
+    if (ret != 0) {
+        Wh_Log(L"CustomBSDR thread init failed; resolving with force...");
+        Resolve(BlockedShutdownResolution_Force);
     }
 
     if (SUCCEEDED(hrCo)) {
@@ -3293,8 +3301,20 @@ void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
 }
 
 void CustomBSDR::RemoveApplication(UINT appid) {
+    lock_guard lock(pendingAppsMutex);
     if (hDlg && IsWindow(hDlg)) {
         PostMessageW(hDlg, WM_REMOVE_APP, (WPARAM)appid, 0);
+    } else {
+        for (size_t i = 0; i < pendingApps->size(); i++) {
+            IShutdownBlockingApp* app = (*pendingApps)[i].Get();
+            UINT iterId = 0;
+            if (SUCCEEDED(app->get_Id(&iterId))) {
+                if (iterId == appid) {
+                    pendingApps->erase(pendingApps->begin() + i);
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -3518,6 +3538,7 @@ bool IsLogonUiInjectionEnabled() {
     }
 
     DWORD size = 0;
+    // WH inclusion key: pipe separated REG_SZ
     res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, nullptr, &size);
     if (res != ERROR_SUCCESS && res != ERROR_MORE_DATA) {
         Wh_Log(L"WH inclusion check failed (size query), GLE=%d", res);
@@ -3612,22 +3633,6 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    CustomBSDR::appTiles.emplace();
-    CustomBSDR::pendingApps.emplace();
-
-    LPCWSTR dllPath = Wh_GetStringSetting(L"resDllPath");
-    if (*dllPath != L'\0') {
-        hResDll = LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-        Wh_FreeStringSetting(dllPath);
-        if (hResDll) {
-            isUsingHardcodedRes = false;
-        } else {
-            Wh_Log(L"Failed to load the resource DLL! Using hardcoded resources...");
-        }
-    } else {
-        Wh_Log(L"Using hardcoded resources...");
-    }
-
     HMODULE blockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (blockedShutdownDll) {
         if (!WindhawkUtils::HookSymbols(blockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
@@ -3643,6 +3648,19 @@ BOOL Wh_ModInit() {
     if (!CustomBSDR::hStopEvent) {
         Wh_Log(L"CreateEventW failed, GLE=%u", GetLastError());
         return FALSE;
+    }
+
+    LPCWSTR dllPath = Wh_GetStringSetting(L"resDllPath");
+    if (*dllPath != L'\0') {
+        hResDll = LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+        Wh_FreeStringSetting(dllPath);
+        if (hResDll) {
+            isUsingHardcodedRes = false;
+        } else {
+            Wh_Log(L"Failed to load the resource DLL! Using hardcoded resources...");
+        }
+    } else {
+        Wh_Log(L"Using hardcoded resources...");
     }
 
     return TRUE;
