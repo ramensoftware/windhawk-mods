@@ -62,11 +62,14 @@ The mod monitors the system's security settings including Firewall, Antivirus, W
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 10 22H2, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2 and it is compatible with the native Windows 10 taskbar (native on Windows 10 and using ExplorerPatcher or similar methods on Windows 11).
 
 ## Known Limitations
+
 - **Vertical taskbar (left/right edge)**: The flyout is centered on the icon and opens toward the screen center. Windows 10's taskbar itself has inconsistent flyout behavior on vertical taskbars, so perfect placement cannot be guaranteed in all configurations.
 - **Hidden tray icon**: It is recommended to keep the Action Center icon visible 
   in the system tray rather than hidden in the notification overflow. When hidden, 
   the flyout falls back to the last known icon position, which may be less accurate 
   depending on the Windows version.
+- **Atypical taskbar configurations**: In rare cases, uncommon taskbar settings (such as multiple rows or having many tray icons always visible) may cause minor interaction issues. While this is rare, it is typically resolved by restarting Explorer after disabling the mod.
+
 ## Notes
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
@@ -88,19 +91,19 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 10 22H2, Wi
   $description: This setting enables rounded edges on the flyout (Windows 7 look). Turn this off for Classic theme or other styles that need square corners.
 - refreshInterval: 5000
   $name: Status check interval (ms)
-  $description: How often the tray icon re-checks security and maintenance (milliseconds). Use at least 1000. Set 0 to check only when Windows reports a change.
+  $description: This setting controls how often the tray icon re-checks security and maintenance (milliseconds). Use at least 1000. Set 0 to check only when Windows reports a change.
 - enableHotkey: false
   $name: Enable hotkeys
-  $description: Turn on keyboard shortcuts for testing (see the options below).
+  $description: This setting turns on keyboard shortcuts for testing (see the options below).
 - enableNotificationSimulation: true
   $name: Test notifications (Ctrl+N)
-  $description: When hotkeys are enabled, Ctrl+N shows a sample balloon and Ctrl+Shift+N clears it. Useful only for testing.
+  $description: This setting enables test notifications. When hotkeys are enabled, Ctrl+N shows a sample balloon and Ctrl+Shift+N clears it. Useful only for testing.
 - privacyMode: false
   $name: Privacy mode
-  $description: Always show the neutral tray icon and hide problems in the flyout. Handy on a shared screen.
+  $description: This setting enables privacy mode to always show the neutral tray icon and hide problems in the flyout. Handy on a shared screen.
 - language: auto
   $name: Language
-  $description: Language for the tray icon, flyout, and balloons. "Auto" follows Windows.
+  $description: This setting controls the language for the tray icon, flyout, and balloons. "Auto" follows Windows.
   $options:
     - auto: Auto (match Windows)
     - en: English
@@ -116,13 +119,13 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 10 22H2, Wi
     - tr: Türkçe
 - restoreCplHubLinks: true
   $name: Control Panel links
-  $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
+  $description: This setting restores the classic Control Panel links. On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
 - useEmbeddedUifile: false
   $name: Control Panel layout fallback
-  $description: Advanced. Only if those Control Panel links do not appear, try an alternate built-in page layout. Leave off in normal use.
+  $description: This setting enables an alternate Control Panel layout. Advanced. Only if those Control Panel links do not appear, try an alternate built-in page layout. Leave off in normal use.
 - theme: auto
   $name: Theme
-  $description: Flyout and notification theme. "Auto" follows the Windows light/dark mode setting.
+  $description: This setting controls the flyout and notification theme. "Auto" follows the Windows light/dark mode setting.
   $options:
     - auto: Auto (follow Windows)
     - light: Light
@@ -130,7 +133,6 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 10 22H2, Wi
 */
 // ==/WindhawkModSettings==
 
-// 2.2.0 -> Fixed the position of the flyout
 
 #ifndef UNICODE
 #define UNICODE
@@ -3907,6 +3909,13 @@ void PositionWindowNearTray(HWND hwnd) {
             y = rcIcon.top - winH - gap;
             break;
         }
+
+        // Clamp dentro l'area di lavoro del monitor dell'icona, preservando il margine
+        if (x + winW > rcWork.right  - gap) x = rcWork.right  - winW - gap;
+        if (y + winH > rcWork.bottom - gap) y = rcWork.bottom - winH - gap;
+        if (x < rcWork.left + gap) x = rcWork.left + gap;
+        if (y < rcWork.top  + gap) y = rcWork.top  + gap;
+
     } else {
         // Fallback senza icona: ancora al bordo della taskbar (come prima).
         int offsetX = MulDiv(10, (int)dpi, 96);
@@ -3931,12 +3940,6 @@ void PositionWindowNearTray(HWND hwnd) {
         }
     }
 
-    // Clamp dentro l'area di lavoro del monitor dell'icona.
-    if (x + winW > rcWork.right)  x = rcWork.right - winW;
-    if (y + winH > rcWork.bottom) y = rcWork.bottom - winH;
-    if (x < rcWork.left) x = rcWork.left;
-    if (y < rcWork.top)  y = rcWork.top;
-
     Wh_Log(L"PositionWindowNearTray: dpi=%u size=%dx%d edge=%u icon={%d,%d,%d,%d} pos={%d,%d}",
            dpi, winW, winH, edge, rcIcon.left, rcIcon.top, rcIcon.right, rcIcon.bottom, x, y);
 
@@ -3949,7 +3952,6 @@ void PositionWindowNearTray(HWND hwnd) {
         SetWindowPos(hwnd, NULL, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
-
 void ToggleFlyout() {
     if (g_Ctx.isUninitializing) return;
 
@@ -4031,16 +4033,10 @@ void ToggleFlyout() {
 // ============================================================================
 // Mouse Hook (Click Outside) - Versione semplificata
 // ============================================================================
-
 // Cache the tray icon rect for use in the mouse hook (avoids cross-process call in WH_MOUSE_LL)
 static void UpdateCachedTrayIconRect() {
-    if (g_Ctx.hWndMsgHandler && g_Ctx.trayIconAdded) {
-        NOTIFYICONIDENTIFIER nidIcon = { sizeof(NOTIFYICONIDENTIFIER) };
-        nidIcon.hWnd = g_Ctx.hWndMsgHandler;
-        nidIcon.uID = TRAY_ICON_ID;
-        nidIcon.guidItem = TRAY_ICON_GUID;
-        Shell_NotifyIconGetRect(&nidIcon, &g_CachedTrayIconRect);
-    }
+    RECT rc;
+    GetTrayIconScreenRect(&rc);  // updates g_CachedTrayIconRect only when it resolves
 }
 
 void InstallClickOutsideHook() {
@@ -4065,7 +4061,6 @@ void RemoveClickOutsideHook() {
 
 
 
-
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (g_Ctx.isUninitializing)
         return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
@@ -4080,6 +4075,7 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
                 // Use cached tray icon rect (updated when flyout opens)
                 // Avoids expensive cross-process Shell_NotifyIconGetRect call in WH_MOUSE_LL
                 BOOL overTrayIcon = PtInRect(&g_CachedTrayIconRect, pMouse->pt);
+                
                 if (overTrayIcon) {
                     // Latch now, at button-down, before WM_ACTIVATE can hide
                     // the flyout on this same click (review issue #1).
@@ -4087,6 +4083,43 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
                         g_TrayClickWhileFlyoutOpen = TRUE;
                     }
                 } else {
+                    // --- MITIGATION FOR MULTI-ROW SYSTEM TRAY (Windows 10 22h2) ---
+                    // In some configurations with a 2-row taskbar, clicks on the second row
+                    // of the system tray are incorrectly interpreted as "outside clicks"
+                    // and close the flyout, preventing interaction with tray icons.
+                    // This mitigation checks if the click is on the taskbar and, if so,
+                    // keeps the flyout open to allow interaction.
+                    //
+                    // Note: This is a best-effort attempt to mitigate the issue.
+                    // The problem has been reported but could not be reproduced
+                    // in the development environment, so the fix is applied
+                    // conservatively to avoid regressions.
+                    BOOL isOnTaskbar = FALSE;
+                    
+                    try {
+                        APPBARDATA abd = {};
+                        abd.cbSize = sizeof(APPBARDATA);
+                        abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+                        if (abd.hWnd && SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
+                            isOnTaskbar = PtInRect(&abd.rc, pMouse->pt);
+                            if (isOnTaskbar) {
+                                // Click on taskbar but not on AC icon:
+                                // update cache and keep flyout open
+                                UpdateCachedTrayIconRect();
+                                Wh_Log(L"Click on taskbar detected - flyout kept open (mitigation for multi-row tray)");
+                                return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+                            }
+                        }
+                    }
+                    catch (...) {
+                        // Exception occurred while checking taskbar position.
+                        // Fall back to original behavior: close the flyout.
+                        Wh_Log(L"Exception in ClickOutsideMouseHookProc taskbar check");
+                        // Continue to original close behavior below
+                    }
+                    
+                    // Click outside flyout, not on AC icon, and (either not on taskbar
+                    // or exception occurred during taskbar check) -> close flyout
                     PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
                 }
             }
@@ -4094,7 +4127,6 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
-
 void HideFlyout(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     RemoveClickOutsideHook();
@@ -4982,16 +5014,17 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             ReleaseProblemBalloonResources();
             return 0;
         }
-        if (trayEvent == NIN_BALLOONUSERCLICK) {
-            RemoveProblemBalloon();
-            // Il clic deve aprire, non chiudere, il flyout.
-            if (!g_Ctx.hWndFlyout || !IsWindow(g_Ctx.hWndFlyout) ||
-                !IsWindowVisible(g_Ctx.hWndFlyout)) {
-                PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0);
-            }
-            return 0;
-        }
-
+if (trayEvent == NIN_BALLOONUSERCLICK) {
+    try {
+        RemoveProblemBalloon();
+        // A click must open the flyout
+        PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0);
+    }
+    catch (...) {
+        Wh_Log(L"Exception in NIN_BALLOONUSERCLICK");
+    }
+    return 0;
+}
         if (trayEvent == WM_LBUTTONUP) { 
             if (g_ProblemBalloonShowing) RemoveProblemBalloon();
             PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0); 
