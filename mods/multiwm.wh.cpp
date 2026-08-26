@@ -53,7 +53,9 @@ A small tray indicator shows the active workspace layout and provides quick acce
 - [Virtual Desktop Helper by u2x1](https://windhawk.net/mods/virtual-desktop-helper)
 - [Taskbar Desktop Indicator by Simon Benedict](https://windhawk.net/mods/taskbar-desktop-indicator)
 
-MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).
+## Notes
+- MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).
+- Windhawk 2.0 paird with a 64-bit system is recommended for the best experience; for x86 builds, virtual desktop switch events are inferred rather than directly tracked. 
 
 */
 // ==/WindhawkModReadme==
