@@ -185,6 +185,7 @@ using winrt::Windows::Foundation::Numerics::float3;
 
 typedef void (*RunFromWindowThreadProc_t)(PVOID);
 void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param);
+bool PointerClearsSurfaces(void* key, Point framePt);
 
 // Quiet time on the taskbar before the tick drops to the sleep rate.
 constexpr ULONGLONG kSleepAfterMs = 2 * 60 * 1000;
@@ -235,7 +236,6 @@ enum class AnimKind { Accordion, GapClose };
 struct {
     std::atomic<RevealTrigger> revealTrigger;
     std::atomic<bool> revealOnStart;
-    std::atomic<bool> collapsed;
     std::atomic<int> restSpeedPxPerSec;
     std::atomic<int> revealDelayMs;
     std::atomic<int> elementPaddingPx;
@@ -290,6 +290,11 @@ std::atomic<bool> g_lastPointerQualified = false;
 double g_speedSamplePrevMs = 0;
 POINT g_speedSamplePrevPos = {};
 
+// Last cheap-qualified pointer sample, letting the tick finish qualification
+// for a parked cursor. Ticks and hooks share the taskbar UI thread.
+void* g_lastQualifiedKey = nullptr;
+Point g_lastQualifiedFramePt = {};
+
 // Bumped by the hotkey and settings changes; a context seeing a new value
 // applies once without animation. Lets other threads request an instant apply
 // without touching contexts or blocking on their message queues.
@@ -303,6 +308,9 @@ std::atomic<int> g_pendingWakes = 0;
 // Unadvise, which does not fence a callback already in flight.
 std::atomic<int> g_sinkCallbacks = 0;
 
+// Serializes hotkey thread start/stop: Wh_ModSettingsChanged and the
+// LoadLibraryExW hook run on different threads.
+std::mutex g_hotkeyThreadMutex;
 HANDLE g_hotkeyThread = nullptr;
 DWORD g_hotkeyThreadId = 0;
 // Signalled once the worker owns a message queue, so WM_QUIT cannot be posted
@@ -1321,7 +1329,12 @@ void OnTimerTick(void* key) {
             if (!CursorOverAnyTaskbar()) {
                 g_emptyHoverSinceTick = 0;
             } else if (now - since >= (ULONGLONG)g_settings.revealDelayMs) {
-                g_revealed = true;
+                if (PointerClearsSurfaces(g_lastQualifiedKey,
+                                          g_lastQualifiedFramePt)) {
+                    g_revealed = true;
+                } else {
+                    g_lastPointerQualified = false;
+                }
                 g_emptyHoverSinceTick = 0;
             }
         }
@@ -1333,6 +1346,15 @@ void OnTimerTick(void* key) {
     // apply so an empty button walk does not swallow it.
     uint64_t instantGen = g_instantApplyGen;
     bool instant = ctx->instantGenSeen != instantGen;
+
+    // Watchdog: CompositionTarget::Rendering stops when the bar is not being
+    // composed (auto-hide, fullscreen occlusion), which can strand an
+    // animation mid-flight. Finish it here.
+    if (ctx->animActive &&
+        NowMs() - ctx->animStartMs >
+            (double)g_settings.animationDurationMs * 3.0 + 1000.0) {
+        StopAnimation(*ctx);
+    }
 
     // While the accordion runs toward the right state, leave it alone: the
     // rendering callback owns the buttons, and reconciliation here would fight
@@ -1386,9 +1408,8 @@ void RegisterFrame(void* key, FrameworkElement frame) {
         [key](IInspectable const&, IInspectable const&) { OnTimerTick(key); });
     ctx.timer.Start();
 
-    (*g_frames)[key] = ctx;
-
     Wh_Log(L"Registered taskbar frame on thread %u", ctx.threadId);
+    g_frames->insert_or_assign(key, std::move(ctx));
 }
 
 bool IsFrameRegistered(void* key) {
@@ -1566,12 +1587,16 @@ bool ProbeStripIsClear(FrameworkElement frame, Point framePt, double padding) {
     return true;
 }
 
-// True when this pointer position is somewhere a reveal may start from.
+// Cheap per-move half of qualification: enough to arm or clear the dwell.
+// Records the sample so the flip can finish qualification later.
 bool PointerQualifiesForReveal(void* key,
                                Input::PointerRoutedEventArgs const& args) {
     if (!IsPointerOverEmptySpace(args)) {
         return false;
     }
+
+    g_lastQualifiedKey = key;
+    g_lastQualifiedFramePt = Point{0, 0};
 
     if (g_settings.elementPaddingPx <= 0) {
         return true;
@@ -1587,6 +1612,23 @@ bool PointerQualifiesForReveal(void* key,
     if (!IsPointerClearOfButtons(*ctx, frame, framePt,
                                  g_settings.elementPaddingPx)) {
         return false;
+    }
+
+    g_lastQualifiedFramePt = framePt;
+    return true;
+}
+
+// Expensive half, run once right before a reveal fires rather than per move:
+// screen-space seam probes and full hit-tests of the bar.
+bool PointerClearsSurfaces(void* key, Point framePt) {
+    if (g_settings.elementPaddingPx <= 0) {
+        return true;
+    }
+
+    FrameContext* ctx = GetFrameContext(key);
+    FrameworkElement frame = ctx ? ctx->frame.get() : nullptr;
+    if (!ctx || !frame) {
+        return true;
     }
 
     // Catches bar content living on a separate surface, which no visual-tree
@@ -1711,6 +1753,13 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
 
+    // The expensive checks run once, at the flip.
+    if (!PointerClearsSurfaces(key, g_lastQualifiedFramePt)) {
+        g_lastPointerQualified = false;
+        g_emptyHoverSinceTick = 0;
+        return;
+    }
+
     g_revealed = true;
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
@@ -1801,7 +1850,8 @@ void HandlePointerReleased(void* pThis, void* pArgs) {
         return;
     }
 
-    if (!PointerQualifiesForReveal(key, args)) {
+    if (!PointerQualifiesForReveal(key, args) ||
+        !PointerClearsSurfaces(key, g_lastQualifiedFramePt)) {
         return;
     }
 
@@ -2114,6 +2164,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
 }
 
 void StartHotkeyThread() {
+    std::lock_guard<std::mutex> guard(g_hotkeyThreadMutex);
     if (g_hotkeyThread) {
         return;
     }
@@ -2151,6 +2202,7 @@ void StartHotkeyThread() {
 // Waits without a timeout on purpose: the mod is unloaded the moment teardown
 // returns, so a thread still running here would resume inside a freed image.
 void StopHotkeyThread() {
+    std::lock_guard<std::mutex> guard(g_hotkeyThreadMutex);
     if (!g_hotkeyThread) {
         return;
     }
@@ -2277,11 +2329,17 @@ void CleanupOnThisThread() {
             continue;
         }
 
-        if (it->second.timer) {
-            it->second.timer.Stop();
-            it->second.timer.Tick(it->second.tickToken);
+        // Guarded: this runs inside a CALLWNDPROC hook or a dispatcher
+        // lambda, and a throw escaping either is fatal or hangs the unload.
+        // The erase must run regardless, or the straggler sweep re-finds it.
+        try {
+            if (it->second.timer) {
+                it->second.timer.Stop();
+                it->second.timer.Tick(it->second.tickToken);
+            }
+            RestoreFrame(it->second);
+        } catch (winrt::hresult_error const&) {
         }
-        RestoreFrame(it->second);
         g_frames->erase(it);
     }
 }
@@ -2289,16 +2347,15 @@ void CleanupOnThisThread() {
 // ------------------------------------------------------------------ lifetime
 
 void LoadSettings() {
-    g_settings.collapsed = Wh_GetIntSetting(L"Collapsed") != 0;
-
     g_settings.revealOnStart = Wh_GetIntSetting(L"RevealOnStart") != 0;
 
+    // Unrecognized values fall back to Click, matching the shipped default.
     auto trigger = WindhawkUtils::StringSetting::make(L"RevealTrigger");
-    g_settings.revealTrigger = RevealTrigger::Hover;
-    if (wcscmp(trigger.get(), L"rest") == 0) {
+    g_settings.revealTrigger = RevealTrigger::Click;
+    if (wcscmp(trigger.get(), L"hover") == 0) {
+        g_settings.revealTrigger = RevealTrigger::Hover;
+    } else if (wcscmp(trigger.get(), L"rest") == 0) {
         g_settings.revealTrigger = RevealTrigger::Rest;
-    } else if (wcscmp(trigger.get(), L"click") == 0) {
-        g_settings.revealTrigger = RevealTrigger::Click;
     } else if (wcscmp(trigger.get(), L"never") == 0) {
         g_settings.revealTrigger = RevealTrigger::Never;
     }
@@ -2343,7 +2400,7 @@ void LoadSettings() {
         g_settings.runningNameMarker = marker.get();
     }
 
-    g_collapseEnabled = g_settings.collapsed.load();
+    g_collapseEnabled = Wh_GetIntSetting(L"Collapsed") != 0;
     g_revealed = false;
     g_revealedByStart = false;
     g_emptyHoverSinceTick = 0;
@@ -2400,6 +2457,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         (int)(TaskbarFrame_OnPointerReleased_Original != nullptr),
         (int)(TaskbarFrame_OnPointerExited_Original != nullptr),
         (int)(TaskbarFrame_MeasureOverride_Original != nullptr));
+    if (!TaskbarFrame_OnPointerReleased_Original) {
+        Wh_Log(L"OnPointerReleased hook missing, click reveal will not work");
+    }
     return true;
 }
 
@@ -2529,17 +2589,29 @@ void Wh_ModBeforeUninit() {
     // to clean up and wait for it. Timers and rendering hooks must come off on
     // their own thread, and dropping the map here would neither stop them nor
     // release their XAML objects safely.
-    std::vector<winrt::Windows::UI::Core::CoreDispatcher> stragglers;
+    std::vector<std::pair<winrt::Windows::UI::Core::CoreDispatcher, DWORD>>
+        stragglers;
     {
         std::lock_guard<std::mutex> guard(g_framesMutex);
         for (auto& [key, ctx] : *g_frames) {
             if (ctx.dispatcher) {
-                stragglers.push_back(ctx.dispatcher);
+                stragglers.emplace_back(ctx.dispatcher, ctx.threadId);
             }
         }
     }
 
-    for (auto& dispatcher : stragglers) {
+    for (auto& [dispatcher, threadId] : stragglers) {
+        // A thread that already exited can never run the lambda; waiting on
+        // it would hang the unload for nothing.
+        if (HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId)) {
+            bool exited = WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0;
+            CloseHandle(hThread);
+            if (exited) {
+                continue;
+            }
+        } else {
+            continue;
+        }
         HANDLE done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (!done) {
             continue;
@@ -2549,7 +2621,12 @@ void Wh_ModBeforeUninit() {
             dispatcher.RunAsync(
                 winrt::Windows::UI::Core::CoreDispatcherPriority::High,
                 [done]() {
-                    CleanupOnThisThread();
+                    // The signal must fire even if cleanup throws, or the
+                    // unbounded wait below never returns.
+                    try {
+                        CleanupOnThisThread();
+                    } catch (...) {
+                    }
                     SetEvent(done);
                 });
             queued = true;
@@ -2572,12 +2649,12 @@ void Wh_ModBeforeUninit() {
     }
 
     // Anything still present could not be reached on its own thread; leaving
-    // its references alive is safer than releasing them from here. An empty
-    // map can go completely, buckets and all.
+    // its references alive is safer than releasing them from here. The empty
+    // map is deliberately never reset(): hooks stay live until this returns
+    // and their g_unloading checks are unlocked, so a disengaged optional
+    // could be dereferenced mid-preemption.
     std::lock_guard<std::mutex> guard(g_framesMutex);
-    if (g_frames->empty()) {
-        g_frames.reset();
-    } else {
+    if (!g_frames->empty()) {
         Wh_Log(L"%u taskbar contexts could not be cleaned up",
                (unsigned)g_frames->size());
     }
