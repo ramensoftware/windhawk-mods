@@ -106,8 +106,8 @@ Credits to AdministratoX for the improvements and for restoring Speech Recogniti
   - never: Never add
 
 - preventSettingsRedirect: true
-  $name: Control Panel Revival guard (unhide applets and block Settings redirects)
-  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Speech Recognition, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
+  $name: Unhide some applets and block certain Settings redirects
+  $description: This setting tries to prevent Windows 10/11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Speech Recognition, and System if they are hidden in Control Panel. When enabled, the classic task links should work correctly. All changes are automatically undone when the mod is disabled.
 
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
