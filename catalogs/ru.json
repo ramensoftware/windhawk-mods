@@ -11501,6 +11501,39 @@
         "version": "1.1.0"
       }
     },
+    "start-button-replacer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787740130000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787740130000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Ender",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image",
+        "github": "https://github.com/EnderDragonEP",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Start Button Replacer",
+        "twitter": "https://twitter.com/NoobieNoodle89",
+        "version": "0.12.4"
+      }
+    },
     "start-menu-all-apps": {
       "details": {
         "defaultSorting": 52353,

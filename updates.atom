@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-26T10:15:25.000Z</updated>
+    <updated>2026-08-26T10:28:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Button Replacer 0.12.4]]></title>
+        <id>https://windhawk.net/mods/start-button-replacer#245e2afbfc6630d0dbda09e94d1fd7ebbce4e191</id>
+        <link href="https://windhawk.net/mods/start-button-replacer"/>
+        <updated>2026-08-26T10:28:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startbuttonreplacer">Start Button Replacer</h1>
+<p>Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.</p>
+<p><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif" alt="preview" /></p>
+<p>Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.</p>
+<h2 id="imagesources">Image sources</h2>
+<p>Local files:</p>
+<pre><code>C:\Users\YourName\Pictures\start.png
+</code></pre>
+<p>Environment variables are supported:</p>
+<pre><code>%USERPROFILE%\Pictures\start.jpg
+</code></pre>
+<p>HTTP/HTTPS URLs are also supported:</p>
+<pre><code>https://example.com/start.gif
+</code></pre>
+<h2 id="animatedgifplayback">Animated GIF playback</h2>
+<ul>
+<li>Always</li>
+<li>Hover</li>
+<li>Pressed</li>
+<li>Stopped</li>
+</ul>
+<h2 id="effects">Effects</h2>
+<p>Separate scale, rotation and opacity settings are available for hover and pressed states.</p>
+<h2 id="separatestateimages">Separate state images</h2>
+<p>The main <strong>Image source</strong> is always the normal image. Add a hover, pressed or activated image source to enable that state automatically. The activated image is shown while the Start menu is open. If it is blank or unavailable, activated falls back to the pressed image, then the hover image, then the main image. Other blank or unavailable state images fall back to the main image.</p>
+<p>While the Start menu is shown, pressing the button temporarily uses the pressed state. The activated state resumes on release and otherwise takes priority over the hover state.</p>
+<p>State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to <code>0</code> to switch instantly.</p>
+<h2 id="notes">Notes</h2>
+<p>For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.</p>]]></content>
+        <author>
+            <name>Ender</name>
+            <uri>https://github.com/EnderDragonEP</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 2.1.0]]></title>
         <id>https://windhawk.net/mods/win7-legacy-applet-restorer#d5ad396ef8daa09e01e7a6bf3e110770b6550bf8</id>
@@ -947,57 +986,6 @@ limited to:</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.1.4]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#54b0e49c4e5899cc7b3f38f3f0ccbf428857b3c5</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-08-20T18:19:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="onscreenindicatorposition">On-Screen Indicator Position</h1>
-<p>Windows 11 shows an on-screen indicator when you change the volume or
-brightness, toggle airplane mode, or when the camera or microphone privacy state
-changes. Under <strong>Settings > System > Notifications > On-screen indicators</strong>,
-Windows lets you put it in one of three places: top left, top center, or bottom
-center.</p>
-<p>This mod replaces that with a full nine-point grid, any corner, any edge center,
-or dead center, plus a pixel offset for fine-tuning.</p>
-<p>The brightness indicator moved to the middle of the right edge:</p>
-<p><img src="https://raw.githubusercontent.com/mario0318/windhawk-mods/3685cdf56c55ba8cb3398b1cf9e35b5e95e68eb1/on-screen-indicator-position/middle-right.jpg" alt="Indicator at middle right" /></p>
-<h2 id="positions">Positions</h2>
-<pre><code> Top left        Top center        Top right
- Middle left     Center            Middle right
- Bottom left     Bottom center     Bottom right
-</code></pre>
-<p>The indicator is kept inside the area Windows lays it out in, so an offset that
-would push it past an edge stops at the edge instead of moving off screen. You
-can also leave the position on <strong>Windows default</strong> and use the offsets alone to
-nudge one of the built-in positions.</p>
-<h2 id="choosingamonitor">Choosing a monitor</h2>
-<p>This mod only changes where the indicator sits on a screen, not which screen it
-appears on. For that, use <a href="https://windhawk.net/mods/volume-control-open-location">Volume control open
-location</a>, which selects
-a monitor by number or by interface name. The two work together.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The slide-in animation direction is chosen by Windows from the built-in
-setting, not by this mod. If the animation looks wrong for your new position,
-change the built-in setting to whichever of the three has the animation you
-like, then let this mod do the actual placement.</li>
-<li>Offsets are given at 100% scaling and scaled to whichever monitor the
-indicator appears on, so the same value moves the same distance on a display
-running at 150%.</li>
-<li>Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The hook onto the indicator's own placement function comes from <a href="https://windhawk.net/mods/volume-control-open-location">Volume control
-open location</a> and
-<a href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor">Taskbar primary on secondary
-monitor</a>, which
-both target the same function and work out the origin handling.</p>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
