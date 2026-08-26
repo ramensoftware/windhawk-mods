@@ -59,6 +59,7 @@ Numbered move and gather actions normally number connected displays contiguously
 using Windows device-name order. For example, connected `DISPLAY4` and `DISPLAY6`
 become display 1 and display 2. **Display order override** changes what "display 1",
 "display 2", and so on mean while keeping every hotkey unchanged.
+These shortcut numbers may differ from numbers shown in Windows Settings.
 
 Enter up to five comma-separated entries containing `primary` or display device
 names. Both `DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
@@ -68,10 +69,11 @@ names. Both `DISPLAY4` and the full `\\.\DISPLAY4` form are accepted:
 * `\\.\DISPLAY4,\\.\DISPLAY3` accepts names copied directly from PowerShell.
 
 Each listed name keeps its numbered slot even while that display is disconnected;
-using that shortcut temporarily falls back to the primary display. Unlisted
-connected displays follow in normal `DISPLAY` number order. The override affects
-numbered move and gather actions only. Primary, mouse, and active-window
-destinations are unchanged.
+using that shortcut while it is disconnected does nothing. Unlisted connected
+displays follow in normal `DISPLAY` number order. The override affects numbered
+move and gather actions only. Primary, mouse, and active-window destinations are
+unchanged. Avoid listing both `primary` and its device name because they refer to
+the same display.
 
 To find the names assigned to connected displays, run this in Windows PowerShell:
 
@@ -86,7 +88,7 @@ rejects the whole override and safely returns to automatic order. Windhawk loggi
 also shows connected device names and the final numbered order when the mod starts,
 settings change, or an action runs after the display layout changes.
 
-If a numbered destination is unavailable, the primary display is used.
+If a numbered destination is unavailable, the action is skipped.
 
 ## Updating shortcut and window selection defaults
 
@@ -100,7 +102,7 @@ owned windows/popups** to keep dialogs and secondary windows in place.
 
 ## Updating window size settings
 
-Earlier versions used **Window size behavior** together with a separate
+Earlier versions used **Preserve window size** together with a separate
 **Shrink oversized windows to fit** switch. After updating, verify the new
 **Window size behavior** setting:
 
@@ -151,6 +153,9 @@ destination. Gathered maximized windows are restored so they can be arranged.
 
 Moving a minimized window without restoring it is not supported because
 applications handle that inconsistently.
+
+DPI-unaware windows can be resized by Windows when moved between displays with
+different scaling, even when **Preserve** is selected.
 */
 // ==/WindhawkModReadme==
 
@@ -691,6 +696,7 @@ void RegisterConfiguredHotkeys() {
         L"foreground to display 3", L"foreground to display 4",
         L"foreground to display 5",
     };
+    static_assert(ARRAYSIZE(modes) == ARRAYSIZE(names));
 
     for (size_t i = 0; i < ARRAYSIZE(modes); i++) {
         UINT modifiers = 0;
@@ -865,7 +871,10 @@ const MonitorInfo* MonitorByHandle(const std::vector<MonitorInfo>& monitors, HMO
 }
 
 const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<MonitorInfo>& monitors) {
-    if (monitors.empty()) return nullptr;
+    if (monitors.empty()) {
+        Wh_Log(L"No displays found");
+        return nullptr;
+    }
     if (mode == TargetMode::Primary || mode == TargetMode::ForegroundPrimary) {
         return PrimaryMonitor(monitors);
     }
@@ -875,8 +884,8 @@ const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<Monit
         if (index < monitors.size() && monitors[index].handle) {
             return &monitors[index];
         }
-        Wh_Log(L"Requested display %zu missing; using primary", index + 1);
-        return PrimaryMonitor(monitors);
+        Wh_Log(L"Requested display %zu missing; action skipped", index + 1);
+        return nullptr;
     }
     if (mode == TargetMode::Mouse) {
         POINT pt{};
@@ -986,6 +995,11 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
 }
 
 void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
+    if (reason == SkipReason::Invalid || reason == SkipReason::Invisible ||
+        reason == SkipReason::Cloaked || reason == SkipReason::DesktopShell ||
+        reason == SkipReason::ToolWindow) {
+        return;
+    }
     wchar_t title[128]{};
     wchar_t className[128]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
@@ -1138,10 +1152,7 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
 void GatherWindows(TargetMode mode) {
     auto monitors = GetMonitors();
     const MonitorInfo* target = ResolveTargetMonitor(mode, monitors);
-    if (!target) {
-        Wh_Log(L"No displays found");
-        return;
-    }
+    if (!target) return;
 
     Wh_Log(L"Target: %s%s work=(%ld,%ld,%ld,%ld)",
            target->deviceName.c_str(), target->primary ? L" primary" : L"",
@@ -1180,11 +1191,18 @@ void GatherWindows(TargetMode mode) {
 
 DWORD WINAPI WorkerMain(LPVOID) {
     // Keep window and display rectangles in one physical-pixel coordinate space.
-    DPI_AWARENESS_CONTEXT previousDpiContext =
-        SetThreadDpiAwarenessContext(
+    using SetThreadDpiAwarenessContext_t =
+        DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto setThreadDpiAwarenessContext =
+        reinterpret_cast<SetThreadDpiAwarenessContext_t>(GetProcAddress(
+            GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+    DPI_AWARENESS_CONTEXT previousDpiContext = nullptr;
+    if (setThreadDpiAwarenessContext) {
+        previousDpiContext = setThreadDpiAwarenessContext(
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    if (!previousDpiContext) {
-        previousDpiContext = SetThreadDpiAwarenessContext(
+    }
+    if (setThreadDpiAwarenessContext && !previousDpiContext) {
+        previousDpiContext = setThreadDpiAwarenessContext(
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
         if (previousDpiContext) {
             Wh_Log(L"Per-display DPI mode: v1 fallback");
@@ -1223,7 +1241,7 @@ DWORD WINAPI WorkerMain(LPVOID) {
     UnregisterConfiguredHotkeys();
     g_workerThreadId = 0;
     if (previousDpiContext) {
-        SetThreadDpiAwarenessContext(previousDpiContext);
+        setThreadDpiAwarenessContext(previousDpiContext);
     }
     return 0;
 }
