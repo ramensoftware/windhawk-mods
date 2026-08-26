@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.1.4
+// @version         1.2.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -44,6 +44,14 @@ The indicator is kept inside the area Windows lays it out in, so an offset that
 would push it past an edge stops at the edge instead of moving off screen. You
 can also leave the position on **Windows default** and use the offsets alone to
 nudge one of the built-in positions.
+
+## A different spot per indicator
+
+Volume, brightness, keyboard brightness, airplane mode, camera, microphone and the
+plain text indicator can each be given their own position. Anything left on **Same
+as the main position** follows the setting above, so you only have to touch the ones
+you want somewhere else. Handy if you want the volume indicator out of the way at the
+bottom but still want the camera one where you will notice it.
 
 ## Choosing a monitor
 
@@ -105,6 +113,102 @@ both target the same function and work out the origin handling.
     setting moves the same distance on a scaled display. The indicator is kept
     inside the area Windows lays it out in, so an offset that would push it past
     an edge stops at the edge instead.
+- perIndicator:
+  - volume: same
+    $name: Volume
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - brightness: same
+    $name: Brightness
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - keyboardBrightness: same
+    $name: Keyboard brightness
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - airplaneMode: same
+    $name: Airplane mode
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - camera: same
+    $name: Camera
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - microphone: same
+    $name: Microphone
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  - text: same
+    $name: Other indicators
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
+  $name: Position per indicator
+  $description: >-
+    Give an individual indicator its own spot. Anything left on Same as the main
+    position follows the Position setting above. The offsets apply to all of them.
 */
 // ==/WindhawkModSettings==
 
@@ -127,6 +231,24 @@ enum class Position {
     bottomRight,
 };
 
+// Which indicator is being shown. Windows has a separate entry point per kind,
+// so the kind is recorded as one is requested and read back when the position is
+// worked out. `same` means the kind has no position of its own.
+enum class Indicator {
+    volume,
+    brightness,
+    keyboardBrightness,
+    airplaneMode,
+    camera,
+    microphone,
+    text,
+    count,
+};
+
+// Only one indicator is on screen at a time, and the entry point runs before the
+// position is worked out, so a single value is enough.
+std::atomic<Indicator> g_currentIndicator{Indicator::text};
+
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
 // confirmator's UI thread, so the members are atomic. Each field is still read
 // separately, so a settings change landing mid-placement can put one indicator
@@ -136,7 +258,21 @@ struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
+    // Position::windowsDefault here means "no override", so the main position is
+    // used. The main position keeps its own meaning of leaving Windows' spot be.
+    std::atomic<bool> perIndicatorSet[(size_t)Indicator::count];
+    std::atomic<Position> perIndicator[(size_t)Indicator::count];
 } g_settings;
+
+// The position to place the indicator that is being shown right now.
+Position CurrentPosition() {
+    size_t i = (size_t)g_currentIndicator.load();
+    if (i < (size_t)Indicator::count && g_settings.perIndicatorSet[i].load()) {
+        return g_settings.perIndicator[i].load();
+    }
+
+    return g_settings.position.load();
+}
 
 HMODULE g_hardwareConfirmatorModule;
 
@@ -152,14 +288,18 @@ struct WinrtRect {
 // `rect` comes back from the original function holding the size Windows chose
 // and the position it picked from the built-in setting; only the position is
 // replaced.
-void PlaceInArea(const WinrtRect& area, int offsetX, int offsetY, WinrtRect* rect) {
+void PlaceInArea(const WinrtRect& area,
+                 Position position,
+                 int offsetX,
+                 int offsetY,
+                 WinrtRect* rect) {
     float centerX = (area.Width - rect->Width) / 2;
     float right = area.Width - rect->Width;
 
     float middleY = (area.Height - rect->Height) / 2;
     float bottom = area.Height - rect->Height;
 
-    switch (g_settings.position.load()) {
+    switch (position) {
         case Position::topLeft:
             rect->X = 0;
             rect->Y = 0;
@@ -219,6 +359,70 @@ void PlaceInArea(const WinrtRect& area, int offsetX, int offsetY, WinrtRect* rec
     }
 }
 
+
+// Each kind of indicator has its own entry point on the host, so the kind is
+// recorded as one is asked for and read back when the position is worked out.
+// They are private coroutines returning winrt::fire_and_forget, an empty struct,
+// so the return is passed through as the single byte it occupies. Every one is
+// hooked as optional: if a name stops resolving on some build, that kind just
+// falls back to the main position instead of the mod failing to load.
+
+using ShowVolumeAsync_t = char(WINAPI*)(void* pThis, int value);
+ShowVolumeAsync_t ShowVolumeAsync_Original;
+char WINAPI ShowVolumeAsync_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::volume);
+    return ShowVolumeAsync_Original(pThis, value);
+}
+
+using ShowBrightnessAsync_t = char(WINAPI*)(void* pThis, int value);
+ShowBrightnessAsync_t ShowBrightnessAsync_Original;
+char WINAPI ShowBrightnessAsync_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::brightness);
+    return ShowBrightnessAsync_Original(pThis, value);
+}
+
+using ShowKeyboardBrightnessAsync_t = char(WINAPI*)(void* pThis, int value);
+ShowKeyboardBrightnessAsync_t ShowKeyboardBrightnessAsync_Original;
+char WINAPI ShowKeyboardBrightnessAsync_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::keyboardBrightness);
+    return ShowKeyboardBrightnessAsync_Original(pThis, value);
+}
+
+using ShowAirplaneModeOnAsync_t = char(WINAPI*)(void* pThis, bool value);
+ShowAirplaneModeOnAsync_t ShowAirplaneModeOnAsync_Original;
+char WINAPI ShowAirplaneModeOnAsync_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::airplaneMode);
+    return ShowAirplaneModeOnAsync_Original(pThis, value);
+}
+
+using ShowCameraOnAsync_t = char(WINAPI*)(void* pThis, bool value);
+ShowCameraOnAsync_t ShowCameraOnAsync_Original;
+char WINAPI ShowCameraOnAsync_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraOnAsync_Original(pThis, value);
+}
+
+using ShowCameraAccessEnabledAsync_t = char(WINAPI*)(void* pThis, bool value);
+ShowCameraAccessEnabledAsync_t ShowCameraAccessEnabledAsync_Original;
+char WINAPI ShowCameraAccessEnabledAsync_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraAccessEnabledAsync_Original(pThis, value);
+}
+
+using ShowMicrophoneMutedAsync_t = char(WINAPI*)(void* pThis, int value);
+ShowMicrophoneMutedAsync_t ShowMicrophoneMutedAsync_Original;
+char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::microphone);
+    return ShowMicrophoneMutedAsync_Original(pThis, value);
+}
+
+using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
+ShowTextAsync_t ShowTextAsync_Original;
+char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
+    g_currentIndicator.store(Indicator::text);
+    return ShowTextAsync_Original(pThis, text, value);
+}
+
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -267,7 +471,8 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
         pThis, retval, &shiftedRect);
 
     if (result) {
-        PlaceInArea(shiftedRect, offsetSettingX, offsetSettingY, result);
+        PlaceInArea(shiftedRect, CurrentPosition(), offsetSettingX,
+                    offsetSettingY, result);
 
         // Shift the result back.
         result->X += offsetX;
@@ -299,8 +504,8 @@ Position PositionFromString(PCWSTR value) {
     }
 
     // A stale or mistyped stored value would otherwise look like the mod simply
-    // isn't working.
-    if (wcscmp(value, L"windowsDefault") != 0) {
+    // isn't working. "same" is a valid per-indicator value, handled by the caller.
+    if (wcscmp(value, L"windowsDefault") != 0 && wcscmp(value, L"same") != 0) {
         Wh_Log(L"Unknown position \"%s\", using the Windows default", value);
     }
 
@@ -314,6 +519,23 @@ void LoadSettings() {
 
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
+
+    static const PCWSTR kIndicatorSettings[] = {
+        L"perIndicator.volume",       L"perIndicator.brightness",
+        L"perIndicator.keyboardBrightness", L"perIndicator.airplaneMode",
+        L"perIndicator.camera",       L"perIndicator.microphone",
+        L"perIndicator.text",
+    };
+    static_assert(ARRAYSIZE(kIndicatorSettings) == (size_t)Indicator::count);
+
+    for (size_t i = 0; i < ARRAYSIZE(kIndicatorSettings); i++) {
+        WindhawkUtils::StringSetting value =
+            WindhawkUtils::StringSetting::make(kIndicatorSettings[i]);
+        bool isSame = wcscmp(value.get(), L"same") == 0;
+        g_settings.perIndicatorSet[i] = !isSame;
+        g_settings.perIndicator[i] =
+            isSame ? Position::windowsDefault : PositionFromString(value.get());
+    }
 }
 
 BOOL Wh_ModInit() {
@@ -344,6 +566,55 @@ BOOL Wh_ModInit() {
             {LR"(private: struct winrt::Windows::Foundation::Rect __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::GetPositionRect(struct winrt::Windows::Foundation::Rect const &))"},
             &HardwareConfirmatorHost_GetPositionRect_Original,
             HardwareConfirmatorHost_GetPositionRect_Hook,
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowVolumeAsync(int))"},
+            &ShowVolumeAsync_Original,
+            ShowVolumeAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowBrightnessAsync(int))"},
+            &ShowBrightnessAsync_Original,
+            ShowBrightnessAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowKeyboardBrightnessAsync(int))"},
+            &ShowKeyboardBrightnessAsync_Original,
+            ShowKeyboardBrightnessAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowAirplaneModeOnAsync(bool))"},
+            &ShowAirplaneModeOnAsync_Original,
+            ShowAirplaneModeOnAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowCameraOnAsync(bool))"},
+            &ShowCameraOnAsync_Original,
+            ShowCameraOnAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowCameraAccessEnabledAsync(bool))"},
+            &ShowCameraAccessEnabledAsync_Original,
+            ShowCameraAccessEnabledAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowTextAsync(struct winrt::hstring,bool))"},
+            &ShowTextAsync_Original,
+            ShowTextAsync_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState))",
+             LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::HWConfirmatorUI::MicrophoneMuteState))"},
+            &ShowMicrophoneMutedAsync_Original,
+            ShowMicrophoneMutedAsync_Hook,
+            true,  // optional
         },
     };
 
