@@ -106,8 +106,8 @@ Credits to AdministratoX for the improvements and for restoring Speech Recogniti
   - never: Never add
 
 - preventSettingsRedirect: true
-  $name: Unhide some applets and block certain Settings redirects
-  $description: This setting tries to prevent Windows 10/11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Speech Recognition, and System if they are hidden in Control Panel. When enabled, the classic task links should work correctly. All changes are automatically undone when the mod is disabled.
+  $name: Control Panel Revival guard (unhide applets and block Settings redirects)
+  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Speech Recognition, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
 
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
@@ -2863,9 +2863,13 @@ void InvalidateClassicTaskLinksFile() {
 // mod by AdmXP8), rebuilt around RAII + try/catch:
 //
 //  * ReversiblePatcher owns every in-memory string patch and restores the
-//    original bytes from a single place (its destructor and Wh_ModUninit),
-//    so no manual restore can ever be forgotten;
-//  * ScopedLibrary owns the windows.storage.dll load the same way;
+//    original bytes from a single place (Wh_ModUninit), so no manual
+//    restore can ever be forgotten. It deliberately has no restoring
+//    destructor - see the [[clang::no_destroy]] wrapper below;
+//  * windows.storage.dll is kept loaded for as long as the patches exist:
+//    the reference is taken when the guard first patches it and released
+//    only in Wh_ModUninit, after RestoreAll(), because the recorded patch
+//    addresses point into that module's image;
 //  * every entry point below is try/catch guarded, so no C++ exception can
 //    ever unwind into Explorer's non-exception-aware call stack.
 //
@@ -2873,8 +2877,17 @@ void InvalidateClassicTaskLinksFile() {
 //  1. zeroes the hidden-applet monikers inside shell32.dll /
 //     windows.storage.dll so Windows 11 stops hiding Personalization,
 //     BitLocker Drive Encryption, Speech Recognition (Text to Speech) and
-//     System;
-//  2. hooks CompareStringOrdinal to break the redirect-to-Settings match;
+//     System. Only readable, non-executable data sections are scanned,
+//     located through the PE section table (never across the whole image),
+//     and only the pages that actually contain a match are temporarily
+//     made writable;
+//  2. hooks COpenControlPanel::Open and raises a thread-local flag around
+//     the original call; while that flag is up - and only then - the
+//     CompareStringOrdinal hook breaks the redirect-to-Settings match.
+//     Scoping the override to the one function that performs the redirect
+//     decision keeps every other comparison in the process honest,
+//     including the ones that resolve the labels of this mod's own task
+//     links (e.g. "Personalization" on the classic Display page);
 //  3. hooks COpenControlPanel::_MapLegacyName so the legacy names are kept
 //     unmapped and the classic applets stay addressable by moniker.
 // ===========================================================================
@@ -2890,58 +2903,75 @@ public:
     ReversiblePatcher() = default;
     ReversiblePatcher(const ReversiblePatcher&) = delete;
     ReversiblePatcher& operator=(const ReversiblePatcher&) = delete;
-    ~ReversiblePatcher() { RestoreAll(); }
+    // No restoring destructor on purpose: this object lives in the
+    // [[clang::no_destroy]] optional below, and a global's destructor would
+    // otherwise run at process shutdown - on the shutdown thread, under the
+    // loader lock, after every other thread has already been terminated.
+    // Writing into other modules' images at that point is pointless (the
+    // image is private to the dying process) and unsafe. RestoreAll() is
+    // called explicitly from Wh_ModUninit instead.
+    ~ReversiblePatcher() = default;
 
-    // Zeroes the first exact occurrence of lpSearch inside the module image,
-    // recording the original bytes so RestoreAll() can put them back.
+    // Zeroes the first exact occurrence of lpSearch inside the module's
+    // readable data sections, recording the original bytes so RestoreAll()
+    // can put them back.
+    //
+    // The scan walks the PE section table and only visits sections that
+    // hold readable, non-executable, non-discardable initialized data
+    // (.rdata/.data and friends): the moniker literals live in the
+    // read-only data pool, and staying inside those sections both bounds
+    // the cost (no .text/.rsrc traversal, no pages that may not be
+    // readable) and avoids touching memory the module never promised to
+    // be mapped at that offset. Candidates are checked at WCHAR alignment.
     bool PatchStringInModule(HMODULE hModule, LPCWSTR lpSearch) {
         if (!hModule || !lpSearch) return false;
 
-        MODULEINFO info = { 0 };
-        if (!GetModuleInformation(GetCurrentProcess(), hModule, &info, sizeof(MODULEINFO)))
-            return false;
-
-        const DWORD_PTR base = (DWORD_PTR)info.lpBaseOfDll;
-        const size_t size = (size_t)info.SizeOfImage;
         const size_t patternLen = wcslen(lpSearch) * sizeof(WCHAR);
-        if (patternLen == 0 || patternLen > size ||
+        if (patternLen == 0 ||
             patternLen > sizeof(PatchRecord::originalBytes))
             return false;
 
-        for (size_t i = 0; i + patternLen <= size; i++) {
-            bool found = true;
-            for (size_t j = 0; j < patternLen; j++) {
-                if (*((const char*)lpSearch + j) != *(const char*)(base + i + j)) {
-                    found = false;
-                    break;
-                }
+        const BYTE* base = (const BYTE*)hModule;
+        const IMAGE_DOS_HEADER* dosHeader = (const IMAGE_DOS_HEADER*)base;
+        if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return false;
+
+        const IMAGE_NT_HEADERS* ntHeaders =
+            (const IMAGE_NT_HEADERS*)(base + dosHeader->e_lfanew);
+        if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return false;
+
+        const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(ntHeaders);
+        const WORD sectionCount = ntHeaders->FileHeader.NumberOfSections;
+
+        for (WORD i = 0; i < sectionCount; i++, section++) {
+            if (!(section->Characteristics & IMAGE_SCN_MEM_READ)) continue;
+            if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+            if (section->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) continue;
+
+            // SizeOfRawData bytes are present in the mapped image at
+            // VirtualAddress; anything past that is zero-filled on demand.
+            // Never scan beyond what the section header says is there.
+            const size_t rawSize = section->SizeOfRawData;
+            if (rawSize == 0 || section->PointerToRawData == 0) continue;
+            const size_t virtualSize = section->Misc.VirtualSize;
+            const size_t scanSize =
+                virtualSize ? (std::min)(rawSize, virtualSize) : rawSize;
+            if (patternLen > scanSize) continue;
+
+            const BYTE* scanBegin = base + section->VirtualAddress;
+            const WCHAR firstChar = lpSearch[0];
+
+            for (size_t offset = 0; offset + patternLen <= scanSize;
+                 offset += sizeof(WCHAR)) {
+                const BYTE* candidate = scanBegin + offset;
+                if (*(const WCHAR*)candidate != firstChar) continue;
+                if (memcmp(candidate, lpSearch, patternLen) != 0) continue;
+
+                // Found. ZeroAndRecord() reports failure only when the
+                // protection change fails or the record table is full, in
+                // which case this moniker stays unpatched and the caller
+                // simply logs it.
+                return ZeroAndRecord((void*)candidate, patternLen);
             }
-            if (!found) continue;
-
-            void* targetAddress = (void*)(base + i);
-            MEMORY_BASIC_INFORMATION mbi = {};
-            if (!VirtualQuery(targetAddress, &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
-                return false;
-
-            DWORD oldProtect = 0;
-            if (!VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect))
-                return false;
-
-            if (patches_.size() >= 64) {  // same capacity as the original mod
-                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
-                return false;
-            }
-
-            PatchRecord record = {};
-            record.address = targetAddress;
-            record.length = patternLen;
-            memcpy(record.originalBytes, targetAddress, patternLen);
-            ZeroMemory(targetAddress, patternLen);
-
-            VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
-            patches_.push_back(record);
-            Wh_Log(L"Revival guard: patched moniker in module %p", (void*)hModule);
-            return true;
         }
         return false;
     }
@@ -2949,14 +2979,13 @@ public:
     // Puts every recorded byte back. Safe to call multiple times.
     void RestoreAll() {
         for (const auto& patch : patches_) {
-            MEMORY_BASIC_INFORMATION mbi = {};
-            if (!VirtualQuery(patch.address, &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
-                continue;
             DWORD oldProtect = 0;
-            if (!VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect))
+            if (!ProtectPageRange(patch.address, patch.length, PAGE_READWRITE,
+                                  &oldProtect))
                 continue;
             memcpy(patch.address, patch.originalBytes, patch.length);
-            VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
+            ProtectPageRange(patch.address, patch.length, oldProtect,
+                             &oldProtect);
         }
         const size_t count = patches_.size();
         patches_.clear();
@@ -2964,33 +2993,78 @@ public:
     }
 
 private:
+    static constexpr size_t kMaxPatches = 64;  // same capacity as the original mod
+
+    // VirtualProtect on exactly the pages spanned by
+    // [address, address+length), leaving the rest of the (copy-on-write,
+    // shared) image untouched.
+    static bool ProtectPageRange(void* address, size_t length,
+                                 DWORD newProtect, DWORD* oldProtect) {
+        SYSTEM_INFO si = {};
+        GetSystemInfo(&si);
+        const DWORD_PTR pageMask = (DWORD_PTR)si.dwPageSize - 1;
+        BYTE* begin = (BYTE*)((DWORD_PTR)address & ~pageMask);
+        BYTE* end =
+            (BYTE*)(((DWORD_PTR)address + length + pageMask) & ~pageMask);
+        return VirtualProtect(begin, (SIZE_T)(end - begin), newProtect,
+                              oldProtect) != FALSE;
+    }
+
+    // Makes the pages holding the match writable, records the original
+    // bytes, zeroes the match and restores the original protection.
+    bool ZeroAndRecord(void* address, size_t length) {
+        DWORD oldProtect = 0;
+        if (!ProtectPageRange(address, length, PAGE_READWRITE, &oldProtect))
+            return false;
+
+        if (patches_.size() >= kMaxPatches) {
+            ProtectPageRange(address, length, oldProtect, &oldProtect);
+            return false;
+        }
+
+        PatchRecord record = {};
+        record.address = address;
+        record.length = length;
+        memcpy(record.originalBytes, address, length);
+        ZeroMemory(address, length);
+
+        ProtectPageRange(address, length, oldProtect, &oldProtect);
+        patches_.push_back(record);
+        return true;
+    }
+
     std::vector<PatchRecord> patches_;
 };
 
-static ReversiblePatcher g_revivalPatcher;
+// The patcher is wrapped in a [[clang::no_destroy]] optional and emplaced in
+// Wh_ModInit: its cleanup must never run from a static destructor at
+// process shutdown (see the comment on ~ReversiblePatcher). Wh_ModUninit
+// restores the patched bytes and resets the optional explicitly.
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] static std::optional<ReversiblePatcher> g_revivalPatcher;
 
-// RAII wrapper for a module this mod loads on its own (windows.storage.dll):
-// the FreeLibrary runs on scope exit no matter how the scope is left.
-class ScopedLibrary {
-public:
-    ScopedLibrary() = default;
-    explicit ScopedLibrary(HMODULE module) : module_(module) {}
-    ScopedLibrary(const ScopedLibrary&) = delete;
-    ScopedLibrary& operator=(const ScopedLibrary&) = delete;
-    ~ScopedLibrary() { if (module_) FreeLibrary(module_); }
-
-    HMODULE Get() const { return module_; }
-    explicit operator bool() const { return module_ != nullptr; }
-
-private:
-    HMODULE module_ = nullptr;
-};
+// Persistent reference to windows.storage.dll, taken the first time the
+// guard patches it and released in Wh_ModUninit, AFTER RestoreAll(): the
+// recorded patch addresses point into that module's image, so the module
+// must stay mapped for as long as the patches exist. (Releasing it any
+// earlier could leave the patch addresses pointing at unmapped memory.)
+static HMODULE g_revivalWinStorageModule = nullptr;
 
 // Master switch for the whole revival guard: when false the two hooks below
 // pass straight through to the original functions. (g_revivalGuardActive is
 // declared up top together with the other mod state.)
 static std::atomic<bool> g_revivalCsoHooked{ false };
 static std::atomic<bool> g_revivalMapNameHooked{ false };
+static std::atomic<bool> g_revivalOpenHooked{ false };
+// Addresses of the two shell32 functions the guard hooks manually. They are
+// resolved in Wh_ModInit by the one HookSymbols call that also resolves the
+// applet-sorting symbols - a second HookSymbols call for the same module
+// would overwrite the module's symbol cache with only the new call's
+// symbols and force a full re-resolution on every subsequent start - so
+// only the addresses are resolved there. The hooks themselves are
+// registered by SetupRevivalGuard().
+static void* g_pRevivalMapLegacyName = nullptr;
+static void* g_pRevivalOpen = nullptr;
 
 // The hidden-applet monikers to unhide (copied from the control-panel-revival
 // mod), narrowed to the applets this mod manages.
@@ -3071,14 +3145,43 @@ static bool COpenControlPanel__MapLegacyName_revivalHook(void* pThis, LPCWSTR ps
     }
 }
 
-// Direct CompareStringOrdinal hook (ported, try/catch guarded).
+// Set only while a thread is executing inside COpenControlPanel::Open - the
+// function that performs the redirect decision when a Control Panel item is
+// opened. The CompareStringOrdinal hook below alters results only while
+// this flag is up, so every other comparison in the process sees honest
+// results; in particular the lookups that pair a task link's canonical
+// name with the applet's localized title (e.g. "Personalization" on the
+// classic Display page) keep resolving, instead of silently losing their
+// label. Same shape as CategorySortScope / ShellProbeBypass above.
+static thread_local bool g_revivalRedirectScope = false;
+
+struct RevivalRedirectScope {
+    bool prev_ = g_revivalRedirectScope;
+    RevivalRedirectScope() { g_revivalRedirectScope = true; }
+    ~RevivalRedirectScope() { g_revivalRedirectScope = prev_; }
+    RevivalRedirectScope(const RevivalRedirectScope&) = delete;
+    RevivalRedirectScope& operator=(const RevivalRedirectScope&) = delete;
+};
+
+// CompareStringOrdinal hook (ported, try/catch guarded), scoped to the
+// redirect decision: it only takes effect while g_revivalRedirectScope is
+// set for the calling thread, which happens exclusively inside the
+// COpenControlPanel::Open hook below. Everywhere else the original
+// comparison runs untouched, so equality checks between two identical
+// applet names (or between two unrelated strings) can no longer be
+// perturbed.
 static decltype(&CompareStringOrdinal) g_revivalCompareStringOrdinalOrig = nullptr;
 static int WINAPI CompareStringOrdinal_revivalHook(LPCWCH lpString1, int cchCount1,
                                                    LPCWCH lpString2, int cchCount2,
                                                    BOOL bIgnoreCase) {
     try {
+        // g_revivalRedirectScope can only be set while the guard is active
+        // (the Open hook checks), so the atomic load is evaluated only on
+        // the rare in-scope calls, never on the hot path.
         // Never interfere with this mod's own IOpenControlPanel::GetPath probe.
-        if (g_revivalGuardActive.load() && !g_inShellProbeBypass &&
+        if (g_revivalRedirectScope &&
+            g_revivalGuardActive.load(std::memory_order_relaxed) &&
+            !g_inShellProbeBypass &&
             (IsRevivalTargetApplet(lpString1, cchCount1) ||
              IsRevivalTargetApplet(lpString2, cchCount2))) {
             return CSTR_LESS_THAN; // Break redirection match
@@ -3095,19 +3198,40 @@ static int WINAPI CompareStringOrdinal_revivalHook(LPCWCH lpString1, int cchCoun
     }
 }
 
-static const WindhawkUtils::SYMBOL_HOOK g_revivalShell32Hooks[] = {
-    {
-        { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
-        (void**)&g_revivalMapLegacyNameOrig,
-        (void*)COpenControlPanel__MapLegacyName_revivalHook,
-        true
+// Hook for COpenControlPanel::Open (IOpenControlPanel::Open, the COM entry
+// point every Control Panel launch goes through - task links, category
+// view, control.exe /name). This is where the redirect decision is made,
+// so it is also the scope within which the CompareStringOrdinal override
+// above is allowed to act: the thread-local flag is raised around the
+// original call and lowered afterwards (RAII, exception-safe).
+static HRESULT(WINAPI* g_revivalOpenOrig)(void*, LPCWSTR, void*, LPCWSTR) = nullptr;
+static HRESULT WINAPI COpenControlPanel__Open_revivalHook(void* pThis, LPCWSTR pszName,
+                                                          void* pUnkSite, LPCWSTR pszPage) {
+    try {
+        if (!g_revivalOpenOrig) return E_FAIL;
+        if (!g_revivalGuardActive.load() || g_inShellProbeBypass) {
+            return g_revivalOpenOrig(pThis, pszName, pUnkSite, pszPage);
+        }
+        RevivalRedirectScope scope;
+        return g_revivalOpenOrig(pThis, pszName, pUnkSite, pszPage);
+    } catch (...) {
+        Wh_Log(L"Exception in COpenControlPanel::Open revival hook");
+        return E_FAIL;
     }
-};
+}
 
-// Patches the hidden monikers and installs the two hooks. Idempotent: a second
-// call (e.g. after re-enabling the setting) only re-applies the string
-// patches, never re-installs a hook that is already in place.
-static void SetupRevivalGuard() {
+// Patches the hidden monikers and installs the guard's hooks. Idempotent: a
+// second call (e.g. after re-enabling the setting) only re-applies the
+// string patches, never re-installs a hook that is already in place.
+//
+// applyNow must be false while Wh_ModInit is still running - Windhawk
+// applies every hook registered there automatically once Wh_ModInit
+// returns, and Wh_ApplyHookOperations() may not be called before that -
+// and true from Wh_ModSettingsChanged, where a hook registered at runtime
+// stays dormant until it is applied explicitly.
+static void SetupRevivalGuard(bool applyNow) {
+    if (!g_revivalPatcher) g_revivalPatcher.emplace();
+
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) {
         Wh_Log(L"Revival guard: shell32.dll not found, skipping");
@@ -3115,18 +3239,31 @@ static void SetupRevivalGuard() {
     }
 
     for (const LPCWSTR moniker : kRevivalAppletMonikers) {
-        g_revivalPatcher.PatchStringInModule(hShell32, moniker);
+        const bool patched = g_revivalPatcher->PatchStringInModule(hShell32, moniker);
+        Wh_Log(L"Revival guard: %s %s in shell32.dll",
+               patched ? L"patched" : L"did not find", moniker);
     }
 
-    {
-        ScopedLibrary winStorage(
-            LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32));
-        if (winStorage) {
-            for (const LPCWSTR moniker : kRevivalAppletMonikers) {
-                g_revivalPatcher.PatchStringInModule(winStorage.Get(), moniker);
-            }
-        }
+    // windows.storage.dll is loaded once and kept loaded: the patch
+    // addresses recorded below point into its image, so the reference is
+    // only released in Wh_ModUninit, after RestoreAll() (see
+    // g_revivalWinStorageModule).
+    if (!g_revivalWinStorageModule) {
+        g_revivalWinStorageModule =
+            LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
+    if (g_revivalWinStorageModule) {
+        for (const LPCWSTR moniker : kRevivalAppletMonikers) {
+            const bool patched =
+                g_revivalPatcher->PatchStringInModule(g_revivalWinStorageModule, moniker);
+            Wh_Log(L"Revival guard: %s %s in windows.storage.dll",
+                   patched ? L"patched" : L"did not find", moniker);
+        }
+    } else {
+        Wh_Log(L"Revival guard: windows.storage.dll could not be loaded; its monikers are left unpatched");
+    }
+
+    bool newHookRegistered = false;
 
     if (!g_revivalCsoHooked.load()) {
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -3137,20 +3274,51 @@ static void SetupRevivalGuard() {
         if (pCso && WindhawkUtils::SetFunctionHook(pCso, CompareStringOrdinal_revivalHook,
                                                    &g_revivalCompareStringOrdinalOrig)) {
             g_revivalCsoHooked.store(true);
-            Wh_Log(L"Revival guard: CompareStringOrdinal hooked");
+            newHookRegistered = true;
+            Wh_Log(L"Revival guard: CompareStringOrdinal hooked (redirect-scoped)");
         } else {
             Wh_Log(L"Revival guard: CompareStringOrdinal hook failed; moniker patching still active");
         }
     }
 
+    // _MapLegacyName and Open were resolved by Wh_ModInit's single
+    // HookSymbols call for shell32.dll; hook them manually here so the
+    // module's symbol cache is not invalidated by a second call.
     if (!g_revivalMapNameHooked.load()) {
-        if (WindhawkUtils::HookSymbols(hShell32, g_revivalShell32Hooks,
-                                       ARRAYSIZE(g_revivalShell32Hooks))) {
+        if (g_pRevivalMapLegacyName &&
+            WindhawkUtils::SetFunctionHook(
+                (decltype(g_revivalMapLegacyNameOrig))g_pRevivalMapLegacyName,
+                COpenControlPanel__MapLegacyName_revivalHook,
+                &g_revivalMapLegacyNameOrig)) {
             g_revivalMapNameHooked.store(true);
+            newHookRegistered = true;
             Wh_Log(L"Revival guard: _MapLegacyName hooked");
         } else {
-            Wh_Log(L"Revival guard: _MapLegacyName symbol not found on this build; moniker patching still active");
+            Wh_Log(L"Revival guard: _MapLegacyName unavailable on this build; moniker patching still active");
         }
+    }
+
+    if (!g_revivalOpenHooked.load()) {
+        if (g_pRevivalOpen &&
+            WindhawkUtils::SetFunctionHook(
+                (decltype(g_revivalOpenOrig))g_pRevivalOpen,
+                COpenControlPanel__Open_revivalHook,
+                &g_revivalOpenOrig)) {
+            g_revivalOpenHooked.store(true);
+            newHookRegistered = true;
+            Wh_Log(L"Revival guard: COpenControlPanel::Open hooked (redirect scope)");
+        } else {
+            Wh_Log(L"Revival guard: COpenControlPanel::Open unavailable on this build; "
+                   L"the CompareStringOrdinal override stays inactive");
+        }
+    }
+
+    if (applyNow && newHookRegistered) {
+        // Hooks registered after Wh_ModInit returned are dormant until
+        // applied. Skipped when nothing new was registered (re-enabling the
+        // guard after a disable reuses the hooks that are already in place)
+        // because the call is a slow, process-wide operation.
+        Wh_ApplyHookOperations();
     }
 
     g_revivalGuardActive.store(true);
@@ -3200,11 +3368,15 @@ void Wh_ModSettingsChanged() {
         try {
             if (g_settings.preventSettingsRedirect.load()) {
                 Wh_Log(L"Control Panel Revival guard re-enabled by settings");
-                SetupRevivalGuard();
+                // applyNow=true: hooks registered here, after Wh_ModInit
+                // has returned, only take effect once applied explicitly.
+                SetupRevivalGuard(true);
             } else {
                 Wh_Log(L"Control Panel Revival guard disabled by settings; restoring patched bytes");
                 g_revivalGuardActive.store(false);
-                g_revivalPatcher.RestoreAll();
+                if (g_revivalPatcher) {
+                    g_revivalPatcher->RestoreAll();
+                }
             }
         } catch (...) {
             Wh_Log(L"Exception while toggling the Control Panel Revival guard");
@@ -3367,6 +3539,15 @@ BOOL Wh_ModInit() {
         // a per-build inlining decision. The comparator is not: it is either
         // the thing that scopes the ranking or, where the ranking is inlined,
         // the thing that does the reordering.
+        //
+        // The two Control Panel Revival guard symbols are resolved here as
+        // well, with a null hook (the same trick as s_SortAppletsInCategory),
+        // so that ALL shell32 symbols come from this single HookSymbols
+        // call: the resolved symbols are cached per module, and each extra
+        // call for the same module overwrites that cache with only the new
+        // call's symbols - which would force a full re-resolution of the
+        // other symbols on every subsequent start. SetupRevivalGuard()
+        // registers the actual hooks with SetFunctionHook.
         void* pSortAppletsInCategory = nullptr;
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
@@ -3378,6 +3559,18 @@ BOOL Wh_ModInit() {
                 {L"private: static int __cdecl CControlPanelAppletList::s_FindAppletInSortArray(unsigned short const *,unsigned short const * const *,int)"},
                 (void**)&CControlPanelAppletList_s_FindAppletInSortArray_orig,
                 (void*)CControlPanelAppletList_s_FindAppletInSortArray_hook,
+                true
+            },
+            {
+                {L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)"},
+                &g_pRevivalMapLegacyName,
+                nullptr,  // Hooked manually by SetupRevivalGuard().
+                true
+            },
+            {
+                {L"public: virtual long __cdecl COpenControlPanel::Open(unsigned short const *,struct IUnknown *,unsigned short const *)"},
+                &g_pRevivalOpen,
+                nullptr,  // Hooked manually by SetupRevivalGuard().
                 true
             },
         };
@@ -3408,9 +3601,15 @@ BOOL Wh_ModInit() {
     // Control Panel Revival guard (ported approach): unhide the legacy
     // applets and break the Settings-app redirect. The whole block is
     // try/catch protected; a failure here never takes the rest of the mod down.
+    // The patcher is emplaced here (not lazily at first patch) so its state
+    // exists for the whole mod lifetime; see the [[clang::no_destroy]]
+    // comment on g_revivalPatcher.
+    g_revivalPatcher.emplace();
     if (g_settings.preventSettingsRedirect.load()) {
         try {
-            SetupRevivalGuard();
+            // applyNow=false: hooks registered during Wh_ModInit are applied
+            // by Windhawk automatically once this function returns.
+            SetupRevivalGuard(false);
         } catch (...) {
             Wh_Log(L"Exception during Control Panel Revival guard setup; guard disabled, rest of the mod active");
             g_revivalGuardActive.store(false);
@@ -3516,9 +3715,23 @@ void Wh_ModUninit() {
         // delete the fake-handle memory here.
         g_keyTracker.ClearWithoutFreeing();
         // Control Panel Revival guard: deactivate the hooks (they now pass
-        // straight through) and restore every patched byte.
+        // straight through) and restore every patched byte. The patcher is
+        // restored and reset explicitly - its storage is
+        // [[clang::no_destroy]], so no destructor ever runs at process
+        // shutdown (see the comment on g_revivalPatcher).
         g_revivalGuardActive.store(false);
-        g_revivalPatcher.RestoreAll();
+        if (g_revivalPatcher) {
+            g_revivalPatcher->RestoreAll();
+            g_revivalPatcher.reset();
+        }
+        // Only now, with every patch restored, may the windows.storage.dll
+        // reference be dropped: the patch addresses pointed into that
+        // module's image, and freeing it any earlier could have left them
+        // referencing memory that no longer belongs to the module.
+        if (g_revivalWinStorageModule) {
+            FreeLibrary(g_revivalWinStorageModule);
+            g_revivalWinStorageModule = nullptr;
+        }
         Wh_Log(L"Cleanup completed");
     } catch (...) {
         Wh_Log(L"Exception during cleanup, continuing anyway");
