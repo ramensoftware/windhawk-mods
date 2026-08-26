@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.3.2
+// @version         1.3.3
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -66,7 +66,8 @@ stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 Metric collection runs on a worker thread. The taskbar UI thread only renders
 the latest completed snapshot. If a display-driver restart changes an adapter
 LUID or invalidates the active performance counters, the mod refreshes the live
-adapter list and rebuilds the counters automatically.
+adapter list and rebuilds the counters automatically. A missing VRAM instance
+alone does not trigger recovery unless fresh enumeration confirms a LUID change.
 
 The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
@@ -94,6 +95,8 @@ The **Temperature source** setting provides these modes:
 
 HWiNFO is optional and is not bundled with this mod. Shared-memory integration
 targets HWiNFO 7.0 or newer, which permits full disclosure of the interface.
+Temperature units are classified from HWiNFO's raw unit bytes, independently of
+the Windows ANSI code page.
 The free HWiNFO64 edition disables shared memory after 12 hours of continuous
 use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
 interface. Configure it under **Sensor Settings > HWiNFO Gadget** by enabling
@@ -443,9 +446,8 @@ PDH_HCOUNTER g_sharedVramCounter = nullptr;
 PDH_HCOUNTER g_thermalZoneCounter = nullptr;
 std::chrono::steady_clock::time_point g_nextPdhCounterRetry{};
 std::chrono::steady_clock::time_point g_nextPdhRecovery{};
+std::chrono::steady_clock::time_point g_nextGpuIdentityCheck{};
 uint32_t g_consecutivePdhReadFailures = 0;
-bool g_pdhGpuSampleWasAvailable = false;
-bool g_pdhVramSampleWasAvailable = false;
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -788,12 +790,54 @@ std::optional<double> NormalizeTemperature(double value,
     return celsiusValue;
 }
 
-bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
+constexpr char HwInfoTemperatureUnit(const char* unit, size_t capacity) {
+    char result = 0;
+    for (size_t i = 0; i < capacity && unit[i]; i++) {
+        char candidate = 0;
+        if (unit[i] == 'C' || unit[i] == 'c') {
+            candidate = 'C';
+        } else if (unit[i] == 'F' || unit[i] == 'f') {
+            candidate = 'F';
+        }
+        if (candidate) {
+            if (result && result != candidate) {
+                return 0;
+            }
+            result = candidate;
+        }
+    }
+    return result;
+}
+
+constexpr char kHwInfoRawCelsiusUnit[] = {
+    static_cast<char>(0xB0), 'C', 0};
+constexpr char kHwInfoRawFahrenheitUnit[] = {
+    static_cast<char>(0xB0), 'F', 0};
+static_assert(HwInfoTemperatureUnit(kHwInfoRawCelsiusUnit,
+                                    std::size(kHwInfoRawCelsiusUnit)) == 'C');
+static_assert(HwInfoTemperatureUnit(kHwInfoRawFahrenheitUnit,
+                                    std::size(kHwInfoRawFahrenheitUnit)) ==
+              'F');
+
+std::optional<double> NormalizeHwInfoTemperature(double value,
+                                                 const char* unit,
+                                                 size_t capacity) {
+    // HWiNFO stores a raw single-byte degree sign followed by an ASCII unit
+    // letter. Decoding the buffer through CP_ACP corrupts that sequence on
+    // DBCS locales, so classify the ASCII letter directly from the bytes.
+    char unitLetter = HwInfoTemperatureUnit(unit, capacity);
+    if (!unitLetter) {
+        return std::nullopt;
+    }
+    return NormalizeTemperature(value, unitLetter == 'F' ? L"F" : L"C");
+}
+
+void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                             const ModSettings& settings) {
     HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE,
                                       L"Global\\HWiNFO_SENS_SM2");
     if (!mapping) {
-        return false;
+        return;
     }
 
     HANDLE mutex = OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
@@ -806,7 +850,7 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
         } else {
             CloseHandle(mutex);
             CloseHandle(mapping);
-            return false;
+            return;
         }
     }
 
@@ -819,86 +863,86 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
             CloseHandle(mutex);
         }
         CloseHandle(mapping);
-        return false;
+        return;
     }
 
-    bool available = false;
     MEMORY_BASIC_INFORMATION memoryInfo{};
-    if (VirtualQuery(view, &memoryInfo, sizeof(memoryInfo)) &&
-        memoryInfo.RegionSize >= sizeof(HwInfoHeader)) {
-        // HWiNFO updates this mapping in place. Snapshot the range metadata so
-        // every address below uses the same values that passed validation even
-        // when the shared mutex isn't accessible from Explorer.
-        HwInfoHeader header{};
-        std::memcpy(&header, view, sizeof(header));
+    if (VirtualQuery(view, &memoryInfo, sizeof(memoryInfo))) {
         size_t viewOffset = static_cast<const uint8_t*>(view) -
                             static_cast<const uint8_t*>(memoryInfo.BaseAddress);
-        size_t mappedSize = memoryInfo.RegionSize - viewOffset;
+        size_t mappedSize = viewOffset <= memoryInfo.RegionSize
+                                ? memoryInfo.RegionSize - viewOffset
+                                : 0;
+        if (mappedSize >= sizeof(HwInfoHeader)) {
+            // HWiNFO updates this mapping in place. Snapshot the range metadata
+            // so every address below uses the same values that passed
+            // validation even when the shared mutex isn't accessible from
+            // Explorer.
+            HwInfoHeader header{};
+            std::memcpy(&header, view, sizeof(header));
 
-        if (header.signature == kHwInfoSignature &&
-            IsRangeValid(mappedSize, header.sensorOffset,
-                         header.sensorStride, header.sensorCount,
-                         sizeof(HwInfoSensorPrefix)) &&
-            IsRangeValid(mappedSize, header.readingOffset,
-                         header.readingStride, header.readingCount,
-                         sizeof(HwInfoReadingPrefix))) {
-            int bestCpuScore = -1;
-            int bestGpuScore = -1;
-            const auto* bytes = static_cast<const uint8_t*>(view);
+            if (header.signature == kHwInfoSignature &&
+                IsRangeValid(mappedSize, header.sensorOffset,
+                             header.sensorStride, header.sensorCount,
+                             sizeof(HwInfoSensorPrefix)) &&
+                IsRangeValid(mappedSize, header.readingOffset,
+                             header.readingStride, header.readingCount,
+                             sizeof(HwInfoReadingPrefix))) {
+                int bestCpuScore = -1;
+                int bestGpuScore = -1;
+                const auto* bytes = static_cast<const uint8_t*>(view);
 
-            for (uint32_t i = 0; i < header.readingCount; i++) {
-                HwInfoReadingPrefix reading{};
-                const uint8_t* readingAddress =
-                    bytes + header.readingOffset +
-                    static_cast<size_t>(i) * header.readingStride;
-                std::memcpy(&reading, readingAddress, sizeof(reading));
+                for (uint32_t i = 0; i < header.readingCount; i++) {
+                    HwInfoReadingPrefix reading{};
+                    const uint8_t* readingAddress =
+                        bytes + header.readingOffset +
+                        static_cast<size_t>(i) * header.readingStride;
+                    std::memcpy(&reading, readingAddress, sizeof(reading));
 
-                if (reading.readingType != kHwInfoTemperatureType ||
-                    reading.sensorIndex >= header.sensorCount) {
-                    continue;
-                }
+                    if (reading.readingType != kHwInfoTemperatureType ||
+                        reading.sensorIndex >= header.sensorCount) {
+                        continue;
+                    }
 
-                auto value = NormalizeTemperature(
-                    reading.value,
-                    FixedAnsiToWide(reading.unit, std::size(reading.unit)));
-                if (!value) {
-                    continue;
-                }
+                    auto value = NormalizeHwInfoTemperature(
+                        reading.value, reading.unit, std::size(reading.unit));
+                    if (!value) {
+                        continue;
+                    }
 
-                HwInfoSensorPrefix sensor{};
-                const uint8_t* sensorAddress =
-                    bytes + header.sensorOffset +
-                    static_cast<size_t>(reading.sensorIndex) *
-                        header.sensorStride;
-                std::memcpy(&sensor, sensorAddress, sizeof(sensor));
+                    HwInfoSensorPrefix sensor{};
+                    const uint8_t* sensorAddress =
+                        bytes + header.sensorOffset +
+                        static_cast<size_t>(reading.sensorIndex) *
+                            header.sensorStride;
+                    std::memcpy(&sensor, sensorAddress, sizeof(sensor));
 
-                std::wstring sensorName =
-                    FixedAnsiToWide(sensor.originalName,
-                                    std::size(sensor.originalName));
-                std::wstring label =
-                    FixedAnsiToWide(reading.originalLabel,
-                                    std::size(reading.originalLabel));
+                    std::wstring sensorName =
+                        FixedAnsiToWide(sensor.originalName,
+                                        std::size(sensor.originalName));
+                    std::wstring label =
+                        FixedAnsiToWide(reading.originalLabel,
+                                        std::size(reading.originalLabel));
 
-                int cpuScore = CpuTemperatureScore(
-                    sensorName, label, settings.cpuTempSensor);
-                if (cpuScore > bestCpuScore) {
-                    bestCpuScore = cpuScore;
-                    snapshot.cpuTemp = *value;
-                    snapshot.cpuTempProvider =
-                        TemperatureProvider::HwInfoSharedMemory;
-                }
+                    int cpuScore = CpuTemperatureScore(
+                        sensorName, label, settings.cpuTempSensor);
+                    if (cpuScore > bestCpuScore) {
+                        bestCpuScore = cpuScore;
+                        snapshot.cpuTemp = *value;
+                        snapshot.cpuTempProvider =
+                            TemperatureProvider::HwInfoSharedMemory;
+                    }
 
-                int gpuScore = GpuTemperatureScore(
-                    sensorName, label, settings.gpuTempSensor);
-                if (gpuScore > bestGpuScore) {
-                    bestGpuScore = gpuScore;
-                    snapshot.gpuTemp = *value;
-                    snapshot.gpuTempProvider =
-                        TemperatureProvider::HwInfoSharedMemory;
+                    int gpuScore = GpuTemperatureScore(
+                        sensorName, label, settings.gpuTempSensor);
+                    if (gpuScore > bestGpuScore) {
+                        bestGpuScore = gpuScore;
+                        snapshot.gpuTemp = *value;
+                        snapshot.gpuTempProvider =
+                            TemperatureProvider::HwInfoSharedMemory;
+                    }
                 }
             }
-
-            available = true;
         }
     }
 
@@ -910,7 +954,6 @@ bool ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
         CloseHandle(mutex);
     }
     CloseHandle(mapping);
-    return available;
 }
 
 std::optional<std::wstring> ReadRegistryString(HKEY key,
@@ -954,18 +997,16 @@ std::optional<double> NormalizeRegistryTemperature(
     return NormalizeTemperature(*value, formattedValue);
 }
 
-bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
+void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                               const ModSettings& settings) {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\HWiNFO64\\VSB", 0,
                       KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
-        return false;
+        return;
     }
 
     int bestCpuScore = snapshot.cpuTemp ? 10000 : -1;
     int bestGpuScore = snapshot.gpuTemp ? 10000 : -1;
-    bool foundAny = false;
-
     int consecutiveMissing = 0;
     for (int i = 0; i < 1024; i++) {
         std::wstring suffix = std::to_wstring(i);
@@ -989,7 +1030,6 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
             continue;
         }
 
-        foundAny = true;
         int cpuScore =
             CpuTemperatureScore(*sensor, *label, settings.cpuTempSensor);
         if (cpuScore > bestCpuScore) {
@@ -1010,7 +1050,6 @@ bool ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     }
 
     RegCloseKey(key);
-    return foundAny;
 }
 
 void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
@@ -1218,6 +1257,7 @@ void InvalidateGpuAdapterCache() {
     g_cachedGpuAdapterFilter.reset();
     g_cachedGpuAdapterInfo.reset();
     g_cachedGpuAdapterResolved = false;
+    g_nextGpuIdentityCheck = {};
 }
 
 std::wstring FormatAdapterLuid(const LUID& luid) {
@@ -1367,6 +1407,21 @@ std::optional<GpuAdapterInfo> GetDxgiAdapterInfo(
         selected.DedicatedVideoMemory, selected.SharedSystemMemory};
 }
 
+std::optional<GpuAdapterInfo> ResolveCurrentGpuAdapterInfo(
+    const std::wstring& filterLower,
+    PCWSTR* provider = nullptr) {
+    auto adapter = GetLiveD3dkmtAdapterInfo(filterLower);
+    PCWSTR resolvedProvider = L"D3DKMT";
+    if (!adapter) {
+        adapter = GetDxgiAdapterInfo(filterLower);
+        resolvedProvider = L"DXGI fallback";
+    }
+    if (provider) {
+        *provider = resolvedProvider;
+    }
+    return adapter;
+}
+
 std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
     const std::wstring& adapterFilter) {
     std::wstring filterLower = ToLower(adapterFilter);
@@ -1376,12 +1431,9 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
     }
 
     g_cachedGpuAdapterFilter = filterLower;
-    g_cachedGpuAdapterInfo = GetLiveD3dkmtAdapterInfo(filterLower);
-    PCWSTR provider = L"D3DKMT";
-    if (!g_cachedGpuAdapterInfo) {
-        g_cachedGpuAdapterInfo = GetDxgiAdapterInfo(filterLower);
-        provider = L"DXGI fallback";
-    }
+    PCWSTR provider = nullptr;
+    g_cachedGpuAdapterInfo =
+        ResolveCurrentGpuAdapterInfo(filterLower, &provider);
     g_cachedGpuAdapterResolved = true;
 
     if (!g_cachedGpuAdapterInfo) {
@@ -1402,6 +1454,19 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
            static_cast<double>(g_cachedGpuAdapterInfo->sharedSystemMemory) /
                kGiB);
     return g_cachedGpuAdapterInfo;
+}
+
+bool HasGpuAdapterIdentityChanged(const GpuAdapterInfo& cachedAdapter,
+                                  const std::wstring& adapterFilter) {
+    auto now = std::chrono::steady_clock::now();
+    if (now < g_nextGpuIdentityCheck) {
+        return false;
+    }
+    g_nextGpuIdentityCheck = now + std::chrono::seconds(5);
+
+    auto currentAdapter =
+        ResolveCurrentGpuAdapterInfo(ToLower(adapterFilter));
+    return currentAdapter && currentAdapter->luid != cachedAdapter.luid;
 }
 
 void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
@@ -1469,6 +1534,23 @@ void ClosePdhQuery() {
     g_thermalZoneCounter = nullptr;
 }
 
+void RecreatePdhSources(PCWSTR reason,
+                        PDH_STATUS status,
+                        std::chrono::steady_clock::time_point now) {
+    if (status == ERROR_SUCCESS) {
+        Wh_Log(L"Recreating GPU performance counters after %s", reason);
+    } else {
+        Wh_Log(L"Recreating GPU performance counters after %s: %08X",
+               reason, status);
+    }
+
+    ClosePdhQuery();
+    InvalidateGpuAdapterCache();
+    g_consecutivePdhReadFailures = 0;
+    g_nextPdhCounterRetry = now + kPdhRecoveryRetryDelay;
+    g_nextPdhRecovery = now + kPdhRecoveryCooldown;
+}
+
 void RecordPdhReadFailure(PCWSTR reason,
                           PDH_STATUS status = ERROR_SUCCESS) {
     g_consecutivePdhReadFailures =
@@ -1481,28 +1563,18 @@ void RecordPdhReadFailure(PCWSTR reason,
         return;
     }
 
-    if (status == ERROR_SUCCESS) {
-        Wh_Log(L"Recreating GPU performance counters after repeated %s "
-               L"failures",
-               reason);
-    } else {
-        Wh_Log(L"Recreating GPU performance counters after repeated %s "
-               L"failures: %08X",
-               reason, status);
-    }
-
-    ClosePdhQuery();
-    InvalidateGpuAdapterCache();
-    g_consecutivePdhReadFailures = 0;
-    g_pdhGpuSampleWasAvailable = false;
-    g_pdhVramSampleWasAvailable = false;
-    g_nextPdhCounterRetry = now + kPdhRecoveryRetryDelay;
-    g_nextPdhRecovery = now + kPdhRecoveryCooldown;
+    RecreatePdhSources(reason, status, now);
 }
 
-void RecordPdhReadSuccess(bool gpuAvailable, bool vramAvailable) {
-    g_pdhGpuSampleWasAvailable |= gpuAvailable;
-    g_pdhVramSampleWasAvailable |= vramAvailable;
+void RecoverFromGpuAdapterIdentityChange() {
+    auto now = std::chrono::steady_clock::now();
+    if (now < g_nextPdhRecovery) {
+        return;
+    }
+    RecreatePdhSources(L"confirmed adapter LUID change", ERROR_SUCCESS, now);
+}
+
+void RecordPdhReadSuccess() {
     g_consecutivePdhReadFailures = 0;
 }
 
@@ -1525,8 +1597,19 @@ bool AddPdhCounter(PDH_HCOUNTER& counter,
     return true;
 }
 
-void EnsurePdhQuery() {
+bool NeedsWindowsThermalZones(const ModSettings& settings) {
+    return settings.temperatureSource == TemperatureSource::Auto ||
+           settings.temperatureSource == TemperatureSource::WindowsNative;
+}
+
+void EnsurePdhQuery(const ModSettings& settings) {
     auto now = std::chrono::steady_clock::now();
+    bool thermalZonesRequired = NeedsWindowsThermalZones(settings);
+    if (!thermalZonesRequired && g_thermalZoneCounter) {
+        PdhRemoveCounter(g_thermalZoneCounter);
+        g_thermalZoneCounter = nullptr;
+    }
+
     bool queryCreated = false;
     if (!g_pdhQuery) {
         if (now < g_nextPdhCounterRetry) {
@@ -1539,7 +1622,7 @@ void EnsurePdhQuery() {
         }
         queryCreated = true;
     } else if (g_gpuCounter && g_vramCounter && g_sharedVramCounter &&
-               g_thermalZoneCounter) {
+               (!thermalZonesRequired || g_thermalZoneCounter)) {
         return;
     }
 
@@ -1556,13 +1639,15 @@ void EnsurePdhQuery() {
     counterAdded |= AddPdhCounter(
         g_sharedVramCounter, L"\\GPU Adapter Memory(*)\\Shared Usage",
         L"shared GPU-memory usage");
-    counterAdded |= AddPdhCounter(
-        g_thermalZoneCounter,
-        L"\\Thermal Zone Information(*)\\Temperature",
-        L"Windows thermal-zone");
+    if (thermalZonesRequired) {
+        counterAdded |= AddPdhCounter(
+            g_thermalZoneCounter,
+            L"\\Thermal Zone Information(*)\\Temperature",
+            L"Windows thermal-zone");
+    }
 
     if (!g_gpuCounter && !g_vramCounter && !g_sharedVramCounter &&
-        !g_thermalZoneCounter) {
+        (!thermalZonesRequired || !g_thermalZoneCounter)) {
         PdhCloseQuery(g_pdhQuery);
         g_pdhQuery = nullptr;
         g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
@@ -1570,7 +1655,7 @@ void EnsurePdhQuery() {
     }
 
     if (!g_gpuCounter || !g_vramCounter || !g_sharedVramCounter ||
-        !g_thermalZoneCounter) {
+        (thermalZonesRequired && !g_thermalZoneCounter)) {
         g_nextPdhCounterRetry = now + kPdhCounterRetryInterval;
     }
 
@@ -1752,7 +1837,7 @@ std::optional<double> ReadVramUsedBytes(
 }
 
 void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
-    EnsurePdhQuery();
+    EnsurePdhQuery(settings);
     if (!g_pdhQuery) {
         return;
     }
@@ -1800,12 +1885,15 @@ void ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
         (vramCounter && IsHardPdhArrayFailure(vramReadStatus));
     bool adapterMismatch = adapter && vramReadStatus == ERROR_SUCCESS &&
                            vramCounterHasData && !vramAvailable;
+    bool adapterIdentityChanged =
+        adapterMismatch &&
+        HasGpuAdapterIdentityChanged(*adapter, settings.gpuAdapter);
     if (hardReadFailure) {
         RecordPdhReadFailure(L"counter read");
-    } else if (adapterMismatch) {
-        RecordPdhReadFailure(L"adapter mismatch");
+    } else if (adapterIdentityChanged) {
+        RecoverFromGpuAdapterIdentityChange();
     } else {
-        RecordPdhReadSuccess(gpuUsage.has_value(), vramAvailable);
+        RecordPdhReadSuccess();
     }
 }
 
@@ -1853,7 +1941,7 @@ bool GetLatestMetrics(MetricsSnapshot& snapshot, uint64_t& sequence) {
 
 void MetricsWorkerProc() {
     ReadCpuUsage();
-    EnsurePdhQuery();
+    EnsurePdhQuery(CurrentSettings());
 
     bool firstSample = true;
     bool providersLogged = false;
@@ -2401,8 +2489,6 @@ void UpdateWidgetText() {
         AppendHistory(g_cpuHistory, snapshot.cpu, historyCapacity);
         if (snapshot.gpuAvailable) {
             AppendHistory(g_gpuHistory, snapshot.gpu, historyCapacity);
-        } else {
-            g_gpuHistory.clear();
         }
         UpdateSparkline(g_cpuGraph, g_cpuHistory, historyCapacity);
         UpdateSparkline(g_gpuGraph, g_gpuHistory, historyCapacity);
@@ -2643,6 +2729,10 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
         if (g_widget && children.IndexOf(g_widget, currentWidgetIndex) &&
             currentWidgetIndex == index) {
             ApplyWidgetSettings();
+            if (!StartMetricsWorker()) {
+                Wh_Log(L"Metrics worker unavailable");
+            }
+            EnsureTimer();
             UpdateWidgetText();
             return true;
         }
@@ -2933,7 +3023,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     const BYTE* code =
         reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-        code[3] == 0x28 &&
         code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
         code[7] <= 0x7F) {
         elementOffset = code[7];
@@ -3130,8 +3219,6 @@ void CloseMetricSources() {
     g_nextPdhCounterRetry = {};
     g_nextPdhRecovery = {};
     g_consecutivePdhReadFailures = 0;
-    g_pdhGpuSampleWasAvailable = false;
-    g_pdhVramSampleWasAvailable = false;
 }
 
 bool TearDownTaskbarUi() {
