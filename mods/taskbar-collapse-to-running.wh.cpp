@@ -230,25 +230,27 @@ enum class RevealTrigger { Never, Hover, Rest, Click };
 // it and the row eases shut.
 enum class AnimKind { Accordion, GapClose };
 
+// Scalars are atomic: LoadSettings writes them on Windhawk's thread while
+// taskbar threads read them mid-tick.
 struct {
-    RevealTrigger revealTrigger;
-    bool revealOnStart;
-    bool collapsed;
-    int restSpeedPxPerSec;
-    int revealDelayMs;
-    int elementPaddingPx;
-    int hoverGraceMs;
-    int refreshIntervalMs;
-    bool sleepEnabled;
-    int sleepIntervalMs;
-    AnimationMode animationMode;
-    CurveId animationCurve;
-    int animationDurationMs;
-    int animationAmplitudePct;
+    std::atomic<RevealTrigger> revealTrigger;
+    std::atomic<bool> revealOnStart;
+    std::atomic<bool> collapsed;
+    std::atomic<int> restSpeedPxPerSec;
+    std::atomic<int> revealDelayMs;
+    std::atomic<int> elementPaddingPx;
+    std::atomic<int> hoverGraceMs;
+    std::atomic<int> refreshIntervalMs;
+    std::atomic<bool> sleepEnabled;
+    std::atomic<int> sleepIntervalMs;
+    std::atomic<AnimationMode> animationMode;
+    std::atomic<CurveId> animationCurve;
+    std::atomic<int> animationDurationMs;
+    std::atomic<int> animationAmplitudePct;
     std::wstring runningNameMarker;
 } g_settings;
 
-// Guards runningNameMarker; every other field is a scalar read directly.
+// Guards runningNameMarker only.
 std::mutex g_settingsMutex;
 
 std::atomic<bool> g_unloading = false;
@@ -1044,8 +1046,16 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     }
 
     if (!g_unloading) {
-        for (auto& button : buttons) {
-            DeanimateButton(ctx, button);
+        if (!g_collapseEnabled && ctx.hiddenByUs.empty()) {
+            // Collapse is switched off and nothing is left hidden: the
+            // taskbar gets its own animations back while the mod idles.
+            // Stripping resumes the moment collapse returns. A mere reveal
+            // keeps stripping, since a collapse can follow at any moment.
+            ReanimateButtons(ctx);
+        } else {
+            for (auto& button : buttons) {
+                DeanimateButton(ctx, button);
+            }
         }
     }
 
@@ -1243,8 +1253,8 @@ void OnTimerTick(void* key) {
     g_sleeping = sleep;
 
     int wantedIntervalMs = (timingSomething || !sleep)
-                               ? g_settings.refreshIntervalMs
-                               : g_settings.sleepIntervalMs;
+                               ? g_settings.refreshIntervalMs.load()
+                               : g_settings.sleepIntervalMs.load();
     if (ctx->intervalMs != wantedIntervalMs) {
         ctx->intervalMs = wantedIntervalMs;
         ctx->timer.Interval(std::chrono::milliseconds(wantedIntervalMs));
@@ -1820,13 +1830,19 @@ using TaskbarFrame_MeasureOverride_t =
 TaskbarFrame_MeasureOverride_t TaskbarFrame_MeasureOverride_Original;
 void HandleFrameMeasure(void* pThis) {
     // This is the layout hot path, so a frame already adopted is dismissed on
-    // a raw pointer compare, before any QueryInterface or lock. The pointer is
-    // stable per frame for this interface slot; the slot is per-thread since
-    // each taskbar measures only on its own UI thread, so it stays hot with
-    // any number of monitors.
-    thread_local void* knownThis = nullptr;
-    if (g_unloading || knownThis == pThis) {
+    // raw pointer compares, before any QueryInterface or lock. The pointer is
+    // stable per frame for this interface slot. Primary and secondary
+    // taskbars share one UI thread, so a few per-thread slots keep the fast
+    // path hot with multiple monitors.
+    thread_local void* knownFrames[4] = {};
+    thread_local unsigned knownNext = 0;
+    if (g_unloading) {
         return;
+    }
+    for (void* known : knownFrames) {
+        if (known == pThis) {
+            return;
+        }
     }
 
     // Deliberately does not count as activity: the taskbar remeasures for
@@ -1838,7 +1854,7 @@ void HandleFrameMeasure(void* pThis) {
         return;
     }
     if (IsFrameRegistered(key)) {
-        knownThis = pThis;
+        knownFrames[knownNext++ & 3] = pThis;
         return;
     }
 
@@ -2098,6 +2114,10 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
 }
 
 void StartHotkeyThread() {
+    if (g_hotkeyThread) {
+        return;
+    }
+
     auto spec = WindhawkUtils::StringSetting::make(L"Hotkey");
     UINT modifiers = 0;
     UINT vk = 0;
@@ -2218,8 +2238,12 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
         windows.push_back(hWnd);
     };
 
-    if (HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr)) {
-        consider(hWnd);
+    // Iterated rather than a single FindWindow: the first Shell_TrayWnd on
+    // the desktop can belong to another process.
+    HWND hPrimary = nullptr;
+    while ((hPrimary = FindWindowEx(nullptr, hPrimary, L"Shell_TrayWnd",
+                                    nullptr))) {
+        consider(hPrimary);
     }
     HWND hSecondary = nullptr;
     while ((hSecondary = FindWindowEx(nullptr, hSecondary,
@@ -2319,7 +2343,7 @@ void LoadSettings() {
         g_settings.runningNameMarker = marker.get();
     }
 
-    g_collapseEnabled = g_settings.collapsed;
+    g_collapseEnabled = g_settings.collapsed.load();
     g_revealed = false;
     g_revealedByStart = false;
     g_emptyHoverSinceTick = 0;
@@ -2337,7 +2361,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
             &TaskbarFrame_OnPointerMoved_Original,
@@ -2363,17 +2387,18 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                    ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
+                                    ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed, mod will not load");
         return false;
     }
 
     Wh_Log(
         L"HookSymbols ok (OnPointerMoved=%d OnPointerReleased=%d "
-        L"MeasureOverride=%d)",
+        L"OnPointerExited=%d MeasureOverride=%d)",
         (int)(TaskbarFrame_OnPointerMoved_Original != nullptr),
         (int)(TaskbarFrame_OnPointerReleased_Original != nullptr),
+        (int)(TaskbarFrame_OnPointerExited_Original != nullptr),
         (int)(TaskbarFrame_MeasureOverride_Original != nullptr));
     return true;
 }
@@ -2391,9 +2416,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
     if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
-        if (HookTaskbarViewDllSymbols(module) &&
-            !g_hooksApplied.exchange(true)) {
-            Wh_ApplyHookOperations();
+        if (HookTaskbarViewDllSymbols(module)) {
+            if (!g_hooksApplied.exchange(true)) {
+                Wh_ApplyHookOperations();
+            }
+            StartHotkeyThread();
         }
     }
 
@@ -2410,6 +2437,9 @@ BOOL Wh_ModInit() {
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             return FALSE;
         }
+        // Only the explorer.exe that owns the taskbar loads Taskbar.View.dll;
+        // other instances must not grab the hotkey or the Start watcher.
+        StartHotkeyThread();
     } else {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         if (!kernelBaseModule) {
@@ -2427,8 +2457,6 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
-    StartHotkeyThread();
-
     return TRUE;
 }
 
@@ -2442,9 +2470,11 @@ void Wh_ModAfterInit() {
     // and the LoadLibraryExW hook going live.
     HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
     if (taskbarViewModule && !g_taskbarViewDllLoaded.exchange(true)) {
-        if (HookTaskbarViewDllSymbols(taskbarViewModule) &&
-            !g_hooksApplied.exchange(true)) {
-            Wh_ApplyHookOperations();
+        if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            if (!g_hooksApplied.exchange(true)) {
+                Wh_ApplyHookOperations();
+            }
+            StartHotkeyThread();
         }
     }
 }
@@ -2454,7 +2484,10 @@ void Wh_ModSettingsChanged() {
 
     StopHotkeyThread();
     LoadSettings();
-    StartHotkeyThread();
+    // Never started in explorer.exe instances that do not own the taskbar.
+    if (g_taskbarViewDllLoaded) {
+        StartHotkeyThread();
+    }
 
     g_instantApplyGen++;
 }
@@ -2522,24 +2555,29 @@ void Wh_ModBeforeUninit() {
             queued = true;
         } catch (winrt::hresult_error const&) {
         }
-        // On timeout the queued lambda still owns SetEvent(done), so the
-        // handle is deliberately leaked rather than recycled under it.
-        if (!queued || WaitForSingleObject(done, 5000) == WAIT_OBJECT_0) {
+        // Unbounded on purpose: giving up would let the queued lambda run
+        // inside a freed image. A wedged taskbar hangs the unload instead,
+        // which is recoverable.
+        if (!queued || WaitForSingleObject(done, INFINITE) == WAIT_OBJECT_0) {
             CloseHandle(done);
         }
     }
 
     // Wakes still queued to taskbar dispatchers hold code from this DLL; the
-    // threads are pumping (they just serviced the cleanup), so give their
-    // queues a bounded moment to run the leftovers down.
-    for (int i = 0; i < 500 && g_pendingWakes.load() > 0; i++) {
+    // threads are pumping (they just serviced the cleanup) and no new wakes
+    // can be queued. Unbounded on purpose: proceeding would let a queued
+    // lambda run inside a freed image.
+    while (g_pendingWakes.load() > 0) {
         Sleep(10);
     }
 
     // Anything still present could not be reached on its own thread; leaving
-    // its references alive is safer than releasing them from here.
+    // its references alive is safer than releasing them from here. An empty
+    // map can go completely, buckets and all.
     std::lock_guard<std::mutex> guard(g_framesMutex);
-    if (!g_frames->empty()) {
+    if (g_frames->empty()) {
+        g_frames.reset();
+    } else {
         Wh_Log(L"%u taskbar contexts could not be cleaned up",
                (unsigned)g_frames->size());
     }
