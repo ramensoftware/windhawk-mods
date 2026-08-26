@@ -10,23 +10,11 @@
 // @compilerOptions -lpsapi -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==
-/*
-# Control Panel Revival
-
-Control Panel Revival is a specialized Windhawk mod designed to restore legacy Control Panel applets in Windows 11 (specifically targeting builds **23H2 and newer** where Microsoft forcibly redirects critical legacy applets like *Troubleshooting*, *Fonts*, *Installed Updates*, and *Personalization* to the modern Settings app).
-
-### Why this mod?
-Unlike older catalog mods built for initial Windows 11 releases, newer Windows 11 builds implement aggressive redirection logic. This mod uses a precise, **reversible** memory patching mechanism combined with symbol and string hooks to neutralize redirection strings in system binaries safely.
-*/
-// ==/WindhawkModReadme==
-
 #include <windows.h>
 #include <psapi.h>
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 
-// GUID list of legacy Control Panel applets to unhide/protect from redirection
 LPCWSTR g_szAppletsToUnhide[] = {
     L"::{BF782CC9-5A52-4A17-806C-2A894FFEEAC5}", // Language Settings
     L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
@@ -44,7 +32,6 @@ LPCWSTR g_szAppletsToUnhide[] = {
     L"::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}"  // Home group
 };
 
-// Canonical names associated with the redirected applets
 LPCWSTR g_szCanonicalNames[] = {
     L"Microsoft.Display",
     L"Microsoft.Personalization",
@@ -62,7 +49,6 @@ LPCWSTR g_szCanonicalNames[] = {
     L"Microsoft.Fonts"
 };
 
-// Structure to store original memory bytes for safe reversibility
 struct PatchRecord {
     void* address;
     BYTE originalBytes[128];
@@ -72,9 +58,12 @@ struct PatchRecord {
 PatchRecord g_appliedPatches[64];
 size_t g_appliedPatchCount = 0;
 HMODULE g_hWinStorage = nullptr;
+bool g_isInitialized = false;
+HMODULE g_hShell32Global = nullptr;
 
-// Centralized cleanup function to restore all patches and free handles on failure or uninit
 void RestoreAllPatchesAndState(void) {
+    if (!g_isInitialized) return;
+
     for (size_t i = 0; i < g_appliedPatchCount; i++) {
         PatchRecord& patch = g_appliedPatches[i];
         MEMORY_BASIC_INFORMATION mbi;
@@ -82,8 +71,7 @@ void RestoreAllPatchesAndState(void) {
             DWORD oldProtect;
             if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
                 memcpy(patch.address, patch.originalBytes, patch.length);
-                DWORD tempProtect;
-                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &tempProtect);
+                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
             }
         }
     }
@@ -93,9 +81,9 @@ void RestoreAllPatchesAndState(void) {
         FreeLibrary(g_hWinStorage);
         g_hWinStorage = nullptr;
     }
+    g_isInitialized = false;
 }
 
-// Safe, Reversible Memory Patching implementation
 void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
     if (!hModule || !lpSearch) return;
 
@@ -137,13 +125,32 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
 
                     ZeroMemory(targetAddress, patternLen); 
 
-                    DWORD dwOldProtect;
-                    VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &dwOldProtect);
+                    VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
                     return;
                 }
             }
         }
     }
+}
+
+// Helper function to match target strings regardless of length format
+bool IsTargetApplet(LPCWCH lpString, int cchCount) {
+    if (!lpString) return false;
+    size_t len = (cchCount == -1) ? wcslen(lpString) : (size_t)cchCount;
+
+    for (UINT i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
+        size_t targetLen = wcslen(g_szAppletsToUnhide[i]);
+        if (len == targetLen && _wcsnicmp(lpString, g_szAppletsToUnhide[i], len) == 0) {
+            return true;
+        }
+    }
+    for (UINT i = 0; i < ARRAYSIZE(g_szCanonicalNames); i++) {
+        size_t targetLen = wcslen(g_szCanonicalNames[i]);
+        if (len == targetLen && _wcsnicmp(lpString, g_szCanonicalNames[i], len) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Hook for COpenControlPanel::_MapLegacyName
@@ -163,65 +170,44 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
     return COpenControlPanel__MapLegacyName_orig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
 }
 
-// Safe hook for CompareStringOrdinal targeting kernelbase.dll
+// Direct CompareStringOrdinal Hook
 decltype(&CompareStringOrdinal) CompareStringOrdinal_orig = nullptr;
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
-    if (!lpString1 || !lpString2) {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return 0;
+    if (IsTargetApplet(lpString1, cchCount1) || IsTargetApplet(lpString2, cchCount2)) {
+        return CSTR_LESS_THAN; // Break redirection match
     }
 
-    if (cchCount1 == -1 && cchCount2 == -1) {
-        auto pCompFunc = bIgnoreCase ? _wcsicmp : wcscmp;
-        for (UINT i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-            if (g_szAppletsToUnhide[i] && (0 == pCompFunc(lpString1, g_szAppletsToUnhide[i]) || 0 == pCompFunc(lpString2, g_szAppletsToUnhide[i]))) {
-                return CSTR_LESS_THAN; 
-            }
-        }
-        for (UINT i = 0; i < ARRAYSIZE(g_szCanonicalNames); i++) {
-            if (g_szCanonicalNames[i] && (0 == pCompFunc(lpString1, g_szCanonicalNames[i]) || 0 == pCompFunc(lpString2, g_szCanonicalNames[i]))) {
-                return CSTR_LESS_THAN;
-            }
-        }
-    }
-
-    if (!CompareStringOrdinal_orig) {
-        return 0;
-    }
-
+    if (!CompareStringOrdinal_orig) return 0;
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-// Shell32 symbol hook definition (marked optional = true to prevent init failure crashes)
 const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
         (void**)&COpenControlPanel__MapLegacyName_orig,
         (void*)COpenControlPanel__MapLegacyName_hook,
-        true // Optional to prevent permanent patching leaks on minor Windows build discrepancies
+        true
     }
 };
 
 BOOL Wh_ModInit(void) {
-    Wh_Log(L"Initializing Control Panel Revival mod with robust initialization guards");
+    Wh_Log(L"Initializing Control Panel Revival mod with full string matching");
 
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
+    g_hShell32Global = GetModuleHandleW(L"shell32.dll");
+    if (!g_hShell32Global) {
         Wh_Log(L"Failed to get handle for shell32.dll");
         return FALSE;
     }
 
     g_hWinStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    // Apply memory patches
     for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-        KillStringInModuleReversible(hShell32, g_szAppletsToUnhide[i]);
+        KillStringInModuleReversible(g_hShell32Global, g_szAppletsToUnhide[i]);
         if (g_hWinStorage) {
             KillStringInModuleReversible(g_hWinStorage, g_szAppletsToUnhide[i]);
         }
     }
 
-    // Hook CompareStringOrdinal with strict failure cleanup checks
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     if (!kernelBaseModule) {
         Wh_Log(L"Failed to get handle for kernelbase.dll");
@@ -242,17 +228,17 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    // Apply shell32 symbol hooks safely
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
+    if (!WindhawkUtils::HookSymbols(g_hShell32Global, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to hook shell32 symbols");
         RestoreAllPatchesAndState();
         return FALSE;
     }
 
+    g_isInitialized = true;
     return TRUE;
 }
 
 void Wh_ModUninit(void) {
-    Wh_Log(L"Uninitializing Control Panel Revival mod - cleaning up state and memory");
+    Wh_Log(L"Uninitializing Control Panel Revival mod safely");
     RestoreAllPatchesAndState();
 }
