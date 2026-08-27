@@ -104,6 +104,10 @@ std::atomic<bool> g_refreshPosted{false};
 std::atomic<bool> g_nativeAutoHideEnabled{false};
 
 bool g_onDesktopState = false;
+// True only while the taskbar itself has foreground focus and the cursor
+// is still over the taskbar. This keeps the hover timer alive after a
+// taskbar click, so moving the cursor away can return to desktop state.
+bool g_taskbarIsForeground = false;
 bool g_shownDueToHover = false;
 ULONGLONG g_hideDeadline = 0;
 
@@ -307,13 +311,27 @@ bool IsTaskbarForegroundAndUnderCursor(HWND foreground) {
 void RefreshDesktopState() {
     HWND foreground = GetForegroundWindow();
 
+    // This flag is transient: it is true only while the taskbar itself
+    // has focus and the cursor is over it. The hover timer uses it to
+    // re-check the state after the cursor leaves the taskbar.
+    g_taskbarIsForeground = false;
+
     if (!foreground) {
         g_onDesktopState = !AnyOtherVisibleWindowExists();
         return;
     }
 
-    if (IsTaskbarForegroundAndUnderCursor(foreground)) {
-        g_onDesktopState = false;
+    if (IsTaskbarWindow(foreground)) {
+        if (IsTaskbarForegroundAndUnderCursor(foreground)) {
+            g_taskbarIsForeground = true;
+            g_onDesktopState = false;
+            return;
+        }
+
+        // The taskbar can remain the foreground window after the user
+        // moves the cursor away. In that situation, treat the desktop
+        // as active if no other application window exists.
+        g_onDesktopState = !AnyOtherVisibleWindowExists();
         return;
     }
 
@@ -711,7 +729,10 @@ void UpdateTaskbarState() {
         g_shownDueToHover = false;
 
         SetTaskbarVisibility(true);
-        StopHoverTimer();
+
+        // If the taskbar itself has focus, keep polling so that moving
+        // the cursor away from it can transition back to desktop state.
+        EnsureHoverTimer(g_taskbarIsForeground);
 
         return;
     }
