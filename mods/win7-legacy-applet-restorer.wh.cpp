@@ -56,8 +56,10 @@ The mod does not commit to restore task links that would open the Settings app r
 ## Credits
 
 This mod is based on a fork of the original work by Anixx (https://github.com/Anixx), with portions of the implementation derived from aubymori's Control Panel script.
+
 Credits to m417z for the code review and various enhancements.
-Credits to AdministratoX for the improvements and for restoring Speech Recognition in Control Panel.
+
+Credits to AdministratoX for the improvements and for restoring Speech Recognition in the Control Panel.
 */
 // ==/WindhawkModReadme==
 
