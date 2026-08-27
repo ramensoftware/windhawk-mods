@@ -8890,7 +8890,8 @@ static bool EqHookTaskbarSymbols() {
     HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!h)
         return false;
-
+        
+    // explorer.exe, taskbar.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
