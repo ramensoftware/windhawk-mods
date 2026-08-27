@@ -2,7 +2,7 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.8.7
+// @version         0.9.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -23,16 +23,12 @@ You can also add the ID of your desired applet to prevent it from being redirect
 
 **Note:** This mod is not designed to reveal hidden Control Panel applets; rather, its purpose is to restore applets that are currently present in the Control Panel but redirect to the Settings app.
 
-**Requirements:** **Explorer Patcher install** (Windows 11 modern updates aggressively redirect legacy control panel applets at the system level. While this mod hooks string comparisons and navigation routines in `shell32.dll` and `windows.storage.dll`, certain UI entry points rely on ExplorerPatcher to properly render and handle legacy Control Panel calls without triggering the forced Settings app redirect.)
-
 
 **Before:**
 ![Before](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124304.gif)
 
 **After:**
 ![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
-
-
 */
 // ==/WindhawkModReadme==
 
@@ -178,6 +174,17 @@ constexpr size_t kMaxCustomApplets = 20;
 // Shows a MessageBox on a separate thread so Wh_ModInit (and therefore the
 // host process's startup, e.g. explorer.exe/rundll32.exe) never blocks
 // waiting for the user to dismiss it.
+//
+// FIX (review item #4): the thread handle is now tracked globally instead of
+// being closed/detached immediately. If the user disables/reloads the mod
+// while the box is still open, Wh_ModUninit MUST NOT return while this
+// thread is still running - once Windhawk FreeLibrary's the mod DLL, the
+// thread's code and return address are unmapped and it crashes the host
+// process the moment it resumes. CloseWarningMessageBoxIfOpen() closes the
+// window and waits for the thread to actually exit before Wh_ModUninit
+// returns.
+HANDLE g_hWarningThread = nullptr;
+
 DWORD WINAPI ShowWarningMessageBoxThreadProc(LPVOID param) {
     wchar_t* text = static_cast<wchar_t*>(param);
     MessageBoxW(nullptr, text, L"Control Panel Revival", MB_OK | MB_ICONWARNING);
@@ -185,18 +192,45 @@ DWORD WINAPI ShowWarningMessageBoxThreadProc(LPVOID param) {
     return 0;
 }
 
+BOOL CALLBACK CloseWindowEnumProc(HWND hwnd, LPARAM) {
+    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
 void ShowWarningMessageBoxAsync(const wchar_t* text) {
+    // Only ever track one outstanding warning thread at a time.
+    if (g_hWarningThread) {
+        CloseHandle(g_hWarningThread);
+        g_hWarningThread = nullptr;
+    }
+
     size_t len = wcslen(text) + 1;
     wchar_t* copy = new wchar_t[len];
     wcscpy_s(copy, len, text);
 
-    HANDLE hThread = CreateThread(nullptr, 0, ShowWarningMessageBoxThreadProc, copy, 0, nullptr);
-    if (hThread) {
-        CloseHandle(hThread); // detach; the thread cleans up its own param
-    } else {
+    g_hWarningThread = CreateThread(nullptr, 0, ShowWarningMessageBoxThreadProc, copy, 0, nullptr);
+    if (!g_hWarningThread) {
         Wh_Log(L"Failed to create thread for warning message box");
         delete[] copy;
     }
+}
+
+// Must be called from Wh_ModUninit before returning: closes any still-open
+// warning box and blocks (briefly) until its thread has actually exited.
+void CloseWarningMessageBoxIfOpen() {
+    if (!g_hWarningThread) return;
+
+    DWORD threadId = GetThreadId(g_hWarningThread);
+    if (threadId) {
+        EnumThreadWindows(threadId, CloseWindowEnumProc, 0);
+    }
+
+    // The box is only ever shown by this mod and only ever owned by this
+    // single thread, so this should return almost immediately; the timeout
+    // is just a safety net so uninit can never hang indefinitely.
+    WaitForSingleObject(g_hWarningThread, 2000);
+    CloseHandle(g_hWarningThread);
+    g_hWarningThread = nullptr;
 }
 
 // Reads the CustomApplets[i] setting entries until an empty one is hit
@@ -321,8 +355,12 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
             haveSafeRegion = true;
 
             if (i + patternLen > safeRegionEnd) {
-                // Pattern would straddle into an unverified region - skip
-                // this start offset instead of reading past what we checked.
+                // Pattern would straddle into an unverified region. Instead of
+                // continuing byte-by-byte (which re-triggers this same
+                // VirtualQuery on every remaining offset in this region -
+                // wasteful for modules with many small regions), jump
+                // straight to the end of this region.
+                i = (safeRegionEnd > i) ? safeRegionEnd - 1 : i;
                 continue;
             }
         }
@@ -456,7 +494,11 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
+// FIX (review item #5): renamed from the old misleading "hooks" name.
+// This array is resolved against shell32.dll (see ApplyShell32DependentPatches
+// below), so its name should say so - matters for reviewers/maintainers
+// scanning for which module a given SYMBOL_HOOK array targets.
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
         (void**)&COpenControlPanel__MapLegacyName_orig,
@@ -464,6 +506,78 @@ const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
         true
     }
 };
+
+// FIX (review item #6): rundll32.exe does NOT statically import shell32.dll -
+// it loads it later, at runtime, when asked to run
+// "shell32.dll,Control_RunDLL". Wh_ModInit runs before that happens, so
+// GetModuleHandleW(L"shell32.dll") returns NULL there and nothing ever gets
+// patched/hooked in exactly the host process that actually runs Control
+// Panel applets. This is also the likely reason the mod appeared to need
+// ExplorerPatcher: control.exe typically hands off applet launches to a
+// fresh rundll32.exe, so the redirect decision was happening in the one
+// process this mod couldn't reach.
+//
+// Fix: hook LoadLibraryExW in kernelbase.dll (internal callers go straight
+// to kernelbase, not through the kernel32 import) and apply the shell32
+// patches/hooks the moment shell32.dll actually gets loaded, whenever that
+// happens - at Wh_ModInit time (explorer.exe, control.exe) or later
+// (rundll32.exe).
+bool g_shell32PatchesApplied = false;
+
+void ApplyShell32DependentPatches() {
+    if (g_shell32PatchesApplied) return;
+
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32) return;
+
+    g_hWinStorage = LoadLibraryW(L"windows.storage.dll");
+
+    for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
+        KillStringInModuleReversible(hShell32, g_szAppletsToUnhide[i]);
+        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, g_szAppletsToUnhide[i]);
+    }
+
+    for (const auto& entry : g_customApplets) {
+        KillStringInModuleReversible(hShell32, entry.c_str());
+        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, entry.c_str());
+    }
+
+    // Note: Windhawk resolves this symbol automatically via Microsoft's
+    // public symbol server (through the DIA SDK) and caches the PDB - no
+    // manual symbol download is needed. What CAN fail is the symbol itself
+    // no longer existing/matching on a future Windows build, since this is
+    // a private, unexported function. If that happens, we log it clearly
+    // instead of silently doing nothing.
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
+        Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
+               L"this function's signature may have changed in this Windows "
+               L"build. The mod will continue with its other fixes.");
+    }
+
+    g_shell32PatchesApplied = true;
+
+    // Required when hooks are installed outside Wh_ModInit's normal single
+    // batch (here: from inside the LoadLibraryExW hook, after shell32.dll
+    // has just finished loading).
+    Wh_ApplyHookOperations();
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_orig = nullptr;
+
+HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE result = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
+
+    if (result && !g_shell32PatchesApplied && lpLibFileName) {
+        LPCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
+        fileName = fileName ? fileName + 1 : lpLibFileName;
+        if (_wcsicmp(fileName, L"shell32.dll") == 0) {
+            ApplyShell32DependentPatches();
+        }
+    }
+
+    return result;
+}
 
 BOOL Wh_ModInit(void) {
     if (!IsSupportedWindowsVersion()) {
@@ -474,19 +588,6 @@ BOOL Wh_ModInit(void) {
     Wh_Log(L"Initializing Control Panel Revival (Base-Derived & Safe)");
 
     LoadCustomAppletSettings();
-
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    g_hWinStorage = LoadLibraryW(L"windows.storage.dll");
-
-    for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-        if (hShell32) KillStringInModuleReversible(hShell32, g_szAppletsToUnhide[i]);
-        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, g_szAppletsToUnhide[i]);
-    }
-
-    for (const auto& entry : g_customApplets) {
-        if (hShell32) KillStringInModuleReversible(hShell32, entry.c_str());
-        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, entry.c_str());
-    }
 
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
@@ -501,23 +602,29 @@ BOOL Wh_ModInit(void) {
         } else {
             Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
         }
-    }
 
-    if (hShell32) {
-        // Note: Windhawk resolves this symbol automatically via Microsoft's
-        // public symbol server (through the DIA SDK) and caches the PDB -
-        // no manual symbol download is needed. What CAN fail is the symbol
-        // itself no longer existing/matching on a future Windows build,
-        // since this is a private, unexported function. If that happens,
-        // we log it clearly instead of silently doing nothing, so it's easy
-        // to diagnose from Wh_Log output rather than looking like the mod
-        // just isn't working.
-        if (!WindhawkUtils::HookSymbols(hShell32, user32DllHooks, ARRAYSIZE(user32DllHooks))) {
-            Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
-                   L"this function's signature may have changed in this Windows "
-                   L"build. The mod will continue with its other fixes.");
+        // Covers processes where shell32.dll hasn't been loaded yet at this
+        // point (notably rundll32.exe - see review item #6 above). If it's
+        // already loaded (explorer.exe, control.exe), this hook simply won't
+        // fire for it and ApplyShell32DependentPatches() below handles that
+        // case directly.
+        auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
+        if (pLoadLibraryExW) {
+            if (!WindhawkUtils::SetFunctionHook(
+                    (void *)pLoadLibraryExW,
+                    (void *)LoadLibraryExW_hook,
+                    (void **)&LoadLibraryExW_orig)) {
+                Wh_Log(L"Failed to hook LoadLibraryExW; a late-loaded shell32.dll in this process won't be patched");
+            }
+        } else {
+            Wh_Log(L"LoadLibraryExW not found in kernelbase.dll");
         }
     }
+
+    // Handles the common case: shell32.dll is already loaded (explorer.exe,
+    // control.exe). If it isn't loaded yet in this process (rundll32.exe),
+    // this is a no-op for now and LoadLibraryExW_hook picks it up later.
+    ApplyShell32DependentPatches();
 
     g_isInitialized = true;
     return TRUE;
@@ -525,7 +632,14 @@ BOOL Wh_ModInit(void) {
 
 void Wh_ModUninit(void) {
     Wh_Log(L"Uninitializing Control Panel Revival safely");
+
+    // Must happen before returning: if a warning box is still open on its
+    // own thread, that thread's code would otherwise be unmapped out from
+    // under it the moment this function returns and Windhawk unloads the DLL.
+    CloseWarningMessageBoxIfOpen();
+
     RestoreAllPatches();
+    g_shell32PatchesApplied = false;
 }
 
 // The memory patches applied in Wh_ModInit are only easy to add correctly at
