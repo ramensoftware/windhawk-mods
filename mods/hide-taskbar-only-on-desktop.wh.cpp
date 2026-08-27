@@ -1,4 +1,4 @@
-
+// ==WindhawkMod==
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides the taskbar when the desktop is active, while showing it for applications and on taskbar hover
