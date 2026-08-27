@@ -25,9 +25,11 @@ This mod restores a selection of classic Control Panel applets and task links in
 * Tablet PC Settings
 * Speech Recognition
 
+This mod aims to restore Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
+
 The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
 
-The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
+The optional "Restore Classic Task Links" setting restores the localized, classic task links for these sections in Category View.
 
 ## Screenshot of the Restored Applets
 
@@ -43,7 +45,7 @@ This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, a
 
 HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
-BitLocker Drive Encryption and Tablet PC Settings are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attemping to prevent duplicate entries because their visibility may vary based on the used Windows build.
+BitLocker Drive Encryption, Tablet PC Settings, and Speech Recognition are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attemping to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
 If the automatic detection proves incorrect for a particular edition, each of the two applets offers an override: **Always add** or **Never add**. It should be noted that "Always add" has no effect when the applet is not actually installed (e.g., on Windows Home), as the entry would lack a name, icon, and target.
 
@@ -98,7 +100,7 @@ Credits to AdministratoX for the improvements and for restoring Speech Recogniti
   - never: Never add
 
 - speechMode: auto
-  $name: Speech Recognition (Text to Speech)
+  $name: Speech Recognition
   $description: This setting adds the "Speech Recognition" icon to Control Panel (under Hardware and Sound). It follows the same Auto/Always/Never logic as BitLocker and "Automatic" adds it only if the applet exists and Control Panel does not already display it.
   $options:
   - auto: Automatic (add only if not already displayed)
@@ -1444,10 +1446,10 @@ bool EnsureClassicTaskLinksFile() {
                     ? NarrowAscii(ToLower(kSpeechGuid))          // real CLSID
                     : NarrowAscii(ToLower(kSpeechVirtualGuid));  // virtual CLSID
                 virtualTaskBlock +=
-                    "  <!-- Speech Recognition / Sintesi vocale (Hardware and Sound, Category 2) -->\n"
+                    "  <!-- Speech Recognition (Hardware and Sound, Category 2) -->\n"
                     "  <application id=\"" + speechAppId + "\">\n"
                     "    <sh:task id=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"><sh:name>{SPEECHCONFIGURE}</sh:name>"
-                    "<sh:keywords>speech;voice;speech recognition;synthesis;sintesi vocale</sh:keywords>"
+                    "<sh:keywords>speech;voice;speech recognition;synthesis</sh:keywords>"
                     "<sh:command>explorer.exe shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}</sh:command></sh:task>\n"
                     "    <category id=\"2\"><sh:task idref=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"/></category>\n"
                     "  </application>\n";
@@ -1457,7 +1459,7 @@ bool EnsureClassicTaskLinksFile() {
         // the real System applet while the Revival guard unhide it.
         if (VirtualTwinSuppressed(g_realSystemRegistered)) {
             virtualTaskBlock +=
-                "  <!-- System / Sistema (System and Security, Category 5) -->\n"
+                "  <!-- System (System and Security, Category 5) -->\n"
                 "  <application id=\"{bb06c0e4-d293-4f75-8a90-cb05b6477eee}\">\n"
                 "    <sh:task id=\"{D4F4A030-0D35-4CB6-A21F-BC1661200030}\"><sh:name>{SYSTEMBASIC}</sh:name>"
                 "<sh:keywords>system;computer;basic information</sh:keywords>"
@@ -1776,7 +1778,7 @@ void InitDisplayNames() {
             Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
     }
     if (g_speechClsidRegistered.load()) {
-        // Speech Recognition (Sintesi vocale): the registry read is primary;
+        // Speech Recognition: the registry read is primary;
         // the speechux.dll resource references are the fallback for the
         // stub-CLSID builds where the key exists without name/icon values.
         if (!AddVirtualApplet(kSpeechVirtualGuid, kSpeechGuid, kCategoryHardware,
@@ -2876,8 +2878,8 @@ void InvalidateClassicTaskLinksFile() {
 // What it does, exactly like the original mod:
 //  1. zeroes the hidden-applet monikers inside shell32.dll /
 //     windows.storage.dll so Windows 11 stops hiding Personalization,
-//     BitLocker Drive Encryption, Speech Recognition (Text to Speech) and
-//     System. Only readable, non-executable data sections are scanned,
+//     BitLocker Drive Encryption, Speech Recognition and System. Only
+//     readable, non-executable data sections are scanned,
 //     located through the PE section table (never across the whole image),
 //     and only the pages that actually contain a match are temporarily
 //     made writable;
@@ -2958,13 +2960,20 @@ public:
             if (patternLen > scanSize) continue;
 
             const BYTE* scanBegin = base + section->VirtualAddress;
-            const WCHAR firstChar = lpSearch[0];
+            const WCHAR firstCharLower = towlower(lpSearch[0]);
+            const size_t charCount = patternLen / sizeof(WCHAR);
 
             for (size_t offset = 0; offset + patternLen <= scanSize;
                  offset += sizeof(WCHAR)) {
                 const BYTE* candidate = scanBegin + offset;
-                if (*(const WCHAR*)candidate != firstChar) continue;
-                if (memcmp(candidate, lpSearch, patternLen) != 0) continue;
+                // Case-insensitive: the GUID monikers mix upper/lowercase hex
+                // digits (e.g. "4e60"/"4f75") and a future shell32 build could
+                // ship different casing without changing the moniker itself.
+                // The bytes actually zeroed/restored are read back verbatim
+                // from the module (ZeroAndRecord snapshots `candidate`), so
+                // restoring still puts back exactly what was there.
+                if (towlower(*(const WCHAR*)candidate) != firstCharLower) continue;
+                if (_wcsnicmp((LPCWSTR)candidate, lpSearch, charCount) != 0) continue;
 
                 // Found. ZeroAndRecord() reports failure only when the
                 // protection change fails or the record table is full, in
@@ -3069,29 +3078,29 @@ static void* g_pRevivalOpen = nullptr;
 // The hidden-applet monikers to unhide (copied from the control-panel-revival
 // mod), narrowed to the applets this mod manages.
 static const LPCWSTR kRevivalAppletMonikers[] = {
-    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization (Personalizzazione)
+    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
     L"::{D9EF8727-CAC2-4e60-809E-86F80A666C91}", // BitLocker Drive Encryption
-    L"::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}", // Text to Speech (Sintesi vocale)
-    L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System (Sistema)
+    L"::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}", // Text to Speech
+    L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
 };
 
-// Copied from the control-panel-revival mod: the canonical names whose
-// legacy-to-modern mapping is short-circuited by the _MapLegacyName hook.
+// The canonical names whose legacy-to-modern mapping is short-circuited by
+// the _MapLegacyName hook. Trimmed to the applets this mod actually
+// restores/injects a classic entry for (Personalization, System, Display,
+// Troubleshooting, DevicesAndPrinters - see the task-links XML and the
+// applet list above). The upstream control-panel-revival mod's full list
+// also blocked the redirect for names like Microsoft.WindowsUpdate and
+// Microsoft.Fonts that this mod does not restore a classic page for; on a
+// stock Windows install that left those Control Panel items pointing at a
+// classic page that no longer exists (Windows Update being the most visible
+// case), even though the preventSettingsRedirect description only promises
+// Personalization/BitLocker/Speech/System.
 static const LPCWSTR kRevivalCanonicalNames[] = {
-    L"Microsoft.Display",
     L"Microsoft.Personalization",
-    L"Microsoft.Language",
-    L"Microsoft.LocationAndOtherSensors",
-    L"Microsoft.LocationSettings",
-    L"Microsoft.WindowsUpdate",
+    L"Microsoft.System",
+    L"Microsoft.Display",
     L"Microsoft.Troubleshooting",
     L"Microsoft.DevicesAndPrinters",
-    L"Microsoft.RegionalAndLanguageOptions",
-    L"Microsoft.System",
-    L"Microsoft.Printers",
-    L"Microsoft.InstalledUpdates",
-    L"Microsoft.DefaultPrograms",
-    L"Microsoft.Fonts"
 };
 
 // Helper function to match target strings regardless of length format
@@ -3238,8 +3247,11 @@ static void SetupRevivalGuard(bool applyNow) {
         return;
     }
 
+    bool anyMonikerPatched = false;
+
     for (const LPCWSTR moniker : kRevivalAppletMonikers) {
         const bool patched = g_revivalPatcher->PatchStringInModule(hShell32, moniker);
+        anyMonikerPatched = anyMonikerPatched || patched;
         Wh_Log(L"Revival guard: %s %s in shell32.dll",
                patched ? L"patched" : L"did not find", moniker);
     }
@@ -3256,6 +3268,7 @@ static void SetupRevivalGuard(bool applyNow) {
         for (const LPCWSTR moniker : kRevivalAppletMonikers) {
             const bool patched =
                 g_revivalPatcher->PatchStringInModule(g_revivalWinStorageModule, moniker);
+            anyMonikerPatched = anyMonikerPatched || patched;
             Wh_Log(L"Revival guard: %s %s in windows.storage.dll",
                    patched ? L"patched" : L"did not find", moniker);
         }
@@ -3321,7 +3334,26 @@ static void SetupRevivalGuard(bool applyNow) {
         Wh_ApplyHookOperations();
     }
 
-    g_revivalGuardActive.store(true);
+    // Only declare the guard active if it actually accomplished something:
+    // at least one moniker was patched (that's what unhides the real
+    // applet) AND at least one of the redirect-blocking hooks is in place
+    // (MapLegacyName and/or Open; CompareStringOrdinal is scoped to Open's
+    // codepath). Everything downstream (VirtualTwinSuppressed, task-link
+    // generation, GetNamespaceClsids) treats "active" as "Windows is now
+    // showing the real applet" - if the patch or the hooks silently failed
+    // (e.g. a future shell32 build changes layout/casing unexpectedly),
+    // leaving the guard inactive keeps the mod's own virtual twins visible
+    // instead of dropping the applet from Control Panel entirely.
+    const bool hooksActive = g_revivalMapNameHooked.load() ||
+                              g_revivalOpenHooked.load() ||
+                              g_revivalCsoHooked.load();
+    const bool guardEffective = anyMonikerPatched && hooksActive;
+    g_revivalGuardActive.store(guardEffective);
+    if (!guardEffective) {
+        Wh_Log(L"Revival guard: did not patch anything effective (monikerPatched=%d, hooksActive=%d); "
+               L"staying inactive so virtual twins keep working",
+               anyMonikerPatched, hooksActive);
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -3380,6 +3412,29 @@ void Wh_ModSettingsChanged() {
             }
         } catch (...) {
             Wh_Log(L"Exception while toggling the Control Panel Revival guard");
+        }
+
+        // Toggling the guard changes what Control Panel actually shows for
+        // BitLocker/Speech (System's virtual twin isn't cache-detected), so
+        // the previously cached "does Control Panel already show this?"
+        // verdict may now describe the wrong state - the same way a mode
+        // change already invalidates it above. Without this, turning the
+        // guard off after it was on can leave the applet missing with no
+        // obvious way back until the user manually flips a mode setting.
+        try {
+            for (const wchar_t* key : { L"bitlocker", L"tabletpc", L"speech" }) {
+                Wh_DeleteValue(MakeVerdictValueName(key).c_str());
+                Wh_DeleteValue(MakeVerdictBuildValueName(key).c_str());
+            }
+            g_lazyDetectionDone.store(false, std::memory_order_release);
+            g_bitlockerAutoDetected.store(false);
+            g_tabletPcAutoDetected.store(false);
+            g_speechAutoDetected.store(false);
+            if (g_lazyDetectionWakeEvent) {
+                SetEvent(g_lazyDetectionWakeEvent);
+            }
+        } catch (...) {
+            Wh_Log(L"Exception while invalidating cached applet verdicts after Revival guard toggle");
         }
     }
     // Regenerate task links file with updated settings
