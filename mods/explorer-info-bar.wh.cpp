@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-info-bar
 // @name            Explorer Info Bar
-// @description     Adds drive, folder, selection, and file details to File Explorer's bottom info bar.
+// @description     Enhances File Explorer's bottom info bar with drive, content, selection, and single-file details, with customizable styles and colors.
 // @version         1.0.0
 // @author          digART
 // @github          https://github.com/digart11
@@ -18,8 +18,6 @@
 A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.
 
 Explorer Info Bar adds useful drive, folder, selection, and single-file information while keeping the native Explorer look and adapting to light, dark, and customized themes.
-
-![Explorer Info Bar preview](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png)
 
 ## Features
 
@@ -51,22 +49,18 @@ Explorer Info Bar adds useful drive, folder, selection, and single-file informat
 
 Typical information shown by the mod:
 
-```text
 Drive D: 150.7GB free
 Content: 15 folders / 25 files (77.2MB)
 Selected: 2 folders / 4 files (571KB)
-```
 
 When one file is selected, additional details can appear:
 
-```text
-.jpg (4032×3024)
-.jpeg (6000×4000)
-.mp4 (1920×1080, 01:23:43)
+.jpg (4032&times;3024)
+.jpeg (6000&times;4000)
+.mp4 (1920&times;1080, 01:23:43)
 .mp3 (00:03:47)
 .doc
 .pdf
-```
 */
 // ==/WindhawkModReadme==
 
@@ -135,6 +129,7 @@ When one file is selected, additional details can appear:
 
 
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <commctrl.h>
@@ -160,10 +155,8 @@ static constexpr int kStatusRowHeight = 24;
 static constexpr ULONGLONG kStatusMarkerLifetimeMs = 250;
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
 static constexpr DWORD kRefreshIntervalMs = 500;
-static constexpr ULONGLONG kContentSafetyRescanMs = 30000;
 static constexpr ULONGLONG kContentFailedRetryMs = 2000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
-static constexpr UINT kSubclassRemovalTimeoutMs = 500;
 
 // ============================================================
 // DrawText hook
@@ -286,8 +279,6 @@ struct ModSettings
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static ModSettings g_settings;
 
-static constexpr UINT_PTR kDirectUiSubclassId = 0xE1B029;
-static UINT g_removeDirectUiSubclassMessage = 0;
 static UINT g_refreshDirectUiMessage = 0;
 
 static LRESULT CALLBACK DirectUiSubclassProc(
@@ -295,7 +286,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     UINT msg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR,
     DWORD_PTR
 );
 
@@ -610,39 +600,6 @@ static ModSettings GetSettingsSnapshot()
 // ============================================================
 // Helpers
 // ============================================================
-
-static bool ContainsItemToken(
-    LPCWSTR text,
-    int length
-)
-{
-    if (
-        !text ||
-        length < 4
-    )
-    {
-        return false;
-    }
-
-    for (
-        int i = 0;
-        i <= length - 4;
-        i++
-    )
-    {
-        if (
-            towlower(text[i]) == L'i' &&
-            towlower(text[i + 1]) == L't' &&
-            towlower(text[i + 2]) == L'e' &&
-            towlower(text[i + 3]) == L'm'
-        )
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 enum class ByteFormat
 {
@@ -2504,11 +2461,6 @@ static unsigned ReadCurrentView(
             sameFolder &&
             total != contentCache.itemCount;
 
-        const bool safetyRescanDue =
-            sameFolder &&
-            now - contentCache.lastFullScanTick >=
-                kContentSafetyRescanMs;
-
         const bool retryThrottled =
             folderIdentity ==
                 contentCache.lastAttemptFolderIdentity &&
@@ -2518,8 +2470,7 @@ static unsigned ReadCurrentView(
         if (
             (
                 !sameFolder ||
-                itemCountChanged ||
-                safetyRescanDue
+                itemCountChanged
             ) &&
             !retryThrottled
         )
@@ -2617,11 +2568,19 @@ static unsigned ReadCurrentView(
             selected =
                 static_cast<int>(selectionCount);
 
+            // Avoid hundreds or thousands of cross-apartment shell calls on
+            // large selections. Keep the exact count, but only enumerate
+            // individual selected items up to a conservative cap.
+            constexpr DWORD kMaxDetailedSelectionItems = 256;
+
             const bool enumerateSelection =
-                settings.showSelection ||
+                selectionCount <= kMaxDetailedSelectionItems &&
                 (
-                    settings.singleFileDetails &&
-                    selectionCount == 1
+                    settings.showSelection ||
+                    (
+                        settings.singleFileDetails &&
+                        selectionCount == 1
+                    )
                 );
 
             if (enumerateSelection)
@@ -2807,7 +2766,7 @@ static DWORD WINAPI WorkerThreadProc(
     const HRESULT comHr =
         CoInitializeEx(
             nullptr,
-            COINIT_APARTMENTTHREADED
+            COINIT_MULTITHREADED
         );
 
     Wh_Log(
@@ -2996,6 +2955,38 @@ static bool IsDirectUiWindow(
         cls,
         L"DirectUIHWND"
     ) == 0;
+}
+
+static bool IsExplorerDirectUiTarget(HWND hwnd)
+{
+    if (!IsDirectUiWindow(hwnd))
+        return false;
+
+    HWND current = GetParent(hwnd);
+    bool sawDuiView = false;
+    bool sawShellTab = false;
+
+    while (current)
+    {
+        wchar_t cls[128] = {};
+        if (GetClassNameW(current, cls, ARRAYSIZE(cls)))
+        {
+            if (!sawDuiView && wcscmp(cls, L"DUIViewWndClassName") == 0)
+                sawDuiView = true;
+            else if (sawDuiView && wcscmp(cls, L"ShellTabWindowClass") == 0)
+                sawShellTab = true;
+            else if (sawShellTab && wcscmp(cls, L"CabinetWClass") == 0)
+            {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(current, &pid);
+                return pid == g_pid;
+            }
+        }
+
+        current = GetParent(current);
+    }
+
+    return false;
 }
 
 static bool StatusMarkIsFresh(
@@ -3987,10 +3978,9 @@ static DirectUiSubclassResult EnsureDirectUiSubclass(
     }
 
     if (
-        !SetWindowSubclass(
+        !WindhawkUtils::SetWindowSubclassFromAnyThread(
             hwnd,
             DirectUiSubclassProc,
-            kDirectUiSubclassId,
             0
         )
     )
@@ -4000,7 +3990,7 @@ static DirectUiSubclassResult EnsureDirectUiSubclass(
         );
 
         Wh_Log(
-            L"SetWindowSubclass failed hwnd=%p error=%lu",
+            L"DirectUI subclass install failed hwnd=%p error=%lu",
             hwnd,
             GetLastError()
         );
@@ -4018,10 +4008,9 @@ static DirectUiSubclassResult EnsureDirectUiSubclass(
     }
     catch (...)
     {
-        RemoveWindowSubclass(
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd,
-            DirectUiSubclassProc,
-            kDirectUiSubclassId
+            DirectUiSubclassProc
         );
 
         ReleaseSRWLockExclusive(
@@ -4069,7 +4058,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     UINT msg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR,
     DWORD_PTR
 )
 {
@@ -4084,65 +4072,8 @@ static LRESULT CALLBACK DirectUiSubclassProc(
         return 0;
     }
 
-    if (
-        g_removeDirectUiSubclassMessage &&
-        msg == g_removeDirectUiSubclassMessage
-    )
-    {
-        const DWORD ownerThread =
-            GetWindowThreadProcessId(
-                hwnd,
-                nullptr
-            );
-
-        const BOOL removed =
-            ownerThread == GetCurrentThreadId() &&
-            RemoveWindowSubclass(
-                hwnd,
-                DirectUiSubclassProc,
-                kDirectUiSubclassId
-            );
-
-        if (removed)
-        {
-            const DWORD shellBrowserCookie =
-                GetShellBrowserCookieSnapshot(hwnd);
-
-            EraseWindowDataCache(hwnd);
-            RevokeShellBrowserCookie(shellBrowserCookie);
-
-            RECT row{};
-
-            if (GetBottomStatusRowRect(hwnd, &row))
-            {
-                RedrawWindow(
-                    hwnd,
-                    &row,
-                    nullptr,
-                    RDW_INVALIDATE |
-                    RDW_ERASE
-                );
-            }
-
-            // Untrack last. If the synchronous removal request times out,
-            // teardown keeps treating this HWND as live until all callback
-            // cleanup has finished.
-            AcquireSRWLockExclusive(&g_subclassLock);
-            UntrackDirectUiWindowLocked(hwnd);
-            ReleaseSRWLockExclusive(&g_subclassLock);
-        }
-
-        return removed ? 1 : 0;
-    }
-
     if (msg == WM_NCDESTROY)
     {
-        RemoveWindowSubclass(
-            hwnd,
-            DirectUiSubclassProc,
-            kDirectUiSubclassId
-        );
-
         const DWORD shellBrowserCookie =
             GetShellBrowserCookieSnapshot(hwnd);
 
@@ -4249,45 +4180,24 @@ static int WINAPI DrawTextW_Hook(
     if (!DrawTextW_Original)
         return 0;
 
-    if (text)
+    // Language-independent marker: Explorer's native information row uses a
+    // distinctive DrawText format. Don't inspect the localized text at all.
+    // The BitBlt hook below performs the decisive validation by mapping this
+    // source rect into the destination DirectUIHWND and requiring it to land
+    // at the bottom of that Explorer view.
+    if (
+        !g_insideFinalPaint &&
+        rect &&
+        format == kNativeStatusTextFormat &&
+        rect->bottom > rect->top &&
+        rect->right > rect->left
+    )
     {
-        int length =
-            count;
-
-        if (length < 0)
-        {
-            length =
-                static_cast<int>(
-                    wcslen(text)
-                );
-        }
-
-        if (
-            length > 0 &&
-            length < 512
-        )
-        {
-            if (
-                format == kNativeStatusTextFormat &&
-                ContainsItemToken(
-                    text,
-                    length
-                )
-            )
-            {
-                g_statusSourceDc =
-                    hdc;
-
-                g_statusMarkTick =
-                    GetTickCount64();
-
-                if (rect)
-                    g_statusRowRect = *rect;
-            }
-        }
+        g_statusSourceDc = hdc;
+        g_statusMarkTick = GetTickCount64();
+        g_statusRowRect = *rect;
     }
 
-    // Important: do not modify the off-screen DirectUI render.
     return DrawTextW_Original(
         hdc,
         text,
@@ -4340,8 +4250,36 @@ static BOOL WINAPI BitBlt_Hook(
             hdcDest
         );
 
-    if (!IsDirectUiWindow(hwnd))
+    if (!IsExplorerDirectUiTarget(hwnd))
         return result;
+
+    // Map the candidate source text rect into destination coordinates and only
+    // accept it when it actually lands on Explorer's bottom information row.
+    RECT client{};
+    if (!GetClientRect(hwnd, &client))
+        return result;
+
+    RECT mappedRow = g_statusRowRect;
+    mappedRow.top = yDest + (g_statusRowRect.top - ySrc);
+    mappedRow.bottom = yDest + (g_statusRowRect.bottom - ySrc);
+    mappedRow.left = xDest + (g_statusRowRect.left - xSrc);
+    mappedRow.right = xDest + (g_statusRowRect.right - xSrc);
+
+    const int rowHeight = mappedRow.bottom - mappedRow.top;
+    const int expectedHeight = ScaleForWindow(hwnd, kStatusRowHeight);
+    const int bottomTolerance = ScaleForWindow(hwnd, 4);
+
+    if (
+        rowHeight < ScaleForWindow(hwnd, 16) ||
+        rowHeight > ScaleForWindow(hwnd, 34) ||
+        std::abs(mappedRow.bottom - client.bottom) > bottomTolerance ||
+        std::abs(rowHeight - expectedHeight) > ScaleForWindow(hwnd, 10)
+    )
+    {
+        return result;
+    }
+
+    g_statusRowRect = mappedRow;
 
     if (
         g_unloading.load(
@@ -4509,20 +4447,12 @@ BOOL Wh_ModInit()
         &g_cacheLock
     );
 
-    g_removeDirectUiSubclassMessage =
-        RegisterWindowMessageW(
-            L"Windhawk_ExplorerInfoBar_RemoveDirectUiSubclass"
-        );
-
     g_refreshDirectUiMessage =
         RegisterWindowMessageW(
             L"Windhawk_ExplorerInfoBar_RefreshDirectUi"
         );
 
-    if (
-        !g_removeDirectUiSubclassMessage ||
-        !g_refreshDirectUiMessage
-    )
+    if (!g_refreshDirectUiMessage)
     {
         Wh_Log(
             L"DirectUI message registration failed error=%lu",
@@ -4761,135 +4691,42 @@ void Wh_ModBeforeUninit()
     if (g_workerThreadId)
         CoCancelCall(g_workerThreadId, 0);
 
-    // A subclass callback points into this module, so unload must not proceed
-    // until every subclass is removed and any timed-out removal callback has
-    // returned to its owning UI thread.
-    ULONGLONG lastWaitLogTick = 0;
+    // Snapshot under the lock, then remove subclasses outside it. The
+    // Windhawk helper handles cross-thread subclass removal without the
+    // custom retry/message/barrier machinery that could previously loop
+    // forever on a hung Explorer UI thread.
+    std::vector<HWND> windows;
 
-    while (true)
+    AcquireSRWLockShared(&g_subclassLock);
+    try
     {
-        HWND hwnd = nullptr;
+        windows.reserve(g_trackedWindows.size());
+        for (const TrackedDirectUiState& state : g_trackedWindows)
+            windows.push_back(state.hwnd);
+    }
+    catch (...)
+    {
+        windows.clear();
+    }
+    ReleaseSRWLockShared(&g_subclassLock);
 
-        AcquireSRWLockShared(&g_subclassLock);
-
-        if (!g_trackedWindows.empty())
-            hwnd = g_trackedWindows.front().hwnd;
-
-        ReleaseSRWLockShared(&g_subclassLock);
-
-        if (!hwnd)
-            break;
-
-        while (true)
+    for (HWND hwnd : windows)
+    {
+        if (hwnd && IsWindow(hwnd))
         {
-            const DWORD ownerThread =
-                GetWindowThreadProcessId(
-                    hwnd,
-                    nullptr
-                );
-
-            if (!ownerThread || !IsWindow(hwnd))
-            {
-                AcquireSRWLockExclusive(&g_subclassLock);
-                const DWORD shellBrowserCookie =
-                    UntrackDirectUiWindowLocked(hwnd);
-                ReleaseSRWLockExclusive(&g_subclassLock);
-
-                EraseWindowDataCache(hwnd);
-                RevokeShellBrowserCookie(shellBrowserCookie);
-                break;
-            }
-
-            DWORD_PTR removalResult = 0;
-            SetLastError(ERROR_SUCCESS);
-
-            const LRESULT sent =
-                SendMessageTimeoutW(
-                    hwnd,
-                    g_removeDirectUiSubclassMessage,
-                    0,
-                    0,
-                    SMTO_ABORTIFHUNG |
-                    SMTO_BLOCK |
-                    SMTO_ERRORONEXIT,
-                    kSubclassRemovalTimeoutMs,
-                    &removalResult
-                );
-
-            if (sent && removalResult == 1)
-            {
-                // SendMessageTimeout returned only after the owner-thread
-                // callback returned, so this HWND is safe to forget.
-                break;
-            }
-
-            bool stillTracked = false;
-
-            AcquireSRWLockShared(&g_subclassLock);
-
-            stillTracked =
-                std::find_if(
-                    g_trackedWindows.begin(),
-                    g_trackedWindows.end(),
-                    [&](const TrackedDirectUiState& value)
-                    {
-                        return value.hwnd == hwnd;
-                    }
-                ) != g_trackedWindows.end();
-
-            ReleaseSRWLockShared(&g_subclassLock);
-
-            if (!stillTracked)
-            {
-                // The removal callback can finish after SendMessageTimeout
-                // gives up. A synchronous no-op message is a UI-thread
-                // barrier: once it returns, that earlier callback has returned.
-                while (IsWindow(hwnd))
-                {
-                    DWORD_PTR barrierResult = 0;
-
-                    const LRESULT barrierSent =
-                        SendMessageTimeoutW(
-                            hwnd,
-                            WM_NULL,
-                            0,
-                            0,
-                            SMTO_ABORTIFHUNG |
-                            SMTO_BLOCK |
-                            SMTO_ERRORONEXIT,
-                            kSubclassRemovalTimeoutMs,
-                            &barrierResult
-                        );
-
-                    if (barrierSent)
-                        break;
-
-                    Sleep(25);
-                }
-
-                break;
-            }
-
-            const ULONGLONG now = GetTickCount64();
-
-            if (
-                lastWaitLogTick == 0 ||
-                now - lastWaitLogTick >= 2000
-            )
-            {
-                Wh_Log(
-                    L"Waiting for DirectUI subclass removal hwnd=%p "
-                    L"ownerTid=%lu error=%lu",
-                    hwnd,
-                    ownerThread,
-                    GetLastError()
-                );
-
-                lastWaitLogTick = now;
-            }
-
-            Sleep(25);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd,
+                DirectUiSubclassProc
+            );
         }
+
+        DWORD shellBrowserCookie = 0;
+        AcquireSRWLockExclusive(&g_subclassLock);
+        shellBrowserCookie = UntrackDirectUiWindowLocked(hwnd);
+        ReleaseSRWLockExclusive(&g_subclassLock);
+
+        EraseWindowDataCache(hwnd);
+        RevokeShellBrowserCookie(shellBrowserCookie);
     }
 
     Wh_Log(L"Explorer Info Bar subclass teardown complete");
@@ -4911,10 +4748,18 @@ void Wh_ModUninit()
     {
         // The cache and COM state must outlive the worker. Wait until the
         // worker has fully stopped before releasing shared resources.
-        WaitForSingleObject(
-            g_workerThread,
-            INFINITE
-        );
+        const DWORD workerWait =
+            WaitForSingleObject(
+                g_workerThread,
+                5000
+            );
+
+        if (workerWait == WAIT_TIMEOUT)
+        {
+            Wh_Log(L"Worker did not stop within 5 seconds; terminating it to avoid blocking mod unload");
+            TerminateThread(g_workerThread, 0);
+            WaitForSingleObject(g_workerThread, 1000);
+        }
 
         CloseHandle(
             g_workerThread
