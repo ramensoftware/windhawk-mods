@@ -2,7 +2,7 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.0
+// @version         0.9.2
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -42,8 +42,9 @@ You can also add the ID of your desired applet to prevent it from being redirect
     braces (e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE or
     {BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) — the "::" prefix is added
     automatically. Canonical names (e.g. Microsoft.SomeApplet) can be entered
-    as-is. One entry per row. Leave a row blank to ignore it. The mod reloads
-    automatically after saving.
+    as-is. One entry per row. IMPORTANT: an empty row ends the list — any
+    rows after a blank one are ignored, so don't leave gaps in the middle.
+    The mod reloads automatically after saving.
 */
 // ==/WindhawkModSettings==
 
@@ -522,13 +523,29 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
 // patches/hooks the moment shell32.dll actually gets loaded, whenever that
 // happens - at Wh_ModInit time (explorer.exe, control.exe) or later
 // (rundll32.exe).
-bool g_shell32PatchesApplied = false;
+// FIX (found during review): use an atomic compare-exchange instead of a
+// plain bool, and set it to "applied" BEFORE doing any work (not after).
+// The previous version set this flag at the end of the function, but
+// LoadLibraryW(L"windows.storage.dll") below can itself trigger a nested
+// LoadLibraryExW call. If that nested call were (for whatever reason) also
+// seen as loading "shell32.dll", the hook would re-enter this function
+// before the first call finished - re-scanning memory that's already been
+// partially zeroed and saving those zeroed bytes as the "original" bytes to
+// restore later, silently corrupting the restore data. Claiming the flag
+// atomically up front closes that window and also makes concurrent calls
+// from different threads safe.
+volatile LONG g_shell32PatchesApplied = 0;
 
 void ApplyShell32DependentPatches() {
-    if (g_shell32PatchesApplied) return;
+    if (InterlockedCompareExchange(&g_shell32PatchesApplied, 1, 0) != 0) {
+        return; // already applied, or another call already claimed this
+    }
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) return;
+    if (!hShell32) {
+        InterlockedExchange(&g_shell32PatchesApplied, 0); // not actually loaded yet; allow a real attempt later
+        return;
+    }
 
     g_hWinStorage = LoadLibraryW(L"windows.storage.dll");
 
@@ -553,8 +570,6 @@ void ApplyShell32DependentPatches() {
                L"this function's signature may have changed in this Windows "
                L"build. The mod will continue with its other fixes.");
     }
-
-    g_shell32PatchesApplied = true;
 
     // Required when hooks are installed outside Wh_ModInit's normal single
     // batch (here: from inside the LoadLibraryExW hook, after shell32.dll
@@ -639,7 +654,7 @@ void Wh_ModUninit(void) {
     CloseWarningMessageBoxIfOpen();
 
     RestoreAllPatches();
-    g_shell32PatchesApplied = false;
+    InterlockedExchange(&g_shell32PatchesApplied, 0);
 }
 
 // The memory patches applied in Wh_ModInit are only easy to add correctly at
