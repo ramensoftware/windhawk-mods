@@ -222,7 +222,6 @@ community.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cwctype>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -721,9 +720,10 @@ thread_local void* g_clickSentinel_TaskGroup;
 // Latched per path (item vs. group), not one shared flag, since the two
 // paths reach CTaskListWnd::HandleClick through different internal call
 // chains and a Windows update could break just one. Requires
-// kClickSentinelMissesBeforeBroken consecutive misses before latching
-// "broken" (not just one - see NoteUnconfirmedClickSentinelMiss for why),
-// and that bound only holds pre-confirmation - see RATIONALE.md.
+// kClickSentinelMissesBeforeBroken cumulative misses (the counter is never
+// reset) before latching "broken" (not just one - see
+// NoteUnconfirmedClickSentinelMiss for why), and that bound only holds
+// pre-confirmation - see RATIONALE.md.
 std::atomic<bool> g_clickSentinelItemConfirmed;
 std::atomic<bool> g_clickSentinelItemBroken;
 std::atomic<int> g_clickSentinelItemMisses;
@@ -1074,6 +1074,17 @@ std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 std::atomic<bool> g_forceResolveUnresolved;
 constexpr int kMaxForcedRetryFailures = 3;
 
+// Caps the per-entry backoff retry itself (not just the force-bypass
+// above) - without this, a button whose interception path is genuinely,
+// permanently broken (e.g. a future Windows update routes it through a
+// different internal handler while the rest of the taskbar still reaches
+// CTaskListWnd::HandleClick, so the click-sentinel latch itself never
+// trips) would keep dispatching a real ReportClicked on this entry every
+// ResolveBackoffMs interval, forever. A button whose identity changes, or
+// that gets pruned and recreated, still gets a fresh consecutiveFailures
+// count and resumes retrying normally.
+constexpr int kMaxResolveFailures = 8;
+
 // The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end of
 // every successful ResolvePendingButtonHwnds pass and read by WinEventProc
 // (a different thread) to filter drag-follow's LOCATIONCHANGE events.
@@ -1167,8 +1178,7 @@ WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
         // reports the restored position while minimized (unlike
         // GetWindowRect).
         WINDOWPLACEMENT wp{.length = sizeof(wp)};
-        if (!hwnd || !GetWindowPlacement(hwnd, &wp) ||
-            !GetMonitorInfo(mon, &mi)) {
+        if (!GetWindowPlacement(hwnd, &wp) || !GetMonitorInfo(mon, &mi)) {
             return {ResolveUnresolvedAppsDefaultSide()};
         }
         wr = wp.rcNormalPosition;
@@ -1179,7 +1189,7 @@ WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
         LONG workOffsetX = mi.rcWork.left - mi.rcMonitor.left;
         wr.left += workOffsetX;
         wr.right += workOffsetX;
-    } else if (!hwnd || !GetWindowRect(hwnd, &wr) || !GetMonitorInfo(mon, &mi)) {
+    } else if (!GetWindowRect(hwnd, &wr) || !GetMonitorInfo(mon, &mi)) {
         return {ResolveUnresolvedAppsDefaultSide()};
     }
 
@@ -1666,6 +1676,10 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
                                         LPARAM lParam,
                                         DWORD_PTR dwRefData);
 
+// Defined later (Mod lifecycle section); applies a settings change
+// ApplyLoadedSettings couldn't hand off to the taskbar thread earlier.
+void ApplyPendingSettingsIfAny();
+
 // Resolves g_hTaskbarWnd and installs the taskbar-window subclass,
 // self-healing on every ArrangeOverride pass rather than a one-shot
 // Wh_ModAfterInit lookup - see RATIONALE.md for why both parts need to
@@ -1698,8 +1712,11 @@ HWND EnsureTaskbarWnd() {
 
     // Retried on every call until it succeeds, not just the pass that
     // first resolves g_hTaskbarWnd above - see RATIONALE.md for why that
-    // matters. Cheap: this runs on the taskbar's own thread, so
-    // SetWindowSubclassFromAnyThread takes its same-thread fast path.
+    // matters. Cheap on the common ArrangeOverride call path, since that
+    // already runs on the taskbar's own thread and
+    // SetWindowSubclassFromAnyThread takes its same-thread fast path there
+    // (the Wh_ModAfterInit call site runs on Windhawk's own thread instead,
+    // so it takes the real cross-thread marshal, but only once at startup).
     if (!g_taskbarWndSubclassed && !g_unloading &&
         WindhawkUtils::SetWindowSubclassFromAnyThread(
             g_hTaskbarWnd, TaskbarWndSubclassProc, 0)) {
@@ -1714,9 +1731,12 @@ HWND EnsureTaskbarWnd() {
         } else {
             // Kicks the resolve timer and a relayout awake - needed since
             // nothing else restarts them once a subclass install has
-            // failed for a while (see ButtonHwndResolveTimerProc).
+            // failed for a while (see ButtonHwndResolveTimerProc). Also
+            // applies any settings change that arrived before this point
+            // could hand it off to the taskbar thread.
             ArmButtonHwndResolveTimer(0);
             InvalidateTaskbarLayout();
+            ApplyPendingSettingsIfAny();
         }
     }
 
@@ -1859,8 +1879,10 @@ void ResolvePendingButtonHwnds() {
                 } else {
                     // forceResolve: bounded to
                     // consecutiveFailures < kMaxForcedRetryFailures - see
-                    // its own comment.
+                    // its own comment. backoffElapsed itself stops
+                    // retrying past kMaxResolveFailures - see its comment.
                     bool backoffElapsed =
+                        it->second.consecutiveFailures < kMaxResolveFailures &&
                         now - it->second.lastAttempt >=
                         ResolveBackoffMs(it->second.consecutiveFailures);
                     needsResolve =
@@ -2333,7 +2355,18 @@ UINT SettingsChangedMsg() {
     return msg;
 }
 
-// Installed on g_hTaskbarWnd by EnsureTaskbarWnd. Handles the three private
+// Sent (not posted) by Wh_ModBeforeUninit right before removing the
+// subclass, to reclaim a SettingsChangedMsg that was posted but never got
+// dispatched (e.g. settings changed immediately before disable) - without
+// this, that message would fall through to Shell_TrayWnd's real WndProc
+// once the subclass is gone, and its heap ModSettings would leak.
+UINT DrainSettingsMsg() {
+    static const UINT msg =
+        RegisterWindowMessage(L"Windhawk_DrainSettings_" WH_MOD_ID);
+    return msg;
+}
+
+// Installed on g_hTaskbarWnd by EnsureTaskbarWnd. Handles the four private
 // messages above and forwards everything else to DefSubclassProc (which
 // also lets comctl32 clean this subclass up via WM_NCDESTROY if the window
 // is destroyed before Wh_ModBeforeUninit removes it). See RATIONALE.md for
@@ -2349,6 +2382,17 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
     }
     if (uMsg == ResolveButtonHwndsMsg()) {
         ResolvePendingButtonHwnds();
+        return 0;
+    }
+    if (uMsg == DrainSettingsMsg()) {
+        // Runs on this thread (SendMessage from Wh_ModBeforeUninit), so
+        // PeekMessage here scans this thread's own queue - the one
+        // SettingsChangedMsg was posted to.
+        MSG queuedMsg;
+        while (PeekMessage(&queuedMsg, hWnd, SettingsChangedMsg(),
+                           SettingsChangedMsg(), PM_REMOVE)) {
+            delete reinterpret_cast<ModSettings*>(queuedMsg.lParam);
+        }
         return 0;
     }
     if (uMsg == SettingsChangedMsg()) {
@@ -2425,10 +2469,17 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     // Only a window this mod has resolved to a taskbar button can affect
     // the layout on a move, so filter LOCATIONCHANGE against that set
     // before the cross-process USER32 calls below. Not applied to SHOW: a
-    // newly-shown window can't be resolved yet by definition.
+    // newly-shown window can't be resolved yet by definition - instead,
+    // its own leading-edge throttle is checked here too, before those same
+    // USER32 calls, since SHOW is otherwise unthrottled and can arrive in
+    // bursts.
     if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
         if (!g_resolvedHwnds.count(hwnd)) {
+            return;
+        }
+    } else if (event == EVENT_OBJECT_SHOW) {
+        if (GetTickCount64() - g_lastShowEventArm < 150) {
             return;
         }
     }
@@ -2441,15 +2492,10 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     if (event == EVENT_OBJECT_SHOW) {
         // A newly-visible top-level window is what a pinned-but-not-running
         // app launching looks like - nudge the resolve timer to run now,
-        // bypassing each entry's own backoff. Leading-edge throttled since
-        // this event is unthrottled and can arrive in bursts; no trailing
-        // timer needed since a single arm(0) picks up every pending button
-        // regardless of which SHOW event triggered it. See RATIONALE.md.
-        ULONGLONG nowShow = GetTickCount64();
-        if (nowShow - g_lastShowEventArm < 150) {
-            return;
-        }
-        g_lastShowEventArm = nowShow;
+        // bypassing each entry's own backoff. No trailing timer needed
+        // since a single arm(0) picks up every pending button regardless
+        // of which SHOW event triggered it. See RATIONALE.md.
+        g_lastShowEventArm = GetTickCount64();
         g_forceResolveUnresolved = true;
         ArmButtonHwndResolveTimer(0);
         return;
@@ -2927,7 +2973,10 @@ void ArmButtonHwndResolveTimer(DWORD delayMs) {
     if (!g_winEventThreadId || g_unloading) {
         return;
     }
-    PostThreadMessage(g_winEventThreadId, kArmResolveNowMsg, 0, delayMs);
+    if (!PostThreadMessage(g_winEventThreadId, kArmResolveNowMsg, 0, delayMs)) {
+        Wh_Log(L"ArmButtonHwndResolveTimer: PostThreadMessage failed, "
+               L"error=%lu", GetLastError());
+    }
 }
 
 BOOL Wh_ModInit() {
@@ -3003,12 +3052,21 @@ void Wh_ModBeforeUninit() {
     // the click-sentinel probe and makes IUIElement_Arrange_Hook fall
     // through to native positioning immediately.
 
-    // Removes the subclass as early as it's safe to. This is the sole
-    // marshal onto the taskbar thread (see g_taskbarWndSubclassed), so
-    // once it's gone there's no way to force an immediate visual
-    // snap-back on disable - native positions apply cosmetically late
-    // instead, next time XAML re-runs Arrange on its own. See RATIONALE.md.
+    // Forces an immediate snap-back to native positions before removing
+    // the subclass below - hooks are still live and g_unloading is already
+    // set, so IUIElement_Arrange_Hook falls through to native positioning
+    // for this pass. Must be SendMessage, not PostMessage:
+    // RemoveWindowSubclassFromAnyThread below is itself a SendMessage, and
+    // a merely posted invalidate would arrive after the subclass is gone.
     HWND hTaskbarWnd = g_hTaskbarWnd;
+    if (hTaskbarWnd && g_taskbarWndSubclassed) {
+        SendMessage(hTaskbarWnd, InvalidateTaskbarLayoutMsg(), 0, 0);
+        // Reclaims a SettingsChangedMsg posted but not yet dispatched -
+        // see DrainSettingsMsg's own comment.
+        SendMessage(hTaskbarWnd, DrainSettingsMsg(), 0, 0);
+    }
+    // Removes the subclass as early as it's safe to - the sole marshal
+    // onto the taskbar thread (see g_taskbarWndSubclassed).
     if (hTaskbarWnd && g_taskbarWndSubclassed.exchange(false)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hTaskbarWnd, TaskbarWndSubclassProc);
@@ -3024,23 +3082,34 @@ void Wh_ModUninit() {
     StopWinEventHook();
 }
 
+// Holds a settings change ApplyLoadedSettings couldn't hand off to the
+// taskbar thread yet (no taskbar window resolved, or its subclass isn't
+// installed) - EnsureTaskbarWnd applies it via ApplyPendingSettingsIfAny
+// once its own next successful subclass install makes that handoff
+// possible. Guarded by a mutex: ApplyLoadedSettings runs on
+// Wh_ModSettingsChanged's arbitrary calling thread, while
+// ApplyPendingSettingsIfAny runs on whichever thread called
+// EnsureTaskbarWnd.
+std::mutex g_pendingSettingsMutex;
+bool g_hasPendingSettings;
+ModSettings g_pendingSettings;
+
 // Applies a freshly-loaded settings struct on the taskbar's own thread,
 // since it reassigns leftApps/rightApps while a concurrent layout pass
-// could be reading them. No fallback if the subclass isn't installed or
-// PostMessage fails - logged loudly rather than silently dropped, since
-// unlike InvalidateTaskbarLayout there's no periodic retry for a missed
-// settings change. See RATIONALE.md.
+// could be reading them. If the taskbar window isn't resolved yet or its
+// subclass isn't installed, stashes the settings above instead of
+// assigning g_settings directly here - a foreign-thread write to it could
+// otherwise race EnsureTaskbarWnd resolving the taskbar (and a layout pass
+// starting to read g_settings) concurrently on another thread. No further
+// fallback if PostMessage itself fails - logged loudly rather than
+// silently dropped. See RATIONALE.md.
 void ApplyLoadedSettings(ModSettings settings) {
-    // Snapshot so every read below agrees.
+    // Snapshot so both checks below agree.
     HWND hTaskbarWnd = g_hTaskbarWnd;
-    if (!hTaskbarWnd) {
-        g_settings = std::move(settings);
-        return;
-    }
-
-    if (!g_taskbarWndSubclassed) {
-        Wh_Log(L"ApplyLoadedSettings: no taskbar subclass installed, "
-               L"new settings not applied");
+    if (!hTaskbarWnd || !g_taskbarWndSubclassed) {
+        std::lock_guard<std::mutex> guard(g_pendingSettingsMutex);
+        g_pendingSettings = std::move(settings);
+        g_hasPendingSettings = true;
         return;
     }
 
@@ -3055,6 +3124,19 @@ void ApplyLoadedSettings(ModSettings settings) {
     }
     Wh_Log(L"ApplyLoadedSettings: PostMessage failed, error=%lu, "
            L"new settings not applied", GetLastError());
+}
+
+void ApplyPendingSettingsIfAny() {
+    ModSettings settings;
+    {
+        std::lock_guard<std::mutex> guard(g_pendingSettingsMutex);
+        if (!g_hasPendingSettings) {
+            return;
+        }
+        settings = std::move(g_pendingSettings);
+        g_hasPendingSettings = false;
+    }
+    ApplyLoadedSettings(std::move(settings));
 }
 
 void Wh_ModSettingsChanged() {
