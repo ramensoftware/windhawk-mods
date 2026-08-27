@@ -20,6 +20,12 @@ place, so pinned order is never touched.
 
 ![Demo](https://i.imgur.com/jgDv8Su.gif)
 
+(Hovering effect not included. Check out "Taskbar Dock Animation" by Ph0en1x-dev for that!)
+
+Running state is read straight from the taskbar's own buttons, so detection
+is exact and language-independent, and the mod reacts the moment an app opens
+or closes. While nothing is happening, it does nothing at all.
+
 ## Revealing
 
 * **Click** (default) — left-click empty taskbar to toggle; right-click stays
@@ -34,17 +40,9 @@ place, so pinned order is never touched.
 **Padding around elements** keeps reveals clear of every taskbar element,
 icons and tray alike; **Reveal delay** requires the cursor to stay put first.
 
-## Running detection
-
-Two signals, either one keeps an icon visible: the button's accessibility name
-("… 1 running window") and the running-indicator element. Non-English Windows:
-change **Running-app text in button names**, or clear it.
-
 ## Notes
 
 * Windows 11 only. Win+number still counts pinned items the way Windows does.
-* After 2 quiet minutes checks drop to the sleep rate; any taskbar activity
-  wakes it instantly.
 * Built and tested on Windows 11 build 26200 with a left-aligned,
   single-monitor taskbar. Other builds can name taskbar internals differently.
 * Revealing is shared across monitors: revealing one taskbar reveals them all.
@@ -72,8 +70,7 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
   $name: Reveal while Start is open
   $description: >-
     Opening Start, by the Windows key or the Start button, shows every icon and
-    keeps them shown until Start closes. Works with any reveal trigger and
-    wakes the mod from sleep.
+    keeps them shown until Start closes. Works with any reveal trigger.
 - RevealDelayMs: 30
   $name: Reveal delay (ms)
   $description: >-
@@ -94,20 +91,6 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 - HoverGraceMs: 150
   $name: Grace period (ms)
   $description: How long the cursor may be off the taskbar before it collapses again.
-- RefreshIntervalMs: 250
-  $name: Refresh interval (ms)
-  $description: >-
-    How often running state and cursor position are re-checked. Whether an app
-    is running changes at human speed, so this can be slow; it only matters
-    while a reveal, dwell or animation is being timed. 10 to 2000.
-- SleepEnabled: true
-  $name: Sleep when idle
-  $description: >-
-    After 2 minutes with no taskbar activity, drop to the sleep rate below.
-    Touching the taskbar wakes it instantly, so nothing feels slower.
-- SleepIntervalMs: 1000
-  $name: Sleep check rate (ms)
-  $description: How often to check while asleep. 500 to 3000.
 - AnimationMode: spacing
   $name: Reveal animation
   $description: >-
@@ -132,14 +115,6 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 - Hotkey: Ctrl+Alt+T
   $name: Toggle hotkey
   $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space. Leave empty for no hotkey.
-- RunningNameMarker: running window
-  $name: Running-app text in button names
-  $description: >-
-    A button whose accessibility name contains this text counts as running,
-    whatever its icons look like. Windows writes names such as
-    "Notepad - 1 running window pinned". Change this if your Windows is not in
-    English, or clear it to rely on the running indicator alone. A pinned app
-    whose own name contains this text always counts as running.
 */
 // ==/WindhawkModSettings==
 
@@ -157,7 +132,6 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
@@ -172,6 +146,7 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 #include <cwctype>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -187,18 +162,15 @@ using winrt::Windows::Foundation::Numerics::float3;
 typedef void (*RunFromWindowThreadProc_t)(PVOID);
 void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param);
 bool PointerClearsSurfaces(void* key, Point framePt);
+void ApplyOnThisThreadNow();
+void WakeAllFramesAsync();
 
-// Quiet time on the taskbar before the tick drops to the sleep rate.
-constexpr ULONGLONG kSleepAfterMs = 2 * 60 * 1000;
-
-// Pointer-event gap after which the cursor counts as parked and the speed
-// sample as stale. The hook and the tick must agree on this.
+// Pointer-event gap after which the cursor counts as parked.
 constexpr double kSpeedSampleStaleMs = 150.0;
 
-// Named element Windows creates inside a task button only while its app runs.
-constexpr PCWSTR kRunningIndicatorName = L"RunningIndicator";
+// Tick rate while something is timed; the timer never runs otherwise.
+constexpr int kTimerIntervalMs = 100;
 
-// A CSS cubic-bezier(x1, y1, x2, y2) curve; endpoints are fixed at 0 and 1.
 struct EasingCurve {
     double x1;
     double y1;
@@ -211,8 +183,7 @@ constexpr EasingCurve kEaseInOutSine{0.37, 0.0, 0.63, 1.0};
 constexpr EasingCurve kEaseInOutCubic{0.65, 0.0, 0.35, 1.0};
 constexpr EasingCurve kEaseInOutCirc{0.85, 0.0, 0.15, 1.0};
 
-// Stored as an id: a cross-thread settings change must never be readable
-// half-updated mid-animation.
+// An id, so a settings change can never be read half-updated.
 enum class CurveId { Sine, Cubic, Circ };
 
 EasingCurve const& CurveFor(CurveId id) {
@@ -229,13 +200,15 @@ EasingCurve const& CurveFor(CurveId id) {
 enum class AnimationMode { None, Spacing };
 enum class RevealTrigger { Never, Hover, Rest, Click };
 
-// Accordion is the reveal/collapse transition. GapClose fades an icon hidden
-// mid-steady-state, holds its slot for the first half, then eases the row
-// shut — layout holds the gap, so there is nothing to fight the taskbar over.
+// GapClose: hide an icon instantly, hold its gap open until the taskbar
+// stops churning, then ease the row shut.
 enum class AnimKind { Accordion, GapClose };
 
-// Scalars are atomic: LoadSettings writes them on Windhawk's thread while
-// taskbar threads read them mid-tick.
+// Quiet time after the last button churn before the gap eases shut, and the
+// longest the gap may hold open waiting for it.
+constexpr double kGapSettleMs = 250.0;
+constexpr double kGapHoldMaxMs = 1000.0;
+
 struct {
     std::atomic<RevealTrigger> revealTrigger;
     std::atomic<bool> revealOnStart;
@@ -243,67 +216,46 @@ struct {
     std::atomic<int> revealDelayMs;
     std::atomic<int> elementPaddingPx;
     std::atomic<int> hoverGraceMs;
-    std::atomic<int> refreshIntervalMs;
-    std::atomic<bool> sleepEnabled;
-    std::atomic<int> sleepIntervalMs;
     std::atomic<AnimationMode> animationMode;
     std::atomic<CurveId> animationCurve;
     std::atomic<int> animationDurationMs;
     std::atomic<int> animationAmplitudePct;
-    std::wstring runningNameMarker;
 } g_settings;
-
-// Guards runningNameMarker only.
-std::mutex g_settingsMutex;
 
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
-std::atomic<bool> g_hooksApplied = false;
 
-// Whether icons should be collapsed; the settings checkbox and the hotkey both write it.
 std::atomic<bool> g_collapseEnabled = true;
 
-// Whether hover is currently holding every icon visible.
 std::atomic<bool> g_revealed = false;
 
 // Reveal caused by Start opening; pinned against grace aging until it closes.
 std::atomic<bool> g_revealedByStart = false;
 
-// Tick when the cursor was last over a taskbar; the grace period counts from here.
 std::atomic<ULONGLONG> g_lastCursorInsideTick = 0;
 
-// Tick when the cursor entered the empty area, or 0 when it is not there.
 std::atomic<ULONGLONG> g_emptyHoverSinceTick = 0;
 
-// Last taskbar activity (pointer, hotkey, settings); sleep counts from here.
-std::atomic<ULONGLONG> g_lastActivityTick = 0;
-
-// True at the sleep rate; the pointer hook snaps the timer back on touch.
-std::atomic<bool> g_sleeping = false;
-
-// Rest trigger: speed in px/s from pointer-event deltas plus its sample time.
-// A parked cursor produces no events, so a stale sample reads as zero and the
-// tick can finish its reveal.
+// Rest speed from pointer-event deltas; a stale sample reads as zero (parked).
 std::atomic<double> g_cursorSpeedPxS = 0;
 std::atomic<double> g_speedSampleMs = 0;
 std::atomic<bool> g_speedMeasured = false;
 std::atomic<bool> g_lastPointerQualified = false;
 POINT g_speedSamplePrevPos = {};
 
-// Last cheap-qualified sample, so the tick can finish qualification for a
-// parked cursor. Ticks and hooks share the taskbar UI thread.
 void* g_lastQualifiedKey = nullptr;
 Point g_lastQualifiedFramePt = {};
 
-// Bumped by hotkey/settings; a context seeing a new value applies once
-// without animation, with no cross-thread blocking.
+// Last TaskListButton state churn; the gap-close hold waits for quiet.
+std::atomic<double> g_lastButtonChurnMs = 0;
+
+// Bumped by hotkey/settings; a new value applies once, without animation.
 std::atomic<uint64_t> g_instantApplyGen = 0;
 
 // Wakes queued but not yet run; unload drains this to zero.
 std::atomic<int> g_pendingWakes = 0;
 
-// Start-menu callbacks in flight; teardown waits for zero after Unadvise,
-// which does not fence a callback already running.
+// Sink callbacks in flight; teardown waits for zero (Unadvise does not fence).
 std::atomic<int> g_sinkCallbacks = 0;
 
 // Serializes start/stop across Windhawk's thread and the LoadLibraryExW hook.
@@ -313,20 +265,16 @@ DWORD g_hotkeyThreadId = 0;
 // Signalled once the worker owns a message queue, so WM_QUIT cannot be lost.
 HANDLE g_hotkeyThreadReady = nullptr;
 
-// Per-button: stripped animations, their originals for restore, and a cached
-// running indicator (created lazily by Windows, so null is re-resolved).
 struct DeanimatedButton {
     winrt::weak_ref<FrameworkElement> button;
     Media::Animation::TransitionCollection originalTransitions{nullptr};
     winrt::Windows::UI::Composition::ImplicitAnimationCollection
         originalImplicit{nullptr};
-    winrt::weak_ref<FrameworkElement> runningIndicator;
 };
 
-// State for one taskbar, touched only by its own UI thread, except
-// dispatcher, which other threads copy under g_framesMutex.
+// Owned by its taskbar's UI thread; only dispatcher is read cross-thread,
+// under g_framesMutex.
 struct FrameContext {
-    // Key in g_frames, for callbacks.
     void* key = nullptr;
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
     winrt::weak_ref<FrameworkElement> frame;
@@ -334,10 +282,8 @@ struct FrameContext {
     DispatcherTimer timer{nullptr};
     winrt::event_token tickToken{};
     DWORD threadId = 0;
-    int intervalMs = 0;
     // Buttons this mod hid, and therefore the only ones it may show again.
     std::vector<winrt::weak_ref<FrameworkElement>> hiddenByUs;
-    // Last seen buttons, for the pointer hook's padding test.
     std::vector<winrt::weak_ref<FrameworkElement>> lastButtons;
     std::vector<DeanimatedButton> deanimated;
 
@@ -345,33 +291,29 @@ struct FrameContext {
     int appliedCollapse = -1;
     bool animActive = false;
     AnimKind animKind = AnimKind::Accordion;
-    // Collapse state the running animation is heading towards.
     bool animTargetCollapse = false;
     double animStartMs = 0;
     // Snapshot at StartAnimation, so both accordion halves use one value.
     double animAmplitude = 0;
-    // Whether the midpoint icon swap has happened yet.
     bool animSwapped = false;
-    // GapClose: offsets back to pre-collapse spots, eased to zero.
     std::vector<float> animGapOffsets;
-    // GapClose: faded but not yet collapsed buttons, with their opacities.
-    std::vector<std::pair<FrameworkElement, double>> pendingHide;
-    // Strong refs while animating; emptied on stop.
+    // GapClose: collapsed at start, held transparent until the run ends.
+    std::vector<std::pair<FrameworkElement, double>> gapHidden;
     std::vector<FrameworkElement> animButtons;
-    // Idle icons' width, measured while visible (hidden icons measure zero);
-    // the amplitude scales from this cache.
+    // Idle icons' width while visible; hidden ones measure zero.
     double idleWidth = 0;
     winrt::event_token renderingToken{};
     bool renderingHooked = false;
-
-    // Last g_instantApplyGen this context consumed.
+    // Coalesces UpdateVisualStates bursts; cleared when the apply runs.
+    bool applyPosted = false;
+    // Retry budget for an apply that found no buttons (taskbar mid-rebuild).
+    int applyRetries = 0;
     uint64_t instantGenSeen = 0;
 };
 
 std::mutex g_framesMutex;
 
-// Never destroyed: CRT shutdown would release UI-thread-affine XAML objects
-// from the wrong thread. Real release happens in CleanupOnThisThread.
+// Never destroyed: CRT shutdown would release XAML from the wrong thread.
 [[clang::no_destroy]] std::optional<std::unordered_map<void*, FrameContext>>
     g_frames{std::in_place};
 
@@ -389,14 +331,8 @@ double NowMs() {
     return (double)counter.QuadPart * 1000.0 / frequency;
 }
 
-std::wstring CopyRunningMarker() {
-    std::lock_guard<std::mutex> guard(g_settingsMutex);
-    return g_settings.runningNameMarker;
-}
-
 // ---------------------------------------------------------------- visual tree
 
-// Calls back for each direct child, stopping at the first callback that returns true.
 FrameworkElement EnumChildElements(
     FrameworkElement element,
     std::function<bool(FrameworkElement)> const& enumCallback) {
@@ -417,39 +353,6 @@ FrameworkElement EnumChildElements(
     return nullptr;
 }
 
-// Exact RunningIndicator wins; a name containing "Running" is the fallback.
-// Do not widen to "Indicator": ProgressIndicator would misread idle apps.
-void FindRunningIndicatorWalk(FrameworkElement element,
-                              int depth,
-                              FrameworkElement& exact,
-                              FrameworkElement& partial) {
-    if (!element || depth < 0 || exact) {
-        return;
-    }
-
-    EnumChildElements(element, [&](FrameworkElement child) {
-        auto nameHstring = child.Name();
-        std::wstring_view name(nameHstring);
-        if (name == kRunningIndicatorName) {
-            exact = child;
-            return true;
-        }
-        if (!partial && name.find(L"Running") != std::wstring_view::npos) {
-            partial = child;
-        }
-        FindRunningIndicatorWalk(child, depth - 1, exact, partial);
-        return (bool)exact;
-    });
-}
-
-FrameworkElement FindRunningIndicator(FrameworkElement button) {
-    FrameworkElement exact = nullptr;
-    FrameworkElement partial = nullptr;
-    FindRunningIndicatorWalk(button, 6, exact, partial);
-    return exact ? exact : partial;
-}
-
-// Collects app buttons, excluding the panel classes nested inside each one.
 void CollectTaskListButtons(FrameworkElement root,
                             int depth,
                             std::vector<FrameworkElement>& out) {
@@ -470,71 +373,31 @@ void CollectTaskListButtons(FrameworkElement root,
     });
 }
 
-bool ContainsNoCase(std::wstring_view haystack, std::wstring_view needle) {
-    if (needle.empty() || needle.size() > haystack.size()) {
-        return false;
-    }
+// The taskbar's own running state; a mandatory symbol, so a build missing it
+// refuses to load rather than mis-hide.
+using TaskListButton_get_IsRunning_t = HRESULT(__cdecl*)(void* pThis,
+                                                         bool* running);
+TaskListButton_get_IsRunning_t TaskListButton_get_IsRunning_Original;
 
-    auto it = std::search(haystack.begin(), haystack.end(), needle.begin(),
-                          needle.end(), [](wchar_t a, wchar_t b) {
-                              return towlower(a) == towlower(b);
-                          });
-    return it != haystack.end();
-}
-
-// True while the indicator exists and is positively shown. The resolved
-// indicator is handed back so the subtree walk runs once per button.
-bool IndicatorSaysRunning(FrameworkElement button,
-                          FrameworkElement& indicatorInOut) {
-    FrameworkElement indicator = indicatorInOut;
-    if (!indicator) {
-        indicator = FindRunningIndicator(button);
-        indicatorInOut = indicator;
-    }
-    if (!indicator) {
-        return false;
-    }
-    if (indicator.Visibility() != Visibility::Visible) {
-        return false;
-    }
-    if (indicator.Opacity() <= 0.01) {
-        return false;
-    }
-
-    // Collapsed buttons are never laid out. Do not drop the laid-out guard:
-    // a hidden button could then never report running again.
-    bool buttonLaidOut = button.Visibility() == Visibility::Visible &&
-                         button.ActualWidth() > 0.5;
-    if (buttonLaidOut &&
-        (indicator.ActualWidth() <= 0.5 || indicator.ActualHeight() <= 0.5)) {
-        return false;
-    }
-
-    return true;
-}
-
-// OR of the indicator and the accessibility name. Do not make this an AND, or
-// a running app disappears. Indicator first; the name allocates a string.
-bool IsButtonRunning(FrameworkElement button,
-                     std::wstring_view marker,
-                     FrameworkElement& indicatorInOut) {
-    if (IndicatorSaysRunning(button, indicatorInOut)) {
+// Fails open: hide only on a positive answer from the exact runtime class.
+bool TaskListButton_IsRunning(FrameworkElement taskListButtonElement) {
+    if (!TaskListButton_get_IsRunning_Original ||
+        winrt::get_class_name(taskListButtonElement) !=
+            L"Taskbar.TaskListButton") {
         return true;
     }
-
-    if (!marker.empty()) {
-        auto name = Automation::AutomationProperties::GetName(button);
-        if (ContainsNoCase(std::wstring_view(name), marker)) {
-            return true;
-        }
+    bool isRunning = false;
+    if (FAILED(TaskListButton_get_IsRunning_Original(
+            winrt::get_abi(taskListButtonElement
+                               .as<winrt::Windows::Foundation::IUnknown>()),
+            &isRunning))) {
+        return true;
     }
-
-    return false;
+    return isRunning;
 }
 
 // ------------------------------------------------------------------- applying
 
-// Membership test that prunes dead entries; removes the match when asked.
 bool TakeFromHiddenSet(std::vector<winrt::weak_ref<FrameworkElement>>& hidden,
                        FrameworkElement const& element,
                        bool remove) {
@@ -587,8 +450,7 @@ bool CursorOverAnyTaskbar() {
         return true;
     }
 
-    // Jump lists and previews are separate popups on the taskbar's own
-    // thread; they count as taskbar, or grace collapses under an open menu.
+    // Popups on a taskbar thread count as taskbar, or grace collapses menus.
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hRoot, &processId);
     if (threadId && processId == GetCurrentProcessId()) {
@@ -603,9 +465,7 @@ bool CursorOverAnyTaskbar() {
     return false;
 }
 
-// Kills the ghost a hidden button renders until its farewell animation ends.
-// No getter, so irreversible: only call for buttons actually being hidden,
-// never on every pass.
+// No getter, so irreversible: only call for buttons actually being hidden.
 void ClearImplicitShowHide(FrameworkElement const& button) {
     try {
         Hosting::ElementCompositionPreview::SetImplicitShowAnimation(button,
@@ -616,11 +476,8 @@ void ClearImplicitShowHide(FrameworkElement const& button) {
     }
 }
 
-// Strips XAML transitions and composition implicit animations, keeping the
-// originals for ReanimateButtons.
 void DeanimateButton(FrameContext& ctx, FrameworkElement button) {
-    // Runs every pass, not strip-once: Windows installs animations at its own
-    // pace, and one stripped too early keeps its reorder slide forever.
+    // Every pass, not strip-once: one stripped too early slides forever.
     DeanimatedButton* known = nullptr;
     for (size_t i = 0; i < ctx.deanimated.size();) {
         auto resolved = ctx.deanimated[i].button.get();
@@ -645,7 +502,6 @@ void DeanimateButton(FrameContext& ctx, FrameworkElement button) {
         entry.originalImplicit = implicit_;
         ctx.deanimated.push_back(entry);
     } else {
-        // Late-appearing animations still belong to Windows; keep for restore.
         if (transitions && !known->originalTransitions) {
             known->originalTransitions = transitions;
         }
@@ -686,7 +542,6 @@ double BezierAxis(double p1, double p2, double u) {
     return 3 * p1 * v * v * u + 3 * p2 * v * u * u + u * u * u;
 }
 
-// Maps linear progress through a CSS-style cubic-bezier curve.
 double CubicBezierEase(EasingCurve const& curve, double t) {
     if (t <= 0) {
         return 0;
@@ -711,9 +566,7 @@ double CubicBezierEase(EasingCurve const& curve, double t) {
 
 // ---------------------------------------------------------------- animation
 
-// Spreads totalExtra across the gaps between visible buttons, leftmost held
-// still. Deliberately no re-centre compensation: it would dwarf the amplitude
-// and read as the row charging across the screen.
+// Leftmost held still; deliberately no re-centre compensation.
 void ApplySpacing(std::vector<FrameworkElement> const& buttons,
                   double totalExtra) {
     std::vector<FrameworkElement const*> visible;
@@ -739,39 +592,21 @@ void ClearSpacing(std::vector<FrameworkElement> const& buttons) {
     }
 }
 
-// Hides or shows the managed buttons, recording only the ones it hid itself.
-// With deferHide set, hides are faded in place for FinalizePendingHides.
+// With deferHide set, hides are only faded; CollapseDeferredHides lands them.
 void SetCollapseState(
     FrameContext& ctx,
     std::vector<FrameworkElement> const& buttons,
     bool collapse,
     std::vector<std::pair<FrameworkElement, double>>* deferHide = nullptr) {
-    std::wstring marker = CopyRunningMarker();
     double idleVisibleWidth = 0;
     bool idleSetComplete = true;
 
     for (auto const& button : buttons) {
         bool weHidIt = TakeFromHiddenSet(ctx.hiddenByUs, button, false);
-
-        DeanimatedButton* state = nullptr;
-        for (auto& entry : ctx.deanimated) {
-            if (entry.button.get() == button) {
-                state = &entry;
-                break;
-            }
-        }
-
-        FrameworkElement indicator =
-            state ? state->runningIndicator.get() : nullptr;
-        bool running = IsButtonRunning(button, marker, indicator);
-        if (state && indicator && !state->runningIndicator.get()) {
-            state->runningIndicator = winrt::make_weak(indicator);
-        }
-
+        bool running = TaskListButton_IsRunning(button);
         bool shouldHide = collapse && !running;
 
-        // Measured before any flip, while layout is real. A partial idle set
-        // (some already hidden) must not overwrite the full-set cache.
+        // Measured pre-flip; a partial idle set must not overwrite the cache.
         if (!running) {
             if (button.Visibility() == Visibility::Visible) {
                 idleVisibleWidth += button.ActualWidth();
@@ -781,15 +616,12 @@ void SetCollapseState(
         }
 
         if (shouldHide) {
-            // Windows' own hides stay unrecorded, never restored on its
-            // behalf. A recorded hide is re-asserted, or it sticks visible.
+            // Windows' own hides stay unrecorded; recorded ones re-assert.
             if (button.Visibility() == Visibility::Visible) {
                 if (deferHide) {
                     deferHide->emplace_back(button, button.Opacity());
                     button.Opacity(0);
                 } else {
-                    // Re-stripped now: the hide animation may be back, and
-                    // its ghost is what neighbours would slide across.
                     ClearImplicitShowHide(button);
                     button.Visibility(Visibility::Collapsed);
                     if (!weHidIt) {
@@ -831,8 +663,7 @@ void UnhookRendering(FrameContext& ctx) {
     ctx.renderingHooked = false;
 }
 
-// Tree order is not visual order (the repeater recycles) and spacing is dealt
-// by index, so sort by on-screen X; hidden buttons sink to the back.
+// Tree order is not visual order; sort by on-screen X, hidden to the back.
 void SortButtonsByPosition(std::vector<FrameworkElement>& buttons,
                            FrameworkElement frame) {
     std::vector<std::pair<double, FrameworkElement>> keyed;
@@ -861,29 +692,39 @@ void SortButtonsByPosition(std::vector<FrameworkElement>& buttons,
     }
 }
 
-// Completes deferred hides: opacity back, collapse for real, record as ours
-// unless Windows hid it first.
-void FinalizePendingHides(FrameContext& ctx) {
-    for (auto& entry : ctx.pendingHide) {
+// Lands the deferred hides for real, kept transparent until the run ends so
+// a re-show by Windows renders empty instead of flashing.
+void CollapseDeferredHides(
+    FrameContext& ctx,
+    std::vector<std::pair<FrameworkElement, double>>& deferHide) {
+    for (auto& entry : deferHide) {
         try {
-            entry.first.Opacity(entry.second);
             if (entry.first.Visibility() == Visibility::Visible) {
                 ClearImplicitShowHide(entry.first);
                 entry.first.Visibility(Visibility::Collapsed);
                 if (!TakeFromHiddenSet(ctx.hiddenByUs, entry.first, false)) {
                     ctx.hiddenByUs.push_back(winrt::make_weak(entry.first));
                 }
+                ctx.gapHidden.push_back(std::move(entry));
+            } else {
+                // Windows hid it itself; not ours to keep.
+                entry.first.Opacity(entry.second);
             }
         } catch (winrt::hresult_error const&) {
         }
     }
-    ctx.pendingHide.clear();
+    deferHide.clear();
 }
 
-// Deferred hides complete rather than revert: hidden is where the
-// interrupted animation was heading.
 void StopAnimation(FrameContext& ctx) {
-    FinalizePendingHides(ctx);
+    // Collapsed since the start, so the opacity restore is invisible here.
+    for (auto& entry : ctx.gapHidden) {
+        try {
+            entry.first.Opacity(entry.second);
+        } catch (winrt::hresult_error const&) {
+        }
+    }
+    ctx.gapHidden.clear();
     ctx.animActive = false;
     ctx.animSwapped = false;
     UnhookRendering(ctx);
@@ -910,9 +751,7 @@ void StartAnimation(FrameContext& ctx,
     HookRendering(ctx, ctx.key);
 }
 
-// Gap-close midpoint: freezes visible survivors at their pre-collapse spots.
-// Sample X, force layout, apply offsets in this same frame. Measured, so any
-// alignment and any number of simultaneous gaps come out right.
+// Freeze survivors at their pre-collapse X, in this same pass.
 void MeasureGapOffsets(FrameContext& ctx, FrameworkElement frame) {
     std::vector<FrameworkElement> survivors;
     std::vector<double> oldX;
@@ -935,6 +774,24 @@ void MeasureGapOffsets(FrameContext& ctx, FrameworkElement frame) {
     }
 
     frame.UpdateLayout();
+
+    // A re-show landing inside that layout pass reads as gaps already
+    // closed and would kill the hold with the icon back; repair, lay out
+    // again.
+    bool reShown = false;
+    for (auto& weak : ctx.hiddenByUs) {
+        if (auto button = weak.get()) {
+            if (button.Visibility() == Visibility::Visible) {
+                ClearImplicitShowHide(button);
+                button.Visibility(Visibility::Collapsed);
+                reShown = true;
+            }
+        }
+    }
+    if (reShown) {
+        Wh_Log(L"GapClose: re-show during gap measurement, repaired");
+        frame.UpdateLayout();
+    }
 
     bool anyMoved = false;
     for (size_t i = 0; i < ctx.animButtons.size(); i++) {
@@ -964,34 +821,39 @@ void MeasureGapOffsets(FrameContext& ctx, FrameworkElement frame) {
     }
 }
 
-// Buttons are already faded by SetCollapseState and the row has not moved;
-// the rendering tick takes it from the midpoint.
+// The hide lands here and now; survivors freeze mid-gap in the same pass.
+// The rendering tick waits out Windows' close churn, then eases the gap shut.
 void StartGapCloseAnimation(
     FrameContext& ctx,
     std::vector<FrameworkElement> const& buttons,
-    std::vector<std::pair<FrameworkElement, double>> pendingHide) {
+    std::vector<std::pair<FrameworkElement, double>> deferHide) {
     ctx.animButtons = buttons;
     ctx.animGapOffsets.clear();
-    ctx.pendingHide = std::move(pendingHide);
     ctx.animActive = true;
     ctx.animKind = AnimKind::GapClose;
     // Matches the applied state so the tick keeps its hands off while it runs.
     ctx.animTargetCollapse = ctx.appliedCollapse == 1;
     ctx.animStartMs = NowMs();
     ctx.animSwapped = false;
+    CollapseDeferredHides(ctx, deferHide);
+    if (auto frame = ctx.frame.get()) {
+        MeasureGapOffsets(ctx, frame);
+    }
+    if (ctx.animGapOffsets.empty()) {
+        // No gap to close (rightmost icons); the hide already landed.
+        StopAnimation(ctx);
+        return;
+    }
     HookRendering(ctx, ctx.key);
 }
 
-// Brings one taskbar to the requested state; never runs mid-animation, the
-// caller stops the animation first. Reports whether it could act, so a
-// pending instant request survives an empty button walk.
+// Never runs mid-animation; reports false so pending work can retry.
 bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     auto frame = ctx.frame.get();
     if (!frame) {
         return false;
     }
 
-    // The cached container keeps the walk off the full tree.
     std::vector<FrameworkElement> buttons;
     if (auto repeater = ctx.repeater.get()) {
         CollectTaskListButtons(repeater, 3, buttons);
@@ -1017,8 +879,6 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
 
     if (!g_unloading) {
         if (!g_collapseEnabled && ctx.hiddenByUs.empty()) {
-            // Collapse off, nothing hidden: the taskbar gets its animations
-            // back. A mere reveal keeps stripping — collapse can follow.
             ReanimateButtons(ctx);
         } else {
             for (auto& button : buttons) {
@@ -1035,7 +895,6 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
         return true;
     }
 
-    // Steady-state hides (an app closing while collapsed) ease shut.
     bool animateGaps = !instant && !g_unloading &&
                        g_settings.animationMode == AnimationMode::Spacing &&
                        (collapse ? 1 : 0) == ctx.appliedCollapse;
@@ -1048,10 +907,7 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     return true;
 }
 
-// Drives one animation frame; spacing is all that is animated. One curve
-// spans the run with the icon swap at its steepest midpoint: the old set
-// stretches open, the new set cuts in squeezed, then relaxes to natural
-// spacing. Collapse runs the same backwards.
+// One curve spans the run; the icon swap sits at its steepest midpoint.
 void OnRenderingTick(void* key) {
     FrameContext* ctx = GetFrameContext(key);
     if (!ctx || !ctx->animActive) {
@@ -1070,28 +926,54 @@ void OnRenderingTick(void* key) {
     double eased = CubicBezierEase(CurveFor(g_settings.animationCurve), t);
 
     if (ctx->animKind == AnimKind::GapClose) {
-        if (t >= 1.0) {
+        // Windows' close churn can re-show what just got hidden, any frame;
+        // re-assert every frame. gapHidden stays transparent for the whole
+        // run, so a lost visibility race still renders empty.
+        try {
+            bool repaired = false;
+            for (auto& entry : ctx->gapHidden) {
+                if (entry.first.Opacity() != 0.0) {
+                    entry.first.Opacity(0);
+                }
+            }
+            for (auto& weak : ctx->hiddenByUs) {
+                if (auto button = weak.get()) {
+                    if (button.Visibility() == Visibility::Visible) {
+                        ClearImplicitShowHide(button);
+                        button.Visibility(Visibility::Collapsed);
+                        repaired = true;
+                    }
+                }
+            }
+            // Same-frame layout, or survivors render once at shifted spots.
+            if (repaired) {
+                if (auto frame = ctx->frame.get()) {
+                    frame.UpdateLayout();
+                }
+            }
+        } catch (winrt::hresult_error const&) {
+        }
+
+        if (!ctx->animSwapped) {
+            // Gap held open; the ease starts once the taskbar goes quiet.
+            double now = NowMs();
+            if (now - g_lastButtonChurnMs.load() < kGapSettleMs &&
+                now - ctx->animStartMs < kGapHoldMaxMs) {
+                return;
+            }
+            ctx->animSwapped = true;
+            ctx->animStartMs = now;
+            return;
+        }
+
+        double closeT =
+            duration > 0
+                ? std::clamp((NowMs() - ctx->animStartMs) / duration, 0.0, 1.0)
+                : 1.0;
+        if (closeT >= 1.0) {
             StopAnimation(*ctx);
             return;
         }
-        // Hold: faded buttons still occupy layout, so nothing can be fought
-        // over and Windows' close flourish plays invisibly. The midpoint
-        // collapses them for real; the second half eases survivors home.
-        if (t < 0.5) {
-            return;
-        }
-        if (!ctx->animSwapped) {
-            ctx->animSwapped = true;
-            FinalizePendingHides(*ctx);
-            if (auto frame = ctx->frame.get()) {
-                MeasureGapOffsets(*ctx, frame);
-            }
-            if (ctx->animGapOffsets.empty()) {
-                StopAnimation(*ctx);
-                return;
-            }
-        }
-        double closeT = (t - 0.5) * 2.0;
         double factor =
             1.0 - CubicBezierEase(CurveFor(g_settings.animationCurve), closeT);
         for (size_t i = 0; i < ctx->animButtons.size(); i++) {
@@ -1107,18 +989,14 @@ void OnRenderingTick(void* key) {
         for (auto& button : ctx->animButtons) {
             DeanimateButton(*ctx, button);
         }
-        // Forced layout gives the new set real positions for the re-sort,
-        // and just-shown icons get their widths into the cache.
         if (auto frame = ctx->frame.get()) {
             frame.UpdateLayout();
             SortButtonsByPosition(ctx->animButtons, frame);
             if (!ctx->animTargetCollapse) {
-                std::wstring marker = CopyRunningMarker();
                 double width = 0;
                 for (auto& button : ctx->animButtons) {
-                    FrameworkElement indicator = nullptr;
                     if (button.Visibility() == Visibility::Visible &&
-                        !IsButtonRunning(button, marker, indicator)) {
+                        !TaskListButton_IsRunning(button)) {
                         width += button.ActualWidth();
                     }
                 }
@@ -1130,8 +1008,6 @@ void OnRenderingTick(void* key) {
         ctx->animSwapped = true;
     }
 
-    // Scales with the hidden icons' width; snapshotted so both halves use one
-    // value — the swap rewrites idleWidth for later runs only.
     double amplitude = ctx->animAmplitude;
 
     if (t >= 1.0) {
@@ -1139,7 +1015,6 @@ void OnRenderingTick(void* key) {
         return;
     }
 
-    // Collapsing is the reveal played backwards, so every offset flips sign.
     double direction = ctx->animTargetCollapse ? -1.0 : 1.0;
     double totalExtra = ctx->animSwapped
                             ? -direction * amplitude * (1 - eased)
@@ -1148,7 +1023,6 @@ void OnRenderingTick(void* key) {
     ApplySpacing(ctx->animButtons, totalExtra);
 }
 
-// Puts one taskbar back exactly as it was found.
 void RestoreFrame(FrameContext& ctx) {
     StopAnimation(ctx);
 
@@ -1167,7 +1041,6 @@ void RestoreFrame(FrameContext& ctx) {
     ReanimateButtons(ctx);
 }
 
-// Drives one taskbar: ages out the hover reveal, then applies the result.
 void OnTimerTick(void* key) {
     FrameContext* ctx = nullptr;
     {
@@ -1200,22 +1073,9 @@ void OnTimerTick(void* key) {
     RevealTrigger trigger = g_settings.revealTrigger;
     bool hoverLike =
         trigger == RevealTrigger::Hover || trigger == RevealTrigger::Rest;
-
-    // The fast rate only pays while something is timing out; a click reveal
-    // is stable and does not hold it up.
-    bool timingSomething = ctx->animActive || g_emptyHoverSinceTick != 0 ||
-                           (g_revealed && hoverLike && !g_revealedByStart);
-    bool sleep = g_settings.sleepEnabled && !timingSomething &&
-                 now - g_lastActivityTick >= kSleepAfterMs;
-    g_sleeping = sleep;
-
-    int wantedIntervalMs = (timingSomething || !sleep)
-                               ? g_settings.refreshIntervalMs.load()
-                               : g_settings.sleepIntervalMs.load();
-    if (ctx->intervalMs != wantedIntervalMs) {
-        ctx->intervalMs = wantedIntervalMs;
-        ctx->timer.Interval(std::chrono::milliseconds(wantedIntervalMs));
-    }
+    bool cursorInside = CursorOverAnyTaskbar();
+    // A flip must reach every monitor; only a posted wake does that now.
+    bool flipped = false;
 
     if (g_revealed) {
         if (!g_collapseEnabled ||
@@ -1223,123 +1083,181 @@ void OnTimerTick(void* key) {
             g_revealed = false;
             g_revealedByStart = false;
             g_emptyHoverSinceTick = 0;
+            flipped = true;
         } else if (g_revealedByStart) {
-            // Pinned while Start is open; the worker thread ends it on close.
-            // Keeping the grace timestamp fresh hands over cleanly if the
-            // cursor is on the taskbar when Start goes away.
+            // Pinned while Start is open; the worker ends it on close.
             g_lastCursorInsideTick = now;
         } else if (hoverLike) {
-            // A click reveal stays until it is clicked away, so only hovering
-            // ages out on the grace period.
-            if (CursorOverAnyTaskbar()) {
+            // Only hover ages out on grace; a click reveal stays.
+            if (cursorInside) {
                 g_lastCursorInsideTick = now;
             } else if (now - g_lastCursorInsideTick >
                        (ULONGLONG)g_settings.hoverGraceMs) {
                 g_revealed = false;
                 g_emptyHoverSinceTick = 0;
+                flipped = true;
             }
         }
     } else if (hoverLike && g_collapseEnabled) {
+        // The tick has the last word on the latch; exit events can be missed.
+        if (!cursorInside) {
+            g_lastPointerQualified = false;
+            g_emptyHoverSinceTick = 0;
+        }
+
         if (trigger == RevealTrigger::Rest) {
-            // Stale sample = no events = parked, so speed reads as zero.
             double speed = NowMs() - g_speedSampleMs > kSpeedSampleStaleMs
                                ? 0.0
                                : g_cursorSpeedPxS.load();
             if (speed > (double)g_settings.restSpeedPxPerSec) {
-                // Moving too fast resets the dwell; resting is continuous.
                 g_emptyHoverSinceTick = 0;
             } else if (g_emptyHoverSinceTick == 0 && g_lastPointerQualified &&
-                       CursorOverAnyTaskbar()) {
+                       cursorInside) {
                 // Parked cursors produce no events; arm off the last check.
                 g_emptyHoverSinceTick = now;
             }
         }
 
-        // Completes the delay for a cursor that stopped producing events.
         ULONGLONG since = g_emptyHoverSinceTick;
-        if (since != 0) {
-            if (!CursorOverAnyTaskbar()) {
-                g_emptyHoverSinceTick = 0;
-            } else if (now - since >= (ULONGLONG)g_settings.revealDelayMs) {
-                if (PointerClearsSurfaces(g_lastQualifiedKey,
-                                          g_lastQualifiedFramePt)) {
-                    g_revealed = true;
-                } else {
-                    g_lastPointerQualified = false;
-                }
-                g_emptyHoverSinceTick = 0;
+        if (since != 0 && cursorInside &&
+            now - since >= (ULONGLONG)g_settings.revealDelayMs) {
+            if (PointerClearsSurfaces(g_lastQualifiedKey,
+                                      g_lastQualifiedFramePt)) {
+                g_revealed = true;
+                flipped = true;
+            } else {
+                g_lastPointerQualified = false;
             }
+            g_emptyHoverSinceTick = 0;
         }
+    }
+
+    if (flipped) {
+        WakeAllFramesAsync();
     }
 
     bool desired = g_collapseEnabled && !g_revealed;
 
-    // At most one pending instant-apply request, consumed on a successful
-    // apply so an empty button walk does not swallow it.
+    // Consumed only on a successful apply.
     uint64_t instantGen = g_instantApplyGen;
     bool instant = ctx->instantGenSeen != instantGen;
 
-    // Watchdog: Rendering stops when the bar is not composed (auto-hide,
-    // fullscreen occlusion), stranding an animation. Finish it here.
+    // Watchdog: Rendering stops when the bar is not being composed.
     if (ctx->animActive &&
         NowMs() - ctx->animStartMs >
             (double)g_settings.animationDurationMs * 3.0 + 1000.0) {
         StopAnimation(*ctx);
     }
 
-    // An animation toward the right state is left alone — the rendering
-    // callback owns the buttons. A flipped target or instant request stops it.
-    if (ctx->animActive) {
-        if (!instant && desired == ctx->animTargetCollapse) {
-            return;
-        }
+    // A running animation toward the right state owns the buttons.
+    if (ctx->animActive && (instant || desired != ctx->animTargetCollapse)) {
         StopAnimation(*ctx);
     }
+    if (!ctx->animActive) {
+        if (ApplyToFrame(*ctx, desired, instant)) {
+            ctx->instantGenSeen = instantGen;
+            ctx->applyRetries = 0;
+        } else if (ctx->applyRetries > 0) {
+            ctx->applyRetries--;
+        } else if (instant || ctx->appliedCollapse < 0) {
+            ctx->applyRetries = 20;
+        }
+    }
 
-    if (ApplyToFrame(*ctx, desired, instant)) {
-        ctx->instantGenSeen = instantGen;
+    // The timer runs only while something needs a clock; everything else
+    // arrives as events. Reveal terms are global: cost, not correctness.
+    bool timing = ctx->animActive || g_emptyHoverSinceTick != 0 ||
+                  (g_revealed && hoverLike && !g_revealedByStart) ||
+                  (hoverLike && g_collapseEnabled && !g_revealed &&
+                   g_lastPointerQualified) ||
+                  ctx->applyRetries > 0;
+    if (timing != ctx->timer.IsEnabled()) {
+        if (timing) {
+            ctx->timer.Start();
+        } else {
+            ctx->timer.Stop();
+        }
     }
 }
 
-// Adopts a taskbar and starts its timer; runs on that taskbar's UI thread.
-void RegisterFrame(void* key, FrameworkElement frame) {
-    std::lock_guard<std::mutex> guard(g_framesMutex);
-
-    // Checked under the lock: a hook that passed its unlocked g_unloading
-    // check must not insert a live timer after the cleanup sweeps ran.
+// The decrement is tied to the delegate's LIFETIME, so a dropped wake still
+// counts down. Increment first: a throwing ctor calls the deleter.
+bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher) {
+    g_pendingWakes++;
+    auto pending =
+        std::shared_ptr<void>(nullptr, [](void*) { g_pendingWakes--; });
+    // The count must never rise after unload's drain saw zero.
     if (g_unloading) {
-        return;
+        return false;
     }
+    try {
+        dispatcher.RunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+            [pending]() {
+                if (!g_unloading) {
+                    try {
+                        ApplyOnThisThreadNow();
+                    } catch (...) {
+                    }
+                }
+            });
+        return true;
+    } catch (winrt::hresult_error const&) {
+        return false;
+    }
+}
 
-    auto it = g_frames->find(key);
-    if (it != g_frames->end()) {
-        if (it->second.frame.get()) {
+// Timer created stopped; the first apply is posted, never run inline.
+void RegisterFrame(void* key, FrameworkElement frame) {
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+
+        // Under the lock: must not insert a live timer after cleanup ran.
+        if (g_unloading) {
             return;
         }
-        StopAnimation(it->second);
-        if (it->second.timer) {
-            it->second.timer.Stop();
-            it->second.timer.Tick(it->second.tickToken);
+
+        auto it = g_frames->find(key);
+        if (it != g_frames->end()) {
+            if (it->second.frame.get()) {
+                return;
+            }
+            StopAnimation(it->second);
+            if (it->second.timer) {
+                it->second.timer.Stop();
+                it->second.timer.Tick(it->second.tickToken);
+            }
+            g_frames->erase(it);
         }
-        g_frames->erase(it);
+
+        FrameContext ctx;
+        ctx.key = key;
+        ctx.instantGenSeen = g_instantApplyGen;
+        ctx.frame = winrt::make_weak(frame);
+        ctx.dispatcher = frame.Dispatcher();
+        ctx.threadId = GetCurrentThreadId();
+        ctx.applyPosted = true;
+
+        ctx.timer = DispatcherTimer();
+        ctx.timer.Interval(std::chrono::milliseconds(kTimerIntervalMs));
+        ctx.tickToken = ctx.timer.Tick([key](IInspectable const&,
+                                             IInspectable const&) {
+            OnTimerTick(key);
+        });
+
+        dispatcher = ctx.dispatcher;
+        Wh_Log(L"Registered taskbar frame on thread %u", ctx.threadId);
+        g_frames->insert_or_assign(key, std::move(ctx));
     }
-
-    FrameContext ctx;
-    ctx.key = key;
-    ctx.instantGenSeen = g_instantApplyGen;
-    ctx.frame = winrt::make_weak(frame);
-    ctx.dispatcher = frame.Dispatcher();
-    ctx.threadId = GetCurrentThreadId();
-    ctx.intervalMs = g_settings.refreshIntervalMs;
-
-    ctx.timer = DispatcherTimer();
-    ctx.timer.Interval(std::chrono::milliseconds(ctx.intervalMs));
-    ctx.tickToken = ctx.timer.Tick(
-        [key](IInspectable const&, IInspectable const&) { OnTimerTick(key); });
-    ctx.timer.Start();
-
-    Wh_Log(L"Registered taskbar frame on thread %u", ctx.threadId);
-    g_frames->insert_or_assign(key, std::move(ctx));
+    // Outside the lock: the one COM call this function makes.
+    if (!PostApply(dispatcher)) {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        auto it = g_frames->find(key);
+        if (it != g_frames->end()) {
+            it->second.applyPosted = false;
+        }
+    }
 }
 
 bool IsFrameRegistered(void* key) {
@@ -1347,15 +1265,13 @@ bool IsFrameRegistered(void* key) {
     return g_frames->find(key) != g_frames->end();
 }
 
-// Entries have stable addresses and single-thread owners, so the returned
-// pointer outlives the lock.
+// Stable addresses, single-thread owners; the pointer outlives the lock.
 FrameContext* GetFrameContext(void* key) {
     std::lock_guard<std::mutex> guard(g_framesMutex);
     auto it = g_frames->find(key);
     return it == g_frames->end() ? nullptr : &it->second;
 }
 
-// Applies to the taskbars owned by the calling thread, skipping the tick's wait.
 void ApplyOnThisThreadNow() {
     std::vector<void*> keys;
     DWORD threadId = GetCurrentThreadId();
@@ -1363,6 +1279,7 @@ void ApplyOnThisThreadNow() {
         std::lock_guard<std::mutex> guard(g_framesMutex);
         for (auto& [key, ctx] : *g_frames) {
             if (ctx.threadId == threadId) {
+                ctx.applyPosted = false;
                 keys.push_back(key);
             }
         }
@@ -1373,8 +1290,17 @@ void ApplyOnThisThreadNow() {
     }
 }
 
-// Non-blocking wake on every taskbar's own thread; a hung taskbar is late,
-// never blocking the caller.
+// OnTimerTick stops them again once nothing is being timed.
+void StartTimersOnThisThread() {
+    DWORD threadId = GetCurrentThreadId();
+    std::lock_guard<std::mutex> guard(g_framesMutex);
+    for (auto& [key, ctx] : *g_frames) {
+        if (ctx.threadId == threadId && ctx.timer && !ctx.timer.IsEnabled()) {
+            ctx.timer.Start();
+        }
+    }
+}
+
 void WakeAllFramesAsync() {
     if (g_unloading) {
         return;
@@ -1391,30 +1317,12 @@ void WakeAllFramesAsync() {
     }
 
     for (auto& dispatcher : dispatchers) {
-        g_pendingWakes++;
-        try {
-            dispatcher.RunAsync(
-                winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                []() {
-                    // The decrement must run even if the apply throws, or
-                    // unload's drain wait stalls on the count.
-                    if (!g_unloading) {
-                        try {
-                            ApplyOnThisThreadNow();
-                        } catch (...) {
-                        }
-                    }
-                    g_pendingWakes--;
-                });
-        } catch (winrt::hresult_error const&) {
-            g_pendingWakes--;
-        }
+        PostApply(dispatcher);
     }
 }
 
 // --------------------------------------------------------------------- hover
 
-// True when nothing button-like sits between the hit-tested element and the frame.
 bool IsPointerOverEmptySpace(Input::PointerRoutedEventArgs const& args) {
     auto source = args.OriginalSource().try_as<DependencyObject>();
 
@@ -1436,7 +1344,6 @@ bool IsPointerOverEmptySpace(Input::PointerRoutedEventArgs const& args) {
     return true;
 }
 
-// True when the point clears every visible button by padding, in frame coordinates.
 bool IsPointerClearOfButtons(FrameContext& ctx,
                              FrameworkElement frame,
                              Point point,
@@ -1471,8 +1378,7 @@ bool IsPointerClearOfButtons(FrameContext& ctx,
     return true;
 }
 
-// Hit-tests the point and its padded neighbours from the bar's root, so
-// Start, widgets and the tray get the same clearance without knowing shapes.
+// From the bar's root, so tray/Start/widgets get the same clearance.
 bool ProbeStripIsClear(FrameworkElement frame, Point framePt, double padding) {
     Point hostPt = framePt;
     FrameworkElement root = frame;
@@ -1516,8 +1422,7 @@ bool ProbeStripIsClear(FrameworkElement frame, Point framePt, double padding) {
     return true;
 }
 
-// Cheap per-move half of qualification: enough to arm or clear the dwell.
-// Records the sample so the flip can finish qualification later.
+// Cheap per-move half: enough to arm or clear the dwell.
 bool PointerQualifiesForReveal(void* key,
                                Input::PointerRoutedEventArgs const& args) {
     if (!IsPointerOverEmptySpace(args)) {
@@ -1547,24 +1452,28 @@ bool PointerQualifiesForReveal(void* key,
     return true;
 }
 
-// Expensive half, run once right before a reveal fires rather than per move:
-// screen-space seam probes and full hit-tests of the bar.
+// Expensive half, run once at the flip rather than per move.
 bool PointerClearsSurfaces(void* key, Point framePt) {
     if (g_settings.elementPaddingPx <= 0) {
         return true;
     }
 
     FrameContext* ctx = GetFrameContext(key);
-    FrameworkElement frame = ctx ? ctx->frame.get() : nullptr;
-    if (!ctx || !frame) {
+    FrameworkElement frame = nullptr;
+    if (ctx) {
+        // Fail open: any tick may resolve another thread's frame here.
+        try {
+            frame = ctx->frame.get();
+        } catch (winrt::hresult_error const&) {
+            return true;
+        }
+    }
+    if (!frame) {
         return true;
     }
 
-    // A different window within the padding is a seam no visual-tree probe
-    // can see (tray content lives on its own surface). Padding scaled to
-    // pixels for high DPI. Probes past the bar's own window are the screen
-    // edge or the next monitor, not a seam, or the bar's outer ends could
-    // never start a reveal.
+    // A different window within the padding is a seam; probes past the bar's
+    // own window are the screen edge or the next monitor, not a seam.
     POINT screenPt;
     if (GetCursorPos(&screenPt)) {
         HWND hAt = WindowFromPoint(screenPt);
@@ -1592,8 +1501,7 @@ bool PointerClearsSurfaces(void* key, Point framePt) {
     return ProbeStripIsClear(frame, framePt, g_settings.elementPaddingPx);
 }
 
-// Hooks see different interface pointers for one object; raw keys would
-// register the same taskbar twice. QI to one interface canonicalizes.
+// QI to one interface: raw hook pointers differ per interface slot.
 void* FrameKeyFromThis(void* pThis, FrameworkElement* elementOut) {
     FrameworkElement element = nullptr;
     ((IUnknown*)pThis)
@@ -1608,8 +1516,7 @@ void* FrameKeyFromThis(void* pThis, FrameworkElement* elementOut) {
     return key;
 }
 
-// Hook bodies live in helpers wrapped in a catch-all: an exception escaping
-// a raw COM ABI slot would unwind into XAML and take explorer down.
+// Catch-all per hook: an exception across the COM ABI kills explorer.
 
 using TaskbarFrame_OnPointerMoved_t = int(__cdecl*)(void* pThis, void* pArgs);
 TaskbarFrame_OnPointerMoved_t TaskbarFrame_OnPointerMoved_Original;
@@ -1631,14 +1538,7 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         RegisterFrame(key, element);
     }
 
-    ULONGLONG pointerNow = GetTickCount64();
-    g_lastCursorInsideTick = pointerNow;
-    g_lastActivityTick = pointerNow;
-
-    // First touch restores the fast tick before reveal logic depends on it.
-    if (g_sleeping.exchange(false)) {
-        ApplyOnThisThreadNow();
-    }
+    g_lastCursorInsideTick = GetTickCount64();
 
     RevealTrigger trigger = g_settings.revealTrigger;
     if ((trigger != RevealTrigger::Hover && trigger != RevealTrigger::Rest) ||
@@ -1646,10 +1546,8 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
 
-    // Speed from event-to-event deltas, lightly smoothed. Under 1 ms is two
-    // frames in the same instant and would divide into garbage. A gap over
-    // kSpeedSampleStaleMs is a pause: its first event carries no measurement
-    // and must not fall through to the arming logic below.
+    // Under 1 ms would divide into garbage; a gap over stale is a pause
+    // whose first event has no measurement and must not arm anything.
     if (trigger == RevealTrigger::Rest) {
         POINT pt;
         if (GetCursorPos(&pt)) {
@@ -1667,8 +1565,7 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
                 double dx = (double)(pt.x - g_speedSamplePrevPos.x);
                 double dy = (double)(pt.y - g_speedSamplePrevPos.y);
                 double instant = sqrt(dx * dx + dy * dy) * 1000.0 / dt;
-                // Seeded with the first measurement, never averaged against
-                // the reset zero, or the gate is blind for several events.
+                // Seeded, never averaged with the reset zero.
                 g_cursorSpeedPxS =
                     g_speedMeasured
                         ? (g_cursorSpeedPxS.load() + instant) * 0.5
@@ -1694,8 +1591,8 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
     g_lastPointerQualified = true;
+    StartTimersOnThisThread();
 
-    // Fresh by construction: sampled just above in this same event.
     if (trigger == RevealTrigger::Rest &&
         g_cursorSpeedPxS > (double)g_settings.restSpeedPxPerSec) {
         g_emptyHoverSinceTick = 0;
@@ -1712,7 +1609,6 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
 
-    // The expensive checks run once, at the flip.
     if (!PointerClearsSurfaces(key, g_lastQualifiedFramePt)) {
         g_lastPointerQualified = false;
         g_emptyHoverSinceTick = 0;
@@ -1722,6 +1618,8 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
     g_revealed = true;
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
+    // Other monitors' taskbars have no running timer to notice the flip.
+    WakeAllFramesAsync();
 }
 
 int __cdecl TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
@@ -1733,9 +1631,8 @@ int __cdecl TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
     return ret;
 }
 
-// Leaving the frame ends pending qualification, so the tray cannot inherit
-// it. Exits also bubble from children and other pointers, so a position
-// still inside the frame keeps the state.
+// Exits bubble from children and other pointers too; a position still
+// inside the frame keeps the state.
 using TaskbarFrame_OnPointerExited_t = int(__cdecl*)(void* pThis, void* pArgs);
 TaskbarFrame_OnPointerExited_t TaskbarFrame_OnPointerExited_Original;
 void HandlePointerExited(void* pThis, void* pArgs) {
@@ -1777,8 +1674,7 @@ int __cdecl TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     return ret;
 }
 
-// Toggles the reveal on a click landing on bare taskbar. Released rather than
-// pressed, so dragging off the taskbar and letting go does not count.
+// Released, not pressed: dragging off and letting go must not count.
 using TaskbarFrame_OnPointerReleased_t = int(__cdecl*)(void* pThis,
                                                        void* pArgs);
 TaskbarFrame_OnPointerReleased_t TaskbarFrame_OnPointerReleased_Original;
@@ -1819,6 +1715,8 @@ void HandlePointerReleased(void* pThis, void* pArgs) {
     }
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
+    // Other monitors' taskbars have no running timer to notice the flip.
+    WakeAllFramesAsync();
 }
 
 int __cdecl TaskbarFrame_OnPointerReleased_Hook(void* pThis, void* pArgs) {
@@ -1842,8 +1740,6 @@ void HandleFrameMeasure(void* pThis) {
         return;
     }
 
-    // Not counted as activity: remeasures for clocks and badges would keep
-    // the mod awake forever.
     FrameworkElement element = nullptr;
     void* key = FrameKeyFromThis(pThis, &element);
     if (!key || IsFrameRegistered(key)) {
@@ -1867,9 +1763,47 @@ int __cdecl TaskbarFrame_MeasureOverride_Hook(
     return ret;
 }
 
+// Fired on button state changes (launch/close/active). The apply is posted,
+// never inline: heavy work in the update pass risks rerendering loops.
+using TaskListButton_UpdateVisualStates_t = void(__cdecl*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    TaskListButton_UpdateVisualStates_Original(pThis);
+    g_lastButtonChurnMs = NowMs();
+    if (g_unloading) {
+        return;
+    }
+    try {
+        winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+        DWORD threadId = GetCurrentThreadId();
+        {
+            std::lock_guard<std::mutex> guard(g_framesMutex);
+            for (auto& [key, ctx] : *g_frames) {
+                if (ctx.threadId == threadId && ctx.dispatcher) {
+                    if (ctx.applyPosted) {
+                        return;
+                    }
+                    ctx.applyPosted = true;
+                    dispatcher = ctx.dispatcher;
+                    break;
+                }
+            }
+        }
+        if (dispatcher && !PostApply(dispatcher)) {
+            // Failed post: un-latch, or this thread goes deaf to events.
+            std::lock_guard<std::mutex> guard(g_framesMutex);
+            for (auto& [key, ctx] : *g_frames) {
+                if (ctx.threadId == threadId) {
+                    ctx.applyPosted = false;
+                }
+            }
+        }
+    } catch (...) {
+    }
+}
+
 // -------------------------------------------------------------------- hotkey
 
-// Parses "Ctrl+Alt+T" into RegisterHotKey arguments; false if there is no key.
 bool ParseHotkey(std::wstring spec, UINT* modifiers, UINT* vk) {
     *modifiers = 0;
     *vk = 0;
@@ -1942,7 +1876,6 @@ void ToggleCollapse() {
     g_revealedByStart = false;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
-    g_lastActivityTick = GetTickCount64();
     g_instantApplyGen++;
     Wh_Log(L"Hotkey toggled collapse to %d", (int)enabled);
     WakeAllFramesAsync();
@@ -1954,9 +1887,16 @@ void OnStartMenuVisibility(bool visible) {
     }
 
     if (visible) {
-        if (!g_revealed.exchange(true)) {
+        bool wasRevealed = g_revealed.exchange(true);
+        RevealTrigger trigger = g_settings.revealTrigger;
+        bool hoverLike = trigger == RevealTrigger::Hover ||
+                         trigger == RevealTrigger::Rest;
+        // Adopt an in-flight hover reveal or grace ages it out under Start;
+        // a click reveal stays its own, so Start-close cannot cancel it.
+        if (!wasRevealed || hoverLike) {
             g_revealedByStart = true;
-            g_lastActivityTick = GetTickCount64();
+        }
+        if (!wasRevealed) {
             Wh_Log(L"Start menu opened, revealing");
             WakeAllFramesAsync();
         }
@@ -1964,9 +1904,7 @@ void OnStartMenuVisibility(bool visible) {
     }
 
     if (g_revealedByStart.exchange(false)) {
-        // Hover-like triggers hand over to grace rules instead of collapsing
-        // under a click in progress. Click/hotkey have no aging that could
-        // ever end it, so their reveal ends with Start.
+        // Hover hands over to grace; click/hotkey reveals end with Start.
         RevealTrigger trigger = g_settings.revealTrigger;
         bool hoverLike = trigger == RevealTrigger::Hover ||
                          trigger == RevealTrigger::Rest;
@@ -1975,14 +1913,12 @@ void OnStartMenuVisibility(bool visible) {
         } else {
             g_revealed = false;
         }
-        g_lastActivityTick = GetTickCount64();
         Wh_Log(L"Start menu closed");
         WakeAllFramesAsync();
     }
 }
 
-// Shell-provided notification for the Start menu opening and closing; the
-// callbacks arrive on COM worker threads and touch only thread-safe state.
+// Callbacks arrive on COM worker threads; only thread-safe state here.
 class StartVisibilitySink final : public IAppVisibilityEvents {
    public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
@@ -2020,9 +1956,7 @@ class StartVisibilitySink final : public IAppVisibilityEvents {
 
     HRESULT STDMETHODCALLTYPE
     LauncherVisibilityChange(BOOL currentVisibleState) override {
-        // Counted so teardown can wait out a call in flight; Unadvise does
-        // not fence one already started. The catch keeps the ABI and the
-        // decrement safe.
+        // Counted so teardown can wait out a call in flight.
         g_sinkCallbacks++;
         try {
             OnStartMenuVisibility(currentVisibleState != FALSE);
@@ -2036,7 +1970,6 @@ class StartVisibilitySink final : public IAppVisibilityEvents {
     LONG m_refCount = 1;
 };
 
-// Owns the hotkey registration and the Start-menu watcher; WM_QUIT ends it.
 DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     // Create and announce the queue before anything slow: WM_QUIT must land.
     MSG queuePrimer;
@@ -2138,8 +2071,7 @@ void StartHotkeyThread() {
     }
 }
 
-// Waits without a timeout on purpose: the mod is unloaded the moment teardown
-// returns, so a thread still running here would resume inside a freed image.
+// Unbounded on purpose: a surviving thread would resume in a freed image.
 void StopHotkeyThread() {
     std::lock_guard<std::mutex> guard(g_hotkeyThreadMutex);
     if (!g_hotkeyThread) {
@@ -2159,7 +2091,6 @@ void StopHotkeyThread() {
 
 // ------------------------------------------------------- taskbar UI threads
 
-// Runs proc on the thread owning hWnd and waits for it to finish.
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
                          PVOID procParam) {
@@ -2208,8 +2139,7 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-// Runs proc once per taskbar UI thread. Do not call while holding
-// g_framesMutex: it blocks until each target thread has run proc.
+// Do not call holding g_framesMutex: blocks on each target thread.
 void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
     std::vector<HWND> windows;
     std::vector<DWORD> threadIds;
@@ -2229,8 +2159,7 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
         windows.push_back(hWnd);
     };
 
-    // Iterated rather than a single FindWindow: the first Shell_TrayWnd on
-    // the desktop can belong to another process.
+    // Iterated: the first Shell_TrayWnd can belong to another process.
     HWND hPrimary = nullptr;
     while ((hPrimary = FindWindowEx(nullptr, hPrimary, L"Shell_TrayWnd",
                                     nullptr))) {
@@ -2247,7 +2176,6 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
     }
 }
 
-// Stops the timers and restores the taskbars owned by the calling thread.
 void CleanupOnThisThread() {
     DWORD threadId = GetCurrentThreadId();
     std::vector<void*> keys;
@@ -2287,7 +2215,6 @@ void CleanupOnThisThread() {
 void LoadSettings() {
     g_settings.revealOnStart = Wh_GetIntSetting(L"RevealOnStart") != 0;
 
-    // Unrecognized values fall back to Click, matching the shipped default.
     auto trigger = WindhawkUtils::StringSetting::make(L"RevealTrigger");
     g_settings.revealTrigger = RevealTrigger::Click;
     if (wcscmp(trigger.get(), L"hover") == 0) {
@@ -2307,12 +2234,6 @@ void LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"ElementPaddingPx"), 0, 200);
     g_settings.hoverGraceMs =
         std::clamp(Wh_GetIntSetting(L"HoverGraceMs"), 0, 5000);
-    g_settings.refreshIntervalMs =
-        std::clamp(Wh_GetIntSetting(L"RefreshIntervalMs"), 10, 2000);
-
-    g_settings.sleepEnabled = Wh_GetIntSetting(L"SleepEnabled") != 0;
-    g_settings.sleepIntervalMs =
-        std::clamp(Wh_GetIntSetting(L"SleepIntervalMs"), 500, 3000);
 
     g_settings.animationDurationMs =
         std::clamp(Wh_GetIntSetting(L"AnimationDurationMs"), 0, 5000);
@@ -2332,18 +2253,11 @@ void LoadSettings() {
         g_settings.animationCurve = CurveId::Circ;
     }
 
-    auto marker = WindhawkUtils::StringSetting::make(L"RunningNameMarker");
-    {
-        std::lock_guard<std::mutex> guard(g_settingsMutex);
-        g_settings.runningNameMarker = marker.get();
-    }
-
     g_collapseEnabled = Wh_GetIntSetting(L"Collapsed") != 0;
     g_revealed = false;
     g_revealedByStart = false;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
-    g_lastActivityTick = GetTickCount64();
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -2380,6 +2294,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskbarFrame_MeasureOverride_Hook,
             true,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
+            &TaskListButton_get_IsRunning_Original,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(module, symbolHooks,
@@ -2414,10 +2337,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
     if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
+        // The exchange makes this exactly-once; no second flag needed.
         if (HookTaskbarViewDllSymbols(module)) {
-            if (!g_hooksApplied.exchange(true)) {
-                Wh_ApplyHookOperations();
-            }
+            Wh_ApplyHookOperations();
             StartHotkeyThread();
         }
     }
@@ -2435,8 +2357,8 @@ BOOL Wh_ModInit() {
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             return FALSE;
         }
-        // Only the explorer.exe that owns the taskbar loads Taskbar.View.dll;
-        // other instances must not grab the hotkey or the Start watcher.
+        // Only the shell explorer loads Taskbar.View.dll; other instances
+        // must not grab the hotkey or the Start watcher.
         StartHotkeyThread();
     } else {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
@@ -2460,18 +2382,14 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (g_taskbarViewDllLoaded) {
-        g_hooksApplied = true;
         return;
     }
 
-    // Try again in case Taskbar.View.dll loaded between Wh_ModInit's check
-    // and the LoadLibraryExW hook going live.
+    // Retry for a load that raced the LoadLibraryExW hook going live.
     HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
     if (taskbarViewModule && !g_taskbarViewDllLoaded.exchange(true)) {
         if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            if (!g_hooksApplied.exchange(true)) {
-                Wh_ApplyHookOperations();
-            }
+            Wh_ApplyHookOperations();
             StartHotkeyThread();
         }
     }
@@ -2482,12 +2400,13 @@ void Wh_ModSettingsChanged() {
 
     StopHotkeyThread();
     LoadSettings();
-    // Never started in explorer.exe instances that do not own the taskbar.
     if (g_taskbarViewDllLoaded) {
         StartHotkeyThread();
     }
 
     g_instantApplyGen++;
+    // The timers are stopped while idle, so the new settings must be pushed.
+    WakeAllFramesAsync();
 }
 
 void Wh_ModBeforeUninit() {
@@ -2498,8 +2417,7 @@ void Wh_ModBeforeUninit() {
 
     RunOnAllTaskbarThreads([](PVOID) { CleanupOnThisThread(); }, nullptr);
 
-    // Second sweep for windows the class-name search missed (mid-recreate):
-    // every timer must stop on its own thread, or it outlives the DLL.
+    // Second sweep: every timer must stop on its own thread.
     std::vector<DWORD> leftoverThreads;
     {
         std::lock_guard<std::mutex> guard(g_framesMutex);
@@ -2522,8 +2440,7 @@ void Wh_ModBeforeUninit() {
         }
     }
 
-    // Last resort for a context with no reachable window: its dispatcher
-    // cleans up. Timers and rendering hooks must come off on their own thread.
+    // Last resort: the context's dispatcher cleans up on its own thread.
     std::vector<std::pair<winrt::Windows::UI::Core::CoreDispatcher, DWORD>>
         stragglers;
     {
@@ -2536,53 +2453,59 @@ void Wh_ModBeforeUninit() {
     }
 
     for (auto& [dispatcher, threadId] : stragglers) {
-        // A thread that already exited can never run the lambda; waiting on
-        // it would hang the unload for nothing.
-        if (HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId)) {
-            bool exited = WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0;
+        HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+        if (!hThread) {
+            continue;
+        }
+        if (WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) {
+            // Already gone: nothing on that thread can ever run the lambda.
             CloseHandle(hThread);
-            if (exited) {
-                continue;
-            }
-        } else {
             continue;
         }
         HANDLE done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (!done) {
+            CloseHandle(hThread);
             continue;
         }
         bool queued = false;
-        try {
-            dispatcher.RunAsync(
-                winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                [done]() {
-                    // The signal must fire even if cleanup throws, or the
-                    // unbounded wait below never returns.
-                    try {
-                        CleanupOnThisThread();
-                    } catch (...) {
-                    }
-                    SetEvent(done);
-                });
-            queued = true;
-        } catch (winrt::hresult_error const&) {
+        {
+            // Signalled on delegate DESTRUCTION, even if dropped uninvoked.
+            auto signal = std::shared_ptr<void>(
+                nullptr, [done](void*) { SetEvent(done); });
+            try {
+                dispatcher.RunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                    [signal]() {
+                        try {
+                            CleanupOnThisThread();
+                        } catch (...) {
+                        }
+                    });
+                queued = true;
+            } catch (winrt::hresult_error const&) {
+            }
         }
-        // Unbounded: giving up would let the lambda run in a freed image. A
-        // wedged taskbar hangs the unload instead, which is recoverable.
-        if (!queued || WaitForSingleObject(done, INFINITE) == WAIT_OBJECT_0) {
+        if (queued) {
+            // Unbounded: giving up lets the lambda run in a freed image. On
+            // thread death the event is deliberately leaked (delegate owns it).
+            HANDLE waits[2] = {done, hThread};
+            if (WaitForMultipleObjects(2, waits, FALSE, INFINITE) ==
+                WAIT_OBJECT_0) {
+                CloseHandle(done);
+            }
+        } else {
             CloseHandle(done);
         }
+        CloseHandle(hThread);
     }
 
-    // Queued wakes hold DLL code, and no new ones can be queued; the threads
-    // are pumping (they just serviced the cleanup). Unbounded, as above.
+    // Lifetime-tied counter: a dropped wake still counts down. Unbounded.
     while (g_pendingWakes.load() > 0) {
         Sleep(10);
     }
 
-    // Leftovers could not be reached on their own thread; leaving references
-    // alive beats releasing them from here. Never reset() the empty map:
-    // hooks stay live past this point with unlocked g_unloading checks.
+    // Leftovers stay referenced (safer than a wrong-thread release). Never
+    // reset() the map: hooks still run unlocked g_unloading checks.
     std::lock_guard<std::mutex> guard(g_framesMutex);
     if (!g_frames->empty()) {
         Wh_Log(L"%u taskbar contexts could not be cleaned up",
