@@ -1,11 +1,11 @@
 // ==WindhawkMod==
-// @id              hide-taskbar-only-on-desktop
-// @name            Hide Taskbar Only on Desktop
-// @description     Hides the taskbar when the desktop is active, while showing it for applications and on taskbar hover
-// @version         1.2.0
-// @author          Sahil Dashoni
-// @github          https://github.com/Sahil-Dashoni
-// @include         windhawk.exe
+// @id hide-taskbar-only-on-desktop
+// @name Hide Taskbar Only on Desktop
+// @description Hides the taskbar when the desktop is active, while showing it for applications and on taskbar hover
+// @version 1.3.0
+// @author Sahil Dashoni
+// @github https://github.com/Sahil-Dashoni
+// @include windhawk.exe
 // @compilerOptions -lshell32 -ldwmapi
 // ==/WindhawkMod==
 
@@ -39,10 +39,13 @@ This mod intentionally differs from native Windows auto-hide:
 it hides the taskbar window without changing the desktop work area.
 
 If native Windows taskbar auto-hide is enabled, this mod stands down so
-the two mechanisms don't fight each other.
+the two mechanisms don't fight each other. If native auto-hide is enabled
+while this mod has hidden the taskbar, the mod restores the taskbar first
+so Windows can take control of it again.
 
-This mod uses Windows events for application/window state changes and
-only uses a short timer while cursor hover handling is actually needed.
+This mod uses only foreground/minimize Windows events for application state
+changes and only uses a short timer while cursor hover handling is actually
+needed. It deliberately avoids system-wide object show/hide/destroy hooks.
 
 This mod was created with AI assistance.
 */
@@ -91,6 +94,7 @@ HANDLE g_hThreadReadyEvent = nullptr;
 
 constexpr UINT WM_APP_REFRESH_STATE = WM_APP + 1;
 constexpr UINT WM_APP_STOP_THREAD = WM_APP + 2;
+constexpr WPARAM kRefreshNativeAutoHide = 1;
 
 constexpr UINT kHoverTimerIntervalMs = 200;
 
@@ -103,7 +107,7 @@ bool g_onDesktopState = false;
 bool g_shownDueToHover = false;
 ULONGLONG g_hideDeadline = 0;
 
-constexpr size_t kMaxWinEventHooks = 6;
+constexpr size_t kMaxWinEventHooks = 3;
 HWINEVENTHOOK g_hWinEventHooks[kMaxWinEventHooks] = {};
 
 
@@ -685,6 +689,11 @@ void UpdateTaskbarState() {
         g_hideDeadline = 0;
         g_shownDueToHover = false;
         StopHoverTimer();
+
+        // Give control back to Windows' native auto-hide implementation.
+        // This is important if native auto-hide was enabled while our
+        // mod had previously hidden the taskbar with SW_HIDE.
+        SetTaskbarVisibility(true);
         return;
     }
 
@@ -795,7 +804,7 @@ void UpdateTaskbarState() {
 // Worker refresh message
 // ============================================================
 
-void RequestStateRefresh() {
+void RequestStateRefresh(bool refreshNativeAutoHide = false) {
     if (!g_threadId) {
         return;
     }
@@ -817,7 +826,7 @@ void RequestStateRefresh() {
         !PostThreadMessageW(
             g_threadId,
             WM_APP_REFRESH_STATE,
-            0,
+            refreshNativeAutoHide ? kRefreshNativeAutoHide : 0,
             0
         )
     ) {
@@ -837,17 +846,14 @@ bool IsRelevantWinEvent(DWORD event) {
     return
         event == EVENT_SYSTEM_FOREGROUND ||
         event == EVENT_SYSTEM_MINIMIZESTART ||
-        event == EVENT_SYSTEM_MINIMIZEEND ||
-        event == EVENT_OBJECT_SHOW ||
-        event == EVENT_OBJECT_HIDE ||
-        event == EVENT_OBJECT_DESTROY;
+        event == EVENT_SYSTEM_MINIMIZEEND;
 }
 
 
 void CALLBACK WinEventProc(
     HWINEVENTHOOK,
     DWORD event,
-    HWND hwnd,
+    HWND,
     LONG idObject,
     LONG idChild,
     DWORD,
@@ -861,22 +867,16 @@ void CALLBACK WinEventProc(
         return;
     }
 
-    if (!hwnd) {
-        RequestStateRefresh();
-        return;
-    }
-
     /*
-     * Foreground/minimize transitions are always relevant.
+     * Foreground changes are the main state transition we care about.
+     * Minimize start/end are needed for the last-application case.
      *
-     * Object show/hide/destroy events are also useful for:
-     * - the last application being closed,
-     * - Explorer recreating the taskbar,
-     * - native taskbar auto-hide changes.
-     *
-     * They are debounced into a single refresh message.
+     * We deliberately do not hook EVENT_OBJECT_SHOW/HIDE/DESTROY here.
+     * Those events are system-wide and can fire for menus, tooltips,
+     * controls and other transient windows. Avoiding them prevents a
+     * synchronous SHAppBarMessage call on every such event.
      */
-    RequestStateRefresh();
+    RequestStateRefresh(event == EVENT_SYSTEM_FOREGROUND);
 }
 
 
@@ -959,8 +959,10 @@ DWORD WINAPI HookThread(LPVOID) {
     }
 
     /*
-     * Install only the events needed to track foreground/application
-     * state and taskbar/window lifetime changes.
+     * Only hook events that represent meaningful application-state
+     * transitions. In particular, do not hook EVENT_OBJECT_SHOW/HIDE/
+     * DESTROY because those are generated system-wide for large numbers
+     * of transient windows and controls.
      */
     bool hookOk = true;
 
@@ -972,32 +974,8 @@ DWORD WINAPI HookThread(LPVOID) {
 
     hookOk &= InstallWinEventHookFor(
         EVENT_SYSTEM_MINIMIZESTART,
-        EVENT_SYSTEM_MINIMIZESTART,
+        EVENT_SYSTEM_MINIMIZEEND,
         1
-    );
-
-    hookOk &= InstallWinEventHookFor(
-        EVENT_SYSTEM_MINIMIZEEND,
-        EVENT_SYSTEM_MINIMIZEEND,
-        2
-    );
-
-    hookOk &= InstallWinEventHookFor(
-        EVENT_OBJECT_SHOW,
-        EVENT_OBJECT_SHOW,
-        3
-    );
-
-    hookOk &= InstallWinEventHookFor(
-        EVENT_OBJECT_HIDE,
-        EVENT_OBJECT_HIDE,
-        4
-    );
-
-    hookOk &= InstallWinEventHookFor(
-        EVENT_OBJECT_DESTROY,
-        EVENT_OBJECT_DESTROY,
-        5
     );
 
     if (!hookOk) {
@@ -1027,7 +1005,10 @@ DWORD WINAPI HookThread(LPVOID) {
                 std::memory_order_release
             );
 
-            RefreshNativeTaskbarAutoHideState();
+            if (msg.wParam == kRefreshNativeAutoHide) {
+                RefreshNativeTaskbarAutoHideState();
+            }
+
             RefreshDesktopState();
             UpdateTaskbarState();
 
@@ -1243,7 +1224,7 @@ void WhTool_ModSettingsChanged() {
      * In particular, this restores secondary taskbars when the setting
      * changes from ON to OFF while the desktop is already active.
      */
-    RequestStateRefresh();
+    RequestStateRefresh(true);
 }
 
 
