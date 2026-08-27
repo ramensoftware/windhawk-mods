@@ -43,8 +43,9 @@ continuous polling.
 ## Getting Started
 Move a tiled window to **float it** or **swap it with the window underneath**. 
 
-By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), moving windows through the logical
-order (Alt+, / .), floating a window (Alt+F), and switching between Automatic and Manual management (Alt R).
+By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), setting the master window (Alt+M),
+moving windows through the logical order (Alt+, / .), floating a window (Alt+F), and switching between Automatic
+and Manual management (Alt+R).
 
 A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.
 
@@ -2854,10 +2855,14 @@ static bool GetCurrentWorkspaceKey(
     HMONITOR monitor, DesktopMonitorKey* outKey) {
   if (!outKey || !IsLiveMonitorHandle(monitor)) return false;
   GUID desktopId{};
-  // Never collapse separate desktops into a zero-GUID workspace when the
-  // private API is temporarily unavailable; let the caller retry after recovery.
-  if (!InitializeVirtualDesktopAPI() || !GetCurrentDesktopId(&desktopId)) {
-    return false;
+  if (g_wm.reconciledDesktopState == ReconciledDesktopState::Settled) {
+    desktopId = g_wm.reconciledDesktop;
+  } else {
+    // Never collapse separate desktops into a zero-GUID workspace when the
+    // private API is temporarily unavailable; let the caller retry after recovery.
+    if (!InitializeVirtualDesktopAPI() || !GetCurrentDesktopId(&desktopId)) {
+      return false;
+    }
   }
   return DesktopMonitorKey::FromHMonitor(desktopId, monitor, outKey);
 }
@@ -7421,7 +7426,13 @@ static void SetTooltip(TileLayout layout) {
     tooltip += LayoutDisplayName(layout);
   } else {
     GUID desktopId{};
-    bool haveDesktop = GetCurrentDesktopId(&desktopId);
+    bool haveDesktop = false;
+    if (g_wm.reconciledDesktopState == ReconciledDesktopState::Settled) {
+      desktopId = g_wm.reconciledDesktop;
+      haveDesktop = true;
+    } else {
+      haveDesktop = GetCurrentDesktopId(&desktopId);
+    }
     if (!haveDesktop && g_haveDisplayedDesktopId) {
       desktopId = g_displayedDesktopId;
       haveDesktop = true;
@@ -7486,6 +7497,11 @@ static bool AddIconToShell() {
 static void UpdateIcon(TileLayout layout, HMONITOR monitor) {
   if (!g_trayWindow || layout == TileLayout::COUNT) return;
 
+  const TileLayout previousLayout = g_displayedLayout;
+  const HMONITOR previousMonitor = g_displayedMonitor;
+  const HICON previousIcon = g_notifyData.hIcon;
+  const std::wstring previousTooltip = g_notifyData.szTip;
+
   g_displayedLayout = layout;
   if (monitor) g_displayedMonitor = monitor;
 
@@ -7515,6 +7531,12 @@ static void UpdateIcon(TileLayout layout, HMONITOR monitor) {
   g_notifyData.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
   g_notifyData.hIcon = GetLayoutIcon(layout);
   SetTooltip(layout);
+  if (previousLayout == g_displayedLayout &&
+      previousMonitor == g_displayedMonitor &&
+      previousIcon == g_notifyData.hIcon &&
+      previousTooltip == g_notifyData.szTip) {
+    return;
+  }
   if (!Shell_NotifyIconW(NIM_MODIFY, &g_notifyData)) {
     // The shell may have discarded the entry while our local state still says it
     // exists. Reverse the recovery direction and recreate it with NIM_ADD.
