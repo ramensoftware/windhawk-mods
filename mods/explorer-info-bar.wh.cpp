@@ -287,6 +287,9 @@ static HWINEVENTHOOK g_selectionWinEventHook = nullptr;
 static HWINEVENTHOOK g_windowCreateWinEventHook = nullptr;
 static std::atomic<ULONGLONG> g_selectionGeneration{1};
 static std::atomic<ULONGLONG> g_lastPaintWakeTick{0};
+static constexpr ULONGLONG kSelectionWinEventWakeIntervalMs = 200;
+static ULONGLONG g_lastSelectionWinEventWakeTick = 0;
+static UINT_PTR g_selectionWinEventWakeTimer = 0;
 
 static CRITICAL_SECTION g_cacheLock;
 
@@ -1896,10 +1899,127 @@ static void WakeWorkerFromPaint()
     SetEvent(g_workerWakeEvent);
 }
 
+static bool IsWinEventFromTrackedExplorerRoot(HWND hwnd)
+{
+    if (!hwnd)
+        return false;
+
+    const HWND eventRoot = GetAncestor(hwnd, GA_ROOT);
+
+    if (!eventRoot)
+        return false;
+
+    wchar_t rootClassName[64]{};
+
+    if (
+        !GetClassNameW(
+            eventRoot,
+            rootClassName,
+            ARRAYSIZE(rootClassName)
+        ) ||
+        wcscmp(rootClassName, L"CabinetWClass") != 0
+    )
+    {
+        return false;
+    }
+
+    // Copy only HWND values while holding the lock. Root inspection happens
+    // below, after releasing it, because window-manager calls can reenter.
+    std::vector<HWND> trackedWindows;
+    bool snapshotFailed = false;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    try
+    {
+        trackedWindows.reserve(g_trackedWindows.size());
+
+        for (const TrackedDirectUiState& state : g_trackedWindows)
+            trackedWindows.push_back(state.hwnd);
+    }
+    catch (...)
+    {
+        snapshotFailed = true;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
+
+    if (snapshotFailed)
+        return false;
+
+    for (HWND trackedWindow : trackedWindows)
+    {
+        if (GetAncestor(trackedWindow, GA_ROOT) == eventRoot)
+            return true;
+    }
+
+    return false;
+}
+
+static void CALLBACK SelectionWinEventWakeTimerProc(
+    HWND,
+    UINT,
+    UINT_PTR timerId,
+    DWORD
+)
+{
+    KillTimer(nullptr, timerId);
+
+    if (g_selectionWinEventWakeTimer == timerId)
+        g_selectionWinEventWakeTimer = 0;
+
+    if (g_unloading.load(std::memory_order_acquire))
+        return;
+
+    g_lastSelectionWinEventWakeTick = GetTickCount64();
+
+    if (g_workerWakeEvent)
+        SetEvent(g_workerWakeEvent);
+}
+
+static void WakeWorkerFromSelectionWinEvent()
+{
+    if (!g_workerWakeEvent)
+        return;
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG elapsed = now - g_lastSelectionWinEventWakeTick;
+
+    if (
+        !g_lastSelectionWinEventWakeTick ||
+        elapsed >= kSelectionWinEventWakeIntervalMs
+    )
+    {
+        g_lastSelectionWinEventWakeTick = now;
+        SetEvent(g_workerWakeEvent);
+        return;
+    }
+
+    if (g_selectionWinEventWakeTimer)
+        return;
+
+    g_selectionWinEventWakeTimer =
+        SetTimer(
+            nullptr,
+            0,
+            static_cast<UINT>(
+                kSelectionWinEventWakeIntervalMs - elapsed
+            ),
+            SelectionWinEventWakeTimerProc
+        );
+
+    if (!g_selectionWinEventWakeTimer)
+    {
+        // A failed coalescing timer must not leave the final selection stale.
+        g_lastSelectionWinEventWakeTick = now;
+        SetEvent(g_workerWakeEvent);
+    }
+}
+
 static void CALLBACK SelectionWinEventProc(
     HWINEVENTHOOK,
     DWORD event,
-    HWND,
+    HWND hwnd,
     LONG,
     LONG,
     DWORD,
@@ -1911,16 +2031,15 @@ static void CALLBACK SelectionWinEventProc(
         // count change and no EVENT_OBJECT_SELECTION-family notification.
         event < EVENT_OBJECT_FOCUS ||
         event > EVENT_OBJECT_SELECTIONWITHIN ||
-        g_unloading.load(std::memory_order_acquire)
+        g_unloading.load(std::memory_order_acquire) ||
+        !IsWinEventFromTrackedExplorerRoot(hwnd)
     )
     {
         return;
     }
 
     g_selectionGeneration.fetch_add(1, std::memory_order_relaxed);
-
-    if (g_workerWakeEvent)
-        SetEvent(g_workerWakeEvent);
+    WakeWorkerFromSelectionWinEvent();
 }
 
 static void CALLBACK ExplorerObjectCreateWinEventProc(
@@ -2044,6 +2163,12 @@ static DWORD WINAPI SelectionWinEventThreadProc(
 
             break;
         }
+    }
+
+    if (g_selectionWinEventWakeTimer)
+    {
+        KillTimer(nullptr, g_selectionWinEventWakeTimer);
+        g_selectionWinEventWakeTimer = 0;
     }
 
     // Both hooks are installed, pumped and removed by this same owning thread.
