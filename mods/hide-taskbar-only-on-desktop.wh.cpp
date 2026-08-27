@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar when the desktop is active, while showing it for applications and on taskbar hover
-// @version 1.3.0
+// @version 1.4.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -324,6 +324,13 @@ void RefreshDesktopState() {
     if (IsTaskbarWindow(foreground)) {
         if (IsTaskbarForegroundAndUnderCursor(foreground)) {
             g_taskbarIsForeground = true;
+
+            // The taskbar was revealed/kept visible by the user's
+            // interaction with it. Preserve this state so that when the
+            // cursor leaves the taskbar we start the configured hover
+            // delay instead of hiding it immediately.
+            g_shownDueToHover = true;
+
             g_onDesktopState = false;
             return;
         }
@@ -726,7 +733,14 @@ void UpdateTaskbarState() {
      */
     if (!g_onDesktopState) {
         g_hideDeadline = 0;
-        g_shownDueToHover = false;
+
+        // Do not clear g_shownDueToHover while the taskbar itself has
+        // focus. It is needed after the cursor leaves the taskbar so the
+        // configured delay is applied. Clear it for a real application
+        // state, where hiding is never delayed.
+        if (!g_taskbarIsForeground) {
+            g_shownDueToHover = false;
+        }
 
         SetTaskbarVisibility(true);
 
