@@ -456,7 +456,7 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
         (void**)&COpenControlPanel__MapLegacyName_orig,
@@ -512,7 +512,7 @@ BOOL Wh_ModInit(void) {
         // we log it clearly instead of silently doing nothing, so it's easy
         // to diagnose from Wh_Log output rather than looking like the mod
         // just isn't working.
-        if (!WindhawkUtils::HookSymbols(hShell32, shell32Hooks, ARRAYSIZE(shell32Hooks))) {
+        if (!WindhawkUtils::HookSymbols(hShell32, user32DllHooks, ARRAYSIZE(user32DllHooks))) {
             Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
                    L"this function's signature may have changed in this Windows "
                    L"build. The mod will continue with its other fixes.");
