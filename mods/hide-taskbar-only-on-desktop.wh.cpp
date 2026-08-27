@@ -10,63 +10,73 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
+
 /*
-# Hide Taskbar on Desktop
+
+# Hide Taskbar Only on Desktop
 
 Hides the Windows taskbar while the desktop is active and shows it again
 when an application or supported Windows shell UI is active.
 
-### Features
+## Features
 
-- Hides the taskbar when no normal visible window is active.
-- Shows the taskbar immediately when an application is active.
-- Reveals the taskbar when the mouse enters the bottom area of a monitor.
-- The reveal zone automatically follows the actual taskbar height.
-- Adds a configurable extra hover margin in millimeters.
-- Uses a configurable delay only when hiding after a mouse hover.
+- Hides the taskbar when on the desktop.
+- Shows the taskbar when an application is active.
+- Reveals the taskbar when the mouse enters the bottom-edge hover area.
+- Automatically matches the hover area to the current taskbar height.
+- Supports an additional configurable hover margin.
+- Uses a configurable delay when hiding after mouse hover.
 - Hides immediately after minimizing or closing the last application.
 - Keeps the taskbar visible while interacting with taskbar buttons.
-- Supports optional secondary taskbars on additional monitors.
-- Re-checks the desktop state periodically so minimizing the last window
-  does not require an extra desktop click.
+- Supports secondary taskbars on additional monitors.
 
-### Settings
+## Settings
 
-- Extra hover margin: additional space above the taskbar-height reveal zone.
-- Auto-hide delay after hover: delay before hiding after leaving the reveal zone.
-- Hide secondary taskbars: controls taskbars on additional monitors.
+### Extra hover margin
 
-### Notes
+Adds additional space above the automatically detected taskbar-height
+reveal zone.
 
-The mod uses a small worker thread with a Windows message queue for
-WinEvent notifications and periodic state checks. The worker is stopped
-and joined before the mod is unloaded.
+Default: 5 mm
+
+### Auto-hide delay after hover
+
+Controls how long the taskbar remains visible after the mouse leaves
+the bottom reveal area.
+
+Default: 700 ms
+
+This delay only applies when the taskbar was revealed by mouse hover.
+
+### Hide secondary taskbars
+
+Controls whether taskbars on additional monitors are also hidden.
+
+Default: enabled
+
 */
-// ==WindhawkModReadme==
+
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
+
 /*
+
 - extraHoverMarginMm: 5
   $name: Extra hover margin (mm)
-  $description: >-
-    Adds extra space above the automatically detected taskbar-height
-    reveal zone. Default is 5 mm.
+  $description: Adds extra space above the automatically detected taskbar-height reveal zone.
 
 - autoHideDelayMs: 700
   $name: Auto-hide delay after hover (ms)
-  $description: >-
-    How long to wait after the mouse leaves the bottom-edge hover zone
-    before hiding the taskbar. Only applies after a mouse hover reveal.
-    Default is 700 ms.
+  $description: How long to wait after the mouse leaves the bottom-edge hover zone before hiding the taskbar.
 
 - hideSecondaryTaskbars: true
   $name: Hide secondary taskbars
-  $description: >-
-    Also hide and show taskbars on additional monitors when Windows is
-    configured to show taskbars on all displays.
-*/
-// ==WindhawkModSettings==
+  $description: Also hide and show taskbars on additional monitors.
 
+*/
+
+// ==/WindhawkModSettings==
 #include <windows.h>
 #include <dwmapi.h>
 
