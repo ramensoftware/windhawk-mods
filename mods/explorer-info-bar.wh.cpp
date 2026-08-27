@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              explorer-info-bar
-// @name            Explorer Info Bar
+// @name            Explorer Info Bar+
 // @description     Enhances File Explorer's bottom info bar with drive, content, selection, and single-file details, with customizable styles and colors.
 // @version         1.0.0
 // @author          digART
@@ -13,11 +13,17 @@
 
 // ==WindhawkModReadme==
 /*
-# Explorer Info Bar
+# Explorer Info Bar+
 
 A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.
 
-Explorer Info Bar adds useful drive, folder, selection, and single-file information while keeping the native Explorer look and adapting to light, dark, and customized themes.
+Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.
+
+Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.
+
+## Preview
+
+![Explorer Info Bar+ preview](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png)
 
 ## Features
 
@@ -49,18 +55,22 @@ Explorer Info Bar adds useful drive, folder, selection, and single-file informat
 
 Typical information shown by the mod:
 
+```text
 Drive D: 150.7GB free
 Content: 15 folders / 25 files (77.2MB)
 Selected: 2 folders / 4 files (571KB)
+```
 
 When one file is selected, additional details can appear:
 
-.jpg (4032&times;3024)
-.jpeg (6000&times;4000)
-.mp4 (1920&times;1080, 01:23:43)
+```text
+.jpg (4032×3024)
+.jpeg (6000×4000)
+.mp4 (1920×1080, 01:23:43)
 .mp3 (00:03:47)
 .doc
 .pdf
+```
 */
 // ==/WindhawkModReadme==
 
@@ -154,7 +164,7 @@ static constexpr UINT kNativeStatusTextFormat = 0x00000824;
 static constexpr int kStatusRowHeight = 24;
 static constexpr ULONGLONG kStatusMarkerLifetimeMs = 250;
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
-static constexpr DWORD kRefreshIntervalMs = 500;
+static constexpr DWORD kRefreshIntervalMs = 10000;
 static constexpr ULONGLONG kContentFailedRetryMs = 2000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
 
@@ -242,6 +252,8 @@ struct TrackedDirectUiState
     COLORREF stableNativeTextColor = CLR_INVALID;
     HWND shellTab = nullptr;
     DWORD shellBrowserCookie = 0;
+    bool hasValidatedStatusRow = false;
+    RECT validatedStatusRow{};
 };
 
 static std::vector<TrackedDirectUiState> g_trackedWindows;
@@ -299,6 +311,9 @@ static HANDLE g_workerThread = nullptr;
 static DWORD g_workerThreadId = 0;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_workerWakeEvent = nullptr;
+static HWINEVENTHOOK g_selectionWinEventHook = nullptr;
+static std::atomic<ULONGLONG> g_selectionGeneration{1};
+static std::atomic<ULONGLONG> g_lastPaintWakeTick{0};
 
 static CRITICAL_SECTION g_cacheLock;
 
@@ -327,6 +342,10 @@ struct WindowDataCache
 {
     HWND hwnd = nullptr;
     int selected = -1;
+    int selectedFiles = 0;
+    int selectedFolders = 0;
+    ULONGLONG selectedBytes = 0;
+    ULONGLONG selectionGeneration = 0;
     std::wstring contentGroup = L"Loading...";
     std::wstring selectionGroup;
     std::wstring driveGroup;
@@ -1844,6 +1863,117 @@ static WindowDataCache* FindWindowDataCacheLocked(
         : nullptr;
 }
 
+
+static bool GetValidatedStatusRow(
+    HWND hwnd,
+    RECT* row
+)
+{
+    if (!row)
+        return false;
+
+    bool found = false;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (
+        existing != g_trackedWindows.end() &&
+        existing->hasValidatedStatusRow
+    )
+    {
+        *row = existing->validatedStatusRow;
+        found = true;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
+    return found;
+}
+
+static void SetValidatedStatusRow(
+    HWND hwnd,
+    const RECT& row
+)
+{
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (existing != g_trackedWindows.end())
+    {
+        existing->validatedStatusRow = row;
+        existing->hasValidatedStatusRow = true;
+    }
+
+    ReleaseSRWLockExclusive(&g_subclassLock);
+}
+
+static void WakeWorkerFromPaint()
+{
+    if (!g_workerWakeEvent)
+        return;
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous =
+        g_lastPaintWakeTick.load(std::memory_order_relaxed);
+
+    if (
+        now - previous < 250 ||
+        !g_lastPaintWakeTick.compare_exchange_strong(
+            previous,
+            now,
+            std::memory_order_relaxed
+        )
+    )
+    {
+        return;
+    }
+
+    SetEvent(g_workerWakeEvent);
+}
+
+static void CALLBACK SelectionWinEventProc(
+    HWINEVENTHOOK,
+    DWORD event,
+    HWND,
+    LONG,
+    LONG,
+    DWORD,
+    DWORD
+)
+{
+    if (
+        event < EVENT_OBJECT_SELECTION ||
+        event > EVENT_OBJECT_SELECTIONWITHIN ||
+        g_unloading.load(std::memory_order_acquire)
+    )
+    {
+        return;
+    }
+
+    g_selectionGeneration.fetch_add(1, std::memory_order_relaxed);
+
+    if (g_workerWakeEvent)
+        SetEvent(g_workerWakeEvent);
+}
+
 static bool EnsureWindowDataCache(
     HWND hwnd
 )
@@ -1956,6 +2086,7 @@ static unsigned UpdateCache(
     const std::wstring& contentOverrideText,
     const std::wstring& selectionOverrideText,
     const std::wstring& fileDetailsText,
+    ULONGLONG selectionGeneration,
     const ContentRefreshCache& contentRefreshCache,
     const SingleFileMetadataCache& metadataCache
 )
@@ -2105,6 +2236,10 @@ static unsigned UpdateCache(
         cache->fileDetailsGroup = fileDetailsText;
     }
 
+    cache->selectedFiles = selectedFiles;
+    cache->selectedFolders = selectedFolders;
+    cache->selectedBytes = selectedBytes;
+    cache->selectionGeneration = selectionGeneration;
     cache->contentRefresh = contentRefreshCache;
     cache->metadata = metadataCache;
 
@@ -2535,12 +2670,14 @@ static unsigned ReadCurrentView(
             : 0;
 
     int selected = 0;
-    int selectedFiles = 0;
-    int selectedFolders = 0;
-    ULONGLONG selectedBytes = 0;
+    int selectedFiles = state.selectedFiles;
+    int selectedFolders = state.selectedFolders;
+    ULONGLONG selectedBytes = state.selectedBytes;
     std::wstring selectionOverrideText;
-    std::wstring singleFileDetails;
-    bool keepSingleFileMetadataCache = false;
+    std::wstring singleFileDetails = state.fileDetailsGroup;
+    bool keepSingleFileMetadataCache = !state.fileDetailsGroup.empty();
+    const ULONGLONG selectionGeneration =
+        g_selectionGeneration.load(std::memory_order_relaxed);
 
     // Always obtain the selection count. Even when the Selected and
     // File Details sections are hidden, the painter uses the count to avoid
@@ -2573,7 +2710,16 @@ static unsigned ReadCurrentView(
             // individual selected items up to a conservative cap.
             constexpr DWORD kMaxDetailedSelectionItems = 256;
 
+            const bool folderChanged =
+                contentCache.folderIdentity != state.contentRefresh.folderIdentity;
+
+            const bool selectionDirty =
+                selectionGeneration != state.selectionGeneration ||
+                selected != state.selected ||
+                folderChanged;
+
             const bool enumerateSelection =
+                selectionDirty &&
                 selectionCount <= kMaxDetailedSelectionItems &&
                 (
                     settings.showSelection ||
@@ -2582,6 +2728,15 @@ static unsigned ReadCurrentView(
                         selectionCount == 1
                     )
                 );
+
+            if (selectionDirty)
+            {
+                selectedFiles = 0;
+                selectedFolders = 0;
+                selectedBytes = 0;
+                singleFileDetails.clear();
+                keepSingleFileMetadataCache = false;
+            }
 
             if (enumerateSelection)
             {
@@ -2725,6 +2880,7 @@ static unsigned ReadCurrentView(
             contentOverrideText,
             selectionOverrideText,
             singleFileDetails,
+            selectionGeneration,
             contentCache,
             metadataCache
         );
@@ -3347,11 +3503,21 @@ static void PaintFinalInfoBar(
         return;
     }
 
-    RECT row =
-        g_statusRowRect;
+    RECT row{};
 
-    // Fall back to Explorer's bottom status-row height if the native rect is unavailable.
+    // Only use a status-row rect after BitBlt_Hook validated it for this
+    // specific DirectUIHWND. Never paint from an unvalidated thread-local
+    // DrawText candidate.
+    const bool hasValidatedRow =
+        GetValidatedStatusRow(
+            hwnd,
+            &row
+        );
+
+    // Fall back to Explorer's bottom status-row geometry when no validated
+    // native rect is available.
     if (
+        !hasValidatedRow ||
         row.bottom <= row.top ||
         row.top < 0 ||
         row.bottom >
@@ -4110,6 +4276,7 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         EnsureWindowDataCache(hwnd);
         EnsureShellBrowserRegistration(hwnd);
+        WakeWorkerFromPaint();
 
         RECT updateRect{};
 
@@ -4279,7 +4446,7 @@ static BOOL WINAPI BitBlt_Hook(
         return result;
     }
 
-    g_statusRowRect = mappedRow;
+    SetValidatedStatusRow(hwnd, mappedRow);
 
     if (
         g_unloading.load(
@@ -4609,6 +4776,25 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
+    g_selectionWinEventHook =
+        SetWinEventHook(
+            EVENT_OBJECT_SELECTION,
+            EVENT_OBJECT_SELECTIONWITHIN,
+            nullptr,
+            SelectionWinEventProc,
+            g_pid,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
+    if (!g_selectionWinEventHook)
+    {
+        Wh_Log(
+            L"selection WinEvent hook failed error=%lu",
+            GetLastError()
+        );
+    }
+
     g_workerThread =
         CreateThread(
             nullptr,
@@ -4621,6 +4807,12 @@ BOOL Wh_ModInit()
 
     if (!g_workerThread)
     {
+        if (g_selectionWinEventHook)
+        {
+            UnhookWinEvent(g_selectionWinEventHook);
+            g_selectionWinEventHook = nullptr;
+        }
+
         Wh_Log(
             L"worker creation failed error=%lu",
             GetLastError()
@@ -4672,6 +4864,10 @@ void Wh_ModSettingsChanged()
 {
     LoadSettings();
 
+    // Force one detailed selection refresh because visibility/detail settings
+    // may have changed even if the Explorer selection itself did not.
+    g_selectionGeneration.fetch_add(1, std::memory_order_relaxed);
+
     if (g_workerWakeEvent)
         SetEvent(g_workerWakeEvent);
 
@@ -4688,8 +4884,17 @@ void Wh_ModBeforeUninit()
     if (g_stopEvent)
         SetEvent(g_stopEvent);
 
+    if (g_selectionWinEventHook)
+    {
+        UnhookWinEvent(g_selectionWinEventHook);
+        g_selectionWinEventHook = nullptr;
+    }
+
     if (g_workerThreadId)
         CoCancelCall(g_workerThreadId, 0);
+
+    if (g_workerThread)
+        CancelSynchronousIo(g_workerThread);
 
     // Snapshot under the lock, then remove subclasses outside it. The
     // Windhawk helper handles cross-thread subclass removal without the
@@ -4698,16 +4903,9 @@ void Wh_ModBeforeUninit()
     std::vector<HWND> windows;
 
     AcquireSRWLockShared(&g_subclassLock);
-    try
-    {
-        windows.reserve(g_trackedWindows.size());
-        for (const TrackedDirectUiState& state : g_trackedWindows)
-            windows.push_back(state.hwnd);
-    }
-    catch (...)
-    {
-        windows.clear();
-    }
+    windows.reserve(g_trackedWindows.size());
+    for (const TrackedDirectUiState& state : g_trackedWindows)
+        windows.push_back(state.hwnd);
     ReleaseSRWLockShared(&g_subclassLock);
 
     for (HWND hwnd : windows)
@@ -4718,6 +4916,33 @@ void Wh_ModBeforeUninit()
                 hwnd,
                 DirectUiSubclassProc
             );
+
+            // The overlay is drawn after Explorer's native buffered paint, so
+            // removing the subclass alone leaves those pixels on screen until
+            // the next native repaint. Force the status row to repaint now
+            // while the GDI hooks are still installed but g_unloading prevents
+            // any new overlay from being drawn.
+            RECT client{};
+            if (GetClientRect(hwnd, &client))
+            {
+                RECT row{};
+                row.left = 0;
+                row.right = client.right;
+                row.bottom = client.bottom;
+                row.top = std::max(
+                    0L,
+                    client.bottom - static_cast<LONG>(ScaleForWindow(hwnd, kStatusRowHeight))
+                );
+
+                RedrawWindow(
+                    hwnd,
+                    &row,
+                    nullptr,
+                    RDW_INVALIDATE |
+                    RDW_ERASE |
+                    RDW_UPDATENOW
+                );
+            }
         }
 
         DWORD shellBrowserCookie = 0;
@@ -4741,25 +4966,17 @@ void Wh_ModUninit()
         );
     }
 
-    if (g_workerThreadId)
-        CoCancelCall(g_workerThreadId, 0);
-
     if (g_workerThread)
     {
-        // The cache and COM state must outlive the worker. Wait until the
-        // worker has fully stopped before releasing shared resources.
-        const DWORD workerWait =
-            WaitForSingleObject(
-                g_workerThread,
-                5000
-            );
+        // CancelSynchronousIo in Wh_ModBeforeUninit interrupts a worker that
+        // is blocked in FindFirstFileExW/FindNextFileW. Never terminate a
+        // thread inside Explorer while it may own COM, CRT or cache locks.
+        CancelSynchronousIo(g_workerThread);
 
-        if (workerWait == WAIT_TIMEOUT)
-        {
-            Wh_Log(L"Worker did not stop within 5 seconds; terminating it to avoid blocking mod unload");
-            TerminateThread(g_workerThread, 0);
-            WaitForSingleObject(g_workerThread, 1000);
-        }
+        WaitForSingleObject(
+            g_workerThread,
+            INFINITE
+        );
 
         CloseHandle(
             g_workerThread
