@@ -573,7 +573,12 @@ static void SendParsedHotkey(const std::wstring& combo) {
             ? combo.substr(start) : combo.substr(start, end - start));
         if (token.empty()) { if (end == std::wstring::npos) break; start = end + 1; continue; }
         WORD vk = ParseHotkeyToken(token.c_str());
-        if (vk) keys.push_back(vk);
+        if (!vk) {
+            Wh_Log(L"SendParsedHotkey: unknown key \"%s\" in combo \"%s\"",
+                   token.c_str(), combo.c_str());
+            return;
+        }
+        keys.push_back(vk);
         if (end == std::wstring::npos) break;
         start = end + 1;
     }
