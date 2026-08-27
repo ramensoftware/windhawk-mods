@@ -22,7 +22,7 @@
     * This mod's UX part has no effect if AuthUX BSDR is installed.
 * This mod also optionally restores Windows 7's logoff sequence, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
-* Loading resources from an external DLL is supported for localization. This requires one of the following:
+* (Optional) Loading resources from an external DLL is supported for localization. This requires one of the following:
     * `winsrv.dll` and `winsrv.dll.mui` from Windows 7. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
     * `AuthUX.dll` from a build of AuthUX that supports BSDR.
     * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
@@ -72,8 +72,6 @@ exclusion option. Otherwise the logoff sequence portion of mod will not function
 #include <eventtoken.h>
 #include <Uxtheme.h>
 
-using namespace std;
-
 #define WM_ADD_APP (WM_APP + 1)
 #define WM_REMOVE_APP (WM_APP + 2)
 
@@ -86,6 +84,8 @@ using namespace std;
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+
+HINSTANCE hBlockedShutdownDll;
 
 #pragma region resources
 // Resource IDs
@@ -1594,7 +1594,7 @@ ILogonUIStateInfo : IInspectable {
 // Windhawk lacks some WinRT header files needed for EventSource. Since add_Resolved is only called once, just handle only one handler
 using ResolvedHandler = ABI::Windows::Foundation::ITypedEventHandler<IBlockedShutdownResolverUX*, BlockedShutdownResolution>;
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<ResolvedHandler> _Resolved;
-mutex resolvedMutex;
+std::mutex resolvedMutex;
 BlockedShutdownResolution resolvedValue = BlockedShutdownResolution_None;
 bool _wasClicked = false;
 
@@ -1602,7 +1602,7 @@ void Resolve(BlockedShutdownResolution resolution) {
     Microsoft::WRL::ComPtr<ResolvedHandler> resolvedLocal;
 
     {
-        lock_guard lock(resolvedMutex);
+        std::lock_guard lock(resolvedMutex);
         _wasClicked = true;
         resolvedValue = resolution;
         resolvedLocal = _Resolved;
@@ -1683,9 +1683,9 @@ namespace CustomBSDR {
         HWND hBlockReason;
         HBITMAP hIconBitmap;
     };
-    [[clang::no_destroy]] static optional<vector<AppTile>> appTiles{in_place};
-    [[clang::no_destroy]] static optional<vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps{in_place};
-    mutex pendingAppsMutex;
+    static std::vector<AppTile> appTiles;
+    [[clang::no_destroy]] static std::optional<std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps{std::in_place};
+    std::mutex pendingAppsMutex;
 };
 #pragma endregion logoncontroller.h and CustomBSDR.h
 
@@ -1695,151 +1695,6 @@ enum LOAD_IMAGE_WITH_WIC_OPTION {
     LIWW_ORIENTATE,
     LIWW_ORIENTATE_AND_CACHE,
 };
-
-bool WICIsOrientationSupported(IWICBitmapDecoder* pDecoder) {
-    const GUID GUID_ContainerFormatJpegXL = { 0xfec14e3f, 0x427a, 0x4736, { 0xaa, 0xe6, 0x27, 0xed, 0x84, 0xf6, 0x93, 0x22 } };
-
-    GUID guidContainerFormat = {};
-    if (FAILED(pDecoder->GetContainerFormat(&guidContainerFormat)))
-        return false;
-
-    return guidContainerFormat == GUID_ContainerFormatJpeg
-        || guidContainerFormat == GUID_ContainerFormatAdng
-        || guidContainerFormat == GUID_ContainerFormatHeif
-        || guidContainerFormat == GUID_ContainerFormatRaw
-        || guidContainerFormat == GUID_ContainerFormatJpegXL;
-}
-
-HRESULT WICGetTransformOptionFromMetadata(IWICMetadataQueryReader* pQueryReader, WICBitmapTransformOptions* pOptions) {
-    *pOptions = WICBitmapTransformRotate0;
-
-    PROPVARIANT varOrientation = {};
-    HRESULT hr = pQueryReader->GetMetadataByName(L"System.Photo.Orientation", &varOrientation);
-    if (hr == WINCODEC_ERR_PROPERTYNOTFOUND || varOrientation.vt != VT_UI2) {
-        *pOptions = WICBitmapTransformRotate0;
-        hr = S_OK;
-    } else if (SUCCEEDED(hr)) {
-        switch (varOrientation.uiVal) {
-        case 1:
-            *pOptions = WICBitmapTransformRotate0;
-            break;
-        case 2:
-            *pOptions = WICBitmapTransformFlipHorizontal;
-            break;
-        case 3:
-            *pOptions = WICBitmapTransformRotate180;
-            break;
-        case 4:
-            *pOptions = WICBitmapTransformFlipVertical;
-            break;
-        case 5:
-            *pOptions = (WICBitmapTransformOptions)(WICBitmapTransformFlipVertical | WICBitmapTransformRotate90);
-            break;
-        case 6:
-            *pOptions = WICBitmapTransformRotate90;
-            break;
-        case 7:
-            *pOptions = (WICBitmapTransformOptions)(WICBitmapTransformFlipVertical | WICBitmapTransformRotate270);
-            break;
-        case 8:
-            *pOptions = WICBitmapTransformRotate270;
-            break;
-        default:
-            *pOptions = WICBitmapTransformRotate0;
-            break;
-        }
-    }
-    PropVariantClear(&varOrientation);
-    return hr;
-}
-
-HRESULT WICCreateCachedOrientedBitmapSource(IWICImagingFactory* pFactory, IWICBitmapSource* pSourceBitmap,
-    IWICMetadataQueryReader* pQueryReader, IWICBitmapSource** ppOutputBitmap) {
-    *ppOutputBitmap = nullptr;
-
-    WICBitmapTransformOptions transformOptions = WICBitmapTransformRotate0;
-    HRESULT hr = WICGetTransformOptionFromMetadata(pQueryReader, &transformOptions);
-    if (SUCCEEDED(hr)) {
-        if (transformOptions == WICBitmapTransformRotate0) {
-            *ppOutputBitmap = pSourceBitmap;
-            pSourceBitmap->AddRef();
-        } else {
-            IWICBitmapFlipRotator* pFlipRotator = nullptr;
-            hr = pFactory->CreateBitmapFlipRotator(&pFlipRotator);
-            if (SUCCEEDED(hr)) {
-                if ((transformOptions & (WICBitmapTransformRotate90 | WICBitmapTransformFlipVertical)) != 0 || transformOptions == WICBitmapTransformRotate180) {
-                    IWICBitmap* pCachedBitmap = nullptr;
-                    hr = pFactory->CreateBitmapFromSource(pSourceBitmap, WICBitmapCacheOnLoad, &pCachedBitmap);
-                    if (SUCCEEDED(hr)) {
-                        hr = pFlipRotator->Initialize(pCachedBitmap, transformOptions);
-                        pCachedBitmap->Release();
-                    }
-                } else {
-                    hr = pFlipRotator->Initialize(pSourceBitmap, transformOptions);
-                }
-
-                if (SUCCEEDED(hr)) {
-                    *ppOutputBitmap = pFlipRotator;
-                    pFlipRotator->AddRef();
-                }
-
-                pFlipRotator->Release();
-            }
-        }
-    }
-
-    return hr;
-}
-
-HRESULT WICCreateOrientedBitmapSource(IWICImagingFactory* pFactory, IWICBitmapSource* pSourceBitmap,
-    IWICMetadataQueryReader* pQueryReader, IWICBitmapSource** ppOrientedBitmap) {
-    *ppOrientedBitmap = nullptr;
-
-    WICBitmapTransformOptions transformOptions = WICBitmapTransformRotate0;
-    HRESULT hr = WICGetTransformOptionFromMetadata(pQueryReader, &transformOptions);
-    if (SUCCEEDED(hr)) {
-        IWICBitmapFlipRotator* pFlipRotator = nullptr;
-        hr = pFactory->CreateBitmapFlipRotator(&pFlipRotator);
-        if (SUCCEEDED(hr)) {
-            hr = pFlipRotator->Initialize(pSourceBitmap, transformOptions);
-            if (SUCCEEDED(hr)) {
-                *ppOrientedBitmap = pFlipRotator;
-                pFlipRotator->AddRef();
-            }
-
-            pFlipRotator->Release();
-        }
-    }
-
-    return hr;
-}
-
-HRESULT WICOrientateFrame(IWICImagingFactory* pFactory, IWICBitmapDecoder* pDecoder,
-    IWICBitmapFrameDecode* pFrameDecode, bool fCacheBitmap, IWICBitmapSource** ppOutputBitmap) {
-    *ppOutputBitmap = nullptr;
-    HRESULT hr = S_OK;
-
-    if (WICIsOrientationSupported(pDecoder)) {
-        IWICMetadataQueryReader* pQueryReader;
-        pQueryReader = nullptr;
-        if (SUCCEEDED(pFrameDecode->GetMetadataQueryReader(&pQueryReader))) {
-            if (fCacheBitmap) {
-                hr = WICCreateCachedOrientedBitmapSource(pFactory, pFrameDecode, pQueryReader, ppOutputBitmap);
-            } else {
-                hr = WICCreateOrientedBitmapSource(pFactory, pFrameDecode, pQueryReader, ppOutputBitmap);
-            }
-            pQueryReader->Release();
-        } else {
-            *ppOutputBitmap = pFrameDecode;
-            pFrameDecode->AddRef();
-        }
-    } else {
-        *ppOutputBitmap = pFrameDecode;
-        pFrameDecode->AddRef();
-    }
-
-    return hr;
-}
 
 HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStream, LOAD_IMAGE_WITH_WIC_OPTION option,
     IWICBitmapSource** ppWICBitmapSource, IWICBitmapFrameDecode** ppWICBitmapFrameDecode, GUID* pguidContainerFormat) {
@@ -1868,51 +1723,7 @@ HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStrea
             hr = spDecoder->GetFrame(0, &spBitmapFrameDecode);
             if (SUCCEEDED(hr)) {
                 if (option != LIWW_NONE) {
-                    hr = WICOrientateFrame(
-                        spWICImagingFactory.Get(), spDecoder.Get(), spBitmapFrameDecode.Get(),
-                        option == LIWW_ORIENTATE_AND_CACHE, ppWICBitmapSource);
-                } else {
-                    hr = spBitmapFrameDecode.CopyTo(ppWICBitmapSource);
-                }
-            }
-            if (SUCCEEDED(hr) && ppWICBitmapFrameDecode) {
-                *ppWICBitmapFrameDecode = spBitmapFrameDecode.Detach();
-            }
-        }
-    }
-
-    return hr;
-}
-
-HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, LPCWSTR pszPath, LOAD_IMAGE_WITH_WIC_OPTION option,
-    IWICBitmapSource** ppWICBitmapSource, IWICBitmapFrameDecode** ppWICBitmapFrameDecode, GUID* pguidContainerFormat) {
-    *ppWICBitmapSource = nullptr;
-    if (ppWICBitmapFrameDecode)
-        *ppWICBitmapFrameDecode = nullptr;
-    if (pguidContainerFormat)
-        *pguidContainerFormat = GUID_NULL;
-
-    HRESULT hr = S_OK;
-
-    Microsoft::WRL::ComPtr<IWICImagingFactory> spWICImagingFactory(pWICImagingFactory);
-    if (!spWICImagingFactory.Get()) {
-        hr = CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICImagingFactory));
-    }
-    if (SUCCEEDED(hr)) {
-        Microsoft::WRL::ComPtr<IWICBitmapDecoder> spDecoder;
-        hr = spWICImagingFactory->CreateDecoderFromFilename(
-            pszPath, &GUID_VendorMicrosoftBuiltIn, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &spDecoder);
-        if (SUCCEEDED(hr) && pguidContainerFormat) {
-            hr = spDecoder->GetContainerFormat(pguidContainerFormat);
-        }
-        if (SUCCEEDED(hr)) {
-            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> spBitmapFrameDecode;
-            hr = spDecoder->GetFrame(0, &spBitmapFrameDecode);
-            if (SUCCEEDED(hr)) {
-                if (option != LIWW_NONE) {
-                    hr = WICOrientateFrame(
-                        spWICImagingFactory.Get(), spDecoder.Get(), spBitmapFrameDecode.Get(),
-                        option == LIWW_ORIENTATE_AND_CACHE, ppWICBitmapSource);
+                    hr = E_NOTIMPL;
                 } else {
                     hr = spBitmapFrameDecode.CopyTo(ppWICBitmapSource);
                 }
@@ -2083,7 +1894,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
     const BITMAPINFOHEADER* pHeader = &pBitmapInfo->bmiHeader;
 
     if (pHeader->biBitCount != 32) {
-        if (isUsingHardcodedRes || !hResDll) {
+        if (isUsingHardcodedRes || !hResDll || forceHardcoded) {
             Wh_Log(L"Image load error: not 32bpp");
             return nullptr;
         }
@@ -2112,9 +1923,9 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
         }
 
         const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
-        if (!isUsingHardcodedRes) { // Don't trust bmp header from external dll
-            DWORD dwSize = SizeofResource(hResDll, hResource) - dwBitsOffset;
-            if (dwSize < 0 || (DWORD)width * height * 4 > dwSize) {
+        if (hResource) { // Size validation for external dll (don't trust its header)
+            DWORD dwSize = SizeofResource(hResDll, hResource);
+            if (dwSize < dwBitsOffset || (DWORD)width * height * 4 > dwSize - dwBitsOffset) {
                 Wh_Log(L"Image load error: invalid size");
                 return nullptr;
             }
@@ -2420,7 +2231,7 @@ LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
 
             HWND hControl = (HWND)lParam;
             bool isBlockReason = false;
-            for (auto& tile : *appTiles) {
+            for (auto& tile : appTiles) {
                 if (tile.hBlockReason == hControl) {
                     isBlockReason = true;
                     break;
@@ -2458,15 +2269,15 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
     tile.hIconBitmap = nullptr;
 
     HSTRING caption, blockReason;
-    wstring titleText;
-    wstring blockReasonText;
+    std::wstring titleText;
+    std::wstring blockReasonText;
 
     if (SUCCEEDED(blockingApp->get_Caption(&caption))) {
         const wchar_t* captionStr = WindowsGetStringRawBuffer(caption, nullptr);
         if (tile.isBlocking) {
             wchar_t waitingFor[256] = {};
             GetString(IDS_BSDR_WAITINGFOR, waitingFor, _countof(waitingFor));
-            titleText = wstring(waitingFor) + L" " + captionStr;
+            titleText = std::wstring(waitingFor) + L" " + captionStr;
         } else {
             titleText = captionStr;
         }
@@ -2536,16 +2347,16 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
     }
 
     if (tile.isBlocking) {
-        appTiles->insert(appTiles->begin(), tile);
+        appTiles.insert(appTiles.begin(), tile);
     } else {
-        appTiles->push_back(tile);
+        appTiles.push_back(tile);
     }
 
     UpdateAppListLayout();
 }
 
 void CustomBSDR::RemoveAppTileControls(UINT appId) {
-    for (auto it = appTiles->begin(); it != appTiles->end(); ++it) {
+    for (auto it = appTiles.begin(); it != appTiles.end(); ++it) {
         if (it->appId == appId) {
             if (it->hIcon) {
                 DestroyWindow(it->hIcon);
@@ -2560,7 +2371,7 @@ void CustomBSDR::RemoveAppTileControls(UINT appId) {
                 DeleteObject(it->hIconBitmap);
             }
 
-            appTiles->erase(it);
+            appTiles.erase(it);
 
             UpdateAppListLayout();
             return;
@@ -2582,17 +2393,19 @@ void CustomBSDR::UpdateAppListLayout() {
     const int itemHeight = MulDiv(83, dpi, 96);
     const int itemHeightNoReason = MulDiv(62, dpi, 96);
     const int iconTextGap = MulDiv(8, dpi, 96);
+    int currentWidth = MulDiv(256, dpi, 96);
     int maxWidth = MulDiv(700, dpi, 96);
     int visibleHeight = MulDiv(300, dpi, 96);
     if (hAppList) {
         RECT rcContainer;
         GetClientRect(hAppList, &rcContainer);
         visibleHeight = rcContainer.bottom - rcContainer.top;
-        maxWidth = rcContainer.right - rcContainer.left - iconSize - iconTextGap;
+        currentWidth = rcContainer.right - rcContainer.left;
+        maxWidth = currentWidth - iconSize - iconTextGap;
     }
 
     totalContentHeight = 0;
-    for (auto& tile : *appTiles) {
+    for (auto& tile : appTiles) {
         totalContentHeight += (tile.hBlockReason != nullptr) ? itemHeight : itemHeightNoReason;
     }
 
@@ -2621,7 +2434,7 @@ void CustomBSDR::UpdateAppListLayout() {
 
     int yPos = topMargin;
 
-    for (auto& tile : *appTiles) {
+    for (auto& tile : appTiles) {
         bool hasBlockReason = (tile.hBlockReason != nullptr);
         int height = hasBlockReason ? itemHeight : itemHeightNoReason;
 
@@ -2653,9 +2466,6 @@ void CustomBSDR::UpdateAppListLayout() {
         yPos += height;
     }
 
-    RECT rcAppList;
-    GetWindowRect(hAppList, &rcAppList);
-    int currentWidth = rcAppList.right - rcAppList.left;
     SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, currentWidth, totalContentHeight, SWP_NOZORDER);
 
     // Set the title text based on the number of apps on the list
@@ -2663,15 +2473,15 @@ void CustomBSDR::UpdateAppListLayout() {
         wchar_t titleFormat[256] = {};
         // Redraw the entire title control area to prevent artifacts from previous longer text when the number of apps decreases
         InvalidateRect(hTitleText, nullptr, TRUE);
-        if (appTiles->size() == 1) {
+        if (appTiles.size() == 1) {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_SINGLE, titleFormat, _countof(titleFormat));
-        } else if (appTiles->size() == 0) {
+        } else if (appTiles.size() == 0) {
             GetString(IDS_BSDR_BLOCKING_BGAPPS, titleFormat, _countof(titleFormat));
         } else {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_MULTI, titleFormat, _countof(titleFormat));
         }
         // Avoid swprintf with format string from user supplied dll
-        wstring titleText = regex_replace(titleFormat, wregex(L"%d"), to_wstring(appTiles->size()));
+        std::wstring titleText = regex_replace(titleFormat, std::wregex(L"%d"), std::to_wstring(appTiles.size()));
         SetWindowTextW(hTitleText, titleText.c_str());
     }
 
@@ -2681,7 +2491,12 @@ void CustomBSDR::UpdateAppListLayout() {
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
-        CustomBSDR::hDlg = hDlg;
+        std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
+        {
+            std::lock_guard lock(pendingAppsMutex);
+            CustomBSDR::hDlg = hDlg;
+            pendingAppsLocal.swap(*pendingApps);
+        }
 
         // Hide title bar
         SetWindowLongW(hDlg, GWL_STYLE, GetWindowLongW(hDlg, GWL_STYLE) & ~WS_CAPTION);
@@ -2703,7 +2518,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         ShowWindow(hYesButton, SW_HIDE);
         ShowWindow(hNoButton, SW_HIDE);
 
-        if (!Wh_GetIntSetting(L"themeScrollbar", 0)) {
+        if (!Wh_GetIntSetting(L"themeScrollbar")) {
             SetWindowTheme(hScrollBar, L" ", L"");
         }
 
@@ -2719,15 +2534,12 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             int itemHeightNoReason = MulDiv(62, dpi, 96);
 
             int totalItemsHeight = 0;
-            {
-                lock_guard lock(pendingAppsMutex);
-                for (auto& app : *pendingApps) {
-                    BOOLEAN isBlocking = FALSE;
-                    if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
-                        totalItemsHeight += itemHeight;
-                    } else {
-                        totalItemsHeight += itemHeightNoReason;
-                    }
+            for (auto& app : pendingAppsLocal) {
+                BOOLEAN isBlocking = FALSE;
+                if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
+                    totalItemsHeight += itemHeight;
+                } else {
+                    totalItemsHeight += itemHeightNoReason;
                 }
             }
 
@@ -2819,13 +2631,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             }
         }
 
-        {
-            lock_guard lock(pendingAppsMutex);
-            for (auto& app : *pendingApps) {
-                CreateAppTileControls(app.Get());
-            }
-            pendingApps->clear();
+        for (auto& app : pendingAppsLocal) {
+            CreateAppTileControls(app.Get());
         }
+        pendingApps->clear();
 
         // Load and set the appropriate strings based on the current LogonUI state
         wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
@@ -2844,9 +2653,12 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             break;
         }
         if (_logonUIState != LogonUIState_ShuttingDown) {
-            hDescText&& SetWindowTextW(hDescText, desc);
-            hWarningText&& SetWindowTextW(hWarningText, warning);
-            hForceButton&& SetWindowTextW(hForceButton, btnText);
+            if (hDescText)
+                SetWindowTextW(hDescText, desc);
+            if (hWarningText)
+                SetWindowTextW(hWarningText, warning);
+            if (hForceButton)
+                SetWindowTextW(hForceButton, btnText);
         }
 
         CenterWindow(hDlg);
@@ -2916,6 +2728,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
                 // LogonUI.exe thread is stuck at WaitForSingleObjectEx from LogonController.dll (prob mutex)
                 // It gets stuck between get_WasClicked and remove_Resolved. Pressing C+A+D makes the thread continue and remove_Resolved/Hide/Stop gets called.
                 // Still haven't figured out the culprit yet
+                Sleep(1000); // Make sure the resolve request reaches winlogon
                 ExitProcess(0);
             }
             SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
@@ -2944,9 +2757,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         break;
     }
     case WM_ADD_APP: {
-        Microsoft::WRL::ComPtr<IShutdownBlockingApp> app = (IShutdownBlockingApp*)lParam;
-        CreateAppTileControls(app.Get());
-        app->Release();
+        Microsoft::WRL::ComPtr<IShutdownBlockingApp> app;
+        app.Attach((IShutdownBlockingApp*)lParam);
+        if (app) {
+            CreateAppTileControls(app.Get());
+        }
         return TRUE;
     }
     case WM_REMOVE_APP: {
@@ -3106,14 +2921,17 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_CLOSE: {
-        for (auto& tile : *appTiles) {
+        for (auto& tile : appTiles) {
             if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
         }
-        appTiles->clear();
+        appTiles.clear();
 
         if (hDlg) {
             DestroyWindow(hDlg);
-            hDlg = nullptr;
+            {
+                std::lock_guard lock(pendingAppsMutex);
+                hDlg = nullptr;
+            }
         }
 
         if (hBgWnd) {
@@ -3173,6 +2991,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
     // but the Windhawk mod can force this phase of session end to run in the default desktop
+    // (This is only an attempt and not critical if failed)
     HDESK hDesktop = OpenInputDesktop(0, FALSE, DESKTOP_CREATEWINDOW | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS);
     if (hDesktop) {
         wchar_t desktopName[256] = {};
@@ -3180,7 +2999,6 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             isOnSecureDesktop = (_wcsicmp(desktopName, L"winlogon") == 0);
         }
         if (!SetThreadDesktop(hDesktop)) {
-            CloseDesktop(hDesktop);
             Wh_Log(L"SetThreadDesktop failed, GLE=%d", GetLastError());
         }
         CloseDesktop(hDesktop);
@@ -3237,7 +3055,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                             SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
                         }
-                        if (!IsDialogMessageW(hDlg, &msg)) {
+                        if (hDlg && !IsDialogMessageW(hDlg, &msg)) {
                             TranslateMessage(&msg);
                             DispatchMessageW(&msg);
                         }
@@ -3248,7 +3066,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 }
             }
         } else {
-            int ret = GetLastError();
+            ret = GetLastError();
             Wh_Log(L"CreateWindowExW failed, GLE=%d", ret);
         }
 
@@ -3256,7 +3074,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
         }
     } else {
-        int ret = GetLastError();
+        ret = GetLastError();
         Wh_Log(L"RegisterClassExW failed, GLE=%d", ret);
     }
 
@@ -3275,7 +3093,7 @@ void CustomBSDR::Start(LogonUIState state) {
     _logonUIState = state;
     if (hThread) {
         // This is one-shot, as this mod highly relies on the fact that LogonUI calls the BSDR interface in the following order:
-        // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n ->
+        // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
         // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
         Wh_Log(L"CustomBSDR has already started once!");
         return;
@@ -3289,7 +3107,7 @@ void CustomBSDR::Start(LogonUIState state) {
 }
 
 void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
-    lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(pendingAppsMutex);
     if (hDlg && IsWindow(hDlg)) {
         blockingApp->AddRef();
         if (!PostMessageW(hDlg, WM_ADD_APP, 0, reinterpret_cast<LPARAM>(blockingApp))) {
@@ -3301,7 +3119,7 @@ void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
 }
 
 void CustomBSDR::RemoveApplication(UINT appid) {
-    lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(pendingAppsMutex);
     if (hDlg && IsWindow(hDlg)) {
         PostMessageW(hDlg, WM_REMOVE_APP, (WPARAM)appid, 0);
     } else {
@@ -3349,7 +3167,7 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
 long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigned char* wasClicked) {
     Wh_Log(L"BlockedShutdownUXImpl::get_WasClicked");
     {
-        lock_guard lock(resolvedMutex);
+        std::lock_guard lock(resolvedMutex);
         *wasClicked = _wasClicked;
     }
     return S_OK;
@@ -3396,9 +3214,8 @@ long __fastcall BlockedShutdownUXImpl_add_Resolved_hook(void* thisPtr, ABI::Wind
     eventToken->value = 0;
 
     BlockedShutdownResolution resolvedValueLocal;
-
     {
-        lock_guard lock(resolvedMutex);
+        std::lock_guard lock(resolvedMutex);
         resolvedValueLocal = resolvedValue;
 
         if (resolvedValueLocal == BlockedShutdownResolution_None) {
@@ -3418,7 +3235,7 @@ long __fastcall BlockedShutdownUXImpl_remove_Resolved_hook(void* thisPtr, EventR
     Wh_Log(L"BlockedShutdownUXImpl::remove_Resolved");
 
     if (eventToken.value == 0) {
-        lock_guard lock(resolvedMutex);
+        std::lock_guard lock(resolvedMutex);
         _Resolved.Reset();
     }
 
@@ -3577,10 +3394,6 @@ void __fastcall ShutdownWindowsWorkerThread_hook(void* Instance, void* Context) 
         Wh_Log(L"ShutdownWindowsWorkerThread_hook: Set g_fShutdownResolverDisabled to 1");
     } else {
         // User did not read the instruction and LogonUI is not added to the inclusion list
-        // The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
-        // it will get stuck in the invisible secure desktop, and users can become clueless.
-        // Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
-        // This is 
         Wh_Log(L"ShutdownWindowsWorkerThread_hook: Not setting g_fShutdownResolverDisabled as LogonUI hooks are not ready");
     }
     ShutdownWindowsWorkerThread_original(Instance, Context);
@@ -3631,9 +3444,9 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    HMODULE blockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (blockedShutdownDll) {
-        if (!WindhawkUtils::HookSymbols(blockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
+    hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hBlockedShutdownDll) {
+        if (!WindhawkUtils::HookSymbols(hBlockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
             Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
             return FALSE;
         }
@@ -3648,10 +3461,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    LPCWSTR dllPath = Wh_GetStringSetting(L"resDllPath");
-    if (*dllPath != L'\0') {
+    auto dllPath = WindhawkUtils::StringSetting::make(L"resDllPath");
+    if (*dllPath && *dllPath != L'\0') {
         hResDll = LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-        Wh_FreeStringSetting(dllPath);
         if (hResDll) {
             isUsingHardcodedRes = false;
         } else {
@@ -3670,7 +3482,7 @@ void Wh_ModUninit() {
     if (CustomBSDR::hThread) {
         bool needsResolve;
         {
-            lock_guard lock(resolvedMutex);
+            std::lock_guard lock(resolvedMutex);
             needsResolve = resolvedValue == BlockedShutdownResolution_None;
         }
         if (needsResolve) {
@@ -3684,7 +3496,6 @@ void Wh_ModUninit() {
         CloseHandle(CustomBSDR::hThread);
     }
 
-    CustomBSDR::appTiles.reset();
     CustomBSDR::pendingApps.reset();
 
     if (CustomBSDR::hStopEvent) {
@@ -3695,6 +3506,9 @@ void Wh_ModUninit() {
 
     if (hResDll) {
         FreeLibrary(hResDll);
+    }
+    if (hBlockedShutdownDll) {
+        FreeLibrary(hBlockedShutdownDll);
     }
 }
 
