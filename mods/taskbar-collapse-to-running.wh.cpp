@@ -132,7 +132,6 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -307,7 +306,9 @@ struct FrameContext {
     // Coalesces UpdateVisualStates bursts; cleared when the apply runs.
     bool applyPosted = false;
     // Retry budget for an apply that found no buttons (taskbar mid-rebuild).
+    // Armed once per generation, or a buttonless frame re-arms forever.
     int applyRetries = 0;
+    uint64_t retriesArmedGen = std::numeric_limits<uint64_t>::max();
     uint64_t instantGenSeen = 0;
 };
 
@@ -781,7 +782,9 @@ void MeasureGapOffsets(FrameContext& ctx, FrameworkElement frame) {
     bool reShown = false;
     for (auto& weak : ctx.hiddenByUs) {
         if (auto button = weak.get()) {
-            if (button.Visibility() == Visibility::Visible) {
+            // Running is a genuine launch, not a re-show; let it by.
+            if (button.Visibility() == Visibility::Visible &&
+                !TaskListButton_IsRunning(button)) {
                 ClearImplicitShowHide(button);
                 button.Visibility(Visibility::Collapsed);
                 reShown = true;
@@ -931,14 +934,24 @@ void OnRenderingTick(void* key) {
         // run, so a lost visibility race still renders empty.
         try {
             bool repaired = false;
-            for (auto& entry : ctx->gapHidden) {
+            for (size_t i = 0; i < ctx->gapHidden.size();) {
+                auto& entry = ctx->gapHidden[i];
+                // Relaunched mid-run: the button is Windows' again.
+                if (TaskListButton_IsRunning(entry.first)) {
+                    entry.first.Opacity(entry.second);
+                    ctx->gapHidden.erase(ctx->gapHidden.begin() + i);
+                    continue;
+                }
                 if (entry.first.Opacity() != 0.0) {
                     entry.first.Opacity(0);
                 }
+                i++;
             }
             for (auto& weak : ctx->hiddenByUs) {
                 if (auto button = weak.get()) {
-                    if (button.Visibility() == Visibility::Visible) {
+                    // Running is a genuine launch, not a re-show; let it by.
+                    if (button.Visibility() == Visibility::Visible &&
+                        !TaskListButton_IsRunning(button)) {
                         ClearImplicitShowHide(button);
                         button.Visibility(Visibility::Collapsed);
                         repaired = true;
@@ -1146,6 +1159,10 @@ void OnTimerTick(void* key) {
     if (ctx->animActive &&
         NowMs() - ctx->animStartMs >
             (double)g_settings.animationDurationMs * 3.0 + 1000.0) {
+        // Land the target, or the next apply starts the same animation again.
+        if (ctx->animKind == AnimKind::Accordion && !ctx->animSwapped) {
+            SetCollapseState(*ctx, ctx->animButtons, ctx->animTargetCollapse);
+        }
         StopAnimation(*ctx);
     }
 
@@ -1159,8 +1176,10 @@ void OnTimerTick(void* key) {
             ctx->applyRetries = 0;
         } else if (ctx->applyRetries > 0) {
             ctx->applyRetries--;
-        } else if (instant || ctx->appliedCollapse < 0) {
+        } else if (ctx->retriesArmedGen != instantGen &&
+                   (instant || ctx->appliedCollapse < 0)) {
             ctx->applyRetries = 20;
+            ctx->retriesArmedGen = instantGen;
         }
     }
 
@@ -1260,9 +1279,11 @@ void RegisterFrame(void* key, FrameworkElement frame) {
     }
 }
 
+// A dead frame at a recycled address must not block re-registration.
 bool IsFrameRegistered(void* key) {
     std::lock_guard<std::mutex> guard(g_framesMutex);
-    return g_frames->find(key) != g_frames->end();
+    auto it = g_frames->find(key);
+    return it != g_frames->end() && it->second.frame.get() != nullptr;
 }
 
 // Stable addresses, single-thread owners; the pointer outlives the lock.
