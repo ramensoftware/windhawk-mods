@@ -213,6 +213,10 @@ community.
 */
 // ==/WindhawkModSettings==
 
+// Design rationale, history, and edge-case reasoning behind the comments
+// below that say "see RATIONALE.md":
+// https://github.com/rycalvo/w11tb_centerer/blob/main/RATIONALE.md
+
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -1080,8 +1084,9 @@ std::unordered_set<HWND> g_resolvedHwnds;
 // Runs the resolution chain and updates the cache. Deliberately ONLY ever
 // called from the resolve timer, never from GetButtonHwnd or an active
 // Arrange pass - running the click-sentinel technique while a button is
-// mid-insertion/removal in an ItemsRepeater crashes explorer.exe (see
-// RATIONALE.md).
+// mid-insertion/removal in an ItemsRepeater reaches STATUS_STOWED_EXCEPTION
+// and crashes explorer.exe (confirmed via crash-dump analysis; see
+// RATIONALE.md for the full trigger conditions).
 bool ResolveAndCacheButtonHwnd(FrameworkElement element,
                                const std::wstring& identity) {
     void* key = winrt::get_abi(element);
@@ -1314,8 +1319,10 @@ double FullFootprintWidth(FrameworkElement element) {
 // hidden/shown - ActualWidth() includes that margin, so it never drops
 // below the collapsed width. Reads the content child's DesiredSize instead
 // (matching taskbar-start-button-position.wh.cpp), falling back to
-// ActualWidth() if no child is realized yet. NOT used for Start or task
-// list buttons - see RATIONALE.md.
+// ActualWidth() if no child is realized yet. NOT used for Start (never
+// hidden/shown, and DesiredSize() understates its true width) or task list
+// buttons (this file's hottest path, no evidence of the same bug) - see
+// RATIONALE.md.
 double SystemButtonContentWidth(FrameworkElement element) {
     if (Media::VisualTreeHelper::GetChildrenCount(element) > 0) {
         auto child = Media::VisualTreeHelper::GetChild(element, 0)
@@ -2262,8 +2269,12 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
 // Live drag-follow: force a taskbar relayout when a top-level window moves
 // ============================================================================
 
-// Guards against reentering this body on the taskbar's own thread. See
-// RATIONALE.md for why it's needed and why this never calls UpdateLayout().
+// Guards against reentering this body on the taskbar's own thread - a
+// nested WinRT/taskbar.dll call inside it can pump messages and let a
+// second posted invalidate land reentrantly before the first returns. This
+// body also never calls UpdateLayout() itself - see InvalidateTaskbarLayout
+// below for why a forced synchronous layout pass here is unsafe regardless
+// of this guard (see RATIONALE.md for more).
 thread_local bool g_inInvalidateTaskbarLayout;
 
 // MUST only run on g_hTaskbarWnd's own thread - same constraint as
@@ -2560,9 +2571,10 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Hooks for Taskbar.View.dll / ExplorerExtensions.dll (see
-    // GetTaskbarViewModuleHandle). Most entries are optional so a single
+    // Which of these two is actually loaded depends on the Windows build -
+    // see GetTaskbarViewModuleHandle. Most entries are optional so a single
     // missing symbol doesn't abort the whole batch - see RATIONALE.md.
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             // Not optional, unlike every entry below: this hook is the
