@@ -10,7 +10,7 @@
 // @include         LogonUI.exe
 // @include         winlogon.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore -luuid
+// @compilerOptions -lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -39,7 +39,7 @@ system process. To do so, add it to the process inclusion list in the advanced
 settings. If you do not do this, it will silently fail to inject.
 
 You must add it to the inclusion list even if you have disabled the critical system process
-exclusion option. Otherwise the logoff sequence portion of mod will not function.
+exclusion option. Otherwise the logoff sequence portion of the mod will not function.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
@@ -58,6 +58,7 @@ exclusion option. Otherwise the logoff sequence portion of mod will not function
 - disableAsyncLogoff: true
   $name: Restore Windows 7's logoff sequence
   $name:ko-KR: Windows 7의 로그오프 절차 복원
+  $description: Switch to the 'logging off' screen after all applications have been closed.
 */
 // ==/WindhawkModSettings==
 
@@ -1690,19 +1691,8 @@ namespace CustomBSDR {
 #pragma endregion logoncontroller.h and CustomBSDR.h
 
 #pragma region wicutil.cpp
-enum LOAD_IMAGE_WITH_WIC_OPTION {
-    LIWW_NONE,
-    LIWW_ORIENTATE,
-    LIWW_ORIENTATE_AND_CACHE,
-};
-
-HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStream, LOAD_IMAGE_WITH_WIC_OPTION option,
-    IWICBitmapSource** ppWICBitmapSource, IWICBitmapFrameDecode** ppWICBitmapFrameDecode, GUID* pguidContainerFormat) {
+HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStream, IWICBitmapSource** ppWICBitmapSource) {
     *ppWICBitmapSource = nullptr;
-    if (ppWICBitmapFrameDecode)
-        *ppWICBitmapFrameDecode = nullptr;
-    if (pguidContainerFormat)
-        *pguidContainerFormat = GUID_NULL;
 
     HRESULT hr = S_OK;
 
@@ -1715,21 +1705,11 @@ HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStrea
         Microsoft::WRL::ComPtr<IWICBitmapDecoder> spDecoder;
         hr = spWICImagingFactory->CreateDecoderFromStream(
             pStream, &GUID_VendorMicrosoftBuiltIn, WICDecodeMetadataCacheOnDemand, &spDecoder);
-        if (SUCCEEDED(hr) && pguidContainerFormat) {
-            hr = spDecoder->GetContainerFormat(pguidContainerFormat);
-        }
         if (SUCCEEDED(hr)) {
             Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> spBitmapFrameDecode;
             hr = spDecoder->GetFrame(0, &spBitmapFrameDecode);
             if (SUCCEEDED(hr)) {
-                if (option != LIWW_NONE) {
-                    hr = E_NOTIMPL;
-                } else {
-                    hr = spBitmapFrameDecode.CopyTo(ppWICBitmapSource);
-                }
-            }
-            if (SUCCEEDED(hr) && ppWICBitmapFrameDecode) {
-                *ppWICBitmapFrameDecode = spBitmapFrameDecode.Detach();
+                hr = spBitmapFrameDecode.CopyTo(ppWICBitmapSource);
             }
         }
     }
@@ -1786,8 +1766,7 @@ HRESULT Convert32bppWICBitmapSourceToHBITMAP(IWICBitmapSource* pWICBitmapSource,
     return hr;
 }
 
-HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBitmapSource* pWICBitmapSource,
-    HBITMAP* phbmImage) {
+HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBitmapSource* pWICBitmapSource, HBITMAP* phbmImage) {
     *phbmImage = nullptr;
     HRESULT hr = S_OK;
 
@@ -1815,7 +1794,7 @@ HRESULT GetBitmapFromRandomStream(Microsoft::WRL::ComPtr<ABI::Windows::Storage::
     RETURN_IF_FAILED(CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICFactory)));
 
     Microsoft::WRL::ComPtr<IWICBitmapSource> spWICBitmapSource;
-    RETURN_IF_FAILED(LoadImageWithWIC(spWICFactory.Get(), spStream.Get(), LIWW_NONE, &spWICBitmapSource, nullptr, nullptr));
+    RETURN_IF_FAILED(LoadImageWithWIC(spWICFactory.Get(), spStream.Get(), &spWICBitmapSource));
 
     RETURN_IF_FAILED(ConvertWICBitmapToHBITMAP(spWICFactory.Get(), spWICBitmapSource.Get(), outBitmap));
     return S_OK;
@@ -1890,6 +1869,15 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
             return CustomBSDR::LoadAlphaBitmap(resourceId, true);
     }
 
+    DWORD dwSize = 0;
+    if (hResource) { // Size validation for external dll
+        dwSize = SizeofResource(hResDll, hResource);
+        if (dwSize < sizeof(BITMAPINFOHEADER)) {
+            Wh_Log(L"Image load error: resource too small");
+            return LoadAlphaBitmap(resourceId, true);
+        }
+    }
+
     const BITMAPINFO* pBitmapInfo = static_cast<const BITMAPINFO*>(pResourceData);
     const BITMAPINFOHEADER* pHeader = &pBitmapInfo->bmiHeader;
 
@@ -1922,14 +1910,12 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
             dwBitsOffset += 12;
         }
 
-        const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
-        if (hResource) { // Size validation for external dll (don't trust its header)
-            DWORD dwSize = SizeofResource(hResDll, hResource);
-            if (dwSize < dwBitsOffset || (DWORD)width * height * 4 > dwSize - dwBitsOffset) {
-                Wh_Log(L"Image load error: invalid size");
-                return nullptr;
-            }
+        if (hResource && (dwSize < dwBitsOffset || (DWORD)width * height * 4 > dwSize - dwBitsOffset)) {
+            Wh_Log(L"Image load error: invalid size");
+            return LoadAlphaBitmap(resourceId, true);
         }
+
+        const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
 
         if (isTopDown) {
             memcpy(pBits, pSrc, width * height * 4);
@@ -2207,10 +2193,10 @@ LRESULT CALLBACK CustomBSDR::ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPa
     }
     case WM_UPDATEUISTATE: {
         if ((HIWORD(wParam) & UISF_HIDEFOCUS) == UISF_HIDEFOCUS) {
-            SetPropW(hWnd, L"CustomBSDR_HideFocus", (HANDLE)((LOWORD(wParam) & UIS_SET) == UIS_SET));
+            SetPropW(hWnd, L"CustomBSDR_HideFocus", (HANDLE)(LOWORD(wParam) == UIS_SET));
         }
         if ((HIWORD(wParam) & UISF_HIDEACCEL) == UISF_HIDEACCEL) {
-            SetPropW(hWnd, L"CustomBSDR_HideAccel", (HANDLE)((LOWORD(wParam) & UIS_SET) == UIS_SET));
+            SetPropW(hWnd, L"CustomBSDR_HideAccel", (HANDLE)(LOWORD(wParam) == UIS_SET));
         }
         break;
     }
@@ -2634,7 +2620,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         for (auto& app : pendingAppsLocal) {
             CreateAppTileControls(app.Get());
         }
-        pendingApps->clear();
 
         // Load and set the appropriate strings based on the current LogonUI state
         wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
@@ -2927,16 +2912,16 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         appTiles.clear();
 
         if (hDlg) {
-            DestroyWindow(hDlg);
             {
                 std::lock_guard lock(pendingAppsMutex);
                 hDlg = nullptr;
             }
+            DestroyWindow(hDlg);
         }
 
         if (hBgWnd) {
-            DestroyWindow(hBgWnd);
             hBgWnd = nullptr;
+            DestroyWindow(hBgWnd);
         }
 
         if (bgBitmap) {
@@ -3063,7 +3048,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                     if (bQuit) {
                         break;
                     }
-                }
+                } else break;
             }
         } else {
             ret = GetLastError();
@@ -3079,7 +3064,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     }
 
     if (ret != 0) {
-        Wh_Log(L"CustomBSDR thread init failed; resolving with force...");
+        Wh_Log(L"CustomBSDR thread init failed");
         Resolve(BlockedShutdownResolution_Force);
     }
 
@@ -3096,11 +3081,13 @@ void CustomBSDR::Start(LogonUIState state) {
         // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
         // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
         Wh_Log(L"CustomBSDR has already started once!");
+        Resolve(BlockedShutdownResolution_Force);
         return;
     }
     hThread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
     if (!hThread) {
         Wh_Log(L"Failed to create CustomBSDR thread, GLE=%d", GetLastError());
+        Resolve(BlockedShutdownResolution_Force);
         return;
     }
     Wh_Log(L"Created CustomBSDR thread");
@@ -3137,8 +3124,8 @@ void CustomBSDR::RemoveApplication(UINT appid) {
 }
 
 void CustomBSDR::Hide() {
-    if (hDlg) {
-        ShowWindow(hDlg, SW_HIDE);
+    if (hBgWnd) {
+        ShowWindow(hBgWnd, SW_HIDE);
     }
 }
 
@@ -3462,7 +3449,7 @@ BOOL Wh_ModInit() {
     }
 
     auto dllPath = WindhawkUtils::StringSetting::make(L"resDllPath");
-    if (*dllPath && *dllPath != L'\0') {
+    if (*dllPath) {
         hResDll = LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
         if (hResDll) {
             isUsingHardcodedRes = false;
