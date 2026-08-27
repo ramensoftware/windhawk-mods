@@ -73,6 +73,8 @@ This mod was created with AI assistance.
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <atomic>
+#include <algorithm>
+#include <stdio.h>
 
 struct Settings {
     std::atomic<int> extraHoverMarginMm{5};
@@ -620,10 +622,10 @@ bool IsCursorInTaskbarHoverZone() {
         abs(taskbarRect.right - mi.rcMonitor.right);
 
     int edgeDistance =
-        min(
-            min(distanceTop, distanceBottom),
-            min(distanceLeft, distanceRight)
-        );
+    std::min(
+        std::min(distanceTop, distanceBottom),
+        std::min(distanceLeft, distanceRight)
+    );
 
     /*
      * If the taskbar is clearly docked to the bottom.
