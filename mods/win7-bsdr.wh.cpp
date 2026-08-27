@@ -62,8 +62,8 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_utils.h>
-#include <wrl/module.h>
+#include <windhawk_utils.h> // Includes <string>, <optional>, <cstlib>, <windows.h>
+#include <wrl/module.h> // Required for WindowsGetStringRawBuffer/WindowsDeleteString and ComPtr
 #include <mutex>
 #include <regex>
 #include <vector>
@@ -1912,6 +1912,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
 
         if (hResource && (dwSize < dwBitsOffset || (DWORD)width * height * 4 > dwSize - dwBitsOffset)) {
             Wh_Log(L"Image load error: invalid size");
+            DeleteObject(hBitmap);
             return LoadAlphaBitmap(resourceId, true);
         }
 
@@ -2192,10 +2193,10 @@ LRESULT CALLBACK CustomBSDR::ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPa
         break;
     }
     case WM_UPDATEUISTATE: {
-        if ((HIWORD(wParam) & UISF_HIDEFOCUS) == UISF_HIDEFOCUS) {
+        if ((HIWORD(wParam) & UISF_HIDEFOCUS) == UISF_HIDEFOCUS && LOWORD(wParam) != UIS_INITIALIZE) {
             SetPropW(hWnd, L"CustomBSDR_HideFocus", (HANDLE)(LOWORD(wParam) == UIS_SET));
         }
-        if ((HIWORD(wParam) & UISF_HIDEACCEL) == UISF_HIDEACCEL) {
+        if ((HIWORD(wParam) & UISF_HIDEACCEL) == UISF_HIDEACCEL && LOWORD(wParam) != UIS_INITIALIZE) {
             SetPropW(hWnd, L"CustomBSDR_HideAccel", (HANDLE)(LOWORD(wParam) == UIS_SET));
         }
         break;
@@ -2474,30 +2475,30 @@ void CustomBSDR::UpdateAppListLayout() {
     RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
 
-INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
         std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
         {
             std::lock_guard lock(pendingAppsMutex);
-            CustomBSDR::hDlg = hDlg;
+            CustomBSDR::hDlg = hWndDlg;
             pendingAppsLocal.swap(*pendingApps);
         }
 
         // Hide title bar
-        SetWindowLongW(hDlg, GWL_STYLE, GetWindowLongW(hDlg, GWL_STYLE) & ~WS_CAPTION);
+        SetWindowLongW(hWndDlg, GWL_STYLE, GetWindowLongW(hWndDlg, GWL_STYLE) & ~WS_CAPTION);
         // Use composited style on dialog, not bg window, to prevent the scrollbar control from flickering on drag
-        SetWindowLongW(hDlg, GWL_EXSTYLE, GetWindowLongW(hDlg, GWL_EXSTYLE) | WS_EX_COMPOSITED);
+        SetWindowLongW(hWndDlg, GWL_EXSTYLE, GetWindowLongW(hWndDlg, GWL_EXSTYLE) | WS_EX_COMPOSITED);
         
-        hTitleText = GetDlgItem(hDlg, IDC_BSDR_TITLE);
-        hAppList = GetDlgItem(hDlg, IDC_BSDR_APPLIST);
-        hScrollBar = GetDlgItem(hDlg, IDC_BSDR_SCROLLBAR);
-        hWarningText = GetDlgItem(hDlg, IDC_BSDR_WARNING);
-        hForceButton = GetDlgItem(hDlg, IDC_BSDR_FORCE_BTN);
-        hCancelButton = GetDlgItem(hDlg, IDCANCEL);
-        hDescText = GetDlgItem(hDlg, IDC_BSDR_DESC);
-        hYesButton = GetDlgItem(hDlg, IDYES);
-        hNoButton = GetDlgItem(hDlg, IDNO);
+        hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
+        hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
+        hScrollBar = GetDlgItem(hWndDlg, IDC_BSDR_SCROLLBAR);
+        hWarningText = GetDlgItem(hWndDlg, IDC_BSDR_WARNING);
+        hForceButton = GetDlgItem(hWndDlg, IDC_BSDR_FORCE_BTN);
+        hCancelButton = GetDlgItem(hWndDlg, IDCANCEL);
+        hDescText = GetDlgItem(hWndDlg, IDC_BSDR_DESC);
+        hYesButton = GetDlgItem(hWndDlg, IDYES);
+        hNoButton = GetDlgItem(hWndDlg, IDNO);
 
         // Hide the warning message controls
         ShowWindow(hWarningText, SW_HIDE);
@@ -2514,7 +2515,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             SetWindowSubclass(hAppListScroll, AppListSubclassProc, 0, 0);
 
             // Calculate the height of the app list container then resize it, also moving the controls below it
-            int dpi = GetDpiForWindow(hDlg);
+            int dpi = GetDpiForWindow(hWndDlg);
 
             int itemHeight = MulDiv(83, dpi, 96);
             int itemHeightNoReason = MulDiv(62, dpi, 96);
@@ -2522,8 +2523,17 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             int totalItemsHeight = 0;
             for (auto& app : pendingAppsLocal) {
                 BOOLEAN isBlocking = FALSE;
+                HSTRING blockReason;
                 if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
                     totalItemsHeight += itemHeight;
+                } else if (SUCCEEDED(app->get_BlockReason(&blockReason))) {
+                    const wchar_t* reasonStr = WindowsGetStringRawBuffer(blockReason, nullptr);
+                    if (reasonStr && wcslen(reasonStr) > 0) {
+                        totalItemsHeight += itemHeight;
+                    } else {
+                        totalItemsHeight += itemHeightNoReason;
+                    }
+                    WindowsDeleteString(blockReason);
                 } else {
                     totalItemsHeight += itemHeightNoReason;
                 }
@@ -2557,22 +2567,22 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
             for (HWND hwndSibling = GetWindow(hScrollBar, GW_HWNDNEXT); hwndSibling; hwndSibling = GetWindow(hwndSibling, GW_HWNDNEXT)) {
                 RECT rcSibling;
                 GetWindowRect(hwndSibling, &rcSibling);
-                MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcSibling, 2);
+                MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcSibling, 2);
                 OffsetRect(&rcSibling, 0, heightDiff);
                 SetWindowPos(hwndSibling, nullptr, rcSibling.left, rcSibling.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
             }
 
             RECT rcDialog, rcTitle, rcNo;
-            GetWindowRect(hDlg, &rcDialog);
+            GetWindowRect(hWndDlg, &rcDialog);
             OffsetRect(&rcDialog, -GetSystemMetrics(SM_XVIRTUALSCREEN), -GetSystemMetrics(SM_YVIRTUALSCREEN));
             GetWindowRect(hTitleText, &rcTitle);
-            MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcTitle, 2);
+            MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcTitle, 2);
             GetWindowRect(hNoButton, &rcNo);
-            MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcNo, 2);
+            MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcNo, 2);
             int topPadding = rcTitle.top - rcDialog.top;
             int dialogWidth = rcTitle.right - rcDialog.left;
             int newDialogHeight = rcNo.bottom - rcDialog.top + topPadding - 1;
-            SetWindowPos(hDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
+            SetWindowPos(hWndDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
         }
 
         SetWindowSubclass(hForceButton, ButtonSubclassProc, 0, 0);
@@ -2596,7 +2606,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)(noButtonUIState & UISF_HIDEACCEL));
 
         // Set font for title and description/warning texts
-        HFONT hDialogFont = (HFONT)SendMessageW(hDlg, WM_GETFONT, 0, 0);
+        HFONT hDialogFont = (HFONT)SendMessageW(hWndDlg, WM_GETFONT, 0, 0);
         LOGFONTW lf = {};
         if (hDialogFont && GetObjectW(hDialogFont, sizeof(lf), &lf)) {
             int originalHeight = lf.lfHeight;
@@ -2646,7 +2656,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
                 SetWindowTextW(hForceButton, btnText);
         }
 
-        CenterWindow(hDlg);
+        CenterWindow(hWndDlg);
         return TRUE;
     }
     case WM_CTLCOLORDLG: // make dialog transparent
@@ -2664,25 +2674,25 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         break;
     case WM_PAINT: {
         PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hDlg, &ps);
+        HDC hdc = BeginPaint(hWndDlg, &ps);
         if (bgBitmap) {
             RECT rcDlg;
-            GetClientRect(hDlg, &rcDlg);
-            MapWindowPoints(hDlg, hBgWnd, (LPPOINT)&rcDlg, 2);
+            GetClientRect(hWndDlg, &rcDlg);
+            MapWindowPoints(hWndDlg, hBgWnd, (LPPOINT)&rcDlg, 2);
             HDC memDC = CreateCompatibleDC(hdc);
             HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bgBitmap);
             BitBlt(hdc, 0, 0, rcDlg.right, rcDlg.bottom, memDC, rcDlg.left, rcDlg.top, SRCCOPY);
             SelectObject(memDC, oldBitmap);
             DeleteDC(memDC);
         }
-        EndPaint(hDlg, &ps);
+        EndPaint(hWndDlg, &ps);
         return 0;
     }
     case WM_ERASEBKGND:
         if (!IsHighContrast()) {
             HDC hdc = (HDC)wParam;
             RECT rcDlg;
-            GetClientRect(hDlg, &rcDlg);
+            GetClientRect(hWndDlg, &rcDlg);
             HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
             FillRect(hdc, &rcDlg, hBrush);
             return TRUE;
@@ -2755,7 +2765,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         return TRUE;
     }
     case WM_MOUSEWHEEL: {
-        int dpi = GetDpiForWindow(hDlg);
+        int dpi = GetDpiForWindow(hWndDlg);
         int visibleHeight = MulDiv(300, dpi, 96);
 
         if (hAppList) {
@@ -2785,7 +2795,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
         return TRUE;
     }
     case WM_VSCROLL: {
-        int dpi = GetDpiForWindow(hDlg);
+        int dpi = GetDpiForWindow(hWndDlg);
         int visibleHeight = MulDiv(300, dpi, 96);
 
         if (hAppList) {
@@ -2827,18 +2837,19 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
 LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE: {
+        HWND hDlgLocal = nullptr;
         if (!isUsingHardcodedRes && hResDll) {
-            hDlg = CreateDialogParamW(hResDll, MAKEINTRESOURCEW(IDD_BSDR_DLG), hWnd, DlgProc, lParam);
-            if (!hDlg) {
+            hDlgLocal = CreateDialogParamW(hResDll, MAKEINTRESOURCEW(IDD_BSDR_DLG), hWnd, DlgProc, lParam);
+            if (!hDlgLocal) {
                 Wh_Log(L"CreateDialogParamW failed: %d", GetLastError());
                 // Retry with hardcoded one
-                hDlg = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
+                hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
             }
         } else {
-            hDlg = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
+            hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
         }
-        if (hDlg) {
-            ShowWindow(hDlg, SW_SHOW);
+        if (hDlgLocal) {
+            ShowWindow(hDlgLocal, SW_SHOW);
         } else {
             // Bail out
             Wh_Log(L"Dialog creation failed!!");
@@ -2912,16 +2923,18 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         appTiles.clear();
 
         if (hDlg) {
+            HWND hDlgLocal = hDlg;
             {
                 std::lock_guard lock(pendingAppsMutex);
                 hDlg = nullptr;
             }
-            DestroyWindow(hDlg);
+            DestroyWindow(hDlgLocal);
         }
 
         if (hBgWnd) {
+            HWND hBgWndLocal = hBgWnd;
             hBgWnd = nullptr;
-            DestroyWindow(hBgWnd);
+            DestroyWindow(hBgWndLocal);
         }
 
         if (bgBitmap) {
@@ -3048,7 +3061,11 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                     if (bQuit) {
                         break;
                     }
-                } else break;
+                } else {
+                    ret = GetLastError();
+                    Wh_Log(L"MsgWaitForMultipleObjects returned %d, GLE=%d", result, ret);
+                    break;
+                }
             }
         } else {
             ret = GetLastError();
@@ -3075,7 +3092,6 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 }
 
 void CustomBSDR::Start(LogonUIState state) {
-    _logonUIState = state;
     if (hThread) {
         // This is one-shot, as this mod highly relies on the fact that LogonUI calls the BSDR interface in the following order:
         // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
@@ -3084,6 +3100,7 @@ void CustomBSDR::Start(LogonUIState state) {
         Resolve(BlockedShutdownResolution_Force);
         return;
     }
+    _logonUIState = state;
     hThread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
     if (!hThread) {
         Wh_Log(L"Failed to create CustomBSDR thread, GLE=%d", GetLastError());
@@ -3139,8 +3156,10 @@ void CustomBSDR::Stop() {
 #pragma region LogonUI BSDR Hooks (Interface)
 long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettingManager, ILogonUIStateInfo* logonUIStateInfo) {
     Wh_Log(L"BlockedShutdownUXImpl::Start");
-    LogonUIState logonUIState = LogonUIState_Start;
-    logonUIStateInfo->get_CurrentLogonUIState(&logonUIState);
+    LogonUIState logonUIState = LogonUIState_LoggingOff;
+    if (logonUIStateInfo) {
+        logonUIStateInfo->get_CurrentLogonUIState(&logonUIState);
+    }
     CustomBSDR::Start(logonUIState);
     return S_OK;
 }
