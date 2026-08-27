@@ -2,7 +2,8 @@
 // @id              neiz-supersmile-audio-visualizer
 // @name            Desktop Audio Visualizer Plus
 // @description     A highly customizable audio visualizer
-// @version         1.0.0
+// @version         1.2.0
+// @license         MIT
 // @author          NeiZ
 // @github          https://github.com/NeiZqwe
 // @include         explorer.exe
@@ -23,11 +24,11 @@ Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highl
 - Optional per-application audio source
 - 1024-point FFT
 - 32 logarithmic frequency bands
+- 10-band custom EQ curve applied across the FFT bands
 - Up to 256 rendered visual bars
 - Auto-Gain normalization
 - Attack / decay controls
 - Optional CAVA-style smoothing
-- EQ presets including Bass Cut, Bass Boost, Rock, Pop, Electronic, Vocal, Bright, Acoustic, Loudness and Cinematic
 
 ### Visualization
 
@@ -59,6 +60,10 @@ The widget supports artist/title metadata, synchronized highlighting, previous/u
 
 When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.
 
+## Custom EQ
+
+The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.
+
 ## Performance
 
 The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.
@@ -71,6 +76,8 @@ Actual CPU usage depends on display resolution, enabled effects, visualization s
 ---
 
 ## Preview
+
+![eq](https://i.imgur.com/IOwofqV.png)
 
 ![1](https://i.imgur.com/TU0iXkc.gif)
 
@@ -283,36 +290,6 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $name:ru-RU: Автонормализация
       $description: Controls automatic audio level normalization
       $description:ru-RU: Настройки автоматической нормализации уровня сигнала
-
-    - eqPreset: balanced
-      $name: EQ preset
-      $name:ru-RU: Пресет EQ
-      $description: Applies a frequency-shaped response to the spectrum before visualization
-      $description:ru-RU: Применяет частотную кривую к спектру перед визуализацией
-      $options:
-        - balanced: Balanced
-        - bass_boost: Bass Boost
-        - rock: Rock
-        - pop: Pop
-        - electronic: Electronic
-        - vocal: Vocal
-        - bright: Bright
-        - acoustic: Acoustic
-        - bass_cut: Bass Cut
-        - loudness: Loudness
-        - cinematic: Cinematic
-      $options:ru-RU:
-        - balanced: Сбалансированный
-        - bass_boost: Усиление баса
-        - rock: Рок
-        - pop: Поп
-        - electronic: Электронный
-        - vocal: Вокал
-        - bright: Яркий
-        - acoustic: Акустика
-        - bass_cut: Срез баса
-        - loudness: Громкость
-        - cinematic: Кинематографический
 
     - Dynamics:
         - attackSpeed: 40
@@ -593,6 +570,12 @@ Please report bugs and feature requests through the repository issue tracker: [R
           $name:ru-RU: Высота фона
           $description: Adjusts the background height relative to the maximum bar height (px). 0 = no change
           $description:ru-RU: Дополнительно изменяет высоту фона относительно максимальной высоты полос (px). 0 = без изменений
+
+        - backgroundBlurRadius: 12
+          $name: Blur strength
+          $name:ru-RU: Сила размытия
+          $description: Controls wallpaper blur radius when Background mode is Blur (1-24 px)
+          $description:ru-RU: Задаёт радиус размытия обоев в режиме «Размытие» (1-24 px)
 
         - backgroundBorderEnabled: false
           $name: Background border
@@ -991,6 +974,8 @@ Please report bugs and feature requests through the repository issue tracker: [R
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windowsx.h>
+#undef GetCurrentTime
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.Control.h>
@@ -1007,6 +992,11 @@ Please report bugs and feature requests through the repository issue tracker: [R
 #include <wrl.h>
 #include <winhttp.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 
 
 enum WH_AUDIOCLIENT_ACTIVATION_TYPE : DWORD {
@@ -1044,12 +1034,23 @@ struct WH_AUDIOCLIENT_ACTIVATION_PARAMS {
 #include <vector>
 #include <array>
 #include <memory>
-#include <new>
+// #include <new>
 #include <mutex>
-#include <thread>
+// #include <thread>
 #include <shared_mutex>
 #include <objidl.h>
 #include <cwctype>
+
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::XamlRoot;
+// using winrt::Windows::UI::Xaml::Visibility;
+using winrt::Windows::UI::Xaml::HorizontalAlignment;
+using winrt::Windows::UI::Xaml::VerticalAlignment;
+using winrt::Windows::UI::Xaml::Controls::Button;
+using winrt::Windows::UI::Xaml::Controls::Grid;
+// using winrt::Windows::UI::Xaml::Controls::TextBlock;
+using winrt::Windows::UI::Xaml::Controls::ToolTip;
+// using winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase;
 
 struct VisualizerSettings {
     int barCount;
@@ -1071,7 +1072,6 @@ struct VisualizerSettings {
     std::wstring audioApplicationName;
     int autoGainEnabled;
     int autoGainStrength;
-    int eqPreset;
     int attackSpeed;
     int decaySpeed;
     bool cavaSmoothingEnabled;
@@ -1099,6 +1099,7 @@ struct VisualizerSettings {
     int backgroundCornerRadius;
     int backgroundPadding;
     int backgroundHeightAdjustment;
+    int backgroundBlurRadius;
     bool backgroundBorderEnabled;
     int backgroundBorderMode; // 0 = solid album, 1 = gradient album, 2 = hex, 3 = hex gradient
     int backgroundBorderThickness;
@@ -1193,6 +1194,24 @@ static constexpr int VIZ_NUM_BANDS = 32;
 static constexpr int VIZ_BANDS_MAX = 256;
 static constexpr float VIZ_PI = 3.14159265358979323846f;
 
+// Ten logarithmic EQ controls cover the audible range without requiring a
+// second FFT or changing the existing 32 visualizer bands.
+static constexpr int VIZ_EQ_BANDS = 10;
+static constexpr std::array<float, VIZ_EQ_BANDS> VIZ_EQ_LOW_HZ = {
+    20.0f, 60.0f, 120.0f, 250.0f, 500.0f,
+    1000.0f, 2000.0f, 4000.0f, 8000.0f, 14000.0f
+};
+static constexpr std::array<float, VIZ_EQ_BANDS> VIZ_EQ_HIGH_HZ = {
+    60.0f, 120.0f, 250.0f, 500.0f, 1000.0f,
+    2000.0f, 4000.0f, 8000.0f, 14000.0f, 20000.0f
+};
+static constexpr std::array<const wchar_t*, VIZ_EQ_BANDS> VIZ_EQ_STORAGE_KEYS = {
+    L"customEqBand0", L"customEqBand1", L"customEqBand2", L"customEqBand3",
+    L"customEqBand4", L"customEqBand5", L"customEqBand6", L"customEqBand7",
+    L"customEqBand8", L"customEqBand9"
+};
+static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_customEqGains{};
+
 static std::atomic<float> g_audioBands[VIZ_NUM_BANDS] = {};
 static std::atomic<ULONGLONG> g_lastAudioUpdateMs{0};
 static float g_currentHeights[VIZ_BANDS_MAX] = {};
@@ -1217,6 +1236,8 @@ static HGDIOBJ g_renderOldBitmap = nullptr;
 static void* g_renderBits = nullptr;
 static int g_renderWidth = 0;
 static int g_renderHeight = 0;
+static RECT g_lastRenderDirtyRect{};
+static bool g_renderNeedsFullClear = true;
 
 static std::shared_mutex g_settingsMutex;
 
@@ -1237,6 +1258,7 @@ static Gdiplus::Bitmap* g_pBackgroundBlurBitmap = nullptr;
 static RECT g_backgroundBlurRect{};
 static int g_backgroundBlurWidth = 0;
 static int g_backgroundBlurHeight = 0;
+static int g_backgroundBlurRadius = 0;
 static std::atomic<bool> g_backgroundBlurNeedsReload{true};
 
 static void LoadForegroundImage() {
@@ -1271,6 +1293,7 @@ static void DestroyBackgroundBlurBitmap() {
     g_backgroundBlurRect = {};
     g_backgroundBlurWidth = 0;
     g_backgroundBlurHeight = 0;
+    g_backgroundBlurRadius = 0;
 }
 
 static void ApplyBoxBlurGdiPlus(Gdiplus::Bitmap& bitmap, int radius) {
@@ -1349,7 +1372,7 @@ static void ApplyBoxBlurGdiPlus(Gdiplus::Bitmap& bitmap, int radius) {
     bitmap.UnlockBits(&data);
 }
 
-static Gdiplus::Bitmap* CreateBackgroundBlurBitmap(const RECT& rect) {
+static Gdiplus::Bitmap* CreateBackgroundBlurBitmap(const RECT& rect, int blurRadius) {
     const int width = rect.right - rect.left;
     const int height = rect.bottom - rect.top;
     if (width <= 0 || height <= 0)
@@ -1415,7 +1438,7 @@ static Gdiplus::Bitmap* CreateBackgroundBlurBitmap(const RECT& rect) {
             drawW,
             drawH));
 
-    ApplyBoxBlurGdiPlus(*result, 12);
+    ApplyBoxBlurGdiPlus(*result, blurRadius);
     return result;
 }
 
@@ -1436,16 +1459,19 @@ static void EnsureBackgroundBlurBitmap(const RECT& rect) {
         g_backgroundBlurRect.right == rect.right &&
         g_backgroundBlurRect.bottom == rect.bottom &&
         g_backgroundBlurWidth == width &&
-        g_backgroundBlurHeight == height) {
+        g_backgroundBlurHeight == height &&
+        g_backgroundBlurRadius == g_settings.backgroundBlurRadius) {
         return;
     }
 
     DestroyBackgroundBlurBitmap();
-    g_pBackgroundBlurBitmap = CreateBackgroundBlurBitmap(rect);
+    g_pBackgroundBlurBitmap = CreateBackgroundBlurBitmap(
+        rect, g_settings.backgroundBlurRadius);
     if (g_pBackgroundBlurBitmap) {
         g_backgroundBlurRect = rect;
         g_backgroundBlurWidth = width;
         g_backgroundBlurHeight = height;
+        g_backgroundBlurRadius = g_settings.backgroundBlurRadius;
         g_backgroundBlurNeedsReload.store(false, std::memory_order_release);
     }
 }
@@ -1475,6 +1501,9 @@ static DWORD ParseHexColorGDI(LPCWSTR hexStr, DWORD fallback) {
         (rgb >> 8) & 0xFF,
         rgb & 0xFF);
 }
+
+static void LoadCustomEQSettings();
+static void SaveCustomEQSettings();
 
 static void LoadSettings() {
     g_settings.barCount = std::clamp(Wh_GetIntSetting(L"Visualizer.barCount"), 1, VIZ_BANDS_MAX);
@@ -1538,6 +1567,8 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"Appearance.Background.backgroundPadding"), 0, 100);
     g_settings.backgroundHeightAdjustment = std::clamp(
         Wh_GetIntSetting(L"Appearance.Background.backgroundHeightAdjustment"), -1000, 1000);
+    g_settings.backgroundBlurRadius = std::clamp(
+        Wh_GetIntSetting(L"Appearance.Background.backgroundBlurRadius"), 1, 24);
 
     PCWSTR backgroundModeStr = Wh_GetStringSetting(L"Appearance.Background.backgroundMode");
     if (backgroundModeStr) {
@@ -1606,21 +1637,7 @@ static void LoadSettings() {
 
     g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
 
-    PCWSTR eqPresetStr = Wh_GetStringSetting(L"Audio.eqPreset");
-    g_settings.eqPreset = 0;
-    if (eqPresetStr) {
-        if (wcscmp(eqPresetStr, L"bass_boost") == 0) g_settings.eqPreset = 1;
-        else if (wcscmp(eqPresetStr, L"rock") == 0) g_settings.eqPreset = 2;
-        else if (wcscmp(eqPresetStr, L"pop") == 0) g_settings.eqPreset = 3;
-        else if (wcscmp(eqPresetStr, L"electronic") == 0) g_settings.eqPreset = 4;
-        else if (wcscmp(eqPresetStr, L"vocal") == 0) g_settings.eqPreset = 5;
-        else if (wcscmp(eqPresetStr, L"bright") == 0) g_settings.eqPreset = 6;
-        else if (wcscmp(eqPresetStr, L"acoustic") == 0) g_settings.eqPreset = 7;
-        else if (wcscmp(eqPresetStr, L"bass_cut") == 0) g_settings.eqPreset = 8;
-        else if (wcscmp(eqPresetStr, L"loudness") == 0) g_settings.eqPreset = 9;
-        else if (wcscmp(eqPresetStr, L"cinematic") == 0) g_settings.eqPreset = 10;
-        Wh_FreeStringSetting(eqPresetStr);
-    }
+    LoadCustomEQSettings();
 
     PCWSTR barShapeStr = Wh_GetStringSetting(L"Visualizer.barShape");
     if (barShapeStr) {
@@ -2030,58 +2047,85 @@ static void VizFFT(std::vector<float>& re, std::vector<float>& im) {
     }
 }
 
-static float GaussianBand(float x, float center, float width) {
-    const float d = (x - center) / std::max(width, 0.001f);
-    return expf(-(d * d));
+static void LoadCustomEQSettings() {
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const int stored = std::clamp(
+            Wh_GetIntValue(VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)], 100), 0, 200);
+        g_customEqGains[static_cast<size_t>(i)].store(
+            stored / 100.0f, std::memory_order_relaxed);
+    }
 }
 
-static float GetVizEQMultiplier(int preset, int band) {
-    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
-    const float low = GaussianBand(t, 0.12f, 0.18f);
-    const float lowMid = GaussianBand(t, 0.34f, 0.16f);
-    const float presence = GaussianBand(t, 0.58f, 0.14f);
-    const float high = GaussianBand(t, 0.86f, 0.18f);
+static void SaveCustomEQSettings() {
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const float gain = std::clamp(
+            g_customEqGains[static_cast<size_t>(i)].load(std::memory_order_relaxed),
+            0.0f, 2.0f);
+        Wh_SetIntValue(
+            VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)],
+            static_cast<int>(std::lround(gain * 100.0f)));
+    }
+}
 
-    float gain = 1.0f;
-    switch (preset) {
-    case 1: gain = 1.0f + 0.75f * low; break;              // Bass Boost
-    case 2: gain = 1.0f + 0.28f * low + 0.18f * lowMid + 0.25f * high; break; // Rock
-    case 3: gain = 1.0f + 0.14f * low + 0.26f * presence + 0.12f * high; break; // Pop
-    case 4: gain = 1.0f + 0.42f * low + 0.24f * high - 0.08f * lowMid; break; // Electronic
-    case 5: gain = 1.0f - 0.18f * low + 0.52f * presence; break; // Vocal
-    case 6: gain = 1.0f - 0.10f * low + 0.52f * high; break; // Bright
-    case 7: gain = 1.0f + 0.12f * low + 0.18f * lowMid + 0.22f * high; break; // Acoustic
-    case 8: {
-        // Bass Cut intentionally affects only the lowest part of the spectrum.
-        // The gain is strongest in the sub-bass/bass region and smoothly returns
-        // to unity before the low-mid region, so frequencies above the bass
-        // cutoff are not attenuated.
-        constexpr float kBassStart = 0.00f;
-        constexpr float kBassFullCutEnd = 0.20f;
-        constexpr float kBassCutoffEnd = 0.30f;
+static float GetVizEQMultiplier(int band) {
+    band = std::clamp(band, 0, VIZ_NUM_BANDS - 1);
 
-        if (t <= kBassFullCutEnd) {
-            const float u = std::clamp(
-                (t - kBassStart) / (kBassFullCutEnd - kBassStart),
+    // The existing FFT uses logarithmic 20 Hz..20 kHz bands, so interpolate
+    // the user controls in log-frequency space. This keeps the EQ smooth while
+    // leaving the established FFT/visualizer pipeline completely unchanged.
+    constexpr float kMinHz = 20.0f;
+    constexpr float kMaxHz = 20000.0f;
+    const float bandT = (static_cast<float>(band) + 0.5f) /
+        static_cast<float>(VIZ_NUM_BANDS);
+    const float frequency = kMinHz *
+        powf(kMaxHz / kMinHz, bandT);
+
+    float previousLog = logf(std::max(kMinHz, VIZ_EQ_LOW_HZ[0]));
+    float previousGain = g_customEqGains[0].load(std::memory_order_relaxed);
+
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const float lowLog = logf(VIZ_EQ_LOW_HZ[static_cast<size_t>(i)]);
+        const float highLog = logf(VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)]);
+        const float currentGain = g_customEqGains[static_cast<size_t>(i)].load(
+            std::memory_order_relaxed);
+
+        if (frequency <= VIZ_EQ_LOW_HZ[static_cast<size_t>(i)]) {
+            if (i == 0)
+                return std::clamp(currentGain, 0.0f, 2.0f);
+            const float t = std::clamp(
+                (logf(frequency) - previousLog) /
+                    std::max(0.0001f, lowLog - previousLog),
                 0.0f, 1.0f);
-            gain = 0.18f + (0.31f - 0.18f) * u;
-        } else if (t < kBassCutoffEnd) {
-            const float u = std::clamp(
-                (t - kBassFullCutEnd) / (kBassCutoffEnd - kBassFullCutEnd),
-                0.0f, 1.0f);
-            // Smoothly release the bass cut from 0.31x back to unity.
-            const float smoothU = u * u * (3.0f - 2.0f * u);
-            gain = 0.31f + (1.0f - 0.31f) * smoothU;
-        } else {
-            gain = 1.0f;
+            return std::clamp(previousGain +
+                (g_customEqGains[static_cast<size_t>(i)].load(std::memory_order_relaxed) -
+                 previousGain) * t, 0.0f, 2.0f);
         }
-        break; // Bass Cut: bass only, approximately 0.18x-0.31x before the cutoff
+
+        if (frequency <= VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)]) {
+            // Each slider controls its own frequency range. A small linear
+            // interpolation inside that range avoids hard gain discontinuities
+            // at the FFT-band boundaries.
+            const float lowT = std::clamp(
+                (logf(frequency) - lowLog) /
+                    std::max(0.0001f, highLog - lowLog),
+                0.0f, 1.0f);
+            const float nextGain = (i + 1 < VIZ_EQ_BANDS)
+                ? g_customEqGains[static_cast<size_t>(i + 1)].load(std::memory_order_relaxed)
+                : currentGain;
+            // Blend towards the next control only through the second half of
+            // the range, preserving the intuitive meaning of the slider.
+            const float blend = lowT < 0.5f ? 0.0f : (lowT - 0.5f) * 2.0f;
+            return std::clamp(currentGain + (nextGain - currentGain) * blend,
+                              0.0f, 2.0f);
+        }
+
+        previousLog = highLog;
+        previousGain = currentGain;
     }
-    case 9: gain = 1.0f + 0.38f * low + 0.30f * high; break; // Loudness
-    case 10: gain = 1.0f + 0.55f * low + 0.20f * lowMid + 0.38f * high; break; // Cinematic
-    default: break;
-    }
-    return std::clamp(gain, 0.18f, 2.0f);
+
+    return std::clamp(
+        g_customEqGains[VIZ_EQ_BANDS - 1].load(std::memory_order_relaxed),
+        0.0f, 2.0f);
 }
 
 static float GetBandGravity(int band) {
@@ -2646,6 +2690,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
     bool isFloat = true;
     DWORD targetProcessId = 0;
     ULONGLONG lastTargetCheckMs = 0;
+    DWORD targetCheckIntervalMs = 500;
     const VisualizerSettings initialSettings = GetSettingsSnapshot();
 
     if (initialSettings.audioSource == 1)
@@ -2676,10 +2721,20 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
         const VisualizerSettings settings = GetSettingsSnapshot();
         if (settings.audioSource == 1) {
             const ULONGLONG now = GetTickCount64();
-            if (now - lastTargetCheckMs >= 500) {
+            if (now - lastTargetCheckMs >= targetCheckIntervalMs) {
                 lastTargetCheckMs = now;
                 const DWORD newTargetProcessId =
                     FindAudioProcessIdByExecutable(enumerator, settings.audioApplicationName);
+
+                if (newTargetProcessId == 0) {
+                    // When the selected app is not playing, there is normally no
+                    // audio session to query. Back off the process fallback so we
+                    // do not create a system-wide snapshot every 500 ms forever.
+                    targetCheckIntervalMs = std::min<DWORD>(
+                        targetCheckIntervalMs * 2, 5000);
+                } else {
+                    targetCheckIntervalMs = 500;
+                }
 
                 if (newTargetProcessId != targetProcessId) {
                     if (client) {
@@ -2877,7 +2932,7 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
                     ? sqrtf(sumSq / static_cast<float>(count))
                     : 0.0f;
 
-                const float eqM = GetVizEQMultiplier(settings.eqPreset, b);
+                const float eqM = GetVizEQMultiplier(b);
 
                 const float mag = (rms / (VIZ_FFT_SIZE * 0.5f)) /
                         GetBandSensitivity(b) * sliderGain * eqM;
@@ -4141,7 +4196,21 @@ static DWORD GetVisualizerColorSecondary() {
 }
 
 static bool IsAlbumColorMode() {
-    return g_settings.colorMode == 7 || g_settings.colorMode == 8;
+    // Album colors are also consumed by the background, visualizer border,
+    // lyrics background, and lyrics border. Keep the album worker alive only
+    // when at least one enabled feature can actually use those colors.
+    return g_settings.colorMode == 7 || g_settings.colorMode == 8 ||
+           (g_settings.backgroundEnabled &&
+            (g_settings.backgroundMode == 2 || g_settings.backgroundMode == 3)) ||
+           (g_settings.backgroundBorderEnabled &&
+            (g_settings.backgroundBorderMode == 0 ||
+             g_settings.backgroundBorderMode == 1)) ||
+           (g_settings.lyricsEnabled && g_settings.lyricsBackgroundEnabled &&
+            (g_settings.lyricsBackgroundMode == 2 ||
+             g_settings.lyricsBackgroundMode == 3)) ||
+           (g_settings.lyricsEnabled && g_settings.lyricsBorderEnabled &&
+            (g_settings.lyricsBorderMode == 0 ||
+             g_settings.lyricsBorderMode == 1));
 }
 
 static void RenderCurveVisualizer(
@@ -4813,6 +4882,12 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
 
         std::wstring pinnedSourceAppUserModelId;
 
+        // Keep this worker polling instead of wiring long-lived WinRT event
+        // tokens. The mod is injected into Explorer and can be reconfigured or
+        // unloaded while the shell is rebuilding; the existing cancellable
+        // async waits make this lifecycle predictable without callback-token
+        // revocation races. The interval is deliberately slow because album
+        // artwork changes only when media metadata changes.
         while (g_albumColorRunning.load(std::memory_order_acquire)) {
             const VisualizerSettings settings = GetSettingsSnapshot();
             try {
@@ -5019,6 +5094,11 @@ static bool HttpGetUtf8(const std::wstring& host, const std::wstring& path,
     WinHttpSetTimeouts(request, kHttpTimeoutMs, kHttpTimeoutMs,
                        kHttpTimeoutMs, kHttpTimeoutMs);
 
+    // Deliberately keep synchronous WinHTTP ownership local to this worker.
+    // Closing a synchronous request from StopLyricsCapture while another thread
+    // is inside WinHttpSendRequest/ReceiveResponse is a concurrency hazard;
+    // finite per-operation timeouts plus the stop checks between operations are
+    // safer here than cross-thread handle invalidation.
     const bool sent =
         WinHttpSendRequest(
             request,
@@ -5738,11 +5818,11 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
 
             if (g_hLyricsStopEvent) {
                 if (WaitForSingleObject(
-                        g_hLyricsStopEvent, 100) == WAIT_OBJECT_0) {
+                        g_hLyricsStopEvent, 500) == WAIT_OBJECT_0) {
                     break;
                 }
             } else {
-                Sleep(100);
+                Sleep(500);
             }
         }
     } catch (...) {
@@ -5848,7 +5928,10 @@ struct LyricsFontCache {
     }
 };
 
-static LyricsFontCache g_lyricsFontCache;
+// GDI+ owns process-global native resources. Do not let a CRT global destructor
+// run after Explorer has already torn down its graphics/runtime state; the
+// overlay thread explicitly clears this cache before GdiplusShutdown.
+[[clang::no_destroy]] static LyricsFontCache g_lyricsFontCache;
 
 static const wchar_t* ResolveLyricsFontName(const std::wstring& id) {
     if (id == L"arial") return L"Arial";
@@ -6660,6 +6743,8 @@ static void DestroyRenderTarget() {
     g_renderBits = nullptr;
     g_renderWidth = 0;
     g_renderHeight = 0;
+    g_lastRenderDirtyRect = {};
+    g_renderNeedsFullClear = true;
 }
 
 static bool g_mirrorRenderPass = false;
@@ -6704,13 +6789,17 @@ static bool EnsureRenderTarget(int w, int h) {
 
     g_renderWidth = w;
     g_renderHeight = h;
+    g_renderNeedsFullClear = true;
     return true;
 }
 
 static int LimitBarLengthByLyricsWidget(
     int barCrossPos,
     int barThickness,
-    int barLen) {
+    int barLen,
+    bool mirroredPass,
+    int renderWidth,
+    int renderHeight) {
     constexpr int kLyricsBarGapPx = 5;
 
     if (!g_settings.lyricsLimitBars || !g_settings.lyricsEnabled || barLen <= 0)
@@ -6725,8 +6814,8 @@ static int LimitBarLengthByLyricsWidget(
     if (!lyricsAvailable && g_settings.lyricsUnavailableBehavior == 1)
         return barLen;
 
-    const int lyricsX = g_settings.lyricsX;
-    const int lyricsY = g_settings.lyricsY;
+    int lyricsX = g_settings.lyricsX;
+    int lyricsY = g_settings.lyricsY;
     const int lyricsW = g_settings.lyricsWidth;
     const int configuredLyricsH = g_settings.lyricsHeight;
     const int lyricsH = (!lyricsAvailable &&
@@ -6736,6 +6825,19 @@ static int LimitBarLengthByLyricsWidget(
 
     if (lyricsW <= 0 || lyricsH <= 0 || barThickness <= 0)
         return barLen;
+
+    // The mirrored visualizer is rendered with a Graphics transform after the
+    // bar geometry is calculated. Keep the bar geometry/orientation unchanged
+    // and transform only the lyrics rectangle into that pass's local space.
+    // This makes Limit visualizer bars with lyrics widget independent for the
+    // primary and mirrored passes without applying the mirror transform twice.
+    if (mirroredPass) {
+        if (g_settings.orientation <= 2) {
+            lyricsY = renderHeight - (lyricsY + lyricsH);
+        } else {
+            lyricsX = renderWidth - (lyricsX + lyricsW);
+        }
+    }
 
     // Vertical directions (0 = bottom-up, 1 = center vertical, 2 = top-down).
     if (g_settings.orientation <= 2) {
@@ -7092,7 +7194,8 @@ static void RenderVisualizerPass(
                 ? g_settings.positionX + currentOffset
                 : g_settings.positionY + currentOffset;
             barLen = LimitBarLengthByLyricsWidget(
-                barCrossPos, currentBarWidth, barLen);
+                barCrossPos, currentBarWidth, barLen,
+                g_mirrorRenderPass, w, h);
             if (barLen <= 0)
                 continue;
         }
@@ -7585,6 +7688,128 @@ static void RenderVisualizerPass(
 
     }
 
+static void AddDirtyRect(RECT& bounds, const RECT& rect, int renderWidth, int renderHeight) {
+    RECT clipped = rect;
+    clipped.left = std::clamp<LONG>(clipped.left, 0, renderWidth);
+    clipped.top = std::clamp<LONG>(clipped.top, 0, renderHeight);
+    clipped.right = std::clamp<LONG>(clipped.right, 0, renderWidth);
+    clipped.bottom = std::clamp<LONG>(clipped.bottom, 0, renderHeight);
+    if (clipped.right <= clipped.left || clipped.bottom <= clipped.top)
+        return;
+
+    if (bounds.right <= bounds.left || bounds.bottom <= bounds.top) {
+        bounds = clipped;
+    } else {
+        bounds.left = std::min<LONG>(bounds.left, clipped.left);
+        bounds.top = std::min<LONG>(bounds.top, clipped.top);
+        bounds.right = std::max<LONG>(bounds.right, clipped.right);
+        bounds.bottom = std::max<LONG>(bounds.bottom, clipped.bottom);
+    }
+}
+
+static RECT MirrorDirtyRect(const RECT& rect, int axis, int renderWidth, int renderHeight) {
+    RECT mirrored = rect;
+    if (axis == 1) {
+        mirrored.top = renderHeight - rect.bottom;
+        mirrored.bottom = renderHeight - rect.top;
+    } else if (axis == 2) {
+        mirrored.left = renderWidth - rect.right;
+        mirrored.right = renderWidth - rect.left;
+    }
+    return mirrored;
+}
+
+static RECT GetOverlayContentBounds(int renderWidth, int renderHeight) {
+    RECT bounds{};
+    const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
+
+    // Use the maximum possible visualizer geometry. This is intentionally
+    // conservative: the persistent DIB is only cleared/uploaded inside this
+    // region, so underestimating it could leave stale pixels behind when bars
+    // move or when settings change. The extra dynamic-width allowance covers
+    // the cursor-driven widening without changing the rendering geometry.
+    RECT visualizerRect = GetVisualizerBackgroundRect(
+        barCount, 1.0f, g_settings.backgroundPadding,
+        g_settings.backgroundHeightAdjustment);
+    const int extraCross = g_settings.dynamicWidthEnabled
+        ? barCount * std::max(0, g_settings.dynamicWidthMaxBonus)
+        : 0;
+    if (g_settings.orientation <= 2)
+        visualizerRect.right += extraCross + std::max(2, g_settings.borderThickness + 1);
+    else
+        visualizerRect.bottom += extraCross + std::max(2, g_settings.borderThickness + 1);
+    visualizerRect.left -= std::max(2, g_settings.borderThickness + 1);
+    visualizerRect.top -= std::max(2, g_settings.borderThickness + 1);
+    AddDirtyRect(bounds, visualizerRect, renderWidth, renderHeight);
+
+    if (g_settings.mirroredVisualizer) {
+        const int axis = (g_settings.barShape == 4)
+            ? 2
+            : ((g_settings.orientation > 2) ? 2 : 1);
+        AddDirtyRect(
+            bounds,
+            MirrorDirtyRect(visualizerRect, axis, renderWidth, renderHeight),
+            renderWidth, renderHeight);
+    }
+
+    if (g_settings.lyricsEnabled &&
+        g_settings.lyricsOpacity > 0 &&
+        g_settings.lyricsWidth > 0 && g_settings.lyricsHeight > 0) {
+        RECT lyricsRect{
+            g_settings.lyricsX,
+            g_settings.lyricsY,
+            g_settings.lyricsX + g_settings.lyricsWidth,
+            g_settings.lyricsY + g_settings.lyricsHeight
+        };
+        const int margin = std::max(2, g_settings.lyricsBorderThickness + 1);
+        lyricsRect.left -= margin;
+        lyricsRect.top -= margin;
+        lyricsRect.right += margin;
+        lyricsRect.bottom += margin;
+        AddDirtyRect(bounds, lyricsRect, renderWidth, renderHeight);
+    }
+
+    if (g_pForegroundImage) {
+        const int drawW = (g_settings.imageWidth > 0)
+            ? g_settings.imageWidth : static_cast<int>(g_pForegroundImage->GetWidth());
+        const int drawH = (g_settings.imageHeight > 0)
+            ? g_settings.imageHeight : static_cast<int>(g_pForegroundImage->GetHeight());
+        if (drawW > 0 && drawH > 0) {
+            RECT imageRect{
+                g_settings.imageX,
+                g_settings.imageY,
+                g_settings.imageX + drawW,
+                g_settings.imageY + drawH
+            };
+            AddDirtyRect(bounds, imageRect, renderWidth, renderHeight);
+        }
+    }
+
+    return bounds;
+}
+
+static void ClearRenderRegion(RECT rect, int width, int height) {
+    if (rect.right <= rect.left || rect.bottom <= rect.top)
+        return;
+    rect.left = std::clamp<LONG>(rect.left, 0, width);
+    rect.top = std::clamp<LONG>(rect.top, 0, height);
+    rect.right = std::clamp<LONG>(rect.right, 0, width);
+    rect.bottom = std::clamp<LONG>(rect.bottom, 0, height);
+    if (rect.right <= rect.left || rect.bottom <= rect.top)
+        return;
+
+    BYTE* bits = static_cast<BYTE*>(g_renderBits);
+    const size_t stride = static_cast<size_t>(width) * sizeof(DWORD);
+    const size_t rowBytes = static_cast<size_t>(rect.right - rect.left) * sizeof(DWORD);
+    for (int y = rect.top; y < rect.bottom; ++y) {
+        std::memset(
+            bits + static_cast<size_t>(y) * stride +
+                static_cast<size_t>(rect.left) * sizeof(DWORD),
+            0,
+            rowBytes);
+    }
+}
+
 static void RenderOverlay(HWND hwnd) {
     EnsureForegroundImageLoaded();
 
@@ -7598,14 +7823,25 @@ static void RenderOverlay(HWND hwnd) {
     if (!EnsureRenderTarget(w, h))
         return;
 
-    std::memset(g_renderBits, 0,
+    // The persistent render target must be cleared completely before each
+    // frame. Partial dirty-region clearing can leave stale pixels behind when
+    // a bar shrinks, especially with mirrored/circular rendering or effects
+    // whose geometry changes with the bar height. Those stale pixels appear as
+    // "ghost" bars even though g_currentHeights is already falling normally.
+    //
+    // Keep the persistent DIB for allocation stability, but use a full-frame
+    // clear/upload so every frame exactly represents the current visualizer.
+    std::memset(
+        g_renderBits, 0,
         static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(DWORD));
+
+    const RECT dirtyRect{0, 0, w, h};
+    g_renderNeedsFullClear = false;
 
     {
         Gdiplus::Graphics graphics(g_renderMemDC);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-
         graphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
 
         RenderVisualizerPass(graphics, w, h);
@@ -7640,8 +7876,12 @@ static void RenderOverlay(HWND hwnd) {
         DrawLyricsWidget(graphics);
 
         if (g_pForegroundImage) {
-            int drawW = (g_settings.imageWidth > 0) ? g_settings.imageWidth : g_pForegroundImage->GetWidth();
-            int drawH = (g_settings.imageHeight > 0) ? g_settings.imageHeight : g_pForegroundImage->GetHeight();
+            int drawW = (g_settings.imageWidth > 0)
+                ? g_settings.imageWidth
+                : g_pForegroundImage->GetWidth();
+            int drawH = (g_settings.imageHeight > 0)
+                ? g_settings.imageHeight
+                : g_pForegroundImage->GetHeight();
 
             graphics.DrawImage(
                 g_pForegroundImage,
@@ -7651,7 +7891,7 @@ static void RenderOverlay(HWND hwnd) {
                 drawH
             );
         }
-    } 
+    }
 
     POINT dstPos{0, 0};
     SIZE size{w, h};
@@ -7662,19 +7902,1029 @@ static void RenderOverlay(HWND hwnd) {
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    UpdateLayeredWindow(
-        hwnd,
-        nullptr,
-        &dstPos,
-        &size,
-        g_renderMemDC,
-        &srcPos,
-        0,
-        &blend,
-        ULW_ALPHA);
+    UPDATELAYEREDWINDOWINFO updateInfo{};
+    updateInfo.cbSize = sizeof(updateInfo);
+    updateInfo.pptDst = &dstPos;
+    updateInfo.psize = &size;
+    updateInfo.hdcSrc = g_renderMemDC;
+    updateInfo.pptSrc = &srcPos;
+    updateInfo.pblend = &blend;
+    updateInfo.dwFlags = ULW_ALPHA;
+    updateInfo.prcDirty = &dirtyRect;
+
+    UpdateLayeredWindowIndirect(hwnd, &updateInfo);
+
+    // Kept for compatibility with the existing render-target lifecycle.
+    g_lastRenderDirtyRect = dirtyRect;
 }
 
 static UINT GetRenderIntervalMs(const VisualizerSettings& settings);
+
+static UINT g_cachedDisplayRefreshRateHz = 0;
+static UINT g_currentOverlayTimerMs = 0;
+
+
+// popup implementation
+static constexpr int EQ_POPUP_WIDTH = 520;
+static constexpr int EQ_POPUP_HEIGHT = 300;
+static constexpr int EQ_SLIDER_TOP = 76;
+static constexpr int EQ_SLIDER_BOTTOM = 242;
+static constexpr int EQ_SLIDER_HORIZONTAL_PADDING = 34;
+static constexpr int EQ_BUTTON_WIDTH = 32;
+static constexpr int EQ_BUTTON_HEIGHT = 32;
+static constexpr int EQ_POPUP_TASKBAR_GAP = 16;
+static HWND g_eqPopupHwnd = nullptr;
+static HINSTANCE g_eqModuleHandle = nullptr;
+static bool g_eqClassesRegistered = false;
+static int g_eqHotBand = -1;
+static int g_eqDraggingBand = -1;
+static const wchar_t* kEqPopupClass = L"WindhawkVisualizerEQPopup";
+
+static bool IsDarkThemeEnabled() {
+    DWORD data = 0;
+    DWORD dataSize = sizeof(data);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme",
+                     RRF_RT_REG_DWORD,
+                     nullptr, &data, &dataSize) == ERROR_SUCCESS) {
+        return data == 0;
+    }
+    return true;
+}
+static void ApplyEqPopupWindowAttributes(HWND hwnd) {
+    if (!hwnd)
+        return;
+
+    const BOOL dark = IsDarkThemeEnabled() ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                          &dark, sizeof(dark));
+#if defined(DWMWA_WINDOW_CORNER_PREFERENCE)
+    const DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                          &corner, sizeof(corner));
+#endif
+}
+
+static POINT GetEqSliderPoint(int index) {
+    const int usableWidth = EQ_POPUP_WIDTH - EQ_SLIDER_HORIZONTAL_PADDING * 2;
+    const float t = VIZ_EQ_BANDS > 1
+        ? static_cast<float>(index) / static_cast<float>(VIZ_EQ_BANDS - 1)
+        : 0.0f;
+    return POINT{
+        EQ_SLIDER_HORIZONTAL_PADDING +
+            static_cast<int>(std::round(t * usableWidth)),
+        EQ_SLIDER_TOP};
+}
+
+static int HitTestEqBand(int x) {
+    int best = -1;
+    int bestDistance = 17;
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const POINT point = GetEqSliderPoint(i);
+        const int distance = std::abs(x - point.x);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = i;
+        }
+    }
+    return best;
+}
+
+static float GetEqGainAtBand(int index) {
+    return std::clamp(
+        g_customEqGains[static_cast<size_t>(index)].load(std::memory_order_relaxed),
+        0.0f, 2.0f);
+}
+
+static void SetEqGainFromMouse(int index, int y) {
+    if (index < 0 || index >= VIZ_EQ_BANDS)
+        return;
+    const float t = std::clamp(
+        static_cast<float>(y - EQ_SLIDER_TOP) /
+            static_cast<float>(std::max(1, EQ_SLIDER_BOTTOM - EQ_SLIDER_TOP)),
+        0.0f, 1.0f);
+    const float gain = std::clamp(2.0f * (1.0f - t), 0.0f, 2.0f);
+    g_customEqGains[static_cast<size_t>(index)].store(
+        gain, std::memory_order_relaxed);
+}
+
+static void RenderEqPopup(HWND hwnd) {
+    if (!hwnd)
+        return;
+
+    const bool dark = IsDarkThemeEnabled();
+    const int width = EQ_POPUP_WIDTH;
+    const int height = EQ_POPUP_HEIGHT;
+
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = width;
+    bi.bmiHeader.biHeight = -height;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screen, &bi, DIB_RGB_COLORS,
+                                      &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap) DeleteObject(bitmap);
+        DeleteDC(mem);
+        ReleaseDC(nullptr, screen);
+        return;
+    }
+
+    HGDIOBJ oldBitmap = SelectObject(mem, bitmap);
+    std::memset(bits, 0, static_cast<size_t>(width) * height * 4);
+
+    Gdiplus::Graphics graphics(mem);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+    const BYTE bgAlpha = dark ? 232 : 238;
+    const Gdiplus::Color bgColor(
+        bgAlpha, dark ? 28 : 242, dark ? 28 : 242, dark ? 30 : 244);
+    Gdiplus::GraphicsPath bgPath;
+    AddRoundedRectSubpath(bgPath, 1.0f, 1.0f,
+                          static_cast<float>(width - 2),
+                          static_cast<float>(height - 2), 16.0f);
+    Gdiplus::SolidBrush bg(bgColor);
+    graphics.FillPath(&bg, &bgPath);
+
+    Gdiplus::Color titleColor(255,
+                              dark ? 245 : 30,
+                              dark ? 245 : 30,
+                              dark ? 248 : 30);
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+    Gdiplus::Font titleFont(&titleFamily, 17.0f,
+                           Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush titleBrush(titleColor);
+    graphics.DrawString(L"Equalizer", -1, &titleFont,
+                        Gdiplus::PointF(20.0f, 15.0f), &titleBrush);
+
+    Gdiplus::FontFamily smallFamily(L"Segoe UI");
+    Gdiplus::Font smallFont(&smallFamily, 9.0f,
+                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush subBrush(Gdiplus::Color(
+        190,
+        dark ? 210 : 80,
+        dark ? 210 : 80,
+        dark ? 215 : 85));
+    graphics.DrawString(L"Gain", -1, &smallFont,
+                        Gdiplus::PointF(20.0f, 45.0f), &subBrush);
+
+    const Gdiplus::Color trackColor(
+        110,
+        dark ? 150 : 125,
+        dark ? 150 : 125,
+        dark ? 155 : 130);
+    const Gdiplus::Color accentColor(
+        255, 105, 165, 255);
+    const Gdiplus::Color labelColor(
+        235,
+        dark ? 225 : 55,
+        dark ? 225 : 55,
+        dark ? 230 : 60);
+
+    Gdiplus::Pen trackPen(trackColor, 4.0f);
+    trackPen.SetStartCap(Gdiplus::LineCapRound);
+    trackPen.SetEndCap(Gdiplus::LineCapRound);
+
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const POINT point = GetEqSliderPoint(i);
+        graphics.DrawLine(&trackPen,
+                          static_cast<float>(point.x),
+                          static_cast<float>(EQ_SLIDER_TOP),
+                          static_cast<float>(point.x),
+                          static_cast<float>(EQ_SLIDER_BOTTOM));
+
+        const float gain = GetEqGainAtBand(i);
+        const float knobY = EQ_SLIDER_BOTTOM -
+            (gain / 2.0f) * (EQ_SLIDER_BOTTOM - EQ_SLIDER_TOP);
+
+        Gdiplus::Pen fillPen(accentColor, 4.0f);
+        fillPen.SetStartCap(Gdiplus::LineCapRound);
+        fillPen.SetEndCap(Gdiplus::LineCapRound);
+        graphics.DrawLine(&fillPen,
+                          static_cast<float>(point.x),
+                          static_cast<float>(knobY),
+                          static_cast<float>(point.x),
+                          static_cast<float>(EQ_SLIDER_BOTTOM));
+
+        Gdiplus::SolidBrush knobBrush(accentColor);
+        graphics.FillEllipse(&knobBrush,
+                             static_cast<float>(point.x) - 7.0f,
+                             knobY - 7.0f,
+                             14.0f, 14.0f);
+
+        if (i == g_eqHotBand || i == g_eqDraggingBand) {
+            wchar_t gainText[16]{};
+            swprintf_s(gainText, L"%.2f", gain);
+            Gdiplus::SolidBrush gainBrush(labelColor);
+            Gdiplus::RectF gainRect(
+                static_cast<float>(point.x) - 22.0f,
+                knobY - 29.0f,
+                44.0f, 18.0f);
+            Gdiplus::StringFormat centered;
+            centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+            centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            graphics.DrawString(gainText, -1, &smallFont,
+                                gainRect, &centered, &gainBrush);
+        }
+
+        wchar_t label[32]{};
+        const float high = VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)];
+        const float low = VIZ_EQ_LOW_HZ[static_cast<size_t>(i)];
+        auto formatFreq = [](float hz, wchar_t* out, size_t count) {
+            if (hz >= 1000.0f)
+                swprintf_s(out, count, L"%.0fk", hz / 1000.0f);
+            else
+                swprintf_s(out, count, L"%.0f", hz);
+        };
+        wchar_t lowText[16]{}, highText[16]{};
+        formatFreq(low, lowText, ARRAYSIZE(lowText));
+        formatFreq(high, highText, ARRAYSIZE(highText));
+        swprintf_s(label, L"%s-%s", lowText, highText);
+
+        Gdiplus::RectF labelRect(
+            static_cast<float>(point.x) - 29.0f,
+            static_cast<float>(EQ_SLIDER_BOTTOM + 14),
+            58.0f, 28.0f);
+        Gdiplus::StringFormat centered;
+        centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+        centered.SetLineAlignment(Gdiplus::StringAlignmentNear);
+        Gdiplus::SolidBrush textBrush(labelColor);
+        graphics.DrawString(label, -1, &smallFont,
+                            labelRect, &centered, &textBrush);
+    }
+
+    POINT dstPos{};
+    RECT popupRect{};
+    GetWindowRect(hwnd, &popupRect);
+    dstPos.x = popupRect.left;
+    dstPos.y = popupRect.top;
+    SIZE size{width, height};
+    POINT srcPos{0, 0};
+    BLENDFUNCTION blend{};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.BlendFlags = 0;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    UpdateLayeredWindow(hwnd, screen, &dstPos, &size,
+                        mem, &srcPos, 0, &blend, ULW_ALPHA);
+
+    SelectObject(mem, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+}
+static void DestroyEqPopup();
+static bool EqIsCursorOverXamlButton();
+static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_MOUSEACTIVATE:
+        return MA_ACTIVATE;
+    case WM_SETFOCUS:
+        RenderEqPopup(hwnd);
+        return 0;
+    case WM_KILLFOCUS:
+        if (g_eqDraggingBand >= 0) {
+            SaveCustomEQSettings();
+            g_eqDraggingBand = -1;
+            ReleaseCapture();
+        }
+        // A click on our XAML tray button also causes the popup to lose focus.
+        // Keep it alive for that click so EqShowPopupForXamlButton() can perform
+        // a real toggle instead of reopening the popup immediately.
+        if (!EqIsCursorOverXamlButton())
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        return 0;
+    case WM_MOUSEMOVE: {
+        const int x = GET_X_LPARAM(lParam);
+        const int y = GET_Y_LPARAM(lParam);
+        const int hot = HitTestEqBand(x);
+        if (hot != g_eqHotBand) {
+            g_eqHotBand = hot;
+            RenderEqPopup(hwnd);
+        }
+        if (g_eqDraggingBand >= 0) {
+            SetEqGainFromMouse(g_eqDraggingBand, y);
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
+        TrackMouseEvent(&tme);
+        return 0;
+    }
+    case WM_MOUSELEAVE:
+        if (g_eqDraggingBand < 0 && g_eqHotBand != -1) {
+            g_eqHotBand = -1;
+            RenderEqPopup(hwnd);
+        }
+        return 0;
+    case WM_LBUTTONDOWN: {
+        const int band = HitTestEqBand(GET_X_LPARAM(lParam));
+        if (band >= 0) {
+            g_eqDraggingBand = band;
+            g_eqHotBand = band;
+            SetEqGainFromMouse(band, GET_Y_LPARAM(lParam));
+            SetCapture(hwnd);
+            RenderEqPopup(hwnd);
+        }
+        return 0;
+    }
+    case WM_LBUTTONUP:
+        if (g_eqDraggingBand >= 0) {
+            SetEqGainFromMouse(g_eqDraggingBand, GET_Y_LPARAM(lParam));
+            SaveCustomEQSettings();
+            g_eqDraggingBand = -1;
+            ReleaseCapture();
+            RenderEqPopup(hwnd);
+            PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+        }
+        return 0;
+    case WM_CANCELMODE:
+    case WM_CAPTURECHANGED:
+        if (g_eqDraggingBand >= 0) {
+            SaveCustomEQSettings();
+            g_eqDraggingBand = -1;
+        }
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_CLOSE:
+        DestroyEqPopup();
+        return 0;
+    case WM_NCHITTEST:
+        return HTCLIENT;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static bool RegisterEqWindowClasses(HINSTANCE instance) {
+    if (g_eqClassesRegistered) return true;
+    WNDCLASSW popupClass{};
+    popupClass.lpfnWndProc = EqPopupProc;
+    popupClass.hInstance = instance;
+    popupClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    popupClass.lpszClassName = kEqPopupClass;
+    SetLastError(ERROR_SUCCESS);
+    const bool popupOk = RegisterClassW(&popupClass) != 0;
+    const DWORD popupError = popupOk ? ERROR_SUCCESS : GetLastError();
+    if (!popupOk && popupError != ERROR_CLASS_ALREADY_EXISTS) return false;
+    g_eqModuleHandle = instance;
+    g_eqClassesRegistered = true;
+    return true;
+}
+static void EqClosePopup();
+static void DestroyEqPopup() {
+    if (g_eqDraggingBand >= 0) {
+        SaveCustomEQSettings();
+        g_eqDraggingBand = -1;
+        ReleaseCapture();
+    }
+    EqClosePopup();
+    g_eqHotBand = -1;
+}
+
+// -----------------------------------------------------------------------------
+// Custom EQ taskbar integration.
+//
+// IMPORTANT: The EQ button is a real XAML child of Windows 11's
+// SystemTrayFrameGrid, rather than a separate HWND. This is the same integration
+// model used by Taskbar Fluent Media Player for its tray positions. As a result,
+// the button participates in the taskbar's visual tree/layout and can be styled
+// by Windows 11 Taskbar Styler and other tray-aware mods.
+// -----------------------------------------------------------------------------
+static constexpr wchar_t kEqXamlButtonName[] = L"WindhawkVisualizerEQButton";
+static constexpr wchar_t kEqXamlTrayGridName[] = L"SystemTrayFrameGrid";
+static constexpr wchar_t kEqButtonGlyph[] = L"\xE9E9"; // Segoe Fluent Icons: Equalizer.
+
+static HWND g_eqTaskbarHwnd = nullptr;
+static std::atomic<bool> g_eqXamlInjectionReady{false};
+[[clang::no_destroy]] static FrameworkElement g_eqXamlButton = nullptr;
+[[clang::no_destroy]] static Grid g_eqXamlTrayGrid = nullptr;
+static int g_eqXamlColumn = -1;
+static winrt::event_token g_eqXamlClickToken{};
+static bool g_eqXamlClickTokenValid = false;
+
+// Symbols copied from the proven Taskbar Fluent Media Player XAML integration
+// path. They are used only to obtain the taskbar's existing XamlRoot.
+using EqCTaskBandGetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using EqCSecondaryTaskBandGetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using EqTaskbarHostFrameHeight_t = int(WINAPI*)(void*);
+using EqStdRefDecref_t = void(WINAPI*)(void*);
+using EqTrayUIStartTaskbar_t = void(WINAPI*)(void*);
+
+static EqCTaskBandGetTaskbarHost_t g_eqCTaskBandGetTaskbarHost = nullptr;
+static EqCSecondaryTaskBandGetTaskbarHost_t g_eqCSecondaryTaskBandGetTaskbarHost = nullptr;
+static EqTaskbarHostFrameHeight_t g_eqTaskbarHostFrameHeight = nullptr;
+static EqStdRefDecref_t g_eqStdRefDecref = nullptr;
+static EqTrayUIStartTaskbar_t g_eqTrayUIStartTaskbarOriginal = nullptr;
+static void* g_eqCTaskBandTaskListWndSiteVftable = nullptr;
+static void* g_eqCSecondaryTaskBandTaskListWndSiteVftable = nullptr;
+
+static bool EqIsReadableMemoryRange(const void* address, size_t size) {
+    if (!address || size == 0)
+        return false;
+    MEMORY_BASIC_INFORMATION memory{};
+    if (!VirtualQuery(address, &memory, sizeof(memory)) ||
+        memory.State != MEM_COMMIT ||
+        (memory.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
+        return false;
+    }
+    const auto start = reinterpret_cast<uintptr_t>(address);
+    const auto regionStart = reinterpret_cast<uintptr_t>(memory.BaseAddress);
+    const auto regionEnd = regionStart + memory.RegionSize;
+    return start >= regionStart && start <= regionEnd &&
+           size <= regionEnd - start;
+}
+
+static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    if (!hTaskbarWnd)
+        return nullptr;
+
+    wchar_t clsBuf[64] = {};
+    GetClassNameW(hTaskbarWnd, clsBuf, ARRAYSIZE(clsBuf));
+    const bool isSecondary = _wcsicmp(clsBuf, L"Shell_SecondaryTrayWnd") == 0;
+    HWND hTaskSwWnd = isSecondary
+        ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
+        : (HWND)GetPropW(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd)
+        return nullptr;
+
+    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
+    if (!taskBand)
+        return nullptr;
+
+    void* expectedVftable = isSecondary
+        ? g_eqCSecondaryTaskBandTaskListWndSiteVftable
+        : g_eqCTaskBandTaskListWndSiteVftable;
+    auto getTaskbarHost = isSecondary
+        ? g_eqCSecondaryTaskBandGetTaskbarHost
+        : g_eqCTaskBandGetTaskbarHost;
+    if (!expectedVftable || !getTaskbarHost || !g_eqTaskbarHostFrameHeight)
+        return nullptr;
+
+    void* taskListWndSite = taskBand;
+    constexpr int kMaxSlotsToScan = 20;
+    for (int i = 0; i <= kMaxSlotsToScan; ++i) {
+        if (!EqIsReadableMemoryRange(taskListWndSite, sizeof(void*)))
+            return nullptr;
+        if (*(void**)taskListWndSite == expectedVftable)
+            break;
+        if (i == kMaxSlotsToScan)
+            return nullptr;
+        taskListWndSite = reinterpret_cast<void**>(taskListWndSite) + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    getTaskbarHost(taskListWndSite, taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0]) {
+        if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
+            g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0;
+    bool recognized = false;
+#if defined(_M_X64) || defined(__x86_64__)
+    {
+        const BYTE* b = reinterpret_cast<const BYTE*>(g_eqTaskbarHostFrameHeight);
+        if (EqIsReadableMemoryRange(b, 8) &&
+            b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
+            b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
+            b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+            recognized = true;
+        }
+    }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    {
+        const DWORD* p = reinterpret_cast<const DWORD*>(g_eqTaskbarHostFrameHeight);
+        if (EqIsReadableMemoryRange(p, sizeof(DWORD) * 4) &&
+            p[0] == 0xD503237F &&
+            (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD &&
+            (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+            recognized = true;
+        }
+    }
+#else
+    taskbarElementIUnknownOffset = 0x10;
+    recognized = true;
+#endif
+
+    if (!recognized || !EqIsReadableMemoryRange(
+            static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
+                taskbarElementIUnknownOffset,
+            sizeof(IUnknown*))) {
+        if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
+            g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
+
+    IUnknown* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
+        static_cast<BYTE*>(taskbarHostSharedPtr[0]) + taskbarElementIUnknownOffset);
+    if (!taskbarElementIUnknown) {
+        if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
+            g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
+
+    FrameworkElement taskbarElement{nullptr};
+    HRESULT hr = taskbarElementIUnknown->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(taskbarElement));
+    XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
+        g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+    return SUCCEEDED(hr) ? result : nullptr;
+}
+
+using EqWindowThreadProc = void(*)(void*);
+static bool EqRunFromWindowThread(HWND hWnd, EqWindowThreadProc proc, void* param) {
+    if (!hWnd || !proc)
+        return false;
+    static const UINT kMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_EQVisualizer");
+    struct Payload { EqWindowThreadProc proc; void* param; } payload{proc, param};
+    DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!tid)
+        return false;
+    if (tid == GetCurrentThreadId()) {
+        proc(param);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) CALLBACK -> LRESULT {
+            if (code == HC_ACTION) {
+                auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                static const UINT kM =
+                    RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_EQVisualizer");
+                if (cwp->message == kM) {
+                    auto* p = reinterpret_cast<Payload*>(cwp->lParam);
+                    if (p && p->proc)
+                        p->proc(p->param);
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        }, nullptr, tid);
+    if (!hook)
+        return false;
+
+    SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&payload));
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+static FrameworkElement EqFindChildByName(
+    FrameworkElement const& root, const wchar_t* name) {
+    if (!root || !name)
+        return nullptr;
+    try {
+        auto children = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(root);
+        for (int i = 0; i < children; ++i) {
+            auto child = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
+            if (!child)
+                continue;
+            if (child.Name() == name)
+                return child;
+            if (auto nested = EqFindChildByName(child, name))
+                return nested;
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+static bool EqGetXamlButtonScreenRect(Button const& button, RECT* outRect) {
+    if (!button || !outRect || !g_eqTaskbarHwnd || !IsWindow(g_eqTaskbarHwnd))
+        return false;
+
+    try {
+        auto root = button.XamlRoot();
+        if (!root)
+            return false;
+        auto content = root.Content().try_as<FrameworkElement>();
+        if (!content)
+            return false;
+
+        const auto point = button.TransformToVisual(content).TransformPoint(
+            winrt::Windows::Foundation::Point{0.0f, 0.0f});
+        const double scale = std::max(0.25, static_cast<double>(root.RasterizationScale()));
+        const double bw = std::max(1.0, button.ActualWidth()) * scale;
+        const double bh = std::max(1.0, button.ActualHeight()) * scale;
+
+        RECT taskbarRect{};
+        if (!GetWindowRect(g_eqTaskbarHwnd, &taskbarRect))
+            return false;
+
+        outRect->left = taskbarRect.left + static_cast<int>(std::lround(point.X * scale));
+        outRect->top = taskbarRect.top + static_cast<int>(std::lround(point.Y * scale));
+        outRect->right = outRect->left + static_cast<int>(std::lround(bw));
+        outRect->bottom = outRect->top + static_cast<int>(std::lround(bh));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool EqIsCursorOverXamlButton() {
+    if (!g_eqXamlButton)
+        return false;
+
+    RECT buttonRect{};
+    if (!EqGetXamlButtonScreenRect(g_eqXamlButton.try_as<Button>(), &buttonRect))
+        return false;
+
+    POINT cursor{};
+    if (!GetCursorPos(&cursor))
+        return false;
+
+    return PtInRect(&buttonRect, cursor) != FALSE;
+}
+
+static void EqClosePopup() {
+    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd)) {
+        HWND hwnd = g_eqPopupHwnd;
+        g_eqPopupHwnd = nullptr;
+        DestroyWindow(hwnd);
+    }
+}
+
+static void EqShowPopupForXamlButton(Button const& button) {
+    try {
+        if (!button)
+            return;
+
+        if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd)) {
+            EqClosePopup();
+            return;
+        }
+
+        RECT taskbarRect{};
+        if (!g_eqTaskbarHwnd || !GetWindowRect(g_eqTaskbarHwnd, &taskbarRect))
+            return;
+
+        RECT buttonRect{};
+        if (!EqGetXamlButtonScreenRect(button, &buttonRect))
+            return;
+
+        const int buttonLeft = buttonRect.left;
+        const int buttonTop = buttonRect.top;
+        const int buttonRight = buttonRect.right;
+        const int buttonBottom = buttonRect.bottom;
+
+        int x = buttonLeft - (EQ_POPUP_WIDTH - (buttonRight - buttonLeft)) / 2;
+        int y = buttonTop - EQ_POPUP_HEIGHT - EQ_POPUP_TASKBAR_GAP;
+
+        // Anchor the flyout to the actual taskbar edge instead of the XAML
+        // button's transformed coordinates. This remains correct when the
+        // taskbar is auto-hidden, and prevents the popup from extending under
+        // the taskbar because of XAML/DPI coordinate differences.
+        MONITORINFO preMi{};
+        preMi.cbSize = sizeof(preMi);
+        HMONITOR preMonitor = MonitorFromWindow(g_eqTaskbarHwnd, MONITOR_DEFAULTTONEAREST);
+        if (preMonitor && GetMonitorInfoW(preMonitor, &preMi)) {
+            const RECT& mr = preMi.rcMonitor;
+            const int topEdgeDistance = std::abs(taskbarRect.top - mr.top);
+            const int bottomEdgeDistance = std::abs(mr.bottom - taskbarRect.bottom);
+            const int leftEdgeDistance = std::abs(taskbarRect.left - mr.left);
+            const int rightEdgeDistance = std::abs(mr.right - taskbarRect.right);
+
+            const int minVertical = std::min(topEdgeDistance, bottomEdgeDistance);
+            const int minHorizontal = std::min(leftEdgeDistance, rightEdgeDistance);
+            const bool bottomTaskbar = bottomEdgeDistance == minVertical &&
+                                       bottomEdgeDistance <= leftEdgeDistance &&
+                                       bottomEdgeDistance <= rightEdgeDistance;
+            const bool topTaskbar = topEdgeDistance == minVertical &&
+                                    topEdgeDistance < bottomEdgeDistance &&
+                                    topEdgeDistance <= leftEdgeDistance &&
+                                    topEdgeDistance <= rightEdgeDistance;
+            const bool leftTaskbar = leftEdgeDistance == minHorizontal &&
+                                     leftEdgeDistance < rightEdgeDistance &&
+                                     leftEdgeDistance < topEdgeDistance &&
+                                     leftEdgeDistance < bottomEdgeDistance;
+
+            if (bottomTaskbar) {
+                // Use the earlier of the work-area bottom and the physical
+                // taskbar top. Both are above the taskbar in the visible and
+                // auto-hide cases respectively.
+                const int anchorY = std::min(taskbarRect.top, preMi.rcWork.bottom);
+                y = anchorY - EQ_POPUP_HEIGHT - EQ_POPUP_TASKBAR_GAP;
+            } else if (topTaskbar) {
+                const int anchorY = std::max(taskbarRect.bottom, preMi.rcWork.top);
+                y = anchorY + EQ_POPUP_TASKBAR_GAP;
+            } else if (leftTaskbar) {
+                x = taskbarRect.right + EQ_POPUP_TASKBAR_GAP;
+                y = buttonTop - EQ_POPUP_HEIGHT / 2;
+            } else {
+                x = taskbarRect.left - EQ_POPUP_WIDTH - EQ_POPUP_TASKBAR_GAP;
+                y = buttonTop - EQ_POPUP_HEIGHT / 2;
+            }
+        }
+
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        HMONITOR monitor = MonitorFromWindow(g_eqTaskbarHwnd, MONITOR_DEFAULTTONEAREST);
+        if (monitor && GetMonitorInfoW(monitor, &mi)) {
+            x = std::clamp<int>(x, mi.rcWork.left + 6,
+                           mi.rcWork.right - EQ_POPUP_WIDTH - 6);
+            y = std::clamp<int>(y, mi.rcWork.top + 6,
+                           mi.rcWork.bottom - EQ_POPUP_HEIGHT - 6);
+        }
+
+        g_eqPopupHwnd = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+            kEqPopupClass,
+            L"Equalizer",
+            WS_POPUP,
+            x, y, EQ_POPUP_WIDTH, EQ_POPUP_HEIGHT,
+            nullptr, nullptr, g_eqModuleHandle, nullptr);
+        if (!g_eqPopupHwnd)
+            return;
+
+        ApplyEqPopupWindowAttributes(g_eqPopupHwnd);
+        ShowWindow(g_eqPopupHwnd, SW_SHOWNOACTIVATE);
+        SetWindowPos(g_eqPopupHwnd, HWND_TOP, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        SetForegroundWindow(g_eqPopupHwnd);
+        SetFocus(g_eqPopupHwnd);
+        RenderEqPopup(g_eqPopupHwnd);
+    } catch (...) {
+        g_eqPopupHwnd = nullptr;
+    }
+}
+
+static void EqRemoveXamlButtonOnUiThread() {
+    try {
+        if (g_eqXamlTrayGrid && g_eqXamlButton) {
+            if (g_eqXamlClickTokenValid) {
+                if (auto button = g_eqXamlButton.try_as<Button>())
+                    button.Click(g_eqXamlClickToken);
+            }
+            for (uint32_t i = 0; i < g_eqXamlTrayGrid.Children().Size(); ++i) {
+                auto child = g_eqXamlTrayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child == g_eqXamlButton) {
+                    g_eqXamlTrayGrid.Children().RemoveAt(i);
+                    break;
+                }
+            }
+            if (g_eqXamlColumn >= 0 &&
+                g_eqXamlColumn < static_cast<int>(g_eqXamlTrayGrid.ColumnDefinitions().Size())) {
+                for (uint32_t i = 0; i < g_eqXamlTrayGrid.Children().Size(); ++i) {
+                    auto child = g_eqXamlTrayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (!child || child == g_eqXamlButton)
+                        continue;
+                    const int column = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(child);
+                    if (column > g_eqXamlColumn)
+                        winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(child, column - 1);
+                }
+                g_eqXamlTrayGrid.ColumnDefinitions().RemoveAt(g_eqXamlColumn);
+            }
+        }
+    } catch (...) {
+    }
+    g_eqXamlClickTokenValid = false;
+    g_eqXamlColumn = -1;
+    g_eqXamlButton = nullptr;
+    g_eqXamlTrayGrid = nullptr;
+    g_eqXamlInjectionReady.store(false, std::memory_order_release);
+    EqClosePopup();
+}
+
+static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
+    if (!taskbar || !xamlRoot || g_eqXamlInjectionReady.load(std::memory_order_acquire))
+        return;
+
+    try {
+        auto root = xamlRoot.Content().try_as<FrameworkElement>();
+        if (!root)
+            return;
+
+        auto trayFrame = EqFindChildByName(root, L"SystemTrayFrameGrid");
+        auto trayGrid = trayFrame.try_as<Grid>();
+        if (!trayGrid)
+            return;
+
+        // Remove any previous copy belonging to us. This is especially important
+        // after TrayUI::StartTaskbar rebuilt the XAML tree.
+        for (int i = static_cast<int>(trayGrid.Children().Size()) - 1; i >= 0; --i) {
+            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+            if (child && child.Name() == kEqXamlButtonName)
+                trayGrid.Children().RemoveAt(i);
+        }
+
+        Button button;
+        button.Name(kEqXamlButtonName);
+        button.Width(EQ_BUTTON_WIDTH);
+        button.Height(EQ_BUTTON_HEIGHT);
+        button.MinWidth(EQ_BUTTON_WIDTH);
+        button.MinHeight(EQ_BUTTON_HEIGHT);
+        button.HorizontalAlignment(HorizontalAlignment::Center);
+        button.VerticalAlignment(VerticalAlignment::Center);
+        button.Padding({0, 0, 0, 0});
+        button.BorderThickness({0, 0, 0, 0});
+        button.Background(nullptr);
+        button.IsHitTestVisible(true);
+        button.IsTabStop(true);
+
+        // Use XAML FontIcon rather than TextBlock so the glyph is rendered as
+        // an actual icon by the XAML framework. E9E9 is Microsoft's official
+        // Segoe Fluent Icons Equalizer glyph.
+        winrt::Windows::UI::Xaml::Controls::FontIcon icon;
+        icon.Glyph(kEqButtonGlyph);
+        icon.FontSize(18.0);
+        icon.HorizontalAlignment(HorizontalAlignment::Center);
+        icon.VerticalAlignment(VerticalAlignment::Center);
+        try {
+            icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe Fluent Icons"));
+        } catch (...) {
+            try {
+                icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe MDL2 Assets"));
+            } catch (...) {
+            }
+        }
+        // Explicitly set a visible theme-aware brush. This avoids inheriting a
+        // null/transparent foreground from the system tray Button template.
+        const BYTE iconChannel = IsDarkThemeEnabled() ? 255 : 32;
+        icon.Foreground(winrt::Windows::UI::Xaml::Media::SolidColorBrush(
+            winrt::Windows::UI::Color{255, iconChannel, iconChannel, iconChannel}));
+        button.Content(icon);
+
+        ToolTip tooltip;
+        tooltip.Content(winrt::box_value(winrt::hstring{L"Equalizer"}));
+        try {
+            winrt::Windows::UI::Xaml::Controls::ToolTipService::SetToolTip(button, tooltip);
+        } catch (...) {
+        }
+
+        auto clickToken = button.Click([button](
+            winrt::Windows::Foundation::IInspectable const&,
+            winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
+            EqShowPopupForXamlButton(button);
+        });
+
+        // Windows 11's SystemTrayFrameGrid puts the language/input indicator
+        // in NonActivatableStack. Insert our column immediately before it so the
+        // EQ button lands between the hidden-icons area and the language button,
+        // instead of becoming the trailing-most tray item.
+        int insertCol = -1;
+        if (auto languageStack = EqFindChildByName(root, L"NonActivatableStack")) {
+            insertCol = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(languageStack);
+        } else if (auto notifyStack = EqFindChildByName(root, L"NotifyIconStack")) {
+            // Fallback for taskbar builds where the language stack has a different name.
+            insertCol = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(notifyStack) + 1;
+        }
+
+        const int columnCount = static_cast<int>(trayGrid.ColumnDefinitions().Size());
+        if (insertCol < 0 || insertCol > columnCount)
+            insertCol = std::min(1, columnCount);
+
+        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+            if (!child)
+                continue;
+            const int column = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(child);
+            if (column >= insertCol)
+                winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(child, column + 1);
+        }
+
+        winrt::Windows::UI::Xaml::Controls::ColumnDefinition newCol;
+        newCol.Width({1.0, winrt::Windows::UI::Xaml::GridUnitType::Auto});
+        trayGrid.ColumnDefinitions().InsertAt(insertCol, newCol);
+        winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(button, insertCol);
+        trayGrid.Children().Append(button);
+
+        g_eqTaskbarHwnd = taskbar;
+        g_eqXamlTrayGrid = trayGrid;
+        g_eqXamlButton = button;
+        g_eqXamlColumn = insertCol;
+        g_eqXamlClickToken = clickToken;
+        g_eqXamlClickTokenValid = true;
+        g_eqXamlInjectionReady.store(true, std::memory_order_release);
+    } catch (...) {
+        EqRemoveXamlButtonOnUiThread();
+    }
+}
+
+static void EqHideLegacyNativeButtons(HWND taskbar) {
+    if (!taskbar || !IsWindow(taskbar))
+        return;
+    // Versions before the XAML rewrite created a native child with this class.
+    // Do not DestroyWindow it here: its old WndProc may belong to an unloaded
+    // module instance. Hiding it is safe and immediately removes any stale
+    // visual while the taskbar rebuilds its tree.
+    for (;;) {
+        HWND old = FindWindowExW(taskbar, nullptr,
+                                 L"WindhawkVisualizerEQButton", nullptr);
+        if (!old || !IsWindow(old))
+            break;
+        ShowWindow(old, SW_HIDE);
+        LONG_PTR style = GetWindowLongPtrW(old, GWL_STYLE);
+        if (style & WS_VISIBLE)
+            SetWindowLongPtrW(old, GWL_STYLE, style & ~static_cast<LONG_PTR>(WS_VISIBLE));
+        // Avoid spinning forever if a third-party component instantly re-shows
+        // the same stale HWND.
+        break;
+    }
+}
+
+static void EqEnsureXamlButton() {
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar || !IsWindow(taskbar))
+        return;
+    EqHideLegacyNativeButtons(taskbar);
+    if (g_eqTaskbarHwnd != taskbar || !g_eqXamlInjectionReady.load(std::memory_order_acquire)) {
+        struct Payload {
+            HWND taskbar;
+        } payload{taskbar};
+        EqRunFromWindowThread(taskbar, [](void* raw) {
+            auto* p = static_cast<Payload*>(raw);
+            if (!p || !p->taskbar)
+                return;
+            try {
+                if (g_eqTaskbarHwnd != p->taskbar)
+                    EqRemoveXamlButtonOnUiThread();
+                auto root = EqGetTaskbarXamlRoot(p->taskbar);
+                if (root)
+                    EqInjectXamlButtonOnUiThread(p->taskbar, root);
+            } catch (...) {
+                g_eqXamlInjectionReady.store(false, std::memory_order_release);
+            }
+        }, &payload);
+    }
+}
+
+static void WINAPI EqTrayUIStartTaskbarHook(void* pThis) {
+    if (g_eqTrayUIStartTaskbarOriginal)
+        g_eqTrayUIStartTaskbarOriginal(pThis);
+
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar)
+        return;
+
+    EqHideLegacyNativeButtons(taskbar);
+    g_eqTaskbarHwnd = taskbar;
+    EqRunFromWindowThread(taskbar, [](void*) {
+        EqRemoveXamlButtonOnUiThread();
+        auto root = EqGetTaskbarXamlRoot(g_eqTaskbarHwnd);
+        if (root)
+            EqInjectXamlButtonOnUiThread(g_eqTaskbarHwnd, root);
+    }, nullptr);
+}
+
+static bool EqHookTaskbarSymbols() {
+    HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!h)
+        return false;
+
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &g_eqCTaskBandTaskListWndSiteVftable},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &g_eqCTaskBandGetTaskbarHost},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &g_eqCSecondaryTaskBandGetTaskbarHost},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &g_eqTaskbarHostFrameHeight},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &g_eqStdRefDecref},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &g_eqTrayUIStartTaskbarOriginal, EqTrayUIStartTaskbarHook},
+    };
+    return WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks));
+}
+
+static void EqCleanupIntegration() {
+    HWND taskbar = g_eqTaskbarHwnd;
+    if (taskbar && IsWindow(taskbar)) {
+        EqRunFromWindowThread(taskbar, [](void*) {
+            EqRemoveXamlButtonOnUiThread();
+        }, nullptr);
+    } else {
+        g_eqXamlInjectionReady.store(false, std::memory_order_release);
+        g_eqXamlButton = nullptr;
+        g_eqXamlTrayGrid = nullptr;
+        g_eqTaskbarHwnd = nullptr;
+        g_eqXamlColumn = -1;
+        EqClosePopup();
+    }
+}
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -7690,14 +8940,13 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 static_cast<float>(std::max(1, g_settings.maxBarHeight));
             const bool shouldIdle =
                 peakRatio <= std::min(1.0f, minRatio + 0.01f);
-            if (shouldIdle != g_overlayIdle.load(std::memory_order_acquire)) {
+            if (shouldIdle != g_overlayIdle.load(std::memory_order_acquire))
                 g_overlayIdle.store(shouldIdle, std::memory_order_release);
-                SetTimer(hwnd, 1,
-                         shouldIdle ? 200 : GetRenderIntervalMs(g_settings),
-                         nullptr);
-            } else if (!shouldIdle) {
-                // Keep the active timer synchronized with the current FPS setting.
-                SetTimer(hwnd, 1, GetRenderIntervalMs(g_settings), nullptr);
+
+            const UINT intervalMs = shouldIdle ? 200 : GetRenderIntervalMs(g_settings);
+            if (intervalMs != g_currentOverlayTimerMs) {
+                g_currentOverlayTimerMs = intervalMs;
+                SetTimer(hwnd, 1, intervalMs, nullptr);
             }
         }
         return 0;
@@ -7706,7 +8955,11 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         g_overlayIdle.store(false, std::memory_order_release);
         {
             const VisualizerSettings settings = GetSettingsSnapshot();
-            SetTimer(hwnd, 1, GetRenderIntervalMs(settings), nullptr);
+            const UINT intervalMs = GetRenderIntervalMs(settings);
+            if (intervalMs != g_currentOverlayTimerMs) {
+                g_currentOverlayTimerMs = intervalMs;
+                SetTimer(hwnd, 1, intervalMs, nullptr);
+            }
         }
         return 0;
 
@@ -7726,12 +8979,26 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
 
     case WM_SETTINGCHANGE:
-        // Wallpaper/theme changes invalidate the cached wallpaper blur.
+        // Wallpaper/theme changes invalidate the cached wallpaper blur and the
+        // display query cache used to derive the render interval.
         g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+        g_cachedDisplayRefreshRateHz = 0;
+        if (g_eqXamlInjectionReady.load(std::memory_order_acquire)) {
+            try {
+                if (auto button = g_eqXamlButton.try_as<Button>())
+                    button.InvalidateMeasure();
+                if (g_eqTaskbarHwnd)
+                    InvalidateRect(g_eqTaskbarHwnd, nullptr, FALSE);
+            } catch (...) {}
+        }
+        if (g_eqPopupHwnd)
+            RenderEqPopup(g_eqPopupHwnd);
         return 0;
 
     case WM_DISPLAYCHANGE:
         g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+        g_cachedDisplayRefreshRateHz = 0;
+        g_currentOverlayTimerMs = 0;
         if (GetParent(hwnd) == nullptr) {
             SetWindowPos(hwnd, HWND_BOTTOM,
                          GetSystemMetrics(SM_XVIRTUALSCREEN),
@@ -7784,7 +9051,9 @@ static UINT GetDisplayRefreshRateHz() {
 }
 
 static UINT GetRenderIntervalMs(const VisualizerSettings& settings) {
-    const UINT refreshRateHz = std::max<UINT>(1, GetDisplayRefreshRateHz());
+    if (g_cachedDisplayRefreshRateHz == 0)
+        g_cachedDisplayRefreshRateHz = GetDisplayRefreshRateHz();
+    const UINT refreshRateHz = std::max<UINT>(1, g_cachedDisplayRefreshRateHz);
 
     int effectiveFps = settings.targetFps;
     if (effectiveFps <= 0)
@@ -7830,22 +9099,30 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
+    // The taskbar helper is optional. If its small native windows cannot be
+    // registered, the core visualizer continues normally rather than failing
+    // the entire mod because of a UI convenience feature.
+    RegisterEqWindowClasses(wc.hInstance);
+
     const int screenW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
     const int screenH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
 
-    HWND hProgman = FindWindowW(L"Progman", nullptr);
-    if (!hProgman) {
-        if (classRegistered)
-            UnregisterClassW(wc.lpszClassName, wc.hInstance);
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        return 0;
-    }
-
-    {
-        DWORD progmanProcessId = 0;
-        GetWindowThreadProcessId(hProgman, &progmanProcessId);
-        if (progmanProcessId != GetCurrentProcessId()) {
+    HWND hParent = nullptr;
+    HWND lastProgman = nullptr;
+    // Explorer can load the injected module before the desktop shell hierarchy
+    // exists. Creating a popup here is unsafe: it can render into an incomplete
+    // desktop and can also keep a stale surface after Explorer rebuilds itself.
+    // Wait for the real SHELLDLL_DefView instead; the wait is stoppable and uses
+    // the same child-window model as the normal desktop path.
+    for (;;) {
+        if (g_hOverlayStopEvent &&
+            WaitForSingleObject(g_hOverlayStopEvent, 0) == WAIT_OBJECT_0) {
+            EqCleanupIntegration();
+            if (g_eqClassesRegistered) {
+                UnregisterClassW(kEqPopupClass, g_eqModuleHandle);
+                g_eqClassesRegistered = false;
+                g_eqModuleHandle = nullptr;
+            }
             if (classRegistered)
                 UnregisterClassW(wc.lpszClassName, wc.hInstance);
             Gdiplus::GdiplusShutdown(g_gdiplusToken);
@@ -7853,57 +9130,59 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
             return 0;
         }
 
-        // Undocumented Progman message used by common desktop-overlay
-        // implementations to create/reposition the WorkerW behind icons.
-        SendMessageTimeoutW(hProgman, 0x052C, 0, 0,
-                            SMTO_ABORTIFHUNG, 1000, nullptr);
-    }
+        HWND hProgman = FindWindowW(L"Progman", nullptr);
+        DWORD progmanProcessId = 0;
+        if (hProgman)
+            GetWindowThreadProcessId(hProgman, &progmanProcessId);
 
-    HWND hParent = nullptr;
-    for (int i = 0; i < 150; ++i) {
-        if (g_hOverlayStopEvent &&
-            WaitForSingleObject(g_hOverlayStopEvent, 0) == WAIT_OBJECT_0) {
-            break;
-        }
+        if (hProgman && progmanProcessId == GetCurrentProcessId()) {
+            if (hProgman != lastProgman) {
+                lastProgman = hProgman;
+                // Undocumented Progman message used by common desktop-overlay
+                // implementations to create/reposition the WorkerW behind icons.
+                // Send it once per Progman instance instead of repeatedly while
+                // the shell is starting, avoiding unnecessary cross-thread work.
+                SendMessageTimeoutW(hProgman, 0x052C, 0, 0,
+                                    SMTO_ABORTIFHUNG, 1000, nullptr);
+            }
 
-        hProgman = FindWindowW(L"Progman", nullptr);
-        HWND hDefView = FindWindowExW(hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
-        if (!hDefView) {
-            HWND hWorkerW = nullptr;
-            while ((hWorkerW = FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) != nullptr) {
-                hDefView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-                if (hDefView)
-                    break;
+            hParent = FindWindowExW(
+                hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
+            if (!hParent) {
+                HWND hWorkerW = nullptr;
+                while ((hWorkerW = FindWindowExW(
+                            nullptr, hWorkerW, L"WorkerW", nullptr)) != nullptr) {
+                    hParent = FindWindowExW(
+                        hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
+                    if (hParent)
+                        break;
+                }
             }
         }
-        if (hDefView) {
-            hParent = hDefView;
+
+        if (hParent)
             break;
-        }
 
-        if (g_hOverlayStopEvent) {
-            if (WaitForSingleObject(g_hOverlayStopEvent, 100) == WAIT_OBJECT_0)
-                break;
-        } else {
-            Sleep(100);
-        }
+        if (g_hOverlayStopEvent)
+            WaitForSingleObject(g_hOverlayStopEvent, 250);
+        else
+            Sleep(250);
     }
 
-    if (g_hOverlayStopEvent &&
-        WaitForSingleObject(g_hOverlayStopEvent, 0) == WAIT_OBJECT_0) {
-        if (classRegistered)
-            UnregisterClassW(wc.lpszClassName, wc.hInstance);
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        return 0;
-    }
+    RECT parentRect{};
+    const int initialW = GetClientRect(hParent, &parentRect)
+        ? std::max(1L, parentRect.right - parentRect.left)
+        : screenW;
+    const int initialH = GetClientRect(hParent, &parentRect)
+        ? std::max(1L, parentRect.bottom - parentRect.top)
+        : screenH;
 
     g_hwndOverlay = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
         L"Desktop Audio Visualizer",
-        hParent ? (WS_CHILD | WS_VISIBLE) : WS_POPUP,
-        0, 0, screenW, screenH, hParent, nullptr, wc.hInstance, nullptr);
+        WS_CHILD | WS_VISIBLE,
+        0, 0, initialW, initialH, hParent, nullptr, wc.hInstance, nullptr);
 
     if (!g_hwndOverlay) {
         if (classRegistered)
@@ -7919,16 +9198,11 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     DwmSetWindowAttribute(g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
                           &excludeFromPeek, sizeof(excludeFromPeek));
 
-    if (!hParent) {
-        SetWindowPos(g_hwndOverlay, HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
-    }
-
     g_overlayIdle.store(false, std::memory_order_release);
     {
         const VisualizerSettings settings = GetSettingsSnapshot();
-        SetTimer(g_hwndOverlay, 1, GetRenderIntervalMs(settings), nullptr);
+        g_currentOverlayTimerMs = GetRenderIntervalMs(settings);
+        SetTimer(g_hwndOverlay, 1, g_currentOverlayTimerMs, nullptr);
     }
 
     MSG msg{};
@@ -7942,42 +9216,75 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
             break;
 
         if (g_running.load(std::memory_order_acquire)) {
-            const bool overlayMissing = !g_hwndOverlay || !IsWindow(g_hwndOverlay);
+            EqEnsureXamlButton();
+            HWND expectedParent = nullptr;
+            HWND currentProgman = FindWindowW(L"Progman", nullptr);
+            if (currentProgman) {
+                expectedParent = FindWindowExW(
+                    currentProgman, nullptr, L"SHELLDLL_DefView", nullptr);
+                if (!expectedParent) {
+                    HWND worker = nullptr;
+                    while ((worker = FindWindowExW(
+                                nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
+                        expectedParent = FindWindowExW(
+                            worker, nullptr, L"SHELLDLL_DefView", nullptr);
+                        if (expectedParent)
+                            break;
+                    }
+                }
+            }
+            const bool overlayMissing =
+                !g_hwndOverlay || !IsWindow(g_hwndOverlay) ||
+                (expectedParent && GetParent(g_hwndOverlay) != expectedParent);
             if (overlayMissing) {
+                // The overlay is owned by this thread, so explicitly destroy a
+                // stale child before attaching a new one to the rebuilt shell.
+                if (g_hwndOverlay && IsWindow(g_hwndOverlay))
+                    DestroyWindow(g_hwndOverlay);
                 g_hwndOverlay = nullptr;
                 g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
 
+                // During Explorer restart the old shell view may disappear for
+                // several polling intervals. Do not fall back to a popup: wait
+                // for the new SHELLDLL_DefView so the mod cannot render before
+                // the desktop is ready or attach to the wrong window tree.
+                HWND recoveryParent = nullptr;
                 HWND recoveryProgman = FindWindowW(L"Progman", nullptr);
                 DWORD recoveryPid = 0;
                 if (recoveryProgman)
                     GetWindowThreadProcessId(recoveryProgman, &recoveryPid);
+                if (recoveryProgman)
+                    lastProgman = recoveryProgman;
 
                 if (recoveryProgman && recoveryPid == GetCurrentProcessId()) {
-                    HWND recoveryParent = FindWindowExW(
+                    recoveryParent = FindWindowExW(
                         recoveryProgman, nullptr, L"SHELLDLL_DefView", nullptr);
                     if (!recoveryParent) {
                         HWND worker = nullptr;
-                        while ((worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
+                        while ((worker = FindWindowExW(
+                                    nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
                             recoveryParent = FindWindowExW(
                                 worker, nullptr, L"SHELLDLL_DefView", nullptr);
                             if (recoveryParent)
                                 break;
                         }
                     }
+                }
 
-                    RECT parentRect{};
-                    int recoveryW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
-                    int recoveryH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
-                    if (recoveryParent && GetClientRect(recoveryParent, &parentRect)) {
-                        recoveryW = std::max(1L, parentRect.right - parentRect.left);
-                        recoveryH = std::max(1L, parentRect.bottom - parentRect.top);
-                    }
+                if (recoveryParent) {
+                    RECT recoveryRect{};
+                    const int recoveryW = GetClientRect(recoveryParent, &recoveryRect)
+                        ? std::max(1L, recoveryRect.right - recoveryRect.left)
+                        : screenW;
+                    const int recoveryH = GetClientRect(recoveryParent, &recoveryRect)
+                        ? std::max(1L, recoveryRect.bottom - recoveryRect.top)
+                        : screenH;
 
                     g_hwndOverlay = CreateWindowExW(
                         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                         wc.lpszClassName,
                         L"Desktop Audio Visualizer",
-                        recoveryParent ? (WS_CHILD | WS_VISIBLE) : WS_POPUP,
+                        WS_CHILD | WS_VISIBLE,
                         0, 0, recoveryW, recoveryH,
                         recoveryParent, nullptr, wc.hInstance, nullptr);
 
@@ -7988,8 +9295,11 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
                             g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
                             &excludeFromPeek, sizeof(excludeFromPeek));
                         g_overlayIdle.store(false, std::memory_order_release);
+                        g_lastRenderDirtyRect = {};
+                        g_renderNeedsFullClear = true;
                         const VisualizerSettings settings = GetSettingsSnapshot();
-                        SetTimer(g_hwndOverlay, 1, GetRenderIntervalMs(settings), nullptr);
+                        g_currentOverlayTimerMs = GetRenderIntervalMs(settings);
+                        SetTimer(g_hwndOverlay, 1, g_currentOverlayTimerMs, nullptr);
                     }
                 }
             } else {
@@ -8024,6 +9334,12 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
 
 overlay_exit:
+    EqCleanupIntegration();
+    if (g_eqClassesRegistered) {
+        UnregisterClassW(kEqPopupClass, g_eqModuleHandle);
+        g_eqClassesRegistered = false;
+        g_eqModuleHandle = nullptr;
+    }
     if (g_hwndOverlay) {
         g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
         KillTimer(g_hwndOverlay, 1);
@@ -8053,6 +9369,11 @@ overlay_exit:
 
 BOOL Wh_ModInit() {
     LoadSettings();
+
+    if (!EqHookTaskbarSymbols()) {
+        Wh_Log(L"Wh_ModInit: taskbar XAML EQ integration hooks could not be installed; visualizer will continue without EQ button");
+    }
+    RegisterEqWindowClasses(GetCurrentModModuleHandle());
     g_running.store(true, std::memory_order_release);
 
     BuildHannWindow();
@@ -8078,17 +9399,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    StartAlbumColorCapture();
+    if (IsAlbumColorMode())
+        StartAlbumColorCapture();
     if (g_settings.lyricsEnabled)
         StartLyricsCapture();
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    g_running.store(false, std::memory_order_release);
+    EqCleanupIntegration();
     StopLyricsCapture();
     StopAlbumColorCapture();
     StopAudioCapture();
-    g_running.store(false, std::memory_order_release);
 
     if (g_hOverlayStopEvent)
         SetEvent(g_hOverlayStopEvent);
@@ -8111,23 +9434,34 @@ void Wh_ModSettingsChanged() {
     int oldAudioSource = 0;
     std::wstring oldAudioApplicationName;
     bool oldLyricsEnabled = false;
+    bool oldAlbumColorMode = false;
 
     {
         std::unique_lock<std::shared_mutex> settingsLock(g_settingsMutex);
         oldAudioSource = g_settings.audioSource;
         oldAudioApplicationName = g_settings.audioApplicationName;
         oldLyricsEnabled = g_settings.lyricsEnabled;
+        oldAlbumColorMode = IsAlbumColorMode();
         LoadSettings();
     }
 
     int newAudioSource = 0;
     std::wstring newAudioApplicationName;
     bool newLyricsEnabled = false;
+    bool newAlbumColorMode = false;
     {
         std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
         newAudioSource = g_settings.audioSource;
         newAudioApplicationName = g_settings.audioApplicationName;
         newLyricsEnabled = g_settings.lyricsEnabled;
+        newAlbumColorMode = IsAlbumColorMode();
+    }
+
+    if (oldAlbumColorMode != newAlbumColorMode) {
+        if (newAlbumColorMode)
+            StartAlbumColorCapture();
+        else
+            StopAlbumColorCapture();
     }
 
     if (oldLyricsEnabled != newLyricsEnabled) {
