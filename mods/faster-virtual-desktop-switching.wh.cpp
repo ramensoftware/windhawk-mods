@@ -154,6 +154,7 @@ bool ResolveTargetFunctionRange() {
     }
 
     void* targetFunction = nullptr;
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
