@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              control-panel-revival-admxp8
+// @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
 // @version         0.9.8
@@ -7,7 +7,6 @@
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         control.exe
-// @include         rundll32.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
