@@ -53,7 +53,7 @@ Additionally, the mod includes the **"Unhide legacy applets"** option (enabled b
 
 **The virtual entries stay as a fallback**. They are not deleted, only hidden, and they come back if the real applet is missing, not found, or not listed. This setting can never remove anything from Control Panel. At worst, the virtual entry is used instead.
 
-The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**, the two mods are complementary and no longer overlap (see below).
+The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
 
 **⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
 
@@ -71,9 +71,8 @@ The mod does not commit to restore task links that would open the Settings app r
 
 ## Related mods and overlaps
 
-- **Settings to Control Panel** (`settings-to-control-panel`): It is the recommended companion. It decides *where* a Control Panel item opens by blocking the legacy-to-Settings redirect. This mod only decides *whether* an applet is listed. The split is deliberate because both mods target `explorer.exe` and hooking the same internal function caused conflicts. If you want classic pages instead of the Settings app, install that mod.
-
-- **Control Panel Revival** (`control-panel-revival`): It unhides some of the same legacy items by patching the same moniker strings. This mod does not detect it, but the patching is self-protecting, so a string already zeroed is not patched twice. Whether an applet is unhidden is determined by asking the shell, not by guessing which mod patched it.
+- **Settings to Control Panel** (`settings-to-control-panel`): This mod is a recommended companion. It controls *where* items open (classic panel vs. Settings app) by controlling *whether* they appear.
+- **Control Panel Revival** (`control-panel-revival`): This mod prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding a series of legacy elements. It is worth noting that the only unhidden applet in common is System.
 
 ## Credits
 
@@ -2879,10 +2878,11 @@ int WINAPI CControlPanelAppletList_s_FindAppletInSortArray_hook(
 static size_t g_appletListDpaOffset = 0;
 static size_t g_appletMonikerOffset = 0;
 
-// Walks the comparator looking for the DPA load, which is the last register
-// load before it calls DPA_GetPtr, and then for the moniker displacement,
-// which is the first immediate added to a register afterwards. Returns false
-// if the code doesn't have that shape, leaving applet ordering alone.
+// Walks the comparator looking for the DPA load - the last write of a
+// [r8+imm] field into rcx before the DPA_GetPtr call, i.e. that call's
+// first argument - and then for the moniker displacement, the first
+// immediate added to a non-stack register afterwards. Returns false if the
+// code doesn't have that shape, leaving applet ordering alone.
 // Note: The moniker offset (0x208) has been found to be valid only on certain
 // Windows 10 builds (e.g., 1809). On Windows 11 24H2+ and 26H1+, the offset
 // has changed and the mod uses the fallback (stock applet ordering).
@@ -2891,11 +2891,22 @@ static size_t g_appletMonikerOffset = 0;
 static bool ResolveAppletOffsets(void* pFunc) {
     // lParam is the third x64 argument, i.e. r8 - anchor on it so an
     // unrelated load in the prologue can't be mistaken for the DPA load.
+    // The destination is anchored on rcx as well: the load exists to feed
+    // the first argument of the DPA_GetPtr call (mov rcx, [r8+0x10] on
+    // every observed build), and the last write to rcx before a call IS
+    // that call's first argument - so this can no longer latch onto some
+    // other [r8+imm] load that happens to precede the call. If a future
+    // build stages the value through another register first, the match
+    // fails and the mod falls back to stock ordering, which is the safe
+    // direction to fail in.
     const std::regex loadRegex(
-        R"(mov r(?:[a-z]{2}|\d{1,2}), \[r8\+(0x[0-9a-f]+)\])",
+        R"(mov rcx, \[r8\+(0x[0-9a-f]+)\])",
         std::regex_constants::icase);
+    // rsp/rbp are explicitly excluded: `add rsp, 0x28` is an ordinary
+    // stack adjustment (and small enough to sail through the upper-bound
+    // sanity check below), not the moniker displacement.
     const std::regex addRegex(
-        R"(add r(?:[a-z]{2}|\d{1,2}), (0x[0-9a-f]+))",
+        R"(add r(?!sp\b|bp\b)(?:[a-z]{2}|\d{1,2}), (0x[0-9a-f]+))",
         std::regex_constants::icase);
 
     size_t dpaOffset = 0;
@@ -2929,9 +2940,13 @@ static bool ResolveAppletOffsets(void* pFunc) {
         }
     }
 
-    // Sanity check
-    if (!dpaOffset || dpaOffset > 0x1000 ||
-        !monikerOffset || monikerOffset > 0x10000) {
+    // Sanity check. Both offsets address pointer-sized fields inside
+    // shell32's private structures, so besides the range bounds they must
+    // be pointer-aligned - an immediate scraped off the wrong instruction
+    // rarely is.
+    if (!dpaOffset || dpaOffset > 0x1000 || (dpaOffset % sizeof(void*)) != 0 ||
+        !monikerOffset || monikerOffset > 0x10000 ||
+        (monikerOffset % sizeof(void*)) != 0) {
         return false;
     }
 
@@ -2959,6 +2974,21 @@ static bool LooksLikeClsidMoniker(LPCWSTR s) {
     return s[len - 1] == L'}';
 }
 
+// Plausibility check on a value about to be treated as an HDPA. If
+// ResolveAppletOffsets ever latched onto the wrong displacement, the loaded
+// value is arbitrary data, and `if (hDpa)` alone would hand any non-null
+// garbage to DPA_GetPtr, which dereferences it - an access violation inside
+// Explorer on every category sort. A real heap pointer is pointer-aligned
+// and lives above the null/reserved region; arbitrary small integers and
+// misaligned values are rejected. Defense in depth on top of the anchored
+// instruction matching in ResolveAppletOffsets, not a substitute for it.
+static bool LooksLikeValidDpaHandle(HDPA hDpa) {
+    const DWORD_PTR value = (DWORD_PTR)hDpa;
+    if (value < 0x10000) return false;               // null/pseudo-handle region
+    if (value % sizeof(void*) != 0) return false;    // heap allocations are aligned
+    return true;
+}
+
 static LPCWSTR GetAppletMoniker(HDPA hDpa, const int* pIndex) {
     LPVOID pItem = DPA_GetPtr(hDpa, *pIndex);
     if (!pItem) return NULL;
@@ -2978,7 +3008,7 @@ int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
 
     if (g_appletMonikerOffset && p1 && p2 && lParam) {
         HDPA hDpa = *(HDPA*)((BYTE*)lParam + g_appletListDpaOffset);
-        if (hDpa) {
+        if (LooksLikeValidDpaHandle(hDpa)) {
             int iApplet1 = FindApplet(GetAppletMoniker(hDpa, (const int*)p1));
             int iApplet2 = FindApplet(GetAppletMoniker(hDpa, (const int*)p2));
             if (iApplet1 >= 0 && iApplet2 >= 0) {
@@ -3075,9 +3105,17 @@ public:
     // called explicitly from Wh_ModUninit instead.
     ~ReversiblePatcher() = default;
 
-    // Zeroes the first exact occurrence of lpSearch inside the module's
-    // readable data sections, recording the original bytes so RestoreAll()
-    // can put them back.
+    // Zeroes every exact whole-string occurrence of lpSearch inside the
+    // module's readable data sections, recording the original bytes so
+    // RestoreAll() can put them back. Whole-string means the candidate has
+    // to END where the pattern ends: a longer literal that merely starts
+    // with the moniker (e.g. "::{GUID}\\pageWallpaper") must never be
+    // clobbered - zeroing its prefix would turn an unrelated string into
+    // L"" while the real hidden-items entry stays untouched. And every
+    // occurrence is patched, not just the first: if the moniker appears in
+    // more than one table, patching one and stopping would leave the
+    // feature half-applied; each patch is recorded individually, so
+    // RestoreAll() still undoes all of them.
     //
     // The scan walks the PE section table and only visits sections that
     // hold readable, non-executable, non-discardable initialized data
@@ -3093,6 +3131,8 @@ public:
         if (patternLen == 0 ||
             patternLen > sizeof(PatchRecord::originalBytes))
             return false;
+
+        bool anyPatched = false;
 
         const BYTE* base = (const BYTE*)hModule;
         const IMAGE_DOS_HEADER* dosHeader = (const IMAGE_DOS_HEADER*)base;
@@ -3136,14 +3176,29 @@ public:
                 if (towlower(*(const WCHAR*)candidate) != firstCharLower) continue;
                 if (_wcsnicmp((LPCWSTR)candidate, lpSearch, charCount) != 0) continue;
 
+                // Must be the whole string, not a prefix of a longer
+                // literal: the WCHAR right after the match has to be the
+                // terminator. If the match runs exactly to the end of the
+                // scannable range there is no terminator to inspect, and
+                // the candidate is rejected as unverifiable rather than
+                // assumed terminated.
+                if (offset + patternLen + sizeof(WCHAR) > scanSize ||
+                    *(const WCHAR*)(candidate + patternLen) != L'\0')
+                    continue;
+
                 // Found. ZeroAndRecord() reports failure only when the
                 // protection change fails or the record table is full, in
-                // which case this moniker stays unpatched and the caller
-                // simply logs it.
-                return ZeroAndRecord((void*)candidate, patternLen);
+                // which case this occurrence stays unpatched and the caller
+                // simply logs it. Keep scanning either way: other
+                // occurrences (and other sections) may still match.
+                if (ZeroAndRecord((void*)candidate, patternLen)) {
+                    anyPatched = true;
+                }
+                // The string just zeroed can't match again; skip past it.
+                offset += patternLen;
             }
         }
-        return false;
+        return anyPatched;
     }
 
     // Puts every recorded byte back. Safe to call multiple times.
