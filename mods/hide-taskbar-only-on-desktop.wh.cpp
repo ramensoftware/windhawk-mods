@@ -38,6 +38,10 @@ visible whenever an application or shell UI is active.
 This mod intentionally differs from native Windows auto-hide:
 it hides the taskbar window without changing the desktop work area.
 
+Because the taskbar is controlled by a separate tool process, an unexpected
+termination of that process while the taskbar is hidden can leave the taskbar
+hidden until Explorer is restarted. Normal disable/unload paths restore it.
+
 If native Windows taskbar auto-hide is enabled, this mod stands down so
 the two mechanisms don't fight each other. If native auto-hide is enabled
 while this mod has hidden the taskbar, the mod restores the taskbar first
@@ -94,8 +98,6 @@ HANDLE g_hThreadReadyEvent = nullptr;
 
 constexpr UINT WM_APP_REFRESH_STATE = WM_APP + 1;
 constexpr UINT WM_APP_STOP_THREAD = WM_APP + 2;
-constexpr WPARAM kRefreshNativeAutoHide = 1;
-
 constexpr UINT kHoverTimerIntervalMs = 200;
 
 UINT_PTR g_hoverTimerId = 0;
@@ -114,6 +116,12 @@ ULONGLONG g_hideDeadline = 0;
 constexpr size_t kMaxWinEventHooks = 3;
 HWINEVENTHOOK g_hWinEventHooks[kMaxWinEventHooks] = {};
 
+
+// Hidden window used to receive setting/display notifications without
+// installing broad system-wide EVENT_OBJECT_* hooks.
+HWND g_hSystemMessageWindow = nullptr;
+const wchar_t kSystemMessageWindowClass[] =
+    L"HideTaskbarOnlyOnDesktop.SystemMessageWindow";
 
 // ============================================================
 // Utility
@@ -452,7 +460,7 @@ void SetWindowVisibilityIfNeeded(HWND hwnd, bool show) {
     if (visible != show) {
         ShowWindow(
             hwnd,
-            show ? SW_SHOW : SW_HIDE
+            show ? SW_SHOWNA : SW_HIDE
         );
     }
 }
@@ -874,6 +882,106 @@ void RequestStateRefresh(bool refreshNativeAutoHide = false) {
 
 
 // ============================================================
+// System notification window
+// ============================================================
+
+LRESULT CALLBACK SystemMessageWindowProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam
+) {
+    UNREFERENCED_PARAMETER(hwnd);
+    UNREFERENCED_PARAMETER(wParam);
+    UNREFERENCED_PARAMETER(lParam);
+
+    switch (message) {
+    case WM_SETTINGCHANGE:
+        /*
+         * Native taskbar auto-hide can be changed from Windows Settings.
+         * Re-query it only when this targeted system notification arrives.
+         */
+        RefreshNativeTaskbarAutoHideState();
+        RefreshDesktopState();
+        UpdateTaskbarState();
+        return 0;
+
+    case WM_DISPLAYCHANGE:
+    case WM_DPICHANGED:
+        /*
+         * Monitor layout or DPI can change taskbar geometry.
+         */
+        RefreshNativeTaskbarAutoHideState();
+        RefreshDesktopState();
+        UpdateTaskbarState();
+        return 0;
+
+    case WM_NCDESTROY:
+        if (g_hSystemMessageWindow == hwnd) {
+            g_hSystemMessageWindow = nullptr;
+        }
+        break;
+    }
+
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+
+bool CreateSystemMessageWindow() {
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = SystemMessageWindowProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kSystemMessageWindowClass;
+
+    if (!RegisterClassW(&wc)) {
+        DWORD error = GetLastError();
+
+        if (error != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(
+                L"RegisterClassW failed: %lu",
+                error
+            );
+            return false;
+        }
+    }
+
+    g_hSystemMessageWindow =
+        CreateWindowExW(
+            0,
+            kSystemMessageWindowClass,
+            L"Hide Taskbar Only on Desktop",
+            WS_OVERLAPPED,
+            0,
+            0,
+            0,
+            0,
+            nullptr,
+            nullptr,
+            GetModuleHandleW(nullptr),
+            nullptr
+        );
+
+    if (!g_hSystemMessageWindow) {
+        Wh_Log(
+            L"CreateWindowExW failed: %lu",
+            GetLastError()
+        );
+        return false;
+    }
+
+    return true;
+}
+
+
+void DestroySystemMessageWindow() {
+    if (g_hSystemMessageWindow) {
+        DestroyWindow(g_hSystemMessageWindow);
+        g_hSystemMessageWindow = nullptr;
+    }
+}
+
+
+// ============================================================
 // WinEvent hook
 // ============================================================
 
@@ -911,7 +1019,7 @@ void CALLBACK WinEventProc(
      * controls and other transient windows. Avoiding them prevents a
      * synchronous SHAppBarMessage call on every such event.
      */
-    RequestStateRefresh(event == EVENT_SYSTEM_FOREGROUND);
+    RequestStateRefresh(false);
 }
 
 
@@ -992,6 +1100,8 @@ DWORD WINAPI HookThread(LPVOID) {
     if (g_hThreadReadyEvent) {
         SetEvent(g_hThreadReadyEvent);
     }
+
+    CreateSystemMessageWindow();
 
     /*
      * Only hook events that represent meaningful application-state
@@ -1077,6 +1187,7 @@ DWORD WINAPI HookThread(LPVOID) {
      * Always restore the user's visible taskbars when the tool exits.
      */
     SetTaskbarVisibility(true);
+    DestroySystemMessageWindow();
 
     g_refreshPosted.store(
         false,
@@ -1255,11 +1366,17 @@ void WhTool_ModSettingsChanged() {
     LoadSettings();
 
     /*
+     * Native taskbar auto-hide is a system setting, so refresh it here
+     * rather than on every foreground/minimize event.
+     */
+    RefreshNativeTaskbarAutoHideState();
+
+    /*
      * Apply settings immediately instead of waiting for a timer tick.
      * In particular, this restores secondary taskbars when the setting
      * changes from ON to OFF while the desktop is already active.
      */
-    RequestStateRefresh(true);
+    RequestStateRefresh(false);
 }
 
 
@@ -1509,14 +1626,8 @@ void Wh_ModAfterInit() {
         1
     ];
 
-    /*
-     * MinGW's swprintf_s requires the destination buffer size.
-     * The previous version omitted it, which caused the PR build
-     * to fail on the Windhawk compiler.
-     */
     swprintf_s(
         commandLine,
-        ARRAYSIZE(commandLine),
         L"\"%s\" -tool-mod \"%s\"",
         currentProcessPath,
         WH_MOD_ID
