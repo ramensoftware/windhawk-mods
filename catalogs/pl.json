@@ -8307,6 +8307,35 @@
         "version": "2.0.1"
       }
     },
+    "mix-files-and-folders-sorting": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787948678000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787948678000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Extremenis",
+        "compilerOptions": "-lole32 -lshlwapi",
+        "description": "Interleave files and folders when sorting Explorer by any column, instead of always grouping all folders before (or after) all files",
+        "github": "https://github.com/Extremenis",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Mix Files and Folders When Sorting in Windows Explorer",
+        "version": "1.5"
+      }
+    },
     "modern-notepad-to-classic-editor": {
       "details": {
         "defaultSorting": 2466,

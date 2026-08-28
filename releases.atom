@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-26T12:21:32.000Z</updated>
+    <updated>2026-08-28T20:24:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mix Files and Folders When Sorting in Windows Explorer 1.5]]></title>
+        <id>https://windhawk.net/mods/mix-files-and-folders-sorting#e087a203889a8e5c177ae18722c883f09559b5b1</id>
+        <link href="https://windhawk.net/mods/mix-files-and-folders-sorting"/>
+        <updated>2026-08-28T20:24:38.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/XVMBh65.png" alt="MixFilesAndFolders" /></p>
+<h1 id="mixfilesandfolderswhensorting">Mix files and folders when sorting</h1>
+<p>Windows Explorer always lists all folders before (or after, when sorting
+descending) all files, regardless of which column is sorted by. This is
+hardcoded shell behavior, not a UI setting, and it's independent from
+"Group by".</p>
+<p>This mod removes that separation: a folder and a file are compared according
+to the selected column's value (name, date, …) instead of the folder
+automatically winning. Folder-vs-folder and file-vs-file comparisons are left
+to the shell untouched, so Explorer's own ordering still applies there.</p>
+<p>Only real directories count as folders here. Items that Explorer shows as
+browsable but stores as files — <code>.zip</code> and other compressed folders, folder
+shortcuts — are treated as files, which is what stock Explorer does for its
+folders-first rule too.</p>
+<h2 id="scope">Scope</h2>
+<p>This only affects regular file-system folders (the <code>CFSFolder</code> shell object,
+i.e. anything you'd browse to on disk). Special views such as Libraries,
+"This PC", and search results use different, independent shell folder
+implementations that this mod doesn't touch, so folders may still be grouped
+first there. The Desktop is a composite view that delegates comparisons
+between two file-system items to the backing <code>CFSFolder</code>, so desktop icon
+sorting is affected.</p>
+<p>The mod is also scoped to <code>explorer.exe</code> only, so common file/save dialogs in
+other applications — which use the same <code>CFSFolder</code> implementation, just in
+a different process — keep the default folders-first ordering.</p>
+<p>Sorting by Size is left to the shell entirely. Folders report an empty size, so
+that column never interleaved on its own, and
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp"><code>explorer-details-better-file-sizes</code></a>
+already owns it — see below.</p>
+<p>Sorting by Type does not interleave either, for a different reason: the Type
+column carries <code>PKEY_ItemTypeText</code> ("File folder", "Application extension"),
+which isn't one of <code>CFSFolder</code>'s columns at all — Explorer sorts it outside
+<code>CFSFolder::CompareIDs</code>, so the folders-first grouping there is out of this
+mod's reach.</p>
+<h2 id="interactionwithexplorerdetailsbetterfilesizes">Interaction with <code>explorer-details-better-file-sizes</code></h2>
+<p><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp"><code>explorer-details-better-file-sizes</code></a>
+hooks the same <code>CFSFolder::CompareIDs</code> function and has its own
+"Mix files and folders when sorting by size" setting (<code>sortSizesMixFolders</code>,
+on by default). Both hooks delegate to the original for anything they don't
+handle, so they chain rather than fight: that mod handles the Size column,
+this one handles the rest.</p>
+<p>To keep that clean, this mod returns the Size column to the original
+comparison untouched. That mod's <code>sortSizesMixFolders</code> setting therefore stays
+authoritative for Size whether it's on or off, and the result no longer depends
+on which mod's hook happens to run first.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<p>The shell's own file-vs-file comparison and this mod's folder-vs-file
+comparison are separate pieces of code, so they can disagree at the margins
+and place a folder in a spot that looks slightly off relative to nearby
+files. Known cases: date columns reported as <code>VT_DATE</code> are compared as a
+double (~ms resolution) where the shell compares <code>FILETIME</code> at 100 ns;
+locale collation of punctuation or accented characters may differ; and a
+blank value is sorted before any present value, which the shell doesn't
+necessarily do for sparsely-populated columns (Date taken, Length,
+Dimensions).</p>
+<h2 id="creditrelatedmod">Credit / related mod</h2>
+<p>The <code>CFSFolder</code> hooking scaffolding (symbol hook, hook lifetime tracking,
+<code>CompareIDs</code> hook skeleton) is derived from m417z's
+<code>explorer-details-better-file-sizes</code>, which is licensed under GPLv3; this mod
+is licensed under GPLv3 for that reason.</p>]]></content>
+        <author>
+            <name>Extremenis</name>
+            <uri>https://github.com/Extremenis</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icon Selection Style 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-icon-selection-style#094b5d25a17c63b8b5ce9cd7f4d527bbdd66f10d</id>
@@ -1205,51 +1275,6 @@ example - are outside the reach of an in-process hook and keep the system colors
         <author>
             <name>Saber Naeemi</name>
             <uri>https://github.com/sabergraphics</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.16.0]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#e9237a6f4eb990817987ed34d41c00842f43dadd</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-08-10T18:32:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="snapsentry">SnapSentry</h1>
-<p>Watches your Windows <strong>Screenshots</strong> folder, wherever it is, and handles new
-screenshots as they are saved. Copy the image, delete the file after a delay, or
-choose what to do from a notification.</p>
-<p><img src="https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png" alt="The SnapSentry notification" /></p>
-<h2 id="clipboardmodes">Clipboard modes</h2>
-<ul>
-<li><strong>Image</strong> copies the picture so it stays pasteable even after the file is deleted.</li>
-<li><strong>File</strong> copies the file for pasting into File Explorer. Deletion is disabled.</li>
-<li><strong>Path</strong> copies the full path as text. You can pick plain text, a quoted path, a
-file link, or a Markdown image link, which is handy for pasting a screenshot
-straight into notes or a bug report. Deletion is disabled.</li>
-<li><strong>None</strong> leaves the clipboard unchanged.</li>
-</ul>
-<h2 id="naming">Naming</h2>
-<p>You can have SnapSentry rename each new screenshot from the window that was in
-front when it was taken, together with a timestamp, so a file ends up named for
-what it shows instead of Screenshot (1). The file stays in the same folder.</p>
-<h2 id="thenotification">The notification</h2>
-<p>The popup is a real Windows notification, so it matches your light or dark theme.
-While the popup is turned on, SnapSentry registers itself with Windows so the
-notification buttons work, and turning the popup off or disabling the mod removes
-that registration again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. If you have turned its notifications off, it takes that as a
-cue to stay quiet: it still copies to the clipboard but shows no dialog and never
-auto deletes.</p>
-<h2 id="privacy">Privacy</h2>
-<p>SnapSentry treats any supported image written into the watched folder within the
-last few seconds as a new screenshot. Files that were already there, and copies of
-older images dragged in or synced from another device, are left alone. A brand new
-file saved or downloaded straight into the folder cannot be told apart from a
-capture, so avoid pointing the folder at a place where downloads land. By default a
-deleted screenshot goes to the Recycle Bin so it can be restored; if you turn that
-off, deletion is permanent. Deleting a screenshot does not remove copies already
-stored in clipboard history, cloud sync, backups, or other programs.</p>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
