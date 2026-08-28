@@ -1,3 +1,8 @@
+## 2.2.0 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/802bccd599b938159d1bfa5cbcacac3b7ba50cc9/mods/win7-action-center-recreation.wh.cpp))
+
+- Improved the positioning of the flyout
+- Mitigated the issue where bottom-row system tray icons became unclickable on multi-row taskbars by ensuring flyout hook checks for taskbar bounds before being closed
+
 ## 2.1.0 ([Aug 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f1803eb78a36c6578c05d1fc6c35d68473f8cfc/mods/win7-action-center-recreation.wh.cpp))
 
 - Fixed an icon inaccuracy

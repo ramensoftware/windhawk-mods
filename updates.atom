@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-28T13:13:38.000Z</updated>
+    <updated>2026-08-28T13:17:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.2.0]]></title>
+        <id>https://windhawk.net/mods/win7-action-center-recreation#802bccd599b938159d1bfa5cbcacac3b7ba50cc9</id>
+        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
+        <updated>2026-08-28T13:17:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the positioning of the flyout</li>
+<li>Mitigated the issue where bottom-row system tray icons became unclickable on multi-row taskbars by ensuring flyout hook checks for taskbar bounds before being closed</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SnapSentry 0.18.8]]></title>
         <id>https://windhawk.net/mods/snap-sentry#d2af22192847759b3de9d7df43f2364b75331c58</id>
@@ -1039,21 +1053,6 @@ In these cases, please use the Windows Default Apps settings to make your change
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.31]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-separators#100b6facb46b006fcd0130731c41900695665eba</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
-        <updated>2026-08-22T14:58:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added middle-click only add / remove logic for better compatibility in cases where context menu interaction isn't available (#5148)</li>
-<li>Support for custom alpha &amp; brightness values (#5156)</li>
-<li>Optional <code>Icon Rotation</code> setting for vertical taskbar compatibility</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
