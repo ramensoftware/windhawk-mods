@@ -2,12 +2,12 @@
 // @id              vlc-pip-toggle
 // @name            VLC One-Key PiP
 // @description     VLC PiP with F8 / Ctrl+Alt+V, title-bar double-click, dragging and resizing.
-// @version         4.1
+// @version         4.2
 // @author          Maverick1254
 // @github          https://github.com/Desmond1254
 // @include         explorer.exe
 // @compilerOptions -luser32
-// @license         nil
+// @license         MIT
 // ==/WindhawkMod==
 
 #include <windows.h>
