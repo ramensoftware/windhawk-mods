@@ -226,6 +226,7 @@ bool HookThumbnailCache(HMODULE module) {
         return false;
     }
 
+    // thumbcache.dll / windows.storage.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
