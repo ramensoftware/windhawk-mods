@@ -45,12 +45,17 @@ selected. Among those, detection goes:
    unidentified tray button would open whatever it happens to be.
 
 ## Notes
+- Windows 11 only. The class names this mod identifies the chevron by are
+  Windows 11 shell types, so on Windows 10 nothing is identified and the mod
+  does nothing.
 - If the chevron is not identified, the mod logs every tray candidate it saw
   (class name, AutomationId, position, name). That log is what to attach to a
   bug report.
 - Updating the mod does not change settings you have already saved. If you saved
-  settings before v1.7.0, reset "Chevron name keywords" to pick up the new
-  defaults.
+  settings before v1.7.0 and your language is missing, delete every entry under
+  "Chevron name keywords" and save: an empty list restores the built-in one.
+- Set "Hover delay" to a small value (e.g. 150 ms) if the flyout opens when you
+  only brush past the chevron on the way to the clock.
 - If auto-collapse does not work, the flyout window class name may differ on your
   build. Change it in the "Flyout window class" setting.
 - Windows shows a "Hide" tooltip over the chevron while the flyout is open, which
@@ -94,12 +99,18 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
    nierozpoznanego przycisku zasobnika otworzyłoby cokolwiek, czym on jest.
 
 ### Uwagi
+- Tylko Windows 11. Nazwy klas, po których rozpoznawana jest strzałka, to typy
+  powłoki Windows 11, więc w Windows 10 nic nie zostanie rozpoznane i mod nie
+  robi nic.
 - Gdy strzałka nie zostanie rozpoznana, mod zapisuje w logu wszystkich
   kandydatów z zasobnika (nazwa klasy, AutomationId, pozycja, nazwa). To ten log
   warto dołączyć do zgłoszenia błędu.
 - Aktualizacja moda nie zmienia ustawień, które zostały już zapisane. Jeśli
-  zapisywałeś ustawienia przed wersją 1.7.0, przywróć domyślne w polu „Słowa
-  kluczowe nazwy strzałki", aby otrzymać nową listę.
+  zapisywałeś ustawienia przed wersją 1.7.0, a brakuje Twojego języka, usuń
+  wszystkie pozycje w polu „Słowa kluczowe nazwy strzałki" i zapisz: pusta lista
+  przywraca wbudowaną.
+- Ustaw „Opóźnienie otwierania" na niewielką wartość (np. 150 ms), jeśli schowek
+  otwiera się przy samym przejeżdżaniu obok strzałki w drodze do zegara.
 - Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
   Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".
 - Gdy schowek jest otwarty, Windows pokazuje nad strzałką podpowiedź „Ukryj",
@@ -124,6 +135,11 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   $name:pl-PL: Częstotliwość sprawdzania (ms)
   $description: How often to check the cursor position. Lower = smoother, more CPU.
   $description:pl-PL: Co ile sprawdzać pozycję kursora. Mniej = płynniej, większe użycie CPU.
+- hoverDelay: 0
+  $name: Hover delay (ms)
+  $name:pl-PL: Opóźnienie otwierania (ms)
+  $description: How long the cursor must stay on the chevron before the flyout opens. 0 opens immediately; a small value stops the flyout from opening when you only brush past the chevron on the way to the clock.
+  $description:pl-PL: Jak długo kursor musi pozostać na strzałce, zanim schowek się otworzy. 0 otwiera natychmiast, a niewielka wartość zapobiega otwieraniu przy samym przejeżdżaniu obok strzałki w drodze do zegara.
 - grace: 200
   $name: Collapse delay (ms)
   $name:pl-PL: Opóźnienie zwijania (ms)
@@ -170,10 +186,10 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   $description: Window class of the chevron tooltip, hidden only when "Hide the chevron tooltip" is enabled. Change it if hiding does not work on your build.
   $description:pl-PL: Klasa okna podpowiedzi strzałki, ukrywanej tylko gdy włączono „Ukryj podpowiedź strzałki". Zmień ją, jeśli ukrywanie nie działa na Twojej kompilacji.
 - trayIconAutomationId: SystemTrayIcon
-  $name: Tray icon AutomationId (fallback)
-  $name:pl-PL: AutomationId ikony zasobnika (mechanizm zapasowy)
-  $description: Used only when the chevron is not matched by name. The leftmost tray button with this AutomationId is then assumed to be the chevron.
-  $description:pl-PL: Używane tylko, gdy strzałki nie uda się dopasować po nazwie. Za strzałkę uznawany jest wtedy pierwszy od lewej przycisk zasobnika o tym AutomationId.
+  $name: Chevron AutomationId
+  $name:pl-PL: AutomationId strzałki
+  $description: The AutomationId paired with "Chevron class name" to identify the chevron. It also tells tray elements apart from taskbar buttons. Change it if a future Windows build renames it.
+  $description:pl-PL: AutomationId strzałki, używane razem z powyższą nazwą klasy. Służy też do odróżnienia elementów zasobnika od przycisków aplikacji na pasku zadań.
 */
 // ==/WindhawkModSettings==
 
@@ -182,6 +198,7 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
 #include <uiautomation.h>
 #include <atomic>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifndef __IUIAutomation_FWD_DEFINED__
@@ -191,6 +208,7 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
 struct Settings {
     bool autoClose = true;
     int pollInterval = 50;
+    int hoverDelay = 0;
     int grace = 200;
     int pad = 4;
     bool hideTooltip = false;
@@ -235,7 +253,13 @@ struct Settings {
 
 // UIA class names of tray elements all share this prefix, which is what makes
 // it possible to exclude the rest of the taskbar from the search.
-static const std::wstring TRAY_CLASS_PREFIX = L"SystemTray.";
+// Every tray element's class name starts with this; taskbar buttons do not.
+static constexpr std::wstring_view TRAY_CLASS_PREFIX = L"SystemTray.";
+
+// Some builds are reported to expose the chevron with this AutomationId instead
+// of the configured one. Accepting both costs nothing, because the class name
+// plus AutomationId pair is only used when exactly one element matches it.
+static constexpr std::wstring_view CHEVRON_AUTOMATION_ID_ALT = L"ChevronButton";
 
 // g_settings is guarded by g_settingsLock; the worker thread keeps a private
 // snapshot and refreshes it when g_settingsGeneration changes, so it never
@@ -316,7 +340,8 @@ static void DoCollapse(IUIAutomationElement* e) {
 // ---- Locating the chevron button ----
 
 static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
-                                                const Settings& s) {
+                                                const Settings& s,
+                                                bool logCandidates) {
     HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTaskbar) return nullptr;
 
@@ -327,6 +352,21 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     VARIANT v; VariantInit(&v);
     v.vt = VT_I4; v.lVal = UIA_ButtonControlTypeId;
     pAuto->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &pCond);
+
+    // Reading five properties per button one at a time is one cross-process call
+    // each, i.e. a few hundred round trips per walk. A cache request collapses
+    // them into the single FindAllBuildCache call. The default element mode is
+    // Full, so the returned elements still support GetCurrentPatternAs, which is
+    // what DoExpand and DoCollapse need.
+    IUIAutomationCacheRequest* pCache = nullptr;
+    if (SUCCEEDED(pAuto->CreateCacheRequest(&pCache)) && pCache) {
+        pCache->AddProperty(UIA_ClassNamePropertyId);
+        pCache->AddProperty(UIA_AutomationIdPropertyId);
+        pCache->AddProperty(UIA_NamePropertyId);
+        pCache->AddProperty(UIA_IsOffscreenPropertyId);
+        pCache->AddProperty(UIA_BoundingRectanglePropertyId);
+    }
+    const bool cached = (pCache != nullptr);
 
     // The Shell_TrayWnd subtree contains every taskbar button: Start, Search,
     // the task list entries, and only then the tray. Candidates are therefore
@@ -355,19 +395,23 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     std::vector<Candidate> cands;
 
     IUIAutomationElementArray* pArr = nullptr;
-    if (pCond && SUCCEEDED(pRoot->FindAll(TreeScope_Subtree, pCond, &pArr)) && pArr) {
+    HRESULT hrFind = pCond
+        ? (cached ? pRoot->FindAllBuildCache(TreeScope_Subtree, pCond, pCache, &pArr)
+                  : pRoot->FindAll(TreeScope_Subtree, pCond, &pArr))
+        : E_FAIL;
+    if (SUCCEEDED(hrFind) && pArr) {
         int n = 0; pArr->get_Length(&n);
         for (int i = 0; i < n; i++) {
             IUIAutomationElement* e = nullptr;
             if (FAILED(pArr->GetElement(i, &e)) || !e) continue;
 
             BSTR cls = nullptr;
-            e->get_CurrentClassName(&cls);
+            if (cached) e->get_CachedClassName(&cls); else e->get_CurrentClassName(&cls);
             std::wstring className = cls ? cls : L"";
             if (cls) SysFreeString(cls);
 
             BSTR aid = nullptr;
-            e->get_CurrentAutomationId(&aid);
+            if (cached) e->get_CachedAutomationId(&aid); else e->get_CurrentAutomationId(&aid);
             std::wstring automationId = aid ? aid : L"";
             if (aid) SysFreeString(aid);
 
@@ -375,24 +419,27 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
             // is discarded before any name or position test is applied. Without
             // this, a task list button (named after its window title) could
             // match a keyword and then be invoked.
-            bool isTrayElement =
-                className.compare(0, TRAY_CLASS_PREFIX.size(), TRAY_CLASS_PREFIX) == 0 ||
-                automationId == s.trayIconAutomationId;
+            bool isTrayElement = className.starts_with(TRAY_CLASS_PREFIX) ||
+                                 automationId == s.trayIconAutomationId ||
+                                 automationId == CHEVRON_AUTOMATION_ID_ALT;
             if (!isTrayElement) { e->Release(); continue; }
 
             // Elements that are not rendered report an empty {0,0,0,0}
             // rectangle, which would otherwise pass every geometric test.
             BOOL offscreen = FALSE;
             RECT r{};
-            if (FAILED(e->get_CurrentIsOffscreen(&offscreen)) || offscreen ||
-                FAILED(e->get_CurrentBoundingRectangle(&r)) ||
+            HRESULT hrOff = cached ? e->get_CachedIsOffscreen(&offscreen)
+                                   : e->get_CurrentIsOffscreen(&offscreen);
+            HRESULT hrRect = cached ? e->get_CachedBoundingRectangle(&r)
+                                    : e->get_CurrentBoundingRectangle(&r);
+            if (FAILED(hrOff) || offscreen || FAILED(hrRect) ||
                 r.right <= r.left || r.bottom <= r.top) {
                 e->Release();
                 continue;
             }
 
             BSTR nm = nullptr;
-            e->get_CurrentName(&nm);
+            if (cached) e->get_CachedName(&nm); else e->get_CurrentName(&nm);
             std::wstring name = nm ? nm : L"";
             if (nm) SysFreeString(nm);
 
@@ -400,6 +447,7 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
         }
         pArr->Release();
     }
+    if (pCache) pCache->Release();
     if (pCond) pCond->Release();
     pRoot->Release();
 
@@ -411,7 +459,8 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     int classMatches = 0, firstClassMatch = -1;
     for (size_t i = 0; i < cands.size(); i++) {
         if (cands[i].className == s.chevronClass &&
-            cands[i].automationId == s.trayIconAutomationId) {
+            (cands[i].automationId == s.trayIconAutomationId ||
+             cands[i].automationId == CHEVRON_AUTOMATION_ID_ALT)) {
             classMatches++;
             if (firstClassMatch < 0) firstClassMatch = (int)i;
         }
@@ -451,7 +500,9 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
 
     // Nothing identified: dump the candidates so that a single log makes the
     // next unsupported build actionable, and do not touch anything.
-    if (chosen < 0) {
+    // Logged once per failure streak: the retry runs every few seconds, and
+    // repeating the whole table would bury the rest of the log.
+    if (chosen < 0 && logCandidates) {
         Wh_Log(L"Chevron not identified among %d tray candidates:", (int)cands.size());
         for (size_t i = 0; i < cands.size(); i++) {
             Wh_Log(L"  [%d] class=%s aid=%s x=%d name=%s", (int)i,
@@ -486,9 +537,21 @@ static const ULONGLONG IDLE_STATE_CHECK_MS = 500;
 // window's visibility is the only reliable state signal. Returns the window
 // handle if the flyout is open, or nullptr otherwise. Resolving the handle
 // once per tick lets callers reuse it instead of each calling FindWindowW.
-static HWND GetVisibleFlyout(const Settings& s) {
-    HWND f = FindWindowW(s.flyoutClass.c_str(), nullptr);
-    return (f && IsWindowVisible(f)) ? f : nullptr;
+// Only windows owned by the taskbar count. The class is user-settable, so a
+// user pointing it at a more generic class must not make the mod track another
+// application's window.
+static HWND GetVisibleFlyout(const Settings& s, DWORD taskbarPid) {
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, s.flyoutClass.c_str(), nullptr))) {
+        if (!IsWindowVisible(h)) continue;
+        if (taskbarPid) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(h, &pid);
+            if (pid != taskbarPid) continue;
+        }
+        return h;
+    }
+    return nullptr;
 }
 
 static bool PtOverWindow(HWND hwnd, POINT pt) {
@@ -504,13 +567,12 @@ static bool PtOverWindow(HWND hwnd, POINT pt) {
 // popup host, so only windows positioned over the chevron (horizontally
 // overlapping it and sitting at or above its top, i.e. inside the flyout zone)
 // are hidden — never popups elsewhere on screen.
-static void HideChevronTooltip(const Settings& s, const RECT& chevron) {
-    // The tooltip class is the generic WinUI popup host, used by many apps, so
-    // only windows owned by the taskbar's own process are eligible. Without
-    // this, another application's popup could be hidden with no way for the
-    // user to bring it back.
-    DWORD taskbarPid = 0;
-    GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &taskbarPid);
+// The tooltip class is the generic WinUI popup host, used by many apps, so only
+// windows owned by the taskbar's own process are eligible. Without that check,
+// another application's popup could be hidden with no way for the user to bring
+// it back.
+static void HideChevronTooltip(const Settings& s, const RECT& chevron,
+                               DWORD taskbarPid) {
     if (!taskbarPid) return;
 
     HWND h = nullptr;
@@ -529,11 +591,13 @@ static void HideChevronTooltip(const Settings& s, const RECT& chevron) {
     }
 }
 
-// True when the foreground window covers its whole monitor, i.e. a fullscreen
-// app (a fullscreen video, a game, etc.). Maximized windows stop at the work
-// area and therefore do not match. The desktop and shell windows are excluded
-// so an empty desktop is not mistaken for a fullscreen app.
-static bool IsForegroundFullscreen() {
+// True when the foreground window covers the whole monitor that the chevron is
+// on, i.e. a fullscreen app (a fullscreen video, a game, etc.) whose content the
+// flyout would pop up over. Maximized windows stop at the work area and
+// therefore do not match, and a fullscreen app on another monitor does not
+// suppress a taskbar that is fully visible here. The desktop and shell windows
+// are excluded so an empty desktop is not mistaken for a fullscreen app.
+static bool IsFullscreenOverChevron(const RECT& chevron) {
     HWND hwnd = GetForegroundWindow();
     if (!hwnd || hwnd == GetShellWindow()) return false;
 
@@ -546,12 +610,13 @@ static bool IsForegroundFullscreen() {
         }
     }
 
+    HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (mon != MonitorFromRect(&chevron, MONITOR_DEFAULTTONEAREST)) return false;
+
     RECT wr;
     if (!GetWindowRect(hwnd, &wr)) return false;
     MONITORINFO mi = { sizeof(mi) };
-    if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
-        return false;
-    }
+    if (!GetMonitorInfoW(mon, &mi)) return false;
     return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
            wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
 }
@@ -585,8 +650,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     ULONGLONG nextRefind = 0;
     ULONGLONG nextRectRefresh = 0;
     ULONGLONG nextIdleStateCheck = 0;
-    ULONGLONG lastOpenAt = 0;
+    ULONGLONG lastActionAt = 0;
+    ULONGLONG insideSince = 0;
+    DWORD taskbarPid = 0;
     bool overBtnPrev = false;
+    bool dwellFired = false;
+    bool loggedCandidates = false;
     bool clickedInFlyout = false;
     bool anyBtnDownPrev = false;
 
@@ -605,6 +674,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             if (pBtn) { pBtn->Release(); pBtn = nullptr; }
             haveRect = false;
             nextRefind = 0;
+            loggedCandidates = false;
         }
 
         // Lazily (re-)find the button only when we don't have a valid one. A
@@ -614,23 +684,41 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         // When the chevron is absent (e.g. no hidden icons), throttle retries
         // to REFIND_INTERVAL_MS instead of walking the tree every tick.
         if (!pBtn && now >= nextRefind) {
-            pBtn = FindOverflowButton(pAuto, s);
+            bool logNow = !loggedCandidates;
+            pBtn = FindOverflowButton(pAuto, s, logNow);
+            loggedCandidates = pBtn ? false : (loggedCandidates || logNow);
             nextRefind = now + REFIND_INTERVAL_MS;
             nextRectRefresh = 0;        // force a fresh rectangle below
+            taskbarPid = 0;
+            GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr),
+                                     &taskbarPid);
         }
 
         if (pBtn) {
             // Expensive and RARE: query the button rectangle through UIA only
             // periodically, not every tick. The chevron rarely moves.
             if (now >= nextRectRefresh) {
-                RECT r;
-                if (SUCCEEDED(pBtn->get_CurrentBoundingRectangle(&r))) {
+                // An element that is alive but not currently rendered (the
+                // taskbar auto-hid, or the last hidden icon was removed) returns
+                // S_OK with an empty rectangle rather than an error. Keeping it
+                // would turn the top-left corner of the screen into a hover
+                // hotspot, and the alternating valid/empty rectangle under a
+                // stationary cursor is what makes the flyout cycle open and
+                // closed. Treat it exactly like a stale element.
+                RECT r{};
+                BOOL offscreen = FALSE;
+                if (SUCCEEDED(pBtn->get_CurrentBoundingRectangle(&r)) &&
+                    r.right > r.left && r.bottom > r.top &&
+                    SUCCEEDED(pBtn->get_CurrentIsOffscreen(&offscreen)) &&
+                    !offscreen) {
                     cachedRect = r;
                     haveRect = true;
                 } else {
-                    // The element is stale/destroyed (taskbar rebuilt). Drop it
-                    // and re-find promptly on the next tick.
-                    pBtn->Release(); pBtn = nullptr; haveRect = false;
+                    pBtn->Release(); pBtn = nullptr;
+                    haveRect = false;
+                    overBtnPrev = false;    // stale once the button is gone
+                    insideSince = 0;
+                    dwellFired = false;
                     nextRefind = 0;
                     WaitForSingleObject(g_stopEvent, s.pollInterval);
                     continue;
@@ -643,8 +731,20 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // Cheap and EVERY TICK: only local Win32 calls.
             POINT pt; GetCursorPos(&pt);
             bool overBtn = PtInRectPad(cachedRect, pt, s.pad);
-            bool cooling = (now - lastOpenAt < ACTION_COOLDOWN_MS);
-            bool enterEdge = overBtn && !overBtnPrev && !cooling;
+            bool cooling = (now - lastActionAt < ACTION_COOLDOWN_MS);
+
+            // The cursor must remain on the chevron for the hover delay before
+            // the flyout opens, and each stay produces at most one attempt. With
+            // the default delay of 0 this is the plain enter edge.
+            if (!overBtn) {
+                insideSince = 0;
+                dwellFired = false;
+            } else if (!overBtnPrev) {
+                insideSince = now;
+                dwellFired = false;
+            }
+            bool enterEdge = overBtn && !dwellFired && !cooling &&
+                             now - insideSince >= (ULONGLONG)s.hoverDelay;
 
             // The flyout state is only needed on the cursor-enter edge (to
             // avoid toggling an open flyout closed) and while auto-collapse is
@@ -656,9 +756,9 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                           || (s.autoClose && flyoutBelievedOpen)
                           || (s.hideTooltip && overBtn);
             if (wantState) {
-                flyoutHwnd = GetVisibleFlyout(s);
+                flyoutHwnd = GetVisibleFlyout(s, taskbarPid);
             } else if (s.autoClose && now >= nextIdleStateCheck) {
-                flyoutHwnd = GetVisibleFlyout(s);
+                flyoutHwnd = GetVisibleFlyout(s, taskbarPid);
                 nextIdleStateCheck = now + IDLE_STATE_CHECK_MS;
             }
             bool flyoutVisible = (flyoutHwnd != nullptr);
@@ -667,7 +767,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // While hovering the chevron of an open flyout, suppress the
             // "Hide" tooltip that would otherwise cover the bottom icons.
             if (s.hideTooltip && overBtn && flyoutVisible) {
-                HideChevronTooltip(s, cachedRect);
+                HideChevronTooltip(s, cachedRect, taskbarPid);
             }
 
             // Open only on the cursor-enter edge and only when the flyout is
@@ -677,13 +777,15 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // taskbar is hidden there, but the cached chevron rect still matches
             // that screen area). Checked only on the edge, so it costs nothing
             // on idle ticks.
-            if (enterEdge && !flyoutVisible &&
-                !(s.suppressInFullscreen && IsForegroundFullscreen())) {
-                DoExpand(pBtn);
-                lastOpenAt = now;
-                flyoutBelievedOpen = true;
-                leftAt = 0;
-                Wh_Log(L"OPEN");
+            if (enterEdge && !flyoutVisible) {
+                dwellFired = true;      // at most one attempt per stay
+                if (!(s.suppressInFullscreen && IsFullscreenOverChevron(cachedRect))) {
+                    DoExpand(pBtn);
+                    lastActionAt = now;
+                    flyoutBelievedOpen = true;
+                    leftAt = 0;
+                    Wh_Log(L"OPEN");
+                }
             }
             overBtnPrev = overBtn;
 
@@ -713,7 +815,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 } else if (leftAt == 0) {
                     leftAt = now;
                 } else if (now - leftAt >= (ULONGLONG)s.grace) {
+                    // The collapse is a second Invoke, i.e. a toggle, and the
+                    // flyout does not disappear instantly. Without arming the
+                    // cooldown here, the next ticks would still see it open and
+                    // invoke the chevron again, re-opening what was just closed.
                     DoCollapse(pBtn);
+                    lastActionAt = now;
                     leftAt = 0;
                     flyoutBelievedOpen = false;
                     Wh_Log(L"CLOSE after grace");
@@ -741,12 +848,14 @@ static void LoadSettings() {
 
     s.autoClose = Wh_GetIntSetting(L"autoClose") != 0;
     s.pollInterval = (int)Wh_GetIntSetting(L"pollInterval");
+    s.hoverDelay = (int)Wh_GetIntSetting(L"hoverDelay");
     s.grace = (int)Wh_GetIntSetting(L"grace");
     s.pad = (int)Wh_GetIntSetting(L"pad");
     s.hideTooltip = Wh_GetIntSetting(L"hideTooltip") != 0;
     s.suppressInFullscreen = Wh_GetIntSetting(L"suppressInFullscreen") != 0;
     s.positionalFallback = Wh_GetIntSetting(L"positionalFallback") != 0;
     if (s.pollInterval < 10) s.pollInterval = 10;
+    if (s.hoverDelay < 0) s.hoverDelay = 0;
     if (s.grace < 0) s.grace = 0;
 
     // Wh_GetStringSetting never returns NULL (it returns L"" on unset/error),
