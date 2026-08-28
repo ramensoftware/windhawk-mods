@@ -25,7 +25,7 @@ This mod restores a selection of classic Control Panel applets and task links in
 * Tablet PC Settings
 * Text to Speech
 
-This mod aims to restore Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
+This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
 
 The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
 
@@ -45,14 +45,19 @@ This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, a
 
 HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
-BitLocker Drive Encryption, Tablet PC Settings, and Text to Speech are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attemping to prevent duplicate entries because their visibility may vary based on the used Windows build.
+BitLocker Drive Encryption, Tablet PC Settings, and Text to Speech are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attempting to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
 If the automatic detection proves incorrect for a particular edition, each of the two applets offers an override: **Always add** or **Never add**. It should be noted that "Always add" has no effect when the applet is not actually installed (e.g., on Windows Home), as the entry would lack a name, icon, and target.
+
+Additionally, the mod includes the **"Unhide legacy applets"** option (enabled by default) which restores the applets that Windows still ships but hides from Control Panel (Personalization, BitLocker Drive Encryption, Text to Speech, System, etc) instead of showing this mod's virtual re-creations of them.
+
+**The virtual entries stay as a fallback**. They are not deleted, only hidden, and they come back if the real applet is missing, not found, or not listed. This setting can never remove anything from Control Panel. At worst, the virtual entry is used instead.
+
+The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**, the two mods are complementary and no longer overlap (see below).
 
 **⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
 
 The mod does not commit to restore task links that would open the Settings app rather than the classic Control Panel interface, as doing so would be contrary to the mod's objective of preserving the traditional Control Panel experience.
-
 
 **Recommendation**: For a better experience on Windows 10 and Windows 11, it is recommended to pair this mod with some of the hereby suggested implementations:
 
@@ -62,8 +67,13 @@ The mod does not commit to restore task links that would open the Settings app r
 - **[Classic Display Control Panel Restorer](https://windhawk.net/mods/win7-display-control-panel-restorer)** – it restores the classic Display and Screen Resolution Control Panel pages.
 - **[Windows 11 HomeGroup Restorer](https://windhawk.net/mods/win11-home-group-restorer)** – it restores the classic HomeGroup applet on Windows 11.
 - **[Windows Update Control Panel Restorer](https://windhawk.net/mods/windows-update-control-panel-restorer)** – it restores the classic Windows Update Control Panel page on Windows 10/11.
-- **[Performance Information and Tools Restorer](https://windhawk.net/mods/performance-info-tools-restorer)** – it restores the classic "Performance Information and Tools" applet
+- **[Performance Information and Tools Restorer](https://windhawk.net/mods/performance-info-tools-restorer)** – it restores the classic "Performance Information and Tools" applet.
 
+## Related mods and overlaps
+
+- **Settings to Control Panel** (`settings-to-control-panel`): It is the recommended companion. It decides *where* a Control Panel item opens by blocking the legacy-to-Settings redirect. This mod only decides *whether* an applet is listed. The split is deliberate because both mods target `explorer.exe` and hooking the same internal function caused conflicts. If you want classic pages instead of the Settings app, install that mod.
+
+- **Control Panel Revival** (`control-panel-revival`): It unhides some of the same legacy items by patching the same moniker strings. This mod does not detect it, but the patching is self-protecting, so a string already zeroed is not patched twice. Whether an applet is unhidden is determined by asking the shell, not by guessing which mod patched it.
 
 ## Credits
 
@@ -121,9 +131,9 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   - always: Always add
   - never: Never add
 
-- preventSettingsRedirect: true
+- unhideLegacyApplets: true
   $name: Unhide legacy applets
-  $description: This setting unhides the real Personalization, BitLocker, Text to Speech, and System applets in Control Panel and stops Windows 11 from redirecting them to the modern Settings app. Enabled by default so Control Panel shows these applets themselves rather than this mod's virtual re-creations of them, which are used as a fallback when the real applet can't be confirmed unhidden and redirect-free. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
+  $description: This setting restores the real Control Panel applets that Windows hides (Personalization, BitLocker, Text to Speech, System) instead of using virtual recreations. The virtual entries are not removed and reappear if the real applet is missing, not found, or not listed. This setting only decides which entry is shown, not where it opens. To keep items on classic pages, use the Settings to Control Panel mod. All changes are undone when the mod is disabled.
 
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
@@ -222,16 +232,26 @@ struct Settings {
     // metadata Explorer indexes for Control Panel search on the real CLSID,
     // and any behavior Explorer attaches to the genuine applet identity
     // (e.g. how it's referenced by other shell components) only exists on
-    // the real one. Once the guard confirms it actually unhid the applet
-    // and blocked the redirect (see guardEffective / hooksActive further
-    // down - the check was tightened specifically so this can't be a false
-    // positive), the real applet is strictly more accurate than the
-    // virtual twin standing in for it, which is why this is worth having on
-    // by default rather than opt-in: it fails closed to the proven virtual
-    // entries on any build where that confirmation doesn't happen, so
-    // enabling it by default costs nothing on a build where it can't do its
-    // job, and gives a real accuracy improvement on the builds where it can.
-    std::atomic<bool> preventSettingsRedirect;
+    // the real one.
+    //
+    // Which is why this setting exists (default true, see the $description
+    // above): it revives the real applet - it clears the moniker that keeps
+    // Windows from listing it - and Control Panel then shows the real thing
+    // instead of the approximation.
+    //
+    // The virtual entries are never deleted for that, they are only stood
+    // down, and they come back whenever the real applet cannot be confirmed:
+    // it isn't installed on this edition, the hidden-item moniker wasn't
+    // found, Windows still doesn't list it, or the shell can't answer the
+    // question. The confirmation is the shell's, not ours - once the patches
+    // have run, the lazy-detection worker asks it (IOpenControlPanel::GetPath
+    // on the "::{GUID}" moniker) whether the item is really part of the
+    // Control Panel item list now, and only a "yes" flips the gate - see
+    // g_realAppletConfirmedVisible / ConfirmUnhiddenAppletsVisible().
+    // Everything else leaves the answer at "not confirmed" and keeps the
+    // proven virtual entry, so this setting can never make an applet
+    // disappear from Control Panel: the fallback is always there.
+    std::atomic<bool> unhideLegacyApplets;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -323,16 +343,45 @@ enum LegacyUnhideMonikerIndex : size_t {
     kLegacyUnhideMonikerSystem = 3,
     kLegacyUnhideMonikerCount = 4,
 };
-// Per-applet: was THIS SPECIFIC moniker actually patched (in shell32.dll
-// and/or windows.storage.dll)? The guard's overall "is it active" flag
-// (g_legacyUnhideActive) is necessarily a single yes/no, but whether each
-// individual applet's moniker was found and zeroed is not - one applet's
-// patch can fail while another's succeeds (e.g. a future shell32 build
-// changes the Personalization string but not System's). Gating suppression
-// on this per applet, in addition to the global flag, stops a moniker that
-// silently failed to patch from taking its applet's virtual twin down with
-// it while the guard as a whole reports itself active.
+// Per-applet: was THIS SPECIFIC moniker found and zeroed (in shell32.dll
+// and/or windows.storage.dll)? Recorded for the "did the guard actually do
+// anything" check below and for the log.
+//
+// It deliberately does NOT gate VirtualTwinSuppressed() any more. Finding a
+// byte pattern and zeroing it only proves the pattern was there: the scan
+// can't tell the shell's hidden-items table from any other copy of the same
+// string, and zeroing a string is not evidence that Windows now lists the
+// applet - so a build where the match landed somewhere harmless would have
+// dropped this mod's working virtual entry without the real one taking its
+// place. What proves the applet is there is the shell saying so, which is
+// what g_realAppletConfirmedVisible below records. (It is also the wrong
+// signal in the other direction: if another mod already zeroed the same
+// moniker, our scan finds nothing yet the applet may well be unhidden.)
 static std::atomic<bool> g_monikerPatched[kLegacyUnhideMonikerCount]{};
+
+// Per-applet: did the SHELL confirm that the real applet is now part of the
+// Control Panel item list? Filled in by ConfirmUnhiddenAppletsVisible(),
+// which runs on the lazy-detection worker after the guard has been set up
+// and re-asks IOpenControlPanel::GetPath about each unhidden applet. This is
+// the actual confirmation the comments above used to claim the byte-pattern
+// check was, and it is what VirtualTwinSuppressed() gates on.
+static std::atomic<bool> g_realAppletConfirmedVisible[kLegacyUnhideMonikerCount]{};
+
+// Whether the confirmation pass has run for the guard's current state. Reset
+// (together with the flags above) whenever the guard is applied or torn
+// down, so toggling the setting re-confirms instead of reusing a verdict
+// from the previous state.
+static std::atomic<bool> g_unhideConfirmationDone{ false };
+
+// Tears the confirmation state down: every applet goes back to "not
+// confirmed", so the virtual twins are served again until the shell says
+// otherwise. Also clears the per-moniker patch records, which describe the
+// same (now previous) application of the guard.
+static void ResetUnhideConfirmation() {
+    for (auto& patched : g_monikerPatched) patched.store(false);
+    for (auto& confirmed : g_realAppletConfirmedVisible) confirmed.store(false);
+    g_unhideConfirmationDone.store(false, std::memory_order_release);
+}
 
 // Whether the REAL Personalization CLSID is registered on this machine.
 // When the legacy-applet unhide feature below unhides it, the mod's own
@@ -346,19 +395,34 @@ static std::atomic<bool> g_realSystemRegistered{ false };
 // GetNamespaceClsids, task-links XML) consult it; it is set by
 // SetupLegacyUnhide() / Wh_ModSettingsChanged and cleared in Wh_ModUninit.
 static std::atomic<bool> g_legacyUnhideActive{ false };
+// True while the worker still owes us a confirmation pass. Read by the
+// request/after-init paths below so the pass is scheduled even in the
+// (common) case where the applet-verdict detection itself is already done
+// and cached.
+inline bool UnhideConfirmationPending() {
+    return g_legacyUnhideActive.load(std::memory_order_acquire) &&
+           !g_unhideConfirmationDone.load(std::memory_order_acquire);
+}
 
 // When the legacy-applet unhide feature is active, Windows shows the real
 // applets itself (the guard unhid them), so the virtual twins this mod
 // injects for the same applets must be suppressed, otherwise the user sees
 // duplicate entries (the twin's open command is a "shell:::{...}" launch).
-// The twin is suppressed only when: the guard subsystem is active overall,
-// THIS applet's own moniker was actually patched (see g_monikerPatched -
-// the guard being active elsewhere doesn't mean this one's string was
-// found), and the real applet is actually present.
+// The twin is suppressed only when: the unhide patches were applied on this
+// build at all (g_legacyUnhideActive), the SHELL HAS CONFIRMED that
+// this specific applet is now listed in Control Panel (see
+// g_realAppletConfirmedVisible - not merely that a matching byte pattern was
+// found and zeroed), and the real applet is actually present.
+//
+// Gating on the confirmation rather than on g_monikerPatched[] is what keeps
+// this fail-closed: if Windows still hides the applet on this build, or the
+// patch matched some unrelated copy of the string, or the probe can't be
+// answered at all, this returns false and the user keeps the mod's own
+// working entry instead of losing the applet from Control Panel entirely.
 static bool VirtualTwinSuppressed(std::atomic<bool>& realPresent, size_t monikerIndex) {
     return g_legacyUnhideActive.load() &&
            monikerIndex < kLegacyUnhideMonikerCount &&
-           g_monikerPatched[monikerIndex].load() &&
+           g_realAppletConfirmedVisible[monikerIndex].load() &&
            realPresent.load();
 }
 
@@ -398,6 +462,7 @@ bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegist
 void InvalidateClassicTaskLinksFile();
 bool EnsureClassicTaskLinksFile();
 void RunLazyVirtualAppletDetection();
+void ConfirmUnhiddenAppletsVisible();
 void RequestLazyVirtualAppletDetection();
 
 // Forward declaration
@@ -873,8 +938,14 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
 // dedicated lazy-detection worker thread and returns immediately, so a
 // registry hook can never block on - or re-enter - the shell probe.
 void RequestLazyVirtualAppletDetection() {
-    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
     if (g_inShellProbeBypass) return;
+    // Wake for the unhide confirmation pass too: it is a separate piece of
+    // work with its own "done" flag, and it is pending in exactly the case
+    // where the applet-verdict detection below has nothing left to do (all
+    // verdicts cached), which is the common case after a restart.
+    if (g_lazyDetectionDone.load(std::memory_order_acquire) &&
+        !UnhideConfirmationPending())
+        return;
     if (g_lazyDetectionWakeEvent) SetEvent(g_lazyDetectionWakeEvent);
 }
 
@@ -1076,10 +1147,11 @@ struct VirtualApplet {
     // (see VirtualTwinSuppressed) so the user doesn't get duplicate entries.
     std::atomic<bool>* realPresent = nullptr;
     // Which kLegacyUnhideMonikers entry corresponds to this applet, so
-    // VirtualTwinSuppressed can check that THIS moniker (not just some
-    // moniker) was actually patched. kLegacyUnhideMonikerCount means "not part
-    // of the unhide feature" (e.g. Tablet PC Settings, which has no moniker
-    // in kLegacyUnhideMonikers and is never suppressed by the guard).
+    // VirtualTwinSuppressed can check the confirmation recorded for THIS
+    // applet (g_realAppletConfirmedVisible) rather than any other one.
+    // kLegacyUnhideMonikerCount means "not part of the unhide feature"
+    // (e.g. Tablet PC Settings, which has no moniker in
+    // kLegacyUnhideMonikers and is never suppressed by the guard).
     size_t monikerIndex = kLegacyUnhideMonikerCount;
 };
 
@@ -1743,7 +1815,7 @@ void LoadSettings() {
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
     g_settings.speechMode.store((int)ReadAppletMode(L"speechMode"));
-    g_settings.preventSettingsRedirect.store(Wh_GetIntSetting(L"preventSettingsRedirect"));
+    g_settings.unhideLegacyApplets.store(Wh_GetIntSetting(L"unhideLegacyApplets"));
     // The effective verdicts depend on both the (fixed) auto detection and the
     // (changeable) override, so they are refreshed on every settings load.
     g_injectBitlockerApplet.store(ResolveAppletInjection(
@@ -2959,6 +3031,7 @@ void InvalidateClassicTaskLinksFile() {
 //    ever unwind into Explorer's non-exception-aware call stack.
 //
 // What it does:
+//
 //  1. zeroes the hidden-applet monikers inside shell32.dll /
 //     windows.storage.dll so Windows 11 stops hiding Personalization,
 //     BitLocker Drive Encryption, Text to Speech and System. Only
@@ -2966,15 +3039,20 @@ void InvalidateClassicTaskLinksFile() {
 //     located through the PE section table (never across the whole image),
 //     and only the pages that actually contain a match are temporarily
 //     made writable;
-//  2. hooks COpenControlPanel::Open and raises a thread-local flag around
-//     the original call; while that flag is up - and only then - the
-//     CompareStringOrdinal hook breaks the redirect-to-Settings match.
-//     Scoping the override to the one function that performs the redirect
-//     decision keeps every other comparison in the process honest,
-//     including the ones that resolve the labels of this mod's own task
-//     links (e.g. "Personalization" on the classic Display page);
-//  3. hooks COpenControlPanel::_MapLegacyName so the legacy names are kept
-//     unmapped and the classic applets stay addressable by moniker.
+//  2. asks the shell (IOpenControlPanel::GetPath) whether each of those
+//     applets really is listed now, and only then lets the real applet
+//     replace this mod's virtual twin - see ConfirmUnhiddenAppletsVisible().
+//
+// What it deliberately does NOT do: block the redirect to the modern
+// Settings app (the COpenControlPanel::_MapLegacyName /
+// CompareStringOrdinal hooks). That is a separate job with a separate,
+// much longer list of items, and it is done by the "Settings to Control
+// Panel" mod - hooking the same shell32 internal from two catalog entries
+// only means the second hook re-decides what the first already decided.
+// Keeping this feature to the string patches also keeps it away from the
+// sharpest edge of that technique: a CompareStringOrdinal override perturbs
+// comparisons the shell also uses for ordered lookups, and a name blocked
+// with no classic page behind it makes explorer.exe fail with 0xC0000005.
 // ===========================================================================
 
 struct PatchRecord {
@@ -3142,21 +3220,9 @@ private:
 // earlier could leave the patch addresses pointing at unmapped memory.)
 static HMODULE g_legacyUnhideWinStorageModule = nullptr;
 
-// Master switch for the whole unhide feature: when false the two hooks below
-// pass straight through to the original functions. (g_legacyUnhideActive is
-// declared up top together with the other mod state.)
-static std::atomic<bool> g_legacyUnhideCsoHooked{ false };
-static std::atomic<bool> g_legacyUnhideMapNameHooked{ false };
-static std::atomic<bool> g_legacyUnhideOpenHooked{ false };
-// Addresses of the two shell32 functions this feature hooks manually. They are
-// resolved in Wh_ModInit by the one HookSymbols call that also resolves the
-// applet-sorting symbols - a second HookSymbols call for the same module
-// would overwrite the module's symbol cache with only the new call's
-// symbols and force a full re-resolution on every subsequent start - so
-// only the addresses are resolved there. The hooks themselves are
-// registered by SetupLegacyUnhide().
-static void* g_pLegacyUnhideMapLegacyName = nullptr;
-static void* g_pLegacyUnhideOpen = nullptr;
+// (The feature installs no hooks of its own - it is string patches plus a
+// shell probe - so there is no hook state to keep here. g_legacyUnhideActive,
+// the master switch, is declared up top together with the other mod state.)
 
 // The hidden-applet monikers to unhide (same technique also used by a
 // similar mod), narrowed to the applets this mod manages.
@@ -3174,219 +3240,35 @@ static const LPCWSTR kLegacyUnhideMonikers[] = {
 static_assert(ARRAYSIZE(kLegacyUnhideMonikers) == kLegacyUnhideMonikerCount,
               "kLegacyUnhideMonikers and LegacyUnhideMonikerIndex must stay in sync");
 
-// The canonical names whose legacy-to-modern mapping is short-circuited by
-// the _MapLegacyName hook. Trimmed to the applets this mod actually
-// restores/injects a classic entry for (Personalization, System, Display,
-// Troubleshooting, DevicesAndPrinters - see the task-links XML and the
-// applet list above). A similar mod's full list
-// also blocked the redirect for names like Microsoft.WindowsUpdate and
-// Microsoft.Fonts that this mod does not restore a classic page for; on a
-// stock Windows install that left those Control Panel items pointing at a
-// classic page that no longer exists (Windows Update being the most visible
-// case), even though the preventSettingsRedirect description only promises
-// Personalization/BitLocker/Speech/System.
-static const LPCWSTR kLegacyUnhideCanonicalNames[] = {
-    L"Microsoft.Personalization",
-    L"Microsoft.System",
-    L"Microsoft.Display",
-    L"Microsoft.Troubleshooting",
-    L"Microsoft.DevicesAndPrinters",
-};
+// A note on running alongside another mod that unhides the same items
+// (control-panel-revival patches some of the same monikers in the same two
+// modules): nothing here tries to detect it any more. Two reasons. The
+// detection this mod used to do looked for a loaded module whose file name
+// contains the other mod's id, which is a Windhawk implementation detail
+// rather than an API, and it was cached for the whole process lifetime, so a
+// mod loaded later was never noticed. And it isn't needed: string patching is
+// self-protecting - once a moniker has been zeroed, our search for it simply
+// doesn't match, so the second patcher is a no-op and no byte is patched
+// twice. Whether an applet ended up unhidden, by us or by that other mod, is
+// then answered the same way in both cases, by asking the shell (see
+// ConfirmUnhiddenAppletsVisible) instead of by guessing who patched what.
 
-// Helper function to match target strings regardless of length format
-// (same technique as a similar mod uses, renamed to avoid collisions).
-static bool IsLegacyUnhideTargetApplet(LPCWCH lpString, int cchCount) {
-    if (!lpString) return false;
-    const size_t len = (cchCount == -1) ? wcslen(lpString) : (size_t)cchCount;
-
-    for (UINT i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
-        const size_t targetLen = wcslen(kLegacyUnhideMonikers[i]);
-        if (len == targetLen && _wcsnicmp(lpString, kLegacyUnhideMonikers[i], len) == 0) {
-            return true;
-        }
-    }
-    for (UINT i = 0; i < ARRAYSIZE(kLegacyUnhideCanonicalNames); i++) {
-        const size_t targetLen = wcslen(kLegacyUnhideCanonicalNames[i]);
-        if (len == targetLen && _wcsnicmp(lpString, kLegacyUnhideCanonicalNames[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Hook for COpenControlPanel::_MapLegacyName (ported, try/catch guarded).
-// While this mod's own shell probe (IsShownByControlPanel) runs, the
-// g_inShellProbeBypass flag is set, so the probe always sees stock behaviour.
-static bool (*g_legacyUnhideMapLegacyNameOrig)(void*, LPCWSTR, LPWSTR, UINT, bool*) = nullptr;
-static bool COpenControlPanel__MapLegacyName_legacyUnhideHook(void* pThis, LPCWSTR pszLegacyName,
-                                                         LPWSTR pszNewName, UINT uUnused,
-                                                         bool* nameChanged) {
-    try {
-        if (g_legacyUnhideActive.load() && !g_inShellProbeBypass && pszLegacyName) {
-            for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideCanonicalNames); i++) {
-                if (kLegacyUnhideCanonicalNames[i] &&
-                    _wcsicmp(pszLegacyName, kLegacyUnhideCanonicalNames[i]) == 0) {
-                    if (nameChanged) *nameChanged = false;
-                    if (pszNewName && uUnused > 0) {
-                        *pszNewName = L'\0';
-                    }
-                    return false;
-                }
-            }
-        }
-        if (!g_legacyUnhideMapLegacyNameOrig) return true;
-        return g_legacyUnhideMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
-    } catch (...) {
-        Wh_Log(L"Exception in _MapLegacyName unhide hook, passing through");
-        return g_legacyUnhideMapLegacyNameOrig
-            ? g_legacyUnhideMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged)
-            : true;
-    }
-}
-
-// Set only while a thread is executing inside COpenControlPanel::Open - the
-// function that performs the redirect decision when a Control Panel item is
-// opened. The CompareStringOrdinal hook below alters results only while
-// this flag is up, so every other comparison in the process sees honest
-// results; in particular the lookups that pair a task link's canonical
-// name with the applet's localized title (e.g. "Personalization" on the
-// classic Display page) keep resolving, instead of silently losing their
-// label. Same shape as CategorySortScope / ShellProbeBypass above.
-static thread_local bool g_legacyUnhideRedirectScope = false;
-
-struct LegacyUnhideRedirectScope {
-    bool prev_ = g_legacyUnhideRedirectScope;
-    LegacyUnhideRedirectScope() { g_legacyUnhideRedirectScope = true; }
-    ~LegacyUnhideRedirectScope() { g_legacyUnhideRedirectScope = prev_; }
-    LegacyUnhideRedirectScope(const LegacyUnhideRedirectScope&) = delete;
-    LegacyUnhideRedirectScope& operator=(const LegacyUnhideRedirectScope&) = delete;
-};
-
-// CompareStringOrdinal hook (ported, try/catch guarded), scoped to the
-// redirect decision: it only takes effect while g_legacyUnhideRedirectScope is
-// set for the calling thread, which happens exclusively inside the
-// COpenControlPanel::Open hook below. Everywhere else the original
-// comparison runs untouched, so equality checks between two identical
-// applet names (or between two unrelated strings) can no longer be
-// perturbed.
-static decltype(&CompareStringOrdinal) g_legacyUnhideCompareStringOrdinalOrig = nullptr;
-static int WINAPI CompareStringOrdinal_legacyUnhideHook(LPCWCH lpString1, int cchCount1,
-                                                   LPCWCH lpString2, int cchCount2,
-                                                   BOOL bIgnoreCase) {
-    try {
-        // g_legacyUnhideRedirectScope can only be set while the guard is active
-        // (the Open hook checks), so the atomic load is evaluated only on
-        // the rare in-scope calls, never on the hot path.
-        // Never interfere with this mod's own IOpenControlPanel::GetPath probe.
-        if (g_legacyUnhideRedirectScope &&
-            g_legacyUnhideActive.load(std::memory_order_relaxed) &&
-            !g_inShellProbeBypass &&
-            (IsLegacyUnhideTargetApplet(lpString1, cchCount1) ||
-             IsLegacyUnhideTargetApplet(lpString2, cchCount2))) {
-            return CSTR_LESS_THAN; // Break redirection match
-        }
-        if (!g_legacyUnhideCompareStringOrdinalOrig) return 0;
-        return g_legacyUnhideCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
-                                                 bIgnoreCase);
-    } catch (...) {
-        Wh_Log(L"Exception in CompareStringOrdinal unhide hook, passing through");
-        return g_legacyUnhideCompareStringOrdinalOrig
-            ? g_legacyUnhideCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
-                                                bIgnoreCase)
-            : 0;
-    }
-}
-
-// Hook for COpenControlPanel::Open (IOpenControlPanel::Open, the COM entry
-// point every Control Panel launch goes through - task links, category
-// view, control.exe /name). This is where the redirect decision is made,
-// so it is also the scope within which the CompareStringOrdinal override
-// above is allowed to act: the thread-local flag is raised around the
-// original call and lowered afterwards (RAII, exception-safe).
-static HRESULT(WINAPI* g_legacyUnhideOpenOrig)(void*, LPCWSTR, void*, LPCWSTR) = nullptr;
-static HRESULT WINAPI COpenControlPanel__Open_legacyUnhideHook(void* pThis, LPCWSTR pszName,
-                                                          void* pUnkSite, LPCWSTR pszPage) {
-    try {
-        if (!g_legacyUnhideOpenOrig) return E_FAIL;
-        if (!g_legacyUnhideActive.load() || g_inShellProbeBypass) {
-            return g_legacyUnhideOpenOrig(pThis, pszName, pUnkSite, pszPage);
-        }
-        LegacyUnhideRedirectScope scope;
-        return g_legacyUnhideOpenOrig(pThis, pszName, pUnkSite, pszPage);
-    } catch (...) {
-        Wh_Log(L"Exception in COpenControlPanel::Open unhide hook");
-        return E_FAIL;
-    }
-}
-
-// Detects whether a similar mod (id: control-panel-revival, by AdmXP8) is
-// also loaded in this process. That mod maintains its own hardcoded moniker
-// list (System, Devices and Printers, Installed Updates, Default Programs,
-// Troubleshooting, Fonts) and patches shell32.dll/windows.storage.dll the
-// same way this feature does. The only actual overlap with
-// kLegacyUnhideMonikers below is "System" - see
-// IsMonikerOwnedBySimilarMod. There's no official Windhawk API to ask
-// "is mod X loaded", so this looks for a loaded module whose file name
-// contains that mod's id - Windhawk compiles each mod's native code into its
-// own DLL named after the mod id, so this is a reliable-in-practice signal
-// without depending on any private engine internals.
+// Patches the hidden monikers. Idempotent: a second call (e.g. after
+// re-enabling the setting) re-applies the string patches from scratch,
+// which is safe because the previous ones were undone by RestoreAll()
+// when the setting was switched off.
 //
-// Cached after the first successful scan (per process lifetime) since the
-// set of loaded modules relevant here never shrinks once that mod has
-// loaded; a failed enumeration is not cached, so it's retried
-// on the next call (e.g. next settings reload) instead of permanently
-// assuming "not present".
-static std::atomic<int> g_similarModDetected{ -1 }; // -1 = not yet checked, 0 = no, 1 = yes
-static bool IsSimilarModLoaded() {
-    int cached = g_similarModDetected.load();
-    if (cached != -1) return cached == 1;
-
-    bool found = false;
-    HMODULE hMods[1024];
-    DWORD cbNeeded = 0;
-    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
-        DWORD count = (std::min)((DWORD)(cbNeeded / sizeof(HMODULE)), (DWORD)ARRAYSIZE(hMods));
-        wchar_t modPath[MAX_PATH];
-        for (DWORD i = 0; i < count; i++) {
-            if (GetModuleFileNameExW(GetCurrentProcess(), hMods[i], modPath, ARRAYSIZE(modPath))) {
-                std::wstring pathLower = modPath;
-                std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
-                if (pathLower.find(L"control-panel-revival") != std::wstring::npos) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-    } else {
-        return false;
-    }
-
-    g_similarModDetected.store(found ? 1 : 0);
-    return found;
-}
-
-// The only moniker(s) this mod shares with that similar mod's own
-// hardcoded list (System, Devices and Printers, Installed Updates, Default
-// Programs, Troubleshooting, Fonts). Personalization, BitLocker Drive
-// Encryption, and Text to Speech are not touched by that mod at all, so
-// they must keep being patched by us regardless of whether it's loaded -
-// gating the whole feature on its presence would wrongly fall back to
-// virtual twins for applets it never manages.
-static bool IsMonikerOwnedBySimilarMod(LPCWSTR moniker) {
-    return _wcsicmp(moniker, L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}") == 0; // System
-}
-
-// Patches the hidden monikers and installs the guard's hooks. Idempotent: a
-// second call (e.g. after re-enabling the setting) only re-applies the
-// string patches, never re-installs a hook that is already in place.
-//
-// applyNow must be false while Wh_ModInit is still running - Windhawk
-// applies every hook registered there automatically once Wh_ModInit
-// returns, and Wh_ApplyHookOperations() may not be called before that -
-// and true from Wh_ModSettingsChanged, where a hook registered at runtime
-// stays dormant until it is applied explicitly.
-static void SetupLegacyUnhide(bool applyNow) {
-    const bool otherModPresent = IsSimilarModLoaded();
+// No hooks are installed here: see the header comment of this section.
+// That also means there is nothing to apply - the patches are direct
+// in-memory writes and take effect immediately - so this can be called
+// from Wh_ModInit and from Wh_ModSettingsChanged alike.
+static void SetupLegacyUnhide() {
+    // A (re-)application invalidates the previous confirmation: the patches
+    // about to be applied (or the ones just restored) change what Control
+    // Panel shows, so every applet goes back to "not confirmed" and the
+    // worker re-asks the shell before anything is suppressed again. Cheap
+    // when the guard never becomes active - the pass is skipped wholesale.
+    ResetUnhideConfirmation();
 
     if (!g_legacyUnhidePatcher) g_legacyUnhidePatcher.emplace();
 
@@ -3403,19 +3285,11 @@ static void SetupLegacyUnhide(bool applyNow) {
     // after RestoreAll() undid the previous ones).
     bool monikerPatchedThisCall[kLegacyUnhideMonikerCount] = {};
 
+    // Every moniker is attempted, whatever else is loaded: if another mod
+    // already zeroed one of them, the scan simply won't find it and nothing
+    // is patched twice (see the note above this function).
     for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
         const LPCWSTR moniker = kLegacyUnhideMonikers[i];
-        if (otherModPresent && IsMonikerOwnedBySimilarMod(moniker)) {
-            // Don't touch this one ourselves - a similar mod owns
-            // it and will already have unhidden it. Treat it as patched so
-            // this mod doesn't inject a redundant virtual twin on top of
-            // the real applet that mod is already showing.
-            anyMonikerPatched = true;
-            monikerPatchedThisCall[i] = true;
-            Wh_Log(L"unhide feature: %s deferred to a similar mod (not re-patched)",
-                   moniker);
-            continue;
-        }
         const bool patched = g_legacyUnhidePatcher->PatchStringInModule(hShell32, moniker);
         anyMonikerPatched = anyMonikerPatched || patched;
         monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
@@ -3434,9 +3308,6 @@ static void SetupLegacyUnhide(bool applyNow) {
     if (g_legacyUnhideWinStorageModule) {
         for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
             const LPCWSTR moniker = kLegacyUnhideMonikers[i];
-            if (otherModPresent && IsMonikerOwnedBySimilarMod(moniker)) {
-                continue; // already accounted for above; avoid a duplicate log line
-            }
             const bool patched =
                 g_legacyUnhidePatcher->PatchStringInModule(g_legacyUnhideWinStorageModule, moniker);
             anyMonikerPatched = anyMonikerPatched || patched;
@@ -3449,99 +3320,131 @@ static void SetupLegacyUnhide(bool applyNow) {
     }
 
     // Publish the per-applet results now that both modules have been
-    // scanned, so VirtualTwinSuppressed only ever sees a fully up to date
-    // row (never shell32's result alone before windows.storage.dll's is in).
+    // scanned, so the log and the guard-active check below never see a
+    // half-finished row (never shell32's result alone before
+    // windows.storage.dll's is in). These are patch results, not visibility
+    // verdicts - see g_monikerPatched / g_realAppletConfirmedVisible.
     for (size_t i = 0; i < kLegacyUnhideMonikerCount; i++) {
         g_monikerPatched[i].store(monikerPatchedThisCall[i]);
     }
 
-    bool newHookRegistered = false;
-
-    if (!g_legacyUnhideCsoHooked.load()) {
-        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-        auto pCso = hKernelBase
-            ? (decltype(&CompareStringOrdinal))GetProcAddress(hKernelBase,
-                                                              "CompareStringOrdinal")
-            : nullptr;
-        if (pCso && WindhawkUtils::SetFunctionHook(pCso, CompareStringOrdinal_legacyUnhideHook,
-                                                   &g_legacyUnhideCompareStringOrdinalOrig)) {
-            g_legacyUnhideCsoHooked.store(true);
-            newHookRegistered = true;
-            Wh_Log(L"unhide feature: CompareStringOrdinal hooked (redirect-scoped)");
-        } else {
-            Wh_Log(L"unhide feature: CompareStringOrdinal hook failed; moniker patching still active");
-        }
-    }
-
-    // _MapLegacyName and Open were resolved by Wh_ModInit's single
-    // HookSymbols call for shell32.dll; hook them manually here so the
-    // module's symbol cache is not invalidated by a second call.
-    if (!g_legacyUnhideMapNameHooked.load()) {
-        if (g_pLegacyUnhideMapLegacyName &&
-            WindhawkUtils::SetFunctionHook(
-                (decltype(g_legacyUnhideMapLegacyNameOrig))g_pLegacyUnhideMapLegacyName,
-                COpenControlPanel__MapLegacyName_legacyUnhideHook,
-                &g_legacyUnhideMapLegacyNameOrig)) {
-            g_legacyUnhideMapNameHooked.store(true);
-            newHookRegistered = true;
-            Wh_Log(L"unhide feature: _MapLegacyName hooked");
-        } else {
-            Wh_Log(L"unhide feature: _MapLegacyName unavailable on this build; moniker patching still active");
-        }
-    }
-
-    if (!g_legacyUnhideOpenHooked.load()) {
-        if (g_pLegacyUnhideOpen &&
-            WindhawkUtils::SetFunctionHook(
-                (decltype(g_legacyUnhideOpenOrig))g_pLegacyUnhideOpen,
-                COpenControlPanel__Open_legacyUnhideHook,
-                &g_legacyUnhideOpenOrig)) {
-            g_legacyUnhideOpenHooked.store(true);
-            newHookRegistered = true;
-            Wh_Log(L"unhide feature: COpenControlPanel::Open hooked (redirect scope)");
-        } else {
-            Wh_Log(L"unhide feature: COpenControlPanel::Open unavailable on this build; "
-                   L"the CompareStringOrdinal override stays inactive");
-        }
-    }
-
-    if (applyNow && newHookRegistered) {
-        // Hooks registered after Wh_ModInit returned are dormant until
-        // applied. Skipped when nothing new was registered (re-enabling the
-        // guard after a disable reuses the hooks that are already in place)
-        // because the call is a slow, process-wide operation.
-        Wh_ApplyHookOperations();
-    }
-
-    // Only declare the guard active if it actually accomplished something:
-    // at least one moniker was patched (that's what unhides the real
-    // applet) AND at least one of the redirect-blocking hooks is in place
-    // (MapLegacyName and/or Open). CompareStringOrdinal only acts inside
-    // COpenControlPanel::Open's scope (g_legacyUnhideRedirectScope is set
-    // exclusively by the Open hook), so on its own it blocks nothing -
-    // counting it here would let a build where both shell32 symbols are
-    // optional-and-missing still report the guard as effective while the
-    // redirect is untouched. Everything downstream (VirtualTwinSuppressed,
-    // task-link generation, GetNamespaceClsids) treats "active" as "Windows
-    // is now showing the real applet" - if the patch or the hooks silently
-    // failed (e.g. a future shell32 build changes layout/casing
-    // unexpectedly), leaving the guard inactive keeps the mod's own virtual
+    // Only declare the feature active if it actually accomplished something:
+    // at least one moniker was found and zeroed. If every patch failed (e.g.
+    // a future shell32 build changes the layout or the casing of the
+    // hidden-items table), staying inactive keeps this mod's own virtual
     // twins visible instead of dropping the applet from Control Panel
-    // entirely. This is the check that makes preventSettingsRedirect
-    // defaulting to true (see the Settings struct above) safe: the setting
-    // being on never means "trust that the guard worked", it means "use the
-    // real applet if, and only if, we just confirmed it's actually shown
-    // and the redirect is actually blocked" - a build where that can't be
-    // confirmed silently and correctly falls back to the proven virtual
-    // entries instead of reporting false success.
-    const bool hooksActive = g_legacyUnhideMapNameHooked.load() ||
-                              g_legacyUnhideOpenHooked.load();
-    const bool guardEffective = anyMonikerPatched && hooksActive;
+    // entirely.
+    //
+    // "Active" here means "the monikers were patched", NOT "Windows is now
+    // showing the real applets" - the latter is a per-applet question that
+    // only the shell can answer, and it is answered separately by
+    // ConfirmUnhiddenAppletsVisible() into g_realAppletConfirmedVisible.
+    // The two together are what make unhideLegacyApplets defaulting to
+    // true safe: this flag proves the unhide was attempted on this build, the
+    // confirmation proves the applet is listed, and VirtualTwinSuppressed
+    // requires both before giving up a virtual entry.
+    const bool guardEffective = anyMonikerPatched;
     g_legacyUnhideActive.store(guardEffective);
     if (!guardEffective) {
-        Wh_Log(L"unhide feature: did not patch anything effective (monikerPatched=%d, hooksActive=%d); "
-               L"staying inactive so virtual twins keep working",
-               anyMonikerPatched, hooksActive);
+        Wh_Log(L"unhide feature: no moniker could be patched; "
+               L"staying inactive so virtual twins keep working");
+    } else {
+        Wh_Log(L"unhide feature: active; the shell will be asked to confirm "
+               L"each applet before its virtual twin is dropped");
+    }
+}
+
+// Maps an entry of LegacyUnhideMonikerIndex to the real applet it unhides,
+// so the confirmation pass below can ask the shell about each one.
+struct UnhideProbeTarget {
+    size_t monikerIndex;
+    const std::wstring* realGuid;
+    std::atomic<bool>* realPresent;
+    const wchar_t* logName;
+};
+
+static const UnhideProbeTarget kUnhideProbeTargets[] = {
+    { kLegacyUnhideMonikerPersonalization, &kRealPersonalizationGuid,
+      &g_realPersonalizationRegistered, L"Personalization" },
+    { kLegacyUnhideMonikerBitLocker, &kBitLockerGuid,
+      &g_bitlockerClsidRegistered, L"BitLocker Drive Encryption" },
+    { kLegacyUnhideMonikerSpeech, &kSpeechGuid,
+      &g_speechClsidRegistered, L"Text to Speech" },
+    { kLegacyUnhideMonikerSystem, &kSystemGuid,
+      &g_realSystemRegistered, L"System" },
+};
+
+// Asks the shell, applet by applet, whether the real item really is listed in
+// Control Panel now that the guard has run, and records the answer in
+// g_realAppletConfirmedVisible. This is the step that turns "we zeroed a byte
+// pattern" into "the applet is there": only a confirmed applet has its
+// virtual twin suppressed, so a patch that didn't unhide anything (or that
+// landed on an unrelated copy of the string, or was already applied by
+// another mod) can no longer remove an entry the user relies on.
+//
+// Deliberately no canonical name is passed to the probe: IOpenControlPanel
+// resolves a canonical name to whatever item it names, which on Windows 10/11
+// can be the modern Settings page that the same name is redirected to, so a
+// canonical name can answer "listed" for an item Control Panel still hides -
+// a false positive, i.e. exactly the failure mode this pass exists to
+// prevent. The "::{GUID}" moniker form (built by IsShownByControlPanel from
+// the GUID) is both the spelling the hidden-items table is keyed on and the
+// one namespace items are addressed by, so it answers the question that
+// matters. When the shell can't answer at all, the verdict stays "not
+// confirmed" and the virtual twin is kept.
+//
+// Runs only on the dedicated lazy-detection worker thread, never on a hook's
+// caller thread (see the same note on RunLazyVirtualAppletDetection), and
+// holds a ShellProbeBypass so the shell's own registry reads during the probe
+// are let straight through.
+void ConfirmUnhiddenAppletsVisible() {
+    if (g_unhideConfirmationDone.load(std::memory_order_acquire)) return;
+    // Guard inactive: no moniker could be patched on this build, so there is
+    // nothing to confirm - and the virtual twins must stay.
+    if (!g_legacyUnhideActive.load(std::memory_order_acquire)) return;
+
+    ShellProbeBypass bypass;
+
+    bool changed = false;
+    for (const UnhideProbeTarget& target : kUnhideProbeTargets) {
+        if (target.monikerIndex >= kLegacyUnhideMonikerCount) continue;
+
+        const bool wasConfirmed = g_realAppletConfirmedVisible[target.monikerIndex].load();
+        bool listed = false;
+        bool confirmed = false;
+
+        if (target.realPresent && target.realPresent->load()) {
+            // An empty canonical name on purpose - see the comment above:
+            // this probes "::{GUID}" first and only falls back to the bare
+            // GUID, never to a canonical name.
+            const bool answered = IsShownByControlPanel(L"", *target.realGuid, listed);
+            confirmed = answered && listed;
+            Wh_Log(L"unhide feature: %s - shell says %s; %s", target.logName,
+                   answered ? (listed ? L"the item IS listed" : L"the item is NOT listed")
+                            : L"it cannot answer",
+                   confirmed ? L"using the real applet"
+                             : L"keeping the virtual entry");
+        } else {
+            Wh_Log(L"unhide feature: %s is not registered here; nothing to confirm",
+                   target.logName);
+        }
+
+        if (confirmed != wasConfirmed) {
+            g_realAppletConfirmedVisible[target.monikerIndex].store(confirmed);
+            changed = true;
+        }
+    }
+
+    g_unhideConfirmationDone.store(true, std::memory_order_release);
+
+    if (changed) {
+        // Which entries carry the classic task links - and whether the
+        // virtual twins are served at all - depends on this verdict, so the
+        // generated XML has to follow it.
+        InvalidateClassicTaskLinksFile();
+        EnsureClassicTaskLinksFile();
+        Wh_Log(L"unhide feature: confirmation pass changed what Control Panel shows; "
+               L"task links regenerated");
     }
 }
 
@@ -3556,7 +3459,7 @@ void Wh_ModSettingsChanged() {
     bool bitChanged = (oldBitMode != newBitMode);
     bool tabChanged = (oldTabMode != newTabMode);
     bool speechChanged = (oldSpeechMode != newSpeechMode);
-    const bool prevRedirectGuard = g_settings.preventSettingsRedirect.load();
+    const bool prevUnhideLegacyApplets = g_settings.unhideLegacyApplets.load();
     if (bitChanged) {
         Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
         Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
@@ -3585,17 +3488,17 @@ void Wh_ModSettingsChanged() {
     // The legacy-applet unhide feature can be toggled live: re-apply the string
     // patches and hooks, or restore the original bytes. try/catch protected so
     // a failure can never leak into Explorer.
-    if (prevRedirectGuard != g_settings.preventSettingsRedirect.load()) {
+    if (prevUnhideLegacyApplets != g_settings.unhideLegacyApplets.load()) {
         try {
-            if (g_settings.preventSettingsRedirect.load()) {
+            if (g_settings.unhideLegacyApplets.load()) {
                 Wh_Log(L"legacy-applet unhide feature re-enabled by settings");
-                // applyNow=true: hooks registered here, after Wh_ModInit
-                // has returned, only take effect once applied explicitly.
-                SetupLegacyUnhide(true);
+                SetupLegacyUnhide();
             } else {
                 Wh_Log(L"legacy-applet unhide feature disabled by settings; restoring patched bytes");
                 g_legacyUnhideActive.store(false);
-                for (auto& patched : g_monikerPatched) patched.store(false);
+                // Every applet goes back to "not confirmed": with the guard
+                // off, the virtual twins are what Control Panel shows again.
+                ResetUnhideConfirmation();
                 if (g_legacyUnhidePatcher) {
                     g_legacyUnhidePatcher->RestoreAll();
                 }
@@ -3643,7 +3546,7 @@ void Wh_ModSettingsChanged() {
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.preventSettingsRedirect.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -3749,7 +3652,7 @@ BOOL Wh_ModInit() {
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.preventSettingsRedirect.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
 
     void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
     void* pRegCloseKey        = GetRegFunc("RegCloseKey");
@@ -3785,14 +3688,13 @@ BOOL Wh_ModInit() {
         // the thing that scopes the ranking or, where the ranking is inlined,
         // the thing that does the reordering.
         //
-        // The two legacy-applet unhide feature symbols are resolved here as
-        // well, with a null hook (the same trick as s_SortAppletsInCategory),
-        // so that ALL shell32 symbols come from this single HookSymbols
-        // call: the resolved symbols are cached per module, and each extra
-        // call for the same module overwrites that cache with only the new
-        // call's symbols - which would force a full re-resolution of the
-        // other symbols on every subsequent start. SetupLegacyUnhide()
-        // registers the actual hooks with SetFunctionHook.
+        // Every shell32 symbol this mod needs comes from this single
+        // HookSymbols call: the resolved symbols are cached per module, and
+        // each extra call for the same module overwrites that cache with
+        // only the new call's symbols - which would force a full
+        // re-resolution of the other symbols on every subsequent start.
+        // (The unhide feature needs no shell32 symbols: it patches string
+        // data, it doesn't hook any function.)
         void* pSortAppletsInCategory = nullptr;
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
@@ -3804,18 +3706,6 @@ BOOL Wh_ModInit() {
                 {L"private: static int __cdecl CControlPanelAppletList::s_FindAppletInSortArray(unsigned short const *,unsigned short const * const *,int)"},
                 (void**)&CControlPanelAppletList_s_FindAppletInSortArray_orig,
                 (void*)CControlPanelAppletList_s_FindAppletInSortArray_hook,
-                true
-            },
-            {
-                {L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)"},
-                &g_pLegacyUnhideMapLegacyName,
-                nullptr,  // Hooked manually by SetupLegacyUnhide().
-                true
-            },
-            {
-                {L"public: virtual long __cdecl COpenControlPanel::Open(unsigned short const *,struct IUnknown *,unsigned short const *)"},
-                &g_pLegacyUnhideOpen,
-                nullptr,  // Hooked manually by SetupLegacyUnhide().
                 true
             },
         };
@@ -3843,22 +3733,21 @@ BOOL Wh_ModInit() {
 
     }
 
-    // legacy-applet unhide feature (ported approach): unhide the legacy
-    // applets and break the Settings-app redirect. The whole block is
-    // try/catch protected; a failure here never takes the rest of the mod down.
-    // The patcher is emplaced here (not lazily at first patch) so its state
-    // exists for the whole mod lifetime; see the [[clang::no_destroy]]
-    // comment on g_legacyUnhidePatcher.
+    // legacy-applet unhide feature: unhide the legacy applets by patching
+    // their hidden-items monikers in memory. The redirect to the Settings app
+    // is NOT touched here - see the header comment of that section. The whole
+    // block is try/catch protected; a failure here never takes the rest of
+    // the mod down. The patcher is emplaced here (not lazily at first patch)
+    // so its state exists for the whole mod lifetime; see the
+    // [[clang::no_destroy]] comment on g_legacyUnhidePatcher.
     g_legacyUnhidePatcher.emplace();
-    if (g_settings.preventSettingsRedirect.load()) {
+    if (g_settings.unhideLegacyApplets.load()) {
         try {
-            // applyNow=false: hooks registered during Wh_ModInit are applied
-            // by Windhawk automatically once this function returns.
-            SetupLegacyUnhide(false);
+            SetupLegacyUnhide();
         } catch (...) {
             Wh_Log(L"Exception during legacy-applet unhide feature setup; guard disabled, rest of the mod active");
             g_legacyUnhideActive.store(false);
-            for (auto& patched : g_monikerPatched) patched.store(false);
+            ResetUnhideConfirmation();
         }
     }
 
@@ -3896,6 +3785,10 @@ static void LazyDetectionThreadProc() {
         }
         
         try {
+            // Runs first and has its own "done" flag: it decides whether the
+            // real applets can replace their virtual twins, which the
+            // detection pass below and the task-link XML both read.
+            ConfirmUnhiddenAppletsVisible();
             RunLazyVirtualAppletDetection();
         } catch (...) {
             Wh_Log(L"Exception in lazy-detection worker thread");
@@ -3914,9 +3807,14 @@ void Wh_ModAfterInit() {
         return;
     }
     g_lazyDetectionThread.emplace(LazyDetectionThreadProc);
-    if (!g_lazyDetectionDone.load(std::memory_order_acquire)) {
+    if (!g_lazyDetectionDone.load(std::memory_order_acquire) ||
+        UnhideConfirmationPending()) {
         // Kick off the initial probe right away instead of waiting for the
-        // first incidental registry access to request it.
+        // first incidental registry access to request it. The confirmation
+        // pass has to be scheduled explicitly here: it is pending in exactly
+        // the case where every applet verdict is already cached, so the
+        // detection pass alone would never wake this thread on a normal
+        // restart and the unhide feature would never be confirmed.
         SetEvent(g_lazyDetectionWakeEvent);
     }
 }
@@ -3960,13 +3858,13 @@ void Wh_ModUninit() {
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
         g_keyTracker.ClearWithoutFreeing();
-        // legacy-applet unhide feature: deactivate the hooks (they now pass
-        // straight through) and restore every patched byte. The patcher is
+        // legacy-applet unhide feature: deactivate it and restore every
+        // patched byte. The patcher is
         // restored and reset explicitly - its storage is
         // [[clang::no_destroy]], so no destructor ever runs at process
         // shutdown (see the comment on g_legacyUnhidePatcher).
         g_legacyUnhideActive.store(false);
-        for (auto& patched : g_monikerPatched) patched.store(false);
+        ResetUnhideConfirmation();
         if (g_legacyUnhidePatcher) {
             g_legacyUnhidePatcher->RestoreAll();
             g_legacyUnhidePatcher.reset();
