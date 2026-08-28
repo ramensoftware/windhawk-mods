@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.7
+// @version         1.5.8
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -164,6 +164,12 @@ enum class PercentTextAlignment {
     Right,
 };
 
+enum class PercentTextVisibility {
+    Never,
+    Hover,
+    Always,
+};
+
 enum class LabelPosition {
     Hidden,
     Left,
@@ -205,7 +211,7 @@ struct Settings {
     PaceTickStyle paceTickStyle = PaceTickStyle::Caret;
     COLORREF paceTickColor = kDefaultPaceTickColor;
     bool showBarLabels = false;
-    bool showPercentText = false;
+    PercentTextVisibility percentTextVisibility = PercentTextVisibility::Hover;
     PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
@@ -260,6 +266,7 @@ struct AppliedState {
 struct PointerHandlers {
     UIElement element{nullptr};
     winrt::event_token tappedToken{};
+    winrt::event_token pointerEnteredToken{};
     winrt::event_token pointerMovedToken{};
     winrt::event_token pointerExitedToken{};
     winrt::event_token pointerCaptureLostToken{};
@@ -4176,6 +4183,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
         if (!handler.element) continue;
 
         try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
+        try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
         try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
         try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
         try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
@@ -4203,10 +4211,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         int barLength, barThickness, labelFontSize, percentFontSize;
         int accountMargin, labelGap, rightMargin;
         int yellowThreshold, orangeThreshold, redThreshold;
-        bool showPaceTicks, showBarLabels, showPercentText;
+        bool showPaceTicks, showBarLabels;
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         COLORREF paceTickColor;
         BarLayout barLayout;
+        PercentTextVisibility percentTextVisibility;
         PercentTextAlignment percentTextAlignment;
         PaceTickStyle paceTickStyle;
         LabelPosition labelPosition;
@@ -4229,7 +4238,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             paceTickStyle = g_settings.paceTickStyle;
             paceTickColor = g_settings.paceTickColor;
             showBarLabels = g_settings.showBarLabels;
-            showPercentText = g_settings.showPercentText;
+            percentTextVisibility = g_settings.percentTextVisibility;
             percentTextAlignment = g_settings.percentTextAlignment;
             yellowThreshold = g_settings.yellowThreshold;
             orangeThreshold = g_settings.orangeThreshold;
@@ -4506,7 +4515,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 barItem.Children().Append(track);
                 refs.barItems[w] = barItem;
 
-                if (showPercentText) {
+                if (percentTextVisibility != PercentTextVisibility::Never) {
                     TextBlock percent;
                     percent.FontSize(percentFontSize);
                     percent.Width(verticalBars ?
@@ -4526,7 +4535,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     }
                     percent.Foreground(SolidColorBrush(
                         winrt::Windows::UI::Color{255, 255, 255, 255}));
-                    percent.Opacity(0.9);
+                    percent.Opacity(percentTextVisibility == PercentTextVisibility::Always ?
+                                        0.9 : 0.0);
                     percent.IsHitTestVisible(false);
                     TranslateTransform translation;
                     translation.X(percentTextAlignment == PercentTextAlignment::Left ?
@@ -4676,6 +4686,20 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     e.Handled(true);
                 });
 
+            auto pointerEnteredToken = tappedElement.PointerEntered(
+                [statePtr, accountIndex, percentTextVisibility](
+                    winrt::Windows::Foundation::IInspectable const&,
+                    wuxi::PointerRoutedEventArgs const&) {
+                    if (g_unloading || percentTextVisibility != PercentTextVisibility::Hover ||
+                        accountIndex >= (int)statePtr->accountRefs.size()) return;
+
+                    try {
+                        for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
+                            if (percent) percent.Opacity(0.9);
+                        }
+                    } catch (...) {}
+                });
+
             // System XAML suppresses the automatic tooltip after a click until pointer re-entry.
             // A short stationary hover reopens it; further movement dismisses it.
             auto pointerMovedToken = tappedElement.PointerMoved(
@@ -4741,12 +4765,25 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
                     } catch (...) {}
                 };
-            auto pointerExitedToken = tappedElement.PointerExited(closeToolTip);
+            auto pointerExitedToken = tappedElement.PointerExited(
+                [closeToolTip, statePtr, accountIndex, percentTextVisibility](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    wuxi::PointerRoutedEventArgs const& e) {
+                    closeToolTip(sender, e);
+                    if (g_unloading || percentTextVisibility != PercentTextVisibility::Hover ||
+                        accountIndex >= (int)statePtr->accountRefs.size()) return;
+
+                    try {
+                        for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
+                            if (percent) percent.Opacity(0.0);
+                        }
+                    } catch (...) {}
+                });
             auto pointerCaptureLostToken = tappedElement.PointerCaptureLost(closeToolTip);
             auto pointerCanceledToken = tappedElement.PointerCanceled(closeToolTip);
-            state.pointerHandlers.push_back({tappedElement, tappedToken, pointerMovedToken,
-                                             pointerExitedToken, pointerCaptureLostToken,
-                                             pointerCanceledToken});
+            state.pointerHandlers.push_back({tappedElement, tappedToken, pointerEnteredToken,
+                                             pointerMovedToken, pointerExitedToken,
+                                             pointerCaptureLostToken, pointerCanceledToken});
 
             MenuFlyout menu;
             if (visualTestMode) {
@@ -4901,9 +4938,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
-    bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
+    bool showPaceTicks, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
+    PercentTextVisibility percentTextVisibility;
     PercentTextAlignment percentTextAlignment;
     ClickAction clickAction;
     {
@@ -4920,7 +4958,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
         showPaceTicks = g_settings.showPaceTicks;
-        showPercentText = g_settings.showPercentText;
+        percentTextVisibility = g_settings.percentTextVisibility;
         percentTextAlignment = g_settings.percentTextAlignment;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
@@ -5083,7 +5121,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     ap.pacePx[w] = pacePx;
                 }
 
-                if (showPercentText) {
+                if (percentTextVisibility != PercentTextVisibility::Never) {
                     PercentTextAlignment appliedAlignment =
                         percentTextAlignment == PercentTextAlignment::Adaptive ?
                             (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
@@ -5827,6 +5865,10 @@ static void NormalizeSettings(Settings* s) {
         s->percentTextAlignment > PercentTextAlignment::Right) {
         s->percentTextAlignment = PercentTextAlignment::Adaptive;
     }
+    if (s->percentTextVisibility < PercentTextVisibility::Never ||
+        s->percentTextVisibility > PercentTextVisibility::Always) {
+        s->percentTextVisibility = PercentTextVisibility::Hover;
+    }
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -5885,7 +5927,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"labelGap", s.labelGap);
         setNumber(L"barGap", s.barGap);
         setNumber(L"rightMargin", s.rightMargin);
-        setBool(L"showPercentText", s.showPercentText);
+        setString(L"percentTextVisibility",
+                  s.percentTextVisibility == PercentTextVisibility::Never ? L"never" :
+                  s.percentTextVisibility == PercentTextVisibility::Always ? L"always" : L"hover");
         setString(L"percentTextAlignment",
                   s.percentTextAlignment == PercentTextAlignment::Left ? L"left" :
                   s.percentTextAlignment == PercentTextAlignment::Center ? L"center" :
@@ -5979,7 +6023,19 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.labelGap = (int)GetNum(root, L"labelGap", 3);
         s.barGap = (int)GetNum(root, L"barGap", 2);
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
-        s.showPercentText = getBoolDefault(L"showPercentText", false);
+        std::wstring percentTextVisibility = GetStr(root, L"percentTextVisibility");
+        if (percentTextVisibility == L"never") {
+            s.percentTextVisibility = PercentTextVisibility::Never;
+        } else if (percentTextVisibility == L"always") {
+            s.percentTextVisibility = PercentTextVisibility::Always;
+        } else if (percentTextVisibility == L"hover") {
+            s.percentTextVisibility = PercentTextVisibility::Hover;
+        } else if (root.HasKey(L"showPercentText") &&
+                   root.GetNamedValue(L"showPercentText").ValueType() == JsonValueType::Boolean) {
+            s.percentTextVisibility = root.GetNamedBoolean(L"showPercentText") ?
+                                          PercentTextVisibility::Always :
+                                          PercentTextVisibility::Never;
+        }
         std::wstring percentTextAlignment = GetStr(root, L"percentTextAlignment");
         s.percentTextAlignment = percentTextAlignment == L"left" ? PercentTextAlignment::Left :
                                  percentTextAlignment == L"center" ? PercentTextAlignment::Center :
@@ -6174,7 +6230,8 @@ static bool LoadLegacySettings(Settings* out) {
     s.labelGap = getInt(L"labelGap", 3);
     s.barGap = getInt(L"barGap", 2);
     s.rightMargin = getInt(L"rightMargin", 4);
-    s.showPercentText = getBool(L"showPercentText", false);
+    s.percentTextVisibility = getBool(L"showPercentText", false) ?
+                                  PercentTextVisibility::Always : PercentTextVisibility::Never;
     s.showCodexSparkInTooltip = getBool(L"showCodexSparkInTooltip", false);
     s.yellowThreshold = getInt(L"yellowThreshold", 50);
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
@@ -6327,7 +6384,7 @@ enum SettingsControlId {
     kPaceTickStyle,
     kPaceTickColor,
     kShowBarLabels,
-    kShowPercentText,
+    kPercentTextVisibility,
     kPercentTextAlignment,
     kShowCodexSpark,
     kColorblindMode,
@@ -7267,13 +7324,14 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
                          (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
+    LRESULT percentTextVisibility = SendDlgItemMessageW(
+        state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
     bool barTextVisible =
         SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED ||
-        SendDlgItemMessageW(state.hWnd, kShowPercentText, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
     EnableSettingsRow(state, kPercentFontSize, barTextVisible);
-    EnableSettingsRow(
-        state, kPercentTextAlignment,
-        SendDlgItemMessageW(state.hWnd, kShowPercentText, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    EnableSettingsRow(state, kPercentTextAlignment,
+                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
     bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
     EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
@@ -7346,7 +7404,8 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SendDlgItemMessageW(state.hWnd, kPaceTickStyle, CB_SETCURSEL,
                         (int)s.paceTickStyle, 0);
     setCheck(kShowBarLabels, s.showBarLabels);
-    setCheck(kShowPercentText, s.showPercentText);
+    SendDlgItemMessageW(state.hWnd, kPercentTextVisibility, CB_SETCURSEL,
+                        (int)s.percentTextVisibility, 0);
     SendDlgItemMessageW(state.hWnd, kPercentTextAlignment, CB_SETCURSEL,
                         (int)s.percentTextAlignment, 0);
     setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
@@ -7431,7 +7490,12 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
         s.paceTickColor = row->previewColor;
     }
     s.showBarLabels = isChecked(kShowBarLabels);
-    s.showPercentText = isChecked(kShowPercentText);
+    int percentTextVisibility = (int)SendDlgItemMessageW(
+        state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
+    s.percentTextVisibility =
+        percentTextVisibility >= 0 &&
+                percentTextVisibility <= (int)PercentTextVisibility::Always ?
+            (PercentTextVisibility)percentTextVisibility : PercentTextVisibility::Hover;
     int percentTextAlignment = (int)SendDlgItemMessageW(
         state.hWnd, kPercentTextAlignment, CB_GETCURSEL, 0, 0);
     s.percentTextAlignment =
@@ -8188,7 +8252,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.paceTickStyle = defaults.paceTickStyle;
         settings.paceTickColor = defaults.paceTickColor;
         settings.showBarLabels = defaults.showBarLabels;
-        settings.showPercentText = defaults.showPercentText;
+        settings.percentTextVisibility = defaults.percentTextVisibility;
         settings.percentTextAlignment = defaults.percentTextAlignment;
         settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
         settings.colorblindMode = defaults.colorblindMode;
@@ -8322,7 +8386,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 *state, 2, L"STATIC", L"", WS_VISIBLE | SS_OWNERDRAW, 0, -1);
             AddSettingsCheck(*state, 2, L"Show bar labels (5h, 7d, Fa, Ex)",
                              kShowBarLabels);
-            AddSettingsCheck(*state, 2, L"Show percentage text", kShowPercentText);
+            HWND percentTextVisibility = AddSettingsRow(
+                *state, 2, L"Percentage text", L"COMBOBOX",
+                CBS_DROPDOWNLIST, 0, kPercentTextVisibility);
+            AddComboItems(percentTextVisibility,
+                          {L"Never show", L"Show on hover", L"Always show"});
             HWND percentTextAlignment = AddSettingsRow(
                 *state, 2, L"Percentage text alignment", L"COMBOBOX",
                 CBS_DROPDOWNLIST, 0, kPercentTextAlignment);
