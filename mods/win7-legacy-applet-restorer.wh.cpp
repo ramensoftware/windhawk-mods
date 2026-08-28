@@ -2,7 +2,7 @@
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
 // @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         2.0.0
+// @version         2.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -20,7 +20,7 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Notification area icons (intended for the Windows 10 taskbar)
 * Network Connections
 * Printers and Faxes
-* HomeGroup (legacy, partially functional)
+* HomeGroup (partially functional, read the note below)
 * BitLocker Drive Encryption
 * Tablet PC Settings
 
@@ -35,7 +35,9 @@ The optional "Restore Classic Task Links" setting restores localized, classic ta
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
+The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
+
+HomeGroup is disabled by default because the page was removed from Windows 11. To restore it there, use the [Windows 11 HomeGroup Page Restorer](https://windhawk.net/mods/win11-home-group-restorer) mod.
 
 BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
 
@@ -66,9 +68,9 @@ Credits to m417z for the code review and enhancing the mod.
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
   $description: This setting adds the "Printers and Faxes" icon to the Control Panel
-- enableHomeGroup: true
+- enableHomeGroup: false
   $name: HomeGroup
-  $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
+  $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, the HomeGroup networking was removed in Windows 10 1803+). On Windows 11 use the "Windows 11 HomeGroup Page Restorer" mod instead.
 - bitLockerMode: auto
   $name: BitLocker Drive Encryption
   $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
@@ -175,6 +177,7 @@ struct Settings {
     std::atomic<bool> restoreWin7CategoryTaskLinks;
 } g_settings;
 
+static std::atomic<bool> g_homeGroupUsable{ false };
 // Wh_Log is already a cheap no-op check (if (g_logsOn)) when logging is off,
 // so there is nothing to gain by compiling diagnostics out entirely — doing so
 // only prevented getting a log out of this mod when a user reports a problem.
@@ -204,6 +207,10 @@ std::wstring g_personalizationName;
 // projects without claiming that the removed networking service itself works. If
 // Windows no longer exposes the CLSID, no virtual replacement is made.
 static std::atomic<bool> g_homeGroupClsidAvailable{ false };
+// Additional check: the implementation file (hgcpl.dll) must actually exist.
+// On Windows 11 the CLSID may be registered but the DLL is missing, so the
+// page would be non-functional.
+static std::atomic<bool> g_homeGroupImplementationExists{ false };
 // BitLocker and Tablet PC Settings are real, unmodified Windows CLSIDs; they
 // are simply not always *registered* (BitLocker needs Pro/Enterprise+TPM,
 // Tablet PC Settings needs a touch/pen-capable device). Unlike HomeGroup,
@@ -728,14 +735,32 @@ void RequestLazyVirtualAppletDetection() {
 // never directly from a registry hook - that's what made the previous
 // version re-entrant and deadlock-prone.
 void RunLazyVirtualAppletDetection() {
+    // Check if detection is already done before acquiring the mutex
     if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    
+    // Check if the stop event is signalled (mod is unloading)
+    if (g_lazyDetectionStopEvent && 
+        WaitForSingleObject(g_lazyDetectionStopEvent, 0) == WAIT_OBJECT_0) {
+        Wh_Log(L"Lazy detection: stop event signalled, bailing out");
+        return;
+    }
+    
     // Don't block every other Explorer thread while we probe: if some other
     // caller already grabbed the mutex, just bail - RequestLazyVirtualAppletDetection
     // will be called again by the next registry access and there's only
     // ever one worker thread doing the real work anyway.
     std::unique_lock<std::mutex> lock(g_lazyDetectionMutex, std::try_to_lock);
     if (!lock.owns_lock()) return;
+    
+    // Re-check state after acquiring the lock
     if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
+    
+    // Check stop event again after acquiring the lock
+    if (g_lazyDetectionStopEvent && 
+        WaitForSingleObject(g_lazyDetectionStopEvent, 0) == WAIT_OBJECT_0) {
+        Wh_Log(L"Lazy detection: stop event signalled after lock acquisition, bailing out");
+        return;
+    }
 
     // Every registry / engine call made below - including any the shell
     // issues on our behalf while activating CLSID_OpenControlPanel - is ours
@@ -754,6 +779,7 @@ void RunLazyVirtualAppletDetection() {
         g_lazyDetectionDone.store(true, std::memory_order_release);
         return;
     }
+    
     bool bitAuto = g_bitlockerAutoDetected.load();
     bool tabAuto = g_tabletPcAutoDetected.load();
     if (needBit) {
@@ -796,11 +822,9 @@ bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegist
             return autoDetected;
     }
 }
-
 bool IsHomeGroupAvailable() {
-    return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
+    return g_settings.enableHomeGroup.load() && g_homeGroupUsable.load();
 }
-
 // Reads a REG_SZ/REG_EXPAND_SZ value from an already-open key via the plain,
 // unhooked registry API (only ever called from InitDisplayNames, before this
 // mod's own hooks are installed - see call site).
@@ -1692,7 +1716,7 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                       nullptr },  // Keep it outside category view; search still exposes its tasks
         { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,        nullptr },
         { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware,       nullptr },
-        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupClsidAvailable },
+        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupUsable },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
@@ -2665,6 +2689,27 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
+    // Check if the HomeGroup implementation actually exists (hgcpl.dll)
+    bool implementationExists = false;
+    if (g_homeGroupClsidAvailable.load()) {
+        // Check for hgcpl.dll directly in System32
+        wchar_t system32[MAX_PATH] = {};
+        if (GetSystemDirectoryW(system32, MAX_PATH)) {
+            const std::wstring hgcplPath = std::wstring(system32) + L"\\hgcpl.dll";
+            DWORD attributes = GetFileAttributesW(hgcplPath.c_str());
+            implementationExists = (attributes != INVALID_FILE_ATTRIBUTES && 
+                                   !(attributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"HomeGroup implementation DLL: %s %s", 
+                   hgcplPath.c_str(), 
+                   implementationExists ? L"exists" : L"does not exist");
+        }
+    }
+    g_homeGroupImplementationExists.store(implementationExists);
+    
+    // Combined flag for HomeGroup usability (CLSID registered AND implementation exists)
+    g_homeGroupUsable.store(g_homeGroupClsidAvailable.load() && 
+                            g_homeGroupImplementationExists.load());
+
     g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
     g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
     g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
@@ -2804,7 +2849,6 @@ BOOL Wh_ModInit() {
       return FALSE;
   }
 }
-
 // Body of the dedicated lazy-detection worker thread. Waits on either the
 // wake event (probe requested/re-armed) or the stop event (mod unloading).
 static void LazyDetectionThreadProc() {
@@ -2812,10 +2856,15 @@ static void LazyDetectionThreadProc() {
     for (;;) {
         DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
         if (wait != WAIT_OBJECT_0) {
-            // Stop event, or a wait failure - either way, exit the thread.
             return;
         }
         ResetEvent(g_lazyDetectionWakeEvent);
+        
+        // Check stop event before running the probe
+        if (WaitForSingleObject(g_lazyDetectionStopEvent, 0) == WAIT_OBJECT_0) {
+            return;
+        }
+        
         try {
             RunLazyVirtualAppletDetection();
         } catch (...) {
