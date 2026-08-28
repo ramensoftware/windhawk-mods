@@ -4,6 +4,7 @@
 // @description     Removes the long pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.
 // @version         1.0
 // @author          meteoni
+// @github          https://github.com/Meteony
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -luser32
