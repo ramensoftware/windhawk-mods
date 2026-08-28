@@ -32,6 +32,19 @@ Taskbar Count Badges adds a small customizable indicator when a taskbar app
 button represents multiple windows. The indicator can be shown as either a
 **number badge** or compact **dots**.
 
+
+## What's new:
+
+### 1.1.0
+- Added top and bottom dot positions
+- Top and bottom dots are displayed horizontally
+- Bottom dots replace the native Windows running indicator and show from one running window
+- Left, right, and top dot positions keep the native Windows running indicator unchanged
+
+### 1.0.0
+- Initial release
+
+
 ## Screenshots
 
 ### Customization examples
