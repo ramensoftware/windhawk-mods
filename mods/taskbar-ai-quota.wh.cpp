@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.4
+// @version         1.5.5
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -97,7 +97,9 @@ Have a suggestion or found a bug?
 #include <initializer_list>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <tlhelp32.h>
@@ -352,7 +354,8 @@ static std::atomic<bool> g_settingsWindowCancelRequested{false};
 // Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
 static HWND g_notifyWnd = nullptr;
 
-static std::vector<std::unique_ptr<QuotaUiInstance>> g_uiInstances;
+[[clang::no_destroy]] static std::optional<
+    std::vector<std::unique_ptr<QuotaUiInstance>>> g_uiInstances{std::in_place};
 static std::mutex g_uiInstancesMutex;
 
 static const wchar_t* kRootName = L"AiQuota_Root";
@@ -3308,6 +3311,17 @@ static void RemoveNotifyIcon() {
 // icon, then shows a balloon (rendered as a toast on Win11, kept in notify center).
 static void FireThresholdNotification(const std::wstring& title, const std::wstring& body) {
     HINSTANCE hInst = GetModuleHandleW(nullptr);
+    auto addNotifyIcon = [](HWND hWnd) {
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = hWnd;
+        nid.uID = kNotifyIconId;
+        nid.uFlags = NIF_ICON | NIF_STATE;
+        nid.dwState = NIS_HIDDEN;
+        nid.dwStateMask = NIS_HIDDEN;
+        nid.hIcon = LoadIconW(nullptr, IDI_WARNING);
+        return Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    };
     if (!g_notifyWnd) {
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
@@ -3323,15 +3337,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
             return;
         }
 
-        NOTIFYICONDATAW nid{};
-        nid.cbSize = sizeof(nid);
-        nid.hWnd = g_notifyWnd;
-        nid.uID = kNotifyIconId;
-        nid.uFlags = NIF_ICON | NIF_STATE;
-        nid.dwState = NIS_HIDDEN;
-        nid.dwStateMask = NIS_HIDDEN;
-        nid.hIcon = LoadIconW(nullptr, IDI_WARNING);
-        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+        if (!addNotifyIcon(g_notifyWnd)) {
             Wh_Log(L"Shell_NotifyIcon NIM_ADD failed");
             DestroyWindow(g_notifyWnd);
             g_notifyWnd = nullptr;
@@ -3347,7 +3353,13 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
     nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
     wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
     wcsncpy_s(nid.szInfo, body.c_str(), _TRUNCATE);
-    Shell_NotifyIconW(NIM_MODIFY, &nid);
+    if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        // Explorer can recreate the notification area without restarting this process.
+        addNotifyIcon(g_notifyWnd);
+        if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+            Wh_Log(L"Shell_NotifyIcon NIM_MODIFY failed");
+        }
+    }
 }
 
 static DWORD WINAPI FetchThreadProc(LPVOID) {
@@ -3997,7 +4009,8 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 // valid after lookup because only that owner thread can erase its state.
 static QuotaUiInstance* FindUiState(HWND hWnd) {
     std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-    for (auto& state : g_uiInstances) {
+    if (!g_uiInstances) return nullptr;
+    for (auto& state : *g_uiInstances) {
         if (state->hWnd == hWnd) return state.get();
     }
     return nullptr;
@@ -4007,17 +4020,19 @@ static void EraseUiState(HWND hWnd) {
     std::unique_ptr<QuotaUiInstance> removed;
     {
         std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-        auto it = std::find_if(g_uiInstances.begin(), g_uiInstances.end(),
+        if (!g_uiInstances) return;
+        auto it = std::find_if(g_uiInstances->begin(), g_uiInstances->end(),
             [hWnd](const auto& state) { return state->hWnd == hWnd; });
-        if (it == g_uiInstances.end()) return;
+        if (it == g_uiInstances->end()) return;
         if ((*it)->ownerThreadId != GetCurrentThreadId()) {
             Wh_Log(L"Refusing to destroy UI state from a non-owner thread");
             return;
         }
 
         removed = std::move(*it);
-        g_uiInstances.erase(it);
-        g_uiInjected.store(!g_unloading && !g_uiInstances.empty(), std::memory_order_release);
+        g_uiInstances->erase(it);
+        g_uiInjected.store(!g_unloading && !g_uiInstances->empty(),
+                           std::memory_order_release);
     }
 
     if (removed->windowSubclassed && removed->hWnd && IsWindow(removed->hWnd)) {
@@ -4785,6 +4800,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (state.buildVisualTestMode != visualTestMode) return;
 
     std::vector<AccountConfig> accounts;
+    std::vector<AccountData> data;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
     bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
@@ -4810,16 +4826,16 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
         showStaleWarning = g_settings.showStaleWarning;
+        if (!visualTestMode) {
+            std::lock_guard<std::mutex> dataLock(g_dataMutex);
+            data = g_data;
+        }
     }
 
     ULONGLONG now = NowUnixMs();
-    std::vector<AccountData> data;
     if (visualTestMode) {
         BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
                                 now, &accounts, &data);
-    } else {
-        std::lock_guard<std::mutex> lk(g_dataMutex);
-        data = g_data;
     }
     if (data.size() != accounts.size()) return;
     if (state.accountRefs.size() != data.size()) return;
@@ -4929,7 +4945,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     ap.fillColor[w] = cv;
                 }
 
-                bool paceVisible = showPaceTicks && !stale && wu.pct >= 0 &&
+                bool paceVisible = showPaceTicks && ui.paceTicks[w] &&
+                                   !stale && wu.pct >= 0 &&
                                    wu.resetUnixMs > wu.windowDurationMs &&
                                    wu.windowDurationMs > 0 &&
                                    now >= wu.resetUnixMs - wu.windowDurationMs;
@@ -5294,9 +5311,12 @@ static bool InjectQuotaGrid(HWND hWnd) {
             newState->ownerThreadId = ownerThreadId;
             {
                 std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-                g_uiInstances.push_back(std::move(newState));
-                state = g_uiInstances.back().get();
+                if (g_uiInstances) {
+                    g_uiInstances->push_back(std::move(newState));
+                    state = g_uiInstances->back().get();
+                }
             }
+            if (!state) return fail(L"UI state registry unavailable");
             if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
                     hWnd, TaskbarWindowSubclassProc, 0)) {
                 EraseUiState(hWnd);
@@ -5403,8 +5423,9 @@ static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
     std::vector<std::pair<HWND, DWORD>> windows;
     {
         std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-        windows.reserve(g_uiInstances.size());
-        for (auto& state : g_uiInstances) {
+        if (!g_uiInstances) return;
+        windows.reserve(g_uiInstances->size());
+        for (auto& state : *g_uiInstances) {
             windows.push_back({state->hWnd, state->ownerThreadId});
         }
     }
@@ -6398,7 +6419,9 @@ static bool IsWindowsDarkMode() {
 
 static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
     HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!uxTheme) uxTheme = LoadLibraryW(L"uxtheme.dll");
+    if (!uxTheme) {
+        uxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (uxTheme) {
         using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
         auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
@@ -6425,7 +6448,9 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
     }
 
     HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwm) dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm) {
+        dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (dwm) {
         using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
         auto setAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
@@ -8678,7 +8703,9 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     GetMonitorInfoW(monitor, &monitorInfo);
     UINT dpi = WindowDpi(nullptr);
     HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-    if (!shcore) shcore = LoadLibraryW(L"shcore.dll");
+    if (!shcore) {
+        shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (shcore) {
         using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
         auto getDpi = reinterpret_cast<GetDpiForMonitor_t>(
@@ -8907,12 +8934,12 @@ void Wh_ModUninit() {
     // XAML releases. Leak those unreachable states rather than release them under loader lock.
     {
         std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-        if (!g_uiInstances.empty()) {
+        if (g_uiInstances && !g_uiInstances->empty()) {
             Wh_Log(L"Leaking %zu orphaned UI state(s) after owner thread exit",
-                   g_uiInstances.size());
-            for (auto& state : g_uiInstances) state.release();
-            g_uiInstances.clear();
+                   g_uiInstances->size());
+            for (auto& state : *g_uiInstances) state.release();
         }
+        g_uiInstances.reset();
     }
 
     if (g_stopEvent) CloseHandle(g_stopEvent);
@@ -8930,9 +8957,4 @@ void Wh_ModUninit() {
         g_mtaUsageCookie = nullptr;
     }
     g_coDecrementMTAUsage = nullptr;
-}
-
-void Wh_ModSettingsChanged() {
-    // Configuration is owned by the native settings window. Legacy Windhawk values are
-    // imported only once during initialization and no longer drive runtime state.
 }
