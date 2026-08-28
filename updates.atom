@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-28T12:52:21.000Z</updated>
+    <updated>2026-08-28T13:08:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on Empty Explorer 2.7.0]]></title>
+        <id>https://windhawk.net/mods/click-on-empty-explorer#ffe3c0fad6d8af42c49b64003af32fae5687dc80</id>
+        <link href="https://windhawk.net/mods/click-on-empty-explorer"/>
+        <updated>2026-08-28T13:08:36.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="bugfixes">Bugfixes</h3>
+<ul>
+<li><strong>Verb truncation:</strong> <code>GCS_VERB</code> → <code>GCS_VERBA</code> — Unicode build was writing wide chars into <code>CHAR*</code> buffer, truncating all verbs to 1 character</li>
+<li><strong>& markers:</strong> <code>StrContainsNorm</code> now strips <code>&amp;</code> so "Git Bash" matches "Open Git Ba&amp;sh here"</li>
+<li><strong>SendInput:</strong> merged split press/release calls into single atomic call</li>
+</ul>
+<h3 id="improvements">Improvements</h3>
+<ul>
+<li><strong>Perf:</strong> subclass procs skip <code>CopySettings()</code> for unhandled messages</li>
+<li><strong>Debug:</strong> dump shows normalized match text per entry (<code>→ match:</code>)</li>
+<li><strong>Docs:</strong> expanded Context Menu Match section with rules table</li>
+<li><strong>Open in Terminal:</strong> now launches Windows Terminal directly via <code>wt.exe -d &lt;folder&gt;</code> instead of matching the context-menu entry. Works on non-English Windows and survives shell updates that rename the menu verb/text. Requires Windows Terminal to be installed.</li>
+</ul>]]></content>
+        <author>
+            <name>LiHua81</name>
+            <uri>https://github.com/LiHua81</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Move and Gather Windows 0.1.2]]></title>
         <id>https://windhawk.net/mods/gather-windows-to-monitor#b4861b654bb17c1c951c2859a7df77f991e5a230</id>
@@ -1033,23 +1056,6 @@ In these cases, please use the Windows Default Apps settings to make your change
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.6]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#dddabf466ecd540485cb9ecb066964779a7bd7e8</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-08-21T18:45:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated themes for compatibility with recent Windows 11 changes (ViVeTool flag 61017737).</li>
-<li>Added the Float theme.</li>
-<li>Several target controls can now be specified for the same styles by separating them with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt; Class#Name2</code>.</li>
-<li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
-<li>Improved handling for remote images.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
