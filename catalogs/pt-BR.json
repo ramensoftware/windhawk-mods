@@ -11544,7 +11544,7 @@
           10
         ],
         "ratingUsers": 10,
-        "updated": 1787507971000,
+        "updated": 1787922818000,
         "users": 115
       },
       "metadata": {
@@ -11557,7 +11557,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.17.3"
+        "version": "0.18.8"
       }
     },
     "spoof-light-dark-theme": {
