@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar when the desktop is active, while showing it for applications and on taskbar hover
-// @version 1.4.0
+// @version 1.5.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -98,12 +98,12 @@ HANDLE g_hThreadReadyEvent = nullptr;
 
 constexpr UINT WM_APP_REFRESH_STATE = WM_APP + 1;
 constexpr UINT WM_APP_STOP_THREAD = WM_APP + 2;
-constexpr WPARAM kRefreshNativeAutoHide = 1;
 constexpr UINT kHoverTimerIntervalMs = 200;
 
 UINT_PTR g_hoverTimerId = 0;
 
 std::atomic<bool> g_refreshPosted{false};
+std::atomic<bool> g_refreshNativeAutoHidePending{false};
 std::atomic<bool> g_nativeAutoHideEnabled{false};
 
 bool g_onDesktopState = false;
@@ -114,7 +114,7 @@ bool g_taskbarIsForeground = false;
 bool g_shownDueToHover = false;
 ULONGLONG g_hideDeadline = 0;
 
-constexpr size_t kMaxWinEventHooks = 3;
+constexpr size_t kMaxWinEventHooks = 2;
 HWINEVENTHOOK g_hWinEventHooks[kMaxWinEventHooks] = {};
 
 
@@ -334,12 +334,6 @@ void RefreshDesktopState() {
         if (IsTaskbarForegroundAndUnderCursor(foreground)) {
             g_taskbarIsForeground = true;
 
-            // The taskbar was revealed/kept visible by the user's
-            // interaction with it. Preserve this state so that when the
-            // cursor leaves the taskbar we start the configured hover
-            // delay instead of hiding it immediately.
-            g_shownDueToHover = true;
-
             g_onDesktopState = false;
             return;
         }
@@ -459,7 +453,7 @@ void SetWindowVisibilityIfNeeded(HWND hwnd, bool show) {
     bool visible = IsWindowVisible(hwnd) != FALSE;
 
     if (visible != show) {
-        ShowWindow(
+        ShowWindowAsync(
             hwnd,
             show ? SW_SHOWNA : SW_HIDE
         );
@@ -743,11 +737,14 @@ void UpdateTaskbarState() {
     if (!g_onDesktopState) {
         g_hideDeadline = 0;
 
-        // Do not clear g_shownDueToHover while the taskbar itself has
-        // focus. It is needed after the cursor leaves the taskbar so the
-        // configured delay is applied. Clear it for a real application
-        // state, where hiding is never delayed.
-        if (!g_taskbarIsForeground) {
+        // If the taskbar itself has focus, preserve the hover-reveal state
+        // so leaving the taskbar starts the configured hide delay.
+        //
+        // A real application state clears the hover-reveal state because
+        // the taskbar must remain visible while that application is active.
+        if (g_taskbarIsForeground) {
+            g_shownDueToHover = true;
+        } else {
             g_shownDueToHover = false;
         }
 
@@ -826,10 +823,6 @@ void UpdateTaskbarState() {
             std::memory_order_relaxed
         );
 
-    if (delay > 60000) {
-        delay = 60000;
-    }
-
     if (g_hideDeadline == 0) {
         g_hideDeadline =
             now + static_cast<ULONGLONG>(delay);
@@ -853,6 +846,13 @@ void RequestStateRefresh(bool refreshNativeAutoHide = false) {
         return;
     }
 
+    if (refreshNativeAutoHide) {
+        g_refreshNativeAutoHidePending.store(
+            true,
+            std::memory_order_release
+        );
+    }
+
     bool expected = false;
 
     if (
@@ -870,7 +870,7 @@ void RequestStateRefresh(bool refreshNativeAutoHide = false) {
         !PostThreadMessageW(
             g_threadId,
             WM_APP_REFRESH_STATE,
-            refreshNativeAutoHide ? kRefreshNativeAutoHide : 0,
+            0,
             0
         )
     ) {
@@ -1151,7 +1151,12 @@ DWORD WINAPI HookThread(LPVOID) {
                 std::memory_order_release
             );
 
-            if (msg.wParam == kRefreshNativeAutoHide) {
+            if (
+                g_refreshNativeAutoHidePending.exchange(
+                    false,
+                    std::memory_order_acq_rel
+                )
+            ) {
                 RefreshNativeTaskbarAutoHideState();
             }
 
@@ -1195,6 +1200,11 @@ DWORD WINAPI HookThread(LPVOID) {
         std::memory_order_release
     );
 
+    g_refreshNativeAutoHidePending.store(
+        false,
+        std::memory_order_release
+    );
+
     return 0;
 }
 
@@ -1209,12 +1219,16 @@ void LoadSettings() {
             L"extraHoverMarginMm"
         );
 
-    DWORD delay =
-        static_cast<DWORD>(
-            Wh_GetIntSetting(
-                L"autoHideDelayMs"
-            )
+    int delay =
+        Wh_GetIntSetting(
+            L"autoHideDelayMs"
         );
+
+    if (delay < 0) {
+        delay = 0;
+    } else if (delay > 60000) {
+        delay = 60000;
+    }
 
     bool secondary =
         Wh_GetIntSetting(
@@ -1239,7 +1253,7 @@ void LoadSettings() {
     );
 
     g_settings.autoHideDelayMs.store(
-        delay,
+        static_cast<DWORD>(delay),
         std::memory_order_relaxed
     );
 
@@ -1425,6 +1439,11 @@ void WhTool_ModUninit() {
         g_hThread = nullptr;
         g_threadId = 0;
     }
+
+    g_refreshNativeAutoHidePending.store(
+        false,
+        std::memory_order_release
+    );
 
     if (g_hThreadReadyEvent) {
         CloseHandle(g_hThreadReadyEvent);
