@@ -78,8 +78,11 @@ thread_local int g_makeBackgroundThumbnailDepth = 0;
 constexpr LONG kHookPending = 0;
 constexpr LONG kHookInstalling = 1;
 constexpr LONG kHookInstalled = 2;
+constexpr LONG kHookFailed = 3;
 volatile LONG g_backgroundHookState = kHookPending;
 volatile LONG g_thumbnailHookState = kHookPending;
+volatile LONG g_thumbcacheHookAttempted = FALSE;
+volatile LONG g_windowsStorageHookAttempted = FALSE;
 volatile LONG g_maximumThumbnailSize = 1024;
 
 // Load settings atomically because Explorer can switch desktops while the
@@ -216,6 +219,15 @@ bool HookThumbnailCache(HMODULE module) {
         return false;
     }
 
+    volatile LONG* attemptState =
+        GetModuleHandleW(L"thumbcache.dll") == module
+            ? &g_thumbcacheHookAttempted
+            : &g_windowsStorageHookAttempted;
+    if (InterlockedExchange(attemptState, TRUE)) {
+        InterlockedExchange(&g_thumbnailHookState, kHookPending);
+        return false;
+    }
+
     if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
             reinterpret_cast<LPCWSTR>(module),
@@ -281,6 +293,14 @@ bool HookLoadedThumbnailCache() {
             return true;
         }
     }
+
+    if (InterlockedCompareExchange(
+            &g_thumbcacheHookAttempted, FALSE, FALSE) &&
+        InterlockedCompareExchange(
+            &g_windowsStorageHookAttempted, FALSE, FALSE)) {
+        InterlockedCompareExchange(
+            &g_thumbnailHookState, kHookFailed, kHookPending);
+    }
     return false;
 }
 
@@ -309,14 +329,14 @@ bool HookBackgroundThumbnailModule(HMODULE twinuiPcShell) {
             reinterpret_cast<LPCWSTR>(twinuiPcShell),
             &g_twinuiPcShell)) {
         Wh_Log(L"Failed to retain twinui.pcshell.dll: %lu", GetLastError());
-        InterlockedExchange(&g_backgroundHookState, kHookPending);
+        InterlockedExchange(&g_backgroundHookState, kHookFailed);
         return false;
     }
 
     if (!HookBackgroundThumbnailHelper(twinuiPcShell)) {
         FreeLibrary(g_twinuiPcShell);
         g_twinuiPcShell = nullptr;
-        InterlockedExchange(&g_backgroundHookState, kHookPending);
+        InterlockedExchange(&g_backgroundHookState, kHookFailed);
         return false;
     }
 
@@ -380,7 +400,7 @@ BOOL Wh_ModInit() {
     if (!IsOrMayBecomeShellExplorer()) {
         Wh_Log(L"Skipping non-shell explorer.exe process %lu",
                GetCurrentProcessId());
-        return TRUE;
+        return FALSE;
     }
 
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
