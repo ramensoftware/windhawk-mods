@@ -6626,19 +6626,19 @@
           2
         ],
         "ratingUsers": 3,
-        "updated": 1785948295000,
+        "updated": 1787921541000,
         "users": 28
       },
       "metadata": {
         "author": "Fred",
         "compilerOptions": "-ldwmapi -lshell32",
-        "description": "Move eligible open windows to a chosen monitor with global hotkeys",
+        "description": "Move or gather windows with global hotkeys and remap numbered shortcuts to the intended displays",
         "github": "https://github.com/fjdiazt",
         "include": [
           "windhawk.exe"
         ],
-        "name": "Gather Windows To Monitor",
-        "version": "0.1.1"
+        "name": "Move and Gather Windows",
+        "version": "0.1.2"
       }
     },
     "genie-minimize-animation": {
