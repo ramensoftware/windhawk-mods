@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.5
+// @version         1.5.6
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -374,6 +374,8 @@ struct TaskbarDisplayInfo {
 };
 
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs = 2000);
+static int ScaleForDpi(int value, UINT dpi);
+static UINT WindowDpi(HWND hWnd);
 static std::vector<TaskbarDisplayInfo> FindCurrentProcessTaskbarDisplays();
 static std::vector<HWND> FindCurrentProcessTaskbarWnds();
 static QuotaUiInstance* FindUiState(HWND hWnd);
@@ -1668,9 +1670,45 @@ static std::atomic<SOCKET> g_loginSocket{INVALID_SOCKET};  // OpenAI loopback li
 struct LoginDialogState {
     std::wstring result;
     HWND edit = nullptr;
+    HFONT font = nullptr;
+    UINT dpi = 96;
     bool ok = false;
     bool done = false;
 };
+
+static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
+    auto sc = [dpi](int value) { return ScaleForDpi(value, dpi); };
+    constexpr UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    SetWindowPos(GetDlgItem(hWnd, 100), nullptr, sc(12), sc(10), sc(424), sc(52), flags);
+    SetWindowPos(GetDlgItem(hWnd, 101), nullptr, sc(12), sc(68), sc(424), sc(24), flags);
+    SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr, sc(262), sc(104), sc(84), sc(30), flags);
+    SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr, sc(352), sc(104), sc(84), sc(30), flags);
+
+    NONCLIENTMETRICSW metrics{sizeof(metrics)};
+    LOGFONTW fontDescription{};
+    using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
+    auto systemParametersInfoForDpi = reinterpret_cast<SystemParametersInfoForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SystemParametersInfoForDpi"));
+    if (systemParametersInfoForDpi &&
+        systemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
+                                   &metrics, 0, dpi)) {
+        fontDescription = metrics.lfMessageFont;
+    } else {
+        fontDescription.lfHeight = -MulDiv(9, (int)dpi, 72);
+        fontDescription.lfQuality = CLEARTYPE_QUALITY;
+        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");
+    }
+    HFONT font = CreateFontIndirectW(&fontDescription);
+    if (font) {
+        for (HWND child : {GetDlgItem(hWnd, 100), GetDlgItem(hWnd, 101),
+                           GetDlgItem(hWnd, IDOK), GetDlgItem(hWnd, IDCANCEL)}) {
+            SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        }
+        if (state.font) DeleteObject(state.font);
+        state.font = font;
+    }
+    state.dpi = dpi;
+}
 
 static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -1679,21 +1717,17 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             auto* st = reinterpret_cast<LoginDialogState*>(cs->lpCreateParams);
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
             HINSTANCE hInst = GetModuleHandleW(nullptr);
-            HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-            HWND label = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
-                                         12, 10, 424, 52, hWnd, (HMENU)100, hInst, nullptr);
+            CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                            12, 10, 424, 52, hWnd, (HMENU)100, hInst, nullptr);
             HWND edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
                                         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
                                         12, 68, 424, 24, hWnd, (HMENU)101, hInst, nullptr);
-            HWND ok = CreateWindowExW(0, L"BUTTON", L"Sign in",
-                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-                                      262, 104, 84, 30, hWnd, (HMENU)IDOK, hInst, nullptr);
-            HWND cancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
-                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                                          352, 104, 84, 30, hWnd, (HMENU)IDCANCEL, hInst, nullptr);
-            for (HWND c : {label, edit, ok, cancel}) {
-                SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
-            }
+            CreateWindowExW(0, L"BUTTON", L"Sign in",
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                            262, 104, 84, 30, hWnd, (HMENU)IDOK, hInst, nullptr);
+            CreateWindowExW(0, L"BUTTON", L"Cancel",
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                            352, 104, 84, 30, hWnd, (HMENU)IDCANCEL, hInst, nullptr);
             if (st) st->edit = edit;
             SetFocus(edit);
             return 0;
@@ -1716,6 +1750,16 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 return 0;
             }
             break;
+        }
+        case WM_DPICHANGED: {
+            auto* st = reinterpret_cast<LoginDialogState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            auto* suggested = reinterpret_cast<RECT*>(lParam);
+            SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
+                         suggested->right - suggested->left,
+                         suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            if (st) LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+            return 0;
         }
         case WM_CLOSE:
             DestroyWindow(hWnd);
@@ -1748,18 +1792,45 @@ static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::w
     }
 
     LoginDialogState st;
-    int w = 460, h = 184;
-    int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
-    int y = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
-    HWND wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, kClass, title.c_str(),
-                               WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h,
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &monitorInfo.rcWork, 0);
+    }
+    DWORD exStyle = WS_EX_TOPMOST | WS_EX_DLGMODALFRAME;
+    DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
+    HWND wnd = CreateWindowExW(exStyle, kClass, title.c_str(),
+                               style, monitorInfo.rcWork.left, monitorInfo.rcWork.top, 460, 184,
                                nullptr, nullptr, hInst, &st);
     if (!wnd) {
         UnregisterClassW(kClass, hInst);
         return {};
     }
-    SetWindowTextW(GetDlgItem(wnd, 100), instructions.c_str());
     g_loginWnd.store(wnd);
+
+    UINT dpi = WindowDpi(wnd);
+    RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(144, dpi)};
+    using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
+    if (!adjustWindowRectExForDpi ||
+        !adjustWindowRectExForDpi(&windowRect, style, FALSE, exStyle, dpi)) {
+        AdjustWindowRectEx(&windowRect, style, FALSE, exStyle);
+    }
+    int width = windowRect.right - windowRect.left;
+    int height = windowRect.bottom - windowRect.top;
+    int x = monitorInfo.rcWork.left +
+            (monitorInfo.rcWork.right - monitorInfo.rcWork.left - width) / 2;
+    int y = monitorInfo.rcWork.top +
+            (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - height) / 2;
+    SetWindowPos(wnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
+    LayoutLoginDialog(wnd, st, dpi);
+    SetWindowTextW(GetDlgItem(wnd, 100), instructions.c_str());
+    ShowWindow(wnd, SW_SHOW);
+    SetForegroundWindow(wnd);
+    SetFocus(st.edit);
 
     MSG msg;
     while (!g_unloading) {
@@ -1773,6 +1844,7 @@ static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::w
     }
     g_loginWnd.store(nullptr);
     if (IsWindow(wnd)) DestroyWindow(wnd);
+    if (st.font) DeleteObject(st.font);
     // Unregister so a later mod reload can't reuse a class pointing at this now-unloaded WndProc.
     UnregisterClassW(kClass, hInst);
     return st.ok ? st.result : std::wstring();
@@ -2010,6 +2082,12 @@ static void DoOpenAiLogin(const LoginRequest& req) {
 
 static DWORD WINAPI LoginThreadProc(LPVOID param) {
     std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
+    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        auto setDpi = reinterpret_cast<SetThreadDpiAwarenessContext_t>(
+            GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+        if (setDpi) setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
     bool apartmentInitialized = false;
     try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -3740,11 +3818,11 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
         [](int code, WPARAM w, LPARAM l) CALLBACK -> LRESULT {
+            PayloadRef payload;
             if (code == HC_ACTION) {
                 auto* cwp = reinterpret_cast<const CWPSTRUCT*>(l);
                 static const UINT kM = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == kM) {
-                    PayloadRef p;
                     {
                         std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
                         auto it = std::find_if(
@@ -3753,19 +3831,21 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
                                 return entry.first == id;
                             });
                         if (it != pendingPayloads.end()) {
-                            p = std::move(it->second);
+                            payload = std::move(it->second);
                             pendingPayloads.erase(it);
                         }
                     }
                     // Multiple concurrent marshals install hooks in the same chain. Only the
                     // first hook that claims this ID may execute and release its payload.
-                    if (p) {
-                        p->result.store(p->proc(p->param), std::memory_order_release);
-                        p->ran.store(true, std::memory_order_release);
+                    if (payload) {
+                        payload->result.store(payload->proc(payload->param),
+                                              std::memory_order_release);
                     }
                 }
             }
-            return CallNextHookEx(nullptr, code, w, l);
+            LRESULT result = CallNextHookEx(nullptr, code, w, l);
+            if (payload) payload->ran.store(true, std::memory_order_release);
+            return result;
         }, nullptr, tid);
     if (!hook) {
         std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
@@ -3779,19 +3859,36 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
         SendMessageW(hWnd, kMsg, payloadId, 0);
     } else {
         DWORD_PTR ignored = 0;
-        // Avoid worker/UI deadlocks during unload if the target thread stops pumping messages.
+        // Keep delivering while a responsive target pumps sent messages. A timeout can safely
+        // cancel only a payload the target hasn't claimed yet.
         sent = SendMessageTimeoutW(hWnd, kMsg, payloadId, 0,
                                    SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
                                    timeoutMs, &ignored) != 0;
     }
 
     bool ran = pay->ran.load(std::memory_order_acquire);
-    bool result = sent && ran && pay->result.load(std::memory_order_acquire);
+    bool claimed = false;
     if (!ran) {
         std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
-        std::erase_if(pendingPayloads,
-                      [payloadId](const auto& entry) { return entry.first == payloadId; });
+        auto it = std::find_if(
+            pendingPayloads.begin(), pendingPayloads.end(),
+            [payloadId](const auto& entry) { return entry.first == payloadId; });
+        if (it != pendingPayloads.end()) {
+            pendingPayloads.erase(it);
+        } else {
+            // The target claimed the payload before the send timed out. It may still be
+            // executing mod code, so don't let the caller proceed until it has returned.
+            claimed = true;
+        }
     }
+    if (claimed) {
+        if (!sent) Wh_Log(L"Window-thread marshal timed out after dispatch; waiting");
+        while (!pay->ran.load(std::memory_order_acquire)) Sleep(1);
+        // The hook tail can still be unwinding. Unload joins every finite-marshal worker,
+        // then its synchronous per-taskbar cleanup sends serialize behind that tail.
+        ran = true;
+    }
+    bool result = ran && pay->result.load(std::memory_order_acquire);
     UnhookWindowsHookEx(hook);
     return result;
 }
@@ -8928,6 +9025,8 @@ void Wh_ModUninit() {
     }
     g_fetchThreadStarted.store(false, std::memory_order_release);
 
+    // All worker threads that can issue finite taskbar marshals are joined. These synchronous
+    // cleanup sends are the final per-UI-thread lifetime barrier before the DLL can unload.
     RemoveAllQuotaGrids(true);
 
     // A taskbar thread that terminated without window teardown has no owner thread left for its
