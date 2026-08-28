@@ -1,0 +1,1627 @@
+// ==WindhawkMod==
+// @id              taskbar-scroll-actions-zones
+// @name            Taskbar Scroll Actions (Zones)
+// @description     Assign different actions for scrolling over different zones of the taskbar, including virtual desktop switching, monitor brightness control, and volume control
+// @version         0.7
+// @author          ALMAS CP
+// @github          https://github.com/almas-cp
+// @homepage        https://github.com/almas-cp
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lversion -ldxva2
+// ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
+
+// ==WindhawkModReadme==
+/*
+# Taskbar Scroll Actions (Zones)
+
+Assign different actions for scrolling over different zones of the taskbar.
+
+The taskbar can be divided into 1, 2, or 3 zones. Each zone can be assigned one of these actions:
+
+* **Change system volume** - Scroll to adjust the master volume
+* **Change monitor brightness** - Scroll to adjust screen brightness (supports external monitors)
+* **Switch virtual desktop** - Scroll to switch between Windows virtual desktops
+
+## Zone Layout
+
+- **Zone 1**: Leftmost portion of the taskbar
+- **Zone 2**: Middle portion (when using 3 zones) or right portion (when using 2 zones)
+- **Zone 3**: Rightmost portion (the "Show Desktop" button area) - great for desktop switching!
+
+**Tip:** Zone 3 corresponds to the "Show Desktop" hover area on the far right of the taskbar,
+making it intuitive for virtual desktop switching.
+
+**Note:** Some laptop touchpads might not support scrolling over the taskbar. A
+workaround is to use the "pinch to zoom" gesture.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- numberOfZones: two
+  $name: Number of zones
+  $description: How many zones to divide the taskbar into
+  $options:
+  - one: Single zone (entire taskbar)
+  - two: Two zones (left and right)
+  - three: Three zones (left, middle, right/show-desktop)
+- zone1Action: brightnessChange
+  $name: Zone 1 action (leftmost)
+  $options:
+  - virtualDesktopSwitch: Switch virtual desktop
+  - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
+- zone2Action: systemVolumeChange
+  $name: Zone 2 action (middle or right)
+  $options:
+  - virtualDesktopSwitch: Switch virtual desktop
+  - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
+- zone3Action: virtualDesktopSwitch
+  $name: Zone 3 action (rightmost / show-desktop area)
+  $options:
+  - virtualDesktopSwitch: Switch virtual desktop
+  - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
+- zone1ScrollStep: 5
+  $name: Zone 1 scroll step
+  $description: Change amount per scroll notch for Zone 1
+- zone2ScrollStep: 5
+  $name: Zone 2 scroll step
+  $description: Change amount per scroll notch for Zone 2
+- zone3ScrollStep: 1
+  $name: Zone 3 scroll step
+  $description: Change amount per scroll notch for Zone 3
+- useDdcCi: false
+  $name: Support external monitors (DDC/CI)
+  $description: >-
+    Enable brightness control for external monitors using the DDC/CI protocol.
+    Falls back to WMI for laptop displays.
+    WARNING: Many monitors don't fully implement the MCCS standard over I2C,
+    which may result in undefined monitor behavior. Only enable this if you
+    have verified it works correctly with your monitor.
+- showVolumePopup: true
+  $name: Show system volume popup
+  $description: Show the Windows volume popup when changing volume
+- throttleMs: 0
+  $name: Throttle time (milliseconds)
+  $description: >-
+    Minimum time between actions. Set to 0 to disable.
+    Useful for preventing rapid desktop switches.
+- reverseScrollingDirection: false
+  $name: Reverse scrolling direction
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    ExplorerPatcher or a similar tool).
+*/
+// ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
+
+#include <initguid.h>
+
+#include <combaseapi.h>
+#include <commctrl.h>
+#include <comutil.h>
+#include <endpointvolume.h>
+#include <mmdeviceapi.h>
+#include <psapi.h>
+#include <wbemcli.h>
+#include <windowsx.h>
+#include <physicalmonitorenumerationapi.h>
+#include <highlevelmonitorconfigurationapi.h>
+
+#include <unordered_set>
+#include <vector>
+
+enum class ScrollAction {
+    virtualDesktopSwitch,
+    brightnessChange,
+    systemVolumeChange,
+};
+
+struct {
+    int numberOfZones;
+    ScrollAction zone1Action;
+    ScrollAction zone2Action;
+    ScrollAction zone3Action;
+    int zone1ScrollStep;
+    int zone2ScrollStep;
+    int zone3ScrollStep;
+    bool useDdcCi;
+    bool showVolumePopup;
+    int throttleMs;
+    bool reverseScrollingDirection;
+    bool oldTaskbarOnWin11;
+} g_settings;
+
+bool g_initialized = false;
+bool g_inputSiteProcHooked = false;
+std::unordered_set<HWND> g_secondaryTaskbarWindows;
+
+enum {
+    WIN_VERSION_UNSUPPORTED = 0,
+    WIN_VERSION_7,
+    WIN_VERSION_8,
+    WIN_VERSION_81,
+    WIN_VERSION_811,
+    WIN_VERSION_10_T1,        // 1507
+    WIN_VERSION_10_T2,        // 1511
+    WIN_VERSION_10_R1,        // 1607
+    WIN_VERSION_10_R2,        // 1703
+    WIN_VERSION_10_R3,        // 1709
+    WIN_VERSION_10_R4,        // 1803
+    WIN_VERSION_10_R5,        // 1809
+    WIN_VERSION_10_19H1,      // 1903, 1909
+    WIN_VERSION_10_20H1,      // 2004, 20H2, 21H1, 21H2
+    WIN_VERSION_SERVER_2022,  // Server 2022
+    WIN_VERSION_11_21H2,
+    WIN_VERSION_11_22H2,
+};
+
+#ifndef WM_POINTERWHEEL
+#define WM_POINTERWHEEL 0x024E
+#endif
+
+int g_nWinVersion;
+int g_nExplorerVersion;
+HWND g_hTaskbarWnd;
+DWORD g_dwTaskbarThreadId;
+
+// Add shell hook message for volume popup
+UINT g_uShellHookMsg = RegisterWindowMessage(L"SHELLHOOK");
+
+#pragma region functions
+
+UINT GetDpiForWindowWithFallback(HWND hWnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
+    static GetDpiForWindow_t pGetDpiForWindow = []() {
+        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+        if (hUser32) {
+            return (GetDpiForWindow_t)GetProcAddress(hUser32,
+                                                     "GetDpiForWindow");
+        }
+
+        return (GetDpiForWindow_t) nullptr;
+    }();
+
+    int iDpi = 96;
+    if (pGetDpiForWindow) {
+        iDpi = pGetDpiForWindow(hWnd);
+    } else {
+        HDC hdc = GetDC(NULL);
+        if (hdc) {
+            iDpi = GetDeviceCaps(hdc, LOGPIXELSX);
+            ReleaseDC(NULL, hdc);
+        }
+    }
+
+    return iDpi;
+}
+
+bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR szClassName[32];
+    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+        return false;
+    }
+
+    return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+int GetZoneFromPoint(HWND hMMTaskbarWnd, POINT pt) {
+    RECT rc;
+    
+    if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+        return -1; // Not in taskbar
+    }
+
+    if (g_settings.numberOfZones == 1) {
+        return 0; // Single zone
+    }
+
+    // Determine taskbar orientation (horizontal or vertical)
+    bool isHorizontal = (rc.right - rc.left) > (rc.bottom - rc.top);
+    int totalSize = isHorizontal ? (rc.right - rc.left) : (rc.bottom - rc.top);
+    int pointPos = isHorizontal ? (pt.x - rc.left) : (pt.y - rc.top);
+    
+    if (g_settings.numberOfZones == 2) {
+        // Two zones: left half and right half (50/50)
+        int zoneSize = totalSize / 2;
+        return (pointPos < zoneSize) ? 0 : 1;
+    }
+    
+    // Three zones: 49% / 49% / 2% distribution
+    // Zone 3 is a tiny edge on the rightmost side (like the "show desktop" button)
+    int zone3Size = totalSize * 2 / 100;  // 2% of taskbar
+    if (zone3Size < 10) zone3Size = 10;   // Minimum 10 pixels for usability
+    
+    int zone3Start = totalSize - zone3Size;
+    int zone1Size = zone3Start / 2;  // Split the remaining 98% equally
+    
+    if (pointPos >= zone3Start) {
+        return 2; // Zone 3 (rightmost 2% / show desktop area)
+    } else if (pointPos >= zone1Size) {
+        return 1; // Zone 2 (middle 49%)
+    } else {
+        return 0; // Zone 1 (leftmost 49%)
+    }
+}
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    HRSRC hResource;
+    HGLOBAL hGlobal;
+    void* pData;
+    void* pFixedFileInfo;
+    UINT uPtrLen;
+
+    pFixedFileInfo = NULL;
+    uPtrLen = 0;
+
+    hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource != NULL) {
+        hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal != NULL) {
+            pData = LockResource(hGlobal);
+            if (pData != NULL) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = NULL;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen)
+        *puPtrLen = uPtrLen;
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+BOOL WindowsVersionInit() {
+    g_nWinVersion = WIN_VERSION_UNSUPPORTED;
+
+    VS_FIXEDFILEINFO* pFixedFileInfo = GetModuleVersionInfo(NULL, NULL);
+    if (!pFixedFileInfo)
+        return FALSE;
+
+    WORD nMajor = HIWORD(pFixedFileInfo->dwFileVersionMS);
+    WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
+    WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
+    WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
+
+    switch (nMajor) {
+        case 6:
+            switch (nMinor) {
+                case 1:
+                    g_nWinVersion = WIN_VERSION_7;
+                    break;
+
+                case 2:
+                    g_nWinVersion = WIN_VERSION_8;
+                    break;
+
+                case 3:
+                    if (nQFE < 17000)
+                        g_nWinVersion = WIN_VERSION_81;
+                    else
+                        g_nWinVersion = WIN_VERSION_811;
+                    break;
+
+                case 4:
+                    g_nWinVersion = WIN_VERSION_10_T1;
+                    break;
+            }
+            break;
+
+        case 10:
+            if (nBuild <= 10240)
+                g_nWinVersion = WIN_VERSION_10_T1;
+            else if (nBuild <= 10586)
+                g_nWinVersion = WIN_VERSION_10_T2;
+            else if (nBuild <= 14393)
+                g_nWinVersion = WIN_VERSION_10_R1;
+            else if (nBuild <= 15063)
+                g_nWinVersion = WIN_VERSION_10_R2;
+            else if (nBuild <= 16299)
+                g_nWinVersion = WIN_VERSION_10_R3;
+            else if (nBuild <= 17134)
+                g_nWinVersion = WIN_VERSION_10_R4;
+            else if (nBuild <= 17763)
+                g_nWinVersion = WIN_VERSION_10_R5;
+            else if (nBuild <= 18362)
+                g_nWinVersion = WIN_VERSION_10_19H1;
+            else if (nBuild <= 19041)
+                g_nWinVersion = WIN_VERSION_10_20H1;
+            else if (nBuild <= 20348)
+                g_nWinVersion = WIN_VERSION_SERVER_2022;
+            else if (nBuild <= 22000)
+                g_nWinVersion = WIN_VERSION_11_21H2;
+            else
+                g_nWinVersion = WIN_VERSION_11_22H2;
+            break;
+    }
+
+    if (g_nWinVersion == WIN_VERSION_UNSUPPORTED)
+        return FALSE;
+
+    return TRUE;
+}
+
+// Improved function to send volume popup using WM_APPCOMMAND
+bool PostAppCommand(SHORT appCommand, int count) {
+    if (!g_hTaskbarWnd) {
+        return false;
+    }
+
+    HWND hReBarWindow32 =
+        FindWindowEx(g_hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
+    if (!hReBarWindow32) {
+        return false;
+    }
+
+    HWND hMSTaskSwWClass =
+        FindWindowEx(hReBarWindow32, nullptr, L"MSTaskSwWClass", nullptr);
+    if (!hMSTaskSwWClass) {
+        return false;
+    }
+
+    for (int i = 0; i < count; i++) {
+        PostMessage(hMSTaskSwWClass, g_uShellHookMsg, HSHELL_APPCOMMAND,
+                    MAKELPARAM(0, appCommand));
+    }
+
+    return true;
+}
+
+// Function to show system volume popup - improved version
+void ShowSystemVolumePopup(int direction) {
+    if (!g_settings.showVolumePopup) return;
+
+    SHORT appCommand = (direction > 0) ? APPCOMMAND_VOLUME_UP : APPCOMMAND_VOLUME_DOWN;
+    PostAppCommand(appCommand, 1);
+}
+
+#pragma endregion  // functions
+
+#pragma region brightness
+
+// Reference:
+// https://github.com/stefankueng/tools/blob/e7cd50c6ac3a50f6dac84c6aace519349164155e/Misc/AAClr/src/Utils.cpp
+
+int GetBrightness() {
+    int ret = -1;
+
+    IWbemLocator* pLocator = NULL;
+    IWbemServices* pNamespace = 0;
+    IEnumWbemClassObject* pEnum = NULL;
+    HRESULT hr = S_OK;
+
+    BSTR path = SysAllocString(L"root\\wmi");
+    BSTR ClassPath = SysAllocString(L"WmiMonitorBrightness");
+    BSTR bstrQuery = SysAllocString(L"Select * from WmiMonitorBrightness");
+
+    if (!path || !ClassPath) {
+        goto cleanup;
+    }
+
+    // Initialize COM and connect up to CIMOM
+
+    hr = CoInitialize(0);
+    if (FAILED(hr)) {
+        goto cleanup;
+    }
+
+    //  NOTE:
+    //  When using asynchronous WMI API's remotely in an environment where the
+    //  "Local System" account has no network identity (such as non-Kerberos
+    //  domains), the authentication level of RPC_C_AUTHN_LEVEL_NONE is needed.
+    //  However, lowering the authentication level to RPC_C_AUTHN_LEVEL_NONE
+    //  makes your application less secure. It is wise to
+    // use semi-synchronous API's for accessing WMI data and events instead of
+    // the asynchronous ones.
+
+    hr = CoInitializeSecurity(
+        NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
+        RPC_C_IMP_LEVEL_IMPERSONATE, NULL,
+        EOAC_SECURE_REFS,  // change to EOAC_NONE if you change dwAuthnLevel to
+                           // RPC_C_AUTHN_LEVEL_NONE
+        NULL);
+
+    hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+                          IID_IWbemLocator, (LPVOID*)&pLocator);
+    if (FAILED(hr)) {
+        goto cleanup;
+    }
+    hr = pLocator->ConnectServer(path, NULL, NULL, NULL, 0, NULL, NULL,
+                                 &pNamespace);
+    if (hr != WBEM_S_NO_ERROR) {
+        goto cleanup;
+    }
+
+    hr = CoSetProxyBlanket(pNamespace, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+                           NULL, RPC_C_AUTHN_LEVEL_PKT,
+                           RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+
+    if (hr != WBEM_S_NO_ERROR) {
+        goto cleanup;
+    }
+
+    hr = pNamespace->ExecQuery(
+        _bstr_t(L"WQL"),               // Query Language
+        bstrQuery,                     // Query to Execute
+        WBEM_FLAG_RETURN_IMMEDIATELY,  // Make a semi-synchronous call
+        NULL,                          // Context
+        &pEnum                         // Enumeration Interface
+    );
+
+    if (hr != WBEM_S_NO_ERROR) {
+        goto cleanup;
+    }
+
+    hr = WBEM_S_NO_ERROR;
+
+    while (WBEM_S_NO_ERROR == hr) {
+        ULONG ulReturned;
+        IWbemClassObject* pObj;
+
+        // Get the Next Object from the collection
+        hr = pEnum->Next(WBEM_INFINITE,  // Timeout
+                         1,              // No of objects requested
+                         &pObj,          // Returned Object
+                         &ulReturned     // No of object returned
+        );
+
+        if (hr != WBEM_S_NO_ERROR) {
+            goto cleanup;
+        }
+
+        VARIANT var1;
+        hr = pObj->Get(_bstr_t(L"CurrentBrightness"), 0, &var1, NULL, NULL);
+
+        ret = V_UI1(&var1);
+
+        VariantClear(&var1);
+        if (hr != WBEM_S_NO_ERROR) {
+            goto cleanup;
+        }
+    }
+
+    // Free up resources
+cleanup:
+
+    SysFreeString(path);
+    SysFreeString(ClassPath);
+    SysFreeString(bstrQuery);
+
+    if (pLocator)
+        pLocator->Release();
+    if (pNamespace)
+        pNamespace->Release();
+
+    CoUninitialize();
+
+    return ret;
+}
+
+bool SetBrightness(int val) {
+    bool bRet = true;
+
+    IWbemLocator* pLocator = NULL;
+    IWbemServices* pNamespace = 0;
+    IWbemClassObject* pClass = NULL;
+    IWbemClassObject* pInClass = NULL;
+    IWbemClassObject* pInInst = NULL;
+    IEnumWbemClassObject* pEnum = NULL;
+    HRESULT hr = S_OK;
+
+    BSTR path = SysAllocString(L"root\\wmi");
+    BSTR ClassPath = SysAllocString(L"WmiMonitorBrightnessMethods");
+    BSTR MethodName = SysAllocString(L"WmiSetBrightness");
+    BSTR ArgName0 = SysAllocString(L"Timeout");
+    BSTR ArgName1 = SysAllocString(L"Brightness");
+    BSTR bstrQuery =
+        SysAllocString(L"Select * from WmiMonitorBrightnessMethods");
+
+    if (!path || !ClassPath || !MethodName || !ArgName0) {
+        bRet = false;
+        goto cleanup;
+    }
+
+    // Initialize COM and connect up to CIMOM
+
+    hr = CoInitialize(0);
+    if (FAILED(hr)) {
+        bRet = false;
+        goto cleanup;
+    }
+
+    //  NOTE:
+    //  When using asynchronous WMI API's remotely in an environment where the
+    //  "Local System" account has no network identity (such as non-Kerberos
+    //  domains), the authentication level of RPC_C_AUTHN_LEVEL_NONE is needed.
+    //  However, lowering the authentication level to RPC_C_AUTHN_LEVEL_NONE
+    //  makes your application less secure. It is wise to
+    // use semi-synchronous API's for accessing WMI data and events instead of
+    // the asynchronous ones.
+
+    hr = CoInitializeSecurity(
+        NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
+        RPC_C_IMP_LEVEL_IMPERSONATE, NULL,
+        EOAC_SECURE_REFS,  // change to EOAC_NONE if you change dwAuthnLevel to
+                           // RPC_C_AUTHN_LEVEL_NONE
+        NULL);
+
+    hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+                          IID_IWbemLocator, (LPVOID*)&pLocator);
+    if (FAILED(hr)) {
+        bRet = false;
+        goto cleanup;
+    }
+    hr = pLocator->ConnectServer(path, NULL, NULL, NULL, 0, NULL, NULL,
+                                 &pNamespace);
+    if (hr != WBEM_S_NO_ERROR) {
+        bRet = false;
+        goto cleanup;
+    }
+
+    hr = CoSetProxyBlanket(pNamespace, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+                           NULL, RPC_C_AUTHN_LEVEL_PKT,
+                           RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+
+    if (hr != WBEM_S_NO_ERROR) {
+        bRet = false;
+        goto cleanup;
+    }
+
+    hr = pNamespace->ExecQuery(
+        _bstr_t(L"WQL"),               // Query Language
+        bstrQuery,                     // Query to Execute
+        WBEM_FLAG_RETURN_IMMEDIATELY,  // Make a semi-synchronous call
+        NULL,                          // Context
+        &pEnum                         // Enumeration Interface
+    );
+
+    if (hr != WBEM_S_NO_ERROR) {
+        bRet = false;
+        goto cleanup;
+    }
+
+    hr = WBEM_S_NO_ERROR;
+
+    while (WBEM_S_NO_ERROR == hr) {
+        ULONG ulReturned;
+        IWbemClassObject* pObj;
+
+        // Get the Next Object from the collection
+        hr = pEnum->Next(WBEM_INFINITE,  // Timeout
+                         1,              // No of objects requested
+                         &pObj,          // Returned Object
+                         &ulReturned     // No of object returned
+        );
+
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+
+        // Get the class object
+        hr = pNamespace->GetObject(ClassPath, 0, NULL, &pClass, NULL);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+
+        // Get the input argument and set the property
+        hr = pClass->GetMethod(MethodName, 0, &pInClass, NULL);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+
+        hr = pInClass->SpawnInstance(0, &pInInst);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+
+        VARIANT var1;
+        VariantInit(&var1);
+
+        V_VT(&var1) = VT_BSTR;
+        V_BSTR(&var1) = SysAllocString(L"0");
+        hr = pInInst->Put(ArgName0, 0, &var1, CIM_UINT32);  // CIM_UINT64
+
+        // var1.vt = VT_I4;
+        // var1.ullVal = 0;
+        //    hr = pInInst->Put(ArgName0, 0, &var1, 0);
+        VariantClear(&var1);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+
+        VARIANT var;
+        VariantInit(&var);
+
+        V_VT(&var) = VT_BSTR;
+        WCHAR buf[10] = {0};
+        swprintf_s(buf, _countof(buf), L"%d", val);
+        V_BSTR(&var) = SysAllocString(buf);
+        hr = pInInst->Put(ArgName1, 0, &var, CIM_UINT8);
+
+        // var.vt=VT_UI1;
+        // var.uiVal = 100;
+        // hr = pInInst->Put(ArgName1, 0, &var, 0);
+        VariantClear(&var);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+        // Call the method
+
+        VARIANT pathVariable;
+        VariantInit(&pathVariable);
+
+        hr = pObj->Get(_bstr_t(L"__PATH"), 0, &pathVariable, NULL, NULL);
+        if (hr != WBEM_S_NO_ERROR)
+            goto cleanup;
+
+        hr = pNamespace->ExecMethod(pathVariable.bstrVal, MethodName, 0, NULL,
+                                    pInInst, NULL, NULL);
+        VariantClear(&pathVariable);
+        if (hr != WBEM_S_NO_ERROR) {
+            bRet = false;
+            goto cleanup;
+        }
+    }
+
+    // Free up resources
+cleanup:
+
+    SysFreeString(path);
+    SysFreeString(ClassPath);
+    SysFreeString(MethodName);
+    SysFreeString(ArgName0);
+    SysFreeString(ArgName1);
+    SysFreeString(bstrQuery);
+
+    if (pClass)
+        pClass->Release();
+    if (pInInst)
+        pInInst->Release();
+    if (pInClass)
+        pInClass->Release();
+    if (pLocator)
+        pLocator->Release();
+    if (pNamespace)
+        pNamespace->Release();
+
+    CoUninitialize();
+
+    return bRet;
+}
+
+// DDC/CI brightness control for external monitors
+bool GetBrightnessDdcCi(HWND hWnd, DWORD* currentBrightness, DWORD* minBrightness, DWORD* maxBrightness) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+
+    DWORD numPhysicalMonitors = 0;
+    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysicalMonitors) || numPhysicalMonitors == 0) {
+        return false;
+    }
+
+    std::vector<PHYSICAL_MONITOR> physicalMonitors(numPhysicalMonitors);
+    if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysicalMonitors, physicalMonitors.data())) {
+        return false;
+    }
+
+    bool success = false;
+    for (DWORD i = 0; i < numPhysicalMonitors; i++) {
+        if (GetMonitorBrightness(physicalMonitors[i].hPhysicalMonitor, minBrightness, currentBrightness, maxBrightness)) {
+            success = true;
+            break;
+        }
+    }
+
+    DestroyPhysicalMonitors(numPhysicalMonitors, physicalMonitors.data());
+    return success;
+}
+
+bool SetBrightnessDdcCi(HWND hWnd, DWORD brightness) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+
+    DWORD numPhysicalMonitors = 0;
+    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysicalMonitors) || numPhysicalMonitors == 0) {
+        return false;
+    }
+
+    std::vector<PHYSICAL_MONITOR> physicalMonitors(numPhysicalMonitors);
+    if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysicalMonitors, physicalMonitors.data())) {
+        return false;
+    }
+
+    bool success = false;
+    for (DWORD i = 0; i < numPhysicalMonitors; i++) {
+        if (SetMonitorBrightness(physicalMonitors[i].hPhysicalMonitor, brightness)) {
+            success = true;
+            break;
+        }
+    }
+
+    DestroyPhysicalMonitors(numPhysicalMonitors, physicalMonitors.data());
+    return success;
+}
+
+// Check if a monitor is the primary monitor (typically the laptop's internal display)
+bool IsPrimaryMonitor(HWND hWnd) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+    
+    MONITORINFO mi;
+    mi.cbSize = sizeof(MONITORINFO);
+    if (GetMonitorInfo(hMonitor, &mi)) {
+        return (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    }
+    
+    return false;
+}
+
+// Unified brightness change function - monitor-aware
+// - For primary monitor (typically laptop): Try DDC/CI first, fall back to WMI
+// - For secondary monitors (typically external): Use DDC/CI only (don't affect laptop screen)
+bool ChangeBrightness(HWND hWnd, int delta) {
+    bool isPrimary = IsPrimaryMonitor(hWnd);
+    bool ddcCiSuccess = false;
+    
+    // Try DDC/CI first if enabled
+    if (g_settings.useDdcCi) {
+        DWORD currentBrightness, minBrightness, maxBrightness;
+        if (GetBrightnessDdcCi(hWnd, &currentBrightness, &minBrightness, &maxBrightness)) {
+            int newBrightness = (int)currentBrightness + delta;
+            if (newBrightness < (int)minBrightness) newBrightness = (int)minBrightness;
+            if (newBrightness > (int)maxBrightness) newBrightness = (int)maxBrightness;
+            
+            if (SetBrightnessDdcCi(hWnd, (DWORD)newBrightness)) {
+                Wh_Log(L"DDC/CI: Changed brightness from %d to %d (primary=%d)", 
+                       currentBrightness, newBrightness, isPrimary);
+                return true;
+            }
+        }
+    }
+    
+    // Only fall back to WMI if this is the primary monitor
+    // WMI controls the internal laptop display, so we shouldn't use it
+    // when scrolling on an external monitor's taskbar
+    if (isPrimary) {
+        int oldBrightness = GetBrightness();
+        if (oldBrightness != -1) {
+            int newBrightness = oldBrightness + delta;
+            if (newBrightness < 0) newBrightness = 0;
+            if (newBrightness > 100) newBrightness = 100;
+            
+            if (SetBrightness(newBrightness)) {
+                Wh_Log(L"WMI: Changed brightness from %d to %d (laptop internal display)", 
+                       oldBrightness, newBrightness);
+                return true;
+            }
+        }
+    } else {
+        Wh_Log(L"Skipping WMI brightness (not on primary monitor)");
+    }
+    
+    Wh_Log(L"Failed to change brightness for this monitor");
+    return false;
+}
+
+#pragma endregion  // brightness
+
+// Use a keyboard simulation and not IVirtualDesktopManagerInternal, since the
+// latter switches desktop without an animation. See:
+// https://github.com/Ciantic/VirtualDesktopAccessor/issues/29
+bool SwitchDesktopViaKeyboardShortcut(int clicks) {
+    if (GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_MENU) < 0 ||
+        GetKeyState(VK_SHIFT) < 0 || GetKeyState(VK_PRIOR) < 0 ||
+        GetKeyState(VK_NEXT) < 0) {
+        return false;
+    }
+
+    // To allow to switch if the foreground window is of an elevated process.
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        SetForegroundWindow(hTaskbarWnd);
+    }
+
+    WORD key = VK_LEFT;
+    if (clicks < 0) {
+        clicks = -clicks;
+        key = VK_RIGHT;
+    }
+
+    INPUT* input = new INPUT[clicks * 2 + 4];
+    for (int i = 0; i < clicks * 2 + 4; i++) {
+        input[i].type = INPUT_KEYBOARD;
+        input[i].ki.wScan = 0;
+        input[i].ki.time = 0;
+        input[i].ki.dwExtraInfo = 0;
+    }
+
+    input[0].ki.wVk = VK_LWIN;
+    input[0].ki.dwFlags = 0;
+    input[1].ki.wVk = VK_LCONTROL;
+    input[1].ki.dwFlags = 0;
+
+    for (int i = 0; i < clicks; i++) {
+        input[2 + i * 2].ki.wVk = key;
+        input[2 + i * 2].ki.dwFlags = 0;
+        input[2 + i * 2 + 1].ki.wVk = key;
+        input[2 + i * 2 + 1].ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+
+    input[2 + clicks * 2].ki.wVk = VK_LCONTROL;
+    input[2 + clicks * 2].ki.dwFlags = KEYEVENTF_KEYUP;
+    input[2 + clicks * 2 + 1].ki.wVk = VK_LWIN;
+    input[2 + clicks * 2 + 1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    SendInput(clicks * 2 + 4, input, sizeof(input[0]));
+
+    delete[] input;
+
+    return true;
+}
+
+#pragma region volume
+
+const static GUID XIID_IMMDeviceEnumerator = {
+    0xA95664D2,
+    0x9614,
+    0x4F35,
+    {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+const static GUID XIID_MMDeviceEnumerator = {
+    0xBCDE0395,
+    0xE52F,
+    0x467C,
+    {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+const static GUID XIID_IAudioEndpointVolume = {
+    0x5CDF2C82,
+    0x841E,
+    0x4546,
+    {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+
+bool g_bSystemVolInitialized;
+IMMDeviceEnumerator* g_pSystemDeviceEnumerator;
+
+void SystemVolInit() {
+    HRESULT hr = CoCreateInstance(
+        XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+        XIID_IMMDeviceEnumerator, (LPVOID*)&g_pSystemDeviceEnumerator);
+    if (FAILED(hr))
+        g_pSystemDeviceEnumerator = NULL;
+}
+
+void SystemVolUninit() {
+    if (g_pSystemDeviceEnumerator) {
+        g_pSystemDeviceEnumerator->Release();
+        g_pSystemDeviceEnumerator = NULL;
+    }
+}
+
+BOOL AddSystemMasterVolumeLevelScalar(float fMasterVolumeAdd, bool showPopup) {
+    IMMDevice* defaultDevice = NULL;
+    IAudioEndpointVolume* endpointVolume = NULL;
+    HRESULT hr;
+    float fMasterVolume;
+    BOOL bSuccess = FALSE;
+
+    if (!g_bSystemVolInitialized) {
+        SystemVolInit();
+        g_bSystemVolInitialized = true;
+    }
+
+    if (g_pSystemDeviceEnumerator) {
+        hr = g_pSystemDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                          &defaultDevice);
+        if (SUCCEEDED(hr)) {
+            hr = defaultDevice->Activate(XIID_IAudioEndpointVolume,
+                                         CLSCTX_INPROC_SERVER, NULL,
+                                         (LPVOID*)&endpointVolume);
+            if (SUCCEEDED(hr)) {
+                if (SUCCEEDED(endpointVolume->GetMasterVolumeLevelScalar(
+                        &fMasterVolume))) {
+                    fMasterVolume += fMasterVolumeAdd;
+
+                    if (fMasterVolume < 0.0)
+                        fMasterVolume = 0.0;
+                    else if (fMasterVolume > 1.0)
+                        fMasterVolume = 1.0;
+
+                    if (SUCCEEDED(endpointVolume->SetMasterVolumeLevelScalar(
+                            fMasterVolume, NULL))) {
+                        bSuccess = TRUE;
+                        
+                        // Show popup if requested
+                        if (showPopup) {
+                            int direction = (fMasterVolumeAdd > 0) ? 1 : -1;
+                            ShowSystemVolumePopup(direction);
+                        }
+                    }
+                }
+
+                endpointVolume->Release();
+            }
+
+            defaultDevice->Release();
+        }
+    }
+
+    return bSuccess;
+}
+
+#pragma endregion  // volume
+
+DWORD g_lastScrollTime;
+int g_lastScrollDeltaRemainder;
+DWORD g_lastActionTime;
+
+ScrollAction GetActionForZone(int zone) {
+    if (zone == 0) return g_settings.zone1Action;
+    if (zone == 1) return g_settings.zone2Action;
+    if (zone == 2) return g_settings.zone3Action;
+    return g_settings.zone1Action; // fallback
+}
+
+int GetScrollStepForZone(int zone) {
+    if (zone == 0) return g_settings.zone1ScrollStep;
+    if (zone == 1) return g_settings.zone2ScrollStep;
+    if (zone == 2) return g_settings.zone3ScrollStep;
+    return g_settings.zone1ScrollStep; // fallback
+}
+
+HWND g_currentTaskbarWnd = NULL; // Track current taskbar window for brightness
+
+void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, int zone, HWND hTaskbarWnd) {
+    ScrollAction action = GetActionForZone(zone);
+    int scrollStep = GetScrollStepForZone(zone);
+    
+    int delta = GET_WHEEL_DELTA_WPARAM(wParam) * scrollStep;
+
+    if (g_settings.reverseScrollingDirection) {
+        delta = -delta;
+    }
+
+    if (GetTickCount() - g_lastScrollTime < 1000 * 5) {
+        delta += g_lastScrollDeltaRemainder;
+    }
+
+    int clicks = delta / WHEEL_DELTA;
+    Wh_Log(L"Zone %d: %d clicks (delta=%d)", zone, clicks, delta);
+
+    if (clicks != 0 && g_settings.throttleMs > 0) {
+        if (GetTickCount() - g_lastActionTime < (DWORD)g_settings.throttleMs) {
+            // It's too soon, ignore this scroll event.
+            clicks = 0;
+            // Reset reminder too.
+            delta = 0;
+        } else if (clicks < -1 || clicks > 1) {
+            // Throttle to a single action at a time.
+            clicks = clicks > 0 ? 1 : -1;
+
+            // Reset reminder if going too fast.
+            delta = 0;
+        }
+    }
+
+    if (clicks != 0) {
+        switch (action) {
+            case ScrollAction::virtualDesktopSwitch:
+                SwitchDesktopViaKeyboardShortcut(clicks);
+                break;
+
+            case ScrollAction::brightnessChange:
+                ChangeBrightness(hTaskbarWnd, clicks);
+                break;
+
+            case ScrollAction::systemVolumeChange:
+                if (AddSystemMasterVolumeLevelScalar(clicks * 0.01f, g_settings.showVolumePopup)) {
+                    Wh_Log(L"Changed system volume by %d%%", clicks);
+                } else {
+                    Wh_Log(L"Error changing system volume");
+                }
+                break;
+        }
+
+        g_lastActionTime = GetTickCount();
+    }
+
+    g_lastScrollTime = GetTickCount();
+    g_lastScrollDeltaRemainder = delta % WHEEL_DELTA;
+}
+
+////////////////////////////////////////////////////////////
+
+// wParam - TRUE to subclass, FALSE to unsubclass
+// lParam - subclass data
+UINT g_subclassRegisteredMsg = RegisterWindowMessage(
+    L"Windhawk_SetWindowSubclassFromAnyThread_" WH_MOD_ID);
+
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
+                                    SUBCLASSPROC pfnSubclass,
+                                    UINT_PTR uIdSubclass,
+                                    DWORD_PTR dwRefData) {
+    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
+        SUBCLASSPROC pfnSubclass;
+        UINT_PTR uIdSubclass;
+        DWORD_PTR dwRefData;
+        BOOL result;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return FALSE;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
+                    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param =
+                        (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
+                    param->result =
+                        SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
+                                          param->uIdSubclass, param->dwRefData);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return FALSE;
+    }
+
+    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
+    param.pfnSubclass = pfnSubclass;
+    param.uIdSubclass = uIdSubclass;
+    param.dwRefData = dwRefData;
+    param.result = FALSE;
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return param.result;
+}
+
+bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
+    if (GetCapture()) {
+        return false;
+    }
+
+    POINT pt;
+    pt.x = GET_X_LPARAM(lParam);
+    pt.y = GET_Y_LPARAM(lParam);
+
+    int zone = GetZoneFromPoint(hWnd, pt);
+    if (zone == -1) {
+        return false; // Not in any valid zone
+    }
+
+    // Allows to steal focus.
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    SendInput(1, &input, sizeof(INPUT));
+
+    InvokeScrollAction(wParam, lParam, zone, hWnd);
+
+    return true;
+}
+
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
+                                           _In_ UINT uMsg,
+                                           _In_ WPARAM wParam,
+                                           _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass,
+                                           _In_ DWORD_PTR dwRefData) {
+    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
+        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
+    }
+
+    LRESULT result = 0;
+
+    switch (uMsg) {
+        case WM_MOUSEWHEEL:
+            if (g_nExplorerVersion < WIN_VERSION_11_21H2 &&
+                OnMouseWheel(hWnd, wParam, lParam)) {
+                result = 0;
+            } else {
+                result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            }
+            break;
+
+        case WM_NCDESTROY:
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+            if (hWnd != g_hTaskbarWnd) {
+                g_secondaryTaskbarWindows.erase(hWnd);
+            }
+            break;
+
+        default:
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            break;
+    }
+
+    return result;
+}
+
+WNDPROC InputSiteWindowProc_Original;
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd,
+                                          UINT uMsg,
+                                          WPARAM wParam,
+                                          LPARAM lParam) {
+    switch (uMsg) {
+        case WM_POINTERWHEEL:
+            if (HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+                IsTaskbarWindow(hRootWnd) &&
+                OnMouseWheel(hRootWnd, wParam, lParam)) {
+                return 0;
+            }
+            break;
+    }
+
+    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+}
+
+void SubclassTaskbarWindow(HWND hWnd) {
+    SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0);
+}
+
+void UnsubclassTaskbarWindow(HWND hWnd) {
+    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+}
+
+void HandleIdentifiedInputSiteWindow(HWND hWnd) {
+    if (!g_dwTaskbarThreadId ||
+        GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
+        return;
+    }
+
+    HWND hParentWnd = GetParent(hWnd);
+    WCHAR szClassName[64];
+    if (!hParentWnd ||
+        !GetClassName(hParentWnd, szClassName, ARRAYSIZE(szClassName)) ||
+        _wcsicmp(szClassName,
+                 L"Windows.UI.Composition.DesktopWindowContentBridge") != 0) {
+        return;
+    }
+
+    hParentWnd = GetParent(hParentWnd);
+    if (!hParentWnd || !IsTaskbarWindow(hParentWnd)) {
+        return;
+    }
+
+    // At first, I tried to subclass the window instead of hooking its wndproc,
+    // but the inputsite.dll code checks that the value wasn't changed, and
+    // crashes otherwise.
+    auto wndProc = (WNDPROC)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
+    WindhawkUtils::Wh_SetFunctionHookT(wndProc, InputSiteWindowProc_Hook,
+                                       &InputSiteWindowProc_Original);
+
+    if (g_initialized) {
+        Wh_ApplyHookOperations();
+    }
+
+    Wh_Log(L"Hooked InputSite wndproc %p", wndProc);
+    g_inputSiteProcHooked = true;
+}
+
+void HandleIdentifiedTaskbarWindow(HWND hWnd) {
+    g_hTaskbarWnd = hWnd;
+    g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    SubclassTaskbarWindow(hWnd);
+    for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
+        SubclassTaskbarWindow(hSecondaryWnd);
+    }
+
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+        HWND hXamlIslandWnd = FindWindowEx(
+            hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
+            nullptr);
+        if (hXamlIslandWnd) {
+            HWND hInputSiteWnd = FindWindowEx(
+                hXamlIslandWnd, nullptr,
+                L"Windows.UI.Input.InputSite.WindowClass", nullptr);
+            if (hInputSiteWnd) {
+                HandleIdentifiedInputSiteWindow(hInputSiteWnd);
+            }
+        }
+    }
+}
+
+void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
+    if (!g_dwTaskbarThreadId ||
+        GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
+        return;
+    }
+
+    g_secondaryTaskbarWindows.insert(hWnd);
+    SubclassTaskbarWindow(hWnd);
+
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+        HWND hXamlIslandWnd = FindWindowEx(
+            hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
+            nullptr);
+        if (hXamlIslandWnd) {
+            HWND hInputSiteWnd = FindWindowEx(
+                hXamlIslandWnd, nullptr,
+                L"Windows.UI.Input.InputSite.WindowClass", nullptr);
+            if (hInputSiteWnd) {
+                HandleIdentifiedInputSiteWindow(hInputSiteWnd);
+            }
+        }
+    }
+}
+
+HWND FindCurrentProcessTaskbarWindows(
+    std::unordered_set<HWND>* secondaryTaskbarWindows) {
+    struct ENUM_WINDOWS_PARAM {
+        HWND* hWnd;
+        std::unordered_set<HWND>* secondaryTaskbarWindows;
+    };
+
+    HWND hWnd = nullptr;
+    ENUM_WINDOWS_PARAM param = {&hWnd, secondaryTaskbarWindows};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
+
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId())
+                return TRUE;
+
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
+                return TRUE;
+
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+                *param.hWnd = hWnd;
+            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+                param.secondaryTaskbarWindows->insert(hWnd);
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&param);
+
+    return hWnd;
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd)
+        return hWnd;
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
+        Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        HandleIdentifiedTaskbarWindow(hWnd);
+    } else if (bTextualClassName &&
+               _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0) {
+        Wh_Log(L"Secondary taskbar window created: %08X",
+               (DWORD)(ULONG_PTR)hWnd);
+        HandleIdentifiedSecondaryTaskbarWindow(hWnd);
+    }
+
+    return hWnd;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           LPVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    LPVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd)
+        return hWnd;
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName &&
+        _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
+        Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        if (g_nExplorerVersion >= WIN_VERSION_11_21H2 &&
+            !g_inputSiteProcHooked) {
+            HandleIdentifiedInputSiteWindow(hWnd);
+        }
+    }
+
+    return hWnd;
+}
+
+void LoadSettings() {
+    // Parse number of zones (string-based dropdown)
+    PCWSTR numberOfZones = Wh_GetStringSetting(L"numberOfZones");
+    g_settings.numberOfZones = 2; // Default to 2 zones
+    if (wcscmp(numberOfZones, L"one") == 0) {
+        g_settings.numberOfZones = 1;
+    } else if (wcscmp(numberOfZones, L"three") == 0) {
+        g_settings.numberOfZones = 3;
+    }
+    Wh_FreeStringSetting(numberOfZones);
+
+    // Helper lambda to parse action
+    auto parseAction = [](PCWSTR actionStr, ScrollAction defaultAction) -> ScrollAction {
+        if (wcscmp(actionStr, L"virtualDesktopSwitch") == 0) {
+            return ScrollAction::virtualDesktopSwitch;
+        } else if (wcscmp(actionStr, L"brightnessChange") == 0) {
+            return ScrollAction::brightnessChange;
+        } else if (wcscmp(actionStr, L"systemVolumeChange") == 0) {
+            return ScrollAction::systemVolumeChange;
+        }
+        return defaultAction;
+    };
+
+    // Parse Zone 1 Action
+    PCWSTR zone1Action = Wh_GetStringSetting(L"zone1Action");
+    g_settings.zone1Action = parseAction(zone1Action, ScrollAction::brightnessChange);
+    Wh_FreeStringSetting(zone1Action);
+
+    // Parse Zone 2 Action
+    PCWSTR zone2Action = Wh_GetStringSetting(L"zone2Action");
+    g_settings.zone2Action = parseAction(zone2Action, ScrollAction::systemVolumeChange);
+    Wh_FreeStringSetting(zone2Action);
+
+    // Parse Zone 3 Action
+    PCWSTR zone3Action = Wh_GetStringSetting(L"zone3Action");
+    g_settings.zone3Action = parseAction(zone3Action, ScrollAction::virtualDesktopSwitch);
+    Wh_FreeStringSetting(zone3Action);
+
+    g_settings.zone1ScrollStep = Wh_GetIntSetting(L"zone1ScrollStep");
+    g_settings.zone2ScrollStep = Wh_GetIntSetting(L"zone2ScrollStep");
+    g_settings.zone3ScrollStep = Wh_GetIntSetting(L"zone3ScrollStep");
+    g_settings.useDdcCi = Wh_GetIntSetting(L"useDdcCi");
+    g_settings.showVolumePopup = Wh_GetIntSetting(L"showVolumePopup");
+    g_settings.throttleMs = Wh_GetIntSetting(L"throttleMs");
+    g_settings.reverseScrollingDirection = Wh_GetIntSetting(L"reverseScrollingDirection");
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+}
+
+bool IsExplorerPatcherModule(HMODULE module) {
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        return false;
+    }
+
+    moduleFileName++;
+
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
+        0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
+        return true;
+    }
+
+    return false;
+}
+
+void HandleLoadedExplorerPatcher() {
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded)) {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+            if (IsExplorerPatcherModule(hMods[i])) {
+                if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
+                    g_nExplorerVersion = WIN_VERSION_10_20H1;
+                }
+                break;
+            }
+        }
+    }
+}
+
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
+    if (module && !((ULONG_PTR)module & 3)) {
+        if (IsExplorerPatcherModule(module)) {
+            if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
+                g_nExplorerVersion = WIN_VERSION_10_20H1;
+            }
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+    }
+
+    return module;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    LoadSettings();
+
+    if (!WindowsVersionInit()) {
+        Wh_Log(L"Unsupported Windows version");
+        return FALSE;
+    }
+
+    g_nExplorerVersion = g_nWinVersion;
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 &&
+        g_settings.oldTaskbarOnWin11) {
+        g_nExplorerVersion = WIN_VERSION_10_20H1;
+    }
+
+    WindhawkUtils::Wh_SetFunctionHookT(CreateWindowExW, CreateWindowExW_Hook,
+                                       &CreateWindowExW_Original);
+
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32Module) {
+        auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+            user32Module, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            WindhawkUtils::Wh_SetFunctionHookT(pCreateWindowInBand,
+                                               CreateWindowInBand_Hook,
+                                               &CreateWindowInBand_Original);
+        }
+    }
+
+    HandleLoadedExplorerPatcher();
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+
+    g_initialized = true;
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    HandleLoadedExplorerPatcher();
+
+    WNDCLASS wndclass;
+    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) {
+        HWND hWnd =
+            FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
+        if (hWnd) {
+            HandleIdentifiedTaskbarWindow(hWnd);
+        }
+    }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
+
+    if (g_hTaskbarWnd) {
+        UnsubclassTaskbarWindow(g_hTaskbarWnd);
+
+        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
+            UnsubclassTaskbarWindow(hSecondaryWnd);
+        }
+    }
+
+    SystemVolUninit();
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    Wh_Log(L">");
+
+    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+
+    LoadSettings();
+
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+
+    return TRUE;
+}
