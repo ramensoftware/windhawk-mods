@@ -8663,6 +8663,39 @@
         "version": "1.0.1"
       }
     },
+    "mutealert": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787949421000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787949421000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nikolay",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32 -luuid -lsetupapi -lhid",
+        "description": "Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.",
+        "github": "https://github.com/Nikolay1243",
+        "homepage": "https://github.com/MuteAlert/windhawk",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "MuteAlert - Microphone Activity Taskbar Widget",
+        "version": "0.9.7"
+      }
+    },
     "native-brightness": {
       "details": {
         "defaultSorting": 564,

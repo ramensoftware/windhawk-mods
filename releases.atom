@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-28T20:30:08.000Z</updated>
+    <updated>2026-08-28T20:37:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.7]]></title>
+        <id>https://windhawk.net/mods/mutealert#accf687cec4460a68914869c4d7fcd998a626265</id>
+        <link href="https://windhawk.net/mods/mutealert"/>
+        <updated>2026-08-28T20:37:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mutealertforwindhawk">MuteAlert for Windhawk</h1>
+<p>Adds a microphone button to the Windows 11 system tray area.</p>
+<p><img src="https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png" alt="MuteAlert microphone activity widget" /></p>
+<ul>
+<li>The microphone fills from bottom to top as the default input device detects
+sound.</li>
+<li>Hover to see the default microphone name, input volume, mute state, and
+available mouse controls.</li>
+<li>Scroll over the button to change the input volume.</li>
+<li>Optionally lock the microphone at a chosen volume. Scrolling updates the
+locked target when this is enabled.</li>
+<li>Left-click the button to mute or unmute the microphone.</li>
+<li>A secondary Slack, Teams, or Zoom logo shows the active call microphone
+state and focuses the call window when left-clicked.</li>
+<li>Headset mute synchronization supports Windows hardware mute reporting,
+standard USB HID mute controls, and vendor-specific adapters. SteelSeries
+Arctis Nova Pro Wireless is the first high-confidence vendor adapter.</li>
+<li>If you speak while muted in a Slack huddle, Microsoft Teams call, or Zoom
+meeting, the widget warns you and can play an optional audio cue.</li>
+<li>Right-click the widget to mute or unmute active call apps when that action
+is shown in the tooltip.</li>
+</ul>
+<p>The widget follows the default Windows capture endpoint. Changing the default
+input device in Windows automatically moves the widget to the new device.</p>
+<p>Call-app monitoring and call synchronization are disabled by default. Enable
+only the Slack, Teams, or Zoom features you use. When enabled, MuteAlert first
+checks capture audio sessions and only performs UI Automation scans for an app
+that is recording, has a pending command, or was already detected in a call.</p>
+<p>Headset detection reports one of four methods in the hover tooltip: Windows
+hardware mute, Standard HID mute button, SteelSeries device state, or
+Unsupported/no observable state. Standard HID buttons are events and do not
+prove the position of a latched switch. Purely mechanical disconnect switches
+cannot be observed, and a zero audio level is never interpreted as mute.</p>
+<p>For unsupported headsets, set <strong>Export sanitized headset diagnostics</strong> to a
+full <code>.txt</code> path and apply Settings. The report includes device IDs, HID
+descriptors, provider slots, and changed byte offsets, but excludes device
+paths, serial numbers, and raw report values.</p>
+<p>Windows 11 is required. x64 and ARM64 Explorer are supported.</p>
+<h2 id="howthisdiffersfromexistingmicrophonemods">How this differs from existing microphone mods</h2>
+<p>Unlike <strong>mic-tray-control</strong>, MuteAlert injects a native XAML taskbar widget
+with a live bottom-to-top peak meter and an optional separate call-app badge.
+It also detects speaking while a Slack, Teams, or Zoom call is muted and can
+synchronize observable headset mute controls with Windows and active calls.
+<strong>adaptive-microphone-icon-visibility</strong> controls the visibility of Windows'
+built-in microphone indicator; MuteAlert supplies its own interactive meter,
+volume control, call state, and headset integration.</p>]]></content>
+        <author>
+            <name>Nikolay</name>
+            <uri>https://github.com/Nikolay1243</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Tree View Expando Fade Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-tree-view-expando-fade-fix#f5ce429ffd771669f3038072c678c8c2a9e25579</id>
@@ -1209,25 +1265,6 @@ not something the mod can work around.</li>
         <author>
             <name>Giggig</name>
             <uri>https://github.com/Giggigx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Separators 0.5.38]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-separators#b895e6b2cf4ae9140dcb70b1200634ad4ceb13c4</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
-        <updated>2026-08-14T11:34:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbariconseparators">Taskbar Icon Separators</h1>
-<p>Create tracked icon separators with configurable padding on the taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png" alt="Screenshot" />
-<em>Example for creating separators on the taskbar</em></p>
-<p>Another mod offers similar functionality, but this implementation takes a different approach.</p>
-<p>This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.</p>
-<p>Native taskbar extent-offset resolution is derived from m417z's <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>, published under GPLv3.</p>
-<p>Note: The mod creates pinned shortcuts targeting the Windows <code>systray.exe</code> stub (with a hidden, immediately exiting <code>cmd.exe</code> fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.</p>
-<p>Windows 11 only.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
