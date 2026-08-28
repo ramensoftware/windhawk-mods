@@ -163,7 +163,7 @@ When one file is selected, additional details can appear:
 static constexpr int kStatusRowHeight = 24;
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
 static constexpr DWORD kRefreshIntervalMs = 10000;
-static constexpr ULONGLONG kContentFailedRetryMs = 2000;
+static constexpr ULONGLONG kContentFailedRetryMs = 60000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
 
 thread_local bool g_insideFinalPaint = false;
@@ -212,6 +212,7 @@ struct InfoBarLayoutGeometry
 struct TrackedDirectUiState
 {
     HWND hwnd = nullptr;
+    ULONGLONG selectionGeneration = 1;
     bool hasLayout = false;
     InfoBarLayoutGeometry layout;
     COLORREF stableRowBackground = CLR_INVALID;
@@ -285,7 +286,6 @@ static HANDLE g_selectionWinEventThreadReady = nullptr;
 static HANDLE g_selectionWinEventStopEvent = nullptr;
 static HWINEVENTHOOK g_selectionWinEventHook = nullptr;
 static HWINEVENTHOOK g_windowCreateWinEventHook = nullptr;
-static std::atomic<ULONGLONG> g_selectionGeneration{1};
 static std::atomic<ULONGLONG> g_lastPaintWakeTick{0};
 static constexpr ULONGLONG kSelectionWinEventWakeIntervalMs = 200;
 static ULONGLONG g_lastSelectionWinEventWakeTick = 0;
@@ -302,8 +302,10 @@ struct ContentRefreshCache
     int folders = 0;
     ULONGLONG directFileBytes = 0;
     ULONGLONG lastFullScanTick = 0;
-    std::wstring lastAttemptFolderIdentity;
-    ULONGLONG lastScanAttemptTick = 0;
+    bool scanFailed = false;
+    std::wstring failedFolderIdentity;
+    int failedItemCount = -1;
+    ULONGLONG failedScanTick = 0;
 };
 
 struct SingleFileMetadataCache
@@ -1899,10 +1901,40 @@ static void WakeWorkerFromPaint()
     SetEvent(g_workerWakeEvent);
 }
 
-static bool IsWinEventFromTrackedExplorerRoot(HWND hwnd)
+static bool AdvanceSelectionGenerationForWinEvent(HWND hwnd)
 {
     if (!hwnd)
         return false;
+
+    // Resolve the event's tab before taking g_subclassLock. GetParent and
+    // GetClassNameW can call into the window manager and must remain outside
+    // the tracked-state critical section.
+    const HWND eventShellTab =
+        FindAncestorByClass(
+            hwnd,
+            L"ShellTabWindowClass"
+        );
+
+    if (eventShellTab)
+    {
+        bool matched = false;
+
+        AcquireSRWLockExclusive(&g_subclassLock);
+
+        for (TrackedDirectUiState& state : g_trackedWindows)
+        {
+            if (state.shellTab == eventShellTab)
+            {
+                state.selectionGeneration++;
+                matched = true;
+            }
+        }
+
+        ReleaseSRWLockExclusive(&g_subclassLock);
+
+        if (matched)
+            return true;
+    }
 
     const HWND eventRoot = GetAncestor(hwnd, GA_ROOT);
 
@@ -1923,19 +1955,31 @@ static bool IsWinEventFromTrackedExplorerRoot(HWND hwnd)
         return false;
     }
 
-    // Copy only HWND values while holding the lock. Root inspection happens
-    // below, after releasing it, because window-manager calls can reenter.
-    std::vector<HWND> trackedWindows;
+    struct TrackedTabSnapshot
+    {
+        HWND hwnd;
+        HWND shellTab;
+    };
+
+    // If the event HWND couldn't be tied directly to a registered shell tab,
+    // use only a unique visible DirectUI target under the same Explorer root.
+    // This preserves a safe recovery path without dirtying sibling tabs.
+    std::vector<TrackedTabSnapshot> trackedTabs;
     bool snapshotFailed = false;
 
     AcquireSRWLockShared(&g_subclassLock);
 
     try
     {
-        trackedWindows.reserve(g_trackedWindows.size());
+        trackedTabs.reserve(g_trackedWindows.size());
 
         for (const TrackedDirectUiState& state : g_trackedWindows)
-            trackedWindows.push_back(state.hwnd);
+        {
+            trackedTabs.push_back({
+                state.hwnd,
+                state.shellTab
+            });
+        }
     }
     catch (...)
     {
@@ -1947,13 +1991,46 @@ static bool IsWinEventFromTrackedExplorerRoot(HWND hwnd)
     if (snapshotFailed)
         return false;
 
-    for (HWND trackedWindow : trackedWindows)
+    HWND fallbackHwnd = nullptr;
+    HWND fallbackShellTab = nullptr;
+
+    for (const TrackedTabSnapshot& tracked : trackedTabs)
     {
-        if (GetAncestor(trackedWindow, GA_ROOT) == eventRoot)
-            return true;
+        if (
+            IsWindowVisible(tracked.hwnd) &&
+            GetAncestor(tracked.hwnd, GA_ROOT) == eventRoot
+        )
+        {
+            if (fallbackHwnd)
+                return false;
+
+            fallbackHwnd = tracked.hwnd;
+            fallbackShellTab = tracked.shellTab;
+        }
     }
 
-    return false;
+    if (!fallbackHwnd)
+        return false;
+
+    bool matched = false;
+
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    for (TrackedDirectUiState& state : g_trackedWindows)
+    {
+        if (
+            state.hwnd == fallbackHwnd &&
+            state.shellTab == fallbackShellTab
+        )
+        {
+            state.selectionGeneration++;
+            matched = true;
+            break;
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_subclassLock);
+    return matched;
 }
 
 static void CALLBACK SelectionWinEventWakeTimerProc(
@@ -2032,13 +2109,12 @@ static void CALLBACK SelectionWinEventProc(
         event < EVENT_OBJECT_FOCUS ||
         event > EVENT_OBJECT_SELECTIONWITHIN ||
         g_unloading.load(std::memory_order_acquire) ||
-        !IsWinEventFromTrackedExplorerRoot(hwnd)
+        !AdvanceSelectionGenerationForWinEvent(hwnd)
     )
     {
         return;
     }
 
-    g_selectionGeneration.fetch_add(1, std::memory_order_relaxed);
     WakeWorkerFromSelectionWinEvent();
 }
 
@@ -2649,7 +2725,8 @@ static std::wstring GetSingleFileDetailsCached(
 
 static unsigned ReadCurrentView(
     HWND hwnd,
-    IShellBrowser* browser
+    IShellBrowser* browser,
+    ULONGLONG selectionGeneration
 )
 {
     if (!hwnd || !browser)
@@ -2822,10 +2899,18 @@ static unsigned ReadCurrentView(
             sameFolder &&
             total != contentCache.itemCount;
 
-        const bool retryThrottled =
-            folderIdentity ==
-                contentCache.lastAttemptFolderIdentity &&
-            now - contentCache.lastScanAttemptTick <
+        const bool sameFailedFolder =
+            contentCache.scanFailed &&
+            !folderIdentity.empty() &&
+            folderIdentity == contentCache.failedFolderIdentity;
+
+        const bool failedItemCountChanged =
+            sameFailedFolder &&
+            total != contentCache.failedItemCount;
+
+        const bool failedRetryDue =
+            sameFailedFolder &&
+            now - contentCache.failedScanTick >=
                 kContentFailedRetryMs;
 
         if (
@@ -2833,12 +2918,13 @@ static unsigned ReadCurrentView(
                 !sameFolder ||
                 itemCountChanged
             ) &&
-            !retryThrottled
+            (
+                !sameFailedFolder ||
+                failedItemCountChanged ||
+                failedRetryDue
+            )
         )
         {
-            contentCache.lastAttemptFolderIdentity = folderIdentity;
-            contentCache.lastScanAttemptTick = now;
-
             int scannedFiles = 0;
             int scannedFolders = 0;
             ULONGLONG scannedBytes = 0;
@@ -2859,8 +2945,19 @@ static unsigned ReadCurrentView(
                 contentCache.folders = scannedFolders;
                 contentCache.directFileBytes = scannedBytes;
                 contentCache.lastFullScanTick = now;
+                contentCache.scanFailed = false;
+                contentCache.failedFolderIdentity.clear();
+                contentCache.failedItemCount = -1;
+                contentCache.failedScanTick = 0;
             }
-
+            else
+            {
+                contentCache.valid = false;
+                contentCache.scanFailed = true;
+                contentCache.failedFolderIdentity = folderIdentity;
+                contentCache.failedItemCount = total;
+                contentCache.failedScanTick = now;
+            }
         }
     }
 
@@ -2869,6 +2966,32 @@ static unsigned ReadCurrentView(
         contentCache.valid &&
         !folderIdentity.empty() &&
         folderIdentity == contentCache.folderIdentity;
+
+    const bool useFailedContentFallback =
+        settings.showContent &&
+        itemCountAvailable &&
+        contentCache.scanFailed &&
+        !folderIdentity.empty() &&
+        folderIdentity == contentCache.failedFolderIdentity &&
+        total == contentCache.failedItemCount;
+
+    if (
+        useFailedContentFallback &&
+        contentOverrideText.empty()
+    )
+    {
+        wchar_t failedContent[128] = {};
+
+        swprintf(
+            failedContent,
+            ARRAYSIZE(failedContent),
+            L"Content: %d item%s",
+            total,
+            total == 1 ? L"" : L"s"
+        );
+
+        contentOverrideText = failedContent;
+    }
 
     if (
         settings.showContent &&
@@ -2902,9 +3025,6 @@ static unsigned ReadCurrentView(
     std::wstring selectionOverrideText;
     std::wstring singleFileDetails = state.fileDetailsGroup;
     bool keepSingleFileMetadataCache = !state.fileDetailsGroup.empty();
-    const ULONGLONG selectionGeneration =
-        g_selectionGeneration.load(std::memory_order_relaxed);
-
     // Always obtain the selection count. Even when the Selected and
     // File Details sections are hidden, the painter uses the count to avoid
     // learning Explorer's temporary selected-row tint as the normal theme.
@@ -3222,10 +3342,12 @@ static DWORD WINAPI WorkerThreadProc(
     {
         HWND hwnd;
         DWORD shellBrowserCookie;
+        ULONGLONG selectionGeneration;
     };
 
     while (true)
     {
+        std::vector<WorkerTarget> targetCandidates;
         std::vector<WorkerTarget> targets;
 
         bool snapshotFailed = false;
@@ -3234,15 +3356,16 @@ static DWORD WINAPI WorkerThreadProc(
 
         try
         {
-            targets.reserve(g_trackedWindows.size());
+            targetCandidates.reserve(g_trackedWindows.size());
 
             for (const TrackedDirectUiState& state : g_trackedWindows)
             {
                 if (state.shellBrowserCookie)
                 {
-                    targets.push_back({
+                    targetCandidates.push_back({
                         state.hwnd,
-                        state.shellBrowserCookie
+                        state.shellBrowserCookie,
+                        state.selectionGeneration
                     });
                 }
             }
@@ -3257,6 +3380,24 @@ static DWORD WINAPI WorkerThreadProc(
         if (snapshotFailed)
         {
             Wh_Log(L"Worker target snapshot failed");
+            targetCandidates.clear();
+        }
+
+        try
+        {
+            targets.reserve(targetCandidates.size());
+
+            for (const WorkerTarget& candidate : targetCandidates)
+            {
+                // Inactive Windows 11 tabs keep their DirectUIHWND tracked,
+                // but a hidden target cannot contribute visible output.
+                if (IsWindowVisible(candidate.hwnd))
+                    targets.push_back(candidate);
+            }
+        }
+        catch (...)
+        {
+            Wh_Log(L"Visible worker target snapshot failed");
             targets.clear();
         }
 
@@ -3285,7 +3426,8 @@ static DWORD WINAPI WorkerThreadProc(
             const unsigned changes =
                 ReadCurrentView(
                     target.hwnd,
-                    browser
+                    browser,
+                    target.selectionGeneration
                 );
 
             browser->Release();
@@ -4898,7 +5040,12 @@ void Wh_ModSettingsChanged()
 
     // Force one detailed selection refresh because visibility/detail settings
     // may have changed even if the Explorer selection itself did not.
-    g_selectionGeneration.fetch_add(1, std::memory_order_relaxed);
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    for (TrackedDirectUiState& state : g_trackedWindows)
+        state.selectionGeneration++;
+
+    ReleaseSRWLockExclusive(&g_subclassLock);
 
     if (g_workerWakeEvent)
         SetEvent(g_workerWakeEvent);
