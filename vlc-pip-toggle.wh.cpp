@@ -5,7 +5,7 @@
 // @version         4.2
 // @author          Maverick1254
 // @github          https://github.com/Desmond1254
-// @include         explorer.exe
+// @include         vlc.exe
 // @compilerOptions -luser32
 // @license         MIT
 // ==/WindhawkMod==
