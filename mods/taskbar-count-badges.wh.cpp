@@ -380,6 +380,7 @@ struct TrackedButton
     // animations from making the native indicator visible.
     winrt::weak_ref<FrameworkElement> runningIndicator;
     bool runningIndicatorHidden = false;
+    bool bottomDotsUsedFallback = false;
 
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
     uint64_t lastSettingsGeneration = 0;
@@ -774,8 +775,14 @@ bool BindDotPositionExpression(Controls::Border badge,
                                FrameworkElement taskListButton,
                                FrameworkElement icon,
                                Controls::Grid dotHost,
-                               unsigned int count)
+                               unsigned int count,
+                               bool *usedTransientFallback = nullptr)
 {
+    if (usedTransientFallback)
+    {
+        *usedTransientFallback = false;
+    }
+
     if (!badge || !taskListButton || !icon || !dotHost)
     {
         return false;
@@ -922,8 +929,16 @@ bool BindDotPositionExpression(Controls::Border badge,
             }
             else
             {
-                // Fallback for a Windows build where RunningIndicator doesn't
-                // currently expose usable geometry.
+                // If RunningIndicator exists but has not been laid out yet,
+                // this placement is temporary. Force a later re-application
+                // so the dots can move onto the real indicator geometry.
+                // If the element doesn't exist at all, the below-icon position
+                // is the intended permanent fallback for that build/button.
+                if (runningIndicator && usedTransientFallback)
+                {
+                    *usedTransientFallback = true;
+                }
+
                 dotX = iconX + (iconBoundsWidth - stackWidth) / 2.0;
                 dotY = iconY + iconBoundsHeight + kDotGap;
             }
@@ -1288,7 +1303,8 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
                            unsigned int count,
                            FrameworkElement taskListButton = nullptr,
                            FrameworkElement icon = nullptr,
-                           Controls::Grid dotHost = nullptr)
+                           Controls::Grid dotHost = nullptr,
+                           bool *usedTransientBottomFallback = nullptr)
 {
     auto circleVisual = FindChildByName(badge, L"WindhawkCircleVisual")
                             .try_as<Shapes::Ellipse>();
@@ -1476,8 +1492,9 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
     dotStack.VerticalAlignment(VerticalAlignment::Center);
 
     RebuildDots(dotStack, count);
-    return BindDotPositionExpression(badge, taskListButton, icon, dotHost,
-                                     count);
+    return BindDotPositionExpression(
+        badge, taskListButton, icon, dotHost, count,
+        usedTransientBottomFallback);
 }
 
 // -----------------------------------------------------------------------------
@@ -1624,6 +1641,7 @@ bool UpdateCountBadge(TrackedButton &tracked,
     }
 
     bool bottomDotMode = IsBottomDotMode();
+    tracked.bottomDotsUsedFallback = false;
 
     if (!bottomDotMode || count == 0)
     {
@@ -1767,8 +1785,9 @@ bool UpdateCountBadge(TrackedButton &tracked,
         tracked.badge = winrt::make_weak(badge);
     }
 
+    bool usedTransientBottomFallback = false;
     if (!ApplyBadgeVisualStyle(badge, count, taskListButton, icon,
-                               dotHost))
+                               dotHost, &usedTransientBottomFallback))
     {
         if (g_settings.displayStyle == DisplayStyle::Dots)
         {
@@ -1785,6 +1804,8 @@ bool UpdateCountBadge(TrackedButton &tracked,
     }
 
     badge.Visibility(Visibility::Visible);
+    tracked.bottomDotsUsedFallback =
+        bottomDotMode && usedTransientBottomFallback;
 
     return true;
 }
@@ -1910,28 +1931,6 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 
     bool runningIndicatorReady = true;
 
-    if (!bottomDotMode &&
-        item.lastAppliedCount == std::numeric_limits<unsigned int>::max())
-    {
-        // Heal a native indicator that may have been left composition-hidden
-        // by a previous mod instance whose taskbar-thread cleanup couldn't run.
-        // Do this only once per button so we don't continuously fight another
-        // mod that intentionally suppresses the native indicator.
-        if (auto runningIndicator =
-                FindChildByName(element, L"RunningIndicator"))
-        {
-            try
-            {
-                Hosting::ElementCompositionPreview::GetElementVisual(
-                    runningIndicator)
-                    .IsVisible(true);
-            }
-            catch (...)
-            {
-            }
-        }
-    }
-
     if (bottomDotMode && count > 0)
     {
         auto runningIndicator = item.runningIndicator.get();
@@ -1973,7 +1972,8 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
     if (item.lastAppliedCount == count &&
         item.lastSettingsGeneration == settingsGeneration &&
         (!badgeExpected || item.badge.get()) &&
-        runningIndicatorReady)
+        runningIndicatorReady &&
+        !item.bottomDotsUsedFallback)
     {
         return;
     }
@@ -3068,9 +3068,10 @@ void Wh_ModBeforeUninit()
         // Dot positioning uses compositor expressions only; there are no XAML
         // or CompositionTarget delegates pointing into the mod image. If the
         // taskbar thread is already unreachable, the weak tracking state can
-        // be left in place safely, but a shell RunningIndicator may remain
-        // composition-hidden until Explorer restarts or a later mod instance
-        // touches that button and performs the one-shot recovery above.
+        // be left in place safely. A shell RunningIndicator hidden by bottom
+        // mode can remain composition-hidden in this rare failure case until
+        // Explorer recreates the taskbar; don't blanket-reenable indicators
+        // from a future instance because another mod may own that state.
         Wh_Log(L"Couldn't execute taskbar-thread cleanup");
     }
 }
