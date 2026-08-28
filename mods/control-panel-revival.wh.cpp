@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              control-panel-revival
+// @id              control-panel-revival-admxp8
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.7
+// @version         0.9.8
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -20,10 +20,6 @@
 This mod is designed to restore sections of the Control Panel—such as Troubleshooting, Installed Updates, Default Programs, and others—that are redirected to the Settings app in Windows 11 (version 23H2 and later) and can no longer be launched even via shell commands.
 You can also add the ID of your desired applet to prevent it from being redirected to the settings.
 
-**How it works:** the mod only hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
-
-**Difference from `settings-to-control-panel`:** that mod also hooks `_MapLegacyName`, but its behavior differs for the applets this mod targets. For Troubleshooting, it launches `msdt.exe` directly instead of opening the applet itself; for Installed Updates and Default Programs, it has no mechanism at all to stop the redirect to Settings. This mod specifically restores the classic in-Control-Panel behavior for those items.
-
 **Note:** This mod is not designed to reveal hidden Control Panel applets; rather, its purpose is to restore applets that are currently present in the Control Panel but redirect to the Settings app.
 
 ### Example CustomApplets configuration:
@@ -38,6 +34,12 @@ You can also add the ID of your desired applet to prevent it from being redirect
 
 **After:**
 ![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
+
+**How it works:** the mod hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
+
+**A note on `CompareStringOrdinal` scoping:** we tried restricting the override to calls whose return address falls inside `shell32.dll` (and later, `shell32.dll` or `windows.storage.dll`), using `GetModuleHandleExW(..., GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, ...)` on the caller's return address. Both attempts broke the mod's actual functionality in testing, which means the real comparison this mod needs to influence isn't reliably reachable that way (most likely it happens through a COM/vtable call chain, or a helper whose return address doesn't resolve the way a direct call would). Given that, the hook is intentionally left unscoped by caller. The blast radius is still bounded in a few concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`; it requires an exact, full-length match against a small, specific set of applet-identifier strings (12 built-in + whatever the user adds in `CustomApplets`); and it never fires for a comparison that wasn't already reporting equality. We're open to a more surgical fix if a maintainer can point at the actual call site.
+
+**Difference from `settings-to-control-panel`:** that mod also hooks `_MapLegacyName`, but its behavior differs for the applets this mod targets. For Troubleshooting, it launches `msdt.exe` directly instead of opening the applet itself; for Installed Updates and Default Programs, it has no mechanism at all to stop the redirect to Settings. This mod specifically restores the classic in-Control-Panel behavior for those items.
 */
 // ==/WindhawkModReadme==
 
@@ -62,7 +64,6 @@ You can also add the ID of your desired applet to prevent it from being redirect
 #include <windows.h>
 #include <windhawk_utils.h>
 #include <shlwapi.h>
-#pragma comment(lib, "shlwapi.lib")
 
 #include <string>
 #include <string_view>
@@ -360,6 +361,11 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
 // ordering - this does not fully fix cmp(A,A) for a target string A (it
 // still won't report CSTR_EQUAL for itself), but it avoids corrupting
 // comparisons between unrelated strings.
+//
+// NOTE: caller-module scoping was attempted here (restricting the override
+// to calls returning into shell32.dll, then shell32.dll-or-windows.storage.dll)
+// and broke the mod's actual functionality both times - see the README's
+// "note on CompareStringOrdinal scoping" for details. Reverted intentionally.
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
 
@@ -476,7 +482,7 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    Wh_Log(L"Initializing Control Panel Revival v1.1.0");
+    Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
 
     LoadCustomAppletSettings();
 
