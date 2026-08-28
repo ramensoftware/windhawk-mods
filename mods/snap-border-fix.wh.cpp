@@ -1,10 +1,11 @@
 // ==WindhawkMod==
 // @id              snap-border-fix
-// @name            Snap Border Fix - Fork/Inspiration by Invisible Borders
-// @description     Changes window borders to a custom color, mainly because of the white borders forced by the Windows 11 snapping feature. Inspired by "Invisible Borders".
+// @name            Snap Border Fix
+// @description     Changes window borders to a custom color, mainly because of the white borders forced by the Windows 11 snapping feature. Credits to Bo0ii for the Source Code.
 // @version         1.0.0
-// @author          M4D_MAXX_, Bo0ii (Original Source Code)
+// @author          M4D_MAXX_
 // @github          https://github.com/M4DMAXX
+// @homepage        https://github.com/M4DMAXX/windhawk-mods
 // @include         *
 // @exclude         devenv.exe
 // @compilerOptions -ldwmapi -luser32
@@ -15,23 +16,22 @@
 /*
 # Snap Border Fix
 
-Change the window borders to a custom color, to get rid of the white borders when using the Windows snapping feature.
+Change the window borders to a custom color, to get rid of the white borders when using the Windows snapping feature. No other mod I found addressed this issue in the way I needed.
+
+![Windows 11 Default vs. Snap Border Fix](https://raw.githubusercontent.com/M4DMAXX/my-windhawk-mods/main/snap-border-fix/Snap%20Border%20Fix%20Comparsion.png)
+![Invisible Borders / Window Border Customizer](https://raw.githubusercontent.com/M4DMAXX/my-windhawk-mods/main/snap-border-fix/Snap%20Border%20Fix%20Comparsion%20to%20Other%20Mod.png)
 
 ## Features
 
 - **Custom Border Color and No More White Snap Borders**: Replaces the white borders shown by Windows when using the snapping feature, by a custom color. Default Color: Dark Anthracite
-- **Universal**: Designed to work with all applications
-- **Lightweight**: Minimal performance impact
-
-## Compatibility
-
-- Windows 10 (version 1809 and later)
-- Windows 11 (all versions)
-- Requires DWM (Desktop Window Manager) to be enabled
 
 ## Support
 
 Contact me via Discord/Github - m4d_maxx_
+
+## Credits
+
+This mod is derived from the source code of "Invisible Window Borders" by Bo0ii, released under the MIT License.
 
 ## License
 
@@ -52,16 +52,21 @@ MIT License - Feel free to modify and distribute
 
 #include <dwmapi.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <atomic>
 
-COLORREF BorderColor = RGB(32, 32, 32);  // Set desired Color for the border - no more ugly white ^^
+std::atomic<COLORREF> BorderColor = RGB(32, 32, 32);
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 
-bool SpecialWindows = false;
+std::atomic<bool> SpecialWindows = false;
 
 bool HexToColorref(PCWSTR hex, COLORREF* color)
 {
     if (!hex || !color)
         return false;
+
+    if (hex[0] == L'#')
+        hex++;
 
     if (wcslen(hex) != 6)
         return false;
@@ -95,33 +100,33 @@ bool HexToColorref(PCWSTR hex, COLORREF* color)
 
 void LoadSettings()
 {
-    PCWSTR hexColor = Wh_GetStringSetting(L"BorderColor");
+    auto hexColor = WindhawkUtils::StringSetting::make(L"BorderColor");
 
-    COLORREF newColor;
+COLORREF newColor;
 
-    if (HexToColorref(hexColor, &newColor))
-    {
-        BorderColor = newColor;
+if (HexToColorref(hexColor.get(), &newColor))
+{
+    BorderColor.store(newColor);
 
-        Wh_Log(
-            L"Loaded border color: #%02X%02X%02X",
-            GetRValue(BorderColor),
-            GetGValue(BorderColor),
-            GetBValue(BorderColor)
-        );
-    }
-    else
-    {
-        BorderColor = RGB(32, 32, 32);
+    COLORREF borderColor = BorderColor.load();
 
-        Wh_Log(
-            L"Invalid border color setting, using default #202020"
-        );
-    }
+    Wh_Log(
+        L"Loaded border color: #%02X%02X%02X",
+        GetRValue(borderColor),
+        GetGValue(borderColor),
+        GetBValue(borderColor)
+    );
+}
+else
+{
+    BorderColor.store(RGB(32, 32, 32));
 
-    Wh_FreeStringSetting(hexColor);
+    Wh_Log(
+        L"Invalid border color setting, using default #202020"
+    );
+}
 
-    SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+SpecialWindows.store(Wh_GetIntSetting(L"SpecialWindows"));
 }
 
 
@@ -131,16 +136,27 @@ BOOL IsValidWindow(HWND hWnd) {
     // Better exclude context menus
     return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME ||
            (dwStyle & WS_CAPTION) == WS_CAPTION ||
-           (SpecialWindows && (dwStyle & WS_OVERLAPPED) == WS_OVERLAPPED && (dwStyle & WS_POPUP) != WS_POPUP);
+           (SpecialWindows.load() &&
+            (dwStyle & WS_OVERLAPPED) == WS_OVERLAPPED &&
+            (dwStyle & WS_POPUP) != WS_POPUP);
 }
 
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
 DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
 HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute) {
-    if (dwAttribute == DWMWA_BORDER_COLOR && IsValidWindow(hwnd)) {
+    if (dwAttribute == DWMWA_BORDER_COLOR &&
+        cbAttribute == sizeof(COLORREF) &&
+        IsValidWindow(hwnd)) {
         Wh_Log(L"Intercepted DWMWA_BORDER_COLOR - setting new border color");
         // Override with border Color
-        return DwmSetWindowAttribute_orig(hwnd, dwAttribute, &BorderColor, sizeof(BorderColor));
+        COLORREF borderColor = BorderColor.load();
+
+        return DwmSetWindowAttribute_orig(
+            hwnd,
+            dwAttribute,
+            &borderColor,
+            sizeof(borderColor)
+        );
     }
 
     return DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
@@ -152,7 +168,14 @@ void SetBorderColor(HWND hWnd)
         return;
 
     Wh_Log(L"Setting border color");
-    DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderColor, sizeof(BorderColor));
+    COLORREF borderColor = BorderColor.load();
+
+    DwmSetWindowAttribute_orig(
+        hWnd,
+        DWMWA_BORDER_COLOR,
+        &borderColor,
+        sizeof(borderColor)
+    );
 }
 
 using DefWindowProcA_t = decltype(&DefWindowProcA);
@@ -248,34 +271,45 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Wh_SetFunctionHook(
-        (void *)DwmSetWindowAttribute,
-        (void *)DwmSetWindowAttribute_hook,
-        (void **)&DwmSetWindowAttribute_orig);
+    if (!WindhawkUtils::SetFunctionHook(
+            DwmSetWindowAttribute,
+            DwmSetWindowAttribute_hook,
+            &DwmSetWindowAttribute_orig)) {
+        Wh_Log(L"Failed to hook DwmSetWindowAttribute");
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook(
-        (void *)DefWindowProcW,
-        (void *)DefWindowProcW_hook,
-        (void **)&DefWindowProcW_orig
-    );
+    if (!WindhawkUtils::SetFunctionHook(
+            DefWindowProcW,
+            DefWindowProcW_hook,
+            &DefWindowProcW_orig)) {
+        Wh_Log(L"Failed to hook DefWindowProcW");
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook(
-        (void *)DefWindowProcA,
-        (void *)DefWindowProcA_hook,
-        (void **)&DefWindowProcA_orig
-    );
+    if (!WindhawkUtils::SetFunctionHook(
+            DefWindowProcA,
+            DefWindowProcA_hook,
+            &DefWindowProcA_orig)) {
+        Wh_Log(L"Failed to hook DefWindowProcA");
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook(
-        (void *)DefDlgProcW,
-        (void *)DefDlgProcW_hook,
-        (void **)&DefDlgProcW_orig
-    );
+    if (!WindhawkUtils::SetFunctionHook(
+            DefDlgProcW,
+            DefDlgProcW_hook,
+            &DefDlgProcW_orig)) {
+        Wh_Log(L"Failed to hook DefDlgProcW");
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook(
-        (void *)DefDlgProcA,
-        (void *)DefDlgProcA_hook,
-        (void **)&DefDlgProcA_orig
-    );
+    if (!WindhawkUtils::SetFunctionHook(
+            DefDlgProcA,
+            DefDlgProcA_hook,
+            &DefDlgProcA_orig)) {
+        Wh_Log(L"Failed to hook DefDlgProcA");
+        return FALSE;
+    }
 
     return TRUE;
 }
