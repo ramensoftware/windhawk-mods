@@ -375,10 +375,10 @@ struct TrackedButton
     winrt::weak_ref<FrameworkElement> element;
     winrt::weak_ref<Controls::Border> badge;
 
-    // Bottom-dot mode hides only RunningIndicator. Keep the original opacity
-    // so switching position/style or unloading restores the native visual.
+    // Bottom-dot mode hides only RunningIndicator at the composition layer.
+    // This preserves XAML layout geometry while preventing taskbar state
+    // animations from making the native indicator visible.
     winrt::weak_ref<FrameworkElement> runningIndicator;
-    double runningIndicatorOpacity = 1.0;
     bool runningIndicatorHidden = false;
 
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
@@ -890,9 +890,9 @@ bool BindDotPositionExpression(Controls::Border badge,
 
         case DotPosition::Bottom:
         {
-            // Anchor the replacement dots to the real native indicator. We
-            // hide it with Opacity rather than collapsing it, so its geometry
-            // remains usable for DPI/taskbar-size-safe placement.
+            // Anchor the replacement dots to the real native indicator. Hide
+            // it only at the composition layer so the XAML element keeps its
+            // geometry for DPI/taskbar-size-safe placement.
             auto runningIndicator =
                 FindChildByName(taskListButton, L"RunningIndicator");
 
@@ -1147,7 +1147,9 @@ void RestoreRunningIndicator(TrackedButton &tracked)
     {
         if (auto runningIndicator = tracked.runningIndicator.get())
         {
-            runningIndicator.Opacity(tracked.runningIndicatorOpacity);
+            Hosting::ElementCompositionPreview::GetElementVisual(
+                runningIndicator)
+                .IsVisible(true);
         }
     }
     catch (...)
@@ -1155,7 +1157,6 @@ void RestoreRunningIndicator(TrackedButton &tracked)
     }
 
     tracked.runningIndicator = {};
-    tracked.runningIndicatorOpacity = 1.0;
     tracked.runningIndicatorHidden = false;
 }
 
@@ -1181,13 +1182,25 @@ bool HideRunningIndicatorForBottomDots(TrackedButton &tracked,
         RestoreRunningIndicator(tracked);
 
         tracked.runningIndicator = winrt::make_weak(runningIndicator);
-        tracked.runningIndicatorOpacity = runningIndicator.Opacity();
         tracked.runningIndicatorHidden = true;
     }
 
-    // ProgressIndicator is a different element and is intentionally untouched.
-    // Opacity keeps RunningIndicator's layout geometry available for anchoring.
-    runningIndicator.Opacity(0.0);
+    // ProgressIndicator is a separate element and remains untouched.
+    // Composition visibility suppresses RunningIndicator even while XAML
+    // visual-state storyboards animate its Opacity, while preserving layout
+    // geometry for bottom-dot anchoring.
+    try
+    {
+        Hosting::ElementCompositionPreview::GetElementVisual(
+            runningIndicator)
+            .IsVisible(false);
+    }
+    catch (...)
+    {
+        RestoreRunningIndicator(tracked);
+        return false;
+    }
+
     return true;
 }
 
@@ -1890,9 +1903,19 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 
         if (item.runningIndicatorHidden && runningIndicator)
         {
-            // Windows can rewrite RunningIndicator visual state after focus,
-            // hover, etc. Reassert our hide without rebuilding the dots.
-            runningIndicator.Opacity(0.0);
+            // Reassert composition visibility without rebuilding the dots.
+            // This is idempotent and cannot be overridden by XAML opacity
+            // storyboards.
+            try
+            {
+                Hosting::ElementCompositionPreview::GetElementVisual(
+                    runningIndicator)
+                    .IsVisible(false);
+            }
+            catch (...)
+            {
+                runningIndicatorReady = false;
+            }
         }
         else
         {
