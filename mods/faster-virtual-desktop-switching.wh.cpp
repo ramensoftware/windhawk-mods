@@ -45,8 +45,6 @@ Laptop users who use three- or four-finger swipe gestures can especially benefit
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-#include <cstdint>
-
 namespace {
 
 struct WtsThumbnailId {
@@ -78,12 +76,27 @@ using ThumbnailCacheGetThumbnail = HRESULT(STDMETHODCALLTYPE*)(
     IUnknown** sharedBitmap,
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId);
+using MakeBackgroundThumbnailFromThumbnailCache = HRESULT(*)(
+    void* self,
+    void* dcompThumbnail,
+    void* virtualDesktop,
+    void* wallpaperPath,
+    RECT bounds,
+    void** result);
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 
 ThumbnailCacheGetThumbnail g_getThumbnailOriginal = nullptr;
+MakeBackgroundThumbnailFromThumbnailCache
+    g_makeBackgroundThumbnailOriginal = nullptr;
+LoadLibraryExW_t g_loadLibraryExWOriginal = nullptr;
 HMODULE g_twinuiPcShell = nullptr;
 HMODULE g_thumbnailCacheServer = nullptr;
-uintptr_t g_targetFunctionStart = 0;
-uintptr_t g_targetFunctionEnd = 0;
+thread_local int g_makeBackgroundThumbnailDepth = 0;
+constexpr LONG kCorePending = 0;
+constexpr LONG kCoreInitializing = 1;
+constexpr LONG kCoreInitialized = 2;
+constexpr LONG kCoreFailed = -1;
+volatile LONG g_coreInitializationState = kCorePending;
 volatile LONG g_maximumThumbnailSize = 1024;
 
 // Load settings atomically because Explorer can switch desktops while the
@@ -111,9 +124,27 @@ bool IsOrMayBecomeShellExplorer() {
     return shellProcessId == GetCurrentProcessId();
 }
 
-// Clamp only calls originating inside Windows' virtual desktop wallpaper
+HRESULT MakeBackgroundThumbnailFromThumbnailCacheHook(
+    void* self,
+    void* dcompThumbnail,
+    void* virtualDesktop,
+    void* wallpaperPath,
+    RECT bounds,
+    void** result) {
+    ++g_makeBackgroundThumbnailDepth;
+    const HRESULT resultCode = g_makeBackgroundThumbnailOriginal(
+        self,
+        dcompThumbnail,
+        virtualDesktop,
+        wallpaperPath,
+        bounds,
+        result);
+    --g_makeBackgroundThumbnailDepth;
+    return resultCode;
+}
+
+// Clamp only calls made synchronously by Windows' virtual desktop wallpaper
 // helper. All other thumbnail-cache clients receive their original arguments.
-__attribute__((noinline))
 HRESULT STDMETHODCALLTYPE GetThumbnailHook(
     IThumbnailCacheMinimal* self,
     IUnknown* shellItem,
@@ -122,11 +153,7 @@ HRESULT STDMETHODCALLTYPE GetThumbnailHook(
     IUnknown** sharedBitmap,
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId) {
-    const uintptr_t returnAddress = reinterpret_cast<uintptr_t>(
-        __builtin_return_address(0));
-
-    if (returnAddress >= g_targetFunctionStart &&
-        returnAddress < g_targetFunctionEnd) {
+    if (g_makeBackgroundThumbnailDepth > 0) {
         const UINT maximumSize = static_cast<UINT>(
             InterlockedCompareExchange(&g_maximumThumbnailSize, 0, 0));
         if (requestedSize > maximumSize) {
@@ -144,74 +171,32 @@ HRESULT STDMETHODCALLTYPE GetThumbnailHook(
         thumbnailId);
 }
 
-// Resolve the target for the loaded Windows build, then obtain its exact code
-// range from the platform unwind table. No private function is detoured.
-bool ResolveTargetFunctionRange() {
-    g_twinuiPcShell = LoadLibraryExW(
-        L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!g_twinuiPcShell) {
-        Wh_Log(L"Failed to load twinui.pcshell.dll: %lu", GetLastError());
+// Hook the outer wallpaper helper so the thumbnail-cache detour can identify
+// its dynamic call context without relying on compiler code layout.
+bool HookBackgroundThumbnailHelper(HMODULE module) {
+    if (!module) {
         return false;
     }
 
-    void* targetFunction = nullptr;
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
                 L"protected: long __cdecl VirtualDesktopGestureWindow::MakeBackgroundThumbnailFromThumbnailCache(struct IDCompThumbnail *,struct IVirtualDesktop *,struct HSTRING__ *,struct tagRECT,struct IDCompThumbnail * *)",
             },
-            &targetFunction,
-            nullptr,
+            reinterpret_cast<void**>(&g_makeBackgroundThumbnailOriginal),
+            reinterpret_cast<void*>(
+                MakeBackgroundThumbnailFromThumbnailCacheHook),
             false,
         },
     };
 
     if (!WindhawkUtils::HookSymbols(
-            g_twinuiPcShell, symbolHooks, ARRAYSIZE(symbolHooks)) ||
-        !targetFunction) {
-        Wh_Log(L"Failed to resolve the virtual desktop wallpaper helper");
+            module, symbolHooks, ARRAYSIZE(symbolHooks)) ||
+        !g_makeBackgroundThumbnailOriginal) {
+        Wh_Log(L"Failed to hook the virtual desktop wallpaper helper");
         return false;
     }
-
-    DWORD64 imageBase = 0;
-    PRUNTIME_FUNCTION runtimeFunction = RtlLookupFunctionEntry(
-        reinterpret_cast<DWORD64>(targetFunction),
-        &imageBase,
-        nullptr);
-    if (!runtimeFunction || !imageBase) {
-        Wh_Log(L"Failed to obtain the virtual desktop helper's unwind range");
-        return false;
-    }
-
-    const uintptr_t functionStart = static_cast<uintptr_t>(
-        imageBase + runtimeFunction->BeginAddress);
-#if defined(_M_ARM64) || defined(_ARM64_)
-    DWORD functionLength = 0;
-    if (runtimeFunction->Flag == PdataRefToFullXdata) {
-        const auto* unwindData = reinterpret_cast<
-            const IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY_XDATA*>(
-                imageBase + runtimeFunction->UnwindData);
-        functionLength = unwindData->FunctionLength * 4;
-    } else if (runtimeFunction->Flag == PdataPackedUnwindFunction ||
-               runtimeFunction->Flag == PdataPackedUnwindFragment) {
-        functionLength = runtimeFunction->FunctionLength * 4;
-    }
-    const uintptr_t functionEnd = functionStart + functionLength;
-#else
-    const uintptr_t functionEnd = static_cast<uintptr_t>(
-        imageBase + runtimeFunction->EndAddress);
-#endif
-    const uintptr_t symbolAddress = reinterpret_cast<uintptr_t>(targetFunction);
-    if (functionEnd <= functionStart || symbolAddress < functionStart ||
-        symbolAddress >= functionEnd ||
-        functionEnd - functionStart > 0x4000) {
-        Wh_Log(L"Resolved an invalid virtual desktop helper range");
-        return false;
-    }
-
-    g_targetFunctionStart = functionStart;
-    g_targetFunctionEnd = functionEnd;
     return true;
 }
 
@@ -295,6 +280,68 @@ void ReleaseModuleReferences() {
     }
 }
 
+bool InitializeCore(HMODULE twinuiPcShell, bool applyHookOperations) {
+    if (InterlockedCompareExchange(
+            &g_coreInitializationState,
+            kCoreInitializing,
+            kCorePending) != kCorePending) {
+        return InterlockedCompareExchange(
+                   &g_coreInitializationState, 0, 0) == kCoreInitialized;
+    }
+
+    if (!IsOrMayBecomeShellExplorer()) {
+        Wh_Log(L"Skipping non-shell explorer.exe process %lu",
+               GetCurrentProcessId());
+        InterlockedExchange(&g_coreInitializationState, kCoreFailed);
+        return false;
+    }
+
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(twinuiPcShell),
+            &g_twinuiPcShell)) {
+        Wh_Log(L"Failed to retain twinui.pcshell.dll: %lu", GetLastError());
+        InterlockedExchange(&g_coreInitializationState, kCoreFailed);
+        return false;
+    }
+
+    if (!HookBackgroundThumbnailHelper(twinuiPcShell) ||
+        !HookThumbnailCache()) {
+        ReleaseModuleReferences();
+        InterlockedExchange(&g_coreInitializationState, kCoreFailed);
+        return false;
+    }
+
+    if (applyHookOperations) {
+        SetLastError(ERROR_SUCCESS);
+        if (!Wh_ApplyHookOperations()) {
+            Wh_Log(L"Failed to apply late-loaded hooks: %lu", GetLastError());
+            InterlockedExchange(&g_coreInitializationState, kCoreFailed);
+            return false;
+        }
+    }
+
+    InterlockedExchange(&g_coreInitializationState, kCoreInitialized);
+    Wh_Log(L"Initialized: maximumThumbnailSize=%ld",
+           InterlockedCompareExchange(&g_maximumThumbnailSize, 0, 0));
+    return true;
+}
+
+HMODULE WINAPI LoadLibraryExWHook(
+    LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = g_loadLibraryExWOriginal(fileName, file, flags);
+    constexpr DWORD dataOnlyFlags =
+        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+        LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (module && !(flags & dataOnlyFlags) &&
+        InterlockedCompareExchange(&g_coreInitializationState, 0, 0) ==
+            kCorePending &&
+        GetModuleHandleW(L"twinui.pcshell.dll") == module) {
+        InitializeCore(module, true);
+    }
+    return module;
+}
+
 }  // namespace
 
 BOOL Wh_ModInit() {
@@ -306,14 +353,38 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    if (!ResolveTargetFunctionRange() || !HookThumbnailCache()) {
-        ReleaseModuleReferences();
+    if (HMODULE twinuiPcShell =
+            GetModuleHandleW(L"twinui.pcshell.dll")) {
+        return InitializeCore(twinuiPcShell, false) ? TRUE : FALSE;
+    }
+
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    auto loadLibraryExW = kernelBase
+        ? reinterpret_cast<LoadLibraryExW_t>(
+              GetProcAddress(kernelBase, "LoadLibraryExW"))
+        : nullptr;
+    if (!loadLibraryExW ||
+        !WindhawkUtils::SetFunctionHook(
+            loadLibraryExW,
+            LoadLibraryExWHook,
+            &g_loadLibraryExWOriginal)) {
+        Wh_Log(L"Failed to hook kernelbase!LoadLibraryExW");
         return FALSE;
     }
 
-    Wh_Log(L"Initialized: maximumThumbnailSize=%ld",
-           InterlockedCompareExchange(&g_maximumThumbnailSize, 0, 0));
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (InterlockedCompareExchange(
+            &g_coreInitializationState, 0, 0) != kCorePending) {
+        return;
+    }
+
+    if (HMODULE twinuiPcShell =
+            GetModuleHandleW(L"twinui.pcshell.dll")) {
+        InitializeCore(twinuiPcShell, true);
+    }
 }
 
 void Wh_ModSettingsChanged() {
