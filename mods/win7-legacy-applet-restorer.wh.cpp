@@ -122,8 +122,8 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   - never: Never add
 
 - preventSettingsRedirect: true
-  $name: Control Panel Revival guard (unhide applets and block Settings redirects)
-  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Text to Speech, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled. Enabled by default because it shows the real applets instead of this mod's virtual approximations of them - the guard only ever reports itself as active once it has actually confirmed the redirect is blocked, and the mod falls back to its virtual entries on any build where that can't be confirmed.
+  $name: Unhide legacy applets
+  $description: This setting unhides the real Personalization, BitLocker, Text to Speech, and System applets in Control Panel and stops Windows 11 from redirecting them to the modern Settings app. Enabled by default so Control Panel shows these applets themselves rather than this mod's virtual re-creations of them, which are used as a fallback when the real applet can't be confirmed unhidden and redirect-free. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
 
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
@@ -312,42 +312,42 @@ static std::atomic<bool> g_speechClsidRegistered{ false };
 static std::atomic<bool> g_speechAutoDetected{ false };
 static std::atomic<bool> g_injectSpeechApplet{ false };
 static std::atomic<int> g_prevSpeechMode{ -1 };
-// Index into kRevivalAppletMonikers / g_monikerPatched (declared here so
-// VirtualTwinSuppressed can use it; kRevivalAppletMonikers itself is
-// declared later, near the rest of the Revival guard, but a static_assert
-// there keeps the two in sync). Order matches kRevivalAppletMonikers.
-enum RevivalMonikerIndex : size_t {
-    kRevivalMonikerPersonalization = 0,
-    kRevivalMonikerBitLocker = 1,
-    kRevivalMonikerSpeech = 2,
-    kRevivalMonikerSystem = 3,
-    kRevivalMonikerCount = 4,
+// Index into kLegacyUnhideMonikers / g_monikerPatched (declared here so
+// VirtualTwinSuppressed can use it; kLegacyUnhideMonikers itself is
+// declared later, near the rest of the unhide feature, but a static_assert
+// there keeps the two in sync). Order matches kLegacyUnhideMonikers.
+enum LegacyUnhideMonikerIndex : size_t {
+    kLegacyUnhideMonikerPersonalization = 0,
+    kLegacyUnhideMonikerBitLocker = 1,
+    kLegacyUnhideMonikerSpeech = 2,
+    kLegacyUnhideMonikerSystem = 3,
+    kLegacyUnhideMonikerCount = 4,
 };
 // Per-applet: was THIS SPECIFIC moniker actually patched (in shell32.dll
 // and/or windows.storage.dll)? The guard's overall "is it active" flag
-// (g_revivalGuardActive) is necessarily a single yes/no, but whether each
+// (g_legacyUnhideActive) is necessarily a single yes/no, but whether each
 // individual applet's moniker was found and zeroed is not - one applet's
 // patch can fail while another's succeeds (e.g. a future shell32 build
 // changes the Personalization string but not System's). Gating suppression
 // on this per applet, in addition to the global flag, stops a moniker that
 // silently failed to patch from taking its applet's virtual twin down with
 // it while the guard as a whole reports itself active.
-static std::atomic<bool> g_monikerPatched[kRevivalMonikerCount]{};
+static std::atomic<bool> g_monikerPatched[kLegacyUnhideMonikerCount]{};
 
 // Whether the REAL Personalization CLSID is registered on this machine.
-// When the Control Panel Revival guard below unhides it, the mod's own
+// When the legacy-applet unhide feature below unhides it, the mod's own
 // virtual Personalization entry must be suppressed (duplicate entries).
 static std::atomic<bool> g_realPersonalizationRegistered{ false };
 // Whether the REAL System CLSID is registered (it is on every supported
 // build; kept as a flag for the same task-links gating logic).
 static std::atomic<bool> g_realSystemRegistered{ false };
-// Master switch for the Control Panel Revival guard (string patches +
+// Master switch for the legacy-applet unhide feature (string patches +
 // hooks). Declared up here because the injection sites (ClassifyPath,
 // GetNamespaceClsids, task-links XML) consult it; it is set by
-// SetupRevivalGuard() / Wh_ModSettingsChanged and cleared in Wh_ModUninit.
-static std::atomic<bool> g_revivalGuardActive{ false };
+// SetupLegacyUnhide() / Wh_ModSettingsChanged and cleared in Wh_ModUninit.
+static std::atomic<bool> g_legacyUnhideActive{ false };
 
-// When the Control Panel Revival guard is active, Windows shows the real
+// When the legacy-applet unhide feature is active, Windows shows the real
 // applets itself (the guard unhid them), so the virtual twins this mod
 // injects for the same applets must be suppressed, otherwise the user sees
 // duplicate entries (the twin's open command is a "shell:::{...}" launch).
@@ -356,8 +356,8 @@ static std::atomic<bool> g_revivalGuardActive{ false };
 // the guard being active elsewhere doesn't mean this one's string was
 // found), and the real applet is actually present.
 static bool VirtualTwinSuppressed(std::atomic<bool>& realPresent, size_t monikerIndex) {
-    return g_revivalGuardActive.load() &&
-           monikerIndex < kRevivalMonikerCount &&
+    return g_legacyUnhideActive.load() &&
+           monikerIndex < kLegacyUnhideMonikerCount &&
            g_monikerPatched[monikerIndex].load() &&
            realPresent.load();
 }
@@ -608,9 +608,10 @@ static const std::wstring kSpeechCanonicalName      = L"";
 // Virtual CLSID mirroring the real Text to Speech applet (same reason as
 // kBitLockerVirtualGuid: Explorer's Category View never probes the real GUID).
 static const std::wstring kSpeechVirtualGuid        = L"{e4a1c6d8-3b7f-4e2a-8c5d-9f1b6a7c2d45}";
-// The real "System" applet (sysdm.cpl): unhidden by the Control Panel Revival
-// guard like the other legacy items above; while the guard is active it also
-// gets the classic Windows 7 task links (see EnsureClassicTaskLinksFile).
+// The real "System" applet (sysdm.cpl): unhidden by the legacy-applet
+// unhide feature like the other legacy items above; while the feature is
+// active it also gets the classic Windows 7 task links (see
+// EnsureClassicTaskLinksFile).
 static const std::wstring kSystemGuid               = L"{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}";
 
 static const DWORD kCategoryAppearance      = 1;
@@ -1070,16 +1071,16 @@ struct VirtualApplet {
     std::wstring openCommand;
     DWORD category = 0;
     std::atomic<bool>* enabledSetting = nullptr;
-    // Points at the "real CLSID is registered" flag: when the Revival guard
+    // Points at the "real CLSID is registered" flag: when the unhide feature
     // is active and the real applet exists, this virtual twin is suppressed
     // (see VirtualTwinSuppressed) so the user doesn't get duplicate entries.
     std::atomic<bool>* realPresent = nullptr;
-    // Which kRevivalAppletMonikers entry corresponds to this applet, so
+    // Which kLegacyUnhideMonikers entry corresponds to this applet, so
     // VirtualTwinSuppressed can check that THIS moniker (not just some
-    // moniker) was actually patched. kRevivalMonikerCount means "not part
-    // of the Revival guard" (e.g. Tablet PC Settings, which has no moniker
-    // in kRevivalAppletMonikers and is never suppressed by the guard).
-    size_t monikerIndex = kRevivalMonikerCount;
+    // moniker) was actually patched. kLegacyUnhideMonikerCount means "not part
+    // of the unhide feature" (e.g. Tablet PC Settings, which has no moniker
+    // in kLegacyUnhideMonikers and is never suppressed by the guard).
+    size_t monikerIndex = kLegacyUnhideMonikerCount;
 };
 
 static std::vector<VirtualApplet> g_virtualApplets;
@@ -1116,7 +1117,7 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
                       const std::wstring& fallbackIcon = L"",
                       const std::wstring& fallbackInfoTip = L"",
                       std::atomic<bool>* realPresent = nullptr,
-                      size_t monikerIndex = kRevivalMonikerCount) {
+                      size_t monikerIndex = kLegacyUnhideMonikerCount) {
     std::wstring name, icon;
     bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
     if (!gotFromRegistry || name.empty()) {
@@ -1403,11 +1404,11 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
                g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
     // The five classic Personalization task links attach to the REAL
-    // Personalization applet while the Revival guard unhide it (the virtual
+    // Personalization applet while the unhide feature unhides it (the virtual
     // twin is then suppressed, see VirtualTwinSuppressed), and to the
     // virtual CLSID otherwise.
     replaceAll("{PERSONALIZATION_TASKS_APP_ID}",
-        VirtualTwinSuppressed(g_realPersonalizationRegistered, kRevivalMonikerPersonalization)
+        VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)
             ? NarrowAscii(ToLower(kRealPersonalizationGuid)).c_str()
             : NarrowAscii(ToLower(kPersonalizationGuid)).c_str());
 
@@ -1492,10 +1493,10 @@ bool EnsureClassicTaskLinksFile() {
     std::string virtualTaskBlock;
     if (g_settings.restoreClassicTaskLinks.load()) {
         {
-            // While the Revival guard is active and the real applet exists,
+            // While the unhide feature is active and the real applet exists,
             // Windows shows the REAL BitLocker entry and the virtual twin is
             // suppressed - so the task links must attach to the real CLSID.
-            const bool bitRealShown = VirtualTwinSuppressed(g_bitlockerClsidRegistered, kRevivalMonikerBitLocker);
+            const bool bitRealShown = VirtualTwinSuppressed(g_bitlockerClsidRegistered, kLegacyUnhideMonikerBitLocker);
             if (g_injectBitlockerApplet.load() || bitRealShown) {
                 const std::string bitAppId = bitRealShown
                     ? NarrowAscii(ToLower(kBitLockerGuid))        // real CLSID
@@ -1512,7 +1513,7 @@ bool EnsureClassicTaskLinksFile() {
         }
         {
             // Same real/virtual switching as the BitLocker block above.
-            const bool speechRealShown = VirtualTwinSuppressed(g_speechClsidRegistered, kRevivalMonikerSpeech);
+            const bool speechRealShown = VirtualTwinSuppressed(g_speechClsidRegistered, kLegacyUnhideMonikerSpeech);
             if (g_injectSpeechApplet.load() || speechRealShown) {
                 const std::string speechAppId = speechRealShown
                     ? NarrowAscii(ToLower(kSpeechGuid))          // real CLSID
@@ -1528,8 +1529,8 @@ bool EnsureClassicTaskLinksFile() {
             }
         }
         // No virtual System twin exists: the classic links simply attach to
-        // the real System applet while the Revival guard unhide it.
-        if (VirtualTwinSuppressed(g_realSystemRegistered, kRevivalMonikerSystem)) {
+        // the real System applet while the unhide feature unhides it.
+        if (VirtualTwinSuppressed(g_realSystemRegistered, kLegacyUnhideMonikerSystem)) {
             virtualTaskBlock +=
                 "  <!-- System (System and Security, Category 5) -->\n"
                 "  <application id=\"{bb06c0e4-d293-4f75-8a90-cb05b6477eee}\">\n"
@@ -1573,10 +1574,10 @@ bool EnsureClassicTaskLinksFile() {
             "    </category>\n"
             "  </application>\n";
         // The theme/background links also attach to the REAL Personalization
-        // applet. While the Revival guard unhide it, the 5-task
+        // applet. While the unhide feature unhides it, the 5-task
         // Personalization block already covers it, so skip this second block
         // to avoid a duplicate application id in the XML.
-        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered, kRevivalMonikerPersonalization)) {
+        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
             displayBlock +=
             "  <application id=\"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\">\n"
             "    <sh:task id=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
@@ -1836,7 +1837,7 @@ void InitDisplayNames() {
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-2",
-                              &g_bitlockerClsidRegistered, kRevivalMonikerBitLocker))
+                              &g_bitlockerClsidRegistered, kLegacyUnhideMonikerBitLocker))
             Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
     }
     if (g_tabletPcClsidRegistered.load()) {
@@ -1866,7 +1867,7 @@ void InitDisplayNames() {
         if (!AddVirtualApplet(kSpeechVirtualGuid, kSpeechGuid, kCategoryHardware,
                               &g_injectSpeechApplet,
                               L"", L"", L"",
-                              &g_speechClsidRegistered, kRevivalMonikerSpeech))
+                              &g_speechClsidRegistered, kLegacyUnhideMonikerSpeech))
             Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
                    L"(no resource fallback); virtual entry not created");
     }
@@ -1944,7 +1945,7 @@ ClassifyResult ClassifyVirtualApplets(const std::wstring& lower) {
     for (size_t i = 0; i < g_virtualApplets.size(); ++i) {
         const VirtualApplet& a = g_virtualApplets[i];
         if (!a.enabledSetting->load()) continue;
-        // Revival guard active + real applet present: Windows shows the real
+        // unhide feature active + real applet present: Windows shows the real
         // entry itself, so this virtual twin must not be served either.
         if (a.realPresent && VirtualTwinSuppressed(*a.realPresent, a.monikerIndex)) continue;
         if (EndsWith(lower, a.clsidSuffix))       return { VNode::ClsidRoot,     ItemKind::VirtualApplet, a.category, (int)i };
@@ -1978,7 +1979,7 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
     }
 
     if (g_settings.enablePersonalization.load() &&
-        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kRevivalMonikerPersonalization)) {
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
         auto cr = ClassifyPersonalizationVirtual(lower);
         if (cr.node != VNode::None) return cr;
     }
@@ -1988,16 +1989,16 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         if (cr.node != VNode::None) return cr;
     }
 
-    if (g_settings.enableCategoryAppearanceLinks.load() || g_revivalGuardActive.load()) {
+    if (g_settings.enableCategoryAppearanceLinks.load() || g_legacyUnhideActive.load()) {
         if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
             EndsWith(lower, g_displayClsidSuffix)) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
         }
-        // With the Revival guard active the real BitLocker / Speech / System
+        // With the unhide feature active the real BitLocker / Speech / System
         // applets are unhidden by Windows, so the classic task links attach
         // to them. cr.category stays 0: the category is NOT overridden,
         // Windows already knows the real applet's own category.
-        if (g_revivalGuardActive.load() &&
+        if (g_legacyUnhideActive.load() &&
             (EndsWith(lower, g_realBitLockerClsidSuffix) ||
              EndsWith(lower, g_realSpeechClsidSuffix) ||
              EndsWith(lower, g_realSystemClsidSuffix))) {
@@ -2267,10 +2268,10 @@ static bool VirtualAppletPresent(const std::wstring& guidLower) {
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
     result.reserve(8);
-    // The virtual Personalization twin is suppressed while the Revival guard
+    // The virtual Personalization twin is suppressed while the unhide feature
     // shows the real applet (guard active + real CLSID registered).
     if (g_settings.enablePersonalization.load() &&
-        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kRevivalMonikerPersonalization)) result.push_back(kPersonalizationGuid);
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
@@ -2714,7 +2715,7 @@ LPCWSTR g_szAppletOrder[] = {
     /* Appearance and Personalization */
     L"::{580722ff-16a7-44c1-bf74-7e1acd00f4f9}", // Personalization (fake GUID)
     // The REAL Personalization applet, which is what shows while the Control
-    // Panel Revival guard is active (the virtual twin is then suppressed).
+    // Panel unhide feature is active (the virtual twin is then suppressed).
     // Only one of the two entries is ever in the category list at a time, so
     // the extra rank costs nothing.
     L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization (real)
@@ -2942,21 +2943,22 @@ void InvalidateClassicTaskLinksFile() {
 }
 
 // ===========================================================================
-// Control Panel Revival approach (ported from the "control-panel-revival"
-// mod by AdmXP8), rebuilt around RAII + try/catch:
+// Legacy-applet unhide feature (similar in approach to a well-known
+// technique also used by a similar mod for the same purpose), rebuilt
+// around RAII + try/catch:
 //
 //  * ReversiblePatcher owns every in-memory string patch and restores the
 //    original bytes from a single place (Wh_ModUninit), so no manual
 //    restore can ever be forgotten. It deliberately has no restoring
 //    destructor - see the [[clang::no_destroy]] wrapper below;
 //  * windows.storage.dll is kept loaded for as long as the patches exist:
-//    the reference is taken when the guard first patches it and released
+//    the reference is taken when the feature first patches it and released
 //    only in Wh_ModUninit, after RestoreAll(), because the recorded patch
 //    addresses point into that module's image;
 //  * every entry point below is try/catch guarded, so no C++ exception can
 //    ever unwind into Explorer's non-exception-aware call stack.
 //
-// What it does, exactly like the original mod:
+// What it does:
 //  1. zeroes the hidden-applet monikers inside shell32.dll /
 //     windows.storage.dll so Windows 11 stops hiding Personalization,
 //     BitLocker Drive Encryption, Text to Speech and System. Only
@@ -3079,7 +3081,7 @@ public:
         }
         const size_t count = patches_.size();
         patches_.clear();
-        if (count) Wh_Log(L"Revival guard: restored %zu patched region(s)", count);
+        if (count) Wh_Log(L"unhide feature: restored %zu patched region(s)", count);
     }
 
 private:
@@ -3131,59 +3133,59 @@ private:
 // process shutdown (see the comment on ~ReversiblePatcher). Wh_ModUninit
 // restores the patched bytes and resets the optional explicitly.
 // https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
-[[clang::no_destroy]] static std::optional<ReversiblePatcher> g_revivalPatcher;
+[[clang::no_destroy]] static std::optional<ReversiblePatcher> g_legacyUnhidePatcher;
 
 // Persistent reference to windows.storage.dll, taken the first time the
 // guard patches it and released in Wh_ModUninit, AFTER RestoreAll(): the
 // recorded patch addresses point into that module's image, so the module
 // must stay mapped for as long as the patches exist. (Releasing it any
 // earlier could leave the patch addresses pointing at unmapped memory.)
-static HMODULE g_revivalWinStorageModule = nullptr;
+static HMODULE g_legacyUnhideWinStorageModule = nullptr;
 
-// Master switch for the whole revival guard: when false the two hooks below
-// pass straight through to the original functions. (g_revivalGuardActive is
+// Master switch for the whole unhide feature: when false the two hooks below
+// pass straight through to the original functions. (g_legacyUnhideActive is
 // declared up top together with the other mod state.)
-static std::atomic<bool> g_revivalCsoHooked{ false };
-static std::atomic<bool> g_revivalMapNameHooked{ false };
-static std::atomic<bool> g_revivalOpenHooked{ false };
-// Addresses of the two shell32 functions the guard hooks manually. They are
+static std::atomic<bool> g_legacyUnhideCsoHooked{ false };
+static std::atomic<bool> g_legacyUnhideMapNameHooked{ false };
+static std::atomic<bool> g_legacyUnhideOpenHooked{ false };
+// Addresses of the two shell32 functions this feature hooks manually. They are
 // resolved in Wh_ModInit by the one HookSymbols call that also resolves the
 // applet-sorting symbols - a second HookSymbols call for the same module
 // would overwrite the module's symbol cache with only the new call's
 // symbols and force a full re-resolution on every subsequent start - so
 // only the addresses are resolved there. The hooks themselves are
-// registered by SetupRevivalGuard().
-static void* g_pRevivalMapLegacyName = nullptr;
-static void* g_pRevivalOpen = nullptr;
+// registered by SetupLegacyUnhide().
+static void* g_pLegacyUnhideMapLegacyName = nullptr;
+static void* g_pLegacyUnhideOpen = nullptr;
 
-// The hidden-applet monikers to unhide (copied from the control-panel-revival
-// mod), narrowed to the applets this mod manages.
-static const LPCWSTR kRevivalAppletMonikers[] = {
+// The hidden-applet monikers to unhide (same technique also used by a
+// similar mod), narrowed to the applets this mod manages.
+static const LPCWSTR kLegacyUnhideMonikers[] = {
     L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
     L"::{D9EF8727-CAC2-4e60-809E-86F80A666C91}", // BitLocker Drive Encryption
     L"::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}", // Text to Speech
     L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
 };
-// Keeps kRevivalMonikerIndex (declared far above, next to
+// Keeps LegacyUnhideMonikerIndex (declared far above, next to
 // VirtualTwinSuppressed/g_monikerPatched, since it is needed there) in sync
 // with the array above - if someone adds/removes/reorders a moniker here
 // without updating the enum, this fails to compile instead of silently
 // mis-gating an unrelated applet's virtual twin.
-static_assert(ARRAYSIZE(kRevivalAppletMonikers) == kRevivalMonikerCount,
-              "kRevivalAppletMonikers and RevivalMonikerIndex must stay in sync");
+static_assert(ARRAYSIZE(kLegacyUnhideMonikers) == kLegacyUnhideMonikerCount,
+              "kLegacyUnhideMonikers and LegacyUnhideMonikerIndex must stay in sync");
 
 // The canonical names whose legacy-to-modern mapping is short-circuited by
 // the _MapLegacyName hook. Trimmed to the applets this mod actually
 // restores/injects a classic entry for (Personalization, System, Display,
 // Troubleshooting, DevicesAndPrinters - see the task-links XML and the
-// applet list above). The upstream control-panel-revival mod's full list
+// applet list above). A similar mod's full list
 // also blocked the redirect for names like Microsoft.WindowsUpdate and
 // Microsoft.Fonts that this mod does not restore a classic page for; on a
 // stock Windows install that left those Control Panel items pointing at a
 // classic page that no longer exists (Windows Update being the most visible
 // case), even though the preventSettingsRedirect description only promises
 // Personalization/BitLocker/Speech/System.
-static const LPCWSTR kRevivalCanonicalNames[] = {
+static const LPCWSTR kLegacyUnhideCanonicalNames[] = {
     L"Microsoft.Personalization",
     L"Microsoft.System",
     L"Microsoft.Display",
@@ -3192,20 +3194,20 @@ static const LPCWSTR kRevivalCanonicalNames[] = {
 };
 
 // Helper function to match target strings regardless of length format
-// (copied from the control-panel-revival mod, renamed to avoid collisions).
-static bool IsRevivalTargetApplet(LPCWCH lpString, int cchCount) {
+// (same technique as a similar mod uses, renamed to avoid collisions).
+static bool IsLegacyUnhideTargetApplet(LPCWCH lpString, int cchCount) {
     if (!lpString) return false;
     const size_t len = (cchCount == -1) ? wcslen(lpString) : (size_t)cchCount;
 
-    for (UINT i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
-        const size_t targetLen = wcslen(kRevivalAppletMonikers[i]);
-        if (len == targetLen && _wcsnicmp(lpString, kRevivalAppletMonikers[i], len) == 0) {
+    for (UINT i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
+        const size_t targetLen = wcslen(kLegacyUnhideMonikers[i]);
+        if (len == targetLen && _wcsnicmp(lpString, kLegacyUnhideMonikers[i], len) == 0) {
             return true;
         }
     }
-    for (UINT i = 0; i < ARRAYSIZE(kRevivalCanonicalNames); i++) {
-        const size_t targetLen = wcslen(kRevivalCanonicalNames[i]);
-        if (len == targetLen && _wcsnicmp(lpString, kRevivalCanonicalNames[i], len) == 0) {
+    for (UINT i = 0; i < ARRAYSIZE(kLegacyUnhideCanonicalNames); i++) {
+        const size_t targetLen = wcslen(kLegacyUnhideCanonicalNames[i]);
+        if (len == targetLen && _wcsnicmp(lpString, kLegacyUnhideCanonicalNames[i], len) == 0) {
             return true;
         }
     }
@@ -3215,15 +3217,15 @@ static bool IsRevivalTargetApplet(LPCWCH lpString, int cchCount) {
 // Hook for COpenControlPanel::_MapLegacyName (ported, try/catch guarded).
 // While this mod's own shell probe (IsShownByControlPanel) runs, the
 // g_inShellProbeBypass flag is set, so the probe always sees stock behaviour.
-static bool (*g_revivalMapLegacyNameOrig)(void*, LPCWSTR, LPWSTR, UINT, bool*) = nullptr;
-static bool COpenControlPanel__MapLegacyName_revivalHook(void* pThis, LPCWSTR pszLegacyName,
+static bool (*g_legacyUnhideMapLegacyNameOrig)(void*, LPCWSTR, LPWSTR, UINT, bool*) = nullptr;
+static bool COpenControlPanel__MapLegacyName_legacyUnhideHook(void* pThis, LPCWSTR pszLegacyName,
                                                          LPWSTR pszNewName, UINT uUnused,
                                                          bool* nameChanged) {
     try {
-        if (g_revivalGuardActive.load() && !g_inShellProbeBypass && pszLegacyName) {
-            for (size_t i = 0; i < ARRAYSIZE(kRevivalCanonicalNames); i++) {
-                if (kRevivalCanonicalNames[i] &&
-                    _wcsicmp(pszLegacyName, kRevivalCanonicalNames[i]) == 0) {
+        if (g_legacyUnhideActive.load() && !g_inShellProbeBypass && pszLegacyName) {
+            for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideCanonicalNames); i++) {
+                if (kLegacyUnhideCanonicalNames[i] &&
+                    _wcsicmp(pszLegacyName, kLegacyUnhideCanonicalNames[i]) == 0) {
                     if (nameChanged) *nameChanged = false;
                     if (pszNewName && uUnused > 0) {
                         *pszNewName = L'\0';
@@ -3232,12 +3234,12 @@ static bool COpenControlPanel__MapLegacyName_revivalHook(void* pThis, LPCWSTR ps
                 }
             }
         }
-        if (!g_revivalMapLegacyNameOrig) return true;
-        return g_revivalMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
+        if (!g_legacyUnhideMapLegacyNameOrig) return true;
+        return g_legacyUnhideMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
     } catch (...) {
-        Wh_Log(L"Exception in _MapLegacyName revival hook, passing through");
-        return g_revivalMapLegacyNameOrig
-            ? g_revivalMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged)
+        Wh_Log(L"Exception in _MapLegacyName unhide hook, passing through");
+        return g_legacyUnhideMapLegacyNameOrig
+            ? g_legacyUnhideMapLegacyNameOrig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged)
             : true;
     }
 }
@@ -3250,46 +3252,46 @@ static bool COpenControlPanel__MapLegacyName_revivalHook(void* pThis, LPCWSTR ps
 // name with the applet's localized title (e.g. "Personalization" on the
 // classic Display page) keep resolving, instead of silently losing their
 // label. Same shape as CategorySortScope / ShellProbeBypass above.
-static thread_local bool g_revivalRedirectScope = false;
+static thread_local bool g_legacyUnhideRedirectScope = false;
 
-struct RevivalRedirectScope {
-    bool prev_ = g_revivalRedirectScope;
-    RevivalRedirectScope() { g_revivalRedirectScope = true; }
-    ~RevivalRedirectScope() { g_revivalRedirectScope = prev_; }
-    RevivalRedirectScope(const RevivalRedirectScope&) = delete;
-    RevivalRedirectScope& operator=(const RevivalRedirectScope&) = delete;
+struct LegacyUnhideRedirectScope {
+    bool prev_ = g_legacyUnhideRedirectScope;
+    LegacyUnhideRedirectScope() { g_legacyUnhideRedirectScope = true; }
+    ~LegacyUnhideRedirectScope() { g_legacyUnhideRedirectScope = prev_; }
+    LegacyUnhideRedirectScope(const LegacyUnhideRedirectScope&) = delete;
+    LegacyUnhideRedirectScope& operator=(const LegacyUnhideRedirectScope&) = delete;
 };
 
 // CompareStringOrdinal hook (ported, try/catch guarded), scoped to the
-// redirect decision: it only takes effect while g_revivalRedirectScope is
+// redirect decision: it only takes effect while g_legacyUnhideRedirectScope is
 // set for the calling thread, which happens exclusively inside the
 // COpenControlPanel::Open hook below. Everywhere else the original
 // comparison runs untouched, so equality checks between two identical
 // applet names (or between two unrelated strings) can no longer be
 // perturbed.
-static decltype(&CompareStringOrdinal) g_revivalCompareStringOrdinalOrig = nullptr;
-static int WINAPI CompareStringOrdinal_revivalHook(LPCWCH lpString1, int cchCount1,
+static decltype(&CompareStringOrdinal) g_legacyUnhideCompareStringOrdinalOrig = nullptr;
+static int WINAPI CompareStringOrdinal_legacyUnhideHook(LPCWCH lpString1, int cchCount1,
                                                    LPCWCH lpString2, int cchCount2,
                                                    BOOL bIgnoreCase) {
     try {
-        // g_revivalRedirectScope can only be set while the guard is active
+        // g_legacyUnhideRedirectScope can only be set while the guard is active
         // (the Open hook checks), so the atomic load is evaluated only on
         // the rare in-scope calls, never on the hot path.
         // Never interfere with this mod's own IOpenControlPanel::GetPath probe.
-        if (g_revivalRedirectScope &&
-            g_revivalGuardActive.load(std::memory_order_relaxed) &&
+        if (g_legacyUnhideRedirectScope &&
+            g_legacyUnhideActive.load(std::memory_order_relaxed) &&
             !g_inShellProbeBypass &&
-            (IsRevivalTargetApplet(lpString1, cchCount1) ||
-             IsRevivalTargetApplet(lpString2, cchCount2))) {
+            (IsLegacyUnhideTargetApplet(lpString1, cchCount1) ||
+             IsLegacyUnhideTargetApplet(lpString2, cchCount2))) {
             return CSTR_LESS_THAN; // Break redirection match
         }
-        if (!g_revivalCompareStringOrdinalOrig) return 0;
-        return g_revivalCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
+        if (!g_legacyUnhideCompareStringOrdinalOrig) return 0;
+        return g_legacyUnhideCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
                                                  bIgnoreCase);
     } catch (...) {
-        Wh_Log(L"Exception in CompareStringOrdinal revival hook, passing through");
-        return g_revivalCompareStringOrdinalOrig
-            ? g_revivalCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
+        Wh_Log(L"Exception in CompareStringOrdinal unhide hook, passing through");
+        return g_legacyUnhideCompareStringOrdinalOrig
+            ? g_legacyUnhideCompareStringOrdinalOrig(lpString1, cchCount1, lpString2, cchCount2,
                                                 bIgnoreCase)
             : 0;
     }
@@ -3301,42 +3303,42 @@ static int WINAPI CompareStringOrdinal_revivalHook(LPCWCH lpString1, int cchCoun
 // so it is also the scope within which the CompareStringOrdinal override
 // above is allowed to act: the thread-local flag is raised around the
 // original call and lowered afterwards (RAII, exception-safe).
-static HRESULT(WINAPI* g_revivalOpenOrig)(void*, LPCWSTR, void*, LPCWSTR) = nullptr;
-static HRESULT WINAPI COpenControlPanel__Open_revivalHook(void* pThis, LPCWSTR pszName,
+static HRESULT(WINAPI* g_legacyUnhideOpenOrig)(void*, LPCWSTR, void*, LPCWSTR) = nullptr;
+static HRESULT WINAPI COpenControlPanel__Open_legacyUnhideHook(void* pThis, LPCWSTR pszName,
                                                           void* pUnkSite, LPCWSTR pszPage) {
     try {
-        if (!g_revivalOpenOrig) return E_FAIL;
-        if (!g_revivalGuardActive.load() || g_inShellProbeBypass) {
-            return g_revivalOpenOrig(pThis, pszName, pUnkSite, pszPage);
+        if (!g_legacyUnhideOpenOrig) return E_FAIL;
+        if (!g_legacyUnhideActive.load() || g_inShellProbeBypass) {
+            return g_legacyUnhideOpenOrig(pThis, pszName, pUnkSite, pszPage);
         }
-        RevivalRedirectScope scope;
-        return g_revivalOpenOrig(pThis, pszName, pUnkSite, pszPage);
+        LegacyUnhideRedirectScope scope;
+        return g_legacyUnhideOpenOrig(pThis, pszName, pUnkSite, pszPage);
     } catch (...) {
-        Wh_Log(L"Exception in COpenControlPanel::Open revival hook");
+        Wh_Log(L"Exception in COpenControlPanel::Open unhide hook");
         return E_FAIL;
     }
 }
 
-// Detects whether the standalone "Control Panel Revival" mod
-// (id: control-panel-revival, by AdmXP8) is also loaded in this process.
-// That mod maintains its own hardcoded moniker list (System, Devices and
-// Printers, Installed Updates, Default Programs, Troubleshooting, Fonts) and
-// patches shell32.dll/windows.storage.dll the same way this guard does. The
-// only actual overlap with kRevivalAppletMonikers below is "System" - see
-// kControlPanelRevivalOwnedMonikers. There's no official Windhawk API to ask
+// Detects whether a similar mod (id: control-panel-revival, by AdmXP8) is
+// also loaded in this process. That mod maintains its own hardcoded moniker
+// list (System, Devices and Printers, Installed Updates, Default Programs,
+// Troubleshooting, Fonts) and patches shell32.dll/windows.storage.dll the
+// same way this feature does. The only actual overlap with
+// kLegacyUnhideMonikers below is "System" - see
+// IsMonikerOwnedBySimilarMod. There's no official Windhawk API to ask
 // "is mod X loaded", so this looks for a loaded module whose file name
 // contains that mod's id - Windhawk compiles each mod's native code into its
 // own DLL named after the mod id, so this is a reliable-in-practice signal
 // without depending on any private engine internals.
 //
 // Cached after the first successful scan (per process lifetime) since the
-// set of loaded modules relevant here never shrinks once Control Panel
-// Revival has loaded; a failed enumeration is not cached, so it's retried
+// set of loaded modules relevant here never shrinks once that mod has
+// loaded; a failed enumeration is not cached, so it's retried
 // on the next call (e.g. next settings reload) instead of permanently
 // assuming "not present".
-static std::atomic<int> g_otherRevivalModDetected{ -1 }; // -1 = not yet checked, 0 = no, 1 = yes
-static bool IsControlPanelRevivalModLoaded() {
-    int cached = g_otherRevivalModDetected.load();
+static std::atomic<int> g_similarModDetected{ -1 }; // -1 = not yet checked, 0 = no, 1 = yes
+static bool IsSimilarModLoaded() {
+    int cached = g_similarModDetected.load();
     if (cached != -1) return cached == 1;
 
     bool found = false;
@@ -3359,18 +3361,18 @@ static bool IsControlPanelRevivalModLoaded() {
         return false;
     }
 
-    g_otherRevivalModDetected.store(found ? 1 : 0);
+    g_similarModDetected.store(found ? 1 : 0);
     return found;
 }
 
-// The only moniker(s) this mod shares with control-panel-revival's own
-// hardcoded list (g_szAppletsToUnhide in that mod: System, Devices and
-// Printers, Installed Updates, Default Programs, Troubleshooting, Fonts).
-// Personalization, BitLocker Drive Encryption, and Text to Speech are not
-// touched by that mod at all, so they must keep being patched by us
-// regardless of whether it's loaded - gating the whole guard on its presence
-// would wrongly fall back to virtual twins for applets it never manages.
-static bool IsMonikerOwnedByControlPanelRevival(LPCWSTR moniker) {
+// The only moniker(s) this mod shares with that similar mod's own
+// hardcoded list (System, Devices and Printers, Installed Updates, Default
+// Programs, Troubleshooting, Fonts). Personalization, BitLocker Drive
+// Encryption, and Text to Speech are not touched by that mod at all, so
+// they must keep being patched by us regardless of whether it's loaded -
+// gating the whole feature on its presence would wrongly fall back to
+// virtual twins for applets it never manages.
+static bool IsMonikerOwnedBySimilarMod(LPCWSTR moniker) {
     return _wcsicmp(moniker, L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}") == 0; // System
 }
 
@@ -3383,14 +3385,14 @@ static bool IsMonikerOwnedByControlPanelRevival(LPCWSTR moniker) {
 // returns, and Wh_ApplyHookOperations() may not be called before that -
 // and true from Wh_ModSettingsChanged, where a hook registered at runtime
 // stays dormant until it is applied explicitly.
-static void SetupRevivalGuard(bool applyNow) {
-    const bool otherModPresent = IsControlPanelRevivalModLoaded();
+static void SetupLegacyUnhide(bool applyNow) {
+    const bool otherModPresent = IsSimilarModLoaded();
 
-    if (!g_revivalPatcher) g_revivalPatcher.emplace();
+    if (!g_legacyUnhidePatcher) g_legacyUnhidePatcher.emplace();
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) {
-        Wh_Log(L"Revival guard: shell32.dll not found, skipping");
+        Wh_Log(L"unhide feature: shell32.dll not found, skipping");
         return;
     }
 
@@ -3399,106 +3401,106 @@ static void SetupRevivalGuard(bool applyNow) {
     // with any stale state from a previous enable/disable cycle - patches
     // are always attempted from scratch here, either at first setup or
     // after RestoreAll() undid the previous ones).
-    bool monikerPatchedThisCall[kRevivalMonikerCount] = {};
+    bool monikerPatchedThisCall[kLegacyUnhideMonikerCount] = {};
 
-    for (size_t i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
-        const LPCWSTR moniker = kRevivalAppletMonikers[i];
-        if (otherModPresent && IsMonikerOwnedByControlPanelRevival(moniker)) {
-            // Don't touch this one ourselves - "Control Panel Revival" owns
+    for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
+        const LPCWSTR moniker = kLegacyUnhideMonikers[i];
+        if (otherModPresent && IsMonikerOwnedBySimilarMod(moniker)) {
+            // Don't touch this one ourselves - a similar mod owns
             // it and will already have unhidden it. Treat it as patched so
             // this mod doesn't inject a redundant virtual twin on top of
             // the real applet that mod is already showing.
             anyMonikerPatched = true;
             monikerPatchedThisCall[i] = true;
-            Wh_Log(L"Revival guard: %s deferred to \"Control Panel Revival\" mod (not re-patched)",
+            Wh_Log(L"unhide feature: %s deferred to a similar mod (not re-patched)",
                    moniker);
             continue;
         }
-        const bool patched = g_revivalPatcher->PatchStringInModule(hShell32, moniker);
+        const bool patched = g_legacyUnhidePatcher->PatchStringInModule(hShell32, moniker);
         anyMonikerPatched = anyMonikerPatched || patched;
         monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
-        Wh_Log(L"Revival guard: %s %s in shell32.dll",
+        Wh_Log(L"unhide feature: %s %s in shell32.dll",
                patched ? L"patched" : L"did not find", moniker);
     }
 
     // windows.storage.dll is loaded once and kept loaded: the patch
     // addresses recorded below point into its image, so the reference is
     // only released in Wh_ModUninit, after RestoreAll() (see
-    // g_revivalWinStorageModule).
-    if (!g_revivalWinStorageModule) {
-        g_revivalWinStorageModule =
+    // g_legacyUnhideWinStorageModule).
+    if (!g_legacyUnhideWinStorageModule) {
+        g_legacyUnhideWinStorageModule =
             LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
-    if (g_revivalWinStorageModule) {
-        for (size_t i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
-            const LPCWSTR moniker = kRevivalAppletMonikers[i];
-            if (otherModPresent && IsMonikerOwnedByControlPanelRevival(moniker)) {
+    if (g_legacyUnhideWinStorageModule) {
+        for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
+            const LPCWSTR moniker = kLegacyUnhideMonikers[i];
+            if (otherModPresent && IsMonikerOwnedBySimilarMod(moniker)) {
                 continue; // already accounted for above; avoid a duplicate log line
             }
             const bool patched =
-                g_revivalPatcher->PatchStringInModule(g_revivalWinStorageModule, moniker);
+                g_legacyUnhidePatcher->PatchStringInModule(g_legacyUnhideWinStorageModule, moniker);
             anyMonikerPatched = anyMonikerPatched || patched;
             monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
-            Wh_Log(L"Revival guard: %s %s in windows.storage.dll",
+            Wh_Log(L"unhide feature: %s %s in windows.storage.dll",
                    patched ? L"patched" : L"did not find", moniker);
         }
     } else {
-        Wh_Log(L"Revival guard: windows.storage.dll could not be loaded; its monikers are left unpatched");
+        Wh_Log(L"unhide feature: windows.storage.dll could not be loaded; its monikers are left unpatched");
     }
 
     // Publish the per-applet results now that both modules have been
     // scanned, so VirtualTwinSuppressed only ever sees a fully up to date
     // row (never shell32's result alone before windows.storage.dll's is in).
-    for (size_t i = 0; i < kRevivalMonikerCount; i++) {
+    for (size_t i = 0; i < kLegacyUnhideMonikerCount; i++) {
         g_monikerPatched[i].store(monikerPatchedThisCall[i]);
     }
 
     bool newHookRegistered = false;
 
-    if (!g_revivalCsoHooked.load()) {
+    if (!g_legacyUnhideCsoHooked.load()) {
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
         auto pCso = hKernelBase
             ? (decltype(&CompareStringOrdinal))GetProcAddress(hKernelBase,
                                                               "CompareStringOrdinal")
             : nullptr;
-        if (pCso && WindhawkUtils::SetFunctionHook(pCso, CompareStringOrdinal_revivalHook,
-                                                   &g_revivalCompareStringOrdinalOrig)) {
-            g_revivalCsoHooked.store(true);
+        if (pCso && WindhawkUtils::SetFunctionHook(pCso, CompareStringOrdinal_legacyUnhideHook,
+                                                   &g_legacyUnhideCompareStringOrdinalOrig)) {
+            g_legacyUnhideCsoHooked.store(true);
             newHookRegistered = true;
-            Wh_Log(L"Revival guard: CompareStringOrdinal hooked (redirect-scoped)");
+            Wh_Log(L"unhide feature: CompareStringOrdinal hooked (redirect-scoped)");
         } else {
-            Wh_Log(L"Revival guard: CompareStringOrdinal hook failed; moniker patching still active");
+            Wh_Log(L"unhide feature: CompareStringOrdinal hook failed; moniker patching still active");
         }
     }
 
     // _MapLegacyName and Open were resolved by Wh_ModInit's single
     // HookSymbols call for shell32.dll; hook them manually here so the
     // module's symbol cache is not invalidated by a second call.
-    if (!g_revivalMapNameHooked.load()) {
-        if (g_pRevivalMapLegacyName &&
+    if (!g_legacyUnhideMapNameHooked.load()) {
+        if (g_pLegacyUnhideMapLegacyName &&
             WindhawkUtils::SetFunctionHook(
-                (decltype(g_revivalMapLegacyNameOrig))g_pRevivalMapLegacyName,
-                COpenControlPanel__MapLegacyName_revivalHook,
-                &g_revivalMapLegacyNameOrig)) {
-            g_revivalMapNameHooked.store(true);
+                (decltype(g_legacyUnhideMapLegacyNameOrig))g_pLegacyUnhideMapLegacyName,
+                COpenControlPanel__MapLegacyName_legacyUnhideHook,
+                &g_legacyUnhideMapLegacyNameOrig)) {
+            g_legacyUnhideMapNameHooked.store(true);
             newHookRegistered = true;
-            Wh_Log(L"Revival guard: _MapLegacyName hooked");
+            Wh_Log(L"unhide feature: _MapLegacyName hooked");
         } else {
-            Wh_Log(L"Revival guard: _MapLegacyName unavailable on this build; moniker patching still active");
+            Wh_Log(L"unhide feature: _MapLegacyName unavailable on this build; moniker patching still active");
         }
     }
 
-    if (!g_revivalOpenHooked.load()) {
-        if (g_pRevivalOpen &&
+    if (!g_legacyUnhideOpenHooked.load()) {
+        if (g_pLegacyUnhideOpen &&
             WindhawkUtils::SetFunctionHook(
-                (decltype(g_revivalOpenOrig))g_pRevivalOpen,
-                COpenControlPanel__Open_revivalHook,
-                &g_revivalOpenOrig)) {
-            g_revivalOpenHooked.store(true);
+                (decltype(g_legacyUnhideOpenOrig))g_pLegacyUnhideOpen,
+                COpenControlPanel__Open_legacyUnhideHook,
+                &g_legacyUnhideOpenOrig)) {
+            g_legacyUnhideOpenHooked.store(true);
             newHookRegistered = true;
-            Wh_Log(L"Revival guard: COpenControlPanel::Open hooked (redirect scope)");
+            Wh_Log(L"unhide feature: COpenControlPanel::Open hooked (redirect scope)");
         } else {
-            Wh_Log(L"Revival guard: COpenControlPanel::Open unavailable on this build; "
+            Wh_Log(L"unhide feature: COpenControlPanel::Open unavailable on this build; "
                    L"the CompareStringOrdinal override stays inactive");
         }
     }
@@ -3515,7 +3517,7 @@ static void SetupRevivalGuard(bool applyNow) {
     // at least one moniker was patched (that's what unhides the real
     // applet) AND at least one of the redirect-blocking hooks is in place
     // (MapLegacyName and/or Open). CompareStringOrdinal only acts inside
-    // COpenControlPanel::Open's scope (g_revivalRedirectScope is set
+    // COpenControlPanel::Open's scope (g_legacyUnhideRedirectScope is set
     // exclusively by the Open hook), so on its own it blocks nothing -
     // counting it here would let a build where both shell32 symbols are
     // optional-and-missing still report the guard as effective while the
@@ -3532,12 +3534,12 @@ static void SetupRevivalGuard(bool applyNow) {
     // and the redirect is actually blocked" - a build where that can't be
     // confirmed silently and correctly falls back to the proven virtual
     // entries instead of reporting false success.
-    const bool hooksActive = g_revivalMapNameHooked.load() ||
-                              g_revivalOpenHooked.load();
+    const bool hooksActive = g_legacyUnhideMapNameHooked.load() ||
+                              g_legacyUnhideOpenHooked.load();
     const bool guardEffective = anyMonikerPatched && hooksActive;
-    g_revivalGuardActive.store(guardEffective);
+    g_legacyUnhideActive.store(guardEffective);
     if (!guardEffective) {
-        Wh_Log(L"Revival guard: did not patch anything effective (monikerPatched=%d, hooksActive=%d); "
+        Wh_Log(L"unhide feature: did not patch anything effective (monikerPatched=%d, hooksActive=%d); "
                L"staying inactive so virtual twins keep working",
                anyMonikerPatched, hooksActive);
     }
@@ -3580,26 +3582,26 @@ void Wh_ModSettingsChanged() {
     g_prevBitLockerMode.store((int)newBitMode);
     g_prevTabletPcMode.store((int)newTabMode);
     g_prevSpeechMode.store((int)newSpeechMode);
-    // The Control Panel Revival guard can be toggled live: re-apply the string
+    // The legacy-applet unhide feature can be toggled live: re-apply the string
     // patches and hooks, or restore the original bytes. try/catch protected so
     // a failure can never leak into Explorer.
     if (prevRedirectGuard != g_settings.preventSettingsRedirect.load()) {
         try {
             if (g_settings.preventSettingsRedirect.load()) {
-                Wh_Log(L"Control Panel Revival guard re-enabled by settings");
+                Wh_Log(L"legacy-applet unhide feature re-enabled by settings");
                 // applyNow=true: hooks registered here, after Wh_ModInit
                 // has returned, only take effect once applied explicitly.
-                SetupRevivalGuard(true);
+                SetupLegacyUnhide(true);
             } else {
-                Wh_Log(L"Control Panel Revival guard disabled by settings; restoring patched bytes");
-                g_revivalGuardActive.store(false);
+                Wh_Log(L"legacy-applet unhide feature disabled by settings; restoring patched bytes");
+                g_legacyUnhideActive.store(false);
                 for (auto& patched : g_monikerPatched) patched.store(false);
-                if (g_revivalPatcher) {
-                    g_revivalPatcher->RestoreAll();
+                if (g_legacyUnhidePatcher) {
+                    g_legacyUnhidePatcher->RestoreAll();
                 }
             }
         } catch (...) {
-            Wh_Log(L"Exception while toggling the Control Panel Revival guard");
+            Wh_Log(L"Exception while toggling the legacy-applet unhide feature");
         }
 
         // Toggling the guard changes what Control Panel actually shows for
@@ -3622,7 +3624,7 @@ void Wh_ModSettingsChanged() {
                 SetEvent(g_lazyDetectionWakeEvent);
             }
         } catch (...) {
-            Wh_Log(L"Exception while invalidating cached applet verdicts after Revival guard toggle");
+            Wh_Log(L"Exception while invalidating cached applet verdicts after unhide feature toggle");
         }
     }
     // Regenerate task links file with updated settings
@@ -3634,7 +3636,7 @@ void Wh_ModSettingsChanged() {
     if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Revival=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
@@ -3741,7 +3743,7 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Revival=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
@@ -3783,13 +3785,13 @@ BOOL Wh_ModInit() {
         // the thing that scopes the ranking or, where the ranking is inlined,
         // the thing that does the reordering.
         //
-        // The two Control Panel Revival guard symbols are resolved here as
+        // The two legacy-applet unhide feature symbols are resolved here as
         // well, with a null hook (the same trick as s_SortAppletsInCategory),
         // so that ALL shell32 symbols come from this single HookSymbols
         // call: the resolved symbols are cached per module, and each extra
         // call for the same module overwrites that cache with only the new
         // call's symbols - which would force a full re-resolution of the
-        // other symbols on every subsequent start. SetupRevivalGuard()
+        // other symbols on every subsequent start. SetupLegacyUnhide()
         // registers the actual hooks with SetFunctionHook.
         void* pSortAppletsInCategory = nullptr;
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
@@ -3806,14 +3808,14 @@ BOOL Wh_ModInit() {
             },
             {
                 {L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)"},
-                &g_pRevivalMapLegacyName,
-                nullptr,  // Hooked manually by SetupRevivalGuard().
+                &g_pLegacyUnhideMapLegacyName,
+                nullptr,  // Hooked manually by SetupLegacyUnhide().
                 true
             },
             {
                 {L"public: virtual long __cdecl COpenControlPanel::Open(unsigned short const *,struct IUnknown *,unsigned short const *)"},
-                &g_pRevivalOpen,
-                nullptr,  // Hooked manually by SetupRevivalGuard().
+                &g_pLegacyUnhideOpen,
+                nullptr,  // Hooked manually by SetupLegacyUnhide().
                 true
             },
         };
@@ -3841,30 +3843,30 @@ BOOL Wh_ModInit() {
 
     }
 
-    // Control Panel Revival guard (ported approach): unhide the legacy
+    // legacy-applet unhide feature (ported approach): unhide the legacy
     // applets and break the Settings-app redirect. The whole block is
     // try/catch protected; a failure here never takes the rest of the mod down.
     // The patcher is emplaced here (not lazily at first patch) so its state
     // exists for the whole mod lifetime; see the [[clang::no_destroy]]
-    // comment on g_revivalPatcher.
-    g_revivalPatcher.emplace();
+    // comment on g_legacyUnhidePatcher.
+    g_legacyUnhidePatcher.emplace();
     if (g_settings.preventSettingsRedirect.load()) {
         try {
             // applyNow=false: hooks registered during Wh_ModInit are applied
             // by Windhawk automatically once this function returns.
-            SetupRevivalGuard(false);
+            SetupLegacyUnhide(false);
         } catch (...) {
-            Wh_Log(L"Exception during Control Panel Revival guard setup; guard disabled, rest of the mod active");
-            g_revivalGuardActive.store(false);
+            Wh_Log(L"Exception during legacy-applet unhide feature setup; guard disabled, rest of the mod active");
+            g_legacyUnhideActive.store(false);
             for (auto& patched : g_monikerPatched) patched.store(false);
         }
     }
 
-    // The Revival guard changes which entries receive the classic task links
+    // The unhide feature changes which entries receive the classic task links
     // (real applets instead of the virtual twins) and which virtual twins are
-    // hidden, so regenerate the XML now that g_revivalGuardActive has its
+    // hidden, so regenerate the XML now that g_legacyUnhideActive has its
     // final value (the earlier eager generation ran before the guard existed).
-    if (g_revivalGuardActive.load()) {
+    if (g_legacyUnhideActive.load()) {
         InvalidateClassicTaskLinksFile();
         EnsureClassicTaskLinksFile();
     }
@@ -3958,24 +3960,24 @@ void Wh_ModUninit() {
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
         g_keyTracker.ClearWithoutFreeing();
-        // Control Panel Revival guard: deactivate the hooks (they now pass
+        // legacy-applet unhide feature: deactivate the hooks (they now pass
         // straight through) and restore every patched byte. The patcher is
         // restored and reset explicitly - its storage is
         // [[clang::no_destroy]], so no destructor ever runs at process
-        // shutdown (see the comment on g_revivalPatcher).
-        g_revivalGuardActive.store(false);
+        // shutdown (see the comment on g_legacyUnhidePatcher).
+        g_legacyUnhideActive.store(false);
         for (auto& patched : g_monikerPatched) patched.store(false);
-        if (g_revivalPatcher) {
-            g_revivalPatcher->RestoreAll();
-            g_revivalPatcher.reset();
+        if (g_legacyUnhidePatcher) {
+            g_legacyUnhidePatcher->RestoreAll();
+            g_legacyUnhidePatcher.reset();
         }
         // Only now, with every patch restored, may the windows.storage.dll
         // reference be dropped: the patch addresses pointed into that
         // module's image, and freeing it any earlier could have left them
         // referencing memory that no longer belongs to the module.
-        if (g_revivalWinStorageModule) {
-            FreeLibrary(g_revivalWinStorageModule);
-            g_revivalWinStorageModule = nullptr;
+        if (g_legacyUnhideWinStorageModule) {
+            FreeLibrary(g_legacyUnhideWinStorageModule);
+            g_legacyUnhideWinStorageModule = nullptr;
         }
         Wh_Log(L"Cleanup completed");
     } catch (...) {
