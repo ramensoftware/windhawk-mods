@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.2.4
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
+// @version         1.2.5
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -26,7 +26,9 @@ Windows lets you put it in one of three places: top left, top center, or bottom
 center.
 
 This mod replaces that with a full nine-point grid, any corner, any edge center,
-or dead center, plus a pixel offset for fine-tuning.
+or dead center, plus a pixel offset for fine-tuning. Each kind of indicator can
+also be given a spot of its own, so the volume one can sit somewhere different
+from the brightness one.
 
 The brightness indicator moved to the middle of the right edge:
 
@@ -257,6 +259,13 @@ enum class Indicator {
 // position is worked out, so a single value is enough.
 std::atomic<Indicator> g_currentIndicator{Indicator::unknown};
 
+// Set when any of the per-kind entry points didn't resolve. The recorded kind is
+// then meaningless, since an unhooked kind would be placed using whichever kind
+// was recorded before it, so the overrides are ignored for the session and
+// everything uses the main position. Checked once at init rather than guessed at
+// per placement.
+std::atomic<bool> g_kindUnreliable{false};
+
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
 // confirmator's UI thread, so the members are atomic. Each field is still read
 // separately, so a settings change landing mid-placement can put one indicator
@@ -275,6 +284,10 @@ struct {
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
+    if (g_kindUnreliable.load()) {
+        return g_settings.position.load();
+    }
+
     size_t i = (size_t)g_currentIndicator.load();
     Position perIndicator = i < (size_t)Indicator::count
                                 ? g_settings.perIndicator[i].load()
@@ -373,12 +386,10 @@ void PlaceInArea(const WinrtRect& area,
 // recorded as one is asked for and read back when the position is worked out.
 // They are private coroutines returning winrt::fire_and_forget, an empty struct,
 // so the return is passed through as the single byte it occupies. Every one is
-// hooked as optional, so a name that stops resolving on some build costs that one
-// kind rather than the whole mod. Such a kind is placed using whichever kind was
-// recorded before it, or the main position if none has been shown yet. Clearing
-// the record on hide would make that exact, but a hide landing between a show and
-// the placement would then misplace a perfectly normal indicator, which is the
-// worse trade.
+// hooked as optional, so a name that stops resolving on some build costs the per
+// indicator feature rather than the whole mod. Wh_ModInit checks afterwards that
+// all eight resolved, and if any didn't it ignores the overrides for the session
+// instead of placing one kind using another kind's spot.
 
 using ShowVolumeAsync_t = char(WINAPI*)(void* pThis, int value);
 ShowVolumeAsync_t ShowVolumeAsync_Original;
@@ -555,14 +566,10 @@ void LoadSettings() {
     for (size_t i = 0; i < ARRAYSIZE(kIndicatorSettings); i++) {
         WindhawkUtils::StringSetting value =
             WindhawkUtils::StringSetting::make(kIndicatorSettings[i]);
-        // An unset setting reads back empty rather than as the declared
-        // default, so empty has to mean the same thing as "same". Without this
-        // every untouched indicator is pinned to the Windows default and the
-        // main position stops applying to any of them.
-        PCWSTR stored = value.get();
-        bool isSame = !*stored || wcscmp(stored, L"same") == 0;
-        g_settings.perIndicator[i] =
-            isSame ? Position::windowsDefault : PositionFromString(stored);
+        // Both "same" and an unset value, which reads back empty, already come
+        // back as windowsDefault and neither is logged as unrecognised. That is
+        // the "no override" sentinel, so the main position applies.
+        g_settings.perIndicator[i] = PositionFromString(value.get());
     }
 }
 
@@ -658,6 +665,32 @@ BOOL Wh_ModInit() {
                      ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
         return FALSE;
+    }
+
+    // An optional symbol that isn't found leaves its original pointer alone, so
+    // a null here means that kind would never be recorded and every kind after
+    // it would be placed using a stale one. Rather than misplace an indicator,
+    // drop to the main position for everything and say so in the log.
+    const void* kindRecorders[] = {
+        (void*)ShowVolumeAsync_Original,
+        (void*)ShowBrightnessAsync_Original,
+        (void*)ShowKeyboardBrightnessAsync_Original,
+        (void*)ShowAirplaneModeOnAsync_Original,
+        (void*)ShowCameraOnAsync_Original,
+        (void*)ShowCameraAccessEnabledAsync_Original,
+        (void*)ShowMicrophoneMutedAsync_Original,
+        (void*)ShowTextAsync_Original,
+    };
+
+    for (const void* recorder : kindRecorders) {
+        if (!recorder) {
+            Wh_Log(
+                L"An indicator entry point didn't resolve, so the position per "
+                L"indicator settings are ignored and everything uses the main "
+                L"position");
+            g_kindUnreliable = true;
+            break;
+        }
     }
 
     return TRUE;
