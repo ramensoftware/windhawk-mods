@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id hide-taskbar-only-on-desktop-v2
+// @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
 // @version 1.7.0
