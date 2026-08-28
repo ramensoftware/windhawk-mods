@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-count-badges
 // @name            Taskbar Count Badges
-// @description     Show customizable per-taskbar-button window counts as badges or vertical dots on Windows 11.
-// @version         1.0.0
+// @description     Show customizable per-taskbar-button window counts as badges or dots on Windows 11.
+// @version         1.1.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
@@ -30,17 +30,17 @@ See how many windows are represented by each app button on the Windows 11 taskba
 
 Taskbar Count Badges adds a small customizable indicator when a taskbar app
 button represents multiple windows. The indicator can be shown as either a
-**number badge** or a compact stack of **vertical dots**.
+**number badge** or compact **dots**.
 
 ## Screenshots
 
 ### Customization examples
 
-![Taskbar Count Badges examples](https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/showcase.png)
+![Taskbar Count Badges examples](https://raw.githubusercontent.com/digart11/taskbar-count-badges/main/images/showcase.png)
 
 ### Settings
 
-![Taskbar Count Badges settings](https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/settings.png)
+![Taskbar Count Badges settings](https://raw.githubusercontent.com/digart11/taskbar-count-badges/main/images/settings.png)
 
 ## Display styles
 
@@ -58,20 +58,27 @@ The badge can be customized with:
 - Font family, size, and weight
 - Configurable maximum number, with larger values shown using `+`
 
-### Vertical dots
+### Dots
 
-Shows a minimal vertical stack of dots beside the app icon.
+Shows a minimal stack or row of dots around the app icon.
 
-- Position the dots on the left or right
+- Left and right positions use a vertical stack
+- Top and bottom positions use a horizontal row
+- Bottom replaces only the native Windows running indicator and therefore
+  shows one dot for one running window; task progress remains untouched
+- Left, right, and top leave the native Windows running indicator untouched
 - Change dot size and color
 - Up to five dots are shown; five dots means **five or more windows**
 
 ## Behavior
 
-By default, no indicator is shown when a taskbar button represents a single
-window. The indicator appears when that button represents two or more windows.
+By default, no count indicator is shown when a taskbar button represents a
+single window. The indicator appears when that button represents two or more
+windows.
 
-The minimum window count can be changed in the settings.
+The minimum window count can be changed in the settings. Bottom dots are the
+exception: they always start at one window because they replace the Windows
+running indicator.
 
 Window counts update automatically as windows are opened and closed, and
 settings are applied live.
@@ -114,7 +121,7 @@ ordering, or application behavior.
     $description: Choose how multiple open windows are shown.
     $options:
     - number: Number badge
-    - dots: Vertical dots
+    - dots: Dots
   $name: Display
 
 - VerticalDots:
@@ -123,6 +130,8 @@ ordering, or application behavior.
     $options:
     - left: Left side
     - right: Right side
+    - top: Top
+    - bottom: Bottom
 
   - size: 4
     $name: Dot size
@@ -130,8 +139,8 @@ ordering, or application behavior.
   - color: "#FFFFFF"
     $name: Dot color
     $description: Hex color in #RRGGBB or #AARRGGBB format.
-  $name: Vertical dots
-  $description: These settings apply only when Display style is set to Vertical dots.
+  $name: Dots
+  $description: Left/right dots are vertical; top/bottom dots are horizontal. Bottom replaces the Windows running indicator.
 
 - Badge:
   - shape: circle
@@ -211,7 +220,7 @@ ordering, or application behavior.
 - Behavior:
   - minimumCount: 2
     $name: Show from window count
-    $description: Default 2 means one window has no badge or dots.
+    $description: Default 2 means one window has no badge or dots. Bottom dots always start at 1 because they replace the Windows running indicator.
 
   - maximumNumber: 99
     $name: Maximum number
@@ -282,6 +291,8 @@ enum class DotPosition
 {
     Left,
     Right,
+    Top,
+    Bottom,
 };
 
 enum class BadgeFontWeight
@@ -350,6 +361,13 @@ struct TrackedButton
     void *identity = nullptr;
     winrt::weak_ref<FrameworkElement> element;
     winrt::weak_ref<Controls::Border> badge;
+
+    // Bottom-dot mode hides only RunningIndicator. Keep the original opacity
+    // so switching position/style or unloading restores the native visual.
+    winrt::weak_ref<FrameworkElement> runningIndicator;
+    double runningIndicatorOpacity = 1.0;
+    bool runningIndicatorHidden = false;
+
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
     uint64_t lastSettingsGeneration = 0;
 };
@@ -512,12 +530,26 @@ void LoadSettings()
         g_settings.fontWeight = BadgeFontWeight::SemiBold;
     }
 
-    // Vertical dots ---------------------------------------------------------
+    // Dots ------------------------------------------------------------------
 
     std::wstring dotPosition = ReadStringSetting(L"VerticalDots.position");
 
-    g_settings.dotPosition =
-        dotPosition == L"left" ? DotPosition::Left : DotPosition::Right;
+    if (dotPosition == L"left")
+    {
+        g_settings.dotPosition = DotPosition::Left;
+    }
+    else if (dotPosition == L"top")
+    {
+        g_settings.dotPosition = DotPosition::Top;
+    }
+    else if (dotPosition == L"bottom")
+    {
+        g_settings.dotPosition = DotPosition::Bottom;
+    }
+    else
+    {
+        g_settings.dotPosition = DotPosition::Right;
+    }
 
     g_settings.dotSize = std::max(2, Wh_GetIntSetting(L"VerticalDots.size"));
 
@@ -786,11 +818,18 @@ bool BindDotPositionExpression(Controls::Border badge,
         double dotSize = static_cast<double>(g_settings.dotSize);
         unsigned int dotCount = GetVisibleDotCount(count);
 
-        double stackHeight = dotCount * dotSize;
+        bool horizontalDots =
+            g_settings.dotPosition == DotPosition::Top ||
+            g_settings.dotPosition == DotPosition::Bottom;
+
+        double stackLength = dotCount * dotSize;
         if (dotCount > 1)
         {
-            stackHeight += (dotCount - 1) * kDotSpacing;
+            stackLength += (dotCount - 1) * kDotSpacing;
         }
+
+        double stackWidth = horizontalDots ? stackLength : dotSize;
+        double stackHeight = horizontalDots ? dotSize : stackLength;
 
         auto dotStack = FindChildByName(badge, L"WindhawkDotStack")
                             .try_as<Controls::StackPanel>();
@@ -809,18 +848,76 @@ bool BindDotPositionExpression(Controls::Border badge,
         dotStack.HorizontalAlignment(HorizontalAlignment::Left);
         dotStack.VerticalAlignment(VerticalAlignment::Top);
 
-        double dotX =
-            g_settings.dotPosition == DotPosition::Left
-                ? static_cast<double>(iconBoundsInButton.X) -
-                      kDotGap - dotSize
-                : static_cast<double>(iconBoundsInButton.X) +
-                      static_cast<double>(iconBoundsInButton.Width) +
-                      kDotGap;
+        double iconX = static_cast<double>(iconBoundsInButton.X);
+        double iconY = static_cast<double>(iconBoundsInButton.Y);
+        double iconBoundsWidth =
+            static_cast<double>(iconBoundsInButton.Width);
+        double iconBoundsHeight =
+            static_cast<double>(iconBoundsInButton.Height);
 
-        double dotY =
-            static_cast<double>(iconBoundsInButton.Y) +
-            (static_cast<double>(iconBoundsInButton.Height) - stackHeight) /
-                2.0;
+        double dotX = iconX;
+        double dotY = iconY;
+
+        switch (g_settings.dotPosition)
+        {
+        case DotPosition::Left:
+            dotX = iconX - kDotGap - dotSize;
+            dotY = iconY + (iconBoundsHeight - stackHeight) / 2.0;
+            break;
+
+        case DotPosition::Right:
+            dotX = iconX + iconBoundsWidth + kDotGap;
+            dotY = iconY + (iconBoundsHeight - stackHeight) / 2.0;
+            break;
+
+        case DotPosition::Top:
+            dotX = iconX + (iconBoundsWidth - stackWidth) / 2.0;
+            dotY = iconY - kDotGap - dotSize;
+            break;
+
+        case DotPosition::Bottom:
+        {
+            // Anchor the replacement dots to the real native indicator. We
+            // hide it with Opacity rather than collapsing it, so its geometry
+            // remains usable for DPI/taskbar-size-safe placement.
+            auto runningIndicator =
+                FindChildByName(taskListButton, L"RunningIndicator");
+
+            if (runningIndicator &&
+                runningIndicator.ActualWidth() > 0 &&
+                runningIndicator.ActualHeight() > 0)
+            {
+                auto indicatorBounds =
+                    runningIndicator.TransformToVisual(taskListButton)
+                        .TransformBounds(
+                            winrt::Windows::Foundation::Rect{
+                                0.0f,
+                                0.0f,
+                                static_cast<float>(
+                                    runningIndicator.ActualWidth()),
+                                static_cast<float>(
+                                    runningIndicator.ActualHeight())});
+
+                dotX = static_cast<double>(indicatorBounds.X) +
+                       (static_cast<double>(indicatorBounds.Width) -
+                        stackWidth) /
+                           2.0;
+                dotY = static_cast<double>(indicatorBounds.Y) +
+                       (static_cast<double>(indicatorBounds.Height) -
+                        dotSize) /
+                           2.0;
+            }
+            else
+            {
+                // Fallback for a Windows build where RunningIndicator doesn't
+                // currently expose usable geometry.
+                dotX = iconX + (iconBoundsWidth - stackWidth) / 2.0;
+                dotY = iconY + iconBoundsHeight + kDotGap;
+            }
+
+            break;
+        }
+        }
 
         dotStack.Margin(Thickness{dotX, dotY, 0.0, 0.0});
 
@@ -1020,6 +1117,67 @@ Controls::Grid FindDotHostGrid(FrameworkElement taskListButton,
     return nullptr;
 }
 
+bool IsBottomDotMode()
+{
+    return g_settings.displayStyle == DisplayStyle::Dots &&
+           g_settings.dotPosition == DotPosition::Bottom;
+}
+
+void RestoreRunningIndicator(TrackedButton &tracked)
+{
+    if (!tracked.runningIndicatorHidden)
+    {
+        return;
+    }
+
+    try
+    {
+        if (auto runningIndicator = tracked.runningIndicator.get())
+        {
+            runningIndicator.Opacity(tracked.runningIndicatorOpacity);
+        }
+    }
+    catch (...)
+    {
+    }
+
+    tracked.runningIndicator = {};
+    tracked.runningIndicatorOpacity = 1.0;
+    tracked.runningIndicatorHidden = false;
+}
+
+bool HideRunningIndicatorForBottomDots(TrackedButton &tracked,
+                                       FrameworkElement taskListButton)
+{
+    auto runningIndicator =
+        FindChildByName(taskListButton, L"RunningIndicator");
+
+    if (!runningIndicator)
+    {
+        RestoreRunningIndicator(tracked);
+        return false;
+    }
+
+    auto previousIndicator = tracked.runningIndicator.get();
+    bool sameIndicator =
+        previousIndicator &&
+        winrt::get_abi(previousIndicator) == winrt::get_abi(runningIndicator);
+
+    if (!tracked.runningIndicatorHidden || !sameIndicator)
+    {
+        RestoreRunningIndicator(tracked);
+
+        tracked.runningIndicator = winrt::make_weak(runningIndicator);
+        tracked.runningIndicatorOpacity = runningIndicator.Opacity();
+        tracked.runningIndicatorHidden = true;
+    }
+
+    // ProgressIndicator is a different element and is intentionally untouched.
+    // Opacity keeps RunningIndicator's layout geometry available for anchoring.
+    runningIndicator.Opacity(0.0);
+    return true;
+}
+
 // -----------------------------------------------------------------------------
 // Badge text / dot content
 // -----------------------------------------------------------------------------
@@ -1057,6 +1215,10 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
 
     constexpr double kDotSpacing = 2.0;
 
+    bool horizontalDots =
+        g_settings.dotPosition == DotPosition::Top ||
+        g_settings.dotPosition == DotPosition::Bottom;
+
     for (unsigned int i = 0; i < dotCount; i++)
     {
         Controls::Border dot;
@@ -1071,9 +1233,12 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
 
         dot.Background(brush);
 
-        double topMargin = i == 0 ? 0.0 : kDotSpacing;
+        double leadingMargin = i == 0 ? 0.0 : kDotSpacing;
 
-        dot.Margin(Thickness{0, topMargin, 0, 0});
+        dot.Margin(
+            horizontalDots
+                ? Thickness{leadingMargin, 0, 0, 0}
+                : Thickness{0, leadingMargin, 0, 0});
 
         dot.IsHitTestVisible(false);
 
@@ -1244,7 +1409,7 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
     }
 
     // ---------------------------------------------------------------------
-    // VERTICAL DOTS
+    // DOTS
     // ---------------------------------------------------------------------
 
     circleVisual.Visibility(Visibility::Collapsed);
@@ -1265,7 +1430,12 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
 
     badge.BorderThickness(Thickness{0, 0, 0, 0});
 
-    dotStack.Orientation(Controls::Orientation::Vertical);
+    bool horizontalDots =
+        g_settings.dotPosition == DotPosition::Top ||
+        g_settings.dotPosition == DotPosition::Bottom;
+
+    dotStack.Orientation(horizontalDots ? Controls::Orientation::Horizontal
+                                        : Controls::Orientation::Vertical);
 
     dotStack.HorizontalAlignment(HorizontalAlignment::Center);
 
@@ -1275,6 +1445,7 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
     return BindDotPositionExpression(badge, taskListButton, icon, dotHost,
                                      count);
 }
+
 // -----------------------------------------------------------------------------
 // Badge
 // -----------------------------------------------------------------------------
@@ -1406,6 +1577,7 @@ bool UpdateCountBadge(TrackedButton &tracked,
 
     if (!iconPanelElement)
     {
+        RestoreRunningIndicator(tracked);
         return false;
     }
 
@@ -1413,7 +1585,15 @@ bool UpdateCountBadge(TrackedButton &tracked,
 
     if (!iconPanel)
     {
+        RestoreRunningIndicator(tracked);
         return false;
+    }
+
+    bool bottomDotMode = IsBottomDotMode();
+
+    if (!bottomDotMode || count == 0)
+    {
+        RestoreRunningIndicator(tracked);
     }
 
     auto badge = tracked.badge.get();
@@ -1467,6 +1647,11 @@ bool UpdateCountBadge(TrackedButton &tracked,
         if (!icon || icon.ActualWidth() <= 0 || icon.ActualHeight() <= 0 ||
             !dotHost)
         {
+            if (bottomDotMode)
+            {
+                RestoreRunningIndicator(tracked);
+            }
+
             if (badge)
             {
                 StopDotPositionBinding(badge);
@@ -1474,6 +1659,18 @@ bool UpdateCountBadge(TrackedButton &tracked,
             }
             return false;
         }
+
+        if (bottomDotMode && count > 0 &&
+            !HideRunningIndicatorForBottomDots(tracked, taskListButton))
+        {
+            if (badge)
+            {
+                StopDotPositionBinding(badge);
+                badge.Visibility(Visibility::Collapsed);
+            }
+            return false;
+        }
+
         desiredParent = dotHost;
 
         // RootGrid is shared by taskbar buttons. Remove only Count Badges
@@ -1507,7 +1704,11 @@ bool UpdateCountBadge(TrackedButton &tracked,
         }
     }
 
-    if (count < static_cast<unsigned int>(g_settings.minimumCount))
+    unsigned int effectiveMinimumCount =
+        bottomDotMode ? 1u
+                      : static_cast<unsigned int>(g_settings.minimumCount);
+
+    if (count < effectiveMinimumCount)
     {
         if (badge)
         {
@@ -1535,6 +1736,12 @@ bool UpdateCountBadge(TrackedButton &tracked,
             StopDotPositionBinding(badge);
         }
         badge.Visibility(Visibility::Collapsed);
+
+        if (bottomDotMode)
+        {
+            RestoreRunningIndicator(tracked);
+        }
+
         return false;
     }
 
@@ -1542,6 +1749,7 @@ bool UpdateCountBadge(TrackedButton &tracked,
 
     return true;
 }
+
 // -----------------------------------------------------------------------------
 // Direct taskbar group count / tracked buttons
 // -----------------------------------------------------------------------------
@@ -1552,6 +1760,8 @@ void PruneDeadTrackedButtons()
     {
         if (!it->element.get())
         {
+            RestoreRunningIndicator(*it);
+
             if (auto badge = it->badge.get())
             {
                 StopDotPositionBinding(badge);
@@ -1585,6 +1795,8 @@ TrackedButton *TrackTaskbarButton(FrameworkElement element)
         // reset the cached visual state.
         if (!existing->element.get())
         {
+            RestoreRunningIndicator(*existing);
+
             if (auto badge = existing->badge.get())
             {
                 StopDotPositionBinding(badge);
@@ -1642,18 +1854,47 @@ bool GetTaskbarButtonViewModelCount(FrameworkElement element,
 void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 {
     uint64_t settingsGeneration = g_settingsGeneration;
-    bool badgeExpected =
-        count >= static_cast<unsigned int>(g_settings.minimumCount);
+    bool bottomDotMode = IsBottomDotMode();
 
-    if (item.lastAppliedCount == count &&
-        item.lastSettingsGeneration == settingsGeneration &&
-        (!badgeExpected || item.badge.get()))
-    {
-        return;
-    }
+    unsigned int effectiveMinimumCount =
+        bottomDotMode ? 1u
+                      : static_cast<unsigned int>(g_settings.minimumCount);
+
+    bool badgeExpected = count >= effectiveMinimumCount;
 
     auto element = item.element.get();
     if (!element)
+    {
+        RestoreRunningIndicator(item);
+        return;
+    }
+
+    bool runningIndicatorReady = true;
+
+    if (bottomDotMode && count > 0)
+    {
+        auto runningIndicator = item.runningIndicator.get();
+
+        if (item.runningIndicatorHidden && runningIndicator)
+        {
+            // Windows can rewrite RunningIndicator visual state after focus,
+            // hover, etc. Reassert our hide without rebuilding the dots.
+            runningIndicator.Opacity(0.0);
+        }
+        else
+        {
+            runningIndicatorReady = false;
+        }
+    }
+    else
+    {
+        RestoreRunningIndicator(item);
+    }
+
+    if (item.lastAppliedCount == count &&
+        item.lastSettingsGeneration == settingsGeneration &&
+        (!badgeExpected || item.badge.get()) &&
+        runningIndicatorReady)
     {
         return;
     }
@@ -2388,6 +2629,8 @@ void CleanupOnTaskbarThread()
 
     for (auto &item : TrackedButtons())
     {
+        RestoreRunningIndicator(item);
+
         auto element = item.element.get();
         auto badge = item.badge.get();
         if (badge)
