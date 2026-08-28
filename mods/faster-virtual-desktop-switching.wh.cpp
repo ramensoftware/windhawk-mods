@@ -144,7 +144,7 @@ HRESULT STDMETHODCALLTYPE GetThumbnailHook(
 }
 
 // Resolve the target for the loaded Windows build, then obtain its exact code
-// range from the x64 unwind table. No private function is detoured.
+// range from the platform unwind table. No private function is detoured.
 bool ResolveTargetFunctionRange() {
     g_twinuiPcShell = LoadLibraryExW(
         L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -184,10 +184,25 @@ bool ResolveTargetFunctionRange() {
 
     const uintptr_t functionStart = static_cast<uintptr_t>(
         imageBase + runtimeFunction->BeginAddress);
+#if defined(_M_ARM64) || defined(_ARM64_)
+    DWORD functionLength = 0;
+    if (runtimeFunction->Flag == PdataRefToFullXdata) {
+        const auto* unwindData = reinterpret_cast<
+            const IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY_XDATA*>(
+                imageBase + runtimeFunction->UnwindData);
+        functionLength = unwindData->FunctionLength * 4;
+    } else if (runtimeFunction->Flag == PdataPackedUnwindFunction ||
+               runtimeFunction->Flag == PdataPackedUnwindFragment) {
+        functionLength = runtimeFunction->FunctionLength * 4;
+    }
+    const uintptr_t functionEnd = functionStart + functionLength;
+#else
     const uintptr_t functionEnd = static_cast<uintptr_t>(
         imageBase + runtimeFunction->EndAddress);
+#endif
     const uintptr_t symbolAddress = reinterpret_cast<uintptr_t>(targetFunction);
-    if (symbolAddress < functionStart || symbolAddress >= functionEnd ||
+    if (functionEnd <= functionStart || symbolAddress < functionStart ||
+        symbolAddress >= functionEnd ||
         functionEnd - functionStart > 0x4000) {
         Wh_Log(L"Resolved an invalid virtual desktop helper range");
         return false;
