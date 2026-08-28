@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
-// @version 1.7.0
+// @version 1.9.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -26,7 +26,7 @@ visible whenever an application or shell UI is active.
 - Uses the taskbar's actual rectangle and per-monitor DPI.
 - Adds a configurable extra hover margin in millimeters.
 - Uses a configurable delay after leaving the hover area.
-- The delay is only used after a hover reveal.
+- The delay is used after a hover reveal and after Alt+Tab closes.
 - Minimizing or closing the last application hides the taskbar immediately.
 - Keeps the taskbar available while interacting with taskbar buttons.
 - Supports secondary taskbars on additional monitors.
@@ -54,9 +54,9 @@ hidden until Explorer is restarted. Normal disable/unload paths restore it.
 For predictable behavior, disable Windows' own "Automatically hide the
 taskbar" option while this mod is enabled.
 
-This mod uses only foreground/minimize Windows events for application state
-changes and only uses a short timer while cursor hover handling is actually
-needed. It deliberately avoids system-wide object show/hide/destroy hooks.
+This mod uses foreground/minimize Windows events for application state
+changes and a timer for cursor/hover and hide-delay handling. It deliberately
+avoids system-wide object show/hide/destroy hooks.
 
 On multi-monitor systems, each monitor's taskbar is evaluated independently.
 A normal visible application intersecting a monitor keeps that monitor's
@@ -98,6 +98,8 @@ This mod was created with AI assistance.
 #include <dwmapi.h>
 #include <atomic>
 #include <stdio.h>
+#include <string.h>
+#include <wchar.h>
 
 struct Settings {
     std::atomic<int> extraHoverMarginMm{5};
@@ -152,33 +154,6 @@ const wchar_t kSystemMessageWindowClass[] =
 // Utility
 // ============================================================
 
-bool IsDesktopWindow(HWND hwnd) {
-    if (!hwnd) {
-        return false;
-    }
-
-    WCHAR className[256] = {};
-
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
-        return false;
-    }
-
-    if (wcscmp(className, L"Progman") == 0) {
-        return true;
-    }
-
-    if (wcscmp(className, L"WorkerW") == 0) {
-        return FindWindowExW(
-            hwnd,
-            nullptr,
-            L"SHELLDLL_DefView",
-            nullptr
-        ) != nullptr;
-    }
-
-    return false;
-}
-
 
 bool IsShellChromeClass(const WCHAR* className) {
     if (!className) {
@@ -231,7 +206,6 @@ bool IsTaskbarWindow(HWND hwnd) {
 
 void DiscoverTaskbars();
 
-HWND FindPrimaryTaskbar();
 bool IsTaskbarActuallyHidden(HWND hwnd);
 bool IsShellUiClass(const WCHAR* className);
 
@@ -276,22 +250,6 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    BOOL cloaked = FALSE;
-
-    if (
-        SUCCEEDED(
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
-            )
-        ) &&
-        cloaked
-    ) {
-        return TRUE;
-    }
-
     RECT rect = {};
 
     if (!GetWindowRect(hwnd, &rect)) {
@@ -308,6 +266,26 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     if (
         GetWindow(hwnd, GW_OWNER) != nullptr &&
         !(exStyle & WS_EX_APPWINDOW)
+    ) {
+        return TRUE;
+    }
+
+    /*
+     * DWM cloaking is relatively expensive, so query it only after the
+     * cheaper visibility/style/geometry checks.
+     */
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
     ) {
         return TRUE;
     }
@@ -523,6 +501,29 @@ bool IsVisibleShellFlyoutForMonitor(
     RECT windowRect = {};
 
     if (!GetWindowRect(hwnd, &windowRect)) {
+        return false;
+    }
+
+    if (
+        windowRect.right <= windowRect.left ||
+        windowRect.bottom <= windowRect.top
+    ) {
+        return false;
+    }
+
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
+    ) {
         return false;
     }
 
@@ -915,16 +916,6 @@ void SetTaskbarVisibility(bool show) {
 }
 
 
-bool IsPrimaryTaskbarHidden() {
-    HWND primary = FindPrimaryTaskbar();
-
-    if (!primary) {
-        return false;
-    }
-
-    return IsWindowVisible(primary) == FALSE;
-}
-
 
 // ============================================================
 // Hover zone
@@ -1087,6 +1078,12 @@ void UpdateTaskbarState() {
             std::memory_order_relaxed
         );
 
+    /*
+     * Alt+Tab is global, so detect it once per state update rather than once
+     * for every taskbar.
+     */
+    bool altTabActive = IsAltTabActive();
+
     for (size_t i = 0; i < g_taskbarCount; ++i) {
         TaskbarState& taskbar =
             g_taskbars[i];
@@ -1112,13 +1109,6 @@ void UpdateTaskbarState() {
         bool hovering =
             IsCursorInTaskbarHoverZone(taskbar);
 
-        bool shellFlyoutOpen =
-            taskbar.shellUiForeground ||
-            HasVisibleShellFlyout(taskbar.monitor);
-
-        bool altTabActive =
-            IsAltTabActive();
-
         /*
          * If a normal application is present on this monitor, that
          * monitor's taskbar remains visible even when another monitor
@@ -1126,6 +1116,7 @@ void UpdateTaskbarState() {
          */
         if (taskbar.hasApplication) {
             taskbar.shownDueToHover = false;
+            taskbar.shownDueToAltTab = false;
             taskbar.hideDeadline = 0;
 
             SetWindowVisibilityIfNeeded(
@@ -1135,6 +1126,10 @@ void UpdateTaskbarState() {
 
             continue;
         }
+
+        bool shellFlyoutOpen =
+            taskbar.shellUiForeground ||
+            HasVisibleShellFlyout(taskbar.monitor);
 
         /*
          * Windows shell flyouts (Start, Search, Notifications, Quick
@@ -1353,10 +1348,6 @@ LRESULT CALLBACK SystemMessageWindowProc(
 
     switch (message) {
     case WM_SETTINGCHANGE:
-        /*
-         * Native taskbar auto-hide can be changed from Windows Settings.
-         * Re-query it only when this targeted system notification arrives.
-         */
         RefreshPerMonitorState();
         UpdateTaskbarState();
         return 0;
