@@ -1160,8 +1160,16 @@ void RestoreRunningIndicator(TrackedButton &tracked)
     tracked.runningIndicatorHidden = false;
 }
 
-bool HideRunningIndicatorForBottomDots(TrackedButton &tracked,
-                                       FrameworkElement taskListButton)
+enum class RunningIndicatorHideResult
+{
+    Hidden,
+    NotPresent,
+    Failed,
+};
+
+RunningIndicatorHideResult HideRunningIndicatorForBottomDots(
+    TrackedButton &tracked,
+    FrameworkElement taskListButton)
 {
     auto runningIndicator =
         FindChildByName(taskListButton, L"RunningIndicator");
@@ -1169,7 +1177,7 @@ bool HideRunningIndicatorForBottomDots(TrackedButton &tracked,
     if (!runningIndicator)
     {
         RestoreRunningIndicator(tracked);
-        return false;
+        return RunningIndicatorHideResult::NotPresent;
     }
 
     auto previousIndicator = tracked.runningIndicator.get();
@@ -1198,10 +1206,10 @@ bool HideRunningIndicatorForBottomDots(TrackedButton &tracked,
     catch (...)
     {
         RestoreRunningIndicator(tracked);
-        return false;
+        return RunningIndicatorHideResult::Failed;
     }
 
-    return true;
+    return RunningIndicatorHideResult::Hidden;
 }
 
 // -----------------------------------------------------------------------------
@@ -1686,15 +1694,20 @@ bool UpdateCountBadge(TrackedButton &tracked,
             return false;
         }
 
-        if (bottomDotMode && count > 0 &&
-            !HideRunningIndicatorForBottomDots(tracked, taskListButton))
+        if (bottomDotMode && count > 0)
         {
-            if (badge)
+            auto hideResult =
+                HideRunningIndicatorForBottomDots(tracked, taskListButton);
+
+            if (hideResult == RunningIndicatorHideResult::Failed)
             {
-                StopDotPositionBinding(badge);
-                badge.Visibility(Visibility::Collapsed);
+                if (badge)
+                {
+                    StopDotPositionBinding(badge);
+                    badge.Visibility(Visibility::Collapsed);
+                }
+                return false;
             }
-            return false;
         }
 
         desiredParent = dotHost;
@@ -1897,6 +1910,28 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 
     bool runningIndicatorReady = true;
 
+    if (!bottomDotMode &&
+        item.lastAppliedCount == std::numeric_limits<unsigned int>::max())
+    {
+        // Heal a native indicator that may have been left composition-hidden
+        // by a previous mod instance whose taskbar-thread cleanup couldn't run.
+        // Do this only once per button so we don't continuously fight another
+        // mod that intentionally suppresses the native indicator.
+        if (auto runningIndicator =
+                FindChildByName(element, L"RunningIndicator"))
+        {
+            try
+            {
+                Hosting::ElementCompositionPreview::GetElementVisual(
+                    runningIndicator)
+                    .IsVisible(true);
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+
     if (bottomDotMode && count > 0)
     {
         auto runningIndicator = item.runningIndicator.get();
@@ -1919,7 +1954,15 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
         }
         else
         {
-            runningIndicatorReady = false;
+            // Missing RunningIndicator is valid in bottom mode: the dots can
+            // still render using the below-icon positioning fallback.
+            auto nativeIndicator =
+                FindChildByName(element, L"RunningIndicator");
+
+            if (nativeIndicator)
+            {
+                runningIndicatorReady = false;
+            }
         }
     }
     else
@@ -3024,9 +3067,10 @@ void Wh_ModBeforeUninit()
     {
         // Dot positioning uses compositor expressions only; there are no XAML
         // or CompositionTarget delegates pointing into the mod image. If the
-        // taskbar thread is already unreachable, leaving the no_destroy weak
-        // tracking state and any stale visual behind is safe: no code in this
-        // DLL remains callable after unload.
+        // taskbar thread is already unreachable, the weak tracking state can
+        // be left in place safely, but a shell RunningIndicator may remain
+        // composition-hidden until Explorer restarts or a later mod instance
+        // touches that button and performs the one-shot recovery above.
         Wh_Log(L"Couldn't execute taskbar-thread cleanup");
     }
 }
