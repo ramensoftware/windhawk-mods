@@ -160,7 +160,6 @@ When one file is selected, additional details can appear:
 
 #define CWM_GETISHELLBROWSER (WM_USER + 7)
 
-static constexpr int kStatusRowHeight = 24;
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
 static constexpr DWORD kRefreshIntervalMs = 10000;
 static constexpr ULONGLONG kContentFailedRetryMs = 60000;
@@ -219,6 +218,7 @@ struct TrackedDirectUiState
     COLORREF stableNativeTextColor = CLR_INVALID;
     HWND shellTab = nullptr;
     DWORD shellBrowserCookie = 0;
+    HWND validatedDefView = nullptr;
     bool hasValidatedStatusRow = false;
     RECT validatedStatusRow{};
 };
@@ -1382,25 +1382,215 @@ static int ScaleForWindow(
     );
 }
 
-static bool GetBottomStatusRowRect(
+static HWND FindShellDefViewDescendant(HWND directUi)
+{
+    if (!directUi || !IsWindow(directUi))
+        return nullptr;
+
+    // Explorer nests SHELLDLL_DefView below an immediate DirectUI child.
+    // Match only the structural class relationship used by Explorer; window
+    // text is neither queried nor involved in target selection.
+    for (
+        HWND child = FindWindowExW(directUi, nullptr, nullptr, nullptr);
+        child;
+        child = FindWindowExW(directUi, child, nullptr, nullptr)
+    )
+    {
+        HWND defView =
+            FindWindowExW(
+                child,
+                nullptr,
+                L"SHELLDLL_DefView",
+                nullptr
+            );
+
+        if (defView)
+            return defView;
+    }
+
+    return nullptr;
+}
+
+static void StoreValidatedStatusRow(
+    HWND hwnd,
+    HWND defView,
+    const RECT* row
+)
+{
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (existing != g_trackedWindows.end())
+    {
+        existing->validatedDefView = row ? defView : nullptr;
+        existing->hasValidatedStatusRow = row != nullptr;
+        existing->validatedStatusRow = row ? *row : RECT{};
+    }
+
+    ReleaseSRWLockExclusive(&g_subclassLock);
+}
+
+static bool RefreshValidatedStatusRow(HWND hwnd)
+{
+    if (!hwnd || !IsWindow(hwnd))
+        return false;
+
+    const HWND defView = FindShellDefViewDescendant(hwnd);
+
+    DWORD directUiPid = 0;
+    DWORD defViewPid = 0;
+    const DWORD directUiThread =
+        GetWindowThreadProcessId(hwnd, &directUiPid);
+    const DWORD defViewThread =
+        defView
+            ? GetWindowThreadProcessId(defView, &defViewPid)
+            : 0;
+
+    RECT client{};
+    RECT mappedDefView{};
+
+    bool valid =
+        defView &&
+        IsWindow(defView) &&
+        IsChild(hwnd, defView) &&
+        directUiThread &&
+        defViewThread == directUiThread &&
+        defViewPid == directUiPid &&
+        GetClientRect(hwnd, &client) &&
+        GetWindowRect(defView, &mappedDefView);
+
+    if (valid)
+    {
+        SetLastError(ERROR_SUCCESS);
+
+        const int mapped =
+            MapWindowPoints(
+                nullptr,
+                hwnd,
+                reinterpret_cast<POINT*>(&mappedDefView),
+                2
+            );
+
+        if (!mapped && GetLastError() != ERROR_SUCCESS)
+            valid = false;
+    }
+
+    const LONG tolerance = ScaleForWindow(hwnd, 2);
+
+    if (
+        valid &&
+        (
+            client.right <= client.left ||
+            client.bottom <= client.top ||
+            mappedDefView.right <= mappedDefView.left ||
+            mappedDefView.bottom <= mappedDefView.top ||
+            mappedDefView.left < client.left - tolerance ||
+            mappedDefView.right > client.right + tolerance ||
+            mappedDefView.top < client.top - tolerance ||
+            mappedDefView.bottom <= client.top ||
+            mappedDefView.bottom > client.bottom + tolerance
+        )
+    )
+    {
+        valid = false;
+    }
+
+    RECT row{};
+
+    if (valid)
+    {
+        row = client;
+        row.top = std::min(mappedDefView.bottom, client.bottom);
+
+        // A zero/sliver gap is normal when Explorer's status bar is hidden.
+        // Require a small DPI-scaled minimum before treating it as a row.
+        if (
+            row.bottom - row.top <
+                static_cast<LONG>(ScaleForWindow(hwnd, 8))
+        )
+        {
+            valid = false;
+        }
+    }
+
+    StoreValidatedStatusRow(
+        hwnd,
+        valid ? defView : nullptr,
+        valid ? &row : nullptr
+    );
+
+    return valid;
+}
+
+static bool GetValidatedStatusRow(
     HWND hwnd,
     RECT* row
 )
 {
-    if (!hwnd || !row || !IsWindow(hwnd))
+    if (!row)
         return false;
+
+    HWND defView = nullptr;
+    RECT cachedRow{};
+    bool found = false;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (
+        existing != g_trackedWindows.end() &&
+        existing->hasValidatedStatusRow
+    )
+    {
+        defView = existing->validatedDefView;
+        cachedRow = existing->validatedStatusRow;
+        found = true;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
 
     RECT client{};
 
-    if (!GetClientRect(hwnd, &client))
+    if (
+        !found ||
+        !hwnd ||
+        !IsWindow(hwnd) ||
+        !defView ||
+        !IsWindow(defView) ||
+        !IsChild(hwnd, defView) ||
+        !GetClientRect(hwnd, &client) ||
+        cachedRow.left != client.left ||
+        cachedRow.right != client.right ||
+        cachedRow.bottom != client.bottom ||
+        cachedRow.top < client.top ||
+        cachedRow.top >= cachedRow.bottom
+    )
+    {
+        if (found)
+            StoreValidatedStatusRow(hwnd, nullptr, nullptr);
+
         return false;
+    }
 
-    *row = client;
-    row->top =
-        client.bottom > ScaleForWindow(hwnd, kStatusRowHeight)
-            ? client.bottom - ScaleForWindow(hwnd, kStatusRowHeight)
-            : 0;
-
+    *row = cachedRow;
     return true;
 }
 
@@ -1415,7 +1605,7 @@ static bool InvalidateInfoBarWindow(
 
     RECT row{};
 
-    if (!GetBottomStatusRowRect(hwnd, &row))
+    if (!GetValidatedStatusRow(hwnd, &row))
         return false;
 
     const int clientRight =
@@ -1841,41 +2031,6 @@ static WindowDataCache* FindWindowDataCacheLocked(
         : nullptr;
 }
 
-
-static bool GetValidatedStatusRow(
-    HWND hwnd,
-    RECT* row
-)
-{
-    if (!row)
-        return false;
-
-    bool found = false;
-
-    AcquireSRWLockShared(&g_subclassLock);
-
-    const auto existing =
-        std::find_if(
-            g_trackedWindows.begin(),
-            g_trackedWindows.end(),
-            [&](const TrackedDirectUiState& value)
-            {
-                return value.hwnd == hwnd;
-            }
-        );
-
-    if (
-        existing != g_trackedWindows.end() &&
-        existing->hasValidatedStatusRow
-    )
-    {
-        *row = existing->validatedStatusRow;
-        found = true;
-    }
-
-    ReleaseSRWLockShared(&g_subclassLock);
-    return found;
-}
 
 static void WakeWorkerFromPaint()
 {
@@ -3882,31 +4037,12 @@ static void PaintFinalInfoBar(
 
     RECT row{};
 
-    // Structural attachment doesn't supply a native-copy row rectangle, so
-    // new targets use the geometric fallback below.
-    const bool hasValidatedRow =
-        GetValidatedStatusRow(
-            hwnd,
-            &row
-        );
-
-    // Fall back to Explorer's bottom status-row geometry when no validated
-    // native rect is available.
     if (
-        !hasValidatedRow ||
-        row.bottom <= row.top ||
-        row.top < 0 ||
-        row.bottom >
-            client.bottom + ScaleForWindow(hwnd, 2)
+        !RefreshValidatedStatusRow(hwnd) ||
+        !GetValidatedStatusRow(hwnd, &row)
     )
     {
-        row.top =
-            client.bottom > ScaleForWindow(hwnd, kStatusRowHeight)
-                ? client.bottom - ScaleForWindow(hwnd, kStatusRowHeight)
-                : 0;
-
-        row.bottom =
-            client.bottom;
+        return;
     }
 
     row.left = ScaleForWindow(hwnd, 6);
@@ -4645,7 +4781,10 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     )
     {
         if (!g_unloading.load(std::memory_order_acquire))
+        {
+            RefreshValidatedStatusRow(hwnd);
             InvalidateInfoBarWindow(hwnd);
+        }
 
         return 0;
     }
@@ -4690,6 +4829,24 @@ static LRESULT CALLBACK DirectUiSubclassProc(
             wParam,
             lParam
         );
+    }
+
+    if (
+        msg == WM_SIZE ||
+        msg == WM_WINDOWPOSCHANGED
+    )
+    {
+        const LRESULT result =
+            DefSubclassProc(
+                hwnd,
+                msg,
+                wParam,
+                lParam
+            );
+
+        RefreshValidatedStatusRow(hwnd);
+        InvalidateInfoBarWindow(hwnd);
+        return result;
     }
 
     if (msg == WM_PAINT)
@@ -5094,18 +5251,9 @@ void Wh_ModBeforeUninit()
             // removing the subclass alone leaves those pixels on screen until
             // the next native repaint. Force the status row to repaint now
             // while g_unloading prevents any new overlay from being drawn.
-            RECT client{};
-            if (GetClientRect(hwnd, &client))
+            RECT row{};
+            if (GetValidatedStatusRow(hwnd, &row))
             {
-                RECT row{};
-                row.left = 0;
-                row.right = client.right;
-                row.bottom = client.bottom;
-                row.top = std::max(
-                    0L,
-                    client.bottom - static_cast<LONG>(ScaleForWindow(hwnd, kStatusRowHeight))
-                );
-
                 RedrawWindow(
                     hwnd,
                     &row,
