@@ -218,7 +218,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
           $name: Centering size override
           $description: 'Only effective when "Override size" is selected. Example: 720, 480'
     $name: Rules
-    $description: 'All populated match fields in a rule must match. Separate rules are alternatives. Exclude prevents management. Trace to owner retargets move/size boundaries from a matching helper window to its already-managed root owner. Centering treatments apply only when Automatic mode admits a new window in a Floating workspace. The first matching centering treatment wins.'
+    $description: 'All populated match fields in a rule must match. Separate rules are alternatives. Exclude prevents management. Trace to owner retargets move/size boundaries from a matching helper window to its already-managed root owner. Centering treatments apply when Automatic mode centers a newly admitted window or must replace missing floating geometry. The first matching centering treatment wins.'
   $name: Window Rules
 
 - advanced:
@@ -2650,15 +2650,12 @@ static bool GetWorkspaceWorkArea(HMONITOR monitor, RECT* outWorkArea) {
 enum class FloatingPlacementIntent {
   PassiveRestore,
   PreserveAnchor,
-  NewWindowDefault,
-  NewWindowPreserveSize,
-  NewWindowCustomSize,
+  NewWindowCenter,
 };
 
 struct FloatingPlacementHint {
   FloatingPlacementIntent intent = FloatingPlacementIntent::PassiveRestore;
   POINT anchor{};
-  FloatingDefaultSize customSizeDip{};
 };
 
 static POINT RectCenter(const RECT& rect) {
@@ -2749,24 +2746,28 @@ static bool RepairFloatingGeometry(
                            current.right > current.left &&
                            current.bottom > current.top;
 
-  const bool useNewWindowDefault =
-      hint.intent == FloatingPlacementIntent::NewWindowDefault;
-  const bool preserveNewWindowSize =
-      hint.intent == FloatingPlacementIntent::NewWindowPreserveSize;
-  const bool useNewWindowCustomSize =
-      hint.intent == FloatingPlacementIntent::NewWindowCustomSize;
-  const bool centerNewWindow = useNewWindowDefault || preserveNewWindowSize ||
-                               useNewWindowCustomSize;
+  const bool centerNewWindow =
+      hint.intent == FloatingPlacementIntent::NewWindowCenter;
+  const bool needsFallbackSize = centerNewWindow || !record->hasFloatingRect;
+  const WindowRule* placementOverride =
+      IsAutomaticMode() && needsFallbackSize
+          ? FindMatchingWindowRule(
+                hwnd, WindowRuleTreatment::FloatingPlacementOverride)
+          : nullptr;
+  const bool preserveCurrentSize =
+      placementOverride && placementOverride->preserveFloatingSize;
+  const bool useCustomSize =
+      placementOverride && !placementOverride->preserveFloatingSize;
 
   LONG width = 0;
   LONG height = 0;
-  if (preserveNewWindowSize && haveCurrent) {
+  if (preserveCurrentSize && haveCurrent) {
     width = current.right - current.left;
     height = current.bottom - current.top;
-  } else if (useNewWindowCustomSize) {
-    width = ScaleDip(hint.customSizeDip.width, targetDpi);
-    height = ScaleDip(hint.customSizeDip.height, targetDpi);
-  } else if (!useNewWindowDefault && record->hasFloatingRect) {
+  } else if (useCustomSize) {
+    width = ScaleDip(placementOverride->floatingSizeDip.width, targetDpi);
+    height = ScaleDip(placementOverride->floatingSizeDip.height, targetDpi);
+  } else if (!centerNewWindow && record->hasFloatingRect) {
     const UINT sourceDpi = record->floatingDpi ? record->floatingDpi : 96;
     width = MulDiv(
         record->floatingRect.right - record->floatingRect.left,
@@ -5126,16 +5127,7 @@ static bool DiscoverWorkspaceWindows(
   if (admitUntracked && workspace.Layout() == TileLayout::Floating) {
     for (HWND hwnd : newlyAdmittedWindows) {
       FloatingPlacementHint newWindowHint;
-      const WindowRule* placementOverride = FindMatchingWindowRule(
-          hwnd, WindowRuleTreatment::FloatingPlacementOverride);
-      if (!placementOverride) {
-        newWindowHint.intent = FloatingPlacementIntent::NewWindowDefault;
-      } else if (placementOverride->preserveFloatingSize) {
-        newWindowHint.intent = FloatingPlacementIntent::NewWindowPreserveSize;
-      } else {
-        newWindowHint.intent = FloatingPlacementIntent::NewWindowCustomSize;
-        newWindowHint.customSizeDip = placementOverride->floatingSizeDip;
-      }
+      newWindowHint.intent = FloatingPlacementIntent::NewWindowCenter;
       RepairFloatingGeometry(key, workspace, hwnd, newWindowHint);
     }
   }
