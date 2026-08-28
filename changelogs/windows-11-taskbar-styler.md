@@ -1,3 +1,13 @@
+## 1.9 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/36710e43ba152f119a7adcfda85a8377507d65c8/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added the following themes: OS26 Liquid Glass (Clear MacDock Compact), OS26 Liquid Glass (Dark MacDock Compact), Blob, Minecraft Hotbar, One UI 8.5 (Dock), One UI 8.5 (Taskbar).
+* Updated most themes with compatibility fixes for the latest Windows 11 update and with other minor fixes and improvements.
+* Several target controls can now be specified for the same styles by separating them with commas, for example: `ParentClass > Class#Name1, ParentClass > Class#Name2`.
+* Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+* Improved the click-through taskbar option that didn't work correctly in some cases, e.g. it could stop working with auto-hide.
+* Fixed handling for taskbar items which could appear with incorrect leftover styles.
+
 ## 1.8 ([Jul 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad8a72751f167a0d45a8b9c0794ccd23b12f6f00/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the click-through taskbar option that allows making the empty parts of the taskbar click-through. Mainly useful for dock themes such as DockLike.

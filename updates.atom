@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-28T13:17:12.000Z</updated>
+    <updated>2026-08-28T15:33:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.9]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#36710e43ba152f119a7adcfda85a8377507d65c8</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-08-28T15:33:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: OS26 Liquid Glass (Clear MacDock Compact), OS26 Liquid Glass (Dark MacDock Compact), Blob, Minecraft Hotbar, One UI 8.5 (Dock), One UI 8.5 (Taskbar).</li>
+<li>Updated most themes with compatibility fixes for the latest Windows 11 update and with other minor fixes and improvements.</li>
+<li>Several target controls can now be specified for the same styles by separating them with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt; Class#Name2</code>.</li>
+<li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
+<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
+<li>Improved the click-through taskbar option that didn't work correctly in some cases, e.g. it could stop working with auto-hide.</li>
+<li>Fixed handling for taskbar items which could appear with incorrect leftover styles.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.2.0]]></title>
         <id>https://windhawk.net/mods/win7-action-center-recreation#802bccd599b938159d1bfa5cbcacac3b7ba50cc9</id>
@@ -980,79 +999,6 @@ ordering, or application behavior.</p>]]></content>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Open With Dialog Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-open-with-dialog#5e1bd29d18f28fbb37e339b7b4ae6504a9f74ecf</id>
-        <link href="https://windhawk.net/mods/win7-open-with-dialog"/>
-        <updated>2026-08-22T15:17:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7openwithdialogrecreation">Windows 7 Open With Dialog Recreation</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic Windows Vista/7 <strong>Open with</strong> dialog on Windows 10 and
-11, replacing the modern picker with an accurate recreation of the original while
-keeping file and application paths completely untouched.</p>
-<p>The mod has been tested primarily on <strong>Windows 10 21H2</strong>, <strong>Windows 11 24H2</strong> and <strong>Windows 11 25H2</strong>. It is designed to work reliably and safely on both current and future Windows versions where possible.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/openwith.PNG" alt="openwith" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><p><strong>Accurate Vista/7-style dialog</strong>: The mod accurately recreates the classic layout with
-recommended and other-program groups, Browse button, Web search, and the Always
-use checkbox.</p></li>
-<li><p><strong>Open with context menu integration</strong>: The mod works correctly with the right-click
-"Open with" menu option.</p></li>
-<li><p><strong>Unknown-file double-click support</strong>: The mod handles double-clicks on files without
-a known association, just like the original.</p></li>
-<li><p><strong>Properties → Change handler</strong>: The mod applies a new default program when the user clicks
-"Change" from a file's Properties window, without opening the file.</p></li>
-<li><p><strong>Persistent defaults</strong>: When choosing "Always use", the selection is saved
-as the new default. If Windows protects a specific association, the mod will
-guide to the Default Apps settings.</p></li>
-<li><p><strong>Direct program launch</strong>: The mod opens the selected program immediately, avoiding
-unnecessary extra steps.</p></li>
-<li><p><strong>Extensionless file support</strong>: Works with files that have no extension, offering
-a selection of registered applications.</p></li>
-<li><p><strong>Fully localized interface</strong>: The mod is available in 120 languages (including English,
-Italian, Spanish, French, German, Portuguese, Russian, Chinese, Japanese, Korean,
-Turkish, Dutch, Polish and 107 more) with automatic system language detection.</p></li>
-<li><p><strong>Concise file display</strong>: For example, the mod shows <code>File: photo.png</code> instead of the full path for a
-cleaner look, while keeping the complete path for actual execution like in Windows Vista/7.</p></li>
-<li><p><strong>Optional description box</strong>: The description field can be hidden via settings
-(enabled by default), making the dialog more compact.</p></li>
-<li><p><strong>DPI-aware</strong>: The mod tries to support multiple DPIs where possible.</p></li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li><strong>Windows 10 or Windows 11 — x64 architecture</strong></li>
-<li><strong>Windhawk</strong> with injection enabled for <code>explorer.exe</code>, <code>OpenWith.exe</code> and
-<code>rundll32.exe</code></li>
-<li>The mod setting <strong>Enable the Windows 7-style picker</strong> must be turned on</li>
-</ul>
-<h2 id="note">Note</h2>
-<p>When explicitly selecting <strong>Always use</strong>, the mod saves the choice as the new
-default. All other selections open the file once without changing the system default.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>Single-file selection</strong>: Opening multiple files at once with "Open with" is
-not currently supported.</li>
-<li><strong>No default for extensionless files</strong>: Files without an extension can be opened,
-but there is no extension to associate permanently.</li>
-<li><strong>Composite extensions</strong>: Windows treats <code>archive.tar.gz</code> as a <code>.gz</code> file; the
-mod follows this same standard behavior.</li>
-<li><strong>Store/UWP applications</strong>: Some modern apps may not appear in the list or may
-not open correctly if their registration is incomplete.</li>
-<li><strong>Protected associations</strong>: Windows may prevent changing certain file associations.
-In these cases, please use the Windows Default Apps settings to make your changes.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>ReactOS</strong> — Inspiration</li>
-<li><strong>aubymori</strong> — Inspiration</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
