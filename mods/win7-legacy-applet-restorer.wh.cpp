@@ -123,7 +123,7 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
 
 - preventSettingsRedirect: true
   $name: Control Panel Revival guard (unhide applets and block Settings redirects)
-  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Text to Speech, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled.
+  $description: This setting prevents Windows 11 from redirecting certain classic Control Panel applets to the modern Settings app. It also unhides Personalization, BitLocker, Text to Speech, and System if they are hidden in Control Panel. When enabled, the classic task links work correctly and Personalization stays at the top of its category. All changes are automatically undone when the mod is disabled. Enabled by default because it shows the real applets instead of this mod's virtual approximations of them - the guard only ever reports itself as active once it has actually confirmed the redirect is blocked, and the mod falls back to its virtual entries on any build where that can't be confirmed.
 
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
@@ -215,6 +215,22 @@ struct Settings {
     std::atomic<int> bitLockerMode;
     std::atomic<int> tabletPcMode;
     std::atomic<int> speechMode;
+    // Defaults to true (see the $description above). The virtual entries
+    // this mod injects when the guard is off are a good approximation of
+    // the real applets - correct name, icon and category - but they are
+    // still an approximation: they don't carry the exact InfoTip/keyword
+    // metadata Explorer indexes for Control Panel search on the real CLSID,
+    // and any behavior Explorer attaches to the genuine applet identity
+    // (e.g. how it's referenced by other shell components) only exists on
+    // the real one. Once the guard confirms it actually unhid the applet
+    // and blocked the redirect (see guardEffective / hooksActive further
+    // down - the check was tightened specifically so this can't be a false
+    // positive), the real applet is strictly more accurate than the
+    // virtual twin standing in for it, which is why this is worth having on
+    // by default rather than opt-in: it fails closed to the proven virtual
+    // entries on any build where that confirmation doesn't happen, so
+    // enabling it by default costs nothing on a build where it can't do its
+    // job, and gives a real accuracy improvement on the builds where it can.
     std::atomic<bool> preventSettingsRedirect;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
@@ -1273,9 +1289,9 @@ bool EnsureClassicTaskLinksFile() {
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
         { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings", "Configure text to speech", "View basic information about your computer", "Review your computer's status", "Review your computer's performance" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura il riconoscimento vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
-        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil", "Configurar el reconocimiento de voz", "Ver información básica sobre el equipo", "Revisar el estado del equipo", "Revisar el rendimiento del equipo" },
-        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile", "Configurer la reconnaissance vocale", "Afficher les informations de base sur l'ordinateur", "Vérifier l'état de votre ordinateur", "Vérifier les performances de votre ordinateur" },
+        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura sintesi vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
+        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil", "Configurar texto a voz", "Ver información básica sobre el equipo", "Revisar el estado del equipo", "Revisar el rendimiento del equipo" },
+        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile", "Configurer la synthèse vocale", "Afficher les informations de base sur l'ordinateur", "Vérifier l'état de votre ordinateur", "Vérifier les performances de votre ordinateur" },
         { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen", "Spracherkennung einrichten", "Grundlegende Informationen zum Computer anzeigen", "Computerstatus überprüfen", "Computerleistung überprüfen" },
         { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies", "Gerenciar BitLocker", "Calibrar a tela para entrada por caneta ou toque", "Configurações de Caneta e Toque" },
         { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies", "Gerir o BitLocker", "Calibrar o ecrã para entrada de caneta ou toque", "Definições de Caneta e Toque" },
@@ -1505,7 +1521,7 @@ bool EnsureClassicTaskLinksFile() {
                     "  <!-- Text to Speech (Hardware and Sound, Category 2) -->\n"
                     "  <application id=\"" + speechAppId + "\">\n"
                     "    <sh:task id=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"><sh:name>{SPEECHCONFIGURE}</sh:name>"
-                    "<sh:keywords>speech;voice;speech recognition;synthesis</sh:keywords>"
+                    "<sh:keywords>speech;voice;text to speech;synthesis</sh:keywords>"
                     "<sh:command>explorer.exe shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}</sh:command></sh:task>\n"
                     "    <category id=\"2\"><sh:task idref=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"/></category>\n"
                     "  </application>\n";
@@ -1834,26 +1850,25 @@ void InitDisplayNames() {
             Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
     }
     if (g_speechClsidRegistered.load()) {
-        // Text to Speech: the registry read is primary; the resource
-        // reference below is the fallback for the stub-CLSID builds where
-        // the key exists without name/icon values. The applet's actual cpl
-        // is sapi.cpl under System32\Speech\SpeechUX (there is no
-        // speechux.dll directly under System32 - that was wrong and made
-        // the fallback silently produce nothing on stub-CLSID builds,
-        // exactly the case it exists for). The string/icon resource IDs
-        // below are carried over unverified from the other applets' known
-        // IDs by analogy, NOT confirmed inside sapi.cpl - verify them on a
-        // real machine (e.g. Resource Hacker or SHLoadIndirectString) before
-        // relying on this fallback; if they're wrong AddVirtualApplet simply
-        // fails to create the entry (same fallback-only-taken-when-stub
-        // safety as the registry path, so nothing regresses if they're off).
+        // Text to Speech: registry-only, no resource fallback. The applet's
+        // actual cpl is sapi.cpl under System32\Speech\SpeechUX, but the
+        // ",-1"/",-2" string/icon resource indices used by a previous
+        // version of this fallback were never confirmed against sapi.cpl -
+        // they were carried over by analogy from other applets, and if
+        // wrong they wouldn't just no-op, they could give the entry an
+        // incorrect name or icon (a wrong index can still resolve to some
+        // unrelated resource in the file). Rather than ship that unverified,
+        // this applet is only added when the registry itself has a usable
+        // name (as it does whenever sapi.cpl is actually registered); on
+        // stub-CLSID builds where it isn't, no virtual entry is created -
+        // same fail-safe behavior AddVirtualApplet already has when neither
+        // the registry nor a fallback has a name.
         if (!AddVirtualApplet(kSpeechVirtualGuid, kSpeechGuid, kCategoryHardware,
                               &g_injectSpeechApplet,
-                              L"@%SystemRoot%\\System32\\Speech\\SpeechUX\\sapi.cpl,-1",
-                              L"%SystemRoot%\\System32\\Speech\\SpeechUX\\sapi.cpl,-1",
-                              L"@%SystemRoot%\\System32\\Speech\\SpeechUX\\sapi.cpl,-2",
+                              L"", L"", L"",
                               &g_speechClsidRegistered, kRevivalMonikerSpeech))
-            Wh_Log(L"Could not read Text to Speech's real name/icon; virtual entry not created");
+            Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
+                   L"(no resource fallback); virtual entry not created");
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -3302,6 +3317,63 @@ static HRESULT WINAPI COpenControlPanel__Open_revivalHook(void* pThis, LPCWSTR p
     }
 }
 
+// Detects whether the standalone "Control Panel Revival" mod
+// (id: control-panel-revival, by AdmXP8) is also loaded in this process.
+// That mod maintains its own hardcoded moniker list (System, Devices and
+// Printers, Installed Updates, Default Programs, Troubleshooting, Fonts) and
+// patches shell32.dll/windows.storage.dll the same way this guard does. The
+// only actual overlap with kRevivalAppletMonikers below is "System" - see
+// kControlPanelRevivalOwnedMonikers. There's no official Windhawk API to ask
+// "is mod X loaded", so this looks for a loaded module whose file name
+// contains that mod's id - Windhawk compiles each mod's native code into its
+// own DLL named after the mod id, so this is a reliable-in-practice signal
+// without depending on any private engine internals.
+//
+// Cached after the first successful scan (per process lifetime) since the
+// set of loaded modules relevant here never shrinks once Control Panel
+// Revival has loaded; a failed enumeration is not cached, so it's retried
+// on the next call (e.g. next settings reload) instead of permanently
+// assuming "not present".
+static std::atomic<int> g_otherRevivalModDetected{ -1 }; // -1 = not yet checked, 0 = no, 1 = yes
+static bool IsControlPanelRevivalModLoaded() {
+    int cached = g_otherRevivalModDetected.load();
+    if (cached != -1) return cached == 1;
+
+    bool found = false;
+    HMODULE hMods[1024];
+    DWORD cbNeeded = 0;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
+        DWORD count = (std::min)((DWORD)(cbNeeded / sizeof(HMODULE)), (DWORD)ARRAYSIZE(hMods));
+        wchar_t modPath[MAX_PATH];
+        for (DWORD i = 0; i < count; i++) {
+            if (GetModuleFileNameExW(GetCurrentProcess(), hMods[i], modPath, ARRAYSIZE(modPath))) {
+                std::wstring pathLower = modPath;
+                std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::towlower);
+                if (pathLower.find(L"control-panel-revival") != std::wstring::npos) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        return false;
+    }
+
+    g_otherRevivalModDetected.store(found ? 1 : 0);
+    return found;
+}
+
+// The only moniker(s) this mod shares with control-panel-revival's own
+// hardcoded list (g_szAppletsToUnhide in that mod: System, Devices and
+// Printers, Installed Updates, Default Programs, Troubleshooting, Fonts).
+// Personalization, BitLocker Drive Encryption, and Text to Speech are not
+// touched by that mod at all, so they must keep being patched by us
+// regardless of whether it's loaded - gating the whole guard on its presence
+// would wrongly fall back to virtual twins for applets it never manages.
+static bool IsMonikerOwnedByControlPanelRevival(LPCWSTR moniker) {
+    return _wcsicmp(moniker, L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}") == 0; // System
+}
+
 // Patches the hidden monikers and installs the guard's hooks. Idempotent: a
 // second call (e.g. after re-enabling the setting) only re-applies the
 // string patches, never re-installs a hook that is already in place.
@@ -3312,6 +3384,8 @@ static HRESULT WINAPI COpenControlPanel__Open_revivalHook(void* pThis, LPCWSTR p
 // and true from Wh_ModSettingsChanged, where a hook registered at runtime
 // stays dormant until it is applied explicitly.
 static void SetupRevivalGuard(bool applyNow) {
+    const bool otherModPresent = IsControlPanelRevivalModLoaded();
+
     if (!g_revivalPatcher) g_revivalPatcher.emplace();
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -3329,6 +3403,17 @@ static void SetupRevivalGuard(bool applyNow) {
 
     for (size_t i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
         const LPCWSTR moniker = kRevivalAppletMonikers[i];
+        if (otherModPresent && IsMonikerOwnedByControlPanelRevival(moniker)) {
+            // Don't touch this one ourselves - "Control Panel Revival" owns
+            // it and will already have unhidden it. Treat it as patched so
+            // this mod doesn't inject a redundant virtual twin on top of
+            // the real applet that mod is already showing.
+            anyMonikerPatched = true;
+            monikerPatchedThisCall[i] = true;
+            Wh_Log(L"Revival guard: %s deferred to \"Control Panel Revival\" mod (not re-patched)",
+                   moniker);
+            continue;
+        }
         const bool patched = g_revivalPatcher->PatchStringInModule(hShell32, moniker);
         anyMonikerPatched = anyMonikerPatched || patched;
         monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
@@ -3347,6 +3432,9 @@ static void SetupRevivalGuard(bool applyNow) {
     if (g_revivalWinStorageModule) {
         for (size_t i = 0; i < ARRAYSIZE(kRevivalAppletMonikers); i++) {
             const LPCWSTR moniker = kRevivalAppletMonikers[i];
+            if (otherModPresent && IsMonikerOwnedByControlPanelRevival(moniker)) {
+                continue; // already accounted for above; avoid a duplicate log line
+            }
             const bool patched =
                 g_revivalPatcher->PatchStringInModule(g_revivalWinStorageModule, moniker);
             anyMonikerPatched = anyMonikerPatched || patched;
@@ -3426,16 +3514,26 @@ static void SetupRevivalGuard(bool applyNow) {
     // Only declare the guard active if it actually accomplished something:
     // at least one moniker was patched (that's what unhides the real
     // applet) AND at least one of the redirect-blocking hooks is in place
-    // (MapLegacyName and/or Open; CompareStringOrdinal is scoped to Open's
-    // codepath). Everything downstream (VirtualTwinSuppressed, task-link
-    // generation, GetNamespaceClsids) treats "active" as "Windows is now
-    // showing the real applet" - if the patch or the hooks silently failed
-    // (e.g. a future shell32 build changes layout/casing unexpectedly),
-    // leaving the guard inactive keeps the mod's own virtual twins visible
-    // instead of dropping the applet from Control Panel entirely.
+    // (MapLegacyName and/or Open). CompareStringOrdinal only acts inside
+    // COpenControlPanel::Open's scope (g_revivalRedirectScope is set
+    // exclusively by the Open hook), so on its own it blocks nothing -
+    // counting it here would let a build where both shell32 symbols are
+    // optional-and-missing still report the guard as effective while the
+    // redirect is untouched. Everything downstream (VirtualTwinSuppressed,
+    // task-link generation, GetNamespaceClsids) treats "active" as "Windows
+    // is now showing the real applet" - if the patch or the hooks silently
+    // failed (e.g. a future shell32 build changes layout/casing
+    // unexpectedly), leaving the guard inactive keeps the mod's own virtual
+    // twins visible instead of dropping the applet from Control Panel
+    // entirely. This is the check that makes preventSettingsRedirect
+    // defaulting to true (see the Settings struct above) safe: the setting
+    // being on never means "trust that the guard worked", it means "use the
+    // real applet if, and only if, we just confirmed it's actually shown
+    // and the redirect is actually blocked" - a build where that can't be
+    // confirmed silently and correctly falls back to the proven virtual
+    // entries instead of reporting false success.
     const bool hooksActive = g_revivalMapNameHooked.load() ||
-                              g_revivalOpenHooked.load() ||
-                              g_revivalCsoHooked.load();
+                              g_revivalOpenHooked.load();
     const bool guardEffective = anyMonikerPatched && hooksActive;
     g_revivalGuardActive.store(guardEffective);
     if (!guardEffective) {
