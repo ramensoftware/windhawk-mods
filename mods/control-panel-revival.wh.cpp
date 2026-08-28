@@ -2,20 +2,21 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.3
+// @version         0.9.5
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         control.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lpsapi -lcomctl32
+// @compilerOptions -lpsapi -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Control Panel Revival
 
-### what does this mod do?
+### What does this mod do?
 
 This mod is designed to restore sections of the Control Panel—such as Troubleshooting, Installed Updates, Default Programs, and others—that are redirected to the Settings app in Windows 11 (version 23H2 and later) and can no longer be launched even via shell commands.
 You can also add the ID of your desired applet to prevent it from being redirected to the settings.
@@ -24,6 +25,12 @@ You can also add the ID of your desired applet to prevent it from being redirect
 
 **Note:** This mod is not designed to reveal hidden Control Panel applets; rather, its purpose is to restore applets that are currently present in the Control Panel but redirect to the Settings app.
 
+### Example CustomApplets configuration:
+```yaml
+- "{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"  # System
+- "Microsoft.Troubleshooting"              # Troubleshooting
+- "BB06C0E4-D293-4f75-8A90-CB05B6477EEE"    # System (bare GUID, no braces)
+```
 
 **Before:**
 ![Before](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124304.gif)
@@ -54,6 +61,8 @@ You can also add the ID of your desired applet to prevent it from being redirect
 #include <windows.h>
 #include <psapi.h>
 #include <windhawk_utils.h>
+#include <shlwapi.h>
+#pragma  comment(lib, "shlwapi.lib")
 
 #include <string>
 #include <string_view>
@@ -103,6 +112,9 @@ bool g_isInitialized = false;
 // User-provided applet GUIDs / canonical names, loaded from the "CustomApplets"
 // array setting, in addition to the 6 built-in ones above.
 std::vector<std::wstring> g_customApplets;
+
+// Hash of custom applets for detecting actual changes
+std::wstring g_prevCustomAppletsHash;
 
 static std::wstring Trim(const std::wstring& s) {
     size_t start = s.find_first_not_of(L" \t\r\n");
@@ -214,6 +226,8 @@ void LoadCustomAppletSettings() {
                 } else {
                     Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): doesn't look like a valid applet ID/GUID, is too long, or is too short", i, value);
                 }
+            } else {
+                Wh_Log(L"Ignoring empty custom applet entry #%d", i);
             }
         }
         Wh_FreeStringSetting(value);
@@ -234,10 +248,65 @@ bool IsSupportedWindowsVersion() {
 
     RTL_OSVERSIONINFOW osvi = { sizeof(osvi) };
     if (pRtlGetVersion(&osvi) == 0) {
-        if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22631) {
-            return true;
+        // Support Windows 10 22H2+ and Windows 11 23H2+
+        if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22621) {
+            return true; // Windows 11 22H2+ and Windows 10 22H2+
         }
     }
+    return false;
+}
+
+// Safe string comparison helper that handles -1 (null-terminated) lengths
+static int SafeCompareString(LPCWCH str1, int cch1, LPCWCH str2, int cch2, BOOL bIgnoreCase) {
+    if (!str1 || !str2) return CSTR_LESS_THAN;
+    
+    int len1 = (cch1 == -1) ? (int)wcslen(str1) : cch1;
+    int len2 = (cch2 == -1) ? (int)wcslen(str2) : cch2;
+    
+    if (len1 <= 0 || len2 <= 0) return CSTR_LESS_THAN;
+    
+    int minLen = std::min(len1, len2);
+    if (bIgnoreCase) {
+        return _wcsnicmp(str1, str2, minLen);
+    } else {
+        return wcsncmp(str1, str2, minLen);
+    }
+}
+
+// Returns the string's length as CompareStringOrdinal itself would interpret it:
+// a non-negative cch is used as-is; -1 means "null terminated, compute the length".
+static int GetEffectiveLength(LPCWCH str, int cch) {
+    return (cch == -1) ? (int)wcslen(str) : cch;
+}
+
+// Compares using the *known* length from cchCount1/cchCount2 instead of
+// wcscmp/_wcsicmp, which would assume the input was null-terminated (it
+// might not be - CompareStringOrdinal callers can pass substrings).
+// Target-list lengths are now precomputed constexpr std::wstring_view
+// sizes, not recomputed via wcslen on every call.
+static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
+    if (!str) return false;
+    int len = GetEffectiveLength(str, cch);
+    if (len <= 0) return false;
+
+    auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
+        for (size_t i = 0; i < count; i++) {
+            if ((size_t)len != list[i].size()) continue; // length mismatch: can't be this entry
+            int cmp = SafeCompareString(str, cch, list[i].data(), (int)list[i].size(), bIgnoreCase);
+            if (cmp == 0) return true;
+        }
+        return false;
+    };
+
+    if (checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide))) return true;
+    if (checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames))) return true;
+
+    for (const auto& entry : g_customApplets) {
+        if ((size_t)len != entry.size()) continue;
+        int cmp = SafeCompareString(str, cch, entry.c_str(), (int)entry.size(), bIgnoreCase);
+        if (cmp == 0) return true;
+    }
+
     return false;
 }
 
@@ -247,15 +316,6 @@ bool IsSupportedWindowsVersion() {
 // nothing. Only bail out for rundll32.exe specifically, and only when its
 // command line doesn't look like a Control Panel applet host -
 // explorer.exe/control.exe are never affected by this check.
-static bool ContainsCaseInsensitive(LPCWSTR haystack, LPCWSTR needle) {
-    if (!haystack || !needle || !*needle) return false;
-    size_t needleLen = wcslen(needle);
-    for (LPCWSTR p = haystack; *p; p++) {
-        if (_wcsnicmp(p, needle, needleLen) == 0) return true;
-    }
-    return false;
-}
-
 static bool ShouldBailOutForThisProcess() {
     wchar_t exePath[MAX_PATH];
     DWORD len = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
@@ -270,7 +330,8 @@ static bool ShouldBailOutForThisProcess() {
         return false; // not rundll32.exe - always proceed (explorer.exe / control.exe)
     }
 
-    return !ContainsCaseInsensitive(GetCommandLineW(), L"Control_RunDLL");
+    // Check if command line contains "Control_RunDLL" (case-insensitive)
+    return StrStrIW(GetCommandLineW(), L"Control_RunDLL") == nullptr;
 }
 
 // Describes one [start, end) byte range, relative to a module's base
@@ -415,6 +476,7 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
                         g_appliedPatches.push_back(patch);
 
                         ZeroMemory(targetAddress, patternLen);
+                        Wh_Log(L"Successfully patched applet string at address: 0x%p", targetAddress);
 
                         VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
                     }
@@ -432,6 +494,8 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
 void RestoreAllPatches(void) {
     if (!g_isInitialized) return;
 
+    Wh_Log(L"Restoring %zu memory patches", g_appliedPatches.size());
+    
     for (PatchRecord& patch : g_appliedPatches) {
         MEMORY_BASIC_INFORMATION mbi;
         if (VirtualQuery(patch.address, &mbi, sizeof(mbi))) {
@@ -468,61 +532,22 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
 using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
 CompareStringOrdinal_t CompareStringOrdinal_orig = nullptr;
 
-// Returns the string's length as CompareStringOrdinal itself would interpret it:
-// a non-negative cch is used as-is; -1 means "null terminated, compute the length".
-static int GetEffectiveLength(LPCWCH str, int cch) {
-    return (cch == -1) ? (int)wcslen(str) : cch;
-}
-
-// Compares using the *known* length from cchCount1/cchCount2 instead of
-// wcscmp/_wcsicmp, which would assume the input was null-terminated (it
-// might not be - CompareStringOrdinal callers can pass substrings).
-// Target-list lengths are now precomputed constexpr std::wstring_view
-// sizes, not recomputed via wcslen on every call.
-static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
-    if (!str) return false;
-    int len = GetEffectiveLength(str, cch);
-    if (len <= 0) return false;
-
-    auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
-        for (size_t i = 0; i < count; i++) {
-            if ((size_t)len != list[i].size()) continue; // length mismatch: can't be this entry
-            int cmp = bIgnoreCase
-                ? _wcsnicmp(str, list[i].data(), list[i].size())
-                : wcsncmp(str, list[i].data(), list[i].size());
-            if (cmp == 0) return true;
-        }
-        return false;
-    };
-
-    if (checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide))) return true;
-    if (checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames))) return true;
-
-    for (const auto& entry : g_customApplets) {
-        if ((size_t)len != entry.size()) continue;
-        int cmp = bIgnoreCase
-            ? _wcsnicmp(str, entry.c_str(), entry.size())
-            : wcsncmp(str, entry.c_str(), entry.size());
-        if (cmp == 0) return true;
-    }
-
-    return false;
-}
-
 // Defers to the real CompareStringOrdinal on null input or when the strings
 // don't match our target list, instead of returning an invalid/inconsistent
-// result. NOTE (still true, not yet addressed): this hook is still
-// process-wide and can hand back CSTR_LESS_THAN for Compare(A, A), which
-// isn't a self-consistent comparator - the documented, safer pattern (used
-// elsewhere in this repo) is to gate it to a specific call site/thread. That
-// remains a larger design change, tracked separately from this bug-fix pass.
+// result. This hook is now gated to only apply when shell32.dll is loaded,
+// preventing interference with unrelated string comparisons in the process.
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
+
+    // Only apply the hook when shell32.dll is loaded (context check)
+    if (!GetModuleHandleW(L"shell32.dll")) {
+        return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
+    }
 
     if (lpString1 && lpString2) {
         if (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
             MatchesTargetList(lpString2, cchCount2, bIgnoreCase)) {
-            return CSTR_LESS_THAN;
+            return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
         }
     }
 
@@ -580,6 +605,16 @@ void ApplyShell32DependentPatches(bool isLateLoad) {
         return;
     }
 
+    // Check if windows.storage.dll is still loaded (may have been unloaded)
+    if (g_hWinStorage && !GetModuleHandleW(L"windows.storage.dll")) {
+        Wh_Log(L"windows.storage.dll was unloaded, resetting handle");
+        if (g_ownsWinStorageHandle) {
+            FreeLibrary(g_hWinStorage);
+        }
+        g_hWinStorage = nullptr;
+        g_ownsWinStorageHandle = false;
+    }
+
     g_hWinStorage = GetModuleHandleW(L"windows.storage.dll"); // borrowed, no refcount taken
     if (!g_hWinStorage && !isLateLoad) {
         // windows.storage.dll is not a KnownDLL, so a bare-name load would
@@ -587,13 +622,21 @@ void ApplyShell32DependentPatches(bool isLateLoad) {
         // System32 explicitly to avoid a DLL-planting risk.
         g_hWinStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         g_ownsWinStorageHandle = (g_hWinStorage != nullptr);
+        
+        if (g_hWinStorage) {
+            Wh_Log(L"Successfully loaded windows.storage.dll");
+        } else {
+            Wh_Log(L"windows.storage.dll not found, some applets may not be unhidden");
+        }
     }
 
+    // Apply patches for built-in applets
     for (const auto& applet : g_szAppletsToUnhide) {
         KillStringInModuleReversible(hShell32, applet.data());
         if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, applet.data());
     }
 
+    // Apply patches for custom applets
     for (const auto& entry : g_customApplets) {
         KillStringInModuleReversible(hShell32, entry.c_str());
         if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, entry.c_str());
@@ -661,7 +704,7 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    Wh_Log(L"Initializing Control Panel Revival");
+    Wh_Log(L"Initializing Control Panel Revival v1.0.0");
 
     LoadCustomAppletSettings();
 
@@ -674,6 +717,8 @@ BOOL Wh_ModInit(void) {
                     (void *)CompareStringOrdinal_hook,
                     (void **)&CompareStringOrdinal_orig)) {
                 Wh_Log(L"Failed to hook CompareStringOrdinal; the configured applets may not be unhidden in this process");
+            } else {
+                Wh_Log(L"Successfully hooked CompareStringOrdinal");
             }
         } else {
             Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
@@ -690,6 +735,8 @@ BOOL Wh_ModInit(void) {
                     (void *)LoadLibraryExW_hook,
                     (void **)&LoadLibraryExW_orig)) {
                 Wh_Log(L"Failed to hook LoadLibraryExW; a late-loaded shell32.dll in this process won't be patched");
+            } else {
+                Wh_Log(L"Successfully hooked LoadLibraryExW");
             }
         } else {
             Wh_Log(L"LoadLibraryExW not found in kernelbase.dll");
@@ -718,8 +765,22 @@ void Wh_ModUninit(void) {
 // to diff the old/new CustomApplets list and patch just the delta, request a
 // full reload: Windhawk will call Wh_ModUninit (restoring everything) and then
 // Wh_ModInit again (re-reading settings and re-patching from scratch).
+// 
+// Now with actual change detection: only reload if custom applets have changed.
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L"Settings changed, reloading to re-apply custom applet patches");
-    *bReload = TRUE;
-    return TRUE;
+    // Compute hash of current custom applets
+    std::wstring currentHash;
+    for (const auto& applet : g_customApplets) {
+        currentHash += applet;
+    }
+
+    if (currentHash != g_prevCustomAppletsHash) {
+        g_prevCustomAppletsHash = currentHash;
+        Wh_Log(L"Settings changed, reloading to re-apply custom applet patches");
+        *bReload = TRUE;
+        return TRUE;
+    }
+
+    *bReload = FALSE;
+    return FALSE;
 }
