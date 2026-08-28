@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.6
+// @version         1.5.7
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -827,9 +827,11 @@ static void QueueRefresh(uint64_t identityHash) {
     if (g_unloading) return;
 
     if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
-        std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        g_refreshing = false;
-        g_refreshAccountIdentity = 0;
+        {
+            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+            g_refreshing = false;
+            g_refreshAccountIdentity = 0;
+        }
         PostUiUpdate();
         return;
     }
@@ -6459,6 +6461,8 @@ static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT ty
                                    GetCurrentThreadId());
     if (!hook) {
         Wh_Log(L"Could not install settings MessageBox hook: %lu", GetLastError());
+        g_settingsMessageBoxContext = context.previous;
+        return context.forcedResult;
     }
 
     int result = MessageBoxW(hWnd, text, caption, type);
