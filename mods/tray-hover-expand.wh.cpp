@@ -2,7 +2,7 @@
 // @id              tray-hover-expand
 // @name            Tray hover expand
 // @description     Open the hidden tray icons flyout on hover instead of clicking the chevron; optionally collapse it when the cursor leaves
-// @version         1.6.0
+// @version         1.7.0
 // @author          wygodad
 // @github          https://github.com/wygodad
 // @include         windhawk.exe
@@ -35,14 +35,16 @@ mod in a dedicated process and does not inject into the shell.
 The "Show Hidden Icons" chevron has no language-independent unique identifier on
 Windows 11 (it shares AutomationId `SystemTrayIcon` with the clock, volume,
 battery, etc., and exposes no ExpandCollapse pattern). So detection is a hybrid:
-1. Match the button by name (the keyword list covers English and Polish by
-   default and can be extended in the settings).
+1. Match the button by name (the keyword list covers the most common Windows
+   display languages by default and can be extended in the settings).
 2. If no name matches (other languages), fall back to the leftmost tray button
    with the configured AutomationId, which is normally the chevron.
 
 ## Notes
-- For unsupported languages, add your locale's chevron name to the "Chevron name
-  keywords" setting, or rely on the leftmost-tray-icon fallback.
+- If your display language is not in the default keyword list, hover the chevron
+  with the mod disabled and add a fragment of its tooltip text to the "Chevron
+  name keywords" setting. Without a name match the mod falls back to a
+  positional guess, which can land on a different tray button.
 - If auto-collapse does not work, the flyout window class name may differ on your
   build. Change it in the "Flyout window class" setting.
 - Windows shows a "Hide" tooltip over the chevron while the flyout is open, which
@@ -78,13 +80,16 @@ języka identyfikatora (dzieli AutomationId `SystemTrayIcon` z zegarem,
 głośnością, baterią itd. i nie udostępnia wzorca ExpandCollapse). Wykrywanie
 jest więc hybrydowe:
 1. Dopasowanie przycisku po nazwie (domyślna lista słów kluczowych obejmuje
-   angielski i polski; można ją rozszerzyć w ustawieniach).
+   najpopularniejsze języki interfejsu Windows; można ją rozszerzyć w
+   ustawieniach).
 2. Gdy nazwa nie pasuje (inne języki) — pierwszy od lewej przycisk zasobnika ze
    skonfigurowanym AutomationId, którym zwykle jest strzałka.
 
 ### Uwagi
-- Dla nieobsługiwanych języków dodaj nazwę strzałki w swoim języku do ustawienia
-  „Słowa kluczowe nazwy strzałki" albo polegaj na powyższym mechanizmie zapasowym.
+- Jeśli Twojego języka wyświetlania nie ma na domyślnej liście, najedź na
+  strzałkę przy wyłączonym modzie i dodaj fragment tekstu jej podpowiedzi do
+  ustawienia „Słowa kluczowe nazwy strzałki". Bez dopasowania po nazwie mod
+  korzysta ze zgadywania po pozycji, które może trafić w inny przycisk zasobnika.
 - Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
   Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".
 - Gdy schowek jest otwarty, Windows pokazuje nad strzałką podpowiedź „Ukryj",
@@ -119,11 +124,11 @@ jest więc hybrydowe:
   $name:pl-PL: Margines obszaru najechania (piksele)
   $description: Enlarges the hover area around the chevron button.
   $description:pl-PL: Powiększa obszar najechania wokół przycisku strzałki.
-- keywords: ["ukryte ikony", "hidden icons", "rozwiń", "overflow"]
+- keywords: ["hidden icons", "ukryte ikony", "rozwiń", "verborgen pictogrammen", "ausgeblendete symbole", "icônes masquées", "iconos ocultos", "icone nascoste", "ícones ocultos", "skryté ikony", "rejtett ikonok", "pictograme ascunse", "dolda ikoner", "skjulte ikoner", "piilotetut kuvakkeet", "gizli simgeleri", "скрытые значки", "приховані піктограми", "κρυφών εικονιδίων", "隐藏的图标", "隱藏的圖示", "隠れている", "숨겨진 아이콘", "overflow"]
   $name: Chevron name keywords
   $name:pl-PL: Słowa kluczowe nazwy strzałki
-  $description: Case-insensitive substrings used to match the chevron button name. Add your locale's name for "Show Hidden Icons" here.
-  $description:pl-PL: Fragmenty nazwy przycisku strzałki (wielkość liter bez znaczenia). Dodaj tu nazwę „Pokaż ukryte ikony" w swoim języku.
+  $description: Case-insensitive substrings used to match the chevron button name. The most common Windows display languages are covered by default. If yours is missing, hover the chevron with the mod disabled and add a fragment of the tooltip text here.
+  $description:pl-PL: Fragmenty nazwy przycisku strzałki (wielkość liter bez znaczenia). Domyślnie pokryte są najpopularniejsze języki interfejsu Windows. Jeśli brakuje Twojego, najedź na strzałkę przy wyłączonym modzie i dodaj tu fragment tekstu podpowiedzi.
 - suppressInFullscreen: true
   $name: Do not activate over fullscreen apps
   $name:pl-PL: Nie aktywuj na aplikacjach pełnoekranowych
@@ -174,8 +179,35 @@ struct Settings {
     std::wstring flyoutClass = L"TopLevelWindowForOverflowXamlIsland";
     std::wstring tooltipClass = L"Xaml_WindowedPopupClass";
     std::wstring trayIconAutomationId = L"SystemTrayIcon";
+    // Fragments of the chevron's name ("Show hidden icons") across the most
+    // common Windows display languages. Each entry is a distinctive part of the
+    // name rather than the whole string, so wording differences between builds
+    // still match.
     std::vector<std::wstring> keywords = {
-        L"ukryte ikony", L"hidden icons", L"rozwiń", L"overflow"
+        L"hidden icons",            // English
+        L"ukryte ikony",            // Polish
+        L"rozwiń",                  // Polish (alternative wording)
+        L"verborgen pictogrammen",  // Dutch
+        L"ausgeblendete symbole",   // German
+        L"icônes masquées",         // French
+        L"iconos ocultos",          // Spanish
+        L"icone nascoste",          // Italian
+        L"ícones ocultos",          // Portuguese
+        L"skryté ikony",            // Czech, Slovak
+        L"rejtett ikonok",          // Hungarian
+        L"pictograme ascunse",      // Romanian
+        L"dolda ikoner",            // Swedish
+        L"skjulte ikoner",          // Danish, Norwegian
+        L"piilotetut kuvakkeet",    // Finnish
+        L"gizli simgeleri",         // Turkish
+        L"скрытые значки",          // Russian
+        L"приховані піктограми",    // Ukrainian
+        L"κρυφών εικονιδίων",       // Greek
+        L"隐藏的图标",                // Chinese (Simplified)
+        L"隱藏的圖示",                // Chinese (Traditional)
+        L"隠れている",                // Japanese
+        L"숨겨진 아이콘",             // Korean
+        L"overflow"                 // generic fallback
     };
 };
 
@@ -197,9 +229,14 @@ static Settings GetSettingsSnapshot() {
     return s;
 }
 
+// CharLowerBuffW is used instead of towlower because the latter follows the C
+// locale and would leave non-ASCII letters (Cyrillic, Greek, ...) untouched,
+// breaking case-insensitive matching for those locales.
 static std::wstring ToLower(const std::wstring& s) {
     std::wstring r = s;
-    std::transform(r.begin(), r.end(), r.begin(), ::towlower);
+    if (!r.empty()) {
+        CharLowerBuffW(&r[0], (DWORD)r.size());
+    }
     return r;
 }
 
