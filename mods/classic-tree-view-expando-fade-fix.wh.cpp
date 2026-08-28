@@ -19,11 +19,11 @@ render expandos in classic theme. This mod fixes that bug, restoring the previou
 
 **Before**:
 
-![Before](https://github.com/aubymori/images/blob/main/classic-tree-view-expando-fade-fix/before.png?raw=true)
+![Before](https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/before.png)
 
 **After**:
 
-![After](https://github.com/aubymori/images/blob/main/classic-tree-view-expando-fade-fix/after.png?raw=true)
+![After](https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/after.png)
 */
 // ==/WindhawkModReadme==
 
