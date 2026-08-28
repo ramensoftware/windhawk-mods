@@ -98,6 +98,7 @@ HANDLE g_hThreadReadyEvent = nullptr;
 
 constexpr UINT WM_APP_REFRESH_STATE = WM_APP + 1;
 constexpr UINT WM_APP_STOP_THREAD = WM_APP + 2;
+constexpr WPARAM kRefreshNativeAutoHide = 1;
 constexpr UINT kHoverTimerIntervalMs = 200;
 
 UINT_PTR g_hoverTimerId = 0;
