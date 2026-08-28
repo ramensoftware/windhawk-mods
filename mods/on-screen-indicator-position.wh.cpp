@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
-// @version         1.2.5
+// @version         1.2.6
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -266,6 +266,9 @@ std::atomic<Indicator> g_currentIndicator{Indicator::unknown};
 // per placement.
 std::atomic<bool> g_kindUnreliable{false};
 
+// Must match the `position` default in the settings block above.
+constexpr Position kDefaultPosition = Position::topRight;
+
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
 // confirmator's UI thread, so the members are atomic. Each field is still read
 // separately, so a settings change landing mid-placement can put one indicator
@@ -283,6 +286,16 @@ struct {
 } g_settings;
 
 // The position to place the indicator that is being shown right now.
+bool AnyPerIndicator() {
+    for (size_t i = 0; i < (size_t)Indicator::count; i++) {
+        if (g_settings.perIndicator[i].load() != Position::windowsDefault) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 Position CurrentPosition() {
     if (g_kindUnreliable.load()) {
         return g_settings.position.load();
@@ -546,8 +559,8 @@ void LoadSettings() {
     // windowsDefault. Left as windowsDefault it would trip the "nothing to do"
     // check in Wh_ModInit and the mod would sit there doing nothing.
     PCWSTR storedPosition = position.get();
-    g_settings.position = *storedPosition ? PositionFromString(storedPosition)
-                                          : Position::topRight;
+    g_settings.position =
+        *storedPosition ? PositionFromString(storedPosition) : kDefaultPosition;
 
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
@@ -581,13 +594,7 @@ BOOL Wh_ModInit() {
     // Nothing to place and nothing to nudge, so don't load the DLL or install a
     // hook that would only pass the rect straight through. Windhawk reloads the
     // mod after a settings change, so it comes back as soon as there is work.
-    bool anyPerIndicator = false;
-    for (size_t i = 0; i < (size_t)Indicator::count; i++) {
-        if (g_settings.perIndicator[i] != Position::windowsDefault) {
-            anyPerIndicator = true;
-            break;
-        }
-    }
+    bool anyPerIndicator = AnyPerIndicator();
 
     if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
         !g_settings.offsetX && !g_settings.offsetY) {
@@ -661,8 +668,14 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
-                     ARRAYSIZE(symbolHooks))) {
+    // The placement hook is the first entry and is always needed. The eight that
+    // record which kind is being shown only matter when a kind has a spot of its
+    // own, and with the shipped defaults none does, so they aren't installed at
+    // all rather than patching eight entry points to write a value that would be
+    // thrown away.
+    size_t hookCount = anyPerIndicator ? ARRAYSIZE(symbolHooks) : 1;
+
+    if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks, hookCount)) {
         Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
@@ -671,25 +684,27 @@ BOOL Wh_ModInit() {
     // a null here means that kind would never be recorded and every kind after
     // it would be placed using a stale one. Rather than misplace an indicator,
     // drop to the main position for everything and say so in the log.
-    const void* kindRecorders[] = {
-        (void*)ShowVolumeAsync_Original,
-        (void*)ShowBrightnessAsync_Original,
-        (void*)ShowKeyboardBrightnessAsync_Original,
-        (void*)ShowAirplaneModeOnAsync_Original,
-        (void*)ShowCameraOnAsync_Original,
-        (void*)ShowCameraAccessEnabledAsync_Original,
-        (void*)ShowMicrophoneMutedAsync_Original,
-        (void*)ShowTextAsync_Original,
-    };
+    if (anyPerIndicator) {
+        const void* kindRecorders[] = {
+            (void*)ShowVolumeAsync_Original,
+            (void*)ShowBrightnessAsync_Original,
+            (void*)ShowKeyboardBrightnessAsync_Original,
+            (void*)ShowAirplaneModeOnAsync_Original,
+            (void*)ShowCameraOnAsync_Original,
+            (void*)ShowCameraAccessEnabledAsync_Original,
+            (void*)ShowMicrophoneMutedAsync_Original,
+            (void*)ShowTextAsync_Original,
+        };
 
-    for (const void* recorder : kindRecorders) {
-        if (!recorder) {
-            Wh_Log(
-                L"An indicator entry point didn't resolve, so the position per "
-                L"indicator settings are ignored and everything uses the main "
-                L"position");
-            g_kindUnreliable = true;
-            break;
+        for (const void* recorder : kindRecorders) {
+            if (!recorder) {
+                Wh_Log(
+                    L"An indicator entry point didn't resolve, so the position "
+                    L"per indicator settings are ignored and everything uses "
+                    L"the main position");
+                g_kindUnreliable = true;
+                break;
+            }
         }
     }
 
@@ -698,10 +713,25 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    // The hooks are already gone by this point, so handing back the reference
+    // taken in Wh_ModInit is safe. Without this every enable and disable cycle
+    // leaves one behind.
+    if (g_hardwareConfirmatorModule) {
+        FreeLibrary(g_hardwareConfirmatorModule);
+        g_hardwareConfirmatorModule = nullptr;
+    }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
+    // Whether the kind recorders are installed is decided in Wh_ModInit, so
+    // turning the first override on, or the last one off, needs a reload to
+    // match. Everything else takes effect on the next indicator.
+    bool hadPerIndicator = AnyPerIndicator();
     LoadSettings();
+    *bReload = AnyPerIndicator() != hadPerIndicator;
+
+    return TRUE;
 }
