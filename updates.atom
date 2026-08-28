@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-28T20:24:38.000Z</updated>
+    <updated>2026-08-28T20:30:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Tree View Expando Fade Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-tree-view-expando-fade-fix#f5ce429ffd771669f3038072c678c8c2a9e25579</id>
+        <link href="https://windhawk.net/mods/classic-tree-view-expando-fade-fix"/>
+        <updated>2026-08-28T20:30:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictreeviewexpandofadefix">Classic Tree View Expando Fade Fix</h1>
+<p>In newer versions of Windows 10, tree views with the extended style
+<code>TVS_EX_FADEINOUTEXPANDOS</code> (most notably the Explorer navigation pane) fail to
+render expandos in classic theme. This mod fixes that bug, restoring the previous behavior.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mix Files and Folders When Sorting in Windows Explorer 1.5]]></title>
         <id>https://windhawk.net/mods/mix-files-and-folders-sorting#e087a203889a8e5c177ae18722c883f09559b5b1</id>
@@ -636,34 +654,6 @@ and deleted by the cleanup pass of a later load or unload.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Search on Active Display 1.1.0]]></title>
-        <id>https://windhawk.net/mods/search-active-display#782f5af4ee10ffeefc60227ec7bc30c32c884236</id>
-        <link href="https://windhawk.net/mods/search-active-display"/>
-        <updated>2026-08-22T15:37:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="searchonactivedisplay">Search on Active Display</h1>
-<p>Opens the Windows Search (Win+S) on the monitor where the mouse cursor is
-located, or on a specific monitor of choice.</p>
-<p>Works for both Win+S shortcut and taskbar search icon click.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks MonitorFromWindow and MonitorFromRect inside SearchHost.exe.
-When SearchHost queries which monitor its CoreWindow is on, the mod returns
-the target monitor (where the cursor is, or a fixed monitor). It also
-physically repositions the CoreWindow to the correct monitor coordinates
-so the DWM compositor renders it there.</p>
-<h2 id="selectingamonitor">Selecting a monitor</h2>
-<p>Set the <strong>Monitor</strong> setting to 0 to follow the mouse cursor, or to a
-specific monitor number (1, 2, 3…). You can also use a monitor interface
-name for stable identification across reboots.</p>
-<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
-<ul>
-<li>Windows 11 22H2 and 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>ereinaimer</name>
-            <uri>https://github.com/ereinaimer</uri>
         </author>
     </entry>
 </feed>

@@ -2523,6 +2523,35 @@
         "version": "1.0"
       }
     },
+    "classic-tree-view-expando-fade-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1787949008000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1787949008000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "aubymori",
+        "compilerOptions": "-lversion",
+        "description": "Fixes tree view expand and collapse buttons on the classic theme",
+        "github": "https://github.com/aubymori",
+        "include": [
+          "*"
+        ],
+        "license": "BSD-3-Clause",
+        "name": "Classic Tree View Expando Fade Fix",
+        "version": "1.0.0"
+      }
+    },
     "classic-uwp-fix": {
       "details": {
         "defaultSorting": 5508,
