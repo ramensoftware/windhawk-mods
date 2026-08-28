@@ -32,19 +32,25 @@ mod in a dedicated process and does not inject into the shell.
   hover (and optionally closes it when you move away).
 
 ## How the chevron is detected
-The "Show Hidden Icons" chevron has no language-independent unique identifier on
-Windows 11 (it shares AutomationId `SystemTrayIcon` with the clock, volume,
-battery, etc., and exposes no ExpandCollapse pattern). So detection is a hybrid:
-1. Match the button by name (the keyword list covers the most common Windows
-   display languages by default and can be extended in the settings).
-2. If no name matches (other languages), fall back to the leftmost tray button
-   with the configured AutomationId, which is normally the chevron.
+Only tray elements are ever considered, so no taskbar application button can be
+selected. Among those, detection goes:
+1. By class name, which is language-independent: the chevron is the only tray
+   element whose class name is `SystemTray.NormalButton` while its AutomationId
+   is `SystemTrayIcon`. Notification icons share the class but use a different
+   AutomationId, and the clock, volume, network, battery and "show desktop"
+   buttons share the AutomationId but use other classes.
+2. By name, in case a future Windows build renames those classes. The keyword
+   list covers the most common display languages and can be extended.
+3. Otherwise nothing happens. The mod does not guess, because invoking an
+   unidentified tray button would open whatever it happens to be.
 
 ## Notes
-- If your display language is not in the default keyword list, hover the chevron
-  with the mod disabled and add a fragment of its tooltip text to the "Chevron
-  name keywords" setting. Without a name match the mod falls back to a
-  positional guess, which can land on a different tray button.
+- If the chevron is not identified, the mod logs every tray candidate it saw
+  (class name, AutomationId, position, name). That log is what to attach to a
+  bug report.
+- Updating the mod does not change settings you have already saved. If you saved
+  settings before v1.7.0, reset "Chevron name keywords" to pick up the new
+  defaults.
 - If auto-collapse does not work, the flyout window class name may differ on your
   build. Change it in the "Flyout window class" setting.
 - Windows shows a "Hide" tooltip over the chevron while the flyout is open, which
@@ -75,21 +81,25 @@ Działa jako „tool mod" w osobnym procesie i nie wstrzykuje się do powłoki.
   najechaniu (a opcjonalnie zamyka po odjechaniu kursorem).
 
 ### Jak wykrywana jest strzałka
-Strzałka „Pokaż ukryte ikony" nie ma w Windows 11 unikalnego, niezależnego od
-języka identyfikatora (dzieli AutomationId `SystemTrayIcon` z zegarem,
-głośnością, baterią itd. i nie udostępnia wzorca ExpandCollapse). Wykrywanie
-jest więc hybrydowe:
-1. Dopasowanie przycisku po nazwie (domyślna lista słów kluczowych obejmuje
-   najpopularniejsze języki interfejsu Windows; można ją rozszerzyć w
-   ustawieniach).
-2. Gdy nazwa nie pasuje (inne języki) — pierwszy od lewej przycisk zasobnika ze
-   skonfigurowanym AutomationId, którym zwykle jest strzałka.
+Brane pod uwagę są wyłącznie elementy zasobnika, więc żaden przycisk aplikacji
+z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
+1. Po nazwie klasy, niezależnie od języka: strzałka jest jedynym elementem
+   zasobnika o klasie `SystemTray.NormalButton` i jednocześnie AutomationId
+   `SystemTrayIcon`. Ikony powiadomień mają tę samą klasę, ale inne
+   AutomationId, a zegar, głośność, sieć, bateria i „pokaż pulpit" mają to samo
+   AutomationId, ale inne klasy.
+2. Po nazwie, na wypadek gdyby przyszła kompilacja Windows zmieniła te klasy.
+   Lista słów kluczowych obejmuje najpopularniejsze języki i można ją rozszerzyć.
+3. W przeciwnym razie nic się nie dzieje. Mod nie zgaduje, bo uruchomienie
+   nierozpoznanego przycisku zasobnika otworzyłoby cokolwiek, czym on jest.
 
 ### Uwagi
-- Jeśli Twojego języka wyświetlania nie ma na domyślnej liście, najedź na
-  strzałkę przy wyłączonym modzie i dodaj fragment tekstu jej podpowiedzi do
-  ustawienia „Słowa kluczowe nazwy strzałki". Bez dopasowania po nazwie mod
-  korzysta ze zgadywania po pozycji, które może trafić w inny przycisk zasobnika.
+- Gdy strzałka nie zostanie rozpoznana, mod zapisuje w logu wszystkich
+  kandydatów z zasobnika (nazwa klasy, AutomationId, pozycja, nazwa). To ten log
+  warto dołączyć do zgłoszenia błędu.
+- Aktualizacja moda nie zmienia ustawień, które zostały już zapisane. Jeśli
+  zapisywałeś ustawienia przed wersją 1.7.0, przywróć domyślne w polu „Słowa
+  kluczowe nazwy strzałki", aby otrzymać nową listę.
 - Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
   Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".
 - Gdy schowek jest otwarty, Windows pokazuje nad strzałką podpowiedź „Ukryj",
@@ -124,11 +134,21 @@ jest więc hybrydowe:
   $name:pl-PL: Margines obszaru najechania (piksele)
   $description: Enlarges the hover area around the chevron button.
   $description:pl-PL: Powiększa obszar najechania wokół przycisku strzałki.
-- keywords: ["hidden icons", "ukryte ikony", "rozwiń", "verborgen pictogrammen", "ausgeblendete symbole", "icônes masquées", "iconos ocultos", "icone nascoste", "ícones ocultos", "skryté ikony", "rejtett ikonok", "pictograme ascunse", "dolda ikoner", "skjulte ikoner", "piilotetut kuvakkeet", "gizli simgeleri", "скрытые значки", "приховані піктограми", "κρυφών εικονιδίων", "隐藏的图标", "隱藏的圖示", "隠れている", "숨겨진 아이콘", "overflow"]
+- keywords: ["hidden icons", "ukryte ikony", "verborgen pictogrammen", "ausgeblendete symbole", "icônes masquées", "iconos ocultos", "icone nascoste", "ícones ocultos", "skryté ikony", "rejtett ikonok", "pictograme ascunse", "dolda ikoner", "skjulte ikoner", "piilotetut kuvakkeet", "gizli simgeleri", "скрытые значки", "приховані піктограми", "κρυφών εικονιδίων", "隐藏的图标", "隱藏的圖示", "隠れている", "숨겨진 아이콘"]
   $name: Chevron name keywords
   $name:pl-PL: Słowa kluczowe nazwy strzałki
-  $description: Case-insensitive substrings used to match the chevron button name. The most common Windows display languages are covered by default. If yours is missing, hover the chevron with the mod disabled and add a fragment of the tooltip text here.
-  $description:pl-PL: Fragmenty nazwy przycisku strzałki (wielkość liter bez znaczenia). Domyślnie pokryte są najpopularniejsze języki interfejsu Windows. Jeśli brakuje Twojego, najedź na strzałkę przy wyłączonym modzie i dodaj tu fragment tekstu podpowiedzi.
+  $description: Only used when the chevron cannot be identified by its class name. Case-insensitive substrings, matched against tray buttons only. The most common Windows display languages are covered by default.
+  $description:pl-PL: Używane tylko wtedy, gdy strzałki nie da się rozpoznać po nazwie klasy. Fragmenty nazwy (wielkość liter bez znaczenia), porównywane wyłącznie z przyciskami zasobnika. Domyślnie pokryte są najpopularniejsze języki interfejsu Windows.
+- chevronClass: SystemTray.NormalButton
+  $name: Chevron class name
+  $name:pl-PL: Nazwa klasy strzałki
+  $description: Primary, language-independent identification. The chevron is the only tray element that has this class name together with the AutomationId below. Change it if a future Windows build renames it.
+  $description:pl-PL: Podstawowe rozpoznawanie, niezależne od języka. Strzałka jest jedynym elementem zasobnika, który ma tę nazwę klasy razem z poniższym AutomationId. Zmień ją, jeśli przyszła kompilacja Windows zmieni nazwę.
+- positionalFallback: false
+  $name: Guess the chevron by position as a last resort
+  $name:pl-PL: W ostateczności zgaduj strzałkę po pozycji
+  $description: When the chevron matches neither the class name nor any keyword, assume it is the leftmost tray button. This is a guess and can select a different button, such as Quick Settings, so it is off by default and the mod simply does nothing instead.
+  $description:pl-PL: Gdy strzałka nie pasuje ani do nazwy klasy, ani do żadnego słowa kluczowego, uznaje za nią pierwszy od lewej przycisk zasobnika. To zgadywanie i może trafić w inny przycisk, na przykład Szybkie ustawienia, dlatego domyślnie jest wyłączone, a mod po prostu nic nie robi.
 - suppressInFullscreen: true
   $name: Do not activate over fullscreen apps
   $name:pl-PL: Nie aktywuj na aplikacjach pełnoekranowych
@@ -163,7 +183,6 @@ jest więc hybrydowe:
 #include <atomic>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 #ifndef __IUIAutomation_FWD_DEFINED__
 #error "UI Automation headers are missing"
@@ -176,9 +195,11 @@ struct Settings {
     int pad = 4;
     bool hideTooltip = false;
     bool suppressInFullscreen = true;
+    bool positionalFallback = false;
     std::wstring flyoutClass = L"TopLevelWindowForOverflowXamlIsland";
     std::wstring tooltipClass = L"Xaml_WindowedPopupClass";
     std::wstring trayIconAutomationId = L"SystemTrayIcon";
+    std::wstring chevronClass = L"SystemTray.NormalButton";
     // Fragments of the chevron's name ("Show hidden icons") across the most
     // common Windows display languages. Each entry is a distinctive part of the
     // name rather than the whole string, so wording differences between builds
@@ -186,7 +207,6 @@ struct Settings {
     std::vector<std::wstring> keywords = {
         L"hidden icons",            // English
         L"ukryte ikony",            // Polish
-        L"rozwiń",                  // Polish (alternative wording)
         L"verborgen pictogrammen",  // Dutch
         L"ausgeblendete symbole",   // German
         L"icônes masquées",         // French
@@ -206,10 +226,16 @@ struct Settings {
         L"隐藏的图标",                // Chinese (Simplified)
         L"隱藏的圖示",                // Chinese (Traditional)
         L"隠れている",                // Japanese
-        L"숨겨진 아이콘",             // Korean
-        L"overflow"                 // generic fallback
+        L"숨겨진 아이콘"              // Korean
     };
+    // Lowercased copy of `keywords`, built once in LoadSettings so that name
+    // matching does not lowercase every keyword for every candidate element.
+    std::vector<std::wstring> keywordsLower;
 };
+
+// UIA class names of tray elements all share this prefix, which is what makes
+// it possible to exclude the rest of the taskbar from the search.
+static const std::wstring TRAY_CLASS_PREFIX = L"SystemTray.";
 
 // g_settings is guarded by g_settingsLock; the worker thread keeps a private
 // snapshot and refreshes it when g_settingsGeneration changes, so it never
@@ -242,8 +268,8 @@ static std::wstring ToLower(const std::wstring& s) {
 
 static bool NameMatches(const std::wstring& name, const Settings& s) {
     std::wstring low = ToLower(name);
-    for (const auto& k : s.keywords) {
-        if (!k.empty() && low.find(ToLower(k)) != std::wstring::npos) return true;
+    for (const auto& k : s.keywordsLower) {
+        if (!k.empty() && low.find(k) != std::wstring::npos) return true;
     }
     return false;
 }
@@ -302,13 +328,31 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     v.vt = VT_I4; v.lVal = UIA_ButtonControlTypeId;
     pAuto->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &pCond);
 
-    // Hybrid strategy:
-    //  1) match by name (reliable for configured languages),
-    //  2) fallback: the leftmost button with the configured AutomationId
-    //     (language-independent but heuristic) — used only when no name matches.
-    IUIAutomationElement* nameMatch = nullptr;
-    IUIAutomationElement* leftmost = nullptr;
-    LONG leftmostX = 0;
+    // The Shell_TrayWnd subtree contains every taskbar button: Start, Search,
+    // the task list entries, and only then the tray. Candidates are therefore
+    // restricted to tray elements first, so that neither a name keyword nor the
+    // positional fallback can ever select an application button (whose name is
+    // the window title and can contain anything).
+    //
+    // Three-step detection, most reliable first:
+    //  1) class name + AutomationId, which is language-independent: the chevron
+    //     is the only tray element that is a `chevronClass` button carrying
+    //     `trayIconAutomationId`. Notification icons share the class but use a
+    //     different AutomationId, and the clock, volume, network, battery and
+    //     "show desktop" buttons share the AutomationId but use other classes.
+    //  2) match by name, for builds where those class names change.
+    //  3) nothing: when the chevron cannot be identified, no element is
+    //     returned. Invoking an unidentified tray button would open whatever it
+    //     happens to be, which is how the chevron was mistaken for Quick
+    //     Settings in the field, so guessing is opt-in only.
+    struct Candidate {
+        IUIAutomationElement* el;
+        std::wstring className;
+        std::wstring automationId;
+        std::wstring name;
+        RECT rect;
+    };
+    std::vector<Candidate> cands;
 
     IUIAutomationElementArray* pArr = nullptr;
     if (pCond && SUCCEEDED(pRoot->FindAll(TreeScope_Subtree, pCond, &pArr)) && pArr) {
@@ -317,43 +361,114 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
             IUIAutomationElement* e = nullptr;
             if (FAILED(pArr->GetElement(i, &e)) || !e) continue;
 
-            BSTR name = nullptr;
-            e->get_CurrentName(&name);
-            bool matched = (name && NameMatches(name, s));
-            if (name) SysFreeString(name);
-            if (matched) {
-                nameMatch = e;           // keep the reference; a name match wins
-                break;
-            }
+            BSTR cls = nullptr;
+            e->get_CurrentClassName(&cls);
+            std::wstring className = cls ? cls : L"";
+            if (cls) SysFreeString(cls);
 
-            // Fallback candidate: a tray button with the configured AutomationId.
             BSTR aid = nullptr;
             e->get_CurrentAutomationId(&aid);
-            bool isTrayIcon = (aid && s.trayIconAutomationId == aid);
+            std::wstring automationId = aid ? aid : L"";
             if (aid) SysFreeString(aid);
 
-            if (isTrayIcon) {
-                RECT r;
-                if (SUCCEEDED(e->get_CurrentBoundingRectangle(&r)) &&
-                    (!leftmost || r.left < leftmostX)) {
-                    if (leftmost) leftmost->Release();
-                    leftmost = e;        // keep the new leftmost candidate
-                    leftmostX = r.left;
-                    e = nullptr;
-                }
+            // Only tray elements are eligible; everything else on the taskbar
+            // is discarded before any name or position test is applied. Without
+            // this, a task list button (named after its window title) could
+            // match a keyword and then be invoked.
+            bool isTrayElement =
+                className.compare(0, TRAY_CLASS_PREFIX.size(), TRAY_CLASS_PREFIX) == 0 ||
+                automationId == s.trayIconAutomationId;
+            if (!isTrayElement) { e->Release(); continue; }
+
+            // Elements that are not rendered report an empty {0,0,0,0}
+            // rectangle, which would otherwise pass every geometric test.
+            BOOL offscreen = FALSE;
+            RECT r{};
+            if (FAILED(e->get_CurrentIsOffscreen(&offscreen)) || offscreen ||
+                FAILED(e->get_CurrentBoundingRectangle(&r)) ||
+                r.right <= r.left || r.bottom <= r.top) {
+                e->Release();
+                continue;
             }
-            if (e) e->Release();
+
+            BSTR nm = nullptr;
+            e->get_CurrentName(&nm);
+            std::wstring name = nm ? nm : L"";
+            if (nm) SysFreeString(nm);
+
+            cands.push_back({e, className, automationId, name, r});
         }
         pArr->Release();
     }
     if (pCond) pCond->Release();
     pRoot->Release();
 
-    if (nameMatch) {
-        if (leftmost) leftmost->Release();
-        return nameMatch;
+    int chosen = -1;
+
+    // 1) Language-independent identification, accepted only when it is
+    // unambiguous. If a future build gives several tray elements this same
+    // signature, picking one of them arbitrarily would be a guess.
+    int classMatches = 0, firstClassMatch = -1;
+    for (size_t i = 0; i < cands.size(); i++) {
+        if (cands[i].className == s.chevronClass &&
+            cands[i].automationId == s.trayIconAutomationId) {
+            classMatches++;
+            if (firstClassMatch < 0) firstClassMatch = (int)i;
+        }
     }
-    return leftmost;   // nullptr if nothing matched
+    if (classMatches == 1) {
+        chosen = firstClassMatch;
+    } else if (classMatches > 1) {
+        Wh_Log(L"%d tray elements share the chevron signature, falling back to name",
+               classMatches);
+    }
+
+    // 2) Name match, for builds where the class names change.
+    if (chosen < 0) {
+        for (size_t i = 0; i < cands.size(); i++) {
+            if (NameMatches(cands[i].name, s)) {
+                chosen = (int)i;
+                Wh_Log(L"Chevron matched by name, not by class name");
+                break;
+            }
+        }
+    }
+
+    // 3) Optional positional guess, off by default.
+    if (chosen < 0 && s.positionalFallback) {
+        for (size_t i = 0; i < cands.size(); i++) {
+            if (cands[i].automationId != s.trayIconAutomationId) continue;
+            if (chosen < 0 || cands[i].rect.left < cands[chosen].rect.left) {
+                chosen = (int)i;
+            }
+        }
+        if (chosen >= 0) {
+            Wh_Log(L"Chevron guessed by position: name=%s class=%s x=%d",
+                   cands[chosen].name.c_str(), cands[chosen].className.c_str(),
+                   (int)cands[chosen].rect.left);
+        }
+    }
+
+    // Nothing identified: dump the candidates so that a single log makes the
+    // next unsupported build actionable, and do not touch anything.
+    if (chosen < 0) {
+        Wh_Log(L"Chevron not identified among %d tray candidates:", (int)cands.size());
+        for (size_t i = 0; i < cands.size(); i++) {
+            Wh_Log(L"  [%d] class=%s aid=%s x=%d name=%s", (int)i,
+                   cands[i].className.c_str(), cands[i].automationId.c_str(),
+                   (int)cands[i].rect.left, cands[i].name.c_str());
+        }
+    }
+
+    IUIAutomationElement* result = nullptr;
+    for (size_t i = 0; i < cands.size(); i++) {
+        if ((int)i == chosen) {
+            result = cands[i].el;
+        } else {
+            cands[i].el->Release();
+        }
+    }
+    return result;
 }
 
 static bool PtInRectPad(const RECT& r, POINT pt, int pad) {
@@ -390,9 +505,20 @@ static bool PtOverWindow(HWND hwnd, POINT pt) {
 // overlapping it and sitting at or above its top, i.e. inside the flyout zone)
 // are hidden — never popups elsewhere on screen.
 static void HideChevronTooltip(const Settings& s, const RECT& chevron) {
+    // The tooltip class is the generic WinUI popup host, used by many apps, so
+    // only windows owned by the taskbar's own process are eligible. Without
+    // this, another application's popup could be hidden with no way for the
+    // user to bring it back.
+    DWORD taskbarPid = 0;
+    GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &taskbarPid);
+    if (!taskbarPid) return;
+
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, s.tooltipClass.c_str(), nullptr))) {
         if (!IsWindowVisible(h)) continue;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid != taskbarPid) continue;
         RECT r;
         if (!GetWindowRect(h, &r)) continue;
         bool overlapsX = r.left <= chevron.right && r.right >= chevron.left;
@@ -433,6 +559,11 @@ static bool IsForegroundFullscreen() {
 // ---- Worker thread ----
 
 static DWORD WINAPI WorkerThread(LPVOID) {
+    // UIA bounding rectangles are physical screen coordinates. Without per
+    // monitor v2 awareness, GetCursorPos and GetWindowRect would be virtualized
+    // on mixed-DPI setups and the hover test would compare different spaces.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     IUIAutomation* pAuto = nullptr;
@@ -462,9 +593,13 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     while (g_running) {
         ULONGLONG now = GetTickCount64();
 
-        if (g_settingsGeneration != settingsGen) {
+        // Read the generation before taking the snapshot. LoadSettings publishes
+        // the settings and only then bumps the counter, so reading it afterwards
+        // could record an update as already applied and drop it.
+        int gen = g_settingsGeneration;
+        if (gen != settingsGen) {
             s = GetSettingsSnapshot();
-            settingsGen = g_settingsGeneration;
+            settingsGen = gen;
             // Settings may change how the chevron is detected, so drop the
             // cached element and re-detect promptly with the new settings.
             if (pBtn) { pBtn->Release(); pBtn = nullptr; }
@@ -610,6 +745,7 @@ static void LoadSettings() {
     s.pad = (int)Wh_GetIntSetting(L"pad");
     s.hideTooltip = Wh_GetIntSetting(L"hideTooltip") != 0;
     s.suppressInFullscreen = Wh_GetIntSetting(L"suppressInFullscreen") != 0;
+    s.positionalFallback = Wh_GetIntSetting(L"positionalFallback") != 0;
     if (s.pollInterval < 10) s.pollInterval = 10;
     if (s.grace < 0) s.grace = 0;
 
@@ -627,6 +763,10 @@ static void LoadSettings() {
     if (*aid) s.trayIconAutomationId = aid;
     Wh_FreeStringSetting(aid);
 
+    PCWSTR cc = Wh_GetStringSetting(L"chevronClass");
+    if (*cc) s.chevronClass = cc;
+    Wh_FreeStringSetting(cc);
+
     std::vector<std::wstring> keywords;
     for (int i = 0;; i++) {
         PCWSTR k = Wh_GetStringSetting(L"keywords[%d]", i);
@@ -636,6 +776,9 @@ static void LoadSettings() {
         if (empty) break;
     }
     if (!keywords.empty()) s.keywords = std::move(keywords);
+
+    s.keywordsLower.reserve(s.keywords.size());
+    for (const auto& k : s.keywords) s.keywordsLower.push_back(ToLower(k));
 
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = std::move(s);
@@ -673,8 +816,9 @@ void WhTool_ModUninit() {
         SetEvent(g_stopEvent);
     }
     if (g_thread) {
-        // Safe to wait without a timeout: the worker only blocks in the
-        // interruptible wait above, so it exits promptly once signaled.
+        // Safe to wait without a timeout: the stop event interrupts the poll
+        // sleep, and the cross-process UIA calls the worker can be inside have
+        // their own timeouts, so the wait is bounded even if the shell is busy.
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
@@ -800,7 +944,8 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
+    WCHAR
+    commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
@@ -815,9 +960,13 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
-        LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID, LPCWSTR,
-        LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
