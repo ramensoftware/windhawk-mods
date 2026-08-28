@@ -2,12 +2,13 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.2
+// @version         0.9.3
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         control.exe
 // @include         rundll32.exe
+// @architecture    x86-64
 // @compilerOptions -lpsapi -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -41,10 +42,12 @@ You can also add the ID of your desired applet to prevent it from being redirect
     ones. For GUID-based applets you can enter just the GUID, with or without
     braces (e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE or
     {BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) — the "::" prefix is added
-    automatically. Canonical names (e.g. Microsoft.SomeApplet) can be entered
-    as-is. One entry per row. IMPORTANT: an empty row ends the list — any
-    rows after a blank one are ignored, so don't leave gaps in the middle.
-    The mod reloads automatically after saving.
+    automatically. Canonical names (e.g. Microsoft.SomeApplet) must be at
+    least 8 characters and contain a dot, same shape as Microsoft's own
+    names — this is a safety floor, not a real validation of the name.
+    One entry per row. IMPORTANT: an empty row ends the list — any rows
+    after a blank one are ignored, so don't leave gaps in the middle. The
+    mod reloads automatically after saving.
 */
 // ==/WindhawkModSettings==
 
@@ -53,11 +56,16 @@ You can also add the ID of your desired applet to prevent it from being redirect
 #include <windhawk_utils.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
+#include <algorithm>
 #include <cwctype>
 
-// These applets exist but they redirect to the modern Settings app on 23H2+
-LPCWSTR g_szAppletsToUnhide[] = {
+// These applets exist but they redirect to the modern Settings app on 23H2+.
+// constexpr std::wstring_view (rather than LPCWSTR) so .size() is computed
+// once at compile time instead of via wcslen() on every single
+// CompareStringOrdinal call in the process (see MatchesTargetList below).
+constexpr std::wstring_view g_szAppletsToUnhide[] = {
     L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
     L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", // Devices and Printers
     L"::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}", // Installed Updates
@@ -66,7 +74,7 @@ LPCWSTR g_szAppletsToUnhide[] = {
     L"::{BD84B380-8CA2-1069-AB1D-08000948F534}", // Fonts
 };
 
-LPCWSTR g_szCanonicalNames[] = {
+constexpr std::wstring_view g_szCanonicalNames[] = {
     L"Microsoft.Troubleshooting",
     L"Microsoft.DevicesAndPrinters",
     L"Microsoft.System",
@@ -75,16 +83,21 @@ LPCWSTR g_szCanonicalNames[] = {
     L"Microsoft.Fonts"
 };
 
-// Structure to save original bytes for safe restoration
+// Structure to save original bytes for safe restoration.
 struct PatchRecord {
     void* address;
     BYTE originalBytes[128];
     size_t length;
 };
 
-PatchRecord g_appliedPatches[64];
-size_t g_appliedPatchCount = 0;
+// std::vector instead of a fixed-size array: the scan deliberately doesn't
+// stop at the first match (a string can legitimately appear more than once
+// in a module), so a fixed cap could silently drop matches partway through,
+// leaving the mod half-applied and half-restorable. This also removes the
+// only reason a "too many custom applets" cap/warning ever existed.
+std::vector<PatchRecord> g_appliedPatches;
 HMODULE g_hWinStorage = nullptr;
+bool g_ownsWinStorageHandle = false; // true only if we called LoadLibrary* ourselves
 bool g_isInitialized = false;
 
 // User-provided applet GUIDs / canonical names, loaded from the "CustomApplets"
@@ -137,9 +150,19 @@ static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
 // anything longer can never be safely patched.
 constexpr size_t kMaxAppletIdLength = 64;
 
+// A canonical name shorter than this turns into a very short, very common
+// UTF-16 byte pattern (e.g. a single letter is just 2 bytes), which can
+// match thousands of times across shell32.dll/windows.storage.dll in data
+// that has nothing to do with any redirect table. All of Microsoft's known
+// canonical CPL names are well above this length. Combined with requiring a
+// dot (every real canonical name looks like "Vendor.Item"), this is a floor
+// against garbage/too-short input reaching the memory scanner at all - it is
+// NOT a guarantee the string is a real applet name.
+constexpr size_t kMinCanonicalNameLength = 8;
+
 // Rejects anything that clearly isn't a plausible Control Panel applet
-// identifier (garbage input, pasted text, anything too long), so it never
-// reaches the memory-scanning/patching code at all.
+// identifier (garbage input, pasted text, anything too long or too short),
+// so it never reaches the memory-scanning/patching code at all.
 static bool IsPlausibleAppletId(const std::wstring& id) {
     if (id.empty() || id.size() > kMaxAppletIdLength) {
         return false;
@@ -153,95 +176,35 @@ static bool IsPlausibleAppletId(const std::wstring& id) {
         return LooksLikeBareGuid(id.substr(3, 36));
     }
 
-    // Otherwise, treat it as a canonical name: must start with a letter and
-    // contain only letters, digits, and dots (e.g. "Microsoft.System").
-    if (!iswalpha(id.front())) {
+    // Otherwise, treat it as a canonical name: must start with a letter,
+    // contain only letters/digits/dots, contain at least one dot, and meet
+    // the minimum length above.
+    if (id.size() < kMinCanonicalNameLength || !iswalpha(id.front())) {
         return false;
     }
+    bool hasDot = false;
     for (wchar_t c : id) {
-        if (!iswalnum(c) && c != L'.') {
+        if (c == L'.') {
+            hasDot = true;
+        } else if (!iswalnum(c)) {
             return false;
         }
     }
-    return true;
+    return hasDot;
 }
 
-// Safety ceiling for how many custom applets we'll track. The 6 built-in
-// applets already reserve up to 12 slots in the fixed-size g_appliedPatches
-// buffer (each is patched in up to 2 modules), leaving comfortable headroom
-// for this many custom entries (each also patched in up to 2 modules).
-constexpr size_t kMaxCustomApplets = 20;
-
-// Shows a MessageBox on a separate thread so Wh_ModInit (and therefore the
-// host process's startup, e.g. explorer.exe/rundll32.exe) never blocks
-// waiting for the user to dismiss it.
-//
-// FIX (review item #4): the thread handle is now tracked globally instead of
-// being closed/detached immediately. If the user disables/reloads the mod
-// while the box is still open, Wh_ModUninit MUST NOT return while this
-// thread is still running - once Windhawk FreeLibrary's the mod DLL, the
-// thread's code and return address are unmapped and it crashes the host
-// process the moment it resumes. CloseWarningMessageBoxIfOpen() closes the
-// window and waits for the thread to actually exit before Wh_ModUninit
-// returns.
-HANDLE g_hWarningThread = nullptr;
-
-DWORD WINAPI ShowWarningMessageBoxThreadProc(LPVOID param) {
-    wchar_t* text = static_cast<wchar_t*>(param);
-    MessageBoxW(nullptr, text, L"Control Panel Revival", MB_OK | MB_ICONWARNING);
-    delete[] text;
-    return 0;
-}
-
-BOOL CALLBACK CloseWindowEnumProc(HWND hwnd, LPARAM) {
-    PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    return TRUE;
-}
-
-void ShowWarningMessageBoxAsync(const wchar_t* text) {
-    // Only ever track one outstanding warning thread at a time.
-    if (g_hWarningThread) {
-        CloseHandle(g_hWarningThread);
-        g_hWarningThread = nullptr;
-    }
-
-    size_t len = wcslen(text) + 1;
-    wchar_t* copy = new wchar_t[len];
-    wcscpy_s(copy, len, text);
-
-    g_hWarningThread = CreateThread(nullptr, 0, ShowWarningMessageBoxThreadProc, copy, 0, nullptr);
-    if (!g_hWarningThread) {
-        Wh_Log(L"Failed to create thread for warning message box");
-        delete[] copy;
-    }
-}
-
-// Must be called from Wh_ModUninit before returning: closes any still-open
-// warning box and blocks (briefly) until its thread has actually exited.
-void CloseWarningMessageBoxIfOpen() {
-    if (!g_hWarningThread) return;
-
-    DWORD threadId = GetThreadId(g_hWarningThread);
-    if (threadId) {
-        EnumThreadWindows(threadId, CloseWindowEnumProc, 0);
-    }
-
-    // The box is only ever shown by this mod and only ever owned by this
-    // single thread, so this should return almost immediately; the timeout
-    // is just a safety net so uninit can never hang indefinitely.
-    WaitForSingleObject(g_hWarningThread, 2000);
-    CloseHandle(g_hWarningThread);
-    g_hWarningThread = nullptr;
-}
-
-// Reads the CustomApplets[i] setting entries until an empty one is hit
-// (Wh_GetStringSetting returns "" past the end of the array, never null).
+// Reads the CustomApplets[i] setting entries until an empty one is hit.
+// NOTE: Wh_GetStringSetting returns "" (never NULL) past the end of a
+// configured array, and there is no other way to ask the API "how many
+// entries are there" - so an empty row is unavoidably treated as the end of
+// the list rather than a skippable gap (this is stated in the setting's
+// $description above).
 void LoadCustomAppletSettings() {
     g_customApplets.clear();
 
     for (int i = 0; ; i++) {
         PCWSTR value = Wh_GetStringSetting(L"CustomApplets[%d]", i);
-        bool hasValue = value && *value;
+        bool hasValue = *value != L'\0';
         if (hasValue) {
             std::wstring normalized = NormalizeAppletId(value);
             if (!normalized.empty()) {
@@ -249,29 +212,12 @@ void LoadCustomAppletSettings() {
                     Wh_Log(L"Custom applet entry #%d: \"%s\" -> \"%s\"", i, value, normalized.c_str());
                     g_customApplets.push_back(std::move(normalized));
                 } else {
-                    Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): doesn't look like a valid applet ID/GUID, or is too long", i, value);
+                    Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): doesn't look like a valid applet ID/GUID, is too long, or is too short", i, value);
                 }
             }
         }
         Wh_FreeStringSetting(value);
         if (!hasValue) break;
-    }
-
-    if (g_customApplets.size() > kMaxCustomApplets) {
-        size_t ignoredCount = g_customApplets.size() - kMaxCustomApplets;
-        g_customApplets.resize(kMaxCustomApplets);
-
-        Wh_Log(L"Too many custom applets configured; keeping the first %zu and ignoring %zu", kMaxCustomApplets, ignoredCount);
-
-        wchar_t message[256];
-        swprintf_s(
-            message,
-            L"You've added too many custom applet IDs (limit: %zu).\n\n"
-            L"Only the first %zu will be applied; the remaining %zu will be ignored.\n"
-            L"Please remove some entries from the mod's settings.",
-            kMaxCustomApplets, kMaxCustomApplets, ignoredCount
-        );
-        ShowWarningMessageBoxAsync(message);
     }
 
     Wh_Log(L"Loaded %zu custom applet ID(s) from settings", g_customApplets.size());
@@ -295,18 +241,101 @@ bool IsSupportedWindowsVersion() {
     return false;
 }
 
+// rundll32.exe hosts arbitrary DLLs and Windows spawns it constantly for
+// completely unrelated work. Without this check, every such instance would
+// still hook CompareStringOrdinal/LoadLibraryExW and scan module memory for
+// nothing. Only bail out for rundll32.exe specifically, and only when its
+// command line doesn't look like a Control Panel applet host -
+// explorer.exe/control.exe are never affected by this check.
+static bool ContainsCaseInsensitive(LPCWSTR haystack, LPCWSTR needle) {
+    if (!haystack || !needle || !*needle) return false;
+    size_t needleLen = wcslen(needle);
+    for (LPCWSTR p = haystack; *p; p++) {
+        if (_wcsnicmp(p, needle, needleLen) == 0) return true;
+    }
+    return false;
+}
+
+static bool ShouldBailOutForThisProcess() {
+    wchar_t exePath[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    if (len == 0 || len >= ARRAYSIZE(exePath)) {
+        return false; // couldn't determine the process name; don't risk bailing incorrectly
+    }
+
+    LPCWSTR exeName = wcsrchr(exePath, L'\\');
+    exeName = exeName ? exeName + 1 : exePath;
+
+    if (_wcsicmp(exeName, L"rundll32.exe") != 0) {
+        return false; // not rundll32.exe - always proceed (explorer.exe / control.exe)
+    }
+
+    return !ContainsCaseInsensitive(GetCommandLineW(), L"Control_RunDLL");
+}
+
+// Describes one [start, end) byte range, relative to a module's base
+// address, that is safe to pattern-scan.
+struct ByteRange {
+    size_t start;
+    size_t end;
+};
+
+// Parses a loaded module's PE section table and returns only the ranges
+// covering non-executable, initialized-data sections (e.g. .rdata, .data).
+// This is what guarantees the scan below can NEVER touch .text (code) or
+// the PE headers themselves, no matter how a search pattern is chosen -
+// closing off the "one unlucky/short custom applet ID corrupts explorer.exe"
+// failure mode entirely, rather than just making it less likely.
+static std::vector<ByteRange> GetScannableDataRanges(HMODULE hModule, size_t moduleSize) {
+    std::vector<ByteRange> ranges;
+
+    auto base = (const BYTE*)hModule;
+    auto dosHeader = (const IMAGE_DOS_HEADER*)base;
+    if (moduleSize < sizeof(IMAGE_DOS_HEADER) || dosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
+        return ranges;
+    }
+
+    auto ntHeaders = (const IMAGE_NT_HEADERS*)(base + dosHeader->e_lfanew);
+    if ((size_t)dosHeader->e_lfanew + sizeof(IMAGE_NT_HEADERS) > moduleSize ||
+        ntHeaders->Signature != IMAGE_NT_SIGNATURE) {
+        return ranges;
+    }
+
+    auto sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
+    WORD numSections = ntHeaders->FileHeader.NumberOfSections;
+
+    for (WORD i = 0; i < numSections; i++, sectionHeader++) {
+        // Never scan executable sections (this is what excludes .text).
+        if (sectionHeader->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+        // Only sections that actually contain initialized data - also
+        // naturally excludes .bss-style uninitialized sections.
+        if (!(sectionHeader->Characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA)) continue;
+
+        size_t start = sectionHeader->VirtualAddress;
+        size_t rawSize = (std::max)(sectionHeader->Misc.VirtualSize, sectionHeader->SizeOfRawData);
+        if (start >= moduleSize) continue;
+
+        size_t end = start + rawSize;
+        if (end > moduleSize) end = moduleSize;
+        if (end > start) ranges.push_back({ start, end });
+    }
+
+    return ranges;
+}
+
 // 2. Reversible Memory Patching
-//    FIX: no longer stops at the first match (return;) — keeps scanning so every
-//    occurrence of the string table entry in the module gets neutralized.
-//    FIX: guards against integer underflow when patternLen > size.
-//    SAFETY TRIP: before reading or writing ANY byte, this verifies (via
-//    VirtualQuery) that the containing memory region is committed, readable,
-//    and not a guard page. If a region fails that check, the scan skips
-//    straight past it without ever touching it - the memory equivalent of a
-//    table saw's sensor retracting the blade the instant it senses skin,
-//    rather than finding out the hard way. This can't predict every possible
-//    crash, but it does eliminate the concrete risk of reading/writing into
-//    unmapped or protected memory, which is the realistic failure mode here.
+//
+//    Scoped to non-executable, initialized-data PE sections only (see
+//    GetScannableDataRanges) - never .text, never the headers. Combined with
+//    only checking WCHAR-aligned offsets (every pattern here is UTF-16
+//    string data, which is always 2-byte aligned within these sections),
+//    this closes off the possibility of a match landing inside executable
+//    code, which byte-at-a-time whole-image scanning could not rule out.
+//
+//    Continues scanning past the first match (a string can legitimately
+//    appear more than once in a module) and verifies every region via
+//    VirtualQuery before touching it, skipping straight past anything not
+//    committed/readable instead of reading or writing it.
 void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
     if (!hModule || !lpSearch) return;
 
@@ -314,100 +343,96 @@ void KillStringInModuleReversible(HMODULE hModule, LPCWSTR lpSearch) {
     if (!GetModuleInformation(GetCurrentProcess(), hModule, &info, sizeof(MODULEINFO))) return;
 
     DWORD_PTR base = (DWORD_PTR)info.lpBaseOfDll;
-    size_t size = (size_t)info.SizeOfImage;
+    size_t moduleSize = (size_t)info.SizeOfImage;
     size_t patternLen = wcslen(lpSearch) * sizeof(WCHAR);
 
     if (patternLen == 0 || patternLen > sizeof(PatchRecord::originalBytes)) return;
-    if (patternLen > size) return; // would underflow below otherwise
+    if (patternLen > moduleSize) return;
 
-    size_t scanLimit = size - patternLen;
+    std::vector<ByteRange> dataRanges = GetScannableDataRanges(hModule, moduleSize);
+    if (dataRanges.empty()) return; // couldn't parse the PE headers; don't guess
 
-    // Cached bounds (relative to `base`) of the region we last verified as
-    // safely readable, so VirtualQuery isn't called on every single byte.
-    size_t safeRegionStart = 0;
-    size_t safeRegionEnd = 0; // exclusive
-    bool haveSafeRegion = false;
+    for (const ByteRange& range : dataRanges) {
+        if (patternLen > range.end - range.start) continue; // pattern can't fit in this section
 
-    for (size_t i = 0; i <= scanLimit; i++) {
-        if (!haveSafeRegion || i < safeRegionStart || (i + patternLen) > safeRegionEnd) {
-            MEMORY_BASIC_INFORMATION mbi;
-            if (!VirtualQuery((void*)(base + i), &mbi, sizeof(mbi))) {
-                // Can't even query this address - stop the whole scan rather
-                // than guess whether it's safe to keep going.
-                break;
+        size_t scanLimit = range.end - patternLen;
+
+        // Cached bounds (relative to `base`) of the region we last verified
+        // as safely readable, so VirtualQuery isn't called on every offset.
+        size_t safeRegionStart = 0;
+        size_t safeRegionEnd = 0; // exclusive
+        bool haveSafeRegion = false;
+
+        size_t i = range.start;
+        while (i <= scanLimit) {
+            bool needRequery = !haveSafeRegion || i < safeRegionStart || i >= safeRegionEnd;
+            if (needRequery) {
+                MEMORY_BASIC_INFORMATION mbi;
+                if (!VirtualQuery((void*)(base + i), &mbi, sizeof(mbi))) {
+                    break; // can't even query - stop scanning this section
+                }
+
+                bool readable = mbi.State == MEM_COMMIT &&
+                                 mbi.Protect != PAGE_NOACCESS &&
+                                 !(mbi.Protect & PAGE_GUARD);
+
+                size_t regionStart = (size_t)((DWORD_PTR)mbi.BaseAddress - base);
+                size_t regionEnd = regionStart + mbi.RegionSize;
+                if (regionEnd > range.end) regionEnd = range.end;
+                if (regionStart < range.start) regionStart = range.start;
+
+                if (!readable || regionEnd <= regionStart) {
+                    // Emergency stop: never touch this region, skip straight past it.
+                    i = regionEnd;
+                    if (i % sizeof(WCHAR) != 0) i += sizeof(WCHAR) - (i % sizeof(WCHAR));
+                    continue;
+                }
+
+                safeRegionStart = regionStart;
+                safeRegionEnd = regionEnd;
+                haveSafeRegion = true;
             }
-
-            bool readable = mbi.State == MEM_COMMIT &&
-                             mbi.Protect != PAGE_NOACCESS &&
-                             !(mbi.Protect & PAGE_GUARD);
-
-            size_t regionStart = (size_t)((DWORD_PTR)mbi.BaseAddress - base);
-            size_t regionEnd = regionStart + mbi.RegionSize;
-            if (regionEnd > size) regionEnd = size;
-
-            if (!readable) {
-                // Emergency stop: never touch this region. Jump past it entirely.
-                i = (regionEnd > i) ? regionEnd - 1 : i; // -1: the for-loop's i++ lands us at regionEnd
-                continue;
-            }
-
-            safeRegionStart = regionStart;
-            safeRegionEnd = regionEnd;
-            haveSafeRegion = true;
 
             if (i + patternLen > safeRegionEnd) {
-                // Pattern would straddle into an unverified region. Instead of
-                // continuing byte-by-byte (which re-triggers this same
-                // VirtualQuery on every remaining offset in this region -
-                // wasteful for modules with many small regions), jump
-                // straight to the end of this region.
-                i = (safeRegionEnd > i) ? safeRegionEnd - 1 : i;
+                // Pattern would straddle past what we've verified as
+                // readable; skip to the end of the verified region.
+                i = safeRegionEnd;
+                if (i % sizeof(WCHAR) != 0) i += sizeof(WCHAR) - (i % sizeof(WCHAR));
                 continue;
             }
-        }
 
-        const char* candidate = (const char*)(base + i);
-        bool found = true;
-        for (size_t j = 0; j < patternLen; j++) {
-            if (((const char*)lpSearch)[j] != candidate[j]) {
-                found = false;
-                break;
-            }
-        }
+            const char* candidate = (const char*)(base + i);
+            if (memcmp(lpSearch, candidate, patternLen) == 0) {
+                void* targetAddress = (void*)(base + i);
+                MEMORY_BASIC_INFORMATION mbi;
+                if (VirtualQuery(targetAddress, &mbi, sizeof(mbi))) {
+                    DWORD oldProtect;
+                    if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
+                        PatchRecord patch;
+                        patch.address = targetAddress;
+                        patch.length = patternLen;
+                        memcpy(patch.originalBytes, targetAddress, patternLen);
+                        g_appliedPatches.push_back(patch);
 
-        if (found) {
-            void* targetAddress = (void*)(base + i);
-            MEMORY_BASIC_INFORMATION mbi;
-            if (VirtualQuery(targetAddress, &mbi, sizeof(mbi))) {
-                DWORD oldProtect;
-                if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_READWRITE, &oldProtect)) {
-                    if (g_appliedPatchCount < ARRAYSIZE(g_appliedPatches)) {
-                        g_appliedPatches[g_appliedPatchCount].address = targetAddress;
-                        g_appliedPatches[g_appliedPatchCount].length = patternLen;
-                        memcpy(g_appliedPatches[g_appliedPatchCount].originalBytes, targetAddress, patternLen);
-                        g_appliedPatchCount++;
-                    } else {
-                        Wh_Log(L"Patch record buffer is full; skipping a match for \"%s\" to avoid an unsafe write", lpSearch);
+                        ZeroMemory(targetAddress, patternLen);
+
                         VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
-                        continue; // don't zero memory we can't guarantee we can restore later
                     }
-
-                    ZeroMemory(targetAddress, patternLen);
-
-                    VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
                 }
+                // Intentionally no early return/break: keep scanning for
+                // further occurrences within this section.
             }
-            // Intentionally no early return: keep scanning for further occurrences.
+
+            i += sizeof(WCHAR);
         }
     }
 }
 
-// Restore memory patches safely when mod unloads
+// Restore memory patches safely when mod unloads.
 void RestoreAllPatches(void) {
     if (!g_isInitialized) return;
 
-    for (size_t i = 0; i < g_appliedPatchCount; i++) {
-        PatchRecord& patch = g_appliedPatches[i];
+    for (PatchRecord& patch : g_appliedPatches) {
         MEMORY_BASIC_INFORMATION mbi;
         if (VirtualQuery(patch.address, &mbi, sizeof(mbi))) {
             DWORD oldProtect;
@@ -417,12 +442,18 @@ void RestoreAllPatches(void) {
             }
         }
     }
-    g_appliedPatchCount = 0;
+    g_appliedPatches.clear();
 
-    if (g_hWinStorage) {
+    // Only release the handle if we actually acquired a reference to it
+    // ourselves (via LoadLibrary*). If it came from GetModuleHandleW, we
+    // never incremented its refcount, and calling FreeLibrary on it would
+    // incorrectly decrement whatever refcount another owner is relying on.
+    if (g_hWinStorage && g_ownsWinStorageHandle) {
         FreeLibrary(g_hWinStorage);
-        g_hWinStorage = nullptr;
     }
+    g_hWinStorage = nullptr;
+    g_ownsWinStorageHandle = false;
+
     g_isInitialized = false;
 }
 
@@ -443,22 +474,22 @@ static int GetEffectiveLength(LPCWCH str, int cch) {
     return (cch == -1) ? (int)wcslen(str) : cch;
 }
 
-// FIX: compares using the *known* length from cchCount1/cchCount2 instead of
-// wcscmp/_wcsicmp, which assumed the input was null-terminated. The original
-// code could read past the end of a non-null-terminated substring passed by
-// a caller, risking a buffer over-read / crash.
+// Compares using the *known* length from cchCount1/cchCount2 instead of
+// wcscmp/_wcsicmp, which would assume the input was null-terminated (it
+// might not be - CompareStringOrdinal callers can pass substrings).
+// Target-list lengths are now precomputed constexpr std::wstring_view
+// sizes, not recomputed via wcslen on every call.
 static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
     if (!str) return false;
     int len = GetEffectiveLength(str, cch);
     if (len <= 0) return false;
 
-    auto checkList = [&](LPCWSTR* list, size_t count) -> bool {
+    auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
         for (size_t i = 0; i < count; i++) {
-            size_t targetLen = wcslen(list[i]);
-            if ((size_t)len != targetLen) continue; // length mismatch: can't be this entry
+            if ((size_t)len != list[i].size()) continue; // length mismatch: can't be this entry
             int cmp = bIgnoreCase
-                ? _wcsnicmp(str, list[i], targetLen)
-                : wcsncmp(str, list[i], targetLen);
+                ? _wcsnicmp(str, list[i].data(), list[i].size())
+                : wcsncmp(str, list[i].data(), list[i].size());
             if (cmp == 0) return true;
         }
         return false;
@@ -478,10 +509,13 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
     return false;
 }
 
-// FIX: on null input or when the strings don't match our target list, this now
-// always defers to the real CompareStringOrdinal instead of returning 0 or the
-// bogus ERROR_INVALID_PARAMETER (87) value, which is not a valid return code
-// for this API and could confuse callers that branch on the result.
+// Defers to the real CompareStringOrdinal on null input or when the strings
+// don't match our target list, instead of returning an invalid/inconsistent
+// result. NOTE (still true, not yet addressed): this hook is still
+// process-wide and can hand back CSTR_LESS_THAN for Compare(A, A), which
+// isn't a self-consistent comparator - the documented, safer pattern (used
+// elsewhere in this repo) is to gate it to a specific call site/thread. That
+// remains a larger design change, tracked separately from this bug-fix pass.
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
 
@@ -495,10 +529,7 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
     return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 }
 
-// FIX (review item #5): renamed from the old misleading "hooks" name.
-// This array is resolved against shell32.dll (see ApplyShell32DependentPatches
-// below), so its name should say so - matters for reviewers/maintainers
-// scanning for which module a given SYMBOL_HOOK array targets.
+// Resolved against shell32.dll - see ApplyShell32DependentPatches below.
 const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
@@ -508,35 +539,37 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     }
 };
 
-// FIX (review item #6): rundll32.exe does NOT statically import shell32.dll -
-// it loads it later, at runtime, when asked to run
-// "shell32.dll,Control_RunDLL". Wh_ModInit runs before that happens, so
-// GetModuleHandleW(L"shell32.dll") returns NULL there and nothing ever gets
-// patched/hooked in exactly the host process that actually runs Control
-// Panel applets. This is also the likely reason the mod appeared to need
-// ExplorerPatcher: control.exe typically hands off applet launches to a
-// fresh rundll32.exe, so the redirect decision was happening in the one
-// process this mod couldn't reach.
+// rundll32.exe does NOT statically import shell32.dll - it loads it later,
+// at runtime, when asked to run "shell32.dll,Control_RunDLL". Wh_ModInit
+// runs before that happens, so GetModuleHandleW(L"shell32.dll") returns
+// NULL there and nothing would ever get patched/hooked in exactly the host
+// process that actually runs Control Panel applets.
 //
 // Fix: hook LoadLibraryExW in kernelbase.dll (internal callers go straight
 // to kernelbase, not through the kernel32 import) and apply the shell32
 // patches/hooks the moment shell32.dll actually gets loaded, whenever that
 // happens - at Wh_ModInit time (explorer.exe, control.exe) or later
 // (rundll32.exe).
-// FIX (found during review): use an atomic compare-exchange instead of a
-// plain bool, and set it to "applied" BEFORE doing any work (not after).
-// The previous version set this flag at the end of the function, but
-// LoadLibraryW(L"windows.storage.dll") below can itself trigger a nested
-// LoadLibraryExW call. If that nested call were (for whatever reason) also
-// seen as loading "shell32.dll", the hook would re-enter this function
-// before the first call finished - re-scanning memory that's already been
-// partially zeroed and saving those zeroed bytes as the "original" bytes to
-// restore later, silently corrupting the restore data. Claiming the flag
-// atomically up front closes that window and also makes concurrent calls
-// from different threads safe.
+//
+// g_shell32PatchesApplied is claimed atomically BEFORE any work happens
+// (not after), so a nested LoadLibraryExW call triggered from within this
+// function can't re-enter it, and concurrent calls from different threads
+// can't race each other into doing the work twice.
 volatile LONG g_shell32PatchesApplied = 0;
 
-void ApplyShell32DependentPatches() {
+// isLateLoad: true when called from the LoadLibraryExW hook (shell32.dll
+// just finished loading after Wh_ModInit already returned), false when
+// called directly from Wh_ModInit. This controls two things that must only
+// happen on the late path:
+//   - Wh_ApplyHookOperations() must never be called before Wh_ModInit
+//     returns (documented API requirement) - only the late path calls it.
+//   - windows.storage.dll is only force-loaded on the direct path. On the
+//     late path we're running from inside another DLL's LoadLibraryExW
+//     call, which may still be holding the loader lock; issuing a nested
+//     LoadLibrary (and potentially a slow HookSymbols PDB resolution) from
+//     under that lock risks a deadlock. On that path we only ever look for
+//     windows.storage.dll if something else already loaded it naturally.
+void ApplyShell32DependentPatches(bool isLateLoad) {
     if (InterlockedCompareExchange(&g_shell32PatchesApplied, 1, 0) != 0) {
         return; // already applied, or another call already claimed this
     }
@@ -547,11 +580,18 @@ void ApplyShell32DependentPatches() {
         return;
     }
 
-    g_hWinStorage = LoadLibraryW(L"windows.storage.dll");
+    g_hWinStorage = GetModuleHandleW(L"windows.storage.dll"); // borrowed, no refcount taken
+    if (!g_hWinStorage && !isLateLoad) {
+        // windows.storage.dll is not a KnownDLL, so a bare-name load would
+        // search the application directory before System32 - force
+        // System32 explicitly to avoid a DLL-planting risk.
+        g_hWinStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        g_ownsWinStorageHandle = (g_hWinStorage != nullptr);
+    }
 
-    for (size_t i = 0; i < ARRAYSIZE(g_szAppletsToUnhide); i++) {
-        KillStringInModuleReversible(hShell32, g_szAppletsToUnhide[i]);
-        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, g_szAppletsToUnhide[i]);
+    for (const auto& applet : g_szAppletsToUnhide) {
+        KillStringInModuleReversible(hShell32, applet.data());
+        if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, applet.data());
     }
 
     for (const auto& entry : g_customApplets) {
@@ -559,11 +599,11 @@ void ApplyShell32DependentPatches() {
         if (g_hWinStorage) KillStringInModuleReversible(g_hWinStorage, entry.c_str());
     }
 
-    // Note: Windhawk resolves this symbol automatically via Microsoft's
-    // public symbol server (through the DIA SDK) and caches the PDB - no
-    // manual symbol download is needed. What CAN fail is the symbol itself
-    // no longer existing/matching on a future Windows build, since this is
-    // a private, unexported function. If that happens, we log it clearly
+    // Windhawk resolves this symbol automatically via Microsoft's public
+    // symbol server (through the DIA SDK) and caches the PDB - no manual
+    // symbol download is needed. What CAN fail is the symbol itself no
+    // longer existing/matching on a future Windows build, since this is a
+    // private, unexported function. If that happens, we log it clearly
     // instead of silently doing nothing.
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
@@ -571,10 +611,14 @@ void ApplyShell32DependentPatches() {
                L"build. The mod will continue with its other fixes.");
     }
 
-    // Required when hooks are installed outside Wh_ModInit's normal single
-    // batch (here: from inside the LoadLibraryExW hook, after shell32.dll
-    // has just finished loading).
-    Wh_ApplyHookOperations();
+    if (isLateLoad) {
+        // Required here because these hooks were installed outside
+        // Wh_ModInit's normal batch. Must NOT be called from the direct
+        // (Wh_ModInit) path - Windhawk applies that batch itself when
+        // Wh_ModInit returns, and calling this before that happens is not
+        // supported by the API.
+        Wh_ApplyHookOperations();
+    }
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -583,11 +627,23 @@ LoadLibraryExW_t LoadLibraryExW_orig = nullptr;
 HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE result = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
 
-    if (result && !g_shell32PatchesApplied && lpLibFileName) {
-        LPCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
-        fileName = fileName ? fileName + 1 : lpLibFileName;
-        if (_wcsicmp(fileName, L"shell32.dll") == 0) {
-            ApplyShell32DependentPatches();
+    if (result && !g_shell32PatchesApplied) {
+        // Resource-only loads don't map the module the normal way (no
+        // import resolution, no DllMain) - not a meaningful "shell32 is now
+        // usable" signal, so skip them rather than act on them.
+        constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
+                                              LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                              LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+        if ((dwFlags & kResourceOnlyFlags) == 0) {
+            // Compare the returned handle against shell32.dll's actual base
+            // address instead of matching the requested file name string:
+            // shell32 can arrive as a static dependency of some other DLL
+            // loaded through this same API, in which case lpLibFileName
+            // would be that other DLL's name/path, not "shell32.dll" - a
+            // name-based check would miss that case entirely.
+            if (result == GetModuleHandleW(L"shell32.dll")) {
+                ApplyShell32DependentPatches(/*isLateLoad=*/true);
+            }
         }
     }
 
@@ -600,7 +656,12 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    Wh_Log(L"Initializing Control Panel Revival (Base-Derived & Safe)");
+    if (ShouldBailOutForThisProcess()) {
+        Wh_Log(L"This rundll32.exe instance isn't hosting a Control Panel applet; mod bypassed for this process.");
+        return FALSE;
+    }
+
+    Wh_Log(L"Initializing Control Panel Revival");
 
     LoadCustomAppletSettings();
 
@@ -619,10 +680,9 @@ BOOL Wh_ModInit(void) {
         }
 
         // Covers processes where shell32.dll hasn't been loaded yet at this
-        // point (notably rundll32.exe - see review item #6 above). If it's
-        // already loaded (explorer.exe, control.exe), this hook simply won't
-        // fire for it and ApplyShell32DependentPatches() below handles that
-        // case directly.
+        // point (notably rundll32.exe). If it's already loaded
+        // (explorer.exe, control.exe), this hook simply won't fire for it
+        // and ApplyShell32DependentPatches() below handles that case directly.
         auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
         if (pLoadLibraryExW) {
             if (!WindhawkUtils::SetFunctionHook(
@@ -636,22 +696,18 @@ BOOL Wh_ModInit(void) {
         }
     }
 
+    g_isInitialized = true;
+
     // Handles the common case: shell32.dll is already loaded (explorer.exe,
     // control.exe). If it isn't loaded yet in this process (rundll32.exe),
     // this is a no-op for now and LoadLibraryExW_hook picks it up later.
-    ApplyShell32DependentPatches();
+    ApplyShell32DependentPatches(/*isLateLoad=*/false);
 
-    g_isInitialized = true;
     return TRUE;
 }
 
 void Wh_ModUninit(void) {
     Wh_Log(L"Uninitializing Control Panel Revival safely");
-
-    // Must happen before returning: if a warning box is still open on its
-    // own thread, that thread's code would otherwise be unmapped out from
-    // under it the moment this function returns and Windhawk unloads the DLL.
-    CloseWarningMessageBoxIfOpen();
 
     RestoreAllPatches();
     InterlockedExchange(&g_shell32PatchesApplied, 0);
