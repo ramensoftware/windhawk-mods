@@ -2,7 +2,7 @@
 // @id              taskbar-multirow
 // @name            Multirow taskbar for Windows 11
 // @description     Span taskbar items across multiple rows, just like it was possible before Windows 11
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -50,7 +50,9 @@ Windows 11.
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -59,6 +61,7 @@ Windows 11.
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -76,7 +79,27 @@ struct {
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
+// Holds a flag for the duration of a scope, so that it's also cleared if the
+// function it wraps throws.
+class ScopedFlag {
+   public:
+    ScopedFlag(bool* flag) : m_flag(flag) { *m_flag = true; }
+    ~ScopedFlag() { *m_flag = false; }
+
+    ScopedFlag(const ScopedFlag&) = delete;
+    ScopedFlag& operator=(const ScopedFlag&) = delete;
+
+   private:
+    bool* m_flag;
+};
+
 thread_local bool g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride;
+
+// Set while the taskbar calculates the drop position of a dragged item, holding
+// the horizontal distance between the row the item is dragged over and the
+// single row the taskbar lays items out in.
+thread_local bool g_hasDropPlaceholderOffset;
+thread_local float g_dropPlaceholderOffset;
 
 struct TaskbarState {
     winrt::weak_ref<XamlRoot> xamlRoot;
@@ -84,6 +107,14 @@ struct TaskbarState {
 };
 
 std::unordered_map<void*, TaskbarState> g_taskbarState;
+
+// Only one taskbar item can be dragged at a time.
+struct {
+    bool active;
+    int startRow;
+    bool hasLastDropX;
+    float lastDropX;
+} g_dragState;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -140,6 +171,33 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
+// The taskbar frame doesn't always have an explicit width, in which case
+// Width() is NaN and the laid out width has to be used.
+double GetTaskbarFrameWidth(FrameworkElement taskbarFrameElement) {
+    double width = taskbarFrameElement.Width();
+    return std::isnan(width) ? taskbarFrameElement.ActualWidth() : width;
+}
+
+// The width a single row of items can span, i.e. the taskbar frame width
+// without the part which is occupied by the system tray.
+bool GetWidthWithoutExtent(FrameworkElement xamlRootContent, double* result) {
+    auto taskbarFrameElement =
+        FindChildByName(xamlRootContent, L"TaskbarFrame");
+    if (!taskbarFrameElement) {
+        return false;
+    }
+
+    auto systemTrayFrame =
+        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
+    if (!systemTrayFrame) {
+        return false;
+    }
+
+    *result = GetTaskbarFrameWidth(taskbarFrameElement) -
+              systemTrayFrame.ActualWidth();
+    return true;
+}
+
 TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
     void* xamlRootAbi = winrt::get_abi(xamlRoot);
 
@@ -161,6 +219,34 @@ TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
     return &it->second;
 }
 
+// The horizontal offset which items get on their way from the single row the
+// taskbar lays out to the given row.
+float RowOffsetSum(TaskbarState* taskbarState, int row) {
+    float sum = 0;
+
+    // The vector is sized from a separate read of the row count setting, which
+    // can change while the taskbar thread is using it.
+    size_t count = std::min(static_cast<size_t>(row),
+                            taskbarState->rowOffsetAdjustment.size());
+    for (size_t i = 0; i < count; i++) {
+        sum += taskbarState->rowOffsetAdjustment[i];
+    }
+
+    return sum;
+}
+
+int ClampRow(int row) {
+    if (row < 0) {
+        return 0;
+    }
+
+    if (row >= g_settings.rows) {
+        return g_settings.rows - 1;
+    }
+
+    return row;
+}
+
 void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
                                       TaskbarState* taskbarState,
                                       double widthWithoutExtent,
@@ -168,6 +254,12 @@ void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
     double desiredMargin = 0;
 
     if (!g_unloading) {
+        // Also catches NaN.
+        if (!(widthWithoutExtent > 0)) {
+            Wh_Log(L"Skipping, widthWithoutExtent=%f", widthWithoutExtent);
+            return;
+        }
+
         desiredMargin = -widthWithoutExtent * (g_settings.rows - 1);
 
         for (const auto f : taskbarState->rowOffsetAdjustment) {
@@ -214,22 +306,10 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         return false;
     }
 
-    auto taskbarFrameElement =
-        FindChildByName(xamlRootContent, L"TaskbarFrame");
-    if (!taskbarFrameElement) {
+    double widthWithoutExtent;
+    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent)) {
         return false;
     }
-
-    auto systemTrayFrame =
-        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
-    if (!systemTrayFrame) {
-        return false;
-    }
-
-    double systemTrayFrameWidth = systemTrayFrame.ActualWidth();
-
-    double widthWithoutExtent =
-        taskbarFrameElement.Width() - systemTrayFrameWidth;
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
                                      widthWithoutExtent, /*forceUpdate=*/true);
@@ -258,7 +338,7 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
+    size_t taskbarElementIUnknownOffset = 0x10;
 
 #if defined(_M_X64)
     {
@@ -273,7 +353,19 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         }
     }
 #elif defined(_M_ARM64)
-    // Just use the default offset which will hopefully work in most cases.
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
 #else
 #error "Unsupported architecture"
 #endif
@@ -422,7 +514,7 @@ void ApplySettingsFromTaskbarThread() {
             }
 
             if (!ApplyStyle(xamlRoot)) {
-                Wh_Log(L"ApplyStyles failed");
+                Wh_Log(L"ApplyStyle failed");
                 return TRUE;
             }
 
@@ -512,8 +604,12 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
         return original();
     }
 
-    auto taskbarFrameRepeater =
-        Media::VisualTreeHelper::GetParent(element).as<FrameworkElement>();
+    auto parent = Media::VisualTreeHelper::GetParent(element);
+    if (!parent) {
+        return original();
+    }
+
+    auto taskbarFrameRepeater = parent.try_as<FrameworkElement>();
     if (!taskbarFrameRepeater ||
         taskbarFrameRepeater.Name() != L"TaskbarFrameRepeater") {
         return original();
@@ -540,27 +636,26 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
     double startButtonWidth = startButton ? startButton.ActualWidth() : 0;
 
     auto xamlRoot = taskbarFrameRepeater.XamlRoot();
+    if (!xamlRoot) {
+        return original();
+    }
+
+    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!xamlRootContent) {
+        return original();
+    }
 
     TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
 
-    auto xamlRootContent = xamlRoot.Content().as<FrameworkElement>();
-
-    auto taskbarFrameElement =
-        FindChildByName(xamlRootContent, L"TaskbarFrame");
-    if (!taskbarFrameElement) {
+    double widthWithoutExtent;
+    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent)) {
         return original();
     }
 
-    auto systemTrayFrame =
-        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
-    if (!systemTrayFrame) {
+    if (!(widthWithoutExtent > 0)) {
+        Wh_Log(L"Skipping, widthWithoutExtent=%f", widthWithoutExtent);
         return original();
     }
-
-    double systemTrayFrameWidth = systemTrayFrame.ActualWidth();
-
-    double widthWithoutExtent =
-        taskbarFrameElement.Width() - systemTrayFrameWidth;
 
     winrt::Windows::Foundation::Rect newRect = rect;
     newRect.Height /= g_settings.rows;
@@ -608,20 +703,191 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
         void** vtable = *(void***)winrt::get_abi(element);
         auto arrange = (IUIElement_Arrange_t)vtable[92];
 
-        WindhawkUtils::Wh_SetFunctionHookT(arrange, IUIElement_Arrange_Hook,
-                                           &IUIElement_Arrange_Original);
+        WindhawkUtils::SetFunctionHook(arrange, IUIElement_Arrange_Hook,
+                                       &IUIElement_Arrange_Original);
         Wh_ApplyHookOperations();
         return true;
     }();
 
-    g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = true;
+    ScopedFlag scopedFlag(
+        &g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride);
 
-    HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
+    return TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
         pThis, context, size, resultSize);
+}
 
-    g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = false;
+// The taskbar keeps laying items out in a single row and tracks a drag in that
+// row: the drop position is the dragged item's layout bounds moved by the
+// distance the pointer traveled. The pointer travels across the rows the items
+// are displayed in, so the drop position has to be moved by the distance
+// between the row the pointer is over and the row the drag started in.
+struct MultirowMetrics {
+    TaskbarState* taskbarState;
+    double widthWithoutExtent;
+    double rowHeight;
+};
 
-    return ret;
+bool GetMultirowMetrics(FrameworkElement taskListButtonElement,
+                        MultirowMetrics* metrics) {
+    if (g_settings.rows < 2) {
+        return false;
+    }
+
+    auto parent = Media::VisualTreeHelper::GetParent(taskListButtonElement);
+    if (!parent) {
+        return false;
+    }
+
+    auto taskbarFrameRepeater = parent.try_as<FrameworkElement>();
+    if (!taskbarFrameRepeater ||
+        taskbarFrameRepeater.Name() != L"TaskbarFrameRepeater") {
+        return false;
+    }
+
+    double rowHeight = taskbarFrameRepeater.ActualHeight() / g_settings.rows;
+    // Also catches NaN.
+    if (!(rowHeight > 0)) {
+        return false;
+    }
+
+    auto xamlRoot = taskbarFrameRepeater.XamlRoot();
+    if (!xamlRoot) {
+        return false;
+    }
+
+    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!xamlRootContent) {
+        return false;
+    }
+
+    double widthWithoutExtent;
+    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent) ||
+        !(widthWithoutExtent > 0)) {
+        return false;
+    }
+
+    metrics->taskbarState = GetTaskbarState(xamlRoot);
+    metrics->widthWithoutExtent = widthWithoutExtent;
+    metrics->rowHeight = rowHeight;
+    return true;
+}
+
+FrameworkElement TaskListButtonElement(void* pThis) {
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis + 3)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(element));
+    return element;
+}
+
+using TaskListButton_OnDragStartedGesture_t =
+    void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Point point);
+TaskListButton_OnDragStartedGesture_t
+    TaskListButton_OnDragStartedGesture_Original;
+void WINAPI TaskListButton_OnDragStartedGesture_Hook(
+    void* pThis,
+    winrt::Windows::Foundation::Point point) {
+    Wh_Log(L">");
+
+    g_dragState = {};
+
+    auto element = g_unloading ? nullptr : TaskListButtonElement(pThis);
+    MultirowMetrics metrics;
+    if (element && GetMultirowMetrics(element, &metrics)) {
+        g_dragState.active = true;
+        g_dragState.startRow = ClampRow(
+            (int)std::lround(element.ActualOffset().y / metrics.rowHeight));
+
+        Wh_Log(L"Drag started in row %d (point.Y=%f, rowHeight=%f)",
+               g_dragState.startRow, point.Y, metrics.rowHeight);
+    }
+
+    TaskListButton_OnDragStartedGesture_Original(pThis, point);
+}
+
+using TaskListButton_OnDragCompletedGesture_t = void(WINAPI*)(void* pThis);
+TaskListButton_OnDragCompletedGesture_t
+    TaskListButton_OnDragCompletedGesture_Original;
+void WINAPI TaskListButton_OnDragCompletedGesture_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_OnDragCompletedGesture_Original(pThis);
+
+    g_dragState = {};
+}
+
+using TaskListButton_UpdateDrag_t =
+    void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Point point);
+TaskListButton_UpdateDrag_t TaskListButton_UpdateDrag_Original;
+void WINAPI
+TaskListButton_UpdateDrag_Hook(void* pThis,
+                               winrt::Windows::Foundation::Point point) {
+    Wh_Log(L">");
+
+    auto original = [=] { TaskListButton_UpdateDrag_Original(pThis, point); };
+
+    if (!g_dragState.active || g_unloading) {
+        return original();
+    }
+
+    auto element = TaskListButtonElement(pThis);
+    MultirowMetrics metrics;
+    if (!element || !GetMultirowMetrics(element, &metrics)) {
+        return original();
+    }
+
+    // Gesture points are relative to the repeater, which spans all rows.
+    int row = ClampRow((int)std::floor(point.Y / metrics.rowHeight));
+    // Clamped again in case the number of rows changed mid-drag.
+    int startRow = ClampRow(g_dragState.startRow);
+
+    g_dropPlaceholderOffset = (row - startRow) * metrics.widthWithoutExtent -
+                              (RowOffsetSum(metrics.taskbarState, row) -
+                               RowOffsetSum(metrics.taskbarState, startRow));
+    ScopedFlag scopedFlag(&g_hasDropPlaceholderOffset);
+
+    return original();
+}
+
+using TaskListDragOperation_GetDropPlaceholder_t =
+    void*(WINAPI*)(void* pThis,
+                   void* result,
+                   void* itemBounds,
+                   UINT64 itemRange,
+                   winrt::Windows::Foundation::Rect dragBounds,
+                   int rearrangeDirection,
+                   void* groupBoundsCalculator,
+                   bool param7);
+TaskListDragOperation_GetDropPlaceholder_t
+    TaskListDragOperation_GetDropPlaceholder_Original;
+void* WINAPI TaskListDragOperation_GetDropPlaceholder_Hook(
+    void* pThis,
+    void* result,
+    void* itemBounds,
+    UINT64 itemRange,
+    winrt::Windows::Foundation::Rect dragBounds,
+    int rearrangeDirection,
+    void* groupBoundsCalculator,
+    bool param7) {
+    Wh_Log(L">");
+
+    if (g_hasDropPlaceholderOffset) {
+        dragBounds.X += g_dropPlaceholderOffset;
+
+        // The caller derives the direction from the pointer position, which
+        // moves backwards whenever the drop position moves forward into the
+        // next row. 1 means forward, 0 means backwards.
+        if (g_dragState.hasLastDropX && dragBounds.X != g_dragState.lastDropX) {
+            rearrangeDirection = dragBounds.X > g_dragState.lastDropX ? 1 : 0;
+        }
+
+        g_dragState.hasLastDropX = true;
+        g_dragState.lastDropX = dragBounds.X;
+    }
+
+    return TaskListDragOperation_GetDropPlaceholder_Original(
+        pThis, result, itemBounds, itemRange, dragBounds, rearrangeDirection,
+        groupBoundsCalculator, param7);
 }
 
 using TaskbarFrame_SystemTrayExtent_t = void(WINAPI*)(void* pThis,
@@ -655,7 +921,8 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
 
     TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
 
-    double widthWithoutExtent = taskbarFrameElement.Width() - value;
+    double widthWithoutExtent =
+        GetTaskbarFrameWidth(taskbarFrameElement) - value;
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
                                      widthWithoutExtent);
@@ -762,6 +1029,26 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TaskbarFrame_SystemTrayExtent_Original,
             TaskbarFrame_SystemTrayExtent_Hook,
         },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragStartedGesture(struct winrt::Windows::Foundation::Point))"},
+            &TaskListButton_OnDragStartedGesture_Original,
+            TaskListButton_OnDragStartedGesture_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragCompletedGesture(void))"},
+            &TaskListButton_OnDragCompletedGesture_Original,
+            TaskListButton_OnDragCompletedGesture_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateDrag(struct winrt::Windows::Foundation::Point))"},
+            &TaskListButton_UpdateDrag_Original,
+            TaskListButton_UpdateDrag_Hook,
+        },
+        {
+            {LR"(public: struct winrt::Taskbar::implementation::DropPlaceholder __cdecl winrt::Taskbar::implementation::TaskListDragOperation::GetDropPlaceholder(class std::vector<struct winrt::Windows::Foundation::Rect,class std::allocator<struct winrt::Windows::Foundation::Rect> > const &,struct std::pair<unsigned int,unsigned int>,struct winrt::Windows::Foundation::Rect,enum winrt::Taskbar::implementation::RearrangeDirection,struct winrt::Taskbar::implementation::GroupBoundsCalculator const *,bool))"},
+            &TaskListDragOperation_GetDropPlaceholder_Original,
+            TaskListDragOperation_GetDropPlaceholder_Hook,
+        },
     };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
@@ -806,7 +1093,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 void LoadSettings() {
-    g_settings.rows = Wh_GetIntSetting(L"rows");
+    g_settings.rows = std::max(Wh_GetIntSetting(L"rows"), 1);
     g_settings.fullHeightStartButton =
         Wh_GetIntSetting(L"fullHeightStartButton");
 }
@@ -832,16 +1119,16 @@ BOOL Wh_ModInit() {
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
-        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                           LoadLibraryExW_Hook,
-                                           &LoadLibraryExW_Original);
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
     }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseRegGetValueW = (decltype(&RegGetValueW))GetProcAddress(
         kernelBaseModule, "RegGetValueW");
-    WindhawkUtils::Wh_SetFunctionHookT(
-        pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseRegGetValueW, RegGetValueW_Hook,
+                                   &RegGetValueW_Original);
 
     return TRUE;
 }
