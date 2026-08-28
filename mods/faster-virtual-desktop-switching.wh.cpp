@@ -425,6 +425,11 @@ BOOL Wh_ModInit() {
     }
 
     HookLoadedThumbnailCache();
+    if (InterlockedCompareExchange(
+            &g_thumbnailHookState, kHookPending, kHookPending) ==
+        kHookFailed) {
+        return FALSE;
+    }
 
     return TRUE;
 }
