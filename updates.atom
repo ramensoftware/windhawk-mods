@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-28T15:33:49.000Z</updated>
+    <updated>2026-08-28T19:53:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#6dba9b6ab6c4c0cb8a723eb2fd06e74936a912d2</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2026-08-28T19:53:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>It's now possible to move items to different rows on the taskbar.</li>
+<li>Fixed compatibility with the latest Windows 11 update.</li>
+<li>Improved ARM64 compatibility.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.9]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#36710e43ba152f119a7adcfda85a8377507d65c8</id>
@@ -931,74 +946,6 @@ like buying me a coffee:</p>
         <author>
             <name>lost_husky</name>
             <uri>https://github.com/DhakadG</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Count Badges 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-count-badges#defb1ad68056046e9b111ad07558d00ee878b9e4</id>
-        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
-        <updated>2026-08-22T15:19:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcountbadges">Taskbar Count Badges</h1>
-<p>See how many windows are represented by each app button on the Windows 11 taskbar.</p>
-<p>Taskbar Count Badges adds a small customizable indicator when a taskbar app
-button represents multiple windows. The indicator can be shown as either a
-<strong>number badge</strong> or a compact stack of <strong>vertical dots</strong>.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="customizationexamples">Customization examples</h3>
-<p><img src="https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/showcase.png" alt="Taskbar Count Badges examples" /></p>
-<h3 id="settings">Settings</h3>
-<p><img src="https://raw.githubusercontent.com/digart11/TaskbarCountBadges/main/images/settings.png" alt="Taskbar Count Badges settings" /></p>
-<h2 id="displaystyles">Display styles</h2>
-<h3 id="numberbadge">Number badge</h3>
-<p>Shows the number of windows represented by that taskbar button.</p>
-<p>The badge can be customized with:</p>
-<ul>
-<li>Circle, rounded-square, or square shape</li>
-<li>Badge size and position</li>
-<li>Horizontal and vertical offsets</li>
-<li>Background, text, and border colors</li>
-<li>Border thickness</li>
-<li>Font family, size, and weight</li>
-<li>Configurable maximum number, with larger values shown using <code>+</code></li>
-</ul>
-<h3 id="verticaldots">Vertical dots</h3>
-<p>Shows a minimal vertical stack of dots beside the app icon.</p>
-<ul>
-<li>Position the dots on the left or right</li>
-<li>Change dot size and color</li>
-<li>Up to five dots are shown; five dots means <strong>five or more windows</strong></li>
-</ul>
-<h2 id="behavior">Behavior</h2>
-<p>By default, no indicator is shown when a taskbar button represents a single
-window. The indicator appears when that button represents two or more windows.</p>
-<p>The minimum window count can be changed in the settings.</p>
-<p>Window counts update automatically as windows are opened and closed, and
-settings are applied live.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 only</li>
-<li>Supports x64 and ARM64 Windows</li>
-<li>Works with multiple monitors and secondary Windows taskbars</li>
-</ul>
-<p>On multi-monitor systems, the count follows each individual taskbar button.
-Depending on the Windows multi-monitor taskbar configuration, the same app can
-therefore show different counts on different monitors. Moving a window between
-monitors can change the count shown on each taskbar.</p>
-<p>The mod is designed primarily for grouped/combined taskbar app buttons. When
-taskbar buttons are configured to stay uncombined, Windows can expose multiple
-buttons for the same app group, so the same app count may appear on more than
-one button.</p>
-<p>Third-party taskbar replacements or tools that replace the native Windows 11
-taskbar may not be compatible.</p>
-<h2 id="notes">Notes</h2>
-<p>The mod uses the taskbar's own per-button grouping information instead of
-independently scanning all desktop windows. Counts therefore follow Windows
-taskbar grouping, including per-taskbar behavior on multi-monitor systems.</p>
-<p>The badge is visual only and doesn't change taskbar grouping, combining, window
-ordering, or application behavior.</p>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>

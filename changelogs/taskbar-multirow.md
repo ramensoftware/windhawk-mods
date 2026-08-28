@@ -1,3 +1,9 @@
+## 1.1.3 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6dba9b6ab6c4c0cb8a723eb2fd06e74936a912d2/mods/taskbar-multirow.wh.cpp))
+
+* It's now possible to move items to different rows on the taskbar.
+* Fixed compatibility with the latest Windows 11 update.
+* Improved ARM64 compatibility.
+
 ## 1.1.2 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d1838a84bcfebc3c645250ae9dac8fdb7aa55e21/mods/taskbar-multirow.wh.cpp))
 
 * Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.
