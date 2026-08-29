@@ -22,7 +22,7 @@ including floating - and simple, predictable controls.
 ![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif)
 
 ## Notes
-- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) and benefit from better stability & workspace preservation across Explorer restarts.*
+- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) for better stability and workspace preservation across Explorer restarts.*
 - *MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).*
 
 ## Features
