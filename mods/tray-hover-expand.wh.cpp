@@ -201,10 +201,6 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
 #include <string_view>
 #include <vector>
 
-#ifndef __IUIAutomation_FWD_DEFINED__
-#error "UI Automation headers are missing"
-#endif
-
 struct Settings {
     bool autoClose = true;
     int pollInterval = 50;
@@ -259,6 +255,9 @@ static constexpr std::wstring_view TRAY_CLASS_PREFIX = L"SystemTray.";
 // Some builds are reported to expose the chevron with this AutomationId instead
 // of the configured one. Accepting both costs nothing, because the class name
 // plus AutomationId pair is only used when exactly one element matches it.
+// Deliberately fixed rather than exposed as a setting: the configurable value
+// is the one a user would have to change on a future build, and this one only
+// widens what already matches.
 static constexpr std::wstring_view CHEVRON_AUTOMATION_ID_ALT = L"ChevronButton";
 
 // g_settings is guarded by g_settingsLock; the worker thread keeps a private
@@ -339,9 +338,13 @@ static void DoCollapse(IUIAutomationElement* e) {
 
 // ---- Locating the chevron button ----
 
+// logCandidates asks for a one-off diagnostic dump when identification fails;
+// *logged reports whether one was actually emitted, so that the caller only
+// counts a streak as reported when there was something to report.
 static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
                                                 const Settings& s,
-                                                bool logCandidates) {
+                                                bool logCandidates,
+                                                bool* logged) {
     HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTaskbar) return nullptr;
 
@@ -467,7 +470,7 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     }
     if (classMatches == 1) {
         chosen = firstClassMatch;
-    } else if (classMatches > 1) {
+    } else if (classMatches > 1 && logCandidates) {
         Wh_Log(L"%d tray elements share the chevron signature, falling back to name",
                classMatches);
     }
@@ -501,8 +504,11 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     // Nothing identified: dump the candidates so that a single log makes the
     // next unsupported build actionable, and do not touch anything.
     // Logged once per failure streak: the retry runs every few seconds, and
-    // repeating the whole table would bury the rest of the log.
-    if (chosen < 0 && logCandidates) {
+    // repeating the whole table would bury the rest of the log. An empty table
+    // just means nothing was rendered (a retracted taskbar), which needs no
+    // diagnosis, so it is not worth a line.
+    if (chosen < 0 && logCandidates && !cands.empty()) {
+        if (logged) *logged = true;
         Wh_Log(L"Chevron not identified among %d tray candidates:", (int)cands.size());
         for (size_t i = 0; i < cands.size(); i++) {
             Wh_Log(L"  [%d] class=%s aid=%s x=%d name=%s", (int)i,
@@ -528,7 +534,13 @@ static bool PtInRectPad(const RECT& r, POINT pt, int pad) {
 }
 
 static const ULONGLONG ACTION_COOLDOWN_MS = 300;
-static const ULONGLONG REFIND_INTERVAL_MS = 3000;
+// Retry the (expensive) chevron lookup quickly while the cursor is at the
+// taskbar, and only occasionally while it is elsewhere. See the worker loop.
+static const ULONGLONG REFIND_NEAR_MS = 250;
+static const ULONGLONG REFIND_IDLE_MS = 1000;
+// How far from the taskbar the cursor still counts as "at the taskbar". Covers
+// the sliver an auto-hidden taskbar leaves at the screen edge while it slides in.
+static const int TASKBAR_REVEAL_PAD = 32;
 static const ULONGLONG RECT_REFRESH_MS = 750;
 static const ULONGLONG IDLE_STATE_CHECK_MS = 500;
 
@@ -673,25 +685,44 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // cached element and re-detect promptly with the new settings.
             if (pBtn) { pBtn->Release(); pBtn = nullptr; }
             haveRect = false;
+            overBtnPrev = false;
+            insideSince = 0;
+            dwellFired = false;
             nextRefind = 0;
             loggedCandidates = false;
         }
 
+        POINT pt; GetCursorPos(&pt);
+
         // Lazily (re-)find the button only when we don't have a valid one. A
         // destroyed or stale element makes the rectangle query below fail,
-        // which clears pBtn and triggers a prompt re-find — so there is no need
-        // for a periodic cross-process subtree walk while the element is valid.
-        // When the chevron is absent (e.g. no hidden icons), throttle retries
-        // to REFIND_INTERVAL_MS instead of walking the tree every tick.
+        // which clears pBtn and triggers a re-find — so there is no need for a
+        // periodic cross-process subtree walk while the element is valid.
+        //
+        // Re-finding is driven by the cursor rather than by a fixed timer. The
+        // rectangle guard drops the element whenever the chevron stops being
+        // rendered, which for an auto-hiding taskbar happens on every retract,
+        // so a fixed interval would leave the mod idle for up to that interval
+        // after each reveal. Conversely, when nothing is hidden the chevron does
+        // not exist at all and a timer would walk the taskbar subtree forever.
+        // Retry quickly while the cursor is at the taskbar, and not at all while
+        // it is elsewhere, since the chevron cannot be hovered from there anyway.
         if (!pBtn && now >= nextRefind) {
-            bool logNow = !loggedCandidates;
-            pBtn = FindOverflowButton(pAuto, s, logNow);
-            loggedCandidates = pBtn ? false : (loggedCandidates || logNow);
-            nextRefind = now + REFIND_INTERVAL_MS;
-            nextRectRefresh = 0;        // force a fresh rectangle below
-            taskbarPid = 0;
-            GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr),
-                                     &taskbarPid);
+            RECT tb;
+            HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+            bool nearTaskbar = hTaskbar && GetWindowRect(hTaskbar, &tb) &&
+                               PtInRectPad(tb, pt, TASKBAR_REVEAL_PAD);
+            if (nearTaskbar) {
+                bool didLog = false;
+                pBtn = FindOverflowButton(pAuto, s, !loggedCandidates, &didLog);
+                loggedCandidates = pBtn ? false : (loggedCandidates || didLog);
+                nextRefind = now + REFIND_NEAR_MS;
+                nextRectRefresh = 0;    // force a fresh rectangle below
+                taskbarPid = 0;
+                GetWindowThreadProcessId(hTaskbar, &taskbarPid);
+            } else {
+                nextRefind = now + REFIND_IDLE_MS;
+            }
         }
 
         if (pBtn) {
@@ -719,6 +750,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     overBtnPrev = false;    // stale once the button is gone
                     insideSince = 0;
                     dwellFired = false;
+                    leftAt = 0;             // don't collapse on the first tick back
                     nextRefind = 0;
                     WaitForSingleObject(g_stopEvent, s.pollInterval);
                     continue;
@@ -729,7 +761,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
         if (haveRect) {
             // Cheap and EVERY TICK: only local Win32 calls.
-            POINT pt; GetCursorPos(&pt);
             bool overBtn = PtInRectPad(cachedRect, pt, s.pad);
             bool cooling = (now - lastActionAt < ACTION_COOLDOWN_MS);
 
@@ -763,6 +794,15 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             }
             bool flyoutVisible = (flyoutHwnd != nullptr);
             flyoutBelievedOpen = flyoutVisible || cooling;
+
+            // A stay that has already seen an open flyout counts as served, so
+            // re-opening requires leaving and re-entering the hit area. Without
+            // this, moving up into the icons and back down onto the chevron
+            // leaves the enter edge armed, and the click that dismisses the
+            // flyout is immediately followed by the mod opening it again.
+            if (overBtn && flyoutVisible) {
+                dwellFired = true;
+            }
 
             // While hovering the chevron of an open flyout, suppress the
             // "Hide" tooltip that would otherwise cover the bottom icons.
