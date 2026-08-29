@@ -9169,7 +9169,7 @@ static bool EqHookTaskbarSymbols() {
     // Primary-taskbar TaskbarHost access is required. Secondary-taskbar symbols
     // are optional so a build can still provide the primary EQ button when the
     // secondary taskbar ABI has changed.
-    WindhawkUtils::SYMBOL_HOOK requiredHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllRequiredHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
@@ -9179,19 +9179,19 @@ static bool EqHookTaskbarSymbols() {
     };
 
     if (!WindhawkUtils::HookSymbols(
-            h, requiredHooks, ARRAYSIZE(requiredHooks))) {
+            h, taskbarDllRequiredHooks, ARRAYSIZE(taskbarDllRequiredHooks))) {
         Wh_Log(L"EqHookTaskbarSymbols: primary taskbar symbols could not be resolved");
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
          &g_eqCSecondaryTaskBandGetTaskbarHost},
     };
     if (!WindhawkUtils::HookSymbols(
-            h, secondaryHooks, ARRAYSIZE(secondaryHooks))) {
+            h, taskbarDllSecondaryHooks, ARRAYSIZE(taskbarDllSecondaryHooks))) {
         g_eqCSecondaryTaskBandTaskListWndSiteVftable = nullptr;
         g_eqCSecondaryTaskBandGetTaskbarHost = nullptr;
         Wh_Log(L"EqHookTaskbarSymbols: secondary taskbar symbols unavailable; continuing for primary taskbar");
@@ -9200,12 +9200,12 @@ static bool EqHookTaskbarSymbols() {
     // FrameHeight is needed to derive the TaskbarHost -> hosted XAML element
     // offset on supported x64/ARM64 builds. This is the same mechanism used by
     // the actively maintained Taskbar Fluent Media Player mod.
-    WindhawkUtils::SYMBOL_HOOK frameHeightHook[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllFrameHeightHooks[] = {
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
          &g_eqTaskbarHostFrameHeight},
     };
     if (!WindhawkUtils::HookSymbols(
-            h, frameHeightHook, ARRAYSIZE(frameHeightHook))) {
+            h, taskbarDllFrameHeightHooks, ARRAYSIZE(taskbarDllFrameHeightHooks))) {
         g_eqTaskbarHostFrameHeight = nullptr;
         Wh_Log(L"EqHookTaskbarSymbols: TaskbarHost::FrameHeight not found");
 #if defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__)
@@ -9215,13 +9215,13 @@ static bool EqHookTaskbarSymbols() {
 
     // Hook the taskbar rebuild path as an immediate reinjection trigger. Keep
     // the periodic poll as a fallback for rebuilds not routed through this hook.
-    WindhawkUtils::SYMBOL_HOOK trayStartHook[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllTrayStartHooks[] = {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &g_eqTrayUIStartTaskbarOriginal,
          EqTrayUIStartTaskbarHook},
     };
     if (!WindhawkUtils::HookSymbols(
-            h, trayStartHook, ARRAYSIZE(trayStartHook))) {
+            h, taskbarDllTrayStartHooks, ARRAYSIZE(taskbarDllTrayStartHooks))) {
         g_eqTrayUIStartTaskbarOriginal = nullptr;
         Wh_Log(L"EqHookTaskbarSymbols: TrayUI::StartTaskbar not found; using polling fallback");
     }
