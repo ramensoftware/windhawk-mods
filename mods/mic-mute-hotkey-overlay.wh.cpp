@@ -120,8 +120,19 @@ grabbing a bare key system-wide.
   $description: "Used only when auto-position is on"
 - overlayDurationMs: 1500
   $name: Overlay auto-hide delay after toggle (ms)
+  $description: >-
+    How long the overlay stays up after a toggle (or after a drag ends)
+    before it auto-hides. If "Keep visible while mic is active" is on, an
+    unmuted mic with signal keeps the overlay up past this delay for as
+    long as that continues.
 - alwaysShow: false
   $name: Always show overlay (ignore auto-hide)
+- keepVisibleWhileActive: false
+  $name: Keep visible while mic is active
+  $description: >-
+    When enabled, the overlay stays on screen for as long as the mic is
+    unmuted and producing signal, instead of hiding after the auto-hide
+    delay above. Has no effect when "Always show overlay" is on.
 - clickThrough: true
   $name: Click-through overlay (don't block mouse)
   $description: >-
@@ -301,6 +312,7 @@ struct ModSettings {
     int overlayMargin;
     int overlayDurationMs;
     bool alwaysShow;
+    bool keepVisibleWhileActive;
     bool clickThrough;
 } g_settings;
 
@@ -324,6 +336,8 @@ void LoadSettings() {
     g_settings.overlayMargin = (int)Wh_GetIntSetting(L"overlayMargin");
     g_settings.overlayDurationMs = (int)Wh_GetIntSetting(L"overlayDurationMs");
     g_settings.alwaysShow = Wh_GetIntSetting(L"alwaysShow") != 0;
+    g_settings.keepVisibleWhileActive =
+        Wh_GetIntSetting(L"keepVisibleWhileActive") != 0;
     g_settings.clickThrough = Wh_GetIntSetting(L"clickThrough") != 0;
 
     if (g_settings.overlaySize < 24) g_settings.overlaySize = 24;
@@ -915,8 +929,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                 float peak = g_micMuted ? 0.0f : GetMicPeak();
                 RenderCurrentState(hwnd, peak);
 
-                if (!g_settings.alwaysShow && g_overlayVisible) {
-                    bool activeSignal = !g_micMuted && peak > 0.03f;
+                if (!g_settings.alwaysShow && g_overlayVisible &&
+                    !g_dragging) {
+                    bool activeSignal = g_settings.keepVisibleWhileActive &&
+                                        !g_micMuted && peak > 0.03f;
                     DWORD elapsed = GetTickCount() - g_lastActivityTick;
                     if (!activeSignal &&
                         elapsed > (DWORD)g_settings.overlayDurationMs) {
@@ -960,6 +976,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             // programmatic repositioning that ApplyOverlayPositionAndSize
             // and UpdateLayeredWindow's pptDst also trigger.
             g_dragging = false;
+            // Restart the auto-hide countdown from the drop, not from
+            // whatever toggle/signal last touched it — otherwise a drag
+            // that outlasts overlayDurationMs hides the overlay on the
+            // very next timer tick after the user lets go.
+            g_lastActivityTick = GetTickCount();
             if (!g_settings.clickThrough) {
                 RECT wr;
                 GetWindowRect(hwnd, &wr);
