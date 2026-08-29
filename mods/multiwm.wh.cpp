@@ -1,12 +1,12 @@
 // ==WindhawkMod==
-// @id              multiwm
-// @name            MultiWM
+// @id              multiwme
+// @name            MultiWME
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
 // @version         1.13.19
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         MIT
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -ldwmapi -lversion -lgdi32 -ladvapi32
 // ==/WindhawkMod==
 
@@ -21,7 +21,9 @@ including floating - and simple, predictable controls.
 
 ![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif)
 
-*Windows 10 support is currently untested.*
+## Notes
+- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) to preserve workspace across Explorer restarts.*
+- *MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).*
 
 ## Features
 - **First-class floating** - use Floating as a whole-workspace layout 
@@ -53,10 +55,6 @@ A small tray indicator shows the active workspace layout and provides quick acce
 ## Also check out
 - [Virtual Desktop Helper by u2x1](https://windhawk.net/mods/virtual-desktop-helper)
 - [Taskbar Desktop Indicator by Simon Benedict](https://windhawk.net/mods/taskbar-desktop-indicator)
-
-## Notes
-- MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).
-- Windhawk 2.0 (or higher) on a 64-bit system is recommended for the best experience; for x86 builds, virtual desktop switch events are inferred at best effort due to the lack of documented ABIs. 
 
 */
 // ==/WindhawkModReadme==
