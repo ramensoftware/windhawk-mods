@@ -58,9 +58,9 @@ selected. Among those, detection goes:
   only brush past the chevron on the way to the clock.
 - If auto-collapse does not work, the flyout window class name may differ on your
   build. Change it in the "Flyout window class" setting.
-- Windows shows a "Hide" tooltip over the chevron while the flyout is open, which
-  can cover the bottom row of icons. Enable "Hide the chevron tooltip" to
-  suppress it.
+- Windows shows a tooltip for the chevron: "Show hidden icons" before the flyout
+  opens, which can appear ahead of it, and "Hide" once it is open, which can cover
+  the bottom row of icons. Enable "Hide the chevron tooltip" to suppress both.
 - By default the flyout is not opened while a fullscreen app is in the foreground
   (e.g. a fullscreen video or a game), so it can't pop up over the content. Turn
   off "Do not activate over fullscreen apps" to always activate.
@@ -113,9 +113,10 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   otwiera się przy samym przejeżdżaniu obok strzałki w drodze do zegara.
 - Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
   Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".
-- Gdy schowek jest otwarty, Windows pokazuje nad strzałką podpowiedź „Ukryj",
-  która potrafi zasłaniać dolny rząd ikon. Włącz „Ukryj podpowiedź strzałki",
-  aby ją wyłączyć.
+- Windows pokazuje dla strzałki podpowiedź: „Pokaż ukryte ikony" przed otwarciem
+  schowka, która potrafi wyprzedzić jego pojawienie się, oraz „Ukryj" po otwarciu,
+  która zasłania dolny rząd ikon. Włącz „Ukryj podpowiedź strzałki", aby wyłączyć
+  obie.
 - Domyślnie schowek nie otwiera się, gdy na pierwszym planie jest aplikacja
   pełnoekranowa (np. film na pełnym ekranie lub gra), więc nie wyskoczy on na
   wierzchu treści. Wyłącz „Nie aktywuj na aplikacjach pełnoekranowych", aby
@@ -173,8 +174,8 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
 - hideTooltip: false
   $name: Hide the chevron tooltip
   $name:pl-PL: Ukryj podpowiedź strzałki
-  $description: While the flyout is open and the cursor is on the chevron, hide the "Hide" tooltip that Windows shows over the chevron (it can cover the bottom row of icons).
-  $description:pl-PL: Gdy schowek jest otwarty, a kursor jest na strzałce, ukrywa podpowiedź „Ukryj", którą Windows pokazuje nad strzałką (potrafi zasłaniać dolny rząd ikon).
+  $description: While the cursor is on the chevron, hide the tooltip Windows shows for it. That covers both "Show hidden icons", which can appear before the flyout does, and "Hide", which covers the bottom row of icons once it is open.
+  $description:pl-PL: Gdy kursor jest na strzałce, ukrywa pokazywaną dla niej podpowiedź Windows. Dotyczy to zarówno „Pokaż ukryte ikony", która potrafi pojawić się przed schowkiem, jak i „Ukryj", która po otwarciu zasłania dolny rząd ikon.
 - flyoutClass: TopLevelWindowForOverflowXamlIsland
   $name: Flyout window class
   $name:pl-PL: Klasa okna schowka
@@ -566,6 +567,16 @@ static HWND GetVisibleFlyout(const Settings& s, DWORD taskbarPid) {
     return nullptr;
 }
 
+// A tray icon's context menu is a separate window that usually extends past the
+// flyout, so the cursor sitting on it counts as having left the flyout. Menus
+// opened with TrackPopupMenu, which is what most tray icons use, all share this
+// window class, so their presence is a reliable "the user is still busy" signal
+// even when the click that opened the menu was never observed.
+static bool IsPopupMenuOpen() {
+    HWND h = FindWindowW(L"#32768", nullptr);
+    return h && IsWindowVisible(h);
+}
+
 static bool PtOverWindow(HWND hwnd, POINT pt) {
     if (!hwnd) return false;
     RECT r;
@@ -583,9 +594,14 @@ static bool PtOverWindow(HWND hwnd, POINT pt) {
 // windows owned by the taskbar's own process are eligible. Without that check,
 // another application's popup could be hidden with no way for the user to bring
 // it back.
+// The tooltip is matched against the flyout rather than against "above the
+// chevron", because which side it sits on depends on where the taskbar is: with
+// the taskbar on top, both the flyout and the tooltip are below the chevron.
 static void HideChevronTooltip(const Settings& s, const RECT& chevron,
-                               DWORD taskbarPid) {
+                               HWND flyout, DWORD taskbarPid) {
     if (!taskbarPid) return;
+    RECT fly{};
+    bool hasFlyout = flyout && GetWindowRect(flyout, &fly);
 
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, s.tooltipClass.c_str(), nullptr))) {
@@ -595,9 +611,22 @@ static void HideChevronTooltip(const Settings& s, const RECT& chevron,
         if (pid != taskbarPid) continue;
         RECT r;
         if (!GetWindowRect(h, &r)) continue;
+        // Horizontally aligned with the chevron, and either overlapping the
+        // flyout (the "Hide" tooltip shown while it is open) or sitting right
+        // next to the chevron (the "Show hidden icons" tooltip, which can beat
+        // the flyout to the screen). Both tests are direction-agnostic, so they
+        // hold with the taskbar at the bottom and at the top.
+        if (h == flyout) continue;
         bool overlapsX = r.left <= chevron.right && r.right >= chevron.left;
-        bool aboveChevron = r.bottom <= chevron.bottom;
-        if (overlapsX && aboveChevron) {
+        bool overlapsFlyout = hasFlyout &&
+                              r.left < fly.right && r.right > fly.left &&
+                              r.top < fly.bottom && r.bottom > fly.top;
+        LONG band = chevron.bottom - chevron.top;
+        LONG gapAbove = chevron.top - r.bottom;
+        LONG gapBelow = r.top - chevron.bottom;
+        bool besideChevron = (gapAbove >= 0 && gapAbove <= band) ||
+                             (gapBelow >= 0 && gapBelow <= band);
+        if (overlapsX && (overlapsFlyout || besideChevron)) {
             ShowWindow(h, SW_HIDE);
         }
     }
@@ -804,10 +833,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 dwellFired = true;
             }
 
-            // While hovering the chevron of an open flyout, suppress the
-            // "Hide" tooltip that would otherwise cover the bottom icons.
-            if (s.hideTooltip && overBtn && flyoutVisible) {
-                HideChevronTooltip(s, cachedRect, taskbarPid);
+            // Suppress the chevron's tooltip for as long as the cursor is on it:
+            // the "Hide" tooltip covers the bottom row of icons once the flyout
+            // is open, and the "Show hidden icons" one can appear before the
+            // flyout does, which is most noticeable when a hover delay is set.
+            if (s.hideTooltip && overBtn) {
+                HideChevronTooltip(s, cachedRect, flyoutHwnd, taskbarPid);
             }
 
             // Open only on the cursor-enter edge and only when the flyout is
@@ -834,11 +865,17 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // Suspend auto-collapse until the flyout closes on its own —
             // collapsing via Invoke would steal focus and dismiss the popup
             // the user just opened.
-            bool anyBtnDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
-                              (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ||
-                              (GetAsyncKeyState(VK_MBUTTON) & 0x8000);
-            if (anyBtnDown && !anyBtnDownPrev && flyoutVisible &&
-                PtOverWindow(flyoutHwnd, pt)) {
+            // The state bit alone misses a click that starts and ends between
+            // two ticks, which at a large polling interval is most clicks. The
+            // low bit reports a press since the previous call, so it catches
+            // those regardless of the interval.
+            SHORT kl = GetAsyncKeyState(VK_LBUTTON);
+            SHORT kr = GetAsyncKeyState(VK_RBUTTON);
+            SHORT km = GetAsyncKeyState(VK_MBUTTON);
+            bool anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
+            bool pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
+            if ((pressedSinceTick || (anyBtnDown && !anyBtnDownPrev)) &&
+                flyoutVisible && PtOverWindow(flyoutHwnd, pt)) {
                 clickedInFlyout = true;
                 Wh_Log(L"Click inside flyout: auto-collapse suspended");
             }
@@ -850,7 +887,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // Auto-collapse once the cursor left both the button and the flyout.
             if (s.autoClose && flyoutVisible && !cooling && !clickedInFlyout) {
                 bool overFlyout = PtOverWindow(flyoutHwnd, pt);
-                if (overBtn || overFlyout) {
+                if (overBtn || overFlyout || IsPopupMenuOpen()) {
                     leftAt = 0;
                 } else if (leftAt == 0) {
                     leftAt = now;
