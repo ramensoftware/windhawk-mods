@@ -57,20 +57,27 @@ settings. If you do not do this, it will silently fail to inject.
   $name: Restore Windows 7's logoff sequence
   $name:ko-KR: Windows 7의 로그오프 절차 복원
   $description: Switch to the 'logging off' screen after all applications have been closed.
+- noSafetyChecks: false
+  $name: (Advanced) Skip safety checks before restoring the classic logoff sequence
+  $name:ko-KR: 고전 로그오프 절차를 복원하기 전 안전 검사 생략
+  $description: This mod verifies that LogonUI injection was successful on every logoff before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <string>
 #include <optional>
-#include <cstdlib>
-#include <wrl/module.h> // Required for WindowsGetStringRawBuffer/WindowsDeleteString and ComPtr
 #include <mutex>
 #include <regex>
 #include <vector>
+#include <cstdlib>
+#include <cstring>
+#include <wrl/client.h>
+#include <winstring.h>
+#include <windows.storage.streams.h>
 #include <wincodec.h>
 #include <shcore.h>
-#include <windows.storage.streams.h>
+#include <shellapi.h>
 #include <eventtoken.h>
 #include <Uxtheme.h>
 
@@ -1909,6 +1916,10 @@ HRESULT GetBitmapFromRandomStream(Microsoft::WRL::ComPtr<ABI::Windows::Storage::
 
 #pragma region CustomBSDR.cpp
 void CustomBSDR::CenterWindow(HWND hWnd) {
+    if (!hWnd) {
+        return;
+    }
+
     RECT rcWindow, rcWorkArea;
     GetWindowRect(hWnd, &rcWindow);
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWorkArea, 0);
@@ -3170,6 +3181,9 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 } else {
                     ret = GetLastError();
                     Wh_Log(L"MsgWaitForMultipleObjects returned %d, GLE=%d", result, ret);
+                    if (hBgWnd && IsWindow(hBgWnd)) {
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+                    }
                     break;
                 }
             }
@@ -3274,7 +3288,7 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
     Wh_Log(L"BlockedShutdownUXImpl::get_ScaleFactor");
     *scaleFactor = 100;
     return S_OK;
-};
+}
 
 long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigned char* wasClicked) {
     Wh_Log(L"BlockedShutdownUXImpl::get_WasClicked");
@@ -3283,7 +3297,7 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
         *wasClicked = _wasClicked;
     }
     return S_OK;
-};
+}
 
 long __fastcall BlockedShutdownUXImpl_AddApplication_hook(void* thisPtr, IShutdownBlockingApp* blockingApp) {
     std::wstring logMessage = L"BlockedShutdownUXImpl::AddApplication, AppId=";
@@ -3444,6 +3458,22 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
 #pragma endregion LogonUI BSDR Hooks (Interface)
 
 #pragma region Winlogon hooks (disable async logoff)
+bool IsAuthUxInstalled() {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\WindowsRuntime\\ActivatableClassId\\Windows.Internal.UI.Logon.Controller.BlockedShutdownResolverUX", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        wchar_t dllPath[MAX_PATH];
+        DWORD size = sizeof(dllPath);
+        if (RegQueryValueExW(hKey, L"DllPath", NULL, NULL, (LPBYTE)dllPath, &size) == ERROR_SUCCESS) {
+            if (wcsstr(_wcsupr(dllPath), L"\\WINDOWS.UI.BLOCKEDSHUTDOWN.DLL") == NULL) { // non stock dll
+                RegCloseKey(hKey);
+                return true;
+            }
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+
 // Safeguard: check if user read the readme
 // The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
 // it will get stuck in the invisible secure desktop, and users can become clueless.
@@ -3456,15 +3486,73 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
 //
 // This approach, derived from the WH tool mod code, also doesn't mess with internal Windhawk configuration
 bool IsLogonUiInjectionEnabled() {
+    // Skip by user choice
+    if (Wh_GetIntSetting(L"noSafetyChecks")) {
+        return true;
+    }
+
+    // Skip if AuthUX is installed
+    if (IsAuthUxInstalled()) {
+        return true;
+    }
+
+    // Check if Windhawk service is running, to deny the portable version
+    // One of these happens on portable (depending on the Windhawk.exe exit timing):
+    //   The active probe below succeeds as WH is still running, but it dies early during the logoff sequence, so actual LUI hook fails
+    //   LogonUI hooks try to initialize but gets unloaded immediately (resulting in the bail-out force resolve path)
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (!hSCM) {
+        Wh_Log(L"Failed to open SCM, GLE=%d", GetLastError());
+        return false;
+    }
+
+    SC_HANDLE hService = OpenServiceW(hSCM, L"Windhawk", SERVICE_QUERY_STATUS);
+    if (!hService) {
+        // Serivce not installed, portable
+        CloseServiceHandle(hSCM);
+        return false;
+    }
+
+    SERVICE_STATUS_PROCESS ssp;
+    DWORD bytesNeeded;
+    if (QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&ssp), sizeof(SERVICE_STATUS_PROCESS), &bytesNeeded)) {
+        if (ssp.dwCurrentState != SERVICE_RUNNING) {
+            // Service not running, portable
+            CloseServiceHandle(hService);
+            CloseServiceHandle(hSCM);
+            return false;
+        }
+    } else {
+        Wh_Log(L"Windhawk service query failed, GLE=%d", GetLastError());
+        CloseServiceHandle(hService);
+        CloseServiceHandle(hSCM);
+        return false;
+    }
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hSCM);
+    Wh_Log(L"Windhawk service running");
+
+    // Active LogonUI injection probe
     STARTUPINFO si = {0};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {0};
 
     DWORD myPid = GetCurrentProcessId();
+    std::wstring cmdline = L"LogonUI.exe /wh-load-check " + std::to_wstring(myPid);
+
+    wchar_t logonUiPath[MAX_PATH];
+    UINT len = GetSystemDirectoryW(logonUiPath, MAX_PATH);
+    if (!len || len >= MAX_PATH - ARRAYSIZE(L"\\LogonUI.exe")) {
+        return false;
+    }
+    wcscat_s(logonUiPath, L"\\LogonUI.exe");
+
+    Wh_SetIntValue(L"LogonUiLoadCheck", -1);
 
     if (!CreateProcessW(
-        L"C:\\Windows\\System32\\LogonUI.exe",
-        (LPWSTR)(L"LogonUI.exe /wh-load-check " + std::to_wstring(myPid)).c_str(),
+        logonUiPath,
+        cmdline.data(),
         nullptr,
         nullptr,
         false,
@@ -3481,6 +3569,7 @@ bool IsLogonUiInjectionEnabled() {
     // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code
     DWORD result = WaitForSingleObject(pi.hProcess, 2000);
     if (result != WAIT_OBJECT_0) {
+        // Should exit immediately but just to be safe
         Wh_Log(L"LogonUI wait timed out or failed");
         TerminateProcess(pi.hProcess, 0);
     }
@@ -3556,22 +3645,26 @@ BOOL Wh_ModInit() {
                 return FALSE;
             }
         }
+        Wh_Log(L"lui? %d", IsLogonUiInjectionEnabled());
         return TRUE;
     }
 
-    hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hBlockedShutdownDll) {
-        if (!WindhawkUtils::HookSymbols(hBlockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
-            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
+    if (wcsstr(exeName, L"\\LOGONUI.EXE") == NULL) {
+        // User decided to mess with the mod advanced settings
+        Wh_Log(L"Loaded in unexpected process!");
         return FALSE;
     }
 
-    if (wcsstr(exeName, L"\\LOGONUI.EXE") == NULL) {
-        Wh_Log(L"Loaded in unexpected process!");
+    // Needed for getting at least the logoff sequence part to work with AuthUX on Windhawk portable
+    // Otherwise Windhawk fails to uninitialize the mod properly during logoff (both for winlogon and LogonUI) and force resolves without showing the dialog
+    // 14:46:12.220 3396 winlogon.exe  [WH] [local@win7-bsdr] [3598:ShutdownWindowsWorkerThread_hook]: ShutdownWindowsWoread_hook: Set g_fShutdownResolverDisabled to 1
+    // 14:46:12.230 6084 LogonUI.exe  [WH] [local@win7-bsdr] [3631:Wh_ModInit]: Init
+    // 14:46:12.233 6084 LogonUI.exe  [WH] [local@win7-bsdr] [3659:Wh_ModInit]: AuthUX installed, skipping LogonUI hooks.
+    // 14:46:12.390 3396 winlogon.exe  [WH] [local@win7-bsdr] [3719:Wh_ModUninit]: Uninit
+    // 14:46:19.559 3396 winlogon.exe  [WH] [local@win7-bsdr] [3605:ShutdownWindowsWorkerThread_hook]: ShutdownWindowsWoread ended; restored p_g_fShutdownResolverDisabled to 0 // ????
+    // (Doesn't happen with WH service, and stopping it while the BSDR dialog is open cleanly results in the cancel resolve path on uninit)
+    if (IsAuthUxInstalled()) {
+        Wh_Log(L"AuthUX installed, skipping LogonUI hooks...");
         return FALSE;
     }
 
@@ -3590,13 +3683,24 @@ BOOL Wh_ModInit() {
             if (checkValue != -1) {
                 Wh_Log(L"Writing load check value %d+%d=%d...", checkValue, pid, checkValue + pid);
                 Wh_SetIntValue(L"LogonUiLoadCheck", checkValue + pid);
-                ExitProcess(0);
+                return FALSE; // Let LogonUI automatically exit immediately (because it lacks proper args)
             }
             break;
         }
     }
 
     LocalFree(argv);
+
+    hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hBlockedShutdownDll) {
+        if (!WindhawkUtils::HookSymbols(hBlockedShutdownDll, hooks, ARRAYSIZE(hooks))) {
+            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
+        return FALSE;
+    }
 
     CustomBSDR::hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!CustomBSDR::hStopEvent) {
