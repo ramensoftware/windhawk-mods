@@ -1,11 +1,14 @@
 // ==WindhawkMod==
 // @id              taskbar-fluent-media-player-lx
-// @name            任务栏 Fluent 媒体播放器（LX Music 歌词版）
-// @description     基于 Taskbar Fluent Media Player 二开的 Windhawk 插件，在 Windows 11 任务栏嵌入 Fluent 风格媒体播放器，并额外显示 LX Music 桌面版的当前歌词（歌词位于底部，可蔓延至播放控件下方）。仅适配 LX Music，需在 LX Music 设置中启用"开放 API 服务"。
+// @name            Taskbar Fluent Media Player (LX Music Lyrics)
+// @name:zh-CN     任务栏 Fluent 媒体播放器（LX Music 歌词版）
+// @description     A Windhawk mod based on Taskbar Fluent Media Player, embedding a Fluent-style media player in the Windows 11 taskbar with additional real-time LX Music lyrics display (lyrics at the bottom, extending beneath playback controls). Only compatible with LX Music; requires enabling "Open API service" in LX Music settings.
+// @description:zh-CN 基于 Taskbar Fluent Media Player 二开的 Windhawk 插件，在 Windows 11 任务栏嵌入 Fluent 风格媒体播放器，并额外显示 LX Music 桌面版的当前歌词（歌词位于底部，可蔓延至播放控件下方）。仅适配 LX Music，需在 LX Music 设置中启用"开放 API 服务"。
 // @description:ru-RU Форк Windhawk-мода Taskbar Fluent Media Player, добавляющий отображение текущего текста песни LX Music в панели задач (внизу, под элементами управления). Только для LX Music, требуется включить "Open API service" в настройках LX Music.
 // @version         1.6.0.10
-// @author          zq20180515 (forked from Salyts)
+// @author          zq20180515 (fork Salyts)
 // @github          https://github.com/zq20180515
+// @license         MIT
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser -lwinhttp
 // ==/WindhawkMod==
@@ -58,6 +61,12 @@
 | **频谱设置** | 频谱位置（左/右/重叠）、重叠透明度 |
 | **行为设置** | 迷你播放器弹窗开关 |
 
+## 📸 效果截图
+
+![taskbar lyrics](https://i.imgur.com/REPLACE_WITH_YOUR_IMGUR_ID.png)
+
+> 歌词显示在任务栏播放器底部，支持双行（当前行+下一句）、频谱重叠、全中文设置。
+
 ## 🙏 致谢
 
 - **[Salyts](https://github.com/Salyts)** — Taskbar Fluent Media Player 原作者
@@ -100,6 +109,12 @@
 - **LX Music Desktop** v2.7.0+ with "Open API service" enabled (default port: 23330)
 - The mod fetches status and full LRC lyrics via `http://127.0.0.1:port/status`
 
+## Screenshots
+
+![taskbar lyrics](https://i.imgur.com/REPLACE_WITH_YOUR_IMGUR_ID.png)
+
+> Lyrics displayed at the bottom of the taskbar player, with dual-line (current + next), visualizer overlay, and full Chinese settings.
+
 ## Credits
 
 - **[Salyts](https://github.com/Salyts)** — Original Taskbar Fluent Media Player author
@@ -113,82 +128,77 @@
 
 - LxMusicSettings:
   - lxEnabled: true
-    $name: 启用 LX Music 歌词
+    $name: Enable LX Music lyrics
     $name:zh-CN: 启用 LX Music 歌词
     $description: Show the current lyric line from the LX Music desktop open API in the taskbar player, displayed in the bottom row spanning beneath the playback controls. Requires the Open API service to be enabled in LX Music settings.
-    $description:zh-CN: 在任务栏播放器中显示 LX Music 桌面版开放 API 返回的当前歌词行，歌词位于底部行并蔓延至播放控件下方。需要在 LX Music 设置中启用“开放 API 服务”。
   - lxHost: "127.0.0.1"
-    $name: LX Music API 地址
-    $name:zh-CN: LX Music API 主机
+    $name: LX Music API host
+    $name:zh-CN: LX Music API 地址
     $description: Host of the LX Music open API service. Keep 127.0.0.1 when LX Music runs on this PC.
-    $description:zh-CN: LX Music 开放 API 服务所在主机。LX Music 在本机运行时保持 127.0.0.1 即可。
   - lxPort: 23330
-    $name: LX Music API 端口
+    $name: LX Music API port
     $name:zh-CN: LX Music API 端口
     $description: Port of the LX Music open API service (shown in LX Music settings once the service is enabled). Default is 23330.
-    $description:zh-CN: LX Music 开放 API 服务端口（启用服务后可在 LX Music 设置中查看）。默认为 23330。
   - lyricsReplaceArtist: true
-    $name: 用歌词替换歌手名
+    $name: Replace artist name with lyrics
     $name:zh-CN: 用歌词替换歌手名
     $description: When enabled, the artist name is hidden (row 0 shows only the track title). The current lyric line is always displayed in the bottom row (row 1), spanning the full width beneath the playback controls. When disabled, row 0 shows both track title and artist.
-    $description:zh-CN: 启用后隐藏歌手名（第0行仅显示歌名）。当前歌词行始终显示在底部第1行，跨全宽并蔓延至播放控件下方。关闭时第0行同时显示歌名和歌手。
   - lyricsScroll: true
-    $name: 长歌词滚动
+    $name: Scroll long lyrics
     $name:zh-CN: 长歌词滚动
     $description: When enabled, long lyric lines scroll horizontally (reuses the title scroll settings such as speed, mode, pause and gap).
-    $description:zh-CN: 启用后，较长的歌词行水平滚动（复用标题的滚动设置：速度、模式、停顿、间距）。
   - lyricsControlsUpOffset: 6
-    $name: 显示歌词时控件上移量（像素）
-    $name:zh-CN: 歌词显示时播放控件上移距离（像素）
+    $name: Controls up offset when lyrics shown (px)
+    $name:zh-CN: 显示歌词时控件上移量（像素）
     $description: Shifts the playback buttons upward by this many pixels so the lyric row at the bottom stays fully visible. Set to 0 to disable.
-    $description:zh-CN: 将播放按钮向上移动指定像素，使底部歌词行完整可见。设为 0 可关闭。
   - lyricFontSize: 12
-    $name: 歌词字号
+    $name: Lyric font size
+    $name:zh-CN: 歌词字号
     $description: Lyric text font size in pixels.
-    $description:zh-CN: 歌词文字的字体大小（像素）。
   - lyricFont: ""
-    $name: 歌词字体
+    $name: Lyric font family
+    $name:zh-CN: 歌词字体
     $description: Font family name for the lyric text. Leave empty to use the artist name font setting.
-    $description:zh-CN: 歌词使用的字体名称。留空则沿用歌手名字体设置。
   - lyricTopSpacing: 4
-    $name: 歌词与歌名间距（像素，可负值重叠）
+    $name: Lyric-to-title spacing (px, negative for overlap)
+    $name:zh-CN: 歌词与歌名间距（像素，可负值重叠）
     $description: Vertical gap between the song title row and the lyric row, in pixels. Negative values pull the lyric upward to overlap with the title/controls area for a more compact layout.
-    $description:zh-CN: 歌名行与歌词行之间的垂直间距（像素）。设为负值可将歌词向上拉，与歌名/控件区域重叠，实现更紧凑的布局。
   - lyricNoLyricMode: "show_artist"
-    $name: 无歌词时的行为
+    $name: Behavior when no lyrics
+    $name:zh-CN: 无歌词时的行为
     $description: What to show in the lyric row when no lyric is available. "show_artist" displays the artist name, "collapse" hides the lyric row entirely.
-    $description:zh-CN: 无可用歌词时歌词行的行为。"show_artist"显示演唱者名称，"collapse"完全隐藏歌词行。
     $options:
     - "show_artist": Show artist name
     - "collapse": Collapse (hide lyric row)
   - lyricDualLine: true
-    $name: 双行歌词显示（当前行+下一句）
+    $name: Dual-line lyrics (current + next)
+    $name:zh-CN: 双行歌词显示（当前行+下一句）
     $description: When enabled, shows the current lyric (large) plus the next lyric line (small, semi-transparent) below it, parsed from the full LRC lyrics via LX Music open API. Falls back to showing the artist name when the next line is unavailable.
-    $description:zh-CN: 启用后显示当前歌词（大号）+ 下一句歌词（小号半透明），通过LX Music开放API获取完整LRC歌词并解析。无法获取下一句时回退显示演唱者名称。
   - lyricSecondLineSize: 9
-    $name: 第二行字号
+    $name: Second line font size
+    $name:zh-CN: 第二行字号
     $description: Font size of the second (small) lyric line in pixels.
-    $description:zh-CN: 第二行（小号）歌词的字体大小（像素）。
   - lyricSecondLineOpacity: 50
-    $name: 第二行不透明度（0-100）
+    $name: Second line opacity (0-100)
+    $name:zh-CN: 第二行不透明度（0-100）
     $description: Opacity of the second lyric line, 0=invisible, 100=fully opaque.
-    $description:zh-CN: 第二行歌词的不透明度，0=完全透明，100=完全不透明。
   - lyricColor: ""
-    $name: 歌词颜色（支持 #RRGGBB 或 R G B，留空沿用歌手色）
+    $name: Lyric color (#RRGGBB or R G B, empty = artist color)
+    $name:zh-CN: 歌词颜色（支持 #RRGGBB 或 R G B，留空沿用歌手色）
     $description: Custom color for the lyric text. Supports hex format "#RRGGBB" (e.g. "#FF0000") or space-separated "R G B" (e.g. "255 0 0"). Leave empty to use the artist name color.
-    $description:zh-CN: 歌词文字的自定义颜色。支持十六进制"#RRGGBB"（如"#FF0000"）或空格分隔的"R G B"（如"255 0 0"）。留空则沿用歌手名字体颜色。
   - lyricShadow: false
-    $name: 歌词文字阴影（增强可读性，仅非滚动模式）
+    $name: Lyric text shadow (readability, non-scroll only)
+    $name:zh-CN: 歌词文字阴影（增强可读性，仅非滚动模式）
     $description: Adds a subtle drop shadow to the lyric text for better readability. Only effective when lyric scrolling is disabled (scroll mode uses moving text which doesn't support shadow).
-    $description:zh-CN: 为歌词文字添加轻微阴影以增强可读性。仅在关闭歌词滚动时生效（滚动模式下文字动态移动，不支持阴影）。
-  $name: LX Music 歌词
+  $name: LX Music Lyrics
   $name:zh-CN: LX Music 歌词
 
 
 - MainSettings:
   - PlayerSetting:
     - position: "tray_left"
-      $name: 媒体播放器位置
+      $name: Media player position
+      $name:zh-CN: 媒体播放器位置
       $name:ru-RU: Расположение медиаплеера
       $options:
       - "taskbar_left_edge": "Taskbar - Left edge (Overlay)"
@@ -243,7 +253,8 @@
       - "tray_after_showdesktop_left": "Трей - Слева от кнопки Показать рабочий стол"
       - "tray_after_showdesktop_right": "Трей - Справа от кнопки Показать рабочий стол"
     - monitor: 1
-      $name: 显示器
+      $name: Monitor
+      $name:zh-CN: 显示器
       $name:ru-RU: Монитор
       $description: >-
         The monitor number the player will appear on (1, 2, 3...).
@@ -254,93 +265,116 @@
         Это число может отличаться от номера монитора в параметрах
         экрана Windows.
     - playerWidth: "0 0"
-      $name: 媒体播放器宽度（最小 最大）
+      $name: Media player width (min max)
+      $name:zh-CN: 媒体播放器宽度（最小 最大）
       $name:ru-RU: Ширина медиаплеера (min max)
       $description: The first number is the minimum size, and the second is the maximum. You can also set it to 0, which means no limit.
       $description:ru-RU: Первая цифра — это минимальный размер, а вторая — максимальный. Также можно указать 0 — это без лимита.
     - playerHeight: "40 40"
-      $name: 媒体播放器高度（最小 最大）
+      $name: Media player height (min max)
+      $name:zh-CN: 媒体播放器高度（最小 最大）
       $name:ru-RU: Высота медиаплеера (min max)
     - playerMargin: "4 4"
-      $name: 媒体播放器外边距（左 右）
+      $name: Media player margin (left right)
+      $name:zh-CN: 媒体播放器外边距（左 右）
       $name:ru-RU: Отступ медиаплеера (left right)
       $description: The first number is the distance to the left, and the second is to the right.
       $description:ru-RU: Первая цифра — это расстояние влево, а вторая — вправо.
     - autoSwitchSession: true
-      $name: 自动切换到活动媒体会话
+      $name: Auto-switch to active media session
+      $name:zh-CN: 自动切换到活动媒体会话
       $name:ru-RU: Автопереключение на активную медиасессию
       $description: When enabled, the player automatically switches to whichever media session is currently playing. If the active session pauses and another session is already playing, the player will switch to it.
       $description:ru-RU: Если включено, плеер автоматически переключается на воспроизводящую медиасессию. Если текущая сессия поставлена на паузу, а другое приложение уже играет — плеер переключится на него.
     - mirrorLayout: false
-      $name: 镜像布局
+      $name: Mirror layout
+      $name:zh-CN: 镜像布局
       $name:ru-RU: Зеркальное расположение
       $description: Album art, text, and buttons will be displayed on the opposite side
       $description:ru-RU: Обложка альбома, текст и кнопки будут отображаться с противоположной стороны
     - fullHeightHitArea: true
-      $name: 全高不可见点击区域
+      $name: Media player
+      $name:zh-CN: 全高不可见点击区域
       $name:ru-RU: Невидимая область клика на всю высоту
       $description: Extends the clickable/hoverable area of the player to the full height of the taskbar, even if the player itself is shorter. Disable this if you don't want the player to react to clicks/hovers above or below its visible bounds.
       $description:ru-RU: Расширяет кликабельную/наводимую область плеера на всю высоту панели задач, даже если сам плеер меньше по высоте. Отключите, если не хотите, чтобы плеер реагировал на клики/наведение выше или ниже его видимых границ.
-    $name: 媒体播放器
+    $name: Media player
+    $name:zh-CN: 媒体播放器
     $name:ru-RU: Медиаплеер
 
   - AlbumArtSetting:
     - showAlbumArt: true
-      $name: 显示专辑封面
+      $name: Show album art
+      $name:zh-CN: 显示专辑封面
       $name:ru-RU: Отображать обложку альбома
     - albumArtWidth: "32 64"
-      $name: 专辑封面宽度（最小 最大）
+      $name: Album art width (min max)
+      $name:zh-CN: 专辑封面宽度（最小 最大）
       $name:ru-RU: Ширина обложки альбома (min max)
     - albumArtHeight: "32 32"
-      $name: 专辑封面高度（最小 最大）
+      $name: Album art height (min max)
+      $name:zh-CN: 专辑封面高度（最小 最大）
       $name:ru-RU: Высота обложки альбома (min max)
     - albumArtMargin: "0 0"
-      $name: 专辑封面外边距（左 右）
+      $name: Album Art
+      $name:zh-CN: 专辑封面外边距（左 右）
       $name:ru-RU: Отступ обложки альбома (left right)
-    $name: 专辑封面
+    $name: Album Art
+    $name:zh-CN: 专辑封面
     $name:ru-RU: Обложка альбома
 
   - TextAreaSetting:
     - showTrackTitle: true
-      $name: 显示歌曲名称
+      $name: Show track title
+      $name:zh-CN: 显示歌曲名称
       $name:ru-RU: Отображать название трека
     - showTrackArtist: true
-      $name: 显示歌手名称
+      $name: Show artist name
+      $name:zh-CN: 显示歌手名称
       $name:ru-RU: Отображать имя исполнителя
     - textAreaWidth: "0 120"
-      $name: 文本区域宽度（最小 最大）
+      $name: Text area width (min max)
+      $name:zh-CN: 文本区域宽度（最小 最大）
       $name:ru-RU: Ширина текстовой области (min max)
     - textAreaHeight: "0 0"
-      $name: 文本区域高度（最小 最大）
+      $name: Text area height (min max)
+      $name:zh-CN: 文本区域高度（最小 最大）
       $name:ru-RU: Высота текстовой области (min max)
     - textAreaMargin: "5 5"
-      $name: 文本区域外边距（左 右）
+      $name: Text area margin (left right)
+      $name:zh-CN: 文本区域外边距（左 右）
       $name:ru-RU: Отступ текстовой области (left right)
     - textSpacing: -1
-      $name: 歌名与歌手间距
+      $name: Spacing between title and artist
+      $name:zh-CN: 歌名与歌手间距
       $name:ru-RU: Отступ между названием и исполнителем
     - enableTitleScrolling: true
-      $name: 启用歌名滚动
+      $name: Enable track title scrolling
+      $name:zh-CN: 启用歌名滚动
       $name:ru-RU: Включить прокрутку названия трека
       $description: When enabled, the track title will scroll horizontally if it overflows the text area.
       $description:ru-RU: Если включено, название трека будет прокручиваться горизонтально при переполнении текстовой области.
     - enableArtistScrolling: false
-      $name: 启用歌手名滚动
+      $name: Enable artist name scrolling
+      $name:zh-CN: 启用歌手名滚动
       $name:ru-RU: Включить прокрутку имени исполнителя
       $description: When enabled, the artist name will scroll horizontally if it overflows the text area.
       $description:ru-RU: Если включено, имя исполнителя будет прокручиваться горизонтально при переполнении текстовой области.
     - scrollSpeed: 1
-      $name: 滚动速度（1-10）
+      $name: Scroll speed (1-10)
+      $name:zh-CN: 滚动速度（1-10）
       $name:ru-RU: Скорость прокрутки (1-10)
       $description: Controls how fast the text scrolls. 1 = slowest, 10 = fastest.
       $description:ru-RU: Управляет скоростью прокрутки текста. 1 = медленнее всего, 10 = быстрее всего.
     - scrollPauseDuration: 1000
-      $name: 边缘暂停时长（毫秒）
+      $name: Pause duration at edges (ms)
+      $name:zh-CN: 边缘暂停时长（毫秒）
       $name:ru-RU: Пауза на краях (мс)
       $description: How long (in milliseconds) scrolling pauses at the start and end before reversing direction.
       $description:ru-RU: Сколько миллисекунд прокрутка делает паузу на начале и конце перед сменой направления.
     - scrollMode: "bounce"
-      $name: 滚动模式
+      $name: Scroll mode
+      $name:zh-CN: 滚动模式
       $name:ru-RU: Режим прокрутки
       $options:
       - "bounce": "Bounce (back and forth)"
@@ -349,42 +383,51 @@
       - "bounce": "Отскок (туда-обратно)"
       - "loop":   "Петля (непрерывная)"
     - loopGap: 40
-      $name: 循环间距（像素）
+      $name: Loop gap (px)
+      $name:zh-CN: 循环间距（像素）
       $name:ru-RU: Отступ между повторами (пикс.)
       $description: Distance in pixels between the end of the text and the beginning of its copy in Loop mode.
       $description:ru-RU: Расстояние в пикселях между концом текста и началом его копии в режиме «Петля».
     - swapTitleArtist: false
-      $name: 交换歌手名与歌名位置
+      $name: Swap artist name and track title
+      $name:zh-CN: 交换歌手名与歌名位置
       $name:ru-RU: Поменять местами название трека и имя исполнителя
     - emptyTitleText: "Untitled"
-      $name: 无歌名时的占位文本
+      $name: Title text when track has no name
+      $name:zh-CN: 无歌名时的占位文本
       $name:ru-RU: Текст названия, если у трека нет имени
       $description: Shown in the title field when a track is playing but has no title. Leave empty to hide the title text in this case.
       $description:ru-RU: Отображается в поле названия, когда трек играет, но у него нет имени. Оставьте пустым, чтобы скрыть текст названия в этом случае.
     - noMediaTitleText: "Not Playing"
-      $name: 未播放时的歌名占位文本
+      $name: Title text when nothing is playing
+      $name:zh-CN: 未播放时的歌名占位文本
       $name:ru-RU: Текст названия, когда ничего не воспроизводится
       $description: Shown in the title field when there is no media session at all. Leave empty to hide the title text in this case.
       $description:ru-RU: Отображается в поле названия, когда нет ни одной медиа-сессии. Оставьте пустым, чтобы скрыть текст названия в этом случае.
     - emptyArtistText: ""
-      $name: 无歌手时的占位文本
+      $name: Artist text when track has no artist
+      $name:zh-CN: 无歌手时的占位文本
       $name:ru-RU: Текст исполнителя, если у трека не указан автор
       $description: Shown in the artist field when a track is playing but has no artist specified. Leave empty to hide the artist text in this case.
       $description:ru-RU: Отображается в поле исполнителя, когда трек играет, но автор не указан. Оставьте пустым, чтобы скрыть текст исполнителя в этом случае.
     - noMediaArtistText: ""
-      $name: 未播放时的歌手占位文本
+      $name: Text area
+      $name:zh-CN: 未播放时的歌手占位文本
       $name:ru-RU: Текст исполнителя, когда ничего не воспроизводится
       $description: Shown in the artist field when there is no media session at all. Leave empty to hide the artist text in this case.
       $description:ru-RU: Отображается в поле исполнителя, когда нет ни одной медиа-сессии. Оставьте пустым, чтобы скрыть текст исполнителя в этом случае.
-    $name: 文本区域
+    $name: Text area
+    $name:zh-CN: 文本区域
     $name:ru-RU: Текстовая область
 
   - MediaButtonsSettings:
     - showMediaButtons: true
-      $name: 显示播放控件
+      $name: Show media buttons
+      $name:zh-CN: 显示播放控件
       $name:ru-RU: Отображать кнопки управления
     - mediaButtons: [prev, play, next]
-      $name: 播放控件顺序
+      $name: Media buttons order
+      $name:zh-CN: 播放控件顺序
       $name:ru-RU: Расположение кнопок управления
       $description: Select which media control buttons to display and their order. Duplicates are ignored.
       $description:ru-RU: Выберите, какие кнопки управления воспроизведением отображать, а также их порядок. Дубликаты игнорируются.
@@ -409,27 +452,33 @@
       - repeat: Повтор
       - switch_sessions: Переключить сессию
     - mediaButtonsMargin: "2 2"
-      $name: 播放控件外边距（左 右）
+      $name: Media buttons margin (left right)
+      $name:zh-CN: 播放控件外边距（左 右）
       $name:ru-RU: Отступ кнопок управления (left right)
     - buttonSize: 28
-      $name: 按钮大小
+      $name: Button size
+      $name:zh-CN: 按钮大小
       $name:ru-RU: Размер кнопок управления
     - hideUnsupportedButtons: false
-      $name: 隐藏不支持的按钮
+      $name: Media Buttons
+      $name:zh-CN: 隐藏不支持的按钮
       $name:ru-RU: Скрывать неподдерживаемые кнопки
       $description: When enabled, buttons for actions not supported by the current media session are completely hidden instead of shown as disabled.
       $description:ru-RU: Когда включено, кнопки действий, не поддерживаемых текущей медиа-сессией, полностью скрываются вместо отображения в неактивном состоянии.
-    $name: 播放控件
+    $name: Media Buttons
+    $name:zh-CN: 播放控件
     $name:ru-RU: Кнопки управления
 
   - VisualizerFunctionsSettings:
     - vizEnabled: false
-      $name: 启用音频可视化
+      $name: Enable audio visualizer
+      $name:zh-CN: 启用音频可视化
       $name:ru-RU: Включить аудиовизуализатор
       $description: Real-time spectrum bars driven by the system audio output (WASAPI loopback + FFT).
       $description:ru-RU: Спектральные столбики в реальном времени, управляемые системным аудиовыходом (WASAPI loopback + FFT).
     - vizPosition: "right"
-      $name: 位置
+      $name: Position
+      $name:zh-CN: 位置
       $name:ru-RU: Положение
       $description: Which side of the player the bars sit on. "overlay" places the bars behind the title and lyrics (excluding album art) as a semi-transparent backdrop.
       $description:ru-RU: С какой стороны плеера расположены столбики. "overlay" располагает столбики за названием и текстом песни (кроме обложки) в виде полупрозрачного фона.
@@ -442,11 +491,12 @@
       - "right": Справа
       - "overlay": Наложение (за текстом)
     - vizOverlayOpacity: 25
-      $name: 重叠模式不透明度（0-100）
+      $name: Overlay mode opacity (0-100)
+      $name:zh-CN: 重叠模式不透明度（0-100）
       $description: Opacity of the visualizer bars in overlay mode (0-100). Lower values make the bars more transparent so they don't interfere with text readability. Only applies when position is set to "overlay".
-      $description:zh-CN: 重叠模式下频谱条的不透明度（0-100）。数值越低越透明，不影响文字阅读。仅在位置设为"重叠显示"时生效。
     - vizShape: "stereo"
-      $name: 频谱条形状
+      $name: Bar shape
+      $name:zh-CN: 频谱条形状
       $name:ru-RU: Форма столбиков
       $options:
       - "stereo": Stereo
@@ -455,7 +505,8 @@
       - "wave": Wave
       - "breathe": Breathe
     - vizEQ: "default"
-      $name: 均衡器预设
+      $name: EQ preset
+      $name:zh-CN: 均衡器预设
       $name:ru-RU: Пресет эквалайзера
       $options:
       - "default": Balanced
@@ -472,7 +523,8 @@
       - "jazz": Джаз
       - "electronic": Электроника
     - vizAnchor: "middle"
-      $name: 垂直锚点
+      $name: Vertical anchor
+      $name:zh-CN: 垂直锚点
       $name:ru-RU: Вертикальная привязка
       $options:
       - "top": Top
@@ -483,32 +535,39 @@
       - "middle": По центру
       - "bottom": Снизу
     - vizBarCountGap: "7 5"
-      $name: 频谱条（数量 间距）
+      $name: Bars (count gap)
+      $name:zh-CN: 频谱条（数量 间距）
       $name:ru-RU: Столбики (количество промежуток)
       $description: Two values "count gap" — number of bars (1-20) and spacing between them in px.
       $description:ru-RU: Два значения "количество промежуток" — количество столбиков (1-20) и расстояние между ними в пикселях.
     - vizBarSize: "5 3"
-      $name: 频谱条尺寸（宽 高）
+      $name: Bar size (width height)
+      $name:zh-CN: 频谱条尺寸（宽 高）
       $name:ru-RU: Размер столбика (ширина высота)
       $description: Two values "width height" — bar width in px (0-40) and idle (resting) height in px (0-15). Width 0 hides the bars.
       $description:ru-RU: Два значения "ширина высота" — ширина столбика в пикселях (0-40) и высота покоя в пикселях (0-15). Ширина 0 скрывает столбики.
     - vizPadding: "0 0"
-      $name: 内边距（左 右）
+      $name: Padding (left right)
+      $name:zh-CN: 内边距（左 右）
       $name:ru-RU: Отступы (слева справа)
       $description: Two values "left right" in px.
       $description:ru-RU: Два значения "слева справа" в пикселях.
     - vizSensitivity: 150
-      $name: 灵敏度（0-300）
+      $name: Main Settings
+      $name:zh-CN: 灵敏度（0-300）
       $name:ru-RU: Чувствительность (0-300)
-    $name: 音频可视化
+    $name: Main Settings
+    $name:zh-CN: 音频可视化
     $name:ru-RU: Визуализатор
-  $name: 主要设置
+  $name: Main Settings
+  $name:zh-CN: 主要设置
   $name:ru-RU: Основные настройки
 
 - AppearanceSettings:
   - BackgroundStyleSettings:
     - backgroundType: "none"
-      $name: 背景类型
+      $name: Background type
+      $name:zh-CN: 背景类型
       $name:ru-RU: Тип фона
       $options:
       - "none":           "None (transparent)"
@@ -527,44 +586,56 @@
       - "mica_alt":       "Mica Alt"
       - "album_art_blur": "Размытая обложка альбома"
     - solidColor: "35 35 35"
-      $name: 背景颜色（RGB）
+      $name: Background color (RGB)
+      $name:zh-CN: 背景颜色（RGB）
       $name:ru-RU: Цвет фона (RGB)
       $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - solidColor2: "35 35 35"
-      $name: 渐变颜色 1（RGB）
+      $name: Gradient color 1 (RGB)
+      $name:zh-CN: 渐变颜色 1（RGB）
       $name:ru-RU: Цвет градиента 1 (RGB)
     - gradientColor2: "128 128 128"
-      $name: 渐变颜色 2（RGB）
+      $name: Gradient color 2 (RGB)
+      $name:zh-CN: 渐变颜色 2（RGB）
       $name:ru-RU: Цвет градиента 2 (RGB)
     - solidOpacity: 100
-      $name: 纯色不透明度（0-100）
+      $name: Solid color opacity (0-100)
+      $name:zh-CN: 纯色不透明度（0-100）
       $name:ru-RU: Прозрачность сплошного цвета (0-100)
     - gradientAngle: 50
-      $name: 渐变旋转角度（0-360）
+      $name: Gradient rotation angle (0-360)
+      $name:zh-CN: 渐变旋转角度（0-360）
       $name:ru-RU: Угол поворота градиента (0-360)
     - gradientBalance: 50
-      $name: 渐变颜色平衡（0-100）
+      $name: Gradient color balance (0-100)
+      $name:zh-CN: 渐变颜色平衡（0-100）
       $name:ru-RU: Градиентный цветовой баланс (0-100)
     - acrylicTintOpacity: 50
-      $name: 亚克力色调不透明度（0-100）
+      $name: Acrylic tint opacity (0-100)
+      $name:zh-CN: 亚克力色调不透明度（0-100）
       $name:ru-RU: Прозрачность акрилового оттенка (0-100)
     - micaOpacity: 50
-      $name: 云母/云母 Alt 不透明度（0-100）
+      $name: Mica/Mica Alt opacity (0-100)
+      $name:zh-CN: 云母/云母 Alt 不透明度（0-100）
       $name:ru-RU: "'Mica/Mica Alt' прозрачность (0-100)"
     - blurOpacity: 65
-      $name: 封面模糊不透明度（0-100）
+      $name: Album art blur opacity (0-100)
+      $name:zh-CN: 封面模糊不透明度（0-100）
       $name:ru-RU: "'Размытая обложка альбома' прозрачность (0-100)"
     - blurRadius: 11
-      $name: 封面模糊强度（1-50）
+      $name: Album art blur strength (1-50)
+      $name:zh-CN: 封面模糊强度（1-50）
       $name:ru-RU: "'Размытая обложка альбома' Сила размытия (1-50)"
     - cornerRadius: "4"
-      $name: 媒体播放器圆角
+      $name: Media player corner radius
+      $name:zh-CN: 媒体播放器圆角
       $name:ru-RU: Радиус скругления медиаплеера
       $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - enablePlayerHoverEffect: "auto"
-      $name: 播放器悬停效果
+      $name: Player hover effect
+      $name:zh-CN: 播放器悬停效果
       $name:ru-RU: Эффект при наведении на плеер
       $options:
       - "auto":  "Auto (theme changes automatically)"
@@ -577,7 +648,8 @@
       - "white": "Белый"
       - "off":   "Выключить эффект наведения"
     - enableMediaButtonsHoverEffect: "auto"
-      $name: 播放控件悬停效果
+      $name: Media buttons hover effect
+      $name:zh-CN: 播放控件悬停效果
       $name:ru-RU: Эффект при наведении на кнопки управления
       $options:
       - "auto":  "Auto (theme changes automatically)"
@@ -590,7 +662,8 @@
       - "white": "Белый"
       - "off":   "Выключить эффект наведения"
     - enableHoverAnimation: true
-      $name: 平滑悬停动画
+      $name: Background Style
+      $name:zh-CN: 平滑悬停动画
       $name:ru-RU: Плавная анимация наведения
       $description: >-
         Fades the hover/press background and border in and out. Disable this if you
@@ -601,12 +674,14 @@
         Плавно проявляет/скрывает фон и рамку при наведении/нажатии. Выключите, если
         нужен мгновенный эффект наведения без анимации, или если вы стилизуете фон
         плеера модом Windows 11 Taskbar Styler и хотите, чтобы он реагировал мгновенно.
-    $name: 背景样式
+    $name: Background Style
+    $name:zh-CN: 背景样式
     $name:ru-RU: Стиль фона
 
   - MediaButtonsStyleSettings:
     - iconStyle: "fluent_outline"
-      $name: 图标样式
+      $name: Icon style
+      $name:zh-CN: 图标样式
       $name:ru-RU: Вид иконок
       $options:
       - "fluent_outline": "Segoe Fluent Icons (Outline)"
@@ -619,38 +694,47 @@
       - "mdl2_outline":   "Segoe MDL2 Assets (Контур)"
       - "mdl2_filled":    "Segoe MDL2 Assets (Заполненный)"
     - buttonSpacing: 0
-      $name: 播放控件间距
+      $name: Spacing between media buttons
+      $name:zh-CN: 播放控件间距
       $name:ru-RU: Расстояние между кнопками управления
     - buttonIconSize: 12
-      $name: 按钮图标大小
+      $name: Button icon size
+      $name:zh-CN: 按钮图标大小
       $name:ru-RU: Размер иконок кнопок
     - buttonCornerRadius: "4"
-      $name: 播放控件圆角
+      $name: Media buttons corner radius
+      $name:zh-CN: 播放控件圆角
       $name:ru-RU: Скругление кнопок управления
       $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - buttonColor: "0 0 0$255 255 255"
-      $name: 播放控件图标颜色（RGB）
+      $name: Media buttons icons color (RGB)
+      $name:zh-CN: 播放控件图标颜色（RGB）
       $name:ru-RU: Цвет иконок для кнопок управления (RGB)
       $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - buttonColorOpacity: 100
-      $name: 播放控件图标不透明度（0-100）
+      $name: Media Buttons Style
+      $name:zh-CN: 播放控件图标不透明度（0-100）
       $name:ru-RU: Прозрачность иконок для кнопок управления (0-100)
-    $name: 播放控件样式
+    $name: Media Buttons Style
+    $name:zh-CN: 播放控件样式
     $name:ru-RU: Стиль кнопок управления
 
   - TitleTextStyleSettings:
     - titleColor: "0 0 0$255 255 255"
-      $name: 歌名颜色（RGB）
+      $name: Title color (RGB)
+      $name:zh-CN: 歌名颜色（RGB）
       $name:ru-RU: Цвет заголовка (RGB)
       $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - titleColorOpacity: 100
-      $name: 歌名不透明度（0-100）
+      $name: Title opacity (0-100)
+      $name:zh-CN: 歌名不透明度（0-100）
       $name:ru-RU: Прозрачность заголовка (0-100)
     - titleFont: segoe_ui_variable
-      $name: 歌名字体
+      $name: Title font
+      $name:zh-CN: 歌名字体
       $name:ru-RU: Шрифт заголовка
       $options:
       - segoe_ui_variable: Segoe UI Variable Display
@@ -685,10 +769,12 @@
       - times_new_roman:   Times New Roman
       - custom:            Другой...
     - titleFontSize: 12
-      $name: 歌名字号
+      $name: Title font size
+      $name:zh-CN: 歌名字号
       $name:ru-RU: Размер шрифта заголовка
     - titleFontFamily: ""
-      $name: 歌名字体族（自定义选项）
+      $name: Title font family (for Custom option)
+      $name:zh-CN: 歌名字体族（自定义选项）
       $name:ru-RU: Семейство шрифтов заголовка (для варианта «Другой»)
       $description: >-
         For a list of fonts that are shipped with Windows 11, refer to the
@@ -698,7 +784,8 @@
         Список шрифтов, поставляемых с Windows 11, можно найти на следующей странице:
         https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
     - titleFontWeight: ""
-      $name: 歌名粗细
+      $name: Title font weight
+      $name:zh-CN: 歌名粗细
       $name:ru-RU: Насыщенность шрифта заголовка
       $options:
       - "":          Default
@@ -727,7 +814,8 @@
       - Black:       Чёрный
       - ExtraBlack:  Сверхчёрный
     - titleFontStyle: ""
-      $name: 歌名样式
+      $name: Title font style
+      $name:zh-CN: 歌名样式
       $name:ru-RU: Стиль шрифта заголовка
       $options:
       - "":       Default
@@ -740,24 +828,29 @@
       - Oblique:  Наклонный
       - Italic:   Курсив
     - titleCharacterSpacing: 0
-      $name: 歌名字符间距
+      $name: Title Text Style
+      $name:zh-CN: 歌名字符间距
       $name:ru-RU: Межсимвольный интервал заголовка
       $description: Can be a positive or a negative number.
       $description:ru-RU: Может быть положительным или отрицательным числом.
-    $name: 歌名文本样式
+    $name: Title Text Style
+    $name:zh-CN: 歌名文本样式
     $name:ru-RU: Стиль текста заголовка
 
   - ArtistTextStyleSettings:
     - artistColor: "0 0 0$255 255 255"
-      $name: 歌手颜色（RGB）
+      $name: Artist color (RGB)
+      $name:zh-CN: 歌手颜色（RGB）
       $name:ru-RU: Цвет имени исполнителя (RGB)
       $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - artistColorOpacity: 80
-      $name: 歌手不透明度（0-100）
+      $name: Artist opacity (0-100)
+      $name:zh-CN: 歌手不透明度（0-100）
       $name:ru-RU: Прозрачность имени исполнителя (0-100)
     - artistFont: segoe_ui_variable
-      $name: 歌手字体
+      $name: Artist font
+      $name:zh-CN: 歌手字体
       $name:ru-RU: Шрифт имени исполнителя
       $options:
       - segoe_ui_variable: Segoe UI Variable Display
@@ -792,10 +885,12 @@
       - times_new_roman:   Times New Roman
       - custom:            Другой...
     - artistFontSize: 11
-      $name: 歌手字号
+      $name: Artist font size
+      $name:zh-CN: 歌手字号
       $name:ru-RU: Размер шрифта исполнителя
     - artistFontFamily: ""
-      $name: 歌手字体族（自定义选项）
+      $name: Artist font family (for Custom option)
+      $name:zh-CN: 歌手字体族（自定义选项）
       $name:ru-RU: Семейство шрифтов исполнителя (для варианта «Другой»)
       $description: >-
         For a list of fonts that are shipped with Windows 11, refer to the
@@ -805,7 +900,8 @@
         Список шрифтов, поставляемых с Windows 11, можно найти на следующей странице:
         https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
     - artistFontWeight: ""
-      $name: 歌手粗细
+      $name: Artist font weight
+      $name:zh-CN: 歌手粗细
       $name:ru-RU: Насыщенность шрифта исполнителя
       $options:
       - "":          Default
@@ -834,7 +930,8 @@
       - Black:       Чёрный
       - ExtraBlack:  Сверхчёрный
     - artistFontStyle: ""
-      $name: 歌手样式
+      $name: Artist font style
+      $name:zh-CN: 歌手样式
       $name:ru-RU: Стиль шрифта исполнителя
       $options:
       - "":       Default
@@ -847,16 +944,19 @@
       - Oblique:  Наклонный
       - Italic:   Курсив
     - artistCharacterSpacing: 0
-      $name: 歌手字符间距
+      $name: Artist Text Style
+      $name:zh-CN: 歌手字符间距
       $name:ru-RU: Межсимвольный интервал исполнителя
       $description: Can be a positive or a negative number.
       $description:ru-RU: Может быть положительным или отрицательным числом.
-    $name: 歌手文本样式
+    $name: Artist Text Style
+    $name:zh-CN: 歌手文本样式
     $name:ru-RU: Стиль текста исполнителя
 
   - AlbumArtDisplaySettings:
     - albumArtEmptyBehavior: "show"
-      $name: 无封面时的封面行为
+      $name: Album art behavior when no cover available
+      $name:zh-CN: 无封面时的封面行为
       $name:ru-RU: Поведение обложки при отсутствии изображения
       $options:
       - "show":          "Show area"
@@ -867,15 +967,18 @@
       - "hide":          "Скрыть область"
       - "show_icon":     "Показать область со значком"
     - emptyIconGlyph: "E189"
-      $name: 图标字形代码（十六进制）
+      $name: Icon glyph code (hex)
+      $name:zh-CN: 图标字形代码（十六进制）
       $name:ru-RU: Код символа значка (hex)
       $description: "Hex code of the glyph to show, e.g. 'E189' for music note. See https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font"
       $description:ru-RU: "Hex-код символа, например 'E189' для ноты. См. https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font"
     - emptyIconSize: 16
-      $name: 图标大小
+      $name: Icon size
+      $name:zh-CN: 图标大小
       $name:ru-RU: Размер значка
     - emptyIconFont: "segoe_fluent"
-      $name: 图标字体样式
+      $name: Icon font style
+      $name:zh-CN: 图标字体样式
       $name:ru-RU: Стиль шрифта значка
       $options:
       - "segoe_fluent": "Segoe Fluent Icons"
@@ -884,15 +987,18 @@
       - "segoe_fluent": "Segoe Fluent Icons"
       - "segoe_mdl2":   "Segoe MDL2 Assets"
     - emptyIconColor: "140 140 140"
-      $name: 图标颜色（RGB）
+      $name: Icon color (RGB)
+      $name:zh-CN: 图标颜色（RGB）
       $name:ru-RU: Цвет значка (RGB)
       $description: "Use '-1 -1 -1' for the system accent color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используйте '-1 -1 -1' для цвета акцента системы и '-2 -2 -2' для цвета обложки альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - emptyIconOpacity: 100
-      $name: 图标不透明度（0-100）
+      $name: Icon opacity (0-100)
+      $name:zh-CN: 图标不透明度（0-100）
       $name:ru-RU: Прозрачность значка (0-100)
     - albumArtQuality: "medium"
-      $name: 专辑封面质量
+      $name: Album art quality
+      $name:zh-CN: 专辑封面质量
       $name:ru-RU: Качество обложки альбома
       $options:
       - "low":    "Low (faster, less memory)"
@@ -903,27 +1009,34 @@
       - "medium": "Среднее (по умолчанию)"
       - "high":   "Высокое (наилучшее качество)"
     - showPauseOverlay: true
-      $name: 暂停时在封面上显示暂停图标
+      $name: Show pause icon overlay on album art when paused
+      $name:zh-CN: 暂停时在封面上显示暂停图标
       $name:ru-RU: Показывать значок паузы на обложке при паузе
     - pauseOverlayIconSize: 16
-      $name: 暂停图标大小
+      $name: Pause icon size
+      $name:zh-CN: 暂停图标大小
       $name:ru-RU: Размер значка паузы
     - pauseOverlayOpacity: 60
-      $name: 暂停遮罩背景不透明度（0-100）
+      $name: Pause overlay background opacity (0-100)
+      $name:zh-CN: 暂停遮罩背景不透明度（0-100）
       $name:ru-RU: Прозрачность фона оверлея паузы (0-100)
     - albumArtOpacity: 100
-      $name: 专辑封面不透明度（0-100）
+      $name: Album art opacity (0-100)
+      $name:zh-CN: 专辑封面不透明度（0-100）
       $name:ru-RU: Прозрачность обложки альбома (0-100)
     - albumArtCornerRadius: "4"
-      $name: 专辑封面圆角
+      $name: Album art corner radius
+      $name:zh-CN: 专辑封面圆角
       $name:ru-RU: Радиус скругления обложки альбома
       $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - showAppIcon: false
-      $name: 显示媒体应用图标覆盖
+      $name: Show media app icon overlay
+      $name:zh-CN: 显示媒体应用图标覆盖
       $name:ru-RU: Показывать значок медиаприложения поверх обложки
     - appIconCorner: "bottom_right"
-      $name: 应用图标角位
+      $name: App icon corner
+      $name:zh-CN: 应用图标角位
       $name:ru-RU: Угол размещения значка приложения
       $options:
       - "top_left":     "Top left"
@@ -936,14 +1049,17 @@
       - "bottom_left":  "Нижний левый"
       - "bottom_right": "Нижний правый"
     - appIconSize: 12
-      $name: 应用图标大小
+      $name: Album Art Display
+      $name:zh-CN: 应用图标大小
       $name:ru-RU: Размер значка приложения
-    $name: 专辑封面显示
+    $name: Album Art Display
+    $name:zh-CN: 专辑封面显示
     $name:ru-RU: Отображение обложки альбома
 
   - VisualizerStyleSettings:
     - vizColorMode: "solid"
-      $name: 颜色模式
+      $name: Color mode
+      $name:zh-CN: 颜色模式
       $name:ru-RU: Цветовой режим
       $options:
       - "solid": Solid
@@ -958,24 +1074,30 @@
       - "custom_gradient": Пользовательский градиент
       - "acrylic": Акрил
     - vizColor: "0 0 0$255 255 255"
-      $name: 频谱条颜色（RGB）
+      $name: Bar color (RGB)
+      $name:zh-CN: 频谱条颜色（RGB）
       $name:ru-RU: Цвет столбиков (RGB)
       $description: "Used by Solid and Acrylic modes. Use '-1 -1 -1' for the system accent color, '-2 -2 -2' for the album color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme."
       $description:ru-RU: "Используется в режимах Сплошной и Акрил. Используйте '-1 -1 -1' для системного цвета акцента, '-2 -2 -2' для цвета альбома. Также можно указать два цвета через символ $ (например, '0 0 0$255 255 255'), где первый цвет для светлой темы, второй для тёмной."
     - vizColor1: "30 215 96"
-      $name: 渐变颜色 1（RGB）
+      $name: Gradient color 1 (RGB)
+      $name:zh-CN: 渐变颜色 1（RGB）
       $name:ru-RU: Цвет градиента 1 (RGB)
     - vizColor2: "0 180 255"
-      $name: 渐变颜色 2（RGB）
+      $name: Appearance Settings
+      $name:zh-CN: 渐变颜色 2（RGB）
       $name:ru-RU: Цвет градиента 2 (RGB)
-    $name: 音频可视化样式
+    $name: Appearance Settings
+    $name:zh-CN: 音频可视化样式
     $name:ru-RU: Стиль визуализатора
-  $name: 外观设置
+  $name: Appearance Settings
+  $name:zh-CN: 外观设置
   $name:ru-RU: Настройки внешнего вида
 
 - PlayerMenuSettings:
   - placementMode: screen
-    $name: 弹出位置模式
+    $name: Placement mode
+    $name:zh-CN: 弹出位置模式
     $name:ru-RU: Режим расположения
     $description: Choose whether the player menu (mini player popup) opens directly Near the media player, or at a fixed position on the screen.
     $description:ru-RU: Выберите, где открывается меню плеера (мини-плеер) — Рядом с медиаплеером или в фиксированном месте на экране.
@@ -988,10 +1110,12 @@
 
   - PlayerMenuSettingsNear:
     - miniPlayerHorizontalOffsetNear: 0
-      $name: 菜单水平偏移（右/左）
+      $name: Menu horizontal offset (right/left)
+      $name:zh-CN: 菜单水平偏移（右/左）
       $name:ru-RU: Горизонтальное смещение меню (вправо/влево)
     - miniPlayerVerticalPlacementNear: top
-      $name: 垂直位置
+      $name: Vertical placement
+      $name:zh-CN: 垂直位置
       $name:ru-RU: Вертикальное расположение
       $description: Whether the menu opens above or below the media player. Also controls the slide-in animation direction.
       $description:ru-RU: Появляется ли меню сверху или снизу от медиаплеера. Также определяет направление анимации появления.
@@ -1001,12 +1125,14 @@
       $options:ru-RU:
       - top: Сверху
       - bottom: Снизу
-    $name: 靠近媒体播放器
+    $name: Near the media player
+    $name:zh-CN: 靠近媒体播放器
     $name:ru-RU: Рядом с медиаплеером
 
   - PlayerMenuSettingsScreen:
     - miniPlayerHorizontalPlacement: right
-      $name: 屏幕水平位置
+      $name: Horizontal placement on the screen
+      $name:zh-CN: 屏幕水平位置
       $name:ru-RU: Горизонтальное расположение на экране
       $options:
       - left: Left
@@ -1018,11 +1144,13 @@
       - right: Справа
     
     - horizontalDistanceFromScreenEdge: 0
-      $name: 距屏幕右/左侧距离
+      $name: Distance from the right/left side of the screen
+      $name:zh-CN: 距屏幕右/左侧距离
       $name:ru-RU: Расстояние от правого/левого края экрана
     
     - miniPlayerVerticalPlacement: bottom
-      $name: 屏幕垂直位置
+      $name: Vertical placement on the screen
+      $name:zh-CN: 屏幕垂直位置
       $name:ru-RU: Вертикальное расположение на экране
       $options:
       - top: Top
@@ -1034,11 +1162,13 @@
       - bottom: Снизу
     
     - verticalDistanceFromScreenEdge: 0
-      $name: 距屏幕底/顶部距离
+      $name: Distance from the bottom/top side of the screen
+      $name:zh-CN: 距屏幕底/顶部距离
       $name:ru-RU: Расстояние от нижнего/верхнего края экрана
     
     - miniPlayerAnimation: auto
-      $name: 出现动画
+      $name: Appearance animation
+      $name:zh-CN: 出现动画
       $name:ru-RU: Анимация появления
       $options:
       - auto: Automatic
@@ -1052,29 +1182,35 @@
       - bottom: Снизу
       - left: Слева
       - right: Справа
-    $name: 屏幕位置
+    $name: Placement on the screen
+    $name:zh-CN: 屏幕位置
     $name:ru-RU: Расположение на экране
 
   - keepMiniPlayerOpen: false
-    $name: 保持迷你播放器菜单打开
+    $name: Keep mini player menu open
+    $name:zh-CN: 保持迷你播放器菜单打开
     $name:ru-RU: Не закрывать мини-плеер при клике вне
   - hideMediaSessionsList: false
-    $name: 隐藏媒体会话列表
+    $name: Player Menu Settings
+    $name:zh-CN: 隐藏媒体会话列表
     $name:ru-RU: Выключить список медиа сессий
     $description: Hide the list of other media sessions/apps in the player menu
     $description:ru-RU: Не отображать список других медиа сессий/приложений в меню плеера
-  $name: 播放器菜单设置
+  $name: Player Menu Settings
+  $name:zh-CN: 播放器菜单设置
   $name:ru-RU: Настройки меню плеера
 
 - BehaviorSettings:
   - disableAlbumArtClick: false
-    $name: 禁用封面点击（穿透到播放器）
+    $name: Disable album art click (click through to player)
+    $name:zh-CN: 禁用封面点击（穿透到播放器）
     $name:ru-RU: Отключить клик по обложке (сквозной клик на плеер)
     $description: When enabled, clicks on the album art will pass through to the player area underneath
     $description:ru-RU: Когда включено, клики по обложке альбома будут передаваться в область плеера под ней
   - ClickActionSettings:
       - - object: player
-          $name: 对象
+          $name: Object
+          $name:zh-CN: 对象
           $name:ru-RU: Объект
           $options:
           - none:       Nothing
@@ -1085,7 +1221,8 @@
           - player:     Область плеера
           - album_art:  Область обложки альбома
         - click: left_click
-          $name: 点击类型
+          $name: Click type
+          $name:zh-CN: 点击类型
           $name:ru-RU: Тип клика
           $options:
           - none:                Nothing
@@ -1104,7 +1241,8 @@
           - middle_click:        Клик средней кнопкой
           - middle_double_click: Двойной клик средней кнопкой
         - action: open_mini_player
-          $name: 动作
+          $name: Click Actions
+          $name:zh-CN: 动作
           $name:ru-RU: Действие
           $options:
           - none:            Nothing
@@ -1140,11 +1278,13 @@
       - - object: album_art
         - click: left_double_click
         - action: open_app
-    $name: 点击动作
+    $name: Click Actions
+    $name:zh-CN: 点击动作
     $name:ru-RU: Действия при клике
   - MouseWheelActionSettings:
       - - object: player
-          $name: 对象
+          $name: Object
+          $name:zh-CN: 对象
           $name:ru-RU: Объект
           $options:
           - none:       Nothing
@@ -1155,7 +1295,8 @@
           - player:     Область плеера
           - album_art:  Область обложки альбома
         - click: mouse_wheel
-          $name: 鼠标类型
+          $name: Mouse type
+          $name:zh-CN: 鼠标类型
           $name:ru-RU: Тип мыши
           $options:
           - none:             Nothing
@@ -1164,7 +1305,8 @@
           - none:             Ничего
           - mouse_wheel:      Колесо мыши
         - action: switch_tracks
-          $name: 动作
+          $name: Mouse wheel Actions
+          $name:zh-CN: 动作
           $name:ru-RU: Действие
           $options:
           - none:                      Nothing
@@ -1183,46 +1325,57 @@
       - - object: album_art
         - click: mouse_wheel
         - action: switch_sessions
-    $name: 滚轮动作
+    $name: Mouse wheel Actions
+    $name:zh-CN: 滚轮动作
     $name:ru-RU: Действия колеса мыши
   - hideWhenNoMedia: true
-    $name: 无媒体播放时隐藏
+    $name: Hide when no media is playing
+    $name:zh-CN: 无媒体播放时隐藏
     $name:ru-RU: Скрывать, когда ничего не воспроизводится
   - hideFullscreen: true
-    $name: 全屏应用运行时隐藏
+    $name: Hide when a fullscreen app is running
+    $name:zh-CN: 全屏应用运行时隐藏
     $name:ru-RU: Скрывать при запущенном полноэкранном приложении
   - idleHideSeconds: 0
-    $name: 闲置自动隐藏超时（秒，0=禁用）
+    $name: Idle auto-hide timeout (seconds, 0 = disabled)
+    $name:zh-CN: 闲置自动隐藏超时（秒，0=禁用）
     $name:ru-RU: Таймаут автоскрытия при бездействии (секунды, 0 = отключено)
   - showFullTitleOnHover: true
-    $name: 悬停时显示完整歌名（提示）
+    $name: Behavior Settings
+    $name:zh-CN: 悬停时显示完整歌名（提示）
     $name:ru-RU: Показывать полное название трека при наведении (подсказка)
   - enableMiniPlayerPopup: true
-    $name: 启用迷你播放器弹窗
+    $name: Enable mini player popup
+    $name:zh-CN: 启用迷你播放器弹窗
     $description: When disabled, the mini player popup window (showing album art, title, artist and controls) will not appear on click or hover.
-    $description:zh-CN: 关闭后，点击或悬停时不会弹出迷你播放器窗口（显示封面、歌名、演唱者和控件）。
-  $name: 行为设置
+  $name: Behavior Settings
+  $name:zh-CN: 行为设置
   $name:ru-RU: Настройки поведения
 
 - AnimationSettings:
   - enableSmoothPositionAnimation: true
-    $name: 启用平滑位置动画
+    $name: Animation Settings media player
+    $name:zh-CN: 启用平滑位置动画
     $name:ru-RU: Включить плавную анимацию позиции
-  $name: 动画设置
+  $name: Animation Settings media player
+  $name:zh-CN: 动画设置
   $name:ru-RU: Настройки анимации медиаплеера
 
 - NotificationSettings:
   - showSuccessNotification: false
-    $name: 插件加载成功时显示通知
+    $name: Notification Settings
+    $name:zh-CN: 插件加载成功时显示通知
     $name:ru-RU: Показывать уведомление при успешной загрузке мода
     $description: Display a Windows notification when the mod is successfully loaded or reloaded
     $description:ru-RU: Отображать уведомление Windows при успешной загрузке или перезагрузке мода
-  $name: 通知设置
+  $name: Notification Settings
+  $name:zh-CN: 通知设置
   $name:ru-RU: Настройки уведомлений
 
 - ContextMenuSettings:
   - contextMenuItems: [switch_sessions, open_app]
-    $name: 右键菜单项
+    $name: Context menu items
+    $name:zh-CN: 右键菜单项
     $name:ru-RU: Пункты контекстного меню
     $description: Select which items to show in the context menu and their order. Duplicates are ignored.
     $description:ru-RU: Выберите, какие пункты отображать в контекстном меню, и их порядок. Дубликаты игнорируются.
@@ -1247,7 +1400,8 @@
     - switch_sessions:  Переключить сессию
     - open_app:         Открыть медиаприложение
   - repeatStyle: "submenu"
-    $name: 重复样式
+    $name: Repeat style
+    $name:zh-CN: 重复样式
     $name:ru-RU: Стиль повтора
     $options:
     - "submenu": "Submenu (Repeat off / Repeat all / Repeat one)"
@@ -1256,7 +1410,8 @@
     - "submenu": "Подменю (Выкл / Все / Один)"
     - "toggle":  "Переключатель (цикл по режимам)"
   - shuffleStyle: "toggle"
-    $name: 随机样式
+    $name: Shuffle style
+    $name:zh-CN: 随机样式
     $name:ru-RU: Стиль случайного воспроизведения
     $options:
     - "submenu": "Submenu (Shuffle off / Shuffle on)"
@@ -1265,10 +1420,12 @@
     - "submenu": "Подменю (Выкл / Вкл)"
     - "toggle":  "Переключатель (одна кнопка)"
   - showOpenWindhawk: true
-    $name: 显示「打开 Windhawk」按钮
+    $name: Show "Open Windhawk" button
+    $name:zh-CN: 显示「打开 Windhawk」按钮
     $name:ru-RU: Показывать кнопку «Открыть Windhawk»
   - contextMenuIconStyle: "as_media_buttons"
-    $name: 右键菜单图标样式
+    $name: Context menu icon style
+    $name:zh-CN: 右键菜单图标样式
     $name:ru-RU: Стиль иконок контекстного меню
     $options:
     - "as_media_buttons": "Same as Media Buttons"
@@ -1283,35 +1440,45 @@
     - "mdl2_outline":     "Segoe MDL2 Assets (Контур)"
     - "mdl2_filled":      "Segoe MDL2 Assets (Заполненный)"
   - contextMenuIconColor: "0 0 0$255 255 255"
-    $name: 右键菜单图标颜色（RGB）
+    $name: Context menu icons color (RGB)
+    $name:zh-CN: 右键菜单图标颜色（RGB）
     $name:ru-RU: Цвет иконок контекстного меню (RGB)
     $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme. Leave empty to use the Media Buttons color."
     $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через $ (например, '0 0 0$255 255 255'). Оставьте пустым, чтобы использовать цвет кнопок управления."
   - contextMenuIconOpacity: 100
-    $name: 右键菜单图标不透明度（0-100）
+    $name: Context Menu Settings
+    $name:zh-CN: 右键菜单图标不透明度（0-100）
     $name:ru-RU: Прозрачность иконок контекстного меню (0-100)
-  $name: 右键菜单设置
+  $name: Context Menu Settings
+  $name:zh-CN: 右键菜单设置
   $name:ru-RU: Настройки контекстного меню
 - DebugSettings:
   - ignoredProcesses: ""
-    $name: 忽略指定进程的媒体（用 ; 分隔）
+    $name: Ignore media from processes (separate with ; )
+    $name:zh-CN: 忽略指定进程的媒体（用 ; 分隔）
     $name:ru-RU: Игнорировать медиа от процессов (разделять через ; )
   - enableTreeDump: false
-    $name: 注入时将 XAML 元素名输出到日志
+    $name: Dump XAML element names to log on inject
+    $name:zh-CN: 注入时将 XAML 元素名输出到日志
     $name:ru-RU: Записывать имена XAML-элементов в лог при инъекции
   - showDebugBorders: false
-    $name: 显示调试边框
+    $name: Show debug borders
+    $name:zh-CN: 显示调试边框
     $name:ru-RU: Показывать отладочные границы
   - showMiniPlayerBorder: false
-    $name: 显示迷你播放器菜单调试边框
+    $name: Show debug mini player menu border
+    $name:zh-CN: 显示迷你播放器菜单调试边框
     $name:ru-RU: Показывать отладочные границу мини-плеера
   - showLayoutAnchors: false
-    $name: 显示布局锚点与中心
+    $name: Show layout anchors and centers
+    $name:zh-CN: 显示布局锚点与中心
     $name:ru-RU: Показывать якоря и центры разметки
   - showRestartButton: false
-    $name: 在右键菜单中显示重启播放器
+    $name: Debug Settings
+    $name:zh-CN: 在右键菜单中显示重启播放器
     $name:ru-RU: Показывать кнопку перезагрузки плеера в контекстном меню
-  $name: 调试设置
+  $name: Debug Settings
+  $name:zh-CN: 调试设置
   $name:ru-RU: Настройки отладки
 */
 // ==/WindhawkModSettings==
@@ -2022,6 +2189,13 @@ static void LoadSettings() {
     }
     g_settings.lxEnabled              = Wh_GetIntSetting(L"LxMusicSettings.lxEnabled") != 0;
     g_settings.lxHost                 = Str(L"LxMusicSettings.lxHost", L"127.0.0.1");
+    // 安全限制：仅允许回环地址，禁止指向外部服务器
+    {
+        const std::wstring& h = g_settings.lxHost;
+        bool isLoopback = (h == L"127.0.0.1" || h == L"localhost" || h == L"::1" ||
+            (h.size() >= 4 && h.substr(0, 4) == L"127."));
+        if (!isLoopback) g_settings.lxHost = L"127.0.0.1";
+    }
     g_settings.lxPort                 = Int(L"LxMusicSettings.lxPort", 1, 65535, 23330);
     g_settings.lyricsReplaceArtist    = Wh_GetIntSetting(L"LxMusicSettings.lyricsReplaceArtist") != 0;
     g_settings.lyricsScroll           = Wh_GetIntSetting(L"LxMusicSettings.lyricsScroll") != 0;
@@ -4739,6 +4913,7 @@ static bool LxFetchStatus(std::wstring& lyricOut, std::wstring& statusOut,
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return false;
+    WinHttpSetTimeouts(hSession, 2000, 2000, 2000, 2000);
     bool result = false;
     HINTERNET hConnect = WinHttpConnect(hSession, g_settings.lxHost.c_str(),
                                         (INTERNET_PORT)g_settings.lxPort, 0);
@@ -4775,7 +4950,7 @@ static bool LxFetchStatus(std::wstring& lyricOut, std::wstring& statusOut,
     WinHttpCloseHandle(hSession);
     return result;
 }
-static std::thread g_lxThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_lxThread;
 static HANDLE g_lxStopEvent = nullptr;
 static bool IsPureMusicLyric(const std::wstring& lyric) {
     if (lyric.empty() || lyric.length() > 20) return false;
@@ -4819,14 +4994,15 @@ static void StartLxThread() {
     if (!g_settings.lxEnabled) return;
     g_lxStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_lxStopEvent) return;
-    g_lxThread = std::thread(LxPollThreadProc);
+    g_lxThread.emplace(LxPollThreadProc);
 }
 static void StopLxThread() {
     if (g_lxStopEvent) {
         SetEvent(g_lxStopEvent);
     }
-    if (g_lxThread.joinable()) {
-        g_lxThread.join();
+    if (g_lxThread.has_value() && g_lxThread->joinable()) {
+        g_lxThread->join();
+        g_lxThread.reset();
     }
     if (g_lxStopEvent) {
         CloseHandle(g_lxStopEvent);
@@ -8094,8 +8270,11 @@ static Grid BuildPlayerGrid() {
         double phMin = (double)g_settings.playerMinHeight;
         double phMax = (double)g_settings.playerMaxHeight;
         if (g_settings.lxEnabled) {
-            if (phMin < 56.0) phMin = 56.0;
-            if (phMax > 0.0 && phMax < 56.0) phMax = 56.0;
+            // 根据实际歌词设置动态计算最小高度，不强制固定值，也不覆盖用户的最大高度设置
+            double lyricExtra = (double)g_settings.lyricFontSize + g_settings.lyricTopSpacing + 4.0;
+            if (g_settings.lyricDualLine) lyricExtra += (double)g_settings.lyricSecondLineSize;
+            double requiredMin = 36.0 + lyricExtra;
+            if (phMin < requiredMin) phMin = requiredMin;
         }
         bool hasTextOrButtons = g_settings.showTrackTitle || g_settings.showTrackArtist || (g_settings.showMediaButtons && !g_mediaButtons.empty());
         Border backgroundBorder;
@@ -9413,6 +9592,7 @@ static InjectionTarget ResolveInjectionTarget(
     return {};
 }
 static bool InjectPlayerGrid() {
+    g_lyricsCtrlShift = -1.0;
     HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
         Wh_Log(L"InjectPlayerGrid: No taskbar window found");
