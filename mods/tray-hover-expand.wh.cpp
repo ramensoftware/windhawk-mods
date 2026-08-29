@@ -341,11 +341,15 @@ static void DoCollapse(IUIAutomationElement* e) {
 
 // logCandidates asks for a one-off diagnostic dump when identification fails;
 // *logged reports whether one was actually emitted, so that the caller only
-// counts a streak as reported when there was something to report.
+// counts a streak as reported when there was something to report. logWeakMatch
+// is a separate opt-in for the "identified, but not by class name" lines, which
+// the caller silences after the first one: on a build where the class match
+// never works, they would otherwise be logged on every acquisition.
 static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
                                                 const Settings& s,
                                                 bool logCandidates,
-                                                bool* logged) {
+                                                bool* logged,
+                                                bool* logWeakMatch) {
     HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTaskbar) return nullptr;
 
@@ -481,7 +485,8 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
         for (size_t i = 0; i < cands.size(); i++) {
             if (NameMatches(cands[i].name, s)) {
                 chosen = (int)i;
-                if (logCandidates) {
+                if (logWeakMatch) {
+                    *logWeakMatch = true;
                     Wh_Log(L"Chevron matched by name, not by class name");
                 }
                 break;
@@ -497,7 +502,8 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
                 chosen = (int)i;
             }
         }
-        if (chosen >= 0) {
+        if (chosen >= 0 && logWeakMatch) {
+            *logWeakMatch = true;
             Wh_Log(L"Chevron guessed by position: name=%s class=%s x=%d",
                    cands[chosen].name.c_str(), cands[chosen].className.c_str(),
                    (int)cands[chosen].rect.left);
@@ -636,7 +642,11 @@ static void HideChevronTooltip(const Settings& s, const RECT& chevron,
         bool besideChevron = (gapAbove >= 0 && gapAbove <= band) ||
                              (gapBelow >= 0 && gapBelow <= band);
         if (overlapsX && (overlapsFlyout || besideChevron)) {
-            ShowWindow(h, SW_HIDE);
+            // Async: the window belongs to explorer, and the synchronous form
+            // marshals into its UI thread and blocks until that thread handles
+            // it. Hiding a tooltip a frame later is not noticeable; stalling
+            // the poll loop behind a busy shell is.
+            ShowWindowAsync(h, SW_HIDE);
         }
     }
 }
@@ -706,6 +716,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     bool overBtnPrev = false;
     bool dwellFired = false;
     bool loggedCandidates = false;
+    // Survives a successful find, unlike loggedCandidates, so that a build
+    // which always matches by name or by position logs that once rather than
+    // on every acquisition.
+    bool loggedWeakMatch = false;
+    ULONGLONG lastWalkAt = 0;
     bool clickedInFlyout = false;
     bool anyBtnDownPrev = false;
     bool nearTaskbarPrev = false;
@@ -728,22 +743,33 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             overBtnPrev = false;
             insideSince = 0;
             dwellFired = false;
+            leftAt = 0;             // don't collapse on the first tick back
             nextRefind = 0;
             loggedCandidates = false;
+            loggedWeakMatch = false;
         }
 
         POINT pt; GetCursorPos(&pt);
 
-        // Sampled every tick, not only when the chevron is available: the low
-        // bit reports a press since the previous call, so skipping calls would
-        // let an arbitrarily old click be reported as fresh once the chevron
-        // comes back. The state bit alone misses a click that starts and ends
-        // between two ticks, which at a large polling interval is most clicks.
-        SHORT kl = GetAsyncKeyState(VK_LBUTTON);
-        SHORT kr = GetAsyncKeyState(VK_RBUTTON);
-        SHORT km = GetAsyncKeyState(VK_MBUTTON);
-        bool anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
-        bool pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
+        // The "pressed since the previous call" bit is desktop-wide state that
+        // the first caller consumes, so polling it continuously would take it
+        // away from every other application for the whole session. It is only
+        // ever read while auto-collapse is watching an open flyout, so sample
+        // it exactly then: staleness stays bounded by the polling interval for
+        // as long as the result can matter, and the rest of the time the mod
+        // does not touch it at all. flyoutBelievedOpen still holds the previous
+        // tick's value here, which is what makes the first tick covered too.
+        bool anyBtnDown = false;
+        bool pressedSinceTick = false;
+        if (s.autoClose && flyoutBelievedOpen) {
+            SHORT kl = GetAsyncKeyState(VK_LBUTTON);
+            SHORT kr = GetAsyncKeyState(VK_RBUTTON);
+            SHORT km = GetAsyncKeyState(VK_MBUTTON);
+            anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
+            pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
+        } else {
+            anyBtnDownPrev = false;
+        }
 
         // Lazily (re-)find the button only when we don't have a valid one. A
         // destroyed or stale element makes the rectangle query below fail,
@@ -769,18 +795,30 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         // second try after a reveal.
         RECT tb;
         HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        // At least as wide as the hit area, so there is no position the mod
+        // treats as "on the chevron" but not as "at the taskbar".
+        int revealPad = s.pad > TASKBAR_REVEAL_PAD ? s.pad : TASKBAR_REVEAL_PAD;
         bool nearTaskbar = hTaskbar && GetWindowRect(hTaskbar, &tb) &&
-                           PtInRectPad(tb, pt, TASKBAR_REVEAL_PAD);
+                           PtInRectPad(tb, pt, revealPad);
         if (nearTaskbar && !nearTaskbarPrev) {
             refindFailures = 0;
             nextRefind = 0;
         }
         nearTaskbarPrev = nearTaskbar;
 
-        if (!pBtn && nearTaskbar && now >= nextRefind) {
+        // The band-entry reset above clears the backoff, so a cursor crossing
+        // the boundary repeatedly would otherwise earn one full walk per
+        // crossing. This floor keeps the worst case at the fast cadence while
+        // still re-acquiring promptly after an auto-hide reveal.
+        if (!pBtn && nearTaskbar && now >= nextRefind &&
+            now - lastWalkAt >= REFIND_NEAR_MS) {
+            lastWalkAt = now;
             bool didLog = false;
-            pBtn = FindOverflowButton(pAuto, s, !loggedCandidates, &didLog);
+            bool didLogWeak = false;
+            pBtn = FindOverflowButton(pAuto, s, !loggedCandidates, &didLog,
+                                      loggedWeakMatch ? nullptr : &didLogWeak);
             loggedCandidates = pBtn ? false : (loggedCandidates || didLog);
+            loggedWeakMatch = loggedWeakMatch || didLogWeak;
             nextRectRefresh = 0;        // force a fresh rectangle below
             taskbarPid = 0;
             GetWindowThreadProcessId(hTaskbar, &taskbarPid);
@@ -876,8 +914,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 dwellFired = true;
             }
 
-            // Suppress the chevron's tooltip for as long as the cursor is on it:
-            // Suppress the chevron's tooltip while the cursor is on it, both
+            // Suppress the chevron's tooltip while the cursor is on it: both
             // the "Hide" tooltip covering the bottom row of icons once the
             // flyout is open, and the "Show hidden icons" one that can appear
             // before the flyout does.
