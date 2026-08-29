@@ -1,3 +1,10 @@
+## 1.3.8 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7934234cb1abdc0a80161c7a8cbade322549e6cb/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed tray layout changing for specific taskbar height values: 24, 32, and 72.
+* Fixed a visual bug with a grouped taskbar button when the icon size is 16x16.
+* Fixed compatibility with the latest Windows 11 update.
+* Fixed a crash with some icon sizes when the overflow popup is opened.
+
 ## 1.3.7 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5d70208acc5a1f46d1c28439cb21c13f1079ec1d/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed compatibility with new insider Windows 11 builds.
