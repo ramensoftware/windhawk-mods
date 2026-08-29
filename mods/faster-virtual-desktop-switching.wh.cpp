@@ -46,6 +46,8 @@ Laptop users who use three- or four-finger swipe gestures can especially benefit
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
+#include <atomic>
+
 namespace {
 
 struct WtsThumbnailId {
@@ -69,16 +71,19 @@ using MakeBackgroundThumbnailFromThumbnailCache = HRESULT(*)(
     void** result);
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 
-ThumbnailCacheGetThumbnail g_thumbnailCacheGetThumbnailOriginal = nullptr;
-ThumbnailCacheGetThumbnail g_thumbnailCacheApiGetThumbnailOriginal = nullptr;
+ThumbnailCacheGetThumbnail g_thumbcacheGetThumbnailOriginal = nullptr;
+ThumbnailCacheGetThumbnail g_thumbcacheApiGetThumbnailOriginal = nullptr;
+ThumbnailCacheGetThumbnail g_windowsStorageGetThumbnailOriginal = nullptr;
+ThumbnailCacheGetThumbnail g_windowsStorageApiGetThumbnailOriginal = nullptr;
 MakeBackgroundThumbnailFromThumbnailCache
     g_makeBackgroundThumbnailOriginal = nullptr;
 LoadLibraryExW_t g_loadLibraryExWOriginal = nullptr;
 thread_local int g_makeBackgroundThumbnailDepth = 0;
-volatile LONG g_twinuiPcShellHookAttempted = FALSE;
-volatile LONG g_thumbcacheHookAttempted = FALSE;
-volatile LONG g_windowsStorageHookAttempted = FALSE;
-volatile LONG g_maximumThumbnailSize = 1024;
+std::atomic_bool g_twinuiPcShellHookAttempted{false};
+std::atomic_bool g_thumbcacheHookAttempted{false};
+std::atomic_bool g_windowsStorageHookAttempted{false};
+std::atomic_bool g_thumbnailClampLogged{false};
+std::atomic<int> g_maximumThumbnailSize{1024};
 
 // Load settings atomically because Explorer can switch desktops while the
 // Windhawk settings callback runs on another thread.
@@ -89,7 +94,7 @@ void LoadSettings() {
     } else if (maximumSize > 1024) {
         maximumSize = 1024;
     }
-    InterlockedExchange(&g_maximumThumbnailSize, maximumSize);
+    g_maximumThumbnailSize.store(maximumSize);
 }
 
 // Return true for the shell process, including early Explorer startup before
@@ -112,16 +117,23 @@ HRESULT MakeBackgroundThumbnailFromThumbnailCacheHook(
     void* wallpaperPath,
     RECT bounds,
     void** result) {
-    ++g_makeBackgroundThumbnailDepth;
-    const HRESULT resultCode = g_makeBackgroundThumbnailOriginal(
+    struct DepthGuard {
+        DepthGuard() {
+            ++g_makeBackgroundThumbnailDepth;
+        }
+
+        ~DepthGuard() {
+            --g_makeBackgroundThumbnailDepth;
+        }
+    } depthGuard;
+
+    return g_makeBackgroundThumbnailOriginal(
         self,
         dcompThumbnail,
         virtualDesktop,
         wallpaperPath,
         bounds,
         result);
-    --g_makeBackgroundThumbnailDepth;
-    return resultCode;
 }
 
 UINT ClampTransitionThumbnailSize(UINT requestedSize) {
@@ -129,14 +141,22 @@ UINT ClampTransitionThumbnailSize(UINT requestedSize) {
         return requestedSize;
     }
 
-    const UINT maximumSize = static_cast<UINT>(
-        InterlockedCompareExchange(&g_maximumThumbnailSize, 0, 0));
-    return requestedSize > maximumSize ? maximumSize : requestedSize;
+    const UINT maximumSize =
+        static_cast<UINT>(g_maximumThumbnailSize.load());
+    if (requestedSize <= maximumSize) {
+        return requestedSize;
+    }
+
+    if (!g_thumbnailClampLogged.exchange(true)) {
+        Wh_Log(L"Clamped virtual desktop wallpaper thumbnail from %u to %u",
+               requestedSize,
+               maximumSize);
+    }
+    return maximumSize;
 }
 
-// Clamp only calls made synchronously by Windows' virtual desktop wallpaper
-// helper. All other thumbnail-cache clients receive their original arguments.
-HRESULT STDMETHODCALLTYPE ThumbnailCacheGetThumbnailHook(
+HRESULT CallThumbnailCacheGetThumbnail(
+    ThumbnailCacheGetThumbnail original,
     void* self,
     void* shellItem,
     UINT requestedSize,
@@ -145,10 +165,10 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheGetThumbnailHook(
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId) {
     requestedSize = ClampTransitionThumbnailSize(requestedSize);
-    if (!g_thumbnailCacheGetThumbnailOriginal) {
+    if (!original) {
         return E_FAIL;
     }
-    return g_thumbnailCacheGetThumbnailOriginal(
+    return original(
         self,
         shellItem,
         requestedSize,
@@ -158,7 +178,9 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheGetThumbnailHook(
         thumbnailId);
 }
 
-HRESULT STDMETHODCALLTYPE ThumbnailCacheApiGetThumbnailHook(
+// Clamp only calls made synchronously by Windows' virtual desktop wallpaper
+// helper. All other thumbnail-cache clients receive their original arguments.
+HRESULT STDMETHODCALLTYPE ThumbcacheGetThumbnailHook(
     void* self,
     void* shellItem,
     UINT requestedSize,
@@ -166,11 +188,65 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheApiGetThumbnailHook(
     void** sharedBitmap,
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId) {
-    requestedSize = ClampTransitionThumbnailSize(requestedSize);
-    if (!g_thumbnailCacheApiGetThumbnailOriginal) {
-        return E_FAIL;
-    }
-    return g_thumbnailCacheApiGetThumbnailOriginal(
+    return CallThumbnailCacheGetThumbnail(
+        g_thumbcacheGetThumbnailOriginal,
+        self,
+        shellItem,
+        requestedSize,
+        flags,
+        sharedBitmap,
+        outFlags,
+        thumbnailId);
+}
+
+HRESULT STDMETHODCALLTYPE ThumbcacheApiGetThumbnailHook(
+    void* self,
+    void* shellItem,
+    UINT requestedSize,
+    DWORD flags,
+    void** sharedBitmap,
+    DWORD* outFlags,
+    WtsThumbnailId* thumbnailId) {
+    return CallThumbnailCacheGetThumbnail(
+        g_thumbcacheApiGetThumbnailOriginal,
+        self,
+        shellItem,
+        requestedSize,
+        flags,
+        sharedBitmap,
+        outFlags,
+        thumbnailId);
+}
+
+HRESULT STDMETHODCALLTYPE WindowsStorageGetThumbnailHook(
+    void* self,
+    void* shellItem,
+    UINT requestedSize,
+    DWORD flags,
+    void** sharedBitmap,
+    DWORD* outFlags,
+    WtsThumbnailId* thumbnailId) {
+    return CallThumbnailCacheGetThumbnail(
+        g_windowsStorageGetThumbnailOriginal,
+        self,
+        shellItem,
+        requestedSize,
+        flags,
+        sharedBitmap,
+        outFlags,
+        thumbnailId);
+}
+
+HRESULT STDMETHODCALLTYPE WindowsStorageApiGetThumbnailHook(
+    void* self,
+    void* shellItem,
+    UINT requestedSize,
+    DWORD flags,
+    void** sharedBitmap,
+    DWORD* outFlags,
+    WtsThumbnailId* thumbnailId) {
+    return CallThumbnailCacheGetThumbnail(
+        g_windowsStorageApiGetThumbnailOriginal,
         self,
         shellItem,
         requestedSize,
@@ -183,8 +259,7 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheApiGetThumbnailHook(
 // Hook the outer wallpaper helper so the thumbnail-cache detour can identify
 // its dynamic call context without relying on compiler code layout.
 bool HookBackgroundThumbnailHelper(HMODULE module) {
-    if (!module || InterlockedExchange(
-                       &g_twinuiPcShellHookAttempted, TRUE)) {
+    if (!module || g_twinuiPcShellHookAttempted.exchange(true)) {
         return false;
     }
 
@@ -218,8 +293,14 @@ bool HookBackgroundThumbnailHelper(HMODULE module) {
 // the concrete method by symbol in whichever naturally loaded module provides
 // it, avoiding COM activation and a hard-coded vtable slot.
 bool HookThumbnailCache(
-    HMODULE module, volatile LONG* hookAttempted, PCWSTR moduleName) {
-    if (!module || InterlockedExchange(hookAttempted, TRUE)) {
+    HMODULE module,
+    std::atomic_bool* hookAttempted,
+    PCWSTR moduleName,
+    ThumbnailCacheGetThumbnail* getThumbnailOriginal,
+    ThumbnailCacheGetThumbnail getThumbnailHook,
+    ThumbnailCacheGetThumbnail* apiGetThumbnailOriginal,
+    ThumbnailCacheGetThumbnail apiGetThumbnailHook) {
+    if (!module || hookAttempted->exchange(true)) {
         return false;
     }
 
@@ -229,26 +310,24 @@ bool HookThumbnailCache(
             {
                 L"public: virtual long __cdecl CThumbnailCache::GetThumbnail(struct IShellItem *,unsigned int,enum WTS_FLAGS,struct ISharedBitmap * *,enum WTS_CACHEFLAGS *,struct WTS_THUMBNAILID *)",
             },
-            reinterpret_cast<void**>(
-                &g_thumbnailCacheGetThumbnailOriginal),
-            reinterpret_cast<void*>(ThumbnailCacheGetThumbnailHook),
+            reinterpret_cast<void**>(getThumbnailOriginal),
+            reinterpret_cast<void*>(getThumbnailHook),
             true,
         },
         {
             {
                 L"public: virtual long __cdecl CThumbnailCacheAPI::GetThumbnail(struct IShellItem *,unsigned int,enum WTS_FLAGS,struct ISharedBitmap * *,enum WTS_CACHEFLAGS *,struct WTS_THUMBNAILID *)",
             },
-            reinterpret_cast<void**>(
-                &g_thumbnailCacheApiGetThumbnailOriginal),
-            reinterpret_cast<void*>(ThumbnailCacheApiGetThumbnailHook),
+            reinterpret_cast<void**>(apiGetThumbnailOriginal),
+            reinterpret_cast<void*>(apiGetThumbnailHook),
             true,
         },
     };
 
     const bool symbolsHooked = WindhawkUtils::HookSymbols(
         module, symbolHooks, ARRAYSIZE(symbolHooks));
-    const bool registeredHook = g_thumbnailCacheGetThumbnailOriginal ||
-                                g_thumbnailCacheApiGetThumbnailOriginal;
+    const bool registeredHook = *getThumbnailOriginal ||
+                                *apiGetThumbnailOriginal;
     if (!registeredHook) {
         Wh_Log(L"Failed to hook thumbnail cache in %s", moduleName);
         return false;
@@ -261,32 +340,37 @@ bool HookThumbnailCache(
 
     Wh_Log(L"Hooked thumbnail cache in %s (concrete=%d api=%d)",
            moduleName,
-           g_thumbnailCacheGetThumbnailOriginal != nullptr,
-           g_thumbnailCacheApiGetThumbnailOriginal != nullptr);
+           *getThumbnailOriginal != nullptr,
+           *apiGetThumbnailOriginal != nullptr);
     return true;
 }
 
 bool HookLoadedThumbnailCache() {
-    if (g_thumbnailCacheGetThumbnailOriginal ||
-        g_thumbnailCacheApiGetThumbnailOriginal) {
-        return false;
-    }
-
+    bool registeredHook = false;
     if (HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll");
-        thumbcache && HookThumbnailCache(
-                          thumbcache,
-                          &g_thumbcacheHookAttempted,
-                          L"thumbcache.dll")) {
-        return true;
+        thumbcache) {
+        registeredHook = HookThumbnailCache(
+            thumbcache,
+            &g_thumbcacheHookAttempted,
+            L"thumbcache.dll",
+            &g_thumbcacheGetThumbnailOriginal,
+            ThumbcacheGetThumbnailHook,
+            &g_thumbcacheApiGetThumbnailOriginal,
+            ThumbcacheApiGetThumbnailHook);
     }
     if (HMODULE windowsStorage = GetModuleHandleW(L"windows.storage.dll");
-        windowsStorage && HookThumbnailCache(
-                              windowsStorage,
-                              &g_windowsStorageHookAttempted,
-                              L"windows.storage.dll")) {
-        return true;
+        windowsStorage) {
+        registeredHook = HookThumbnailCache(
+                             windowsStorage,
+                             &g_windowsStorageHookAttempted,
+                             L"windows.storage.dll",
+                             &g_windowsStorageGetThumbnailOriginal,
+                             WindowsStorageGetThumbnailHook,
+                             &g_windowsStorageApiGetThumbnailOriginal,
+                             WindowsStorageApiGetThumbnailHook) ||
+                         registeredHook;
     }
-    return false;
+    return registeredHook;
 }
 
 HMODULE WINAPI LoadLibraryExWHook(
