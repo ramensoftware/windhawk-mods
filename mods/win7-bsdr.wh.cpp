@@ -30,6 +30,7 @@
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
+    *   * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
 
 ![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 ## ⚠ Important usage note ⚠
@@ -37,9 +38,6 @@
 In order to use this mod, you must allow Windhawk to inject into the **LogonUI.exe**
 system process. To do so, add it to the process inclusion list in the advanced
 settings. If you do not do this, it will silently fail to inject.
-
-You must add it to the inclusion list even if you have disabled the critical system process
-exclusion option. Otherwise the logoff sequence portion of the mod will not function.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
@@ -62,7 +60,10 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_utils.h> // Includes <string>, <optional>, <cstlib>, <windows.h>
+#include <windhawk_utils.h>
+#include <string>
+#include <optional>
+#include <cstdlib>
 #include <wrl/module.h> // Required for WindowsGetStringRawBuffer/WindowsDeleteString and ComPtr
 #include <mutex>
 #include <regex>
@@ -124,72 +125,177 @@ HINSTANCE hBlockedShutdownDll;
 HINSTANCE hResDll;
 bool isUsingHardcodedRes = true;
 
-// Hardcoded resources 
+// Hardcoded resources
+template<size_t N>
+struct DLGITEMTEMPLATEEX {
+    DWORD     helpID;
+    DWORD     exStyle;
+    DWORD     style;
+    short     x;
+    short     y;
+    short     cx;
+    short     cy;
+    DWORD     id;
+    struct {
+        WORD  classMarker;
+        WORD  classOrdinal;
+    } windowClass;
+    wchar_t   title[N];
+    WORD      extraCount;
+};
 
-// https://github.com/Ingan121/AuthUX/blob/42909c132f429337e6169cf67c3a253405e916d0/shell/auth/authux/consolelogon/dll/consolelogon.rc#L471
-alignas(DWORD)
-static constexpr unsigned char RES_DIALOG[]  = {
-    0x01, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0xc0, 0x40, 
-    0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x01, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x0a, 0x00, 0x00, 0x00, 0x00, 0x01, 0x53, 0x00, 0x65, 0x00, 0x67, 0x00, 0x6f, 0x00, 0x65, 0x00, 
-    0x20, 0x00, 0x55, 0x00, 0x49, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x02, 0x50, 0x00, 0x00, 0x14, 0x00, 0x0a, 0x01, 0x0e, 0x00, 0x05, 0x01, 0x00, 0x00, 
-    0xff, 0xff, 0x82, 0x00, 0x54, 0x00, 0x68, 0x00, 0x65, 0x00, 0x20, 0x00, 0x66, 0x00, 0x6f, 0x00, 
-    0x6c, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x77, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x67, 0x00, 0x20, 0x00, 
-    0x70, 0x00, 0x72, 0x00, 0x6f, 0x00, 0x67, 0x00, 0x72, 0x00, 0x61, 0x00, 0x6d, 0x00, 0x73, 0x00, 
-    0x20, 0x00, 0x6e, 0x00, 0x65, 0x00, 0x65, 0x00, 0x64, 0x00, 0x20, 0x00, 0x74, 0x00, 0x6f, 0x00, 
-    0x20, 0x00, 0x63, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x73, 0x00, 0x65, 0x00, 0x3a, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x50, 
-    0x00, 0x00, 0x2e, 0x00, 0x0a, 0x01, 0x01, 0x00, 0x0d, 0x01, 0x00, 0x00, 0xff, 0xff, 0x82, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x50, 
-    0x00, 0x00, 0x34, 0x00, 0x00, 0x01, 0x55, 0x00, 0x0a, 0x01, 0x00, 0x00, 0xff, 0xff, 0x82, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x50, 
-    0x00, 0x01, 0x34, 0x00, 0x0a, 0x00, 0x55, 0x00, 0x0c, 0x01, 0x00, 0x00, 0xff, 0xff, 0x84, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x50, 
-    0x00, 0x00, 0x8f, 0x00, 0x0a, 0x01, 0x01, 0x00, 0x0e, 0x01, 0x00, 0x00, 0xff, 0xff, 0x82, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x50, 
-    0x00, 0x00, 0x98, 0x00, 0x0a, 0x01, 0x1e, 0x00, 0x06, 0x01, 0x00, 0x00, 0xff, 0xff, 0x82, 0x00, 
-    0x54, 0x00, 0x6f, 0x00, 0x20, 0x00, 0x63, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x73, 0x00, 0x65, 0x00, 
-    0x20, 0x00, 0x74, 0x00, 0x68, 0x00, 0x65, 0x00, 0x20, 0x00, 0x70, 0x00, 0x72, 0x00, 0x6f, 0x00, 
-    0x67, 0x00, 0x72, 0x00, 0x61, 0x00, 0x6d, 0x00, 0x20, 0x00, 0x74, 0x00, 0x68, 0x00, 0x61, 0x00, 
-    0x74, 0x00, 0x20, 0x00, 0x69, 0x00, 0x73, 0x00, 0x20, 0x00, 0x70, 0x00, 0x72, 0x00, 0x65, 0x00, 
-    0x76, 0x00, 0x65, 0x00, 0x6e, 0x00, 0x74, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x67, 0x00, 0x20, 0x00, 
-    0x57, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x64, 0x00, 0x6f, 0x00, 0x77, 0x00, 0x73, 0x00, 0x20, 0x00, 
-    0x66, 0x00, 0x72, 0x00, 0x6f, 0x00, 0x6d, 0x00, 0x0a, 0x00, 0x73, 0x00, 0x68, 0x00, 0x75, 0x00, 
-    0x74, 0x00, 0x74, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x67, 0x00, 0x20, 0x00, 0x64, 0x00, 0x6f, 0x00, 
-    0x77, 0x00, 0x6e, 0x00, 0x2c, 0x00, 0x20, 0x00, 0x63, 0x00, 0x6c, 0x00, 0x69, 0x00, 0x63, 0x00, 
-    0x6b, 0x00, 0x20, 0x00, 0x43, 0x00, 0x61, 0x00, 0x6e, 0x00, 0x63, 0x00, 0x65, 0x00, 0x6c, 0x00, 
-    0x2c, 0x00, 0x20, 0x00, 0x61, 0x00, 0x6e, 0x00, 0x64, 0x00, 0x20, 0x00, 0x74, 0x00, 0x68, 0x00, 
-    0x65, 0x00, 0x6e, 0x00, 0x20, 0x00, 0x63, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x73, 0x00, 0x65, 0x00, 
-    0x20, 0x00, 0x74, 0x00, 0x68, 0x00, 0x65, 0x00, 0x20, 0x00, 0x70, 0x00, 0x72, 0x00, 0x6f, 0x00, 
-    0x67, 0x00, 0x72, 0x00, 0x61, 0x00, 0x6d, 0x00, 0x2e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x03, 0x50, 0xc1, 0x00, 0xbf, 0x00, 
-    0x46, 0x00, 0x0d, 0x00, 0x02, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x00, 0x26, 0x00, 0x43, 0x00, 
-    0x61, 0x00, 0x6e, 0x00, 0x63, 0x00, 0x65, 0x00, 0x6c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x01, 0x50, 0x73, 0x00, 0xbf, 0x00, 
-    0x46, 0x00, 0x0d, 0x00, 0x04, 0x01, 0x00, 0x00, 0xff, 0xff, 0x80, 0x00, 0x26, 0x00, 0x46, 0x00, 
-    0x6f, 0x00, 0x72, 0x00, 0x63, 0x00, 0x65, 0x00, 0x20, 0x00, 0x73, 0x00, 0x68, 0x00, 0x75, 0x00, 
-    0x74, 0x00, 0x20, 0x00, 0x64, 0x00, 0x6f, 0x00, 0x77, 0x00, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x50, 0x00, 0x00, 0x98, 0x00, 
-    0x0a, 0x01, 0x1e, 0x00, 0x0f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x82, 0x00, 0x49, 0x00, 0x66, 0x00, 
-    0x20, 0x00, 0x79, 0x00, 0x6f, 0x00, 0x75, 0x00, 0x20, 0x00, 0x66, 0x00, 0x6f, 0x00, 0x72, 0x00, 
-    0x63, 0x00, 0x65, 0x00, 0x20, 0x00, 0x73, 0x00, 0x68, 0x00, 0x75, 0x00, 0x74, 0x00, 0x20, 0x00, 
-    0x64, 0x00, 0x6f, 0x00, 0x77, 0x00, 0x6e, 0x00, 0x20, 0x00, 0x79, 0x00, 0x6f, 0x00, 0x75, 0x00, 
-    0x20, 0x00, 0x6d, 0x00, 0x61, 0x00, 0x79, 0x00, 0x20, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x73, 0x00, 
-    0x65, 0x00, 0x20, 0x00, 0x77, 0x00, 0x6f, 0x00, 0x72, 0x00, 0x6b, 0x00, 0x20, 0x00, 0x74, 0x00, 
-    0x68, 0x00, 0x61, 0x00, 0x74, 0x00, 0x20, 0x00, 0x79, 0x00, 0x6f, 0x00, 0x75, 0x00, 0x20, 0x00, 
-    0x68, 0x00, 0x61, 0x00, 0x76, 0x00, 0x65, 0x00, 0x6e, 0x00, 0x27, 0x00, 0x74, 0x00, 0x20, 0x00, 
-    0x73, 0x00, 0x61, 0x00, 0x76, 0x00, 0x65, 0x00, 0x64, 0x00, 0x2e, 0x00, 0x0a, 0x00, 0x44, 0x00, 
-    0x6f, 0x00, 0x20, 0x00, 0x79, 0x00, 0x6f, 0x00, 0x75, 0x00, 0x20, 0x00, 0x73, 0x00, 0x74, 0x00, 
-    0x69, 0x00, 0x6c, 0x00, 0x6c, 0x00, 0x20, 0x00, 0x77, 0x00, 0x61, 0x00, 0x6e, 0x00, 0x74, 0x00, 
-    0x20, 0x00, 0x74, 0x00, 0x6f, 0x00, 0x20, 0x00, 0x66, 0x00, 0x6f, 0x00, 0x72, 0x00, 0x63, 0x00, 
-    0x65, 0x00, 0x20, 0x00, 0x73, 0x00, 0x68, 0x00, 0x75, 0x00, 0x74, 0x00, 0x64, 0x00, 0x6f, 0x00, 
-    0x77, 0x00, 0x6e, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x03, 0x50, 0xc1, 0x00, 0xbf, 0x00, 0x46, 0x00, 0x0d, 0x00, 
-    0x07, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x00, 0x26, 0x00, 0x4e, 0x00, 0x6f, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x01, 0x50, 
-    0x73, 0x00, 0xbf, 0x00, 0x46, 0x00, 0x0d, 0x00, 0x06, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x00, 
-    0x26, 0x00, 0x59, 0x00, 0x65, 0x00, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00
+typedef struct {
+    WORD      dlgVer;
+    WORD      signature;
+    DWORD     helpID;
+    DWORD     exStyle;
+    DWORD     style;
+    WORD      cDlgItems;
+    short     x;
+    short     y;
+    short     cx;
+    short     cy;
+    WORD      menu;        // unused, only 0000
+    WORD      windowClass; // ditto
+    WCHAR     title[1];    // L""
+    WORD      pointsize;
+    WORD      weight;
+    BYTE      italic;
+    BYTE      charset;
+    WCHAR     typeface[9]; // L"Segoe UI"
+
+    DLGITEMTEMPLATEEX<38>  item1;
+    DLGITEMTEMPLATEEX<1>   item2;
+    DLGITEMTEMPLATEEX<1>   item3;
+    DLGITEMTEMPLATEEX<1>   item4;
+    DLGITEMTEMPLATEEX<1>   item5;
+    DLGITEMTEMPLATEEX<110> item6;
+    DLGITEMTEMPLATEEX<8>   item7;
+    DLGITEMTEMPLATEEX<17>  item8;
+    DLGITEMTEMPLATEEX<102> item9;
+    DLGITEMTEMPLATEEX<4>   item10;
+    DLGITEMTEMPLATEEX<5>   item11;
+} DLGTEMPLATEEX;
+
+static constexpr DLGTEMPLATEEX RES_DIALOG = {
+    .dlgVer      = 1,
+    .signature   = 0xffff,
+    .helpID      = NULL,
+    .exStyle     = NULL,
+    .style       = DS_SETFONT | WS_CAPTION | WS_CHILD,
+    .cDlgItems   = 11,
+    .x           = 0,
+    .y           = 0,
+    .cx          = 266,
+    .cy          = 224,
+    .menu        = NULL,
+    .windowClass = NULL,
+    .title       = L"",
+    .pointsize   = 10,
+    .weight      = FW_DONTCARE,
+    .italic      = false,
+    .charset     = DEFAULT_CHARSET,
+    .typeface    = L"Segoe UI",
+
+    .item1       = {
+        NULL, NULL,
+        SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
+        0, 20, 266, 14,
+        IDC_BSDR_TITLE,
+        { 0xffff, 0x82 }, // STATIC
+        L"The following programs need to close:",
+        0
+    },
+    .item2       = {
+        NULL, NULL,
+        SS_OWNERDRAW | WS_CHILD | WS_VISIBLE,
+        0, 46, 266, 1,
+        IDC_BSDR_SEPARATOR_TOP,
+        { 0xffff, 0x82 }, // STATIC
+        L"",
+        0
+    },
+    .item3       = {
+        NULL, NULL,
+        SS_USERITEM | WS_CHILD | WS_VISIBLE,
+        0, 52, 256, 85,
+        IDC_BSDR_APPLIST,
+        { 0xffff, 0x82 }, // STATIC
+        L"",
+        0
+    },
+    .item4       = {
+        NULL, NULL,
+        SBS_VERT | WS_CHILD | WS_VISIBLE,
+        256, 52, 10, 85,
+        IDC_BSDR_SCROLLBAR,
+        { 0xffff, 0x84 }, // SCROLLBAR
+        L"",
+        0
+    },
+    .item5       = {
+        NULL, NULL,
+        SS_OWNERDRAW | WS_CHILD | WS_VISIBLE,
+        0, 143, 266, 1,
+        IDC_BSDR_SEPARATOR_BOTTOM,
+        { 0xffff, 0x82 }, // STATIC
+        L"",
+        0
+    },
+    .item6       = {
+        NULL, NULL,
+        SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
+        0, 152, 266, 30,
+        IDC_BSDR_DESC,
+        { 0xffff, 0x82 }, // STATIC
+        L"To close the program that is preventing Windows from\nshutting down, click Cancel, and then close the program.",
+        0
+    },
+    .item7       = {
+        NULL, NULL,
+        BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP,
+        193, 191, 70, 13,
+        IDCANCEL,
+        { 0xffff, 0x80 }, // BUTTON
+        L"&Cancel",
+        0
+    },
+    .item8       = {
+        NULL, NULL,
+        BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        115, 191, 70, 13,
+        IDC_BSDR_FORCE_BTN,
+        { 0xffff, 0x80 }, // BUTTON
+        L"&Force shut down",
+        0
+    },
+    .item9       = {
+        NULL, NULL,
+        SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
+        0, 152, 266, 30,
+        IDC_BSDR_WARNING,
+        { 0xffff, 0x82 }, // STATIC
+        L"If you force shut down you may lose work that you haven't saved.\nDo you still want to force shutdown?",
+        0
+    },
+    .item10      = {
+        NULL, NULL,
+        BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP,
+        193, 191, 70, 13,
+        IDNO,
+        { 0xffff, 0x80 }, // BUTTON
+        L"&No",
+        0
+    },
+    .item11      = {
+        NULL, NULL,
+        BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        115, 191, 70, 13,
+        IDYES,
+        { 0xffff, 0x80 }, // BUTTON
+        L"&Yes",
+        0
+    }
 };
 
 alignas(BITMAPINFOHEADER)
@@ -2843,10 +2949,10 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             if (!hDlgLocal) {
                 Wh_Log(L"CreateDialogParamW failed: %d", GetLastError());
                 // Retry with hardcoded one
-                hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
+                hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
             }
         } else {
-            hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(RES_DIALOG), hWnd, DlgProc, lParam);
+            hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
         }
         if (hDlgLocal) {
             ShowWindow(hDlgLocal, SW_SHOW);
@@ -3260,17 +3366,13 @@ long __fastcall BlockedShutdownUXImpl_Stop_hook(void* thisPtr) {
     return S_OK;
 }
 
-// Unused variable that only exists to make Windhawk 1.6.1 happy
-// Putting nullptr in originalFunction only works on WH 1.7 somehow (unlike what the SYMBOL_HOOK comment says)
-void** dummyOrig = nullptr;
-
 // Windows.UI.BlockedShutdown.dll
 WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Start(struct Windows::Internal::UI::Logon::Controller::IUserSettingManager *,struct Windows::Internal::UI::Logon::Controller::ILogonUIStateInfo *)",
         },
-        dummyOrig,
+        (void**)nullptr, // Cast is not needed on WH 1.7+
         (void*)BlockedShutdownUXImpl_Start_hook,
         FALSE
     },
@@ -3278,7 +3380,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::get_ScaleFactor(unsigned int *)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_get_ScaleFactor_hook,
         FALSE
     },
@@ -3286,7 +3388,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::get_WasClicked(unsigned char *)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_get_WasClicked_hook,
         FALSE
     },
@@ -3294,7 +3396,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::AddApplication(struct Windows::Internal::UI::Logon::Controller::IShutdownBlockingApp *)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_AddApplication_hook,
         FALSE
     },
@@ -3302,7 +3404,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::RemoveApplication(unsigned int)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_RemoveApplication_hook,
         FALSE
     },
@@ -3310,7 +3412,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::add_Resolved(struct Windows::Foundation::ITypedEventHandler<struct Windows::Internal::UI::Logon::Controller::IBlockedShutdownResolverUX *,enum Windows::Internal::UI::Logon::Controller::BlockedShutdownResolution> *,struct EventRegistrationToken *)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_add_Resolved_hook,
         FALSE
     },
@@ -3318,7 +3420,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::remove_Resolved(struct EventRegistrationToken)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_remove_Resolved_hook,
         FALSE
     },
@@ -3326,7 +3428,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Hide(void)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_Hide_hook,
         FALSE
     },
@@ -3334,7 +3436,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Stop(void)",
         },
-        dummyOrig,
+        (void**)nullptr,
         (void*)BlockedShutdownUXImpl_Stop_hook,
         FALSE
     }
@@ -3348,41 +3450,49 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
 // Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
 //
 // Can't think of better appraoch because of the execution sequence mentioned in CustomBSDR::Start
-// ShutdownWindowsWorkerThread runs before LogonUI exec so checking live LUI injection status isn't possible
-// and will be always one step behind (e.g. will detect as LUI not injected on first logoff after mod install)
-// I know the global inclusion key is not everything that affects that injection but this is minimal safeguard anyway
-// Let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
+// ShutdownWindowsWorkerThread runs before LogonUI exec so checking live LUI injection status is tricky
+// Relying on natural execution will result in detection being one step behind
+// (e.g. will detect as LUI not injected on first logoff after mod install)
+//
+// This approach, derived from the WH tool mod code, also doesn't mess with internal Windhawk configuration
 bool IsLogonUiInjectionEnabled() {
-    HKEY hKey;
-    int res = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Windhawk\\Engine\\Settings", 0, KEY_READ, &hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"WH inclusion check failed (RegOpenKeyExW), error=%d", res);
+    STARTUPINFO si = {0};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {0};
+
+    srand((unsigned int)time(nullptr));
+    DWORD myPid = GetCurrentProcessId();
+
+    if (!CreateProcessW(
+        L"C:\\Windows\\System32\\LogonUI.exe",
+        (LPWSTR)(L"LogonUI.exe /wh-load-check " + std::to_wstring(myPid)).c_str(),
+        nullptr,
+        nullptr,
+        false,
+        0,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    )) {
+        Wh_Log(L"LogonUI load check exec failed");
         return false;
     }
 
-    DWORD size = 0;
-    // WH inclusion key: pipe separated REG_SZ
-    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, nullptr, &size);
-    if (res != ERROR_SUCCESS && res != ERROR_MORE_DATA) {
-        Wh_Log(L"WH inclusion check failed (size query), GLE=%d", res);
-        RegCloseKey(hKey);
-        return false;
+    // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code
+    DWORD result = WaitForSingleObject(pi.hProcess, 2000);
+    if (result != WAIT_OBJECT_0) {
+        Wh_Log(L"LogonUI wait timed out or failed");
+        TerminateProcess(pi.hProcess, 0);
     }
 
-    wchar_t* data = new wchar_t[size / sizeof(wchar_t) + 1];
-    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)data, &size);
-    RegCloseKey(hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"WH inclusion check failed, error=%d", res);
-        delete[] data;
-        return false;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    
+    if ((DWORD)Wh_GetIntValue(L"LogonUiLoadCheck", -1) == myPid + pi.dwProcessId) {
+        return true;
     }
-
-    data[size / sizeof(wchar_t)] = L'\0';
-    int isLogonUiThere = wcsstr(_wcsupr(data), L"LOGONUI.EXE") != NULL;
-    delete[] data;
-
-    return isLogonUiThere;
+    return false;
 }
 
 int* p_g_fShutdownResolverDisabled = nullptr;
@@ -3460,6 +3570,34 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
         return FALSE;
     }
+
+    if (wcsstr(exeName, L"\\LOGONUI.EXE") == NULL) {
+        Wh_Log(L"Loaded in unexpected process!");
+        return FALSE;
+    }
+
+    int checkValue = -1;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"/wh-load-check") == 0) {
+            checkValue = _wtoi(argv[i + 1]);
+            DWORD pid = GetCurrentProcessId();
+            if (checkValue != -1) {
+                Wh_Log(L"Writing load check value %d+%d=%d...", checkValue, pid, checkValue + pid);
+                Wh_SetIntValue(L"LogonUiLoadCheck", checkValue + pid);
+                ExitProcess(0);
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
 
     CustomBSDR::hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!CustomBSDR::hStopEvent) {
