@@ -3419,7 +3419,7 @@ long __fastcall BlockedShutdownUXImpl_Stop_hook(void* thisPtr) {
 }
 
 // Windows.UI.BlockedShutdown.dll
-WindhawkUtils::SYMBOL_HOOK blockedShutdownDllHooks[] = {
+WindhawkUtils::SYMBOL_HOOK blockedShutdownHooks[] = {
     {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Start(struct Windows::Internal::UI::Logon::Controller::IUserSettingManager *,struct Windows::Internal::UI::Logon::Controller::ILogonUIStateInfo *)",
@@ -3730,7 +3730,7 @@ BOOL Wh_ModInit() {
 
     g_hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_hBlockedShutdownDll) {
-        if (!WindhawkUtils::HookSymbols(g_hBlockedShutdownDll, blockedShutdownDllHooks, ARRAYSIZE(blockedShutdownDllHooks))) {
+        if (!WindhawkUtils::HookSymbols(g_hBlockedShutdownDll, blockedShutdownHooks, ARRAYSIZE(blockedShutdownHooks))) {
             Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
             return FALSE;
         }
