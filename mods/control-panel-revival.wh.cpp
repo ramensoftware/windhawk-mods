@@ -2,7 +2,7 @@
 // @id              control-panel-revival
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.9
+// @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -16,10 +16,15 @@
 
 ### What does this mod do?
 
-This mod is designed to restore sections of the Control Panel—such as Troubleshooting, Installed Updates, Default Programs, and others—that are redirected to the Settings app in Windows 11 (version 23H2 and later) and can no longer be launched even via shell commands.
-You can also add the ID of your desired applet to prevent it from being redirected to the settings.
+This mod restores Control Panel applets - Troubleshooting, Installed Updates,
+Default Programs, Devices and Printers, Fonts, and System - that Windows 11
+(23H2 and later) redirects to the Settings app instead of opening directly,
+even when launched via a shell command. You can also add your own applet IDs
+to protect them from being redirected.
 
-**Note:** This mod is not designed to reveal hidden Control Panel applets; rather, its purpose is to restore applets that are currently present in the Control Panel but redirect to the Settings app.
+**Note:** This mod does not reveal hidden Control Panel applets. It only
+restores applets that are already present in Control Panel but currently
+redirect to Settings.
 
 ### Example CustomApplets configuration:
 ```yaml
@@ -34,12 +39,18 @@ You can also add the ID of your desired applet to prevent it from being redirect
 **After:**
 ![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
 
-**How it works:** the mod hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs, GUIDs, canonical names, and bare legacy keywords; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
+**Difference from `settings-to-control-panel`:** that mod also hooks the
+same underlying function, but doesn't stop the redirect for Installed
+Updates or Default Programs, and opens `msdt.exe` directly for
+Troubleshooting instead of the classic applet. This mod restores the
+original in-Control-Panel behavior for all of those.
 
-**A note on `CompareStringOrdinal` scoping:** we've made three separate attempts to restrict this override to a specific caller instead of leaving it process-wide: (1) return-address matching against `shell32.dll`, (2) the same against `shell32.dll` or `windows.storage.dll`, and (3) a multi-frame stack walk that empirically identified `explorerframe.dll` as a caller and added it to the accepted set. All three broke the mod's actual functionality in testing. Per a reviewer's feedback, this is consistent with a known limitation of the technique itself: `__builtin_return_address` / `RtlCaptureStackBackTrace`-based caller detection is unreliable across hook trampolines and inlined helpers, so it can misidentify or miss the real call site even when a match is observed in some cases. The more reliable alternative - a thread-local "armed" flag set only around a call into a specific, already-hooked outer shell32 entry point - requires confidently identifying which outer function precedes the actual redirect-check comparison, which we have not been able to establish. Given that, the hook is intentionally left unscoped by caller for now. The blast radius is still bounded in concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`, and it requires an exact, full-length, case-insensitive match against a small, specific set of applet-identifier strings (built-in list + whatever the user adds in `CustomApplets`). We're open to a properly-scoped fix if a maintainer can identify the actual redirect-decision call site.
-
-**Difference from `settings-to-control-panel`:** that mod also hooks `_MapLegacyName`, but its behavior differs for the applets this mod targets. For Troubleshooting, it launches `msdt.exe` directly instead of opening the applet itself; for Installed Updates and Default Programs, it has no mechanism at all to stop the redirect to Settings. This mod specifically restores the classic in-Control-Panel behavior for those items.
-
+**Known limitation:** one of the two hooks this mod installs
+(`CompareStringOrdinal`) is not scoped to a specific caller - see the code
+comments for the technical detail and the scoping attempts that were tried.
+In practice this only ever changes the outcome of a comparison that was
+already reporting two specific applet-identifier strings as equal, so the
+practical risk is low, but it isn't a hard guarantee.
 */
 // ==/WindhawkModReadme==
 
@@ -53,10 +64,10 @@ You can also add the ID of your desired applet to prevent it from being redirect
     braces (e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE or
     {BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) — the "::" prefix is added
     automatically. Canonical names (e.g. Microsoft.SomeApplet) or bare
-    legacy keywords (e.g. system) can be entered as-is - any non-empty entry
-    up to 128 characters is accepted. One entry per row. IMPORTANT: an empty
-    row ends the list — any rows after a blank one are ignored, so don't
-    leave gaps in the middle. The mod reloads automatically after saving.
+    legacy keywords (e.g. system) can be entered as-is. One entry per row.
+    IMPORTANT: an empty row ends the list — any rows after a blank one are
+    ignored, so don't leave gaps in the middle. The mod reloads
+    automatically after saving.
 */
 // ==/WindhawkModSettings==
 
@@ -66,14 +77,13 @@ You can also add the ID of your desired applet to prevent it from being redirect
 #include <string>
 #include <string_view>
 #include <vector>
-#include <algorithm>
 #include <cwctype>
 #include <exception>
 
 // These applets exist but they redirect to the modern Settings app on 23H2+.
 // constexpr std::wstring_view (rather than LPCWSTR) so .size() is computed
 // once at compile time instead of via wcslen() on every single
-// CompareStringOrdinal call in the process (see MatchesTargetList below).
+// CompareStringOrdinal call in the process (see MatchesBuiltInList below).
 constexpr std::wstring_view g_szAppletsToUnhide[] = {
     L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
     L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", // Devices and Printers
@@ -94,9 +104,7 @@ constexpr std::wstring_view g_szCanonicalNames[] = {
 
 // Bare legacy keywords Control Panel can also hand to _MapLegacyName for
 // these same six applets, alongside (or instead of) the canonical/GUID
-// forms above - settings-to-control-panel's own whitelist confirms these
-// exact spellings for the same six items. Without these, a call using the
-// bare form would silently fall through unmatched.
+// forms above.
 constexpr std::wstring_view g_szBareLegacyNames[] = {
     L"troubleshooting",
     L"installedupdates",
@@ -108,8 +116,14 @@ constexpr std::wstring_view g_szBareLegacyNames[] = {
 
 bool g_isInitialized = false;
 
-// User-provided applet GUIDs / canonical names, loaded from the "CustomApplets"
-// array setting, in addition to the built-in ones above.
+// User-provided applet GUIDs / canonical names / bare keywords, loaded from
+// the "CustomApplets" array setting. Only ever checked against
+// _MapLegacyName's legacy-name parameter (see COpenControlPanel__MapLegacyName_hook)
+// - deliberately NEVER checked in CompareStringOrdinal_hook. A non-matching
+// _MapLegacyName call is harmless (it just falls through to the real
+// implementation), but arbitrary user input feeding a process-wide string
+// comparison override has no such safety net, so that path is restricted to
+// the small, vetted built-in list only.
 std::vector<std::wstring> g_customApplets;
 
 static std::wstring Trim(const std::wstring& s) {
@@ -153,14 +167,6 @@ static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
     return raw; // assume canonical name or bare legacy keyword
 }
 
-// A generous sanity cap - no memory-patch buffer to size against anymore
-// (memory patching was removed after testing showed it wasn't needed), this
-// just guards against absurd/garbage input reaching the hooks' comparisons.
-// No dot/length/charset heuristics: those used to reject legitimate short
-// bare legacy names (e.g. "system", "fonts"), and since the
-// CompareStringOrdinal hook only ever fires on a genuine exact match (see
-// MatchesTargetList), a short/garbage entry can't do harm - it just never
-// matches anything real.
 constexpr size_t kMaxAppletIdLength = 128;
 
 static bool IsPlausibleAppletId(const std::wstring& id) {
@@ -199,7 +205,7 @@ void LoadCustomAppletSettings() {
     Wh_Log(L"Loaded %zu custom applet ID(s) from settings", g_customApplets.size());
 }
 
-// Build Gate: Ensures it only runs on Windows 11 23H2 (Build 22631) or newer,
+// Ensures the mod only runs on Windows 11 23H2 (build 22631) or newer,
 // matching @description.
 bool IsSupportedWindowsVersion() {
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
@@ -221,8 +227,8 @@ bool IsSupportedWindowsVersion() {
 // Hooks
 bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
 
-static bool NameMatches(const std::wstring_view& candidate, LPCWSTR pszLegacyName, size_t legacyLen) {
-    return candidate.size() == legacyLen && _wcsnicmp(candidate.data(), pszLegacyName, candidate.size()) == 0;
+static bool NameMatches(const std::wstring_view& candidate, LPCWSTR name, size_t nameLen) {
+    return candidate.size() == nameLen && _wcsnicmp(candidate.data(), name, candidate.size()) == 0;
 }
 
 // Only suppresses the mapping for names actually in our target list;
@@ -230,14 +236,8 @@ static bool NameMatches(const std::wstring_view& candidate, LPCWSTR pszLegacyNam
 // legacy->canonical name resolution intact for every Control Panel item
 // this mod doesn't care about, and avoids clobbering whatever
 // settings-to-control-panel's own whitelist is doing if both mods are
-// enabled together.
-//
-// FIX: all comparisons are case-insensitive (Windows treats CLSID strings
-// and canonical/legacy names case-insensitively; the built-in GUIDs are
-// stored uppercase to match what StringFromGUID2 actually generates, but a
-// caller could still hand either case).
+// enabled together. All comparisons are case-insensitive.
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
-    // Never let a C++ exception escape into shell32's non-C++ call frames.
     try {
         bool isTargeted = false;
 
@@ -282,100 +282,63 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
 using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
 CompareStringOrdinal_t CompareStringOrdinal_orig = nullptr;
 
-// Safe string comparison helper that handles -1 (null-terminated) lengths.
-static int SafeCompareString(LPCWCH str1, int cch1, LPCWCH str2, int cch2, BOOL bIgnoreCase) {
-    if (!str1 || !str2) return CSTR_LESS_THAN;
-
-    int len1 = (cch1 == -1) ? (int)wcslen(str1) : cch1;
-    int len2 = (cch2 == -1) ? (int)wcslen(str2) : cch2;
-
-    if (len1 <= 0 || len2 <= 0) return CSTR_LESS_THAN;
-
-    int minLen = (std::min)(len1, len2);
-    if (bIgnoreCase) {
-        return _wcsnicmp(str1, str2, minLen);
-    } else {
-        return wcsncmp(str1, str2, minLen);
-    }
-}
-
-// Returns the string's length as CompareStringOrdinal itself would interpret it:
-// a non-negative cch is used as-is; -1 means "null terminated, compute the length".
 static int GetEffectiveLength(LPCWCH str, int cch) {
     return (cch == -1) ? (int)wcslen(str) : cch;
 }
 
-// Compares using the *known* length from cchCount1/cchCount2 instead of
-// wcscmp/_wcsicmp, which would assume the input was null-terminated (it
-// might not be - CompareStringOrdinal callers can pass substrings).
-// Always compares case-insensitively, regardless of the caller's
-// bIgnoreCase: this function is only ever reached after the real
-// CompareStringOrdinal already reported the two input strings as equal, so
-// matching that already-equal value against our target list
-// case-insensitively can only make a real match MORE likely to be
-// recognized, never incorrectly less strict.
-static bool MatchesTargetList(LPCWCH str, int cch, BOOL /*bIgnoreCase*/) {
+// Checks ONLY the built-in, vetted list (GUIDs + canonical names + bare
+// keywords) - deliberately excludes g_customApplets. This is the list
+// CompareStringOrdinal_hook is allowed to influence; user-supplied strings
+// are only ever matched against _MapLegacyName's legacy-name parameter,
+// never against this process-wide comparison primitive.
+static bool MatchesBuiltInList(LPCWCH str, int cch) {
     if (!str) return false;
     int len = GetEffectiveLength(str, cch);
     if (len <= 0) return false;
 
     auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
         for (size_t i = 0; i < count; i++) {
-            if ((size_t)len != list[i].size()) continue; // length mismatch: can't be this entry
-            int cmp = SafeCompareString(str, cch, list[i].data(), (int)list[i].size(), /*bIgnoreCase=*/TRUE);
-            if (cmp == 0) return true;
+            if ((size_t)len != list[i].size()) continue;
+            if (_wcsnicmp(str, list[i].data(), list[i].size()) == 0) return true;
         }
         return false;
     };
 
-    if (checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide))) return true;
-    if (checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames))) return true;
-    if (checkList(g_szBareLegacyNames, ARRAYSIZE(g_szBareLegacyNames))) return true;
-
-    for (const auto& entry : g_customApplets) {
-        if ((size_t)len != entry.size()) continue;
-        int cmp = SafeCompareString(str, cch, entry.c_str(), (int)entry.size(), /*bIgnoreCase=*/TRUE);
-        if (cmp == 0) return true;
-    }
-
-    return false;
+    return checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide)) ||
+           checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames)) ||
+           checkList(g_szBareLegacyNames, ARRAYSIZE(g_szBareLegacyNames));
 }
 
-// Always computes the REAL result first via the original function, and only
-// overrides it when that real result was CSTR_EQUAL (i.e. only turns a
-// "these are equal" answer into "not equal" for our target strings). Every
-// non-equal comparison anywhere in the process keeps its true, correct
-// ordering - this does not fully fix cmp(A,A) for a target string A (it
-// still won't report CSTR_EQUAL for itself), but it avoids corrupting
-// comparisons between unrelated strings.
+// FIX: only ever overrides a result that was genuinely CSTR_EQUAL for one
+// of the built-in target strings - every non-equal comparison anywhere in
+// the process keeps its true result. CustomApplets entries are deliberately
+// excluded here (see g_customApplets above) - only the built-in, vetted
+// list can trigger this override.
 //
-// NOTE: three separate attempts at caller-module scoping (shell32.dll only;
-// shell32.dll-or-windows.storage.dll; and a multi-frame stack walk that
-// added explorerframe.dll after empirically observing it as a caller) each
-// broke the mod's functionality in testing. Left intentionally unscoped -
-// see the README's "note on CompareStringOrdinal scoping" for the full
-// account and why the underlying technique (return-address/stack-walk
-// caller detection across hook trampolines) isn't reliable here. No debug
-// diagnostics remain in this build - a raw stack walk on every match has a
-// real, unconditional cost (RtlCaptureStackBackTrace + up to several
-// GetModuleHandleExW/GetModuleFileNameW calls, and it clobbers the calling
-// thread's last-error value), so it isn't something to ship even gated
-// behind logging.
+// This is intentionally NOT scoped to a specific caller. Four separate
+// scoping attempts were made and each broke the mod's actual functionality
+// in testing: (1) return-address matching against shell32.dll, (2) the
+// same against shell32.dll-or-windows.storage.dll, (3) a multi-frame stack
+// walk that empirically added explorerframe.dll to the accepted set, and
+// (4) a thread-local flag armed for the duration of the
+// COpenControlPanel::_MapLegacyName call on the same thread. That the
+// temporal approach (4) also failed is itself informative: it suggests the
+// actual redirect-decision comparison doesn't happen synchronously nested
+// inside _MapLegacyName's call on the same thread at all - it may be
+// deferred (a posted message handled later), happen on a different thread,
+// or go through a call path that doesn't involve _MapLegacyName in the
+// first place. Given that, the hook is left unscoped for now. We're open
+// to a properly-scoped fix if the actual call site can be identified (e.g.
+// via a debugger breakpoint on the unhooked CompareStringOrdinal, rather
+// than detection from inside the hook).
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
 
-    // A hook function is called from non-C++ trampolines (kernelbase's own
-    // dispatch code). If a C++ exception (e.g. std::bad_alloc from a
-    // std::vector/std::wstring operation) escaped this function
-    // uncaught, it would unwind into stack frames that don't know how to
-    // handle it - almost certainly crashing the host process outright.
-    // Catch anything here and fall back to the real, unmodified comparison.
     try {
         int result = CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 
         if (result == CSTR_EQUAL && lpString1 && lpString2 &&
-            (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
-             MatchesTargetList(lpString2, cchCount2, bIgnoreCase))) {
+            (MatchesBuiltInList(lpString1, cchCount1) || MatchesBuiltInList(lpString2, cchCount2))) {
             return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
         }
 
@@ -386,31 +349,26 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
     }
 }
 
-// Resolved against shell32.dll - see ApplyShell32Hooks below.
+// Resolved against shell32.dll - see ApplyShell32Hooks below. Marked
+// non-optional (the last field): this is the only hook this mod installs,
+// so if the symbol can't be resolved on some future Windows build, the mod
+// is entirely non-functional and that must be a reported failure, not a
+// silently-accepted no-op.
 const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
         (void**)&COpenControlPanel__MapLegacyName_orig,
         (void*)COpenControlPanel__MapLegacyName_hook,
-        true
+        false
     }
 };
 
-// control.exe/explorer.exe aren't guaranteed to have shell32.dll loaded
-// yet at Wh_ModInit time in every scenario. Fix: hook LoadLibraryExW in
+// control.exe/explorer.exe aren't guaranteed to have shell32.dll loaded yet
+// at Wh_ModInit time in every scenario. Fix: hook LoadLibraryExW in
 // kernelbase.dll and install the shell32 hook the moment shell32.dll
 // actually gets loaded, whenever that happens - at Wh_ModInit time or later.
-//
-// g_shell32HookApplied is claimed atomically BEFORE any work happens (not
-// after), so concurrent calls from different threads can't race each other
-// into doing the work twice.
 volatile LONG g_shell32HookApplied = 0;
 
-// isLateLoad: true when called from the LoadLibraryExW hook (shell32.dll
-// just finished loading after Wh_ModInit already returned), false when
-// called directly from Wh_ModInit.
-//   - Wh_ApplyHookOperations() must never be called before Wh_ModInit
-//     returns (documented API requirement) - only the late path calls it.
 void ApplyShell32Hooks(bool isLateLoad) {
     if (InterlockedCompareExchange(&g_shell32HookApplied, 1, 0) != 0) {
         return; // already applied, or another call already claimed this
@@ -422,15 +380,10 @@ void ApplyShell32Hooks(bool isLateLoad) {
         return;
     }
 
-    // Windhawk resolves this symbol automatically via Microsoft's public
-    // symbol server (through the DIA SDK) and caches the PDB - no manual
-    // symbol download is needed. What CAN fail is the symbol itself no
-    // longer existing/matching on a future Windows build, since this is a
-    // private, unexported function. If that happens, we log it clearly
-    // instead of silently doing nothing.
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
-               L"this function's signature may have changed in this Windows build.");
+               L"this function's signature may have changed in this Windows build. "
+               L"The mod will not be able to unhide any applets in this process.");
     }
 
     if (isLateLoad) {
@@ -450,28 +403,16 @@ HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 
     try {
         if (result && !g_shell32HookApplied) {
-            // Resource-only loads don't map the module the normal way (no
-            // import resolution, no DllMain) - not a meaningful "shell32 is
-            // now usable" signal, so skip them rather than act on them.
             constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
                                                   LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
                                                   LOAD_LIBRARY_AS_IMAGE_RESOURCE;
             if ((dwFlags & kResourceOnlyFlags) == 0) {
-                // Compare the returned handle against shell32.dll's actual
-                // base address instead of matching the requested file name
-                // string: shell32 can arrive as a static dependency of some
-                // other DLL loaded through this same API, in which case
-                // lpLibFileName would be that other DLL's name/path, not
-                // "shell32.dll" - a name-based check would miss that case
-                // entirely.
                 if (result == GetModuleHandleW(L"shell32.dll")) {
                     ApplyShell32Hooks(/*isLateLoad=*/true);
                 }
             }
         }
     } catch (...) {
-        // Never let an exception escape into the loader's call frames - the
-        // real LoadLibraryExW result is still returned either way below.
         Wh_Log(L"LoadLibraryExW_hook: caught an exception while checking for shell32.dll");
     }
 
@@ -484,11 +425,6 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    // Wraps all of initialization: this runs before the host process has
-    // fully started, and a stray uncaught exception here would take
-    // explorer.exe/control.exe down with it. Fail the mod's
-    // own init cleanly instead - the process itself keeps running normally,
-    // just without this mod's changes.
     try {
         Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
 
@@ -510,10 +446,6 @@ BOOL Wh_ModInit(void) {
                 Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
             }
 
-            // Covers a process where shell32.dll hasn't been loaded yet at
-            // this point. If it's already loaded (the common case), this
-            // hook simply won't fire and ApplyShell32Hooks() below handles
-            // that case directly.
             auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
             if (pLoadLibraryExW) {
                 if (!WindhawkUtils::SetFunctionHook(
@@ -530,10 +462,6 @@ BOOL Wh_ModInit(void) {
         }
 
         g_isInitialized = true;
-
-        // Handles the common case: shell32.dll is already loaded. If it
-        // isn't loaded yet in this process, this is a no-op for now and
-        // LoadLibraryExW_hook picks it up later.
         ApplyShell32Hooks(/*isLateLoad=*/false);
 
         return TRUE;
@@ -548,9 +476,6 @@ BOOL Wh_ModInit(void) {
 
 void Wh_ModUninit(void) {
     Wh_Log(L"Uninitializing Control Panel Revival");
-
-    // Nothing to restore: this mod no longer modifies any module's memory,
-    // only installs function hooks, which Windhawk removes on its own.
     g_isInitialized = false;
     InterlockedExchange(&g_shell32HookApplied, 0);
 }
