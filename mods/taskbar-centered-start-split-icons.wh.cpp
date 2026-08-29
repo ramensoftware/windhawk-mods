@@ -1149,9 +1149,12 @@ constexpr int kMaxForcedRetryFailures = 3;
 // different internal handler while the rest of the taskbar still reaches
 // CTaskListWnd::HandleClick, so the click-sentinel latch itself never
 // trips) would keep dispatching a real ReportClicked on this entry every
-// ResolveBackoffMs interval, forever. A button whose identity changes, or
-// that gets pruned and recreated, still gets a fresh consecutiveFailures
-// count and resumes retrying normally. Only counts a genuinely dispatched-
+// ResolveBackoffMs interval, forever. A button that gets pruned and
+// recreated gets a fresh cache entry (and so a fresh consecutiveFailures
+// count) - an identity change alone does NOT reset it, since
+// ResolveAndCacheButtonHwnd seeds failures from the existing entry
+// regardless of identity, only clearing it on an actual successful
+// resolve. Only counts a genuinely dispatched-
 // and-missed click (see ResolveAndCacheButtonHwnd) - a bail-out before
 // ever dispatching one doesn't risk anything and must not count toward
 // this. NextResolveDelayMs must treat a terminal entry exactly like a
@@ -1218,13 +1221,6 @@ HWND GetButtonHwnd(FrameworkElement element) {
     }
     return it->second.hwnd;
 }
-
-// ResolvePendingButtonHwnds (which actually walks TaskListButtons and
-// calls ResolveAndCacheButtonHwnd above) is defined later, right after
-// FindTaskbarFrameRepeater and IsTaskListButton - it depends on both.
-// Forward-declared here so WinEventHookThreadProc (Mod lifecycle section)
-// can reference it before that point.
-void ResolvePendingButtonHwnds();
 
 // Defined later (Mod lifecycle section) alongside NextResolveDelayMs,
 // which shares this same backoff formula - forward-declared here so
