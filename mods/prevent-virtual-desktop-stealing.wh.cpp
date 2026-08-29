@@ -24,7 +24,7 @@ window to you instead.
 
 ![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif)
 
-If you haven't seen the problem before, try this:
+If you haven't seen the problem before, try this: 
 
 - Open Windhawk on one virtual desktop.
 - Switch to another desktop.
