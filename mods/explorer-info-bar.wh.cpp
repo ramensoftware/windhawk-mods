@@ -287,11 +287,22 @@ static HANDLE g_selectionWinEventStopEvent = nullptr;
 static HWINEVENTHOOK g_selectionWinEventHook = nullptr;
 static HWINEVENTHOOK g_windowCreateWinEventHook = nullptr;
 static std::atomic<ULONGLONG> g_lastPaintWakeTick{0};
-static constexpr ULONGLONG kSelectionWinEventWakeIntervalMs = 200;
-static ULONGLONG g_lastSelectionWinEventWakeTick = 0;
+static constexpr ULONGLONG kSelectionWinEventDebounceMs = 200;
+static constexpr ULONGLONG kSelectionWinEventMaxLatencyMs = 800;
+static ULONGLONG g_selectionWinEventBurstStartTick = 0;
 static UINT_PTR g_selectionWinEventWakeTimer = 0;
 
 static CRITICAL_SECTION g_cacheLock;
+
+static bool IsWorkerStopRequested()
+{
+    return
+        g_unloading.load(std::memory_order_acquire) ||
+        (
+            g_stopEvent &&
+            WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0
+        );
+}
 
 struct ContentRefreshCache
 {
@@ -873,7 +884,6 @@ static std::wstring FormatMediaDuration(
 }
 
 static std::wstring BuildSingleFileDetails(
-    IShellItem* item,
     const std::wstring& path,
     bool* transientFailure
 )
@@ -881,7 +891,7 @@ static std::wstring BuildSingleFileDetails(
     if (transientFailure)
         *transientFailure = false;
 
-    if (!item || path.empty())
+    if (path.empty())
         return L"";
 
     const std::wstring extension =
@@ -892,20 +902,48 @@ static std::wstring BuildSingleFileDetails(
             ? L"no extension"
             : extension;
 
-    IShellItem2* item2 = nullptr;
+    if (IsWorkerStopRequested())
+        return result;
+
+    IShellItem* localItem = nullptr;
 
     if (
         FAILED(
-            item->QueryInterface(
-                IID_PPV_ARGS(&item2)
+            SHCreateItemFromParsingName(
+                path.c_str(),
+                nullptr,
+                IID_PPV_ARGS(&localItem)
             )
         ) ||
-        !item2
+        !localItem
     )
     {
         if (transientFailure)
             *transientFailure = true;
 
+        return result;
+    }
+
+    IShellItem2* item2 = nullptr;
+
+    const HRESULT item2Hr =
+        localItem->QueryInterface(
+            IID_PPV_ARGS(&item2)
+        );
+
+    localItem->Release();
+
+    if (FAILED(item2Hr) || !item2)
+    {
+        if (transientFailure)
+            *transientFailure = true;
+
+        return result;
+    }
+
+    if (IsWorkerStopRequested())
+    {
+        item2->Release();
         return result;
     }
 
@@ -1871,14 +1909,27 @@ static void RefreshInfoBarWindow(
             &client
         );
 
+    const int currentControlSafeRight =
+        currentClientAvailable
+            ? std::max(
+                0,
+                static_cast<int>(client.right) -
+                    ScaleForWindow(hwnd, 64)
+            )
+            : -1;
+
     const int currentUsableRight =
         currentClientAvailable
-            ? (
-                client.right > ScaleForWindow(hwnd, 220)
-                    ? static_cast<int>(
-                        client.right - ScaleForWindow(hwnd, 220)
-                    )
-                    : static_cast<int>(client.right)
+            ? std::max(
+                ScaleForWindow(hwnd, 6),
+                std::min(
+                    currentControlSafeRight,
+                    client.right > ScaleForWindow(hwnd, 220)
+                        ? static_cast<int>(
+                            client.right - ScaleForWindow(hwnd, 220)
+                        )
+                        : currentControlSafeRight
+                )
             )
             : -1;
 
@@ -2203,7 +2254,7 @@ static void CALLBACK SelectionWinEventWakeTimerProc(
     if (g_unloading.load(std::memory_order_acquire))
         return;
 
-    g_lastSelectionWinEventWakeTick = GetTickCount64();
+    g_selectionWinEventBurstStartTick = 0;
 
     if (g_workerWakeEvent)
         SetEvent(g_workerWakeEvent);
@@ -2215,35 +2266,49 @@ static void WakeWorkerFromSelectionWinEvent()
         return;
 
     const ULONGLONG now = GetTickCount64();
-    const ULONGLONG elapsed = now - g_lastSelectionWinEventWakeTick;
 
-    if (
-        !g_lastSelectionWinEventWakeTick ||
-        elapsed >= kSelectionWinEventWakeIntervalMs
-    )
+    if (!g_selectionWinEventBurstStartTick)
+        g_selectionWinEventBurstStartTick = now;
+
+    if (g_selectionWinEventWakeTimer)
     {
-        g_lastSelectionWinEventWakeTick = now;
+        KillTimer(nullptr, g_selectionWinEventWakeTimer);
+        g_selectionWinEventWakeTimer = 0;
+    }
+
+    const ULONGLONG burstElapsed =
+        now - g_selectionWinEventBurstStartTick;
+
+    if (burstElapsed >= kSelectionWinEventMaxLatencyMs)
+    {
+        g_selectionWinEventBurstStartTick = 0;
         SetEvent(g_workerWakeEvent);
         return;
     }
 
-    if (g_selectionWinEventWakeTimer)
-        return;
+    const ULONGLONG remainingLatency =
+        kSelectionWinEventMaxLatencyMs - burstElapsed;
+
+    const UINT delay =
+        static_cast<UINT>(
+            std::min(
+                kSelectionWinEventDebounceMs,
+                remainingLatency
+            )
+        );
 
     g_selectionWinEventWakeTimer =
         SetTimer(
             nullptr,
             0,
-            static_cast<UINT>(
-                kSelectionWinEventWakeIntervalMs - elapsed
-            ),
+            delay,
             SelectionWinEventWakeTimerProc
         );
 
     if (!g_selectionWinEventWakeTimer)
     {
-        // A failed coalescing timer must not leave the final selection stale.
-        g_lastSelectionWinEventWakeTick = now;
+        // A failed debounce timer must not leave the final selection stale.
+        g_selectionWinEventBurstStartTick = 0;
         SetEvent(g_workerWakeEvent);
     }
 }
@@ -2721,6 +2786,9 @@ static bool ScanFilesystemDirectory(
         return false;
     }
 
+    if (IsWorkerStopRequested())
+        return false;
+
     std::wstring searchPath = directoryPath;
 
     if (
@@ -2734,6 +2802,9 @@ static bool ScanFilesystemDirectory(
     searchPath += L'*';
 
     WIN32_FIND_DATAW findData{};
+
+    if (IsWorkerStopRequested())
+        return false;
 
     HANDLE findHandle =
         FindFirstFileExW(
@@ -2836,7 +2907,6 @@ static void ClearSingleFileMetadataCache(
 
 static std::wstring GetSingleFileDetailsCached(
     SingleFileMetadataCache* cache,
-    IShellItem* item,
     const std::wstring& path
 )
 {
@@ -2858,7 +2928,6 @@ static std::wstring GetSingleFileDetailsCached(
 
     std::wstring details =
         BuildSingleFileDetails(
-            item,
             path,
             &transientFailure
         );
@@ -3325,7 +3394,6 @@ static unsigned ReadCurrentView(
                                     singleFileDetails =
                                         GetSingleFileDetailsCached(
                                             &metadataCache,
-                                            item,
                                             path
                                         );
                                 }
@@ -3752,6 +3820,7 @@ static COLORREF PickBackgroundColor(
     HDC hdc,
     HWND hwnd,
     const RECT& row,
+    const RECT* nativePaintRect,
     int selected
 )
 {
@@ -3768,36 +3837,43 @@ static COLORREF PickBackgroundColor(
         return stable.rowBackground;
     }
 
-    const int y =
-        row.top +
-        ((row.bottom - row.top) / 2);
-
-    const int samples[] =
-    {
-        ScaleForWindow(hwnd, 420),
-        ScaleForWindow(hwnd, 520),
-        ScaleForWindow(hwnd, 620),
-        ScaleForWindow(hwnd, 720)
-    };
-
     COLORREF chosen = CLR_INVALID;
+    const int rowWidth = row.right - row.left;
+    const int rowHeight = row.bottom - row.top;
 
-    for (int x : samples)
+    if (
+        nativePaintRect &&
+        rowWidth > 0 &&
+        rowHeight > 0
+    )
     {
-        if (x >= row.right)
-            continue;
+        const int y = row.top + (rowHeight / 2);
+        const int sampleNumerators[] = { 9, 8, 7, 6, 5, 4 };
+        const int safetyInset = 1;
 
-        const COLORREF sample =
-            GetPixel(
-                hdc,
-                x,
-                y
-            );
-
-        if (sample != CLR_INVALID)
+        for (int numerator : sampleNumerators)
         {
-            chosen = sample;
-            break;
+            const int x =
+                row.left +
+                (rowWidth * numerator) / 10;
+
+            if (
+                x - safetyInset < nativePaintRect->left ||
+                x + safetyInset >= nativePaintRect->right ||
+                y - safetyInset < nativePaintRect->top ||
+                y + safetyInset >= nativePaintRect->bottom
+            )
+            {
+                continue;
+            }
+
+            const COLORREF sample = GetPixel(hdc, x, y);
+
+            if (sample != CLR_INVALID)
+            {
+                chosen = sample;
+                break;
+            }
         }
     }
 
@@ -3806,7 +3882,7 @@ static COLORREF PickBackgroundColor(
         if (stable.rowBackground != CLR_INVALID)
             return stable.rowBackground;
 
-        chosen = RGB(32, 32, 32);
+        return GetSysColor(COLOR_WINDOW);
     }
 
     if (selected <= 0)
@@ -4045,13 +4121,31 @@ static void PaintFinalInfoBar(
         return;
     }
 
+    RECT coverRow = row;
+
+    // The native controls occupy only the compact area at the far right.
+    // Cover native status text up to that area independently of the wider
+    // content-layout reservation below.
+    coverRow.right =
+        std::max(
+            coverRow.left,
+            client.right - ScaleForWindow(hwnd, 64)
+        );
+
     row.left = ScaleForWindow(hwnd, 6);
 
-    // Preserve Explorer's right-side controls.
+    // Keep the existing conservative content margin without leaving the
+    // native status-text area uncovered when the window is narrow.
     row.right =
-        client.right > ScaleForWindow(hwnd, 220)
-            ? client.right - ScaleForWindow(hwnd, 220)
-            : client.right;
+        std::max(
+            row.left,
+            std::min(
+                coverRow.right,
+                client.right > ScaleForWindow(hwnd, 220)
+                    ? client.right - ScaleForWindow(hwnd, 220)
+                    : coverRow.right
+            )
+        );
 
     std::wstring contentGroup;
     std::wstring selectionGroup;
@@ -4096,7 +4190,7 @@ static void PaintFinalInfoBar(
         return;
 
     RECT paintRect =
-        row;
+        coverRow;
 
     if (
         updateRect &&
@@ -4129,6 +4223,7 @@ static void PaintFinalInfoBar(
             hdc,
             hwnd,
             row,
+            updateRect ? &paintRect : nullptr,
             selected
         );
 
@@ -4141,7 +4236,7 @@ static void PaintFinalInfoBar(
     {
         FillRect(
             hdc,
-            &row,
+            &coverRow,
             brush
         );
 
@@ -5296,15 +5391,46 @@ void Wh_ModUninit()
 
     if (g_workerThread)
     {
-        // CancelSynchronousIo in Wh_ModBeforeUninit interrupts a worker that
-        // is blocked in FindFirstFileExW/FindNextFileW. Never terminate a
-        // thread inside Explorer while it may own COM, CRT or cache locks.
-        CancelSynchronousIo(g_workerThread);
+        // Cancellation can race with the worker entering its next COM or
+        // filesystem call. Retry both mechanisms between bounded waits.
+        // Never terminate a thread while it may own COM, CRT or cache locks.
+        while (true)
+        {
+            if (g_workerThreadId)
+                CoCancelCall(g_workerThreadId, 0);
 
-        WaitForSingleObject(
-            g_workerThread,
-            INFINITE
-        );
+            CancelSynchronousIo(g_workerThread);
+
+            const DWORD waitResult =
+                WaitForSingleObject(
+                    g_workerThread,
+                    500
+                );
+
+            if (waitResult == WAIT_OBJECT_0)
+                break;
+
+            if (waitResult != WAIT_TIMEOUT)
+            {
+                Wh_Log(
+                    L"worker shutdown wait failed result=%lu error=%lu",
+                    waitResult,
+                    GetLastError()
+                );
+
+                DWORD exitCode = STILL_ACTIVE;
+
+                if (
+                    GetExitCodeThread(g_workerThread, &exitCode) &&
+                    exitCode != STILL_ACTIVE
+                )
+                {
+                    break;
+                }
+
+                Sleep(500);
+            }
+        }
 
         CloseHandle(
             g_workerThread
