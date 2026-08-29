@@ -1,56 +1,86 @@
 // ==WindhawkMod==
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
-// @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         2.1.0
+// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11
+// @version         3.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshlwapi -lole32
+// @compilerOptions -lcomctl32 -lshlwapi -lole32 -lpsapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 ## About
-This mod restores classic Control Panel applets and classic task links in Category View, including:
+This mod restores a selection of classic Control Panel applets and task links in Category View, including:
 
-* Personalization, with localized classic Windows 7 task links
-* Notification area icons (intended for the Windows 10 taskbar)
+* Personalization 
+* Notification area icons (intended for use with the Windows 10 taskbar)
 * Network Connections
 * Printers and Faxes
-* HomeGroup (partially functional, read the note below)
+* HomeGroup (partially functional, see the note below)
 * BitLocker Drive Encryption
 * Tablet PC Settings
+* Text to Speech
 
-Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
-The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
+This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
+
+The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
+
+The optional "Restore Classic Task Links" setting restores the localized, classic task links for these sections in Category View.
+
 ## Screenshot of the Restored Applets
 
 ![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
 
-## Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)
+## Screenshot of HomeGroup and Network Connections with Task Links
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-HomeGroup is disabled by default because the page was removed from Windows 11. To restore it there, use the [Windows 11 HomeGroup Page Restorer](https://windhawk.net/mods/win11-home-group-restorer) mod.
+This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
+HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
-If the automatic detection is wrong on your edition, each of the two applets has an **Always add** / **Never add** override in the settings. "Always add" still does nothing when the applet is genuinely not installed (e.g. Windows Home), since the entry would have no name, icon or target.
+BitLocker Drive Encryption, Tablet PC Settings, and Text to Speech are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attempting to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
-**⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.
+If the automatic detection proves incorrect for a particular edition, each of the two applets offers an override: **Always add** or **Never add**. It should be noted that "Always add" has no effect when the applet is not actually installed (e.g., on Windows Home), as the entry would lack a name, icon, and target.
 
-The mod does not commit to restoring task links that open the Settings app instead of the classic Control Panel UI, because restoring such links would defeat the mod's purpose (contributing to the Control Panel restoration).
+Additionally, the mod includes the **"Unhide legacy applets"** option (enabled by default) which restores the applets that Windows still ships but hides from Control Panel (Personalization, BitLocker Drive Encryption, Text to Speech, System, etc) instead of showing this mod's virtual re-creations of them.
+
+**The virtual entries stay as a fallback**. They are not deleted, only hidden, and they come back if the real applet is missing, not found, or not listed. This setting can never remove anything from Control Panel. In the normal case (mod enabled at logon/Explorer startup) at worst the virtual entry is used instead. If the mod is enabled or its settings are changed while Explorer is already running, shell32's Control Panel item list may have been built before the patch takes effect; the mod keeps re-asking the shell until it confirms the real applet, but until it does you may briefly see a duplicate entry (both the real applet and the virtual twin) rather than a fallback.
+
+The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
+
+**⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
+
+The mod does not commit to restore task links that would open the Settings app rather than the classic Control Panel interface, as doing so would be contrary to the mod's objective of preserving the traditional Control Panel experience.
+
+**Recommendation**: For a better experience on Windows 10 and Windows 11, it is recommended to pair this mod with some of the hereby suggested implementations:
+
+- **[Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)** – it recreates the classic Windows 7/8.1 Action Center tray icon and flyout with real-time security status monitoring along with a partial restore of a link inside the Action Center Control Panel page.
+- **[Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)** – it recreates the classic Windows 7 "Taskbar and Start Menu Properties" dialog for Windows 10 and 11.
+- **[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)** – it recreates the classic Windows 7 network flyout with Wi-Fi list, signal strength, and connection support and, if enabled, partial restore of some links inside the classic "Network and Sharing Center" Control Panel page.
+- **[Classic Display Control Panel Restorer](https://windhawk.net/mods/win7-display-control-panel-restorer)** – it restores the classic Display and Screen Resolution Control Panel pages.
+- **[Windows 11 HomeGroup Restorer](https://windhawk.net/mods/win11-home-group-restorer)** – it restores the classic HomeGroup applet on Windows 11.
+- **[Windows Update Control Panel Restorer](https://windhawk.net/mods/windows-update-control-panel-restorer)** – it restores the classic Windows Update Control Panel page on Windows 10/11.
+- **[Performance Information and Tools Restorer](https://windhawk.net/mods/performance-info-tools-restorer)** – it restores the classic "Performance Information and Tools" applet.
+
+## Related mods and overlaps
+
+- **Settings to Control Panel** (`settings-to-control-panel`): This mod is a recommended companion. It controls *where* items open (classic panel vs. Settings app) by controlling *whether* they appear.
+- **Control Panel Revival** (`control-panel-revival`): This mod prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding a series of legacy elements. It is worth noting that the only unhidden applet in common is System.
 
 ## Credits
-This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
-Credits to m417z for the code review and enhancing the mod.
 
+This mod is based on a fork of the original work by Anixx (https://github.com/Anixx), with portions of the implementation derived from aubymori's Control Panel script.
+
+Credits to m417z for the code review and various enhancements.
+
+Credits to AdministratoX for the improvements and for restoring Text to Speech in the Control Panel.
 */
 // ==/WindhawkModReadme==
 
@@ -58,54 +88,87 @@ Credits to m417z for the code review and enhancing the mod.
 /*
 - enablePersonalization: true
   $name: Personalization
-  $description: This setting adds the "Personalization" icon to the Control Panel
+  $description: This setting adds the "Personalization" icon to Control Panel
+
 - enableNotificationIcons: true
   $name: Notification area icons
-  $description: This setting adds the "Notification area icons" icon to the Control Panel (intended for Windows 10 taskbar)
+  $description: This setting adds the "Notification area icons" icon to Control Panel (intended for the Windows 10 taskbar)
+
 - enableNetworkConnections: true
   $name: Network connections
-  $description: This setting adds the "Network connections" icon to the Control Panel
+  $description: This setting adds the "Network connections" icon to Control Panel
+
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
-  $description: This setting adds the "Printers and Faxes" icon to the Control Panel
+  $description: This setting adds the "Printers and Faxes" icon to Control Panel
+
 - enableHomeGroup: false
   $name: HomeGroup
-  $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, the HomeGroup networking was removed in Windows 10 1803+). On Windows 11 use the "Windows 11 HomeGroup Page Restorer" mod instead.
+  $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, HomeGroup networking functionality was removed in Windows 10 1803 and later). On Windows 11, the "Windows 11 HomeGroup Page Restorer" mod is recommended instead.
+
 - bitLockerMode: auto
   $name: BitLocker Drive Encryption
-  $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
+  $description: This setting adds the "BitLocker Drive Encryption" icon to Control Panel (under System and Security). The "Automatic" setting adds it only if the applet exists and Control Panel does not already display it, so as to avoid duplicate entries. If the automatic detection is incorrect for your edition, select "Always add" or "Never add" to override it.
   $options:
-  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - auto: Automatic (add only if not already displayed)
   - always: Always add
   - never: Never add
+
 - tabletPcMode: auto
   $name: Tablet PC Settings
-  $description: Adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your device, force it with "Always add" or "Never add".
+  $description: This setting adds the "Tablet PC Settings" icon to Control Panel (under Hardware and Sound). The "Automatic" setting adds it only if the applet exists and Control Panel does not already display it, so as to avoid duplicate entries. If the automatic detection is incorrect for your device, select "Always add" or "Never add" to override it.
   $options:
-  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - auto: Automatic (add only if not already displayed)
   - always: Always add
   - never: Never add
+
+- speechMode: auto
+  $name: Text to Speech
+  $description: This setting adds the "Text to Speech" icon to Control Panel (under Hardware and Sound). It follows the same Auto/Always/Never logic as BitLocker and "Automatic" adds it only if the applet exists and Control Panel does not already display it.
+  $options:
+  - auto: Automatic (add only if not already displayed)
+  - always: Always add
+  - never: Never add
+
+- unhideLegacyApplets: true
+  $name: Unhide legacy applets
+  $description: This setting restores the real Control Panel applets that Windows hides (Personalization, BitLocker, Text to Speech, System) instead of using virtual recreations. The virtual entries are not removed and reappear if the real applet is missing, not found, or not listed. This setting only decides which entry is shown, not where it opens. To keep items on classic pages, use the Settings to Control Panel mod. All changes are undone when the mod is disabled.
+
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
-  $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
+  $description: This setting restores the classic links "Change the theme", "Change desktop background", and "Adjust screen resolution" beneath the Appearance and Personalization category on the main Control Panel home page.
+
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
-  $description: This setting removes the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} non-functional icon
+  $description: This setting removes the non-functional {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} icon from Control Panel
+
 - suppressWindowsToGo: false
   $name: Suppress Windows To Go
-  $description: This setting hides Windows To Go when that legacy Control Panel item is registered on this Windows installation
+  $description: This setting hides Windows To Go when that legacy Control Panel item is registered on the system
+
 - suppressInfrared: false
   $name: Suppress Infrared
-  $description: This setting hides the legacy Infrared Control Panel item when it is registered on this Windows installation
+  $description: This setting hides the legacy Infrared Control Panel item when it is registered on the system
+
 - suppressWorkFolders: false
   $name: Suppress Work Folders
-  $description: This setting hides the legacy Work Folders Control Panel item when it is registered on this Windows installation
+  $description: This setting hides the legacy Work Folders Control Panel item when it is registered on the system
+
 - restoreClassicTaskLinks: true
   $name: Restore Classic Task Links
-  $description: This setting restores the localized, classic task links for Personalization and other sections in category view
+  $description: This setting restores localized, classic task links for Personalization and other sections in Category View
+
 - restoreWin7CategoryTaskLinks: true
   $name: Restore Windows 7 Category Task Links
-  $description: This setting restores the classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) like Windows 7 had
+  $description: This setting restores classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) as they appeared in Windows 7
+
+# HIDDEN SETTING - deliberately not shown in the settings UI. The feature it
+# controls is not working on the tested builds and sleeps, fully commented,
+# in the source ("THE SLEEPING NAVIGATION" section). Kept here, commented, so
+# that re-arming the feature one day is an "uncomment", never a "rewrite".
+#- inlinePersonalizationNavigation: true
+#  $name: In-place Personalization navigation
+#  $description: This setting patches the Personalization applet itself (themecpl.dll.mun) so its "Desktop Background" and "Window Color" links navigate within the same applet window instead of opening a separate Settings window. Reversed automatically when the mod is disabled.
 */
 // ==/WindhawkModSettings==
 
@@ -116,8 +179,7 @@ This mod enhances Anixx's "Restore the classic Personalization and other CPLs"
 category task links, and a shell::: command redirect hook.
 
 Based on a fork of Anixx's work, its primary goal is to restore Windows 7-style 
-links on Windows 10/11. Currently tested only on Windows 10 1809 (hardware limited 
-to 4 GB RAM, HDD; unable to run Windows 11).
+links on Windows 10/11. 
 
 New features include the reintroduction of HomeGroup in Control Panel — absent 
 from the original mod. To prevent conflicts, this mod will auto-disable if 
@@ -143,6 +205,7 @@ runs with stock applet ordering.
 #include <mutex>
 #include <shared_mutex>
 #include <vector>
+#include <utility>
 #include <atomic>
 #include <fstream>
 #include <cstring>
@@ -152,6 +215,7 @@ runs with stock applet ordering.
 #include <optional>
 #include <thread>
 #include <shellapi.h>
+#include <psapi.h>
 #include <shobjidl.h>   // IOpenControlPanel, CLSID_OpenControlPanel
 #include <shlwapi.h>
 #include <commctrl.h>
@@ -168,6 +232,34 @@ struct Settings {
     // cannot be answered with total confidence on every edition.
     std::atomic<int> bitLockerMode;
     std::atomic<int> tabletPcMode;
+    std::atomic<int> speechMode;
+    // Defaults to true (see the $description above). The virtual entries
+    // this mod injects when the guard is off are a good approximation of
+    // the real applets - correct name, icon and category - but they are
+    // still an approximation: they don't carry the exact InfoTip/keyword
+    // metadata Explorer indexes for Control Panel search on the real CLSID,
+    // and any behavior Explorer attaches to the genuine applet identity
+    // (e.g. how it's referenced by other shell components) only exists on
+    // the real one.
+    //
+    // Which is why this setting exists (default true, see the $description
+    // above): it revives the real applet - it clears the moniker that keeps
+    // Windows from listing it - and Control Panel then shows the real thing
+    // instead of the approximation.
+    //
+    // The virtual entries are never deleted for that, they are only stood
+    // down, and they come back whenever the real applet cannot be confirmed:
+    // it isn't installed on this edition, the hidden-item moniker wasn't
+    // found, Windows still doesn't list it, or the shell can't answer the
+    // question. The confirmation is the shell's, not ours - once the patches
+    // have run, the lazy-detection worker asks it (IOpenControlPanel::GetPath
+    // on the "::{GUID}" moniker) whether the item is really part of the
+    // Control Panel item list now, and only a "yes" flips the gate - see
+    // g_realAppletConfirmedVisible / ConfirmUnhiddenAppletsVisible().
+    // Everything else leaves the answer at "not confirmed" and keeps the
+    // proven virtual entry, so this setting can never make an applet
+    // disappear from Control Panel: the fallback is always there.
+    std::atomic<bool> unhideLegacyApplets;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -175,6 +267,13 @@ struct Settings {
     std::atomic<bool> suppressWorkFolders;
     std::atomic<bool> restoreClassicTaskLinks;
     std::atomic<bool> restoreWin7CategoryTaskLinks;
+    // (sleeping feature - see THE SLEEPING NAVIGATION) Serves a patched copy
+    // of themecpl.dll.mun's markup resource so its Desktop Background /
+    // Window Color NavigateButtons carry a navigationtargetrelative
+    // attribute and navigate in-place inside the same PersonalizationHubStyle
+    // hub. The original shellexecute command is kept in the patched markup,
+    // but only as a fallback. Kept commented until a future implementation.
+    // std::atomic<bool> inlinePersonalizationNavigation;
 } g_settings;
 
 static std::atomic<bool> g_homeGroupUsable{ false };
@@ -244,6 +343,127 @@ static std::atomic<bool> g_tabletPcClsidRegistered{ false };
 // settings change.
 static std::atomic<bool> g_injectBitlockerApplet{ false };
 static std::atomic<bool> g_injectTabletPcApplet{ false };
+static std::atomic<bool> g_speechClsidRegistered{ false };
+static std::atomic<bool> g_speechAutoDetected{ false };
+static std::atomic<bool> g_injectSpeechApplet{ false };
+static std::atomic<int> g_prevSpeechMode{ -1 };
+// Index into kLegacyUnhideMonikers / g_monikerPatched (declared here so
+// VirtualTwinSuppressed can use it; kLegacyUnhideMonikers itself is
+// declared later, near the rest of the unhide feature, but a static_assert
+// there keeps the two in sync). Order matches kLegacyUnhideMonikers.
+enum LegacyUnhideMonikerIndex : size_t {
+    kLegacyUnhideMonikerPersonalization = 0,
+    kLegacyUnhideMonikerBitLocker = 1,
+    kLegacyUnhideMonikerSpeech = 2,
+    kLegacyUnhideMonikerSystem = 3,
+    kLegacyUnhideMonikerCount = 4,
+};
+// Per-applet: was THIS SPECIFIC moniker found and zeroed (in shell32.dll
+// and/or windows.storage.dll)? Recorded for the "did the guard actually do
+// anything" check below and for the log.
+//
+// It deliberately does NOT gate VirtualTwinSuppressed() any more. Finding a
+// byte pattern and zeroing it only proves the pattern was there: the scan
+// can't tell the shell's hidden-items table from any other copy of the same
+// string, and zeroing a string is not evidence that Windows now lists the
+// applet - so a build where the match landed somewhere harmless would have
+// dropped this mod's working virtual entry without the real one taking its
+// place. What proves the applet is there is the shell saying so, which is
+// what g_realAppletConfirmedVisible below records. (It is also the wrong
+// signal in the other direction: if another mod already zeroed the same
+// moniker, our scan finds nothing yet the applet may well be unhidden.)
+static std::atomic<bool> g_monikerPatched[kLegacyUnhideMonikerCount]{};
+
+// Per-applet: did the SHELL confirm that the real applet is now part of the
+// Control Panel item list? Filled in by ConfirmUnhiddenAppletsVisible(),
+// which runs on the lazy-detection worker after the guard has been set up
+// and re-asks IOpenControlPanel::GetPath about each unhidden applet. This is
+// the actual confirmation the comments above used to claim the byte-pattern
+// check was, and it is what VirtualTwinSuppressed() gates on.
+static std::atomic<bool> g_realAppletConfirmedVisible[kLegacyUnhideMonikerCount]{};
+
+// True once every applet that needs a verdict has one it can be trusted to
+// keep: either the moniker was never patched (nothing to confirm), the real
+// CLSID isn't registered here (nothing to confirm), or the shell has
+// confirmed the applet IS listed. A "not listed" answer never counts as
+// settled - see AllUnhideTargetsSettled's definition, further down next to
+// kUnhideProbeTargets, and ConfirmUnhiddenAppletsVisible for why: on a mod
+// enabled while Explorer is already running, shell32's cached Control Panel
+// item list can make a real applet look absent even though it is (or soon
+// will be) listed, and latching that false negative permanently is what lets
+// a duplicate entry appear later with no way back short of toggling the
+// setting.
+bool AllUnhideTargetsSettled();
+
+// Tears the confirmation state down: every applet goes back to "not
+// confirmed", so the virtual twins are served again until the shell says
+// otherwise. Also clears the per-moniker patch records, which describe the
+// same (now previous) application of the guard.
+static void ResetUnhideConfirmation() {
+    for (auto& patched : g_monikerPatched) patched.store(false);
+    for (auto& confirmed : g_realAppletConfirmedVisible) confirmed.store(false);
+}
+
+// Whether the REAL Personalization CLSID is registered on this machine.
+// When the legacy-applet unhide feature below unhides it, the mod's own
+// virtual Personalization entry must be suppressed (duplicate entries).
+static std::atomic<bool> g_realPersonalizationRegistered{ false };
+// Whether the REAL System CLSID is registered (it is on every supported
+// build; kept as a flag for the same task-links gating logic).
+static std::atomic<bool> g_realSystemRegistered{ false };
+// Master switch for the legacy-applet unhide feature (string patches +
+// hooks). Declared up here because the injection sites (ClassifyPath,
+// GetNamespaceClsids, task-links XML) consult it; it is set by
+// SetupLegacyUnhide() / Wh_ModSettingsChanged and cleared in Wh_ModUninit.
+static std::atomic<bool> g_legacyUnhideActive{ false };
+// True while the worker still owes us a confirmation pass - i.e. at least one
+// patched, registered applet is not yet settled (see AllUnhideTargetsSettled).
+// Read by the request/after-init paths below so the pass is scheduled even in
+// the (common) case where the applet-verdict detection itself is already done
+// and cached, AND kept true across repeated calls whenever an applet is still
+// waiting on a "listed" verdict, so a stale "not listed" answer gets asked
+// again instead of sticking forever.
+// 
+// Retry limiting: prevents infinite loop if the shell keeps answering "not listed"
+// - Maximum 5 attempts
+// - 30 second cooldown between attempts
+static std::atomic<ULONGLONG> g_lastUnhideTick{ 0 };
+static std::atomic<int> g_unhideAttempts{ 0 };
+
+inline bool UnhideConfirmationPending() {
+    if (!g_legacyUnhideActive.load(std::memory_order_acquire)) return false;
+    
+    // Stop retrying after 5 failed attempts
+    if (g_unhideAttempts.load(std::memory_order_relaxed) >= 5) return false;
+    
+    // Cooldown between retries
+    ULONGLONG last = g_lastUnhideTick.load(std::memory_order_relaxed);
+    if (last && GetTickCount64() - last < 30000) return false;
+    
+    return !AllUnhideTargetsSettled();
+}
+
+// When the legacy-applet unhide feature is active, Windows shows the real
+// applets itself (the guard unhid them), so the virtual twins this mod
+// injects for the same applets must be suppressed, otherwise the user sees
+// duplicate entries (the twin's open command is a "shell:::{...}" launch).
+// The twin is suppressed only when: the unhide patches were applied on this
+// build at all (g_legacyUnhideActive), the SHELL HAS CONFIRMED that
+// this specific applet is now listed in Control Panel (see
+// g_realAppletConfirmedVisible - not merely that a matching byte pattern was
+// found and zeroed), and the real applet is actually present.
+//
+// Gating on the confirmation rather than on g_monikerPatched[] is what keeps
+// this fail-closed: if Windows still hides the applet on this build, or the
+// patch matched some unrelated copy of the string, or the probe can't be
+// answered at all, this returns false and the user keeps the mod's own
+// working entry instead of losing the applet from Control Panel entirely.
+static bool VirtualTwinSuppressed(std::atomic<bool>& realPresent, size_t monikerIndex) {
+    return g_legacyUnhideActive.load() &&
+           monikerIndex < kLegacyUnhideMonikerCount &&
+           g_realAppletConfirmedVisible[monikerIndex].load() &&
+           realPresent.load();
+}
 
 // --- Lazy/virtual-applet probe state (fixes startup-path cost) ---
 static std::atomic<bool> g_lazyDetectionDone{ false };
@@ -281,6 +501,7 @@ bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegist
 void InvalidateClassicTaskLinksFile();
 bool EnsureClassicTaskLinksFile();
 void RunLazyVirtualAppletDetection();
+void ConfirmUnhiddenAppletsVisible();
 void RequestLazyVirtualAppletDetection();
 
 // Forward declaration
@@ -434,6 +655,9 @@ std::wstring g_personalizationNsSuffix;
 
 std::wstring g_realPersonalizationClsidSuffix;
 std::wstring g_displayClsidSuffix;
+std::wstring g_realBitLockerClsidSuffix;
+std::wstring g_realSpeechClsidSuffix;
+std::wstring g_realSystemClsidSuffix;
 
 std::wstring g_suppressedClsidSuffix,  g_suppressedNsSuffix;
 std::wstring g_windowsToGoClsidSuffix, g_windowsToGoNsSuffix;
@@ -474,6 +698,25 @@ static const std::wstring kTabletPcCanonicalName    = L"Microsoft.TabletPCSettin
 // used for the HomeGroup task links.
 static const std::wstring kBitLockerVirtualGuid     = L"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}";
 static const std::wstring kTabletPcVirtualGuid      = L"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}";
+static const std::wstring kSpeechGuid               = L"{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}";
+// This is the "Text to Speech" applet (sapi.cpl), NOT "Speech Recognition"
+// ({58E3C745-D971-4081-9034-86E34B30836A}, a different CLSID/applet). Left
+// empty on purpose: IOpenControlPanel::GetPath is picky about canonical
+// names, and a wrong one that happens to resolve to a different, unrelated
+// item produces a wrong "is it shown" verdict (not just a wasted probe
+// attempt), which then gets cached per Windows build. The probe already
+// falls through to "::{GUID}" and the bare GUID form when this is empty
+// (see IsShownByControlPanel), which is the spelling this mod actually
+// cares about.
+static const std::wstring kSpeechCanonicalName      = L"";
+// Virtual CLSID mirroring the real Text to Speech applet (same reason as
+// kBitLockerVirtualGuid: Explorer's Category View never probes the real GUID).
+static const std::wstring kSpeechVirtualGuid        = L"{e4a1c6d8-3b7f-4e2a-8c5d-9f1b6a7c2d45}";
+// The real "System" applet (sysdm.cpl): unhidden by the legacy-applet
+// unhide feature like the other legacy items above; while the feature is
+// active it also gets the classic Windows 7 task links (see
+// EnsureClassicTaskLinksFile).
+static const std::wstring kSystemGuid               = L"{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}";
 
 static const DWORD kCategoryAppearance      = 1;
 static const DWORD kCategoryHardware        = 2;
@@ -489,6 +732,15 @@ std::wstring ToLower(const std::wstring& str) {
 bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     if (str.size() < suffix.size()) return false;
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// ASCII-only narrow conversion for embedding pre-computed lowercase GUIDs
+// into the (UTF-8) task-links XML.
+std::string NarrowAscii(const std::wstring& w) {
+    std::string s;
+    s.reserve(w.size());
+    for (wchar_t c : w) s += (char)c;
+    return s;
 }
 
 // Minimal RAII wrapper around HKEY: closes the key on scope exit no matter
@@ -571,19 +823,78 @@ bool IsListedInControlPanelNameSpace(const std::wstring& guid) {
 // before hooks are installed at all), so the shell's own registry reads
 // during CoCreateInstance/GetPath are let straight through instead of
 // re-entering our hooks.
+// Locally-defined rather than pulled from the SDK's CLSID_OpenControlPanel /
+// IID_IOpenControlPanel: those symbols live in uuid.lib, which Windhawk's
+// clang toolchain does not link by default, so referencing them fails at
+// link time with "undefined symbol: CLSID_OpenControlPanel". The values are
+// fixed, documented interface identifiers, so defining them here costs
+// nothing and avoids adding a library dependency just for two GUIDs.
+static const CLSID kClsidOpenControlPanel =
+    { 0x06622d85, 0x6856, 0x4460, { 0x8d, 0xe1, 0xa8, 0x19, 0x21, 0xb4, 0x1c, 0x4b } };
+static const IID kIidOpenControlPanel =
+    { 0xd11ad862, 0x66de, 0x4df4, { 0xbf, 0x6c, 0x1f, 0x56, 0x21, 0x99, 0x6a, 0xf1 } };
+
+// The single-item probe against an already-activated IOpenControlPanel.
+// Factored out of IsShownByControlPanel so a caller that needs to ask about
+// several items (ConfirmUnhiddenAppletsVisible) can share one activation
+// instead of paying CoInitializeEx + CoCreateInstance per item - see
+// IsShownByControlPanelBatch below.
+//
+// pszName is documented as "the item's canonical name or its GUID", but the
+// GUID form is the unreliable one: shell32 runs the string through
+// COpenControlPanel::_MapLegacyName and a canonical-name lookup, and namespace
+// items are addressed with the ::{GUID} moniker form rather than a bare
+// {GUID}. So each candidate spelling is tried in turn - canonical name first,
+// then ::{GUID}, then the bare GUID - and the first one the shell can parse
+// wins. If none of them parse, the probe reports "no answer" instead of
+// guessing, and the caller falls back to the registry hint.
+static bool QueryShownByControlPanel(IOpenControlPanel* openControlPanel,
+                                     const std::wstring& canonicalName,
+                                     const std::wstring& guid, bool& outListed) {
+    bool answered = false;
+    const std::wstring monikerForm = L"::" + guid;
+    const std::wstring* candidates[] = { &canonicalName, &monikerForm, &guid };
+
+    for (const std::wstring* candidate : candidates) {
+        if (candidate->empty()) continue;
+
+        wchar_t path[MAX_PATH] = {};
+        HRESULT hr = openControlPanel->GetPath(candidate->c_str(), path, ARRAYSIZE(path));
+        if (SUCCEEDED(hr)) {
+            outListed = true;
+            answered = true;
+            Wh_Log(L"  GetPath(\"%s\") -> \"%s\" (item IS shown)", candidate->c_str(), path);
+            break;
+        }
+        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+            // The shell understood the name and says the item isn't there.
+            outListed = false;
+            answered = true;
+            Wh_Log(L"  GetPath(\"%s\") -> ERROR_FILE_NOT_FOUND (item is NOT shown)", candidate->c_str());
+            break;
+        }
+        // E_INVALIDARG and friends mean "shell couldn't parse this name",
+        // NOT "the item is absent" - never treat it as a verdict. Try the
+        // next spelling instead.
+        Wh_Log(L"  GetPath(\"%s\") not understood, hr=0x%08lX; trying next form",
+            candidate->c_str(), (unsigned long)hr);
+    }
+
+    if (!answered)
+        Wh_Log(L"  No spelling of the item name was understood by the shell; no verdict");
+    return answered;
+}
+
+// Returns true only when the shell gave a usable verdict, with outListed set.
+// Called from Wh_ModInit's synchronous startup probe AND from the dedicated
+// lazy-detection worker thread (see RunLazyVirtualAppletDetection /
+// Wh_ModAfterInit) - never from a registry hook's caller thread. Both
+// callers wrap their own registry/engine calls in a ShellProbeBypass (or run
+// before hooks are installed at all), so the shell's own registry reads
+// during CoCreateInstance/GetPath are let straight through instead of
+// re-entering our hooks.
 bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring& guid,
                            bool& outListed) {
-    // Defined locally rather than pulled from the SDK's CLSID_OpenControlPanel /
-    // IID_IOpenControlPanel: those symbols live in uuid.lib, which Windhawk's
-    // clang toolchain does not link by default, so referencing them fails at
-    // link time with "undefined symbol: CLSID_OpenControlPanel". The values are
-    // fixed, documented interface identifiers, so defining them here costs
-    // nothing and avoids adding a library dependency just for two GUIDs.
-    static const CLSID kClsidOpenControlPanel =
-        { 0x06622d85, 0x6856, 0x4460, { 0x8d, 0xe1, 0xa8, 0x19, 0x21, 0xb4, 0x1c, 0x4b } };
-    static const IID kIidOpenControlPanel =
-        { 0xd11ad862, 0x66de, 0x4df4, { 0xbf, 0x6c, 0x1f, 0x56, 0x21, 0x99, 0x6a, 0xf1 } };
-
     // The shell's Control Panel object is apartment-threaded; initialize an STA
     // for the duration of the probe and undo it only if we created it.
     const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -598,37 +909,7 @@ bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring
     HRESULT hr = CoCreateInstance(kClsidOpenControlPanel, nullptr, CLSCTX_INPROC_SERVER,
                                   kIidOpenControlPanel, (void**)&openControlPanel);
     if (SUCCEEDED(hr) && openControlPanel) {
-        const std::wstring monikerForm = L"::" + guid;
-        const std::wstring* candidates[] = { &canonicalName, &monikerForm, &guid };
-
-        for (const std::wstring* candidate : candidates) {
-            if (candidate->empty()) continue;
-
-            wchar_t path[MAX_PATH] = {};
-            hr = openControlPanel->GetPath(candidate->c_str(), path, ARRAYSIZE(path));
-            if (SUCCEEDED(hr)) {
-                outListed = true;
-                answered = true;
-                Wh_Log(L"  GetPath(\"%s\") -> \"%s\" (item IS shown)", candidate->c_str(), path);
-                break;
-            }
-            if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
-                // The shell understood the name and says the item isn't there.
-                outListed = false;
-                answered = true;
-                Wh_Log(L"  GetPath(\"%s\") -> ERROR_FILE_NOT_FOUND (item is NOT shown)", candidate->c_str());
-                break;
-            }
-            // E_INVALIDARG and friends mean "shell couldn't parse this name",
-            // NOT "the item is absent" - never treat it as a verdict. Try the
-            // next spelling instead.
-            Wh_Log(L"  GetPath(\"%s\") not understood, hr=0x%08lX; trying next form",
-                candidate->c_str(), (unsigned long)hr);
-        }
-
-        if (!answered)
-            Wh_Log(L"  No spelling of the item name was understood by the shell; no verdict");
-
+        answered = QueryShownByControlPanel(openControlPanel, canonicalName, guid, outListed);
         openControlPanel->Release();
     } else {
         Wh_Log(L"  CoCreateInstance(CLSID_OpenControlPanel) failed, hr=0x%08lX", (unsigned long)hr);
@@ -636,6 +917,45 @@ bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring
 
     if (weInitialized) CoUninitialize();
     return answered;
+}
+
+// Batched form of IsShownByControlPanel: activates IOpenControlPanel once and
+// answers up to several items with it, instead of paying a full
+// CoInitializeEx -> CoCreateInstance -> GetPath -> CoUninitialize cycle per
+// item. items[i].second receives whether the shell answered; when it did,
+// outListed[i] receives the verdict. Same threading/bypass requirements as
+// IsShownByControlPanel.
+void IsShownByControlPanelBatch(
+    const std::vector<std::pair<std::wstring, std::wstring>>& items, // {canonicalName, guid}
+    std::vector<bool>& outAnswered, std::vector<bool>& outListed) {
+    outAnswered.assign(items.size(), false);
+    outListed.assign(items.size(), false);
+    if (items.empty()) return;
+
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (initHr == RPC_E_CHANGED_MODE) {
+        Wh_Log(L"  COM already initialized in a different mode; skipping shell probe");
+        return;
+    }
+    const bool weInitialized = SUCCEEDED(initHr);
+
+    IOpenControlPanel* openControlPanel = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidOpenControlPanel, nullptr, CLSCTX_INPROC_SERVER,
+                                  kIidOpenControlPanel, (void**)&openControlPanel);
+    if (SUCCEEDED(hr) && openControlPanel) {
+        for (size_t i = 0; i < items.size(); i++) {
+            bool listed = false;
+            const bool answered = QueryShownByControlPanel(
+                openControlPanel, items[i].first, items[i].second, listed);
+            outAnswered[i] = answered;
+            outListed[i] = listed;
+        }
+        openControlPanel->Release();
+    } else {
+        Wh_Log(L"  CoCreateInstance(CLSID_OpenControlPanel) failed, hr=0x%08lX", (unsigned long)hr);
+    }
+
+    if (weInitialized) CoUninitialize();
 }
 
 // The verdict only changes when the machine's configuration changes (an edition
@@ -725,8 +1045,14 @@ bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
 // dedicated lazy-detection worker thread and returns immediately, so a
 // registry hook can never block on - or re-enter - the shell probe.
 void RequestLazyVirtualAppletDetection() {
-    if (g_lazyDetectionDone.load(std::memory_order_acquire)) return;
     if (g_inShellProbeBypass) return;
+    // Wake for the unhide confirmation pass too: it is a separate piece of
+    // work with its own "done" flag, and it is pending in exactly the case
+    // where the applet-verdict detection below has nothing left to do (all
+    // verdicts cached), which is the common case after a restart.
+    if (g_lazyDetectionDone.load(std::memory_order_acquire) &&
+        !UnhideConfirmationPending())
+        return;
     if (g_lazyDetectionWakeEvent) SetEvent(g_lazyDetectionWakeEvent);
 }
 
@@ -769,19 +1095,24 @@ void RunLazyVirtualAppletDetection() {
 
     AppletMode bitMode = (AppletMode)g_settings.bitLockerMode.load();
     AppletMode tabMode = (AppletMode)g_settings.tabletPcMode.load();
+    AppletMode spMode  = (AppletMode)g_settings.speechMode.load();
     bool needBit = (bitMode == AppletMode::Auto) && g_bitlockerClsidRegistered.load();
     bool needTab = (tabMode == AppletMode::Auto) && g_tabletPcClsidRegistered.load();
-    if (!needBit && !needTab) {
+    bool needSp  = (spMode == AppletMode::Auto) && g_speechClsidRegistered.load();
+    if (!needBit && !needTab && !needSp) {
         g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
             g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
         g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
             g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+        g_injectSpeechApplet.store(ResolveAppletInjection(spMode, g_speechAutoDetected.load(),
+            g_speechClsidRegistered.load(), L"Text to Speech"));
         g_lazyDetectionDone.store(true, std::memory_order_release);
         return;
     }
     
     bool bitAuto = g_bitlockerAutoDetected.load();
     bool tabAuto = g_tabletPcAutoDetected.load();
+    bool spAuto  = g_speechAutoDetected.load();
     if (needBit) {
         bitAuto = DetectVirtualAppletNeededCached(kBitLockerGuid, kBitLockerCanonicalName,
             L"bitlocker", L"BitLocker Drive Encryption", g_bitlockerClsidRegistered, bitMode);
@@ -792,15 +1123,22 @@ void RunLazyVirtualAppletDetection() {
             L"tabletpc", L"Tablet PC Settings", g_tabletPcClsidRegistered, tabMode);
         g_tabletPcAutoDetected.store(tabAuto);
     }
+    if (needSp) {
+        spAuto = DetectVirtualAppletNeededCached(kSpeechGuid, kSpeechCanonicalName,
+            L"speech", L"Text to Speech", g_speechClsidRegistered, spMode);
+        g_speechAutoDetected.store(spAuto);
+    }
     g_injectBitlockerApplet.store(ResolveAppletInjection(bitMode, g_bitlockerAutoDetected.load(),
         g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
     g_injectTabletPcApplet.store(ResolveAppletInjection(tabMode, g_tabletPcAutoDetected.load(),
         g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_injectSpeechApplet.store(ResolveAppletInjection(spMode, g_speechAutoDetected.load(),
+        g_speechClsidRegistered.load(), L"Text to Speech"));
     g_lazyDetectionDone.store(true, std::memory_order_release);
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d",
-        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load());
+    Wh_Log(L"Lazy detection completed: BitLocker inject=%d TabletPC inject=%d Speech inject=%d",
+        g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(), g_injectSpeechApplet.load());
 }
 
 // Combines the automatic detection with the user's explicit override.
@@ -911,6 +1249,17 @@ struct VirtualApplet {
     std::wstring openCommand;
     DWORD category = 0;
     std::atomic<bool>* enabledSetting = nullptr;
+    // Points at the "real CLSID is registered" flag: when the unhide feature
+    // is active and the real applet exists, this virtual twin is suppressed
+    // (see VirtualTwinSuppressed) so the user doesn't get duplicate entries.
+    std::atomic<bool>* realPresent = nullptr;
+    // Which kLegacyUnhideMonikers entry corresponds to this applet, so
+    // VirtualTwinSuppressed can check the confirmation recorded for THIS
+    // applet (g_realAppletConfirmedVisible) rather than any other one.
+    // kLegacyUnhideMonikerCount means "not part of the unhide feature"
+    // (e.g. Tablet PC Settings, which has no moniker in
+    // kLegacyUnhideMonikers and is never suppressed by the guard).
+    size_t monikerIndex = kLegacyUnhideMonikerCount;
 };
 
 static std::vector<VirtualApplet> g_virtualApplets;
@@ -945,7 +1294,9 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
                       DWORD category, std::atomic<bool>* enabledSetting,
                       const std::wstring& fallbackNameIndirect = L"",
                       const std::wstring& fallbackIcon = L"",
-                      const std::wstring& fallbackInfoTip = L"") {
+                      const std::wstring& fallbackInfoTip = L"",
+                      std::atomic<bool>* realPresent = nullptr,
+                      size_t monikerIndex = kLegacyUnhideMonikerCount) {
     std::wstring name, icon;
     bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
     if (!gotFromRegistry || name.empty()) {
@@ -1000,6 +1351,8 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
     applet.openCommand = L"explorer.exe shell:::" + realGuid;
     applet.category = category;
     applet.enabledSetting = enabledSetting;
+    applet.realPresent = realPresent;
+    applet.monikerIndex = monikerIndex;
     g_virtualApplets.push_back(std::move(applet));
     return true;
 }
@@ -1103,6 +1456,10 @@ bool EnsureClassicTaskLinksFile() {
         const char* bitlockerManage;
         const char* tabletCalibrate;
         const char* tabletPenTouch;
+        const char* speechConfigure;
+        const char* systemBasic;
+        const char* systemStatus;
+        const char* systemPerformance;
     };
 
     // Hard-coded localized Windows 7-style labels. The selected entry follows
@@ -1111,11 +1468,11 @@ bool EnsureClassicTaskLinksFile() {
     // MUI/resource dependency; English remains the fallback for other locales.
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
-        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco" },
-        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil" },
-        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile" },
-        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen" },
+        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings", "Configure text to speech", "View basic information about your computer", "Review your computer's status", "Review your computer's performance" },
+        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura sintesi vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
+        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil", "Configurar texto a voz", "Ver información básica sobre el equipo", "Revisar el estado del equipo", "Revisar el rendimiento del equipo" },
+        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile", "Configurer la synthèse vocale", "Afficher les informations de base sur l'ordinateur", "Vérifier l'état de votre ordinateur", "Vérifier les performances de votre ordinateur" },
+        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen", "Spracherkennung einrichten", "Grundlegende Informationen zum Computer anzeigen", "Computerstatus überprüfen", "Computerleistung überprüfen" },
         { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies", "Gerenciar BitLocker", "Calibrar a tela para entrada por caneta ou toque", "Configurações de Caneta e Toque" },
         { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies", "Gerir o BitLocker", "Calibrar o ecrã para entrada de caneta ou toque", "Definições de Caneta e Toque" },
         { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen", "BitLocker beheren", "Scherm kalibreren voor pen- of aanraakinvoer", "Instellingen voor pen en aanraking" },
@@ -1160,7 +1517,7 @@ bool EnsureClassicTaskLinksFile() {
     }
 
 
-    static const char kClassicTaskLinks[] = R"xml(  <application id="{580722ff-16a7-44c1-bf74-7e1acd00f4f9}">
+    static const char kClassicTaskLinks[] = R"xml(  <application id="{PERSONALIZATION_TASKS_APP_ID}">
     <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
     <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
@@ -1225,6 +1582,14 @@ bool EnsureClassicTaskLinksFile() {
     
     replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
                g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+    // The five classic Personalization task links attach to the REAL
+    // Personalization applet while the unhide feature unhides it (the virtual
+    // twin is then suppressed, see VirtualTwinSuppressed), and to the
+    // virtual CLSID otherwise.
+    replaceAll("{PERSONALIZATION_TASKS_APP_ID}",
+        VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)
+            ? NarrowAscii(ToLower(kRealPersonalizationGuid)).c_str()
+            : NarrowAscii(ToLower(kPersonalizationGuid)).c_str());
 
     // Windows 7 Category Task Links
     if (g_settings.restoreWin7CategoryTaskLinks.load()) {
@@ -1306,14 +1671,60 @@ bool EnsureClassicTaskLinksFile() {
     // tasks attach to exactly the entries this mod injects.
     std::string virtualTaskBlock;
     if (g_settings.restoreClassicTaskLinks.load()) {
-        if (g_injectBitlockerApplet.load()) {
+        {
+            // While the unhide feature is active and the real applet exists,
+            // Windows shows the REAL BitLocker entry and the virtual twin is
+            // suppressed - so the task links must attach to the real CLSID.
+            const bool bitRealShown = VirtualTwinSuppressed(g_bitlockerClsidRegistered, kLegacyUnhideMonikerBitLocker);
+            if (g_injectBitlockerApplet.load() || bitRealShown) {
+                const std::string bitAppId = bitRealShown
+                    ? NarrowAscii(ToLower(kBitLockerGuid))        // real CLSID
+                    : NarrowAscii(ToLower(kBitLockerVirtualGuid)); // virtual CLSID
+                virtualTaskBlock +=
+                    "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
+                    "  <application id=\"" + bitAppId + "\">\n"
+                    "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
+                    "<sh:keywords>bitlocker;encryption</sh:keywords>"
+                    "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
+                    "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                    "  </application>\n";
+            }
+        }
+        {
+            // Same real/virtual switching as the BitLocker block above.
+            const bool speechRealShown = VirtualTwinSuppressed(g_speechClsidRegistered, kLegacyUnhideMonikerSpeech);
+            if (g_injectSpeechApplet.load() || speechRealShown) {
+                const std::string speechAppId = speechRealShown
+                    ? NarrowAscii(ToLower(kSpeechGuid))          // real CLSID
+                    : NarrowAscii(ToLower(kSpeechVirtualGuid));  // virtual CLSID
+                virtualTaskBlock +=
+                    "  <!-- Text to Speech (Hardware and Sound, Category 2) -->\n"
+                    "  <application id=\"" + speechAppId + "\">\n"
+                    "    <sh:task id=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"><sh:name>{SPEECHCONFIGURE}</sh:name>"
+                    "<sh:keywords>speech;voice;text to speech;synthesis</sh:keywords>"
+                    "<sh:command>explorer.exe shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}</sh:command></sh:task>\n"
+                    "    <category id=\"2\"><sh:task idref=\"{D4F4A020-0D35-4CB6-A21F-BC1661200020}\"/></category>\n"
+                    "  </application>\n";
+            }
+        }
+        // No virtual System twin exists: the classic links simply attach to
+        // the real System applet while the unhide feature unhides it.
+        if (VirtualTwinSuppressed(g_realSystemRegistered, kLegacyUnhideMonikerSystem)) {
             virtualTaskBlock +=
-                "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
-                "  <application id=\"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}\">\n"
-                "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
-                "<sh:keywords>bitlocker;encryption</sh:keywords>"
-                "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
-                "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                "  <!-- System (System and Security, Category 5) -->\n"
+                "  <application id=\"{bb06c0e4-d293-4f75-8a90-cb05b6477eee}\">\n"
+                "    <sh:task id=\"{D4F4A030-0D35-4CB6-A21F-BC1661200030}\"><sh:name>{SYSTEMBASIC}</sh:name>"
+                "<sh:keywords>system;computer;basic information</sh:keywords>"
+                "<sh:command>rundll32.exe shell32.dll,Control_RunDLL sysdm.cpl</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A031-0D35-4CB6-A21F-BC1661200031}\"><sh:name>{SYSTEMSTATUS}</sh:name>"
+                "<sh:keywords>system;status;action center</sh:keywords>"
+                "<sh:command>rundll32.exe shell32.dll,Control_RunDLL wscui.cpl</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A032-0D35-4CB6-A21F-BC1661200032}\"><sh:name>{SYSTEMPERF}</sh:name>"
+                "<sh:keywords>system;performance;performance monitor</sh:keywords>"
+                "<sh:command>perfmon.exe</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A030-0D35-4CB6-A21F-BC1661200030}\"/>"
+                "<sh:task idref=\"{D4F4A031-0D35-4CB6-A21F-BC1661200031}\"/>"
+                "<sh:task idref=\"{D4F4A032-0D35-4CB6-A21F-BC1661200032}\"/></category>\n"
                 "  </application>\n";
         }
         if (g_injectTabletPcApplet.load()) {
@@ -1334,13 +1745,19 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
     if (g_settings.enableCategoryAppearanceLinks.load()) {
-        replaceAll("{DISPLAY_APPLICATION_BLOCK}", 
+        std::string displayBlock =
             "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
             "    <sh:task id=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}</sh:command></sh:task>\n"
             "    <category id=\"1\">\n"
             "       <sh:task idref=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"/>\n"
             "    </category>\n"
-            "  </application>\n"
+            "  </application>\n";
+        // The theme/background links also attach to the REAL Personalization
+        // applet. While the unhide feature unhides it, the 5-task
+        // Personalization block already covers it, so skip this second block
+        // to avoid a duplicate application id in the XML.
+        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
+            displayBlock +=
             "  <application id=\"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\">\n"
             "    <sh:task id=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
             "    <sh:task id=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
@@ -1348,7 +1765,9 @@ bool EnsureClassicTaskLinksFile() {
             "       <sh:task idref=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"/>\n"
             "       <sh:task idref=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"/>\n"
             "    </category>\n"
-            "  </application>");
+            "  </application>";
+        }
+        replaceAll("{DISPLAY_APPLICATION_BLOCK}", displayBlock.c_str());
     } else {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", "");
     }
@@ -1389,6 +1808,19 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{BITLOCKERMANAGE}", texts->bitlockerManage);
     replaceAll("{TABLETCALIBRATE}", texts->tabletCalibrate);
     replaceAll("{TABLETPENTOUCH}", texts->tabletPenTouch);
+    // Locales without a dedicated translation fall back to the English text
+    // (same convention the rest of the table already documents).
+    const char* speechConfigureText = texts->speechConfigure ? texts->speechConfigure
+                                                             : kTaskLinkTexts[0].speechConfigure;
+    replaceAll("{SPEECHCONFIGURE}", speechConfigureText);
+    // System links: same English fallback for the other locales.
+    const char* systemBasicText = texts->systemBasic ? texts->systemBasic : kTaskLinkTexts[0].systemBasic;
+    const char* systemStatusText = texts->systemStatus ? texts->systemStatus : kTaskLinkTexts[0].systemStatus;
+    const char* systemPerfText = texts->systemPerformance ? texts->systemPerformance
+                                                          : kTaskLinkTexts[0].systemPerformance;
+    replaceAll("{SYSTEMBASIC}", systemBasicText);
+    replaceAll("{SYSTEMSTATUS}", systemStatusText);
+    replaceAll("{SYSTEMPERF}", systemPerfText);
 
 
     const std::wstring targetPath = g_classicTaskLinksFilePath;
@@ -1489,6 +1921,8 @@ void LoadSettings() {
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
+    g_settings.speechMode.store((int)ReadAppletMode(L"speechMode"));
+    g_settings.unhideLegacyApplets.store(Wh_GetIntSetting(L"unhideLegacyApplets"));
     // The effective verdicts depend on both the (fixed) auto detection and the
     // (changeable) override, so they are refreshed on every settings load.
     g_injectBitlockerApplet.store(ResolveAppletInjection(
@@ -1497,6 +1931,9 @@ void LoadSettings() {
     g_injectTabletPcApplet.store(ResolveAppletInjection(
         (AppletMode)g_settings.tabletPcMode.load(), g_tabletPcAutoDetected.load(),
         g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
+    g_injectSpeechApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.speechMode.load(), g_speechAutoDetected.load(),
+        g_speechClsidRegistered.load(), L"Text to Speech"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
@@ -1504,6 +1941,7 @@ void LoadSettings() {
     g_settings.suppressWorkFolders.store(Wh_GetIntSetting(L"suppressWorkFolders"));
     g_settings.restoreClassicTaskLinks.store(Wh_GetIntSetting(L"restoreClassicTaskLinks"));
     g_settings.restoreWin7CategoryTaskLinks.store(Wh_GetIntSetting(L"restoreWin7CategoryTaskLinks"));
+    // (sleeping feature) g_settings.inlinePersonalizationNavigation.store(Wh_GetIntSetting(L"inlinePersonalizationNavigation"));
 }
 
 void InitDisplayNames() {
@@ -1545,6 +1983,9 @@ void InitDisplayNames() {
 
     g_realPersonalizationClsidSuffix = L"clsid\\" + g_realPersonalizationGuidLower;
     g_displayClsidSuffix             = L"clsid\\" + g_displayGuidLower;
+    g_realBitLockerClsidSuffix       = L"clsid\\" + ToLower(kBitLockerGuid);
+    g_realSpeechClsidSuffix          = L"clsid\\" + ToLower(kSpeechGuid);
+    g_realSystemClsidSuffix          = L"clsid\\" + ToLower(kSystemGuid);
 
     g_suppressedClsidSuffix  = L"clsid\\" + g_suppressedGuidLower;
     g_suppressedNsSuffix     = L"controlpanel\\namespace\\" + g_suppressedGuidLower;
@@ -1575,7 +2016,8 @@ void InitDisplayNames() {
                               &g_injectBitlockerApplet,
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"%SystemRoot%\\System32\\fvecpl.dll,-1",
-                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2"))
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2",
+                              &g_bitlockerClsidRegistered, kLegacyUnhideMonikerBitLocker))
             Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
     }
     if (g_tabletPcClsidRegistered.load()) {
@@ -1587,6 +2029,27 @@ void InitDisplayNames() {
                               L"%SystemRoot%\\System32\\tabletpc.cpl,-10200",
                               L"@%SystemRoot%\\System32\\tabletpc.cpl,-10102"))
             Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
+    }
+    if (g_speechClsidRegistered.load()) {
+        // Text to Speech: registry-only, no resource fallback. The applet's
+        // actual cpl is sapi.cpl under System32\Speech\SpeechUX, but the
+        // ",-1"/",-2" string/icon resource indices used by a previous
+        // version of this fallback were never confirmed against sapi.cpl -
+        // they were carried over by analogy from other applets, and if
+        // wrong they wouldn't just no-op, they could give the entry an
+        // incorrect name or icon (a wrong index can still resolve to some
+        // unrelated resource in the file). Rather than ship that unverified,
+        // this applet is only added when the registry itself has a usable
+        // name (as it does whenever sapi.cpl is actually registered); on
+        // stub-CLSID builds where it isn't, no virtual entry is created -
+        // same fail-safe behavior AddVirtualApplet already has when neither
+        // the registry nor a fallback has a name.
+        if (!AddVirtualApplet(kSpeechVirtualGuid, kSpeechGuid, kCategoryHardware,
+                              &g_injectSpeechApplet,
+                              L"", L"", L"",
+                              &g_speechClsidRegistered, kLegacyUnhideMonikerSpeech))
+            Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
+                   L"(no resource fallback); virtual entry not created");
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -1662,6 +2125,9 @@ ClassifyResult ClassifyVirtualApplets(const std::wstring& lower) {
     for (size_t i = 0; i < g_virtualApplets.size(); ++i) {
         const VirtualApplet& a = g_virtualApplets[i];
         if (!a.enabledSetting->load()) continue;
+        // unhide feature active + real applet present: Windows shows the real
+        // entry itself, so this virtual twin must not be served either.
+        if (a.realPresent && VirtualTwinSuppressed(*a.realPresent, a.monikerIndex)) continue;
         if (EndsWith(lower, a.clsidSuffix))       return { VNode::ClsidRoot,     ItemKind::VirtualApplet, a.category, (int)i };
         if (EndsWith(lower, a.defaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::VirtualApplet, a.category, (int)i };
         if (EndsWith(lower, a.shellSuffix))       return { VNode::Shell,        ItemKind::VirtualApplet, a.category, (int)i };
@@ -1692,7 +2158,8 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
             return { VNode::Suppressed, ItemKind::Suppressed, 0 };
     }
 
-    if (g_settings.enablePersonalization.load()) {
+    if (g_settings.enablePersonalization.load() &&
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
         auto cr = ClassifyPersonalizationVirtual(lower);
         if (cr.node != VNode::None) return cr;
     }
@@ -1702,9 +2169,52 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         if (cr.node != VNode::None) return cr;
     }
 
-    if (g_settings.enableCategoryAppearanceLinks.load()) {
-        if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
-            EndsWith(lower, g_displayClsidSuffix)) {
+    // Each branch below is gated on exactly the condition that makes the
+    // generated task-list XML (see the kTaskListTemplate assembly above)
+    // actually contain an <application> block for that CLSID. Granting
+    // RealCplTaskUrl any more loosely than that would make TryProvideValue
+    // hand Explorer XML with no matching block, leaving the real applet with
+    // no task links at all instead of falling through to its stock ones.
+    if (EndsWith(lower, g_displayClsidSuffix) &&
+        g_settings.enableCategoryAppearanceLinks.load()) {
+        // The Display sub-block in DISPLAY_APPLICATION_BLOCK is emitted
+        // unconditionally whenever enableCategoryAppearanceLinks is on.
+        return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
+    }
+    if (EndsWith(lower, g_realPersonalizationClsidSuffix)) {
+        const bool personalizationRealShown = VirtualTwinSuppressed(
+            g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization);
+        // The real Personalization CLSID gets an <application> block from
+        // one of two places, never both (see the comment above the
+        // Display block's personalization sub-block, which exists to avoid
+        // a duplicate application id): the classic 5-task Personalization
+        // block once the virtual twin is suppressed, or the Display block's
+        // theme/background sub-block while it is not.
+        const bool hasClassicBlock =
+            g_settings.restoreClassicTaskLinks.load() && personalizationRealShown;
+        const bool hasDisplayBlock =
+            g_settings.enableCategoryAppearanceLinks.load() && !personalizationRealShown;
+        if (hasClassicBlock || hasDisplayBlock) {
+            return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
+        }
+    }
+    // The BitLocker / Speech / System blocks all live inside the
+    // restoreClassicTaskLinks-gated section of the classic task links, and
+    // each additionally requires the shell to have confirmed the real
+    // applet is shown (VirtualTwinSuppressed) before its block is emitted.
+    // cr.category stays 0: the category is NOT overridden, Windows already
+    // knows the real applet's own category.
+    if (g_settings.restoreClassicTaskLinks.load()) {
+        if (EndsWith(lower, g_realBitLockerClsidSuffix) &&
+            VirtualTwinSuppressed(g_bitlockerClsidRegistered, kLegacyUnhideMonikerBitLocker)) {
+            return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
+        }
+        if (EndsWith(lower, g_realSpeechClsidSuffix) &&
+            VirtualTwinSuppressed(g_speechClsidRegistered, kLegacyUnhideMonikerSpeech)) {
+            return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
+        }
+        if (EndsWith(lower, g_realSystemClsidSuffix) &&
+            VirtualTwinSuppressed(g_realSystemRegistered, kLegacyUnhideMonikerSystem)) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
         }
     }
@@ -1809,9 +2319,9 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 return true;
             }
         }
-        if (valueName == L"System.ControlPanel.Category") {
+        if (cr.category != 0 && valueName == L"System.ControlPanel.Category") {
             if (lpType) *lpType = REG_DWORD;
-            outStatus = ProvideDwordValue(lpData, lpcbData, kCategoryAppearance);
+            outStatus = ProvideDwordValue(lpData, lpcbData, cr.category);
             return true;
         }
         return false;
@@ -1963,14 +2473,18 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 // actually built before advertising it.
 static bool VirtualAppletPresent(const std::wstring& guidLower) {
     for (const auto& a : g_virtualApplets)
-        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load()) return true;
+        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load() &&
+            !(a.realPresent && VirtualTwinSuppressed(*a.realPresent, a.monikerIndex))) return true;
     return false;
 }
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    result.reserve(7);
-    if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
+    result.reserve(8);
+    // The virtual Personalization twin is suppressed while the unhide feature
+    // shows the real applet (guard active + real CLSID registered).
+    if (g_settings.enablePersonalization.load() &&
+        !VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
@@ -1979,6 +2493,8 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kBitLockerVirtualGuid);
     if (g_injectTabletPcApplet.load() && VirtualAppletPresent(kTabletPcVirtualGuid))
         result.push_back(kTabletPcVirtualGuid);
+    if (g_injectSpeechApplet.load() && VirtualAppletPresent(kSpeechVirtualGuid))
+        result.push_back(kSpeechVirtualGuid);
     return result;
 }
 
@@ -2411,6 +2927,11 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
 LPCWSTR g_szAppletOrder[] = {
     /* Appearance and Personalization */
     L"::{580722ff-16a7-44c1-bf74-7e1acd00f4f9}", // Personalization (fake GUID)
+    // The REAL Personalization applet, which is what shows while the Control
+    // Panel unhide feature is active (the virtual twin is then suppressed).
+    // Only one of the two entries is ever in the category list at a time, so
+    // the extra rank costs nothing.
+    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization (real)
 };
 
 // Control Panel item monikers appear both bare and with a leading "::", so
@@ -2499,10 +3020,11 @@ int WINAPI CControlPanelAppletList_s_FindAppletInSortArray_hook(
 static size_t g_appletListDpaOffset = 0;
 static size_t g_appletMonikerOffset = 0;
 
-// Walks the comparator looking for the DPA load, which is the last register
-// load before it calls DPA_GetPtr, and then for the moniker displacement,
-// which is the first immediate added to a register afterwards. Returns false
-// if the code doesn't have that shape, leaving applet ordering alone.
+// Walks the comparator looking for the DPA load - the last write of a
+// [r8+imm] field into rcx before the DPA_GetPtr call, i.e. that call's
+// first argument - and then for the moniker displacement, the first
+// immediate added to a non-stack register afterwards. Returns false if the
+// code doesn't have that shape, leaving applet ordering alone.
 // Note: The moniker offset (0x208) has been found to be valid only on certain
 // Windows 10 builds (e.g., 1809). On Windows 11 24H2+ and 26H1+, the offset
 // has changed and the mod uses the fallback (stock applet ordering).
@@ -2511,11 +3033,22 @@ static size_t g_appletMonikerOffset = 0;
 static bool ResolveAppletOffsets(void* pFunc) {
     // lParam is the third x64 argument, i.e. r8 - anchor on it so an
     // unrelated load in the prologue can't be mistaken for the DPA load.
+    // The destination is anchored on rcx as well: the load exists to feed
+    // the first argument of the DPA_GetPtr call (mov rcx, [r8+0x10] on
+    // every observed build), and the last write to rcx before a call IS
+    // that call's first argument - so this can no longer latch onto some
+    // other [r8+imm] load that happens to precede the call. If a future
+    // build stages the value through another register first, the match
+    // fails and the mod falls back to stock ordering, which is the safe
+    // direction to fail in.
     const std::regex loadRegex(
-        R"(mov r(?:[a-z]{2}|\d{1,2}), \[r8\+(0x[0-9a-f]+)\])",
+        R"(mov rcx, \[r8\+(0x[0-9a-f]+)\])",
         std::regex_constants::icase);
+    // rsp/rbp are explicitly excluded: `add rsp, 0x28` is an ordinary
+    // stack adjustment (and small enough to sail through the upper-bound
+    // sanity check below), not the moniker displacement.
     const std::regex addRegex(
-        R"(add r(?:[a-z]{2}|\d{1,2}), (0x[0-9a-f]+))",
+        R"(add r(?!sp\b|bp\b)(?:[a-z]{2}|\d{1,2}), (0x[0-9a-f]+))",
         std::regex_constants::icase);
 
     size_t dpaOffset = 0;
@@ -2549,9 +3082,13 @@ static bool ResolveAppletOffsets(void* pFunc) {
         }
     }
 
-    // Sanity check
-    if (!dpaOffset || dpaOffset > 0x1000 ||
-        !monikerOffset || monikerOffset > 0x10000) {
+    // Sanity check. Both offsets address pointer-sized fields inside
+    // shell32's private structures, so besides the range bounds they must
+    // be pointer-aligned - an immediate scraped off the wrong instruction
+    // rarely is.
+    if (!dpaOffset || dpaOffset > 0x1000 || (dpaOffset % sizeof(void*)) != 0 ||
+        !monikerOffset || monikerOffset > 0x10000 ||
+        (monikerOffset % sizeof(void*)) != 0) {
         return false;
     }
 
@@ -2579,10 +3116,58 @@ static bool LooksLikeClsidMoniker(LPCWSTR s) {
     return s[len - 1] == L'}';
 }
 
+// Plausibility check on a value about to be treated as an HDPA. If
+// ResolveAppletOffsets ever latched onto the wrong displacement, the loaded
+// value is arbitrary data, and `if (hDpa)` alone would hand any non-null
+// garbage to DPA_GetPtr, which dereferences it - an access violation inside
+// Explorer on every category sort. A real heap pointer is pointer-aligned
+// and lives above the null/reserved region; arbitrary small integers and
+// misaligned values are rejected. Defense in depth on top of the anchored
+// instruction matching in ResolveAppletOffsets, not a substitute for it.
+static bool LooksLikeValidDpaHandle(HDPA hDpa) {
+    const DWORD_PTR value = (DWORD_PTR)hDpa;
+    if (value < 0x10000) return false;               // null/pseudo-handle region
+    if (value % sizeof(void*) != 0) return false;    // heap allocations are aligned
+    return true;
+}
+
+// Guards the read window [pItem + g_appletMonikerOffset,
+// pItem + g_appletMonikerOffset + kMonikerReadWindow) with a single
+// VirtualQuery before it is touched. g_appletMonikerOffset comes from a
+// disassembly heuristic in ResolveAppletOffsets that is only checked for
+// range and alignment, not correctness - if it ever latches onto the wrong
+// displacement, this is the last line of defense against reading past the
+// end of the shell32 heap object on every applet comparison of every
+// category sort. Not a replacement for LooksLikeClsidMoniker's content
+// check, or for ResolveAppletOffsets getting the offset right in the first
+// place - just a commit/readability check so a bad offset degrades to "no
+// match" instead of an access violation in explorer.exe.
+static bool IsReadableMonikerWindow(LPCVOID pMoniker) {
+    constexpr size_t kMonikerReadWindow = 64 * sizeof(WCHAR); // matches LooksLikeClsidMoniker's kMaxLen scan
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(pMoniker, &mbi, sizeof(mbi)) != sizeof(mbi)) {
+        return false;
+    }
+    if (mbi.State != MEM_COMMIT) {
+        return false;
+    }
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_EXECUTE)) {
+        return false;
+    }
+    if (mbi.Protect & PAGE_GUARD) {
+        return false;
+    }
+    // Make sure the whole scan window fits inside this committed region.
+    const BYTE* regionEnd = (const BYTE*)mbi.BaseAddress + mbi.RegionSize;
+    const BYTE* windowEnd = (const BYTE*)pMoniker + kMonikerReadWindow;
+    return windowEnd <= regionEnd;
+}
+
 static LPCWSTR GetAppletMoniker(HDPA hDpa, const int* pIndex) {
     LPVOID pItem = DPA_GetPtr(hDpa, *pIndex);
     if (!pItem) return NULL;
     LPCWSTR moniker = (LPCWSTR)((char*)pItem + g_appletMonikerOffset);
+    if (!IsReadableMonikerWindow(moniker)) return NULL;
     return LooksLikeClsidMoniker(moniker) ? moniker : NULL;
 }
 
@@ -2598,7 +3183,7 @@ int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
 
     if (g_appletMonikerOffset && p1 && p2 && lParam) {
         HDPA hDpa = *(HDPA*)((BYTE*)lParam + g_appletListDpaOffset);
-        if (hDpa) {
+        if (LooksLikeValidDpaHandle(hDpa)) {
             int iApplet1 = FindApplet(GetAppletMoniker(hDpa, (const int*)p1));
             int iApplet2 = FindApplet(GetAppletMoniker(hDpa, (const int*)p2));
             if (iApplet1 >= 0 && iApplet2 >= 0) {
@@ -2634,14 +3219,861 @@ void InvalidateClassicTaskLinksFile() {
     g_taskLinksLastCheckTick.store(0, std::memory_order_relaxed);
 }
 
+// ===========================================================================
+// Legacy-applet unhide feature (similar in approach to a well-known
+// technique also used by a similar mod for the same purpose), rebuilt
+// around RAII + try/catch:
+//
+//  * ReversiblePatcher owns every in-memory string patch and restores the
+//    original bytes from a single place (Wh_ModUninit), so no manual
+//    restore can ever be forgotten. It deliberately has no restoring
+//    destructor - see the [[clang::no_destroy]] wrapper below;
+//  * windows.storage.dll is kept loaded for as long as the patches exist:
+//    the reference is taken when the feature first patches it and released
+//    only in Wh_ModUninit, after RestoreAll(), because the recorded patch
+//    addresses point into that module's image;
+//  * every entry point below is try/catch guarded, so no C++ exception can
+//    ever unwind into Explorer's non-exception-aware call stack.
+//
+// What it does:
+//
+//  1. zeroes the hidden-applet monikers inside shell32.dll /
+//     windows.storage.dll so Windows 11 stops hiding Personalization,
+//     BitLocker Drive Encryption, Text to Speech and System. Only
+//     readable, non-executable data sections are scanned,
+//     located through the PE section table (never across the whole image),
+//     and only the pages that actually contain a match are temporarily
+//     made writable;
+//  2. asks the shell (IOpenControlPanel::GetPath) whether each of those
+//     applets really is listed now, and only then lets the real applet
+//     replace this mod's virtual twin - see ConfirmUnhiddenAppletsVisible().
+//
+// What it deliberately does NOT do: block the redirect to the modern
+// Settings app (the COpenControlPanel::_MapLegacyName /
+// CompareStringOrdinal hooks). That is a separate job with a separate,
+// much longer list of items, and it is done by the "Settings to Control
+// Panel" mod - hooking the same shell32 internal from two catalog entries
+// only means the second hook re-decides what the first already decided.
+// Keeping this feature to the string patches also keeps it away from the
+// sharpest edge of that technique: a CompareStringOrdinal override perturbs
+// comparisons the shell also uses for ordered lookups, and a name blocked
+// with no classic page behind it makes explorer.exe fail with 0xC0000005.
+// ===========================================================================
+
+struct PatchRecord {
+    void* address;
+    BYTE originalBytes[128];
+    size_t length;
+};
+
+class ReversiblePatcher {
+public:
+    ReversiblePatcher() = default;
+    ReversiblePatcher(const ReversiblePatcher&) = delete;
+    ReversiblePatcher& operator=(const ReversiblePatcher&) = delete;
+    // No restoring destructor on purpose: this object lives in the
+    // [[clang::no_destroy]] optional below, and a global's destructor would
+    // otherwise run at process shutdown - on the shutdown thread, under the
+    // loader lock, after every other thread has already been terminated.
+    // Writing into other modules' images at that point is pointless (the
+    // image is private to the dying process) and unsafe. RestoreAll() is
+    // called explicitly from Wh_ModUninit instead.
+    ~ReversiblePatcher() = default;
+
+    // Zeroes every exact whole-string occurrence of lpSearch inside the
+    // module's readable data sections, recording the original bytes so
+    // RestoreAll() can put them back. Whole-string means the candidate has
+    // to END where the pattern ends: a longer literal that merely starts
+    // with the moniker (e.g. "::{GUID}\\pageWallpaper") must never be
+    // clobbered - zeroing its prefix would turn an unrelated string into
+    // L"" while the real hidden-items entry stays untouched. And every
+    // occurrence is patched, not just the first: if the moniker appears in
+    // more than one table, patching one and stopping would leave the
+    // feature half-applied; each patch is recorded individually, so
+    // RestoreAll() still undoes all of them.
+    //
+    // The scan walks the PE section table and only visits sections that
+    // hold readable, non-executable, non-discardable initialized data
+    // (.rdata/.data and friends): the moniker literals live in the
+    // read-only data pool, and staying inside those sections both bounds
+    // the cost (no .text/.rsrc traversal, no pages that may not be
+    // readable) and avoids touching memory the module never promised to
+    // be mapped at that offset. Candidates are checked at WCHAR alignment.
+    bool PatchStringInModule(HMODULE hModule, LPCWSTR lpSearch) {
+        if (!hModule || !lpSearch) return false;
+
+        const size_t patternLen = wcslen(lpSearch) * sizeof(WCHAR);
+        if (patternLen == 0 ||
+            patternLen > sizeof(PatchRecord::originalBytes))
+            return false;
+
+        bool anyPatched = false;
+
+        const BYTE* base = (const BYTE*)hModule;
+        const IMAGE_DOS_HEADER* dosHeader = (const IMAGE_DOS_HEADER*)base;
+        if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return false;
+
+        const IMAGE_NT_HEADERS* ntHeaders =
+            (const IMAGE_NT_HEADERS*)(base + dosHeader->e_lfanew);
+        if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return false;
+
+        const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(ntHeaders);
+        const WORD sectionCount = ntHeaders->FileHeader.NumberOfSections;
+
+        for (WORD i = 0; i < sectionCount; i++, section++) {
+            if (!(section->Characteristics & IMAGE_SCN_MEM_READ)) continue;
+            if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+            if (section->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) continue;
+
+            // SizeOfRawData bytes are present in the mapped image at
+            // VirtualAddress; anything past that is zero-filled on demand.
+            // Never scan beyond what the section header says is there.
+            const size_t rawSize = section->SizeOfRawData;
+            if (rawSize == 0 || section->PointerToRawData == 0) continue;
+            const size_t virtualSize = section->Misc.VirtualSize;
+            const size_t scanSize =
+                virtualSize ? (std::min)(rawSize, virtualSize) : rawSize;
+            if (patternLen > scanSize) continue;
+
+            const BYTE* scanBegin = base + section->VirtualAddress;
+            const WCHAR firstCharLower = towlower(lpSearch[0]);
+            const size_t charCount = patternLen / sizeof(WCHAR);
+
+            for (size_t offset = 0; offset + patternLen <= scanSize;
+                 offset += sizeof(WCHAR)) {
+                const BYTE* candidate = scanBegin + offset;
+                // Case-insensitive: the GUID monikers mix upper/lowercase hex
+                // digits (e.g. "4e60"/"4f75") and a future shell32 build could
+                // ship different casing without changing the moniker itself.
+                // The bytes actually zeroed/restored are read back verbatim
+                // from the module (ZeroAndRecord snapshots `candidate`), so
+                // restoring still puts back exactly what was there.
+                if (towlower(*(const WCHAR*)candidate) != firstCharLower) continue;
+                if (_wcsnicmp((LPCWSTR)candidate, lpSearch, charCount) != 0) continue;
+
+                // Must be the whole string, not a prefix of a longer
+                // literal: the WCHAR right after the match has to be the
+                // terminator. If the match runs exactly to the end of the
+                // scannable range there is no terminator to inspect, and
+                // the candidate is rejected as unverifiable rather than
+                // assumed terminated.
+                if (offset + patternLen + sizeof(WCHAR) > scanSize ||
+                    *(const WCHAR*)(candidate + patternLen) != L'\0')
+                    continue;
+
+                // Found. ZeroAndRecord() reports failure only when the
+                // protection change fails or the record table is full, in
+                // which case this occurrence stays unpatched and the caller
+                // simply logs it. Keep scanning either way: other
+                // occurrences (and other sections) may still match.
+                if (ZeroAndRecord((void*)candidate, patternLen)) {
+                    anyPatched = true;
+                }
+                // The string just zeroed can't match again; skip past it.
+                offset += patternLen;
+            }
+        }
+        return anyPatched;
+    }
+
+    // Puts every recorded byte back. Safe to call multiple times.
+    void RestoreAll() {
+        for (const auto& patch : patches_) {
+            DWORD oldProtect = 0;
+            if (!ProtectPageRange(patch.address, patch.length, PAGE_READWRITE,
+                                  &oldProtect))
+                continue;
+            memcpy(patch.address, patch.originalBytes, patch.length);
+            ProtectPageRange(patch.address, patch.length, oldProtect,
+                             &oldProtect);
+        }
+        const size_t count = patches_.size();
+        patches_.clear();
+        if (count) Wh_Log(L"unhide feature: restored %zu patched region(s)", count);
+    }
+
+private:
+    static constexpr size_t kMaxPatches = 64;  // same capacity as the original mod
+
+    // VirtualProtect on exactly the pages spanned by
+    // [address, address+length), leaving the rest of the (copy-on-write,
+    // shared) image untouched.
+    static bool ProtectPageRange(void* address, size_t length,
+                                 DWORD newProtect, DWORD* oldProtect) {
+        SYSTEM_INFO si = {};
+        GetSystemInfo(&si);
+        const DWORD_PTR pageMask = (DWORD_PTR)si.dwPageSize - 1;
+        BYTE* begin = (BYTE*)((DWORD_PTR)address & ~pageMask);
+        BYTE* end =
+            (BYTE*)(((DWORD_PTR)address + length + pageMask) & ~pageMask);
+        return VirtualProtect(begin, (SIZE_T)(end - begin), newProtect,
+                              oldProtect) != FALSE;
+    }
+
+    // Makes the pages holding the match writable, records the original
+    // bytes, zeroes the match and restores the original protection.
+    bool ZeroAndRecord(void* address, size_t length) {
+        DWORD oldProtect = 0;
+        if (!ProtectPageRange(address, length, PAGE_READWRITE, &oldProtect))
+            return false;
+
+        if (patches_.size() >= kMaxPatches) {
+            ProtectPageRange(address, length, oldProtect, &oldProtect);
+            return false;
+        }
+
+        PatchRecord record = {};
+        record.address = address;
+        record.length = length;
+        memcpy(record.originalBytes, address, length);
+        ZeroMemory(address, length);
+
+        ProtectPageRange(address, length, oldProtect, &oldProtect);
+        patches_.push_back(record);
+        return true;
+    }
+
+    std::vector<PatchRecord> patches_;
+};
+
+// The patcher is wrapped in a [[clang::no_destroy]] optional and emplaced in
+// Wh_ModInit: its cleanup must never run from a static destructor at
+// process shutdown (see the comment on ~ReversiblePatcher). Wh_ModUninit
+// restores the patched bytes and resets the optional explicitly.
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] static std::optional<ReversiblePatcher> g_legacyUnhidePatcher;
+
+// Persistent reference to windows.storage.dll, taken the first time the
+// guard patches it and released in Wh_ModUninit, AFTER RestoreAll(): the
+// recorded patch addresses point into that module's image, so the module
+// must stay mapped for as long as the patches exist. (Releasing it any
+// earlier could leave the patch addresses pointing at unmapped memory.)
+static HMODULE g_legacyUnhideWinStorageModule = nullptr;
+
+// (The feature installs no hooks of its own - it is string patches plus a
+// shell probe - so there is no hook state to keep here. g_legacyUnhideActive,
+// the master switch, is declared up top together with the other mod state.)
+
+// The hidden-applet monikers to unhide (same technique also used by a
+// similar mod), narrowed to the applets this mod manages.
+static const LPCWSTR kLegacyUnhideMonikers[] = {
+    L"::{ED834ED6-4B5A-4BFE-8F11-A626DCB6A921}", // Personalization
+    L"::{D9EF8727-CAC2-4e60-809E-86F80A666C91}", // BitLocker Drive Encryption
+    L"::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}", // Text to Speech
+    L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
+};
+// Keeps LegacyUnhideMonikerIndex (declared far above, next to
+// VirtualTwinSuppressed/g_monikerPatched, since it is needed there) in sync
+// with the array above - if someone adds/removes/reorders a moniker here
+// without updating the enum, this fails to compile instead of silently
+// mis-gating an unrelated applet's virtual twin.
+static_assert(ARRAYSIZE(kLegacyUnhideMonikers) == kLegacyUnhideMonikerCount,
+              "kLegacyUnhideMonikers and LegacyUnhideMonikerIndex must stay in sync");
+
+// A note on running alongside another mod that unhides the same items
+// (control-panel-revival patches some of the same monikers in the same two
+// modules): nothing here tries to detect it any more. Two reasons. The
+// detection this mod used to do looked for a loaded module whose file name
+// contains the other mod's id, which is a Windhawk implementation detail
+// rather than an API, and it was cached for the whole process lifetime, so a
+// mod loaded later was never noticed. And it isn't needed: string patching is
+// self-protecting - once a moniker has been zeroed, our search for it simply
+// doesn't match, so the second patcher is a no-op and no byte is patched
+// twice. Whether an applet ended up unhidden, by us or by that other mod, is
+// then answered the same way in both cases, by asking the shell (see
+// ConfirmUnhiddenAppletsVisible) instead of by guessing who patched what.
+
+// Patches the hidden monikers. Idempotent: a second call (e.g. after
+// re-enabling the setting) re-applies the string patches from scratch,
+// which is safe because the previous ones were undone by RestoreAll()
+// when the setting was switched off.
+//
+// No hooks are installed here: see the header comment of this section.
+// That also means there is nothing to apply - the patches are direct
+// in-memory writes and take effect immediately - so this can be called
+// from Wh_ModInit and from Wh_ModSettingsChanged alike.
+static void SetupLegacyUnhide() {
+    // A (re-)application invalidates the previous confirmation: the patches
+    // about to be applied (or the ones just restored) change what Control
+    // Panel shows, so every applet goes back to "not confirmed" and the
+    // worker re-asks the shell before anything is suppressed again. Cheap
+    // when the guard never becomes active - the pass is skipped wholesale.
+    ResetUnhideConfirmation();
+
+    if (!g_legacyUnhidePatcher) g_legacyUnhidePatcher.emplace();
+
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32) {
+        Wh_Log(L"unhide feature: shell32.dll not found, skipping");
+        return;
+    }
+
+    bool anyMonikerPatched = false;
+    // Fresh per-moniker results for this call; overwritten below (not OR'd
+    // with any stale state from a previous enable/disable cycle - patches
+    // are always attempted from scratch here, either at first setup or
+    // after RestoreAll() undid the previous ones).
+    bool monikerPatchedThisCall[kLegacyUnhideMonikerCount] = {};
+
+    // Every moniker is attempted, whatever else is loaded: if another mod
+    // already zeroed one of them, the scan simply won't find it and nothing
+    // is patched twice (see the note above this function).
+    for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
+        const LPCWSTR moniker = kLegacyUnhideMonikers[i];
+        const bool patched = g_legacyUnhidePatcher->PatchStringInModule(hShell32, moniker);
+        anyMonikerPatched = anyMonikerPatched || patched;
+        monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
+        Wh_Log(L"unhide feature: %s %s in shell32.dll",
+               patched ? L"patched" : L"did not find", moniker);
+    }
+
+    // windows.storage.dll is loaded once and kept loaded: the patch
+    // addresses recorded below point into its image, so the reference is
+    // only released in Wh_ModUninit, after RestoreAll() (see
+    // g_legacyUnhideWinStorageModule).
+    if (!g_legacyUnhideWinStorageModule) {
+        g_legacyUnhideWinStorageModule =
+            LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (g_legacyUnhideWinStorageModule) {
+        for (size_t i = 0; i < ARRAYSIZE(kLegacyUnhideMonikers); i++) {
+            const LPCWSTR moniker = kLegacyUnhideMonikers[i];
+            const bool patched =
+                g_legacyUnhidePatcher->PatchStringInModule(g_legacyUnhideWinStorageModule, moniker);
+            anyMonikerPatched = anyMonikerPatched || patched;
+            monikerPatchedThisCall[i] = monikerPatchedThisCall[i] || patched;
+            Wh_Log(L"unhide feature: %s %s in windows.storage.dll",
+                   patched ? L"patched" : L"did not find", moniker);
+        }
+    } else {
+        Wh_Log(L"unhide feature: windows.storage.dll could not be loaded; its monikers are left unpatched");
+    }
+
+    // Publish the per-applet results now that both modules have been
+    // scanned, so the log and the guard-active check below never see a
+    // half-finished row (never shell32's result alone before
+    // windows.storage.dll's is in). These are patch results, not visibility
+    // verdicts - see g_monikerPatched / g_realAppletConfirmedVisible.
+    for (size_t i = 0; i < kLegacyUnhideMonikerCount; i++) {
+        g_monikerPatched[i].store(monikerPatchedThisCall[i]);
+    }
+
+    // Only declare the feature active if it actually accomplished something:
+    // at least one moniker was found and zeroed. If every patch failed (e.g.
+    // a future shell32 build changes the layout or the casing of the
+    // hidden-items table), staying inactive keeps this mod's own virtual
+    // twins visible instead of dropping the applet from Control Panel
+    // entirely.
+    //
+    // "Active" here means "the monikers were patched", NOT "Windows is now
+    // showing the real applets" - the latter is a per-applet question that
+    // only the shell can answer, and it is answered separately by
+    // ConfirmUnhiddenAppletsVisible() into g_realAppletConfirmedVisible.
+    // The two together are what make unhideLegacyApplets defaulting to
+    // true safe: this flag proves the unhide was attempted on this build, the
+    // confirmation proves the applet is listed, and VirtualTwinSuppressed
+    // requires both before giving up a virtual entry.
+    const bool guardEffective = anyMonikerPatched;
+    g_legacyUnhideActive.store(guardEffective);
+    if (!guardEffective) {
+        Wh_Log(L"unhide feature: no moniker could be patched; "
+               L"staying inactive so virtual twins keep working");
+    } else {
+        Wh_Log(L"unhide feature: active; the shell will be asked to confirm "
+               L"each applet before its virtual twin is dropped");
+    }
+}
+
+
+// ===========================================================================
+// WHY THIS BLOCK MUST REMAIN IN THE SOURCE (for whoever is tempted
+// to press delete):
+//
+//  * It is a finished, reviewed, compiling implementation of the idea, one
+//    uncomment away from a future implementation. The day the hub-side half
+//    of the problem is solved (a different attribute name, a host navigation
+//    call, or a future build that finally honours relative navigation
+//    targets), this block is the starting line - not an archaeological find.
+//
+//  * Deleting it would scatter the knowledge across a thousand GitHub
+//    revisions, forks and issue threads, and the next person would have to
+//    re-excavate both failed mechanisms (the equal-length in-place rewrite,
+//    and the hooked-resource copy with the shell command demoted to a mere
+//    fallback) together with every invariant learned the hard way: a mapped
+//    resource blob cannot change size; a sentinel HGLOBAL may only be handed
+//    out while all three resource hooks are live; the override objects must
+//    outlive any toggle of the feature; themecpl.dll must be loaded for real
+//    and kept loaded for as long as HRSRC handles are stored.
+//
+//  * Its setting (inlinePersonalizationNavigation) is kept with it, hidden,
+//    in the settings block above, so that re-arming the feature is a single
+//    coherent uncomment. Nothing in this block compiles into the running
+//    mod: zero runtime cost, zero risk - only memory for the next attempt.
+//
+// ===========================================================================
+/*
+// ===========================================================================
+// In-place Personalization navigation (themecpl.dll.mun markup patch)
+// ===========================================================================
+// The stock Personalization markup shipped in themecpl.dll.mun carries two
+// elements whose activation round-trips through the modern Settings app:
+//
+//   Desktop Background button:
+//     shellexecute="shell:settings\pagepersonalization-background"
+//   Window Color button:
+//     shellexecute="ms-settings:personalization-colors"
+//
+// Clicking either spawns a separate Settings window. The fix: give those
+// elements a relative navigation target FIRST -
+// navigationtargetrelative="pageWallpaper" / "pageColorization" - so the
+// hub switches pages silently inside the hosting Explorer window, while the
+// original shellexecute command is KEPT, demoted to a mere fallback that
+// only matters on builds where the navigation target cannot be resolved.
+//
+// Why this is NOT an in-place byte patch: inserting the extra attribute
+// makes the markup longer, and a mapped resource blob cannot change size
+// (the previous equal-length rewrite had to delete shellexecute entirely,
+// which left no fallback and did not navigate on every build). Instead the
+// mod serves a patched COPY of the markup through hooked resource APIs
+// (LoadResource / LockResource / SizeofResource): no byte of the module is
+// modified, there is no page-protection trickery that can fail on .mun
+// mappings, and the replacement may be any size. With the feature off the
+// hooks are pure pass-through.
+
+struct ThemeCplMarkupReplacement {
+    const wchar_t* find;    // the shellexecute span, kept as fallback
+    const wchar_t* insert;  // navigation attribute inserted before it
+};
+
+static const ThemeCplMarkupReplacement kThemeCplMarkupReplacements[] = {
+    { L"shellexecute=\"shell:settings\\pagepersonalization-background\"",
+      L"navigationtargetrelative=\"pageWallpaper\" " },
+    { L"shellexecute=\"ms-settings:personalization-colors\"",
+      L"navigationtargetrelative=\"pageColorization\" " },
+};
+
+// A patched copy of a markup resource that contained one or more of the
+// spans above. The LoadResource hook hands back the heap object's address
+// as a sentinel HGLOBAL (stable for the object's lifetime), which the
+// LockResource hook recognises and resolves to the patched bytes.
+struct ThemeMarkupOverride {
+    HRSRC hRes = nullptr;
+    std::vector<BYTE> data;
+};
+
+// Keep-alive reference on themecpl.dll: the recorded HRSRC handles and the
+// original resource bytes only stay valid while the module is mapped.
+// Released in UnpatchThemeCplMun() / Wh_ModUninit.
+static HMODULE g_themeCplModule = nullptr;
+static std::atomic<bool> g_themeCplNavigationActive{ false };
+static std::shared_mutex g_themeOverrideMutex;
+// Entries are append-only and never freed until process exit: a thread may
+// be holding a sentinel HGLOBAL between LoadResource and LockResource, so
+// the heap objects they resolve to must outlive any toggle of the feature.
+static std::vector<std::unique_ptr<ThemeMarkupOverride>> g_themeMarkupOverrides;
+
+typedef HGLOBAL(WINAPI *LoadResource_t)(HMODULE, HRSRC);
+typedef LPVOID(WINAPI *LockResource_t)(HGLOBAL);
+typedef DWORD(WINAPI *SizeofResource_t)(HMODULE, HRSRC);
+static LoadResource_t LoadResourceOriginal = nullptr;
+static LockResource_t LockResourceOriginal = nullptr;
+static SizeofResource_t SizeofResourceOriginal = nullptr;
+
+static bool ThemeCplCiEquals(const wchar_t* a, const wchar_t* b, size_t n) {
+    return _wcsnicmp(a, b, n) == 0;
+}
+static bool ThemeCplCiEquals(const char* a, const char* b, size_t n) {
+    return _strnicmp(a, b, n) == 0;
+}
+
+// Builds a copy of [src, src+count) with every shellexecute span preceded
+// by its navigationtargetrelative attribute. Returns false (and leaves
+// outBytes untouched) when the blob contains none of the spans.
+template <typename C>
+static bool BuildPatchedMarkupCopy(const C* src, size_t count,
+                                   std::vector<BYTE>& outBytes) {
+    std::vector<C> out(src, src + count);
+    bool any = false;
+
+    for (const ThemeCplMarkupReplacement& entry : kThemeCplMarkupReplacements) {
+        std::basic_string<C> findS;
+        std::basic_string<C> insS;
+        for (const wchar_t* p = entry.find; *p; ++p) findS.push_back((C)*p);
+        for (const wchar_t* p = entry.insert; *p; ++p) insS.push_back((C)*p);
+
+        size_t scan = 0;
+        while (scan + findS.size() <= out.size()) {
+            if (!ThemeCplCiEquals(out.data() + scan, findS.data(), findS.size())) {
+                scan++;
+                continue;
+            }
+            out.insert(out.begin() + scan, insS.begin(), insS.end());
+            any = true;
+            scan += insS.size() + findS.size();
+        }
+    }
+
+    if (!any) return false;
+    outBytes.assign((const BYTE*)out.data(),
+                    (const BYTE*)out.data() + out.size() * sizeof(C));
+    return true;
+}
+
+static BOOL CALLBACK ThemeCplEnumResNamesProc(HMODULE hModule, LPCWSTR lpType,
+                                              LPWSTR lpName, LONG_PTR lParam) {
+    auto* found = (std::vector<std::unique_ptr<ThemeMarkupOverride>>*)lParam;
+    HRSRC hRes = FindResourceW(hModule, lpName, lpType);
+    if (!hRes) return TRUE;
+    // Read through the ORIGINALs: during a rebuild an existing override
+    // must not feed already-patched bytes back into the builder.
+    HGLOBAL hData = LoadResourceOriginal(hModule, hRes);
+    if (!hData) return TRUE;
+    BYTE* blob = (BYTE*)LockResourceOriginal(hData);
+    DWORD size = SizeofResourceOriginal(hModule, hRes);
+    if (!blob || !size) return TRUE;
+
+    std::vector<BYTE> patched;
+    bool isMarkup = (size % sizeof(WCHAR) == 0) &&
+                    BuildPatchedMarkupCopy<WCHAR>((const WCHAR*)blob,
+                                                  size / sizeof(WCHAR), patched);
+    if (!isMarkup) {
+        isMarkup = BuildPatchedMarkupCopy<char>((const char*)blob, size, patched);
+    }
+    if (isMarkup) {
+        auto o = std::make_unique<ThemeMarkupOverride>();
+        o->hRes = hRes;
+        o->data = std::move(patched);
+        found->push_back(std::move(o));
+    }
+    return TRUE;  // keep enumerating
+}
+
+static BOOL CALLBACK ThemeCplEnumResTypesProc(HMODULE hModule, LPWSTR lpType,
+                                              LONG_PTR lParam) {
+    EnumResourceNamesW(hModule, lpType, ThemeCplEnumResNamesProc, lParam);
+    return TRUE;
+}
+
+static ThemeMarkupOverride* FindThemeOverrideLocked(HRSRC hRes) {
+    for (auto& entry : g_themeMarkupOverrides) {
+        if (entry->hRes == hRes) return entry.get();
+    }
+    return nullptr;
+}
+
+static HGLOBAL WINAPI LoadResourceHook(HMODULE hModule, HRSRC hRes) {
+    if (!LoadResourceOriginal) return nullptr;
+    // A sentinel may only be handed out when ALL three hooks are live:
+    // otherwise the real LockResource would receive the sentinel and crash.
+    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load() &&
+        LockResourceOriginal && SizeofResourceOriginal) {
+        std::shared_lock lock(g_themeOverrideMutex);
+        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
+            return (HGLOBAL)o;
+    }
+    return LoadResourceOriginal(hModule, hRes);
+}
+
+static LPVOID WINAPI LockResourceHook(HGLOBAL hResData) {
+    if (!LockResourceOriginal) return nullptr;
+    if (hResData) {
+        std::shared_lock lock(g_themeOverrideMutex);
+        for (auto& entry : g_themeMarkupOverrides) {
+            if ((HGLOBAL)entry.get() == hResData) return entry->data.data();
+        }
+    }
+    return LockResourceOriginal(hResData);
+}
+
+static DWORD WINAPI SizeofResourceHook(HMODULE hModule, HRSRC hRes) {
+    if (!SizeofResourceOriginal) return 0;
+    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load()) {
+        std::shared_lock lock(g_themeOverrideMutex);
+        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
+            return (DWORD)o->data.size();
+    }
+    return SizeofResourceOriginal(hModule, hRes);
+}
+
+// The three hooks are installed once in Wh_ModInit (regardless of the
+// setting, so a later live toggle needs no hooking) and are removed by the
+// Windhawk engine when the mod unloads.
+static void InstallThemeCplResourceHooks() {
+    if (LoadResourceOriginal) return;  // already installed
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!hKernelBase) {
+        Wh_Log(L"in-place Personalization navigation: kernelbase.dll not found");
+        return;
+    }
+    void* pLoad = (void*)GetProcAddress(hKernelBase, "LoadResource");
+    void* pLock = (void*)GetProcAddress(hKernelBase, "LockResource");
+    void* pSize = (void*)GetProcAddress(hKernelBase, "SizeofResource");
+    if (!pLoad || !pLock || !pSize) {
+        Wh_Log(L"in-place Personalization navigation: resource APIs not found");
+        return;
+    }
+    // Each hook is defensive on its own original, and a sentinel is only
+    // handed out when all three are live, so a partial install degrades to
+    // pure pass-through instead of breaking resource loading.
+    if (!WindhawkUtils::SetFunctionHook((LoadResource_t)pLoad, LoadResourceHook,
+                                        &LoadResourceOriginal))
+        Wh_Log(L"in-place Personalization navigation: failed to hook LoadResource");
+    if (!WindhawkUtils::SetFunctionHook((LockResource_t)pLock, LockResourceHook,
+                                        &LockResourceOriginal))
+        Wh_Log(L"in-place Personalization navigation: failed to hook LockResource");
+    if (!WindhawkUtils::SetFunctionHook((SizeofResource_t)pSize, SizeofResourceHook,
+                                        &SizeofResourceOriginal))
+        Wh_Log(L"in-place Personalization navigation: failed to hook SizeofResource");
+}
+
+// (Re-)builds the patched markup copies and flips the feature on.
+// Idempotent: existing overrides for the same HRSRC are kept as-is.
+static void PatchThemeCplMun() {
+    if (!LoadResourceOriginal) {
+        Wh_Log(L"in-place Personalization navigation: hooks not installed, skipping");
+        return;
+    }
+    if (!g_themeCplModule) {
+        // A real load, not LOAD_LIBRARY_AS_DATAFILE: the applet host must
+        // resolve the very same module (and HRSRC handles) when it creates
+        // the page, otherwise the hooks would never see its requests.
+        g_themeCplModule = LoadLibraryExW(L"themecpl.dll", nullptr,
+                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!g_themeCplModule) {
+        Wh_Log(L"in-place Personalization navigation: themecpl.dll could not be loaded");
+        return;
+    }
+
+    std::vector<std::unique_ptr<ThemeMarkupOverride>> found;
+    EnumResourceTypesW(g_themeCplModule, ThemeCplEnumResTypesProc,
+                       (LONG_PTR)&found);
+
+    {
+        std::unique_lock lock(g_themeOverrideMutex);
+        for (auto& o : found) {
+            if (!FindThemeOverrideLocked(o->hRes))
+                g_themeMarkupOverrides.push_back(std::move(o));
+        }
+    }
+
+    g_themeCplNavigationActive.store(!found.empty());
+    Wh_Log(L"in-place Personalization navigation: %zu markup resource(s) patched "
+           L"(shellexecute kept as fallback)", found.size());
+}
+
+// Flips the feature off and drops the keep-alive module reference. The
+// override heap objects deliberately stay alive (see their declaration):
+// an in-flight LoadResource->LockResource pair may still be holding a
+// sentinel, and with the flag off no NEW request is ever answered with one.
+static void UnpatchThemeCplMun() {
+    g_themeCplNavigationActive.store(false);
+    if (g_themeCplModule) {
+        FreeLibrary(g_themeCplModule);
+        g_themeCplModule = nullptr;
+    }
+}
+*/
+// Maps an entry of LegacyUnhideMonikerIndex to the real applet it unhides,
+// so the confirmation pass below can ask the shell about each one.
+struct UnhideProbeTarget {
+    size_t monikerIndex;
+    const std::wstring* realGuid;
+    std::atomic<bool>* realPresent;
+    const wchar_t* logName;
+};
+
+static const UnhideProbeTarget kUnhideProbeTargets[] = {
+    { kLegacyUnhideMonikerPersonalization, &kRealPersonalizationGuid,
+      &g_realPersonalizationRegistered, L"Personalization" },
+    { kLegacyUnhideMonikerBitLocker, &kBitLockerGuid,
+      &g_bitlockerClsidRegistered, L"BitLocker Drive Encryption" },
+    { kLegacyUnhideMonikerSpeech, &kSpeechGuid,
+      &g_speechClsidRegistered, L"Text to Speech" },
+    { kLegacyUnhideMonikerSystem, &kSystemGuid,
+      &g_realSystemRegistered, L"System" },
+};
+
+// A target is "settled" once nothing further can usefully be asked about it:
+// either its moniker was never patched, its real CLSID isn't registered here,
+// or the shell has already confirmed it IS listed. A target whose moniker was
+// patched, whose CLSID is registered, but that the shell has NOT (yet)
+// confirmed listed is left unsettled on purpose - see ConfirmUnhiddenAppletsVisible
+// for why a "not listed" answer must not latch permanently.
+bool AllUnhideTargetsSettled() {
+    for (const UnhideProbeTarget& target : kUnhideProbeTargets) {
+        if (target.monikerIndex >= kLegacyUnhideMonikerCount) continue;
+        if (!g_monikerPatched[target.monikerIndex].load()) continue;
+        if (target.realPresent && !target.realPresent->load()) continue;
+        if (!g_realAppletConfirmedVisible[target.monikerIndex].load()) return false;
+    }
+    return true;
+}
+
+// Once the shell confirms an applet IS listed, that verdict is persisted here
+// (keyed by Windows build, like the applet-injection verdicts above) so a
+// later logon/Explorer restart/control.exe launch can skip probing that
+// applet again instead of repeating the same GetPath-driven Control Panel
+// item list build every time. A "not listed" or "no answer" verdict is
+// deliberately never persisted this way - see ConfirmUnhiddenAppletsVisible.
+std::wstring MakeUnhideConfirmedValueName(const wchar_t* key) {
+    return std::wstring(L"unhideConfirmedShown_") + key;
+}
+std::wstring MakeUnhideConfirmedBuildValueName(const wchar_t* key) {
+    return std::wstring(L"unhideConfirmedShownBuild_") + key;
+}
+
+// Asks the shell, applet by applet, whether the real item really is listed in
+// Control Panel now that the guard has run, and records the answer in
+// g_realAppletConfirmedVisible. This is the step that turns "we zeroed a byte
+// pattern" into "the applet is there": only a confirmed applet has its
+// virtual twin suppressed, so a patch that didn't unhide anything (or that
+// landed on an unrelated copy of the string, or was already applied by
+// another mod) can no longer remove an entry the user relies on.
+//
+// Deliberately no canonical name is passed to the probe: IOpenControlPanel
+// resolves a canonical name to whatever item it names, which on Windows 10/11
+// can be the modern Settings page that the same name is redirected to, so a
+// canonical name can answer "listed" for an item Control Panel still hides -
+// a false positive, i.e. exactly the failure mode this pass exists to
+// prevent. The "::{GUID}" moniker form (built by QueryShownByControlPanel
+// from the GUID) is both the spelling the hidden-items table is keyed on and
+// the one namespace items are addressed by, so it answers the question that
+// matters. When the shell can't answer at all, the verdict stays "not
+// confirmed" and the virtual twin is kept.
+//
+// A "not listed" (or unanswered) verdict is deliberately NOT treated as
+// final: shell32 caches its Control Panel item list, so if this mod (or its
+// setting) is enabled while Explorer is already running, that list can have
+// been built before the patch took effect. Latching "not listed" forever in
+// that case would mean the shell later does start listing the real applet
+// while this mod keeps serving the virtual twin too - a duplicate entry with
+// no way back short of toggling the setting. So any target the shell hasn't
+// yet confirmed listed is left unsettled (see AllUnhideTargetsSettled) and
+// gets asked again on the next pass, for as long as the guard stays active.
+//
+// Runs only on the dedicated lazy-detection worker thread, never on a hook's
+// caller thread (see the same note on RunLazyVirtualAppletDetection), and
+// holds a ShellProbeBypass so the shell's own registry reads during the probe
+// are let straight through.
+void ConfirmUnhiddenAppletsVisible() {
+    // Guard inactive: no moniker could be patched on this build, so there is
+    // nothing to confirm - and the virtual twins must stay.
+    if (!g_legacyUnhideActive.load(std::memory_order_acquire)) return;
+    if (AllUnhideTargetsSettled()) return;
+    
+    // Rate limiting for confirmation attempts - prevents infinite loop
+    // if the shell keeps answering "not listed"
+    if (g_unhideAttempts.load(std::memory_order_relaxed) >= 5) {
+        Wh_Log(L"unhide feature: max retry attempts (5) reached, stopping confirmation attempts");
+        return;
+    }
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG last = g_lastUnhideTick.load(std::memory_order_relaxed);
+    if (last && now - last < 30000) {
+        // Cooldown period - not time to retry yet
+        return;
+    }
+    g_lastUnhideTick.store(now, std::memory_order_relaxed);
+    g_unhideAttempts.fetch_add(1, std::memory_order_relaxed);
+
+    ShellProbeBypass bypass;
+
+    // Figure out, up front, which targets still need a shell round trip this
+    // pass: already-confirmed targets are skipped outright, and a target with
+    // a persisted "confirmed shown" verdict from an earlier run on this same
+    // build is adopted directly, without touching COM at all (finding 3's
+    // caching, extended to this confirmation pass the same way
+    // DetectVirtualAppletNeededCached already caches the injection verdicts).
+    std::vector<size_t> probeTargetIndices; // indices into kUnhideProbeTargets
+    bool changed = false;
+    for (size_t i = 0; i < ARRAYSIZE(kUnhideProbeTargets); i++) {
+        const UnhideProbeTarget& target = kUnhideProbeTargets[i];
+        if (target.monikerIndex >= kLegacyUnhideMonikerCount) continue;
+        if (g_realAppletConfirmedVisible[target.monikerIndex].load()) continue; // already settled true
+        if (!(target.realPresent && target.realPresent->load())) {
+            Wh_Log(L"unhide feature: %s is not registered here; nothing to confirm",
+                   target.logName);
+            continue; // settled (nothing to confirm), see AllUnhideTargetsSettled
+        }
+
+        const std::wstring verdictName = MakeUnhideConfirmedValueName(target.logName);
+        const std::wstring buildName = MakeUnhideConfirmedBuildValueName(target.logName);
+        const int cachedBuild = Wh_GetIntValue(buildName.c_str(), 0);
+        if (Wh_GetIntValue(verdictName.c_str(), 0) != 0 && cachedBuild == (int)g_winBuild) {
+            Wh_Log(L"unhide feature: %s - using cached confirmation from build %d; shell not probed",
+                   target.logName, cachedBuild);
+            g_realAppletConfirmedVisible[target.monikerIndex].store(true);
+            changed = true;
+            continue;
+        }
+
+        probeTargetIndices.push_back(i);
+    }
+
+    if (!probeTargetIndices.empty()) {
+        // A single COM activation serves every target still needing an
+        // answer this pass, instead of one CoInitializeEx/CoCreateInstance
+        // cycle per applet.
+        std::vector<std::pair<std::wstring, std::wstring>> items;
+        for (size_t idx : probeTargetIndices) {
+            // An empty canonical name on purpose - see the comment above:
+            // this probes "::{GUID}" first and only falls back to the bare
+            // GUID, never to a canonical name.
+            items.push_back({ L"", *kUnhideProbeTargets[idx].realGuid });
+        }
+        std::vector<bool> answeredList, listedList;
+        IsShownByControlPanelBatch(items, answeredList, listedList);
+
+        for (size_t j = 0; j < probeTargetIndices.size(); j++) {
+            const UnhideProbeTarget& target = kUnhideProbeTargets[probeTargetIndices[j]];
+            const bool answered = answeredList[j];
+            const bool listed = listedList[j];
+            const bool confirmed = answered && listed;
+            Wh_Log(L"unhide feature: %s - shell says %s; %s", target.logName,
+                   answered ? (listed ? L"the item IS listed" : L"the item is NOT listed")
+                            : L"it cannot answer",
+                   confirmed ? L"using the real applet"
+                             : L"keeping the virtual entry, will re-check later");
+
+            if (confirmed) {
+                g_realAppletConfirmedVisible[target.monikerIndex].store(true);
+                changed = true;
+                Wh_SetIntValue(MakeUnhideConfirmedValueName(target.logName).c_str(), 1);
+                Wh_SetIntValue(MakeUnhideConfirmedBuildValueName(target.logName).c_str(), (int)g_winBuild);
+            }
+            // "not confirmed" is intentionally left as-is (still false) and
+            // NOT persisted, so this target is retried on the next pass
+            // instead of latching a stale negative - see the comment above
+            // this function.
+        }
+    }
+
+    if (changed) {
+        // Which entries carry the classic task links - and whether the
+        // virtual twins are served at all - depends on this verdict, so the
+        // generated XML has to follow it.
+        InvalidateClassicTaskLinksFile();
+        EnsureClassicTaskLinksFile();
+        Wh_Log(L"unhide feature: confirmation pass changed what Control Panel shows; "
+               L"task links regenerated");
+    }
+}
+
 void Wh_ModSettingsChanged() {
   try {
     AppletMode oldBitMode = (AppletMode)g_prevBitLockerMode.load();
     AppletMode oldTabMode = (AppletMode)g_prevTabletPcMode.load();
+    AppletMode oldSpeechMode = (AppletMode)g_prevSpeechMode.load();
     AppletMode newBitMode = ReadAppletMode(L"bitLockerMode");
     AppletMode newTabMode = ReadAppletMode(L"tabletPcMode");
+    AppletMode newSpeechMode = ReadAppletMode(L"speechMode");
     bool bitChanged = (oldBitMode != newBitMode);
     bool tabChanged = (oldTabMode != newTabMode);
+    bool speechChanged = (oldSpeechMode != newSpeechMode);
+    const bool prevUnhideLegacyApplets = g_settings.unhideLegacyApplets.load();
+    // (sleeping feature) const bool prevInlineNavigation =
+    //     g_settings.inlinePersonalizationNavigation.load();
     if (bitChanged) {
         Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
         Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
@@ -2656,26 +4088,95 @@ void Wh_ModSettingsChanged() {
         g_lazyDetectionDone.store(false, std::memory_order_release);
         g_tabletPcAutoDetected.store(false);
     }
+    if (speechChanged) {
+        Wh_Log(L"speechMode changed %d -> %d, clearing cached verdict", (int)oldSpeechMode, (int)newSpeechMode);
+        Wh_DeleteValue(MakeVerdictValueName(L"speech").c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(L"speech").c_str());
+        g_lazyDetectionDone.store(false, std::memory_order_release);
+        g_speechAutoDetected.store(false);
+    }
     LoadSettings();
     g_prevBitLockerMode.store((int)newBitMode);
     g_prevTabletPcMode.store((int)newTabMode);
+    g_prevSpeechMode.store((int)newSpeechMode);
+    // The legacy-applet unhide feature can be toggled live: re-apply the string
+    // patches and hooks, or restore the original bytes. try/catch protected so
+    // a failure can never leak into Explorer.
+    if (prevUnhideLegacyApplets != g_settings.unhideLegacyApplets.load()) {
+        try {
+            if (g_settings.unhideLegacyApplets.load()) {
+                Wh_Log(L"legacy-applet unhide feature re-enabled by settings");
+                SetupLegacyUnhide();
+            } else {
+                Wh_Log(L"legacy-applet unhide feature disabled by settings; restoring patched bytes");
+                g_legacyUnhideActive.store(false);
+                // Every applet goes back to "not confirmed": with the guard
+                // off, the virtual twins are what Control Panel shows again.
+                ResetUnhideConfirmation();
+                if (g_legacyUnhidePatcher) {
+                    g_legacyUnhidePatcher->RestoreAll();
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Exception while toggling the legacy-applet unhide feature");
+        }
+
+        // Toggling the guard changes what Control Panel actually shows for
+        // BitLocker/Speech (System's virtual twin isn't cache-detected), so
+        // the previously cached "does Control Panel already show this?"
+        // verdict may now describe the wrong state - the same way a mode
+        // change already invalidates it above. Without this, turning the
+        // guard off after it was on can leave the applet missing with no
+        // obvious way back until the user manually flips a mode setting.
+        try {
+            for (const wchar_t* key : { L"bitlocker", L"tabletpc", L"speech" }) {
+                Wh_DeleteValue(MakeVerdictValueName(key).c_str());
+                Wh_DeleteValue(MakeVerdictBuildValueName(key).c_str());
+            }
+            g_lazyDetectionDone.store(false, std::memory_order_release);
+            g_bitlockerAutoDetected.store(false);
+            g_tabletPcAutoDetected.store(false);
+            g_speechAutoDetected.store(false);
+            if (g_lazyDetectionWakeEvent) {
+                SetEvent(g_lazyDetectionWakeEvent);
+            }
+        } catch (...) {
+            Wh_Log(L"Exception while invalidating cached applet verdicts after unhide feature toggle");
+        }
+    }
+    // (sleeping feature - the whole toggle is commented out; see
+    // THE SLEEPING NAVIGATION)
+    // if (prevInlineNavigation != g_settings.inlinePersonalizationNavigation.load()) {
+    //     try {
+    //         if (g_settings.inlinePersonalizationNavigation.load()) {
+    //             Wh_Log(L"in-place Personalization navigation enabled by settings");
+    //             PatchThemeCplMun();
+    //         } else {
+    //             Wh_Log(L"in-place Personalization navigation disabled by settings; "
+    //                    L"restoring markup bytes");
+    //             UnpatchThemeCplMun();
+    //         }
+    //     } catch (...) {
+    //         Wh_Log(L"Exception while toggling in-place Personalization navigation");
+    //     }
+    // }
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
     // Re-arm the lazy-detection worker if a mode change invalidated the
     // cached verdict, instead of waiting for the next incidental registry
     // access to request it.
-    if ((bitChanged || tabChanged) && g_lazyDetectionWakeEvent) {
+    if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
-        g_settings.enableCategoryAppearanceLinks.load(),
+        g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -2712,8 +4213,14 @@ BOOL Wh_ModInit() {
 
     g_bitlockerClsidRegistered.store(IsRegisteredClsid(kBitLockerGuid));
     g_tabletPcClsidRegistered.store(IsRegisteredClsid(kTabletPcSettingsGuid));
+    g_speechClsidRegistered.store(IsRegisteredClsid(kSpeechGuid));
+    Wh_Log(L"Text to Speech CLSID %s", g_speechClsidRegistered.load()
+        ? L"is registered" : L"is absent on this edition; applet will not be injected");
+    g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
+    g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
     g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
     g_prevTabletPcMode.store(g_settings.tabletPcMode.load());
+    g_prevSpeechMode.store(g_settings.speechMode.load());
     {
         auto tryLoadCachedVerdict = [&](const wchar_t* key, std::atomic<bool>& outAutoDetected) -> bool {
             const std::wstring verdictName = MakeVerdictValueName(key);
@@ -2730,7 +4237,7 @@ BOOL Wh_ModInit() {
             outAutoDetected.store(false);
             return false;
         };
-        bool bitCached = false, tabCached = false;
+        bool bitCached = false, tabCached = false, speechCached = false;
         if ((AppletMode)g_settings.bitLockerMode.load() == AppletMode::Auto && g_bitlockerClsidRegistered.load()) {
             bitCached = tryLoadCachedVerdict(L"bitlocker", g_bitlockerAutoDetected);
             if (!bitCached) Wh_Log(L"BitLocker: no cached verdict, will probe lazily on first registry access");
@@ -2745,7 +4252,14 @@ BOOL Wh_ModInit() {
             g_tabletPcAutoDetected.store(false);
             tabCached = true;
         }
-        bool needLazy = !bitCached || !tabCached;
+        if ((AppletMode)g_settings.speechMode.load() == AppletMode::Auto && g_speechClsidRegistered.load()) {
+            speechCached = tryLoadCachedVerdict(L"speech", g_speechAutoDetected);
+            if (!speechCached) Wh_Log(L"Speech: no cached verdict, will probe lazily on first registry access");
+        } else {
+            g_speechAutoDetected.store(false);
+            speechCached = true;
+        }
+        bool needLazy = !bitCached || !tabCached || !speechCached;
         g_lazyDetectionDone.store(!needLazy, std::memory_order_release);
     }
     LoadSettings();
@@ -2762,13 +4276,13 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
-        g_settings.enableCategoryAppearanceLinks.load(),
+        g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
 
     void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
     void* pRegCloseKey        = GetRegFunc("RegCloseKey");
@@ -2803,6 +4317,14 @@ BOOL Wh_ModInit() {
         // a per-build inlining decision. The comparator is not: it is either
         // the thing that scopes the ranking or, where the ranking is inlined,
         // the thing that does the reordering.
+        //
+        // Every shell32 symbol this mod needs comes from this single
+        // HookSymbols call: the resolved symbols are cached per module, and
+        // each extra call for the same module overwrites that cache with
+        // only the new call's symbols - which would force a full
+        // re-resolution of the other symbols on every subsequent start.
+        // (The unhide feature needs no shell32 symbols: it patches string
+        // data, it doesn't hook any function.)
         void* pSortAppletsInCategory = nullptr;
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
@@ -2841,6 +4363,43 @@ BOOL Wh_ModInit() {
 
     }
 
+    // legacy-applet unhide feature: unhide the legacy applets by patching
+    // their hidden-items monikers in memory. The redirect to the Settings app
+    // is NOT touched here - see the header comment of that section. The whole
+    // block is try/catch protected; a failure here never takes the rest of
+    // the mod down. The patcher is emplaced here (not lazily at first patch)
+    // so its state exists for the whole mod lifetime; see the
+    // [[clang::no_destroy]] comment on g_legacyUnhidePatcher.
+    g_legacyUnhidePatcher.emplace();
+    if (g_settings.unhideLegacyApplets.load()) {
+        try {
+            SetupLegacyUnhide();
+        } catch (...) {
+            Wh_Log(L"Exception during legacy-applet unhide feature setup; guard disabled, rest of the mod active");
+            g_legacyUnhideActive.store(false);
+            ResetUnhideConfirmation();
+        }
+    }
+
+    // The unhide feature changes which entries receive the classic task links
+    // (real applets instead of the virtual twins) and which virtual twins are
+    // hidden, so regenerate the XML now that g_legacyUnhideActive has its
+    // final value (the earlier eager generation ran before the guard existed).
+    if (g_legacyUnhideActive.load()) {
+        InvalidateClassicTaskLinksFile();
+        EnsureClassicTaskLinksFile();
+    }
+
+    // (sleeping feature - see THE SLEEPING NAVIGATION)
+    // InstallThemeCplResourceHooks();
+    // if (g_settings.inlinePersonalizationNavigation.load()) {
+    //     try {
+    //         PatchThemeCplMun();
+    //     } catch (...) {
+    //         Wh_Log(L"Exception during in-place Personalization navigation setup");
+    //     }
+    // }
+
     Wh_Log(L"All hooks set successfully");
     Wh_Log(L"Shell32 symbol hook: %s", hShell32 ? L"loaded" : L"FAILED");
     return TRUE;
@@ -2866,6 +4425,10 @@ static void LazyDetectionThreadProc() {
         }
         
         try {
+            // Runs first and has its own "done" flag: it decides whether the
+            // real applets can replace their virtual twins, which the
+            // detection pass below and the task-link XML both read.
+            ConfirmUnhiddenAppletsVisible();
             RunLazyVirtualAppletDetection();
         } catch (...) {
             Wh_Log(L"Exception in lazy-detection worker thread");
@@ -2884,9 +4447,14 @@ void Wh_ModAfterInit() {
         return;
     }
     g_lazyDetectionThread.emplace(LazyDetectionThreadProc);
-    if (!g_lazyDetectionDone.load(std::memory_order_acquire)) {
+    if (!g_lazyDetectionDone.load(std::memory_order_acquire) ||
+        UnhideConfirmationPending()) {
         // Kick off the initial probe right away instead of waiting for the
-        // first incidental registry access to request it.
+        // first incidental registry access to request it. The confirmation
+        // pass has to be scheduled explicitly here: it is pending in exactly
+        // the case where every applet verdict is already cached, so the
+        // detection pass alone would never wake this thread on a normal
+        // restart and the unhide feature would never be confirmed.
         SetEvent(g_lazyDetectionWakeEvent);
     }
 }
@@ -2930,6 +4498,28 @@ void Wh_ModUninit() {
         // See KeyTracker::ClearWithoutFreeing for why we deliberately don't
         // delete the fake-handle memory here.
         g_keyTracker.ClearWithoutFreeing();
+        // legacy-applet unhide feature: deactivate it and restore every
+        // patched byte. The patcher is
+        // restored and reset explicitly - its storage is
+        // [[clang::no_destroy]], so no destructor ever runs at process
+        // shutdown (see the comment on g_legacyUnhidePatcher).
+        g_legacyUnhideActive.store(false);
+        ResetUnhideConfirmation();
+        if (g_legacyUnhidePatcher) {
+            g_legacyUnhidePatcher->RestoreAll();
+            g_legacyUnhidePatcher.reset();
+        }
+        // Only now, with every patch restored, may the windows.storage.dll
+        // reference be dropped: the patch addresses pointed into that
+        // module's image, and freeing it any earlier could have left them
+        // referencing memory that no longer belongs to the module.
+        if (g_legacyUnhideWinStorageModule) {
+            FreeLibrary(g_legacyUnhideWinStorageModule);
+            g_legacyUnhideWinStorageModule = nullptr;
+        }
+        // (sleeping feature) restore the markup bytes first, then drop the
+        // themecpl.dll keep-alive reference.
+        // UnpatchThemeCplMun();
         Wh_Log(L"Cleanup completed");
     } catch (...) {
         Wh_Log(L"Exception during cleanup, continuing anyway");
