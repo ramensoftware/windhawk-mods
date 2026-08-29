@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-29T16:18:57.000Z</updated>
+    <updated>2026-08-29T18:07:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 3.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#f2eedecca227cd1f5c0d9fd3e95822dddd00fb8f</id>
+        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
+        <updated>2026-08-29T18:07:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the Speech Recognition link</li>
+<li>Improved the virtualization and integration of the restored applets to match the classic Windows behavior</li>
+<li>Added a setting to attempt to block the redirect to Settings and unhide legacy applets</li>
+<li>Enhanced the virtual applet fallback</li>
+<li>Applied minor fixes </li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#9455e7ee79a80d6d65829456b0c7e0738dcfe720</id>
@@ -571,22 +589,6 @@ determines the target monitor using the cursor position, and repositions the win
         <content type="html"><![CDATA[<ul>
 <li>Applied minor improvements</li>
 <li>Updated the README to clarify a mod suggestion</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.36]]></title>
-        <id>https://windhawk.net/mods/settings-to-control-panel#65a796cb19f248d5d5cd06c3ad76619efed32102</id>
-        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
-        <updated>2026-08-26T10:14:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a bug where some hooks were registered but never actually turned on, so a few features could silently stop working after Explorer restarted or after changing a setting</li>
-<li>Cleaned up some unnecessary error-handling code that wasn't actually protecting against anything</li>
-<li>Fixed the "Display" settings redirect being removed by accident, and added a toggle so this mod works together with the Classic Display Control Panel Restorer mod instead of conflicting with it</li>
-<li>Updated the README to be more accurate about what the mod actually protects against</li>
 </ul>]]></content>
         <author>
             <name>babamohammed</name>

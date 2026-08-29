@@ -16202,7 +16202,7 @@
           5
         ],
         "ratingUsers": 6,
-        "updated": 1787739325000,
+        "updated": 1788026840000,
         "users": 228
       },
       "metadata": {
@@ -16210,15 +16210,15 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-lcomctl32 -lshlwapi -lole32",
-        "description": "This mod restores some classic Control Panel applets and localized Windows 7 task links using native components",
+        "compilerOptions": "-lcomctl32 -lshlwapi -lole32 -lpsapi",
+        "description": "This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe",
           "control.exe"
         ],
         "name": "Windows 7 Legacy Applet Restorer",
-        "version": "2.1.0"
+        "version": "3.0.0"
       }
     },
     "win7-login-fade": {

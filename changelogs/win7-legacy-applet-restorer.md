@@ -1,3 +1,12 @@
+## 3.0.0 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2eedecca227cd1f5c0d9fd3e95822dddd00fb8f/mods/win7-legacy-applet-restorer.wh.cpp))
+
+- Added the Speech Recognition link
+- Improved the virtualization and integration of the restored applets to match the classic Windows behavior
+- Added a setting to attempt to block the redirect to Settings and unhide legacy applets
+- Enhanced the virtual applet fallback
+- Applied minor fixes 
+- Updated the README
+
 ## 2.1.0 ([Aug 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d5ad396ef8daa09e01e7a6bf3e110770b6550bf8/mods/win7-legacy-applet-restorer.wh.cpp))
 
 - Applied minor improvements
