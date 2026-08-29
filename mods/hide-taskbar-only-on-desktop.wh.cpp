@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
-// @version 1.9.0
+// @version 1.10.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -26,7 +26,7 @@ visible whenever an application or shell UI is active.
 - Uses the taskbar's actual rectangle and per-monitor DPI.
 - Adds a configurable extra hover margin in millimeters.
 - Uses a configurable delay after leaving the hover area.
-- The delay is used after a hover reveal and after Alt+Tab closes.
+- The delay is only used after a hover reveal.
 - Minimizing or closing the last application hides the taskbar immediately.
 - Keeps the taskbar available while interacting with taskbar buttons.
 - Supports secondary taskbars on additional monitors.
@@ -54,9 +54,9 @@ hidden until Explorer is restarted. Normal disable/unload paths restore it.
 For predictable behavior, disable Windows' own "Automatically hide the
 taskbar" option while this mod is enabled.
 
-This mod uses foreground/minimize Windows events for application state
-changes and a timer for cursor/hover and hide-delay handling. It deliberately
-avoids system-wide object show/hide/destroy hooks.
+This mod uses only foreground/minimize Windows events for application state
+changes and only uses a short timer while cursor hover handling is actually
+needed. It deliberately avoids system-wide object show/hide/destroy hooks.
 
 On multi-monitor systems, each monitor's taskbar is evaluated independently.
 A normal visible application intersecting a monitor keeps that monitor's
@@ -98,8 +98,6 @@ This mod was created with AI assistance.
 #include <dwmapi.h>
 #include <atomic>
 #include <stdio.h>
-#include <string.h>
-#include <wchar.h>
 
 struct Settings {
     std::atomic<int> extraHoverMarginMm{5};
@@ -154,6 +152,33 @@ const wchar_t kSystemMessageWindowClass[] =
 // Utility
 // ============================================================
 
+bool IsDesktopWindow(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    WCHAR className[256] = {};
+
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+        return false;
+    }
+
+    if (wcscmp(className, L"Progman") == 0) {
+        return true;
+    }
+
+    if (wcscmp(className, L"WorkerW") == 0) {
+        return FindWindowExW(
+            hwnd,
+            nullptr,
+            L"SHELLDLL_DefView",
+            nullptr
+        ) != nullptr;
+    }
+
+    return false;
+}
+
 
 bool IsShellChromeClass(const WCHAR* className) {
     if (!className) {
@@ -205,7 +230,10 @@ bool IsTaskbarWindow(HWND hwnd) {
 // ============================================================
 
 void DiscoverTaskbars();
+bool IsAltTabWindowClass(const WCHAR* className);
 
+
+HWND FindPrimaryTaskbar();
 bool IsTaskbarActuallyHidden(HWND hwnd);
 bool IsShellUiClass(const WCHAR* className);
 
@@ -250,6 +278,22 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
+    ) {
+        return TRUE;
+    }
+
     RECT rect = {};
 
     if (!GetWindowRect(hwnd, &rect)) {
@@ -266,26 +310,6 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     if (
         GetWindow(hwnd, GW_OWNER) != nullptr &&
         !(exStyle & WS_EX_APPWINDOW)
-    ) {
-        return TRUE;
-    }
-
-    /*
-     * DWM cloaking is relatively expensive, so query it only after the
-     * cheaper visibility/style/geometry checks.
-     */
-    BOOL cloaked = FALSE;
-
-    if (
-        SUCCEEDED(
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
-            )
-        ) &&
-        cloaked
     ) {
         return TRUE;
     }
@@ -447,21 +471,23 @@ bool IsShellUiClass(const WCHAR* className) {
         return false;
     }
 
-    /*
-     * Windows 11 shell flyouts:
-     * - ControlCenterWindow: newer Quick Settings / Notifications hosts.
-     * - Xaml_WindowedPopupClass: XAML popup surfaces used by Start,
-     *   Action Center/flyouts and other shell UI.
-     * - TopLevelWindowForOverflowXamlIsland / NotifyIconOverflowWindow:
-     *   notification/overflow surfaces.
-     * - #32771: the system Alt+Tab switcher window.
-     */
     return
         wcscmp(className, L"ControlCenterWindow") == 0 ||
         wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
         wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
         wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
-        wcscmp(className, L"#32771") == 0;
+        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0;
+}
+
+
+bool IsAltTabWindowClass(const WCHAR* className) {
+    if (!className) {
+        return false;
+    }
+
+    return
+        wcscmp(className, L"#32771") == 0 ||
+        wcscmp(className, L"XamlExplorerHostIslandWindow") == 0;
 }
 
 
@@ -489,25 +515,32 @@ bool IsVisibleShellFlyoutForMonitor(
         return false;
     }
 
-    /*
-     * For an actual visible flyout, use the popup/window class rather than
-     * the owning shell process. ShellExperienceHost and StartMenuExperienceHost
-     * can own other visible windows even when no flyout is open.
-     */
     if (!IsShellUiClass(className)) {
         return false;
     }
 
-    RECT windowRect = {};
+    /*
+     * XAML popup classes are used by ordinary applications too.
+     * Require a known Windows shell process before treating one as a
+     * taskbar-preserving shell flyout.
+     */
+    WCHAR processName[MAX_PATH] = {};
 
-    if (!GetWindowRect(hwnd, &windowRect)) {
+    if (
+        !GetWindowProcessName(
+            hwnd,
+            processName,
+            ARRAYSIZE(processName)
+        )
+    ) {
         return false;
     }
 
-    if (
-        windowRect.right <= windowRect.left ||
-        windowRect.bottom <= windowRect.top
-    ) {
+    bool knownShellProcess =
+        _wcsicmp(processName, L"explorer.exe") == 0 ||
+        IsKnownShellUiProcess(processName);
+
+    if (!knownShellProcess) {
         return false;
     }
 
@@ -523,6 +556,19 @@ bool IsVisibleShellFlyoutForMonitor(
             )
         ) &&
         cloaked
+    ) {
+        return false;
+    }
+
+    RECT windowRect = {};
+
+    if (!GetWindowRect(hwnd, &windowRect)) {
+        return false;
+    }
+
+    if (
+        windowRect.right <= windowRect.left ||
+        windowRect.bottom <= windowRect.top
     ) {
         return false;
     }
@@ -599,11 +645,7 @@ BOOL CALLBACK EnumAltTabWindowProc(
     bool* found =
         reinterpret_cast<bool*>(lParam);
 
-    if (!found) {
-        return FALSE;
-    }
-
-    if (!IsWindowVisible(hwnd)) {
+    if (!found || !IsWindowVisible(hwnd)) {
         return TRUE;
     }
 
@@ -614,17 +656,61 @@ BOOL CALLBACK EnumAltTabWindowProc(
             hwnd,
             className,
             ARRAYSIZE(className)
-        ) == 0
+        ) == 0 ||
+        !IsAltTabWindowClass(className)
     ) {
         return TRUE;
     }
 
-    if (wcscmp(className, L"#32771") == 0) {
-        *found = true;
-        return FALSE;
+    /*
+     * The modern Windows 11 switcher uses
+     * XamlExplorerHostIslandWindow. Restrict it to the shell processes
+     * that actually host the task switcher.
+     */
+    if (
+        wcscmp(
+            className,
+            L"XamlExplorerHostIslandWindow"
+        ) == 0
+    ) {
+        WCHAR processName[MAX_PATH] = {};
+
+        if (
+            !GetWindowProcessName(
+                hwnd,
+                processName,
+                ARRAYSIZE(processName)
+            )
+        ) {
+            return TRUE;
+        }
+
+        if (
+            _wcsicmp(processName, L"explorer.exe") != 0 &&
+            _wcsicmp(processName, L"ShellExperienceHost.exe") != 0
+        ) {
+            return TRUE;
+        }
     }
 
-    return TRUE;
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
+    ) {
+        return TRUE;
+    }
+
+    *found = true;
+    return FALSE;
 }
 
 
@@ -656,22 +742,35 @@ bool IsAltTabActive() {
 }
 
 
-bool IsShellUiForegroundOnMonitor(HMONITOR monitor, HWND foreground) {
+bool IsShellUiForegroundOnMonitor(
+    HMONITOR monitor,
+    HWND foreground
+) {
     if (!monitor || !foreground) {
         return false;
     }
 
     WCHAR className[256] = {};
 
-    bool knownClass =
+    if (
         GetClassNameW(
             foreground,
             className,
             ARRAYSIZE(className)
-        ) != 0 &&
-        IsShellUiClass(className);
+        ) == 0
+    ) {
+        return false;
+    }
 
-    if (!knownClass && !IsShellUiWindow(foreground)) {
+    if (IsAltTabWindowClass(className)) {
+        return true;
+    }
+
+    if (!IsShellUiClass(className)) {
+        return false;
+    }
+
+    if (!IsShellUiWindow(foreground)) {
         return false;
     }
 
@@ -916,6 +1015,16 @@ void SetTaskbarVisibility(bool show) {
 }
 
 
+bool IsPrimaryTaskbarHidden() {
+    HWND primary = FindPrimaryTaskbar();
+
+    if (!primary) {
+        return false;
+    }
+
+    return IsWindowVisible(primary) == FALSE;
+}
+
 
 // ============================================================
 // Hover zone
@@ -1078,12 +1187,6 @@ void UpdateTaskbarState() {
             std::memory_order_relaxed
         );
 
-    /*
-     * Alt+Tab is global, so detect it once per state update rather than once
-     * for every taskbar.
-     */
-    bool altTabActive = IsAltTabActive();
-
     for (size_t i = 0; i < g_taskbarCount; ++i) {
         TaskbarState& taskbar =
             g_taskbars[i];
@@ -1109,6 +1212,13 @@ void UpdateTaskbarState() {
         bool hovering =
             IsCursorInTaskbarHoverZone(taskbar);
 
+        bool shellFlyoutOpen =
+            taskbar.shellUiForeground ||
+            HasVisibleShellFlyout(taskbar.monitor);
+
+        bool altTabActive =
+            IsAltTabActive();
+
         /*
          * If a normal application is present on this monitor, that
          * monitor's taskbar remains visible even when another monitor
@@ -1116,7 +1226,6 @@ void UpdateTaskbarState() {
          */
         if (taskbar.hasApplication) {
             taskbar.shownDueToHover = false;
-            taskbar.shownDueToAltTab = false;
             taskbar.hideDeadline = 0;
 
             SetWindowVisibilityIfNeeded(
@@ -1126,10 +1235,6 @@ void UpdateTaskbarState() {
 
             continue;
         }
-
-        bool shellFlyoutOpen =
-            taskbar.shellUiForeground ||
-            HasVisibleShellFlyout(taskbar.monitor);
 
         /*
          * Windows shell flyouts (Start, Search, Notifications, Quick
@@ -1348,6 +1453,10 @@ LRESULT CALLBACK SystemMessageWindowProc(
 
     switch (message) {
     case WM_SETTINGCHANGE:
+        /*
+         * Native taskbar auto-hide can be changed from Windows Settings.
+         * Re-query it only when this targeted system notification arrives.
+         */
         RefreshPerMonitorState();
         UpdateTaskbarState();
         return 0;
