@@ -41,6 +41,8 @@ three projects listed in Credits are not installation requirements.
   running indicators, and distance from the bottom of the screen.
 - Keep the raised Minecraft taskbar below normal application windows.
 - Customize native Windows taskbar icon and running-indicator sizes and colors.
+- Use a neutral adaptive background instead of the Windows accent color for the
+  native taskbar theme.
 - Optionally make the empty area around a shaped taskbar click-through and
   apply rounded clipping to the native taskbar window.
 
@@ -370,6 +372,13 @@ struct Theme {
 };
 
 // clang-format off
+
+const Theme g_themeNative = {{
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground#BackgroundControl > Grid > Rectangle#BackgroundFill, Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
+        L"Fill:=<AcrylicBrush BackgroundSource=\"Backdrop\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.92\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground#BackgroundControl > Grid > Rectangle#BackgroundStroke, Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundStroke", {
+        L"Fill:=Transparent"}},
+}};
 
 const Theme g_themeTranslucentTaskbar = {{
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
@@ -19393,7 +19402,9 @@ void ProcessThemeStyles(PCWSTR themeName,
                         bool processUserStyles,
                         bool processResourceVariables) {
     const Theme* theme = nullptr;
-    if (wcscmp(themeName, L"TranslucentTaskbar") == 0) {
+    if (wcscmp(themeName, L"Native") == 0) {
+        theme = &g_themeNative;
+    } else if (wcscmp(themeName, L"TranslucentTaskbar") == 0) {
         theme = &g_themeTranslucentTaskbar;
     } else if (wcscmp(themeName, L"DockLike") == 0) {
         theme = &g_themeDockLike;
