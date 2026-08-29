@@ -423,9 +423,24 @@ static std::atomic<bool> g_legacyUnhideActive{ false };
 // and cached, AND kept true across repeated calls whenever an applet is still
 // waiting on a "listed" verdict, so a stale "not listed" answer gets asked
 // again instead of sticking forever.
+// 
+// Retry limiting: prevents infinite loop if the shell keeps answering "not listed"
+// - Maximum 5 attempts
+// - 30 second cooldown between attempts
+static std::atomic<ULONGLONG> g_lastUnhideTick{ 0 };
+static std::atomic<int> g_unhideAttempts{ 0 };
+
 inline bool UnhideConfirmationPending() {
-    return g_legacyUnhideActive.load(std::memory_order_acquire) &&
-           !AllUnhideTargetsSettled();
+    if (!g_legacyUnhideActive.load(std::memory_order_acquire)) return false;
+    
+    // Stop retrying after 5 failed attempts
+    if (g_unhideAttempts.load(std::memory_order_relaxed) >= 5) return false;
+    
+    // Cooldown between retries
+    ULONGLONG last = g_lastUnhideTick.load(std::memory_order_relaxed);
+    if (last && GetTickCount64() - last < 30000) return false;
+    
+    return !AllUnhideTargetsSettled();
 }
 
 // When the legacy-applet unhide feature is active, Windows shows the real
@@ -3946,6 +3961,21 @@ void ConfirmUnhiddenAppletsVisible() {
     // nothing to confirm - and the virtual twins must stay.
     if (!g_legacyUnhideActive.load(std::memory_order_acquire)) return;
     if (AllUnhideTargetsSettled()) return;
+    
+    // Rate limiting for confirmation attempts - prevents infinite loop
+    // if the shell keeps answering "not listed"
+    if (g_unhideAttempts.load(std::memory_order_relaxed) >= 5) {
+        Wh_Log(L"unhide feature: max retry attempts (5) reached, stopping confirmation attempts");
+        return;
+    }
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG last = g_lastUnhideTick.load(std::memory_order_relaxed);
+    if (last && now - last < 30000) {
+        // Cooldown period - not time to retry yet
+        return;
+    }
+    g_lastUnhideTick.store(now, std::memory_order_relaxed);
+    g_unhideAttempts.fetch_add(1, std::memory_order_relaxed);
 
     ShellProbeBypass bypass;
 
