@@ -97,6 +97,24 @@ void LoadSettings() {
     g_maximumThumbnailSize.store(maximumSize);
 }
 
+bool IsWindows11OrGreater() {
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto rtlGetVersion = ntdll
+        ? reinterpret_cast<RtlGetVersion_t>(
+              GetProcAddress(ntdll, "RtlGetVersion"))
+        : nullptr;
+    if (!rtlGetVersion) {
+        return false;
+    }
+
+    OSVERSIONINFOW versionInfo{};
+    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
+    return rtlGetVersion(&versionInfo) == 0 &&
+           versionInfo.dwMajorVersion >= 10 &&
+           versionInfo.dwBuildNumber >= 22000;
+}
+
 // Return true for the shell process, including early Explorer startup before
 // its shell window exists. Separate folder processes are skipped once known.
 bool IsOrMayBecomeShellExplorer() {
@@ -385,7 +403,9 @@ HMODULE WINAPI LoadLibraryExWHook(
 
     HMODULE twinuiPcShell = GetModuleHandleW(L"twinui.pcshell.dll");
     bool registeredHook = HookBackgroundThumbnailHelper(twinuiPcShell);
-    registeredHook = HookLoadedThumbnailCache() || registeredHook;
+    if (g_makeBackgroundThumbnailOriginal) {
+        registeredHook = HookLoadedThumbnailCache() || registeredHook;
+    }
 
     if (registeredHook) {
         SetLastError(ERROR_SUCCESS);
@@ -399,6 +419,11 @@ HMODULE WINAPI LoadLibraryExWHook(
 }  // namespace
 
 BOOL Wh_ModInit() {
+    if (!IsWindows11OrGreater()) {
+        Wh_Log(L"Skipping unsupported Windows version");
+        return FALSE;
+    }
+
     LoadSettings();
 
     if (!IsOrMayBecomeShellExplorer()) {
@@ -426,9 +451,8 @@ BOOL Wh_ModInit() {
         if (!HookBackgroundThumbnailHelper(twinuiPcShell)) {
             return FALSE;
         }
+        HookLoadedThumbnailCache();
     }
-
-    HookLoadedThumbnailCache();
 
     return TRUE;
 }
