@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              files-2-folders
 // @name            Files 2 Folders
-// @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.6
+// @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), or Defolder to unpack folders back out, with a workaround hotkey for other file managers
+// @version         2.6.1
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomdlg32 -lgdi32 -luser32
+// @compilerOptions -lole32 -luuid -lshlwapi -lshell32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -122,12 +122,17 @@ Notes:
 - The **Defolder: use the safe move engine** setting controls whether the files
   move via the shell (Ctrl+Z undo, conflict prompts, permission prompts) or the
   fast direct move (auto-renames collisions, cannot be undone).
+- **Ctrl+Z after a Defolder is only partial.** With the safe engine the file
+  moves are undoable, but removing the emptied folders is not — undo brings the
+  files back while the folder structure stays gone. The confirmation is asked
+  every time for this reason, including in silent mode.
 
 In copy mode the dialog options say "Copy" rather than "Move", so you can tell
 the configured operation at a glance.
 
 The dialog also has an **Operation** segmented control above the mode list —
-three buttons glued together (**Move - fast** / **Move - safe** / **Copy**),
+four buttons glued together (**Move - fast** / **Move - safe** / **Copy** /
+**Defolder**),
 the active one shown pressed/held down. Picking one changes the operation for
 just this one run, without touching the **Operation** setting — handy for a
 one-off copy, or a one-off progress-bar/undo-capable move, without changing
@@ -301,13 +306,12 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <windowsx.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <string>
 #include <vector>
-#include <algorithm>
+#include <cwctype>   // towupper (BuildHotkeyVk)
 
 // Not pulled in by this toolchain's <windows.h>/<winuser.h> headers even
 // though it's a long-standing documented static-control style; define it
@@ -1164,6 +1168,7 @@ struct ElevationState {
     bool allowed = false;   // does this operation support elevating at all?
     bool used    = false;   // did any destination actually need it?
     bool refused = false;   // declined or failed once - stop asking
+    bool denied  = false;   // a destination was refused for want of permission
 };
 
 // Try the direct creation first and only escalate to the shell (which may
@@ -1190,6 +1195,7 @@ static bool EnsureDir(HWND owner, const std::wstring& path, ElevationState& st) 
                path.c_str(), (unsigned)err);
         return false;
     }
+    st.denied = true;
     if (!st.allowed || st.refused) {
         Wh_Log(L"create '%s' denied and elevation is %s", path.c_str(),
                st.allowed ? L"already declined for this run"
@@ -1335,9 +1341,23 @@ static void DoDefolder(HWND owner,
                        F2FOperation moveVia)
 {
     // Only directories can be defoldered; a mixed selection just ignores files.
+    //
+    // A junction or directory symlink must be rejected here, not just when
+    // encountered during the walk: GetFileAttributesW reports it as a directory
+    // (DIRECTORY | REPARSE_POINT), so it would otherwise be enumerated through
+    // - moving the *target's* files out from wherever it points - and then
+    // removed. Skipping the roots too is what makes the README's promise true.
     std::vector<std::wstring> roots;
-    for (auto& item : items)
-        if (IsDirectoryPath(item)) roots.push_back(item);
+    for (auto& item : items) {
+        DWORD a = GetFileAttributesW(item.c_str());
+        if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if (a & FILE_ATTRIBUTE_REPARSE_POINT) {
+            Wh_Log(L"defolder: skipping reparse-point root '%s'", item.c_str());
+            continue;
+        }
+        roots.push_back(item);
+    }
 
     if (roots.empty()) {
         if (!silent)
@@ -1354,15 +1374,16 @@ static void DoDefolder(HWND owner,
         CollectTreeContents(r, files, dirs);
 
     if (files.empty()) {
-        // Nothing to move, but the folders may still be removable.
-        if (!silent) {
-            WCHAR q[256];
-            wsprintfW(q, L"The selected folder(s) contain no files.\n\n"
-                         L"Remove %d empty folder(s)?", (int)(dirs.size() + roots.size()));
-            if (MessageBoxW(owner, q, L"Files 2 Folder",
-                            MB_ICONQUESTION | MB_YESNO) != IDYES)
-                return;
-        }
+        // Nothing to move, but the folders may still be removable. Deliberately
+        // NOT gated on `silent`: RemoveDirectoryW bypasses the Recycle Bin, so
+        // this is unrecoverable and must always be confirmed. Same reasoning as
+        // the summary confirmation below.
+        std::wstring q = L"The selected folder(s) contain no files.\n\nRemove ";
+        q += std::to_wstring(dirs.size() + roots.size());
+        q += L" empty folder(s)?";
+        if (MessageBoxW(owner, q.c_str(), L"Files 2 Folder",
+                        MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) != IDYES)
+            return;
         int gone = RemoveEmptyDirs(dirs, roots);
         Wh_Log(L"defolder: no files; removed %d empty folder(s)", gone);
         SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
@@ -1372,7 +1393,13 @@ static void DoDefolder(HWND owner,
 
     // One summary confirmation covering both halves of the operation, since the
     // flatten discards the folder structure and the removal can't be undone.
-    if (!silent) {
+    //
+    // Deliberately NOT gated on `silent`. Silent mode exists so the other three
+    // operations can run straight from the context menu, but that entry carries
+    // the shell's localized "Move to a folder" label - letting one click
+    // silently flatten a tree and delete the folders would be a very large gap
+    // between what the menu says and what it does, with no undo for the removal.
+    {
         std::wstring q = L"Move ";
         q += std::to_wstring(files.size());
         q += (files.size() == 1) ? L" file out of " : L" files out of ";
@@ -1396,6 +1423,18 @@ static void DoDefolder(HWND owner,
         : RunItemsShell(owner, moves, /*copy=*/false);
 
     Wh_Log(L"defolder: moved %d of %d file(s)", done, (int)files.size());
+
+    // Nothing moved - cancelled at the shell's progress/conflict dialog, or
+    // every move failed. Leave the tree completely alone: subfolders that
+    // happened to be empty *already* are not ours to delete, and
+    // RemoveDirectoryW bypasses the Recycle Bin, so removing them here would be
+    // an unrecoverable side effect of an operation the user just cancelled.
+    if (done == 0) {
+        Wh_Log(L"defolder: nothing was moved - leaving the folders alone");
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                       folder.c_str(), nullptr);
+        return;
+    }
 
     // Only clean up what actually emptied. RemoveDirectoryW refuses non-empty
     // directories, so a partial move simply leaves those folders in place.
@@ -1435,6 +1474,11 @@ static void DoFiles2Folder(HWND owner,
     }
 
     std::vector<std::pair<std::wstring, std::wstring>> moves;
+
+    // "By name" / "by extension" only apply to files, so folders in the
+    // selection are skipped. Counting them lets an empty `moves` be explained
+    // correctly instead of being blamed on permissions.
+    int skippedFolders = 0;
 
     // Elevation state for this whole run. Move - fast cannot complete an
     // elevated move (MoveFileExW runs in-process), so it must not create the
@@ -1494,7 +1538,7 @@ static void DoFiles2Folder(HWND owner,
     else if (mode == MODE_PER_FILE_NAME) {
         BatchCreateSiblings(owner, folder, items, elev, /*byExtension=*/false);
         for (auto& item : items) {
-            if (IsDirectoryPath(item)) continue;
+            if (IsDirectoryPath(item)) { skippedFolders++; continue; }
             std::wstring leaf = GetFileNameOnly(item);
             std::wstring base = SanitizeFolderName(GetFileBase(leaf));
             if (base.empty()) continue;
@@ -1506,7 +1550,7 @@ static void DoFiles2Folder(HWND owner,
     else if (mode == MODE_PER_EXTENSION) {
         BatchCreateSiblings(owner, folder, items, elev, /*byExtension=*/true);
         for (auto& item : items) {
-            if (IsDirectoryPath(item)) continue;
+            if (IsDirectoryPath(item)) { skippedFolders++; continue; }
             std::wstring leaf = GetFileNameOnly(item);
             std::wstring ext  = GetFileExt(leaf);
             if (ext.empty()) ext = L"_no_ext";
@@ -1522,20 +1566,32 @@ static void DoFiles2Folder(HWND owner,
 
     // Move - fast goes straight through MoveFileExW; both Move - safe and Copy
     // route through IFileOperation (Copy leaves the originals in place).
-    // Every destination was refused for want of permission, so there is nothing
-    // to move. Say which modes can do it instead of failing mutely; for
-    // Move - fast this is now raised *before* anything is created, so no
-    // consent is requested and no empty folder is left behind.
-    if (moves.empty() && !silent && !elev.allowed) {
-        MessageBoxW(owner,
-            L"This location requires administrator permission.\n\n"
-            L"\"Move - fast\" cannot request it - use \"Move - safe\" or "
-            L"\"Copy\", which let Windows prompt for permission.",
-            L"Files 2 Folder", MB_ICONWARNING);
-        return;
-    }
-    if (moves.empty() && !silent && elev.refused) {
-        Wh_Log(L"elevation declined or unavailable; nothing was moved");
+    // Nothing to move. The reason matters: a selection of only folders in the
+    // file-only modes is an ordinary mistake, and blaming it on permissions
+    // (which the previous single branch did) sends the user somewhere useless.
+    if (moves.empty()) {
+        if (silent) {
+            Wh_Log(L"nothing to move (skippedFolders=%d, denied=%d)",
+                   skippedFolders, (int)elev.denied);
+            return;
+        }
+        if (!elev.denied && skippedFolders > 0) {
+            MessageBoxW(owner,
+                L"These modes only apply to files - the selection contains "
+                L"only folders.\n\nUse \"Defolder\" to unpack folders, or pick "
+                L"a different subfolder mode.",
+                L"Files 2 Folder", MB_ICONINFORMATION);
+        } else if (elev.denied && !elev.allowed) {
+            // Move - fast can't elevate, and this is raised before anything is
+            // created, so no consent is requested and no empty folder is left.
+            MessageBoxW(owner,
+                L"This location requires administrator permission.\n\n"
+                L"\"Move - fast\" cannot request it - use \"Move - safe\" or "
+                L"\"Copy\", which let Windows prompt for permission.",
+                L"Files 2 Folder", MB_ICONWARNING);
+        } else if (elev.denied) {
+            Wh_Log(L"elevation declined or unavailable; nothing was moved");
+        }
         return;
     }
 
@@ -2568,17 +2624,43 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// The module the mod's code lives in. A window class must be registered with
+// this rather than GetModuleHandleW(nullptr) (which is explorer.exe): the class
+// belongs to the module its window procedure lives in, and registering it under
+// the host's handle leaves a class whose lpfnWndProc points into an image that
+// can be unloaded.
+static HINSTANCE GetCurrentModuleHandle() {
+    HMODULE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetCurrentModuleHandle, &h);
+    return (HINSTANCE)h;
+}
+
 static DWORD WINAPI HotkeyThreadProc(LPVOID) {
     WNDCLASSW wc = {};
     wc.lpfnWndProc   = HotkeyWndProc;
-    wc.hInstance     = (HINSTANCE)GetModuleHandleW(nullptr);
+    wc.hInstance     = GetCurrentModuleHandle();
     wc.lpszClassName = L"Files2FolderHotkeyWnd";
-    RegisterClassW(&wc);
+    // A stale registration from a previous load would leave lpfnWndProc
+    // pointing into an unmapped image, and CreateWindowExW would happily
+    // succeed against it - so treat a failed registration as fatal rather than
+    // building a window on top of whatever class already exists.
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        return 1;
+    }
 
     g_hotkeyWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0,
                                   0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   wc.hInstance, nullptr);
-    if (!g_hotkeyWnd) return 1;
+    if (!g_hotkeyWnd) {
+        // Unregister here too: the normal exit path below is not reached, and
+        // leaving the class behind would dangle after the mod unloads.
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
 
     // Win-based combos can't be claimed by RegisterHotKey, so use a low-level
     // keyboard hook for those (what PowerToys uses). Ctrl/Alt-only combos keep
