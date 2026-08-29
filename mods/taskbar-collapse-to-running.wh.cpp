@@ -41,19 +41,8 @@ or closes. While nothing is happening, it does nothing at all.
 icons and tray alike; **Reveal delay** requires the cursor to stay put first.
 
 ## Notes
-
-* Windows 11 only. Win+number still counts pinned items the way Windows does.
-* Built and tested on Windows 11 build 26200 with a left-aligned,
-  single-monitor taskbar. Other builds can name taskbar internals differently.
-* Revealing is shared across monitors: revealing one taskbar reveals them all.
-* With Click, a click on empty taskbar reaches other mods bound to the same
-  spot too, so one click can trigger both.
-* Disabling the mod restores hidden icons and the animations it stripped, with
-  one exception: Windows' icon appear/disappear animation on buttons the mod
-  actually hid stays off until Explorer restarts, because that property cannot
-  be read back to restore it.
-
-Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
+* Built with Claude and tested on Windows 11 build 26200.
+* Thanks to https://easings.net/ for the easing curve values.
 */
 // ==/WindhawkModReadme==
 
@@ -74,7 +63,8 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 - RevealDelayMs: 30
   $name: Reveal delay (ms)
   $description: >-
-    How long the cursor must stay in the empty taskbar area before the icons come back.
+    How long the cursor must stay in the empty taskbar area before the icons
+    come back (only applies to: Reveal trigger > Hover / Rest)
 - RestSpeedPxPerSec: 300
   $name: Rest speed (px/s)
   $description: >-
@@ -84,13 +74,15 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
   $description: >-
     Hide pinned icons whose app is not running. The hotkey flips the same
     switch, but only until settings are saved again, which restores this box.
-- ElementPaddingPx: 24
+- ElementPaddingPx: 12
   $name: Padding around elements (px)
   $description: >-
     Safe area around every taskbar element to prevent unwanted transitions.
 - HoverGraceMs: 150
   $name: Grace period (ms)
-  $description: How long the cursor may be off the taskbar before it collapses again.
+  $description: >-
+    How long the cursor may be off the taskbar before it collapses again
+    (only applies to: Reveal trigger > Hover / Rest)
 - AnimationMode: spacing
   $name: Reveal animation
   $description: >-
@@ -107,11 +99,13 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 - AnimationDurationMs: 160
   $name: Animation length (ms)
 - AnimationAmplitudePct: 40
-  $name: Animation amplitude (%)
+  $name: Snappiness (%)
   $description: >-
-    How far the accordion stretches, as a percentage of the width the hidden
-    icons actually take up. 100 stretches by exactly the space they occupy, so
-    the animation scales itself to how many icons are pinned. 0 to 200.
+    How much of the motion the mid-transition cut takes. On a left-aligned
+    taskbar the accordion stretches by this share of the hidden icons' width
+    and the cut flips it. On a centered taskbar spacing is left alone;
+    instead this share of the row's travel is skipped at the cut. 0 is fully
+    smooth, 100 is maximum snap.
 - Hotkey: Ctrl+Alt+T
   $name: Toggle hotkey
   $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space. Leave empty for no hotkey.
@@ -124,6 +118,10 @@ Licensed MIT. Thanks to https://easings.net/ for the easing curve values.
 
 // winbase.h's GetCurrentTime macro collides with the XAML animation headers.
 #undef GetCurrentTime
+
+#ifndef SPI_SETLOGICALDPIOVERRIDE
+#define SPI_SETLOGICALDPIOVERRIDE 0x009F
+#endif
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -163,6 +161,9 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param);
 bool PointerClearsSurfaces(void* key, Point framePt);
 void ApplyOnThisThreadNow();
 void WakeAllFramesAsync();
+void StartHotkeyThread();
+void NudgeTaskbarsForDiscovery();
+bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher);
 
 // Pointer-event gap after which the cursor counts as parked.
 constexpr double kSpeedSampleStaleMs = 150.0;
@@ -199,14 +200,13 @@ EasingCurve const& CurveFor(CurveId id) {
 enum class AnimationMode { None, Spacing };
 enum class RevealTrigger { Never, Hover, Rest, Click };
 
-// GapClose: hide an icon instantly, hold its gap open until the taskbar
-// stops churning, then ease the row shut.
+// GapClose: hide an icon instantly, hold its gap open a beat, then ease the
+// row shut.
 enum class AnimKind { Accordion, GapClose };
 
-// Quiet time after the last button churn before the gap eases shut, and the
-// longest the gap may hold open waiting for it.
-constexpr double kGapSettleMs = 250.0;
-constexpr double kGapHoldMaxMs = 1000.0;
+// How long a closed icon's gap holds before easing shut: enough for
+// Windows' close churn to pass, short enough to read as one motion.
+constexpr double kGapHoldMs = 250.0;
 
 struct {
     std::atomic<RevealTrigger> revealTrigger;
@@ -244,9 +244,6 @@ POINT g_speedSamplePrevPos = {};
 
 void* g_lastQualifiedKey = nullptr;
 Point g_lastQualifiedFramePt = {};
-
-// Last TaskListButton state churn; the gap-close hold waits for quiet.
-std::atomic<double> g_lastButtonChurnMs = 0;
 
 // Bumped by hotkey/settings; a new value applies once, without animation.
 std::atomic<uint64_t> g_instantApplyGen = 0;
@@ -294,10 +291,43 @@ struct FrameContext {
     double animStartMs = 0;
     // Snapshot at StartAnimation, so both accordion halves use one value.
     double animAmplitude = 0;
+    bool animCentered = false;
+    // Accordion playback table, computed before the first frame renders:
+    // start and destination for every strip element, fold order per phase.
+    // The tick only interpolates; reality diverging from the table kills
+    // the run and lands the target instantly.
+    struct PlanEntry {
+        FrameworkElement element{nullptr};
+        double startX = 0;
+        double finalX = 0;
+        // Participation per phase (folds/renders); on a reveal, appearing
+        // icons hold live-but-transparent slots, so actual Visibility in
+        // phase one is tracked separately for the divergence guard.
+        bool visibleBefore = false;
+        bool visibleAfter = false;
+        bool visiblePhase1 = false;
+        int foldBefore = -1;
+        int foldAfter = -1;
+    };
+    std::vector<PlanEntry> animPlan;
+    int animFoldCountBefore = 0;
+    int animFoldCountAfter = 0;
+    // Strip child count when the run began; a change is divergence.
+    int animChildCount = -1;
     bool animSwapped = false;
+    // Collapse run ended; the real hides land on the next dispatcher pass.
+    bool animFinalizePending = false;
     std::vector<float> animGapOffsets;
-    // GapClose: collapsed at start, held transparent until the run ends.
-    std::vector<std::pair<FrameworkElement, double>> gapHidden;
+    struct GapHidden {
+        FrameworkElement element{nullptr};
+        double opacity = 1;
+        double maxWidth = 0;
+    };
+    // GapClose: collapsed at start, held transparent and widthless until the
+    // run ends, so a re-show by Windows neither draws nor takes space. The
+    // accordion reveal reuses it for appearing icons held transparent until
+    // the apex; StopAnimation restores whatever is left either way.
+    std::vector<GapHidden> gapHidden;
     std::vector<FrameworkElement> animButtons;
     // Idle icons' width while visible; hidden ones measure zero.
     double idleWidth = 0;
@@ -442,7 +472,7 @@ bool CursorOverAnyTaskbar() {
     }
 
     WCHAR className[64];
-    if (!GetClassName(hRoot, className, ARRAYSIZE(className))) {
+    if (!GetClassNameW(hRoot, className, ARRAYSIZE(className))) {
         return false;
     }
 
@@ -464,6 +494,17 @@ bool CursorOverAnyTaskbar() {
     }
 
     return false;
+}
+
+// Alignment from TaskbarAl: 1 or missing = centred (the Windows 11 default).
+bool TaskbarIsCentered() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
+                 L"Advanced",
+                 L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value != 0;
 }
 
 // No getter, so irreversible: only call for buttons actually being hidden.
@@ -567,29 +608,13 @@ double CubicBezierEase(EasingCurve const& curve, double t) {
 
 // ---------------------------------------------------------------- animation
 
-// Leftmost held still; deliberately no re-centre compensation.
-void ApplySpacing(std::vector<FrameworkElement> const& buttons,
-                  double totalExtra) {
-    std::vector<FrameworkElement const*> visible;
-    for (auto const& button : buttons) {
-        if (button.Visibility() == Visibility::Visible) {
-            visible.push_back(&button);
-        } else {
-            button.Translation(float3{0, 0, 0});
-        }
-    }
-
-    int gaps = (int)visible.size() - 1;
-    double perGap = gaps > 0 ? totalExtra / gaps : 0;
-
-    for (int i = 0; i < (int)visible.size(); i++) {
-        visible[i]->Translation(float3{(float)(i * perGap), 0, 0});
-    }
-}
-
+// Per-element fence: one dead element must not strand the rest translated.
 void ClearSpacing(std::vector<FrameworkElement> const& buttons) {
     for (auto const& button : buttons) {
-        button.Translation(float3{0, 0, 0});
+        try {
+            button.Translation(float3{0, 0, 0});
+        } catch (winrt::hresult_error const&) {
+        }
     }
 }
 
@@ -623,7 +648,11 @@ void SetCollapseState(
                     deferHide->emplace_back(button, button.Opacity());
                     button.Opacity(0);
                 } else {
-                    ClearImplicitShowHide(button);
+                    // Irreversible strip, so only where the mod's own
+                    // animation would fight the ghost; None keeps Windows'.
+                    if (g_settings.animationMode == AnimationMode::Spacing) {
+                        ClearImplicitShowHide(button);
+                    }
                     button.Visibility(Visibility::Collapsed);
                     if (!weHidIt) {
                         ctx.hiddenByUs.push_back(winrt::make_weak(button));
@@ -706,7 +735,12 @@ void CollapseDeferredHides(
                 if (!TakeFromHiddenSet(ctx.hiddenByUs, entry.first, false)) {
                     ctx.hiddenByUs.push_back(winrt::make_weak(entry.first));
                 }
-                ctx.gapHidden.push_back(std::move(entry));
+                FrameContext::GapHidden held;
+                held.element = entry.first;
+                held.opacity = entry.second;
+                held.maxWidth = entry.first.MaxWidth();
+                entry.first.MaxWidth(0);
+                ctx.gapHidden.push_back(std::move(held));
             } else {
                 // Windows hid it itself; not ours to keep.
                 entry.first.Opacity(entry.second);
@@ -718,20 +752,268 @@ void CollapseDeferredHides(
 }
 
 void StopAnimation(FrameContext& ctx) {
-    // Collapsed since the start, so the opacity restore is invisible here.
+    // Collapsed since the start, so these restores are invisible here.
     for (auto& entry : ctx.gapHidden) {
         try {
-            entry.first.Opacity(entry.second);
+            entry.element.MaxWidth(entry.maxWidth);
+            entry.element.Opacity(entry.opacity);
         } catch (winrt::hresult_error const&) {
         }
     }
     ctx.gapHidden.clear();
     ctx.animActive = false;
     ctx.animSwapped = false;
+    ctx.animFinalizePending = false;
     UnhookRendering(ctx);
     ClearSpacing(ctx.animButtons);
+    for (auto& entry : ctx.animPlan) {
+        try {
+            entry.element.Translation(float3{0, 0, 0});
+        } catch (winrt::hresult_error const&) {
+        }
+    }
+    ctx.animPlan.clear();
+    ctx.animChildCount = -1;
     ctx.animButtons.clear();
     ctx.animGapOffsets.clear();
+}
+
+int CountStripChildren(FrameContext& ctx) {
+    auto repeater = ctx.repeater.get();
+    if (!repeater) {
+        return -1;
+    }
+    int count = 0;
+    EnumChildElements(repeater, [&](FrameworkElement) {
+        count++;
+        return false;
+    });
+    return count;
+}
+
+// Computes the whole run before the first frame renders: flip to the
+// destination, lay out, measure, flip back — invisible, all in this pass.
+// Elements visible on only one side get the missing coordinate from their
+// measured neighbours' displacement, interpolated once, here. The tick
+// then only plays the table back.
+bool BuildAnimPlan(FrameContext& ctx,
+                   FrameworkElement frame,
+                   bool targetCollapse) {
+    ctx.animPlan.clear();
+    ctx.animFoldCountBefore = 0;
+    ctx.animFoldCountAfter = 0;
+    ctx.animChildCount = CountStripChildren(ctx);
+
+    std::vector<FrameworkElement> elements;
+    if (auto repeater = ctx.repeater.get()) {
+        EnumChildElements(repeater, [&](FrameworkElement child) {
+            elements.push_back(child);
+            return false;
+        });
+    }
+    if (elements.empty()) {
+        elements = ctx.animButtons;
+        ctx.animChildCount = (int)elements.size();
+    }
+
+    auto measure = [&](FrameworkElement const& element, double* x) {
+        if (element.Visibility() != Visibility::Visible) {
+            return false;
+        }
+        try {
+            *x = element.TransformToVisual(frame)
+                     .TransformPoint(Point{0, 0})
+                     .X;
+            return true;
+        } catch (winrt::hresult_error const&) {
+            return false;
+        }
+    };
+
+    for (auto const& element : elements) {
+        FrameContext::PlanEntry entry;
+        entry.element = element;
+        entry.visibleBefore = measure(element, &entry.startX);
+        ctx.animPlan.push_back(std::move(entry));
+    }
+
+    bool priorCollapse = ctx.appliedCollapse == 1;
+    SetCollapseState(ctx, ctx.animButtons, targetCollapse);
+    frame.UpdateLayout();
+    for (auto& entry : ctx.animPlan) {
+        entry.visibleAfter = measure(entry.element, &entry.finalX);
+    }
+    if (targetCollapse) {
+        // Collapse animates over the old layout; put it back. A reveal
+        // keeps the final layout live from frame one instead.
+        SetCollapseState(ctx, ctx.animButtons, priorCollapse);
+        frame.UpdateLayout();
+    }
+
+    // haveStart: one-sided entries that only have startX get finalX synth'd
+    // (disappearing); the other call fills startX for appearing ones.
+    auto fill = [&](bool haveStart) {
+        std::vector<FrameContext::PlanEntry*> known;
+        std::vector<FrameContext::PlanEntry*> missing;
+        for (auto& entry : ctx.animPlan) {
+            if (entry.visibleBefore && entry.visibleAfter) {
+                known.push_back(&entry);
+            } else if (haveStart ? entry.visibleBefore : entry.visibleAfter) {
+                missing.push_back(&entry);
+            }
+        }
+        auto key = [&](FrameContext::PlanEntry* entry) {
+            return haveStart ? entry->startX : entry->finalX;
+        };
+        auto deltaOf = [&](FrameContext::PlanEntry* entry) {
+            return haveStart ? entry->finalX - entry->startX
+                             : entry->startX - entry->finalX;
+        };
+        std::stable_sort(
+            known.begin(), known.end(),
+            [&](FrameContext::PlanEntry* a, FrameContext::PlanEntry* b) {
+                return key(a) < key(b);
+            });
+        for (auto* entry : missing) {
+            double k = key(entry);
+            FrameContext::PlanEntry* left = nullptr;
+            FrameContext::PlanEntry* right = nullptr;
+            for (auto* candidate : known) {
+                if (key(candidate) <= k) {
+                    left = candidate;
+                } else {
+                    right = candidate;
+                    break;
+                }
+            }
+            double delta = 0;
+            if (left && right) {
+                double span = key(right) - key(left);
+                double u = span > 0.5 ? (k - key(left)) / span : 0.5;
+                delta = deltaOf(left) + (deltaOf(right) - deltaOf(left)) * u;
+            } else if (left) {
+                delta = deltaOf(left);
+            } else if (right) {
+                delta = deltaOf(right);
+            }
+            if (haveStart) {
+                entry->finalX = entry->startX + delta;
+            } else {
+                entry->startX = entry->finalX + delta;
+            }
+        }
+    };
+    fill(true);
+    fill(false);
+
+    // Fold order per phase, task buttons only, fixed here once.
+    auto assignFold = [&](bool beforePhase, int* outCount) {
+        std::vector<FrameContext::PlanEntry*> phase;
+        for (auto& entry : ctx.animPlan) {
+            bool visible =
+                beforePhase ? entry.visibleBefore : entry.visibleAfter;
+            if (!visible) {
+                continue;
+            }
+            for (auto const& button : ctx.animButtons) {
+                if (button == entry.element) {
+                    phase.push_back(&entry);
+                    break;
+                }
+            }
+        }
+        std::stable_sort(
+            phase.begin(), phase.end(),
+            [&](FrameContext::PlanEntry* a, FrameContext::PlanEntry* b) {
+                return (beforePhase ? a->startX : a->finalX) <
+                       (beforePhase ? b->startX : b->finalX);
+            });
+        for (int i = 0; i < (int)phase.size(); i++) {
+            if (beforePhase) {
+                phase[i]->foldBefore = i;
+            } else {
+                phase[i]->foldAfter = i;
+            }
+        }
+        *outCount = (int)phase.size();
+    };
+    assignFold(true, &ctx.animFoldCountBefore);
+    assignFold(false, &ctx.animFoldCountAfter);
+
+    // Reveal: appearing icons hold their slots transparently until the apex
+    // flips their opacity — a composition-only cut that cannot tear against
+    // the translations. Survivors are frozen at their old visuals here,
+    // before anything renders.
+    if (!targetCollapse) {
+        for (auto& entry : ctx.animPlan) {
+            try {
+                if (!entry.visibleBefore && entry.visibleAfter) {
+                    FrameContext::GapHidden held;
+                    held.element = entry.element;
+                    held.opacity = entry.element.Opacity();
+                    held.maxWidth = entry.element.MaxWidth();
+                    entry.element.Opacity(0);
+                    ctx.gapHidden.push_back(std::move(held));
+                    entry.element.Translation(float3{0, 0, 0});
+                } else if (entry.visibleBefore) {
+                    entry.element.Translation(
+                        float3{(float)(entry.startX - entry.finalX), 0, 0});
+                }
+            } catch (winrt::hresult_error const&) {
+            }
+        }
+    }
+    for (auto& entry : ctx.animPlan) {
+        try {
+            entry.visiblePhase1 =
+                entry.element.Visibility() == Visibility::Visible;
+        } catch (winrt::hresult_error const&) {
+            entry.visiblePhase1 = entry.visibleBefore;
+        }
+    }
+
+    return !ctx.animPlan.empty();
+}
+
+// Lands a finished collapse run: the real hides, the translation zeroing
+// and the opacity restores in one dispatcher pass, off the render clock —
+// where commits have proven atomic (the reveal's start-of-run flip). Every
+// step is fenced so a throw cannot strand a partial landing, and a
+// follow-up pass re-checks for stragglers.
+void FinalizeCollapseRun(FrameContext& ctx) {
+    ctx.animFinalizePending = false;
+    Wh_Log(L"Collapse finalize: landing");
+    // Windows re-arms its reposition animations between the apex and here;
+    // strip them again, or the layout flip glides or strands the survivors.
+    for (auto& entry : ctx.animPlan) {
+        try {
+            DeanimateButton(ctx, entry.element);
+        } catch (winrt::hresult_error const&) {
+        }
+    }
+    std::vector<FrameworkElement> buttons = ctx.animButtons;
+    try {
+        SetCollapseState(ctx, buttons, true);
+    } catch (winrt::hresult_error const&) {
+        Wh_Log(L"Collapse finalize: SetCollapseState threw");
+    }
+    StopAnimation(ctx);
+    // Belt: nothing translated may survive the landing.
+    if (auto repeater = ctx.repeater.get()) {
+        EnumChildElements(repeater, [](FrameworkElement child) {
+            try {
+                auto translation = child.Translation();
+                if (translation.x != 0 || translation.y != 0) {
+                    Wh_Log(L"Collapse finalize: stray translation swept");
+                    child.Translation(float3{0, 0, 0});
+                }
+            } catch (winrt::hresult_error const&) {
+            }
+            return false;
+        });
+    }
+    // And one verification pass right behind it.
+    PostApply(ctx.dispatcher);
 }
 
 void StartAnimation(FrameContext& ctx,
@@ -743,11 +1025,20 @@ void StartAnimation(FrameContext& ctx,
     ctx.animStartMs = NowMs();
     ctx.animAmplitude =
         ctx.idleWidth * (double)g_settings.animationAmplitudePct / 100.0;
+    ctx.animCentered = TaskbarIsCentered();
     ctx.animSwapped = false;
     ctx.animButtons = std::move(buttons);
     ctx.animGapOffsets.clear();
+    bool planned = false;
     if (auto frame = ctx.frame.get()) {
         SortButtonsByPosition(ctx.animButtons, frame);
+        planned = BuildAnimPlan(ctx, frame, targetCollapse);
+    }
+    if (!planned) {
+        // No table, no playback: land the target instantly.
+        SetCollapseState(ctx, ctx.animButtons, targetCollapse);
+        StopAnimation(ctx);
+        return;
     }
     HookRendering(ctx, ctx.key);
 }
@@ -830,7 +1121,19 @@ void StartGapCloseAnimation(
     FrameContext& ctx,
     std::vector<FrameworkElement> const& buttons,
     std::vector<std::pair<FrameworkElement, double>> deferHide) {
-    ctx.animButtons = buttons;
+    // Hold everything the repeater lays out — on a centred bar Start and
+    // search shift too — so the whole strip freezes and eases as one.
+    ctx.animButtons.clear();
+    if (auto repeater = ctx.repeater.get()) {
+        EnumChildElements(repeater, [&](FrameworkElement child) {
+            ctx.animButtons.push_back(child);
+            return false;
+        });
+    }
+    if (ctx.animButtons.empty()) {
+        ctx.animButtons = buttons;
+    }
+    ctx.animChildCount = CountStripChildren(ctx);
     ctx.animGapOffsets.clear();
     ctx.animActive = true;
     ctx.animKind = AnimKind::GapClose;
@@ -887,6 +1190,14 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
             for (auto& button : buttons) {
                 DeanimateButton(ctx, button);
             }
+            // Start/search recentre with the row; their own slide lags the
+            // choreography, so they go still too. Restored with the rest.
+            if (auto repeater = ctx.repeater.get()) {
+                EnumChildElements(repeater, [&](FrameworkElement child) {
+                    DeanimateButton(ctx, child);
+                    return false;
+                });
+            }
         }
     }
 
@@ -906,6 +1217,21 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
                      animateGaps ? &deferHide : nullptr);
     if (!deferHide.empty()) {
         StartGapCloseAnimation(ctx, buttons, std::move(deferHide));
+    } else if (!ctx.animActive) {
+        // Steady state: a recycled container can resurface carrying a stale
+        // offset from an earlier run, which reads as jumbled spacing. Sweep.
+        if (auto repeater = ctx.repeater.get()) {
+            EnumChildElements(repeater, [](FrameworkElement child) {
+                try {
+                    auto translation = child.Translation();
+                    if (translation.x != 0 || translation.y != 0) {
+                        child.Translation(float3{0, 0, 0});
+                    }
+                } catch (winrt::hresult_error const&) {
+                }
+                return false;
+            });
+        }
     }
     return true;
 }
@@ -929,6 +1255,26 @@ void OnRenderingTick(void* key) {
     double eased = CubicBezierEase(CurveFor(g_settings.animationCurve), t);
 
     if (ctx->animKind == AnimKind::GapClose) {
+        // An element joining or leaving the strip mid-run, or a held
+        // survivor vanishing, is divergence: land the final state instantly
+        // instead of animating a stale plan.
+        int childCount = CountStripChildren(*ctx);
+        if (ctx->animChildCount >= 0 && childCount >= 0 &&
+            childCount != ctx->animChildCount) {
+            StopAnimation(*ctx);
+            return;
+        }
+        try {
+            for (auto& button : ctx->animButtons) {
+                if (button.Visibility() != Visibility::Visible) {
+                    StopAnimation(*ctx);
+                    return;
+                }
+            }
+        } catch (winrt::hresult_error const&) {
+            StopAnimation(*ctx);
+            return;
+        }
         // Windows' close churn can re-show what just got hidden, any frame;
         // re-assert every frame. gapHidden stays transparent for the whole
         // run, so a lost visibility race still renders empty.
@@ -937,13 +1283,17 @@ void OnRenderingTick(void* key) {
             for (size_t i = 0; i < ctx->gapHidden.size();) {
                 auto& entry = ctx->gapHidden[i];
                 // Relaunched mid-run: the button is Windows' again.
-                if (TaskListButton_IsRunning(entry.first)) {
-                    entry.first.Opacity(entry.second);
+                if (TaskListButton_IsRunning(entry.element)) {
+                    entry.element.MaxWidth(entry.maxWidth);
+                    entry.element.Opacity(entry.opacity);
                     ctx->gapHidden.erase(ctx->gapHidden.begin() + i);
                     continue;
                 }
-                if (entry.first.Opacity() != 0.0) {
-                    entry.first.Opacity(0);
+                if (entry.element.Opacity() != 0.0) {
+                    entry.element.Opacity(0);
+                }
+                if (entry.element.MaxWidth() != 0.0) {
+                    entry.element.MaxWidth(0);
                 }
                 i++;
             }
@@ -968,10 +1318,9 @@ void OnRenderingTick(void* key) {
         }
 
         if (!ctx->animSwapped) {
-            // Gap held open; the ease starts once the taskbar goes quiet.
+            // Gap holds open for a fixed beat, then the ease takes over.
             double now = NowMs();
-            if (now - g_lastButtonChurnMs.load() < kGapSettleMs &&
-                now - ctx->animStartMs < kGapHoldMaxMs) {
+            if (now - ctx->animStartMs < kGapHoldMs) {
                 return;
             }
             ctx->animSwapped = true;
@@ -996,16 +1345,78 @@ void OnRenderingTick(void* key) {
         return;
     }
 
-    if (t >= 0.5 && !ctx->animSwapped) {
-        SetCollapseState(*ctx, ctx->animButtons, ctx->animTargetCollapse);
-        // The flip can prompt fresh animations while the tick is paused.
-        for (auto& button : ctx->animButtons) {
-            DeanimateButton(*ctx, button);
+    // Accordion playback. Reality must match the table; an element joining,
+    // leaving, or flipping phase off-script kills the run and lands the
+    // target instantly.
+    bool diverged = false;
+    int childCount = CountStripChildren(*ctx);
+    if (ctx->animChildCount >= 0 && childCount >= 0 &&
+        childCount != ctx->animChildCount) {
+        diverged = true;
+    }
+    if (!diverged) {
+        try {
+            for (auto& entry : ctx->animPlan) {
+                // Collapse hides nothing until the end; reveal's phase two
+                // expects the full set.
+                bool expect = ctx->animSwapped && !ctx->animTargetCollapse
+                                  ? entry.visibleAfter
+                                  : entry.visiblePhase1;
+                if ((entry.element.Visibility() == Visibility::Visible) !=
+                    expect) {
+                    diverged = true;
+                    break;
+                }
+            }
+        } catch (winrt::hresult_error const&) {
+            diverged = true;
         }
-        if (auto frame = ctx->frame.get()) {
-            frame.UpdateLayout();
-            SortButtonsByPosition(ctx->animButtons, frame);
-            if (!ctx->animTargetCollapse) {
+    }
+    if (diverged) {
+        // Land first, then clean: the reverse order flashes the full row.
+        // Stripped again first, or the landing glides on Windows' re-armed
+        // animations.
+        bool target = ctx->animTargetCollapse;
+        std::vector<FrameworkElement> buttons = ctx->animButtons;
+        for (auto& entry : ctx->animPlan) {
+            try {
+                DeanimateButton(*ctx, entry.element);
+            } catch (winrt::hresult_error const&) {
+            }
+        }
+        SetCollapseState(*ctx, buttons, target);
+        StopAnimation(*ctx);
+        return;
+    }
+
+    if (t >= 0.5 && !ctx->animSwapped) {
+        ctx->animSwapped = true;
+        // The apex cut is opacity only, both ways; the layout never moves
+        // mid-run. Reveal flips the appearing icons in; collapse flips the
+        // disappearing ones out, and their real hides land at the end.
+        if (ctx->animTargetCollapse) {
+            for (auto& entry : ctx->animPlan) {
+                try {
+                    if (entry.visibleBefore && !entry.visibleAfter) {
+                        FrameContext::GapHidden held;
+                        held.element = entry.element;
+                        held.opacity = entry.element.Opacity();
+                        held.maxWidth = entry.element.MaxWidth();
+                        entry.element.Opacity(0);
+                        ctx->gapHidden.push_back(std::move(held));
+                    }
+                } catch (winrt::hresult_error const&) {
+                }
+            }
+        } else {
+            for (auto& entry : ctx->gapHidden) {
+                try {
+                    entry.element.Opacity(entry.opacity);
+                } catch (winrt::hresult_error const&) {
+                }
+            }
+            ctx->gapHidden.clear();
+            if (ctx->frame.get()) {
                 double width = 0;
                 for (auto& button : ctx->animButtons) {
                     if (button.Visibility() == Visibility::Visible &&
@@ -1018,22 +1429,70 @@ void OnRenderingTick(void* key) {
                 }
             }
         }
-        ctx->animSwapped = true;
+        // The flip can prompt fresh animations while the tick is paused.
+        for (auto& button : ctx->animButtons) {
+            DeanimateButton(*ctx, button);
+        }
     }
 
-    double amplitude = ctx->animAmplitude;
-
     if (t >= 1.0) {
+        if (ctx->animTargetCollapse) {
+            // Land the layout off the render clock; the next dispatcher
+            // pass commits hides, translations and opacities together.
+            ctx->animFinalizePending = true;
+            UnhookRendering(*ctx);
+            PostApply(ctx->dispatcher);
+            return;
+        }
         StopAnimation(*ctx);
         return;
     }
 
+    // Travel comes from the table. Left-aligned adds the fold on top — the
+    // stretch, flipped at the cut, day one's accordion. Centred leaves the
+    // spacing alone: Snappiness instead skips that share of the travel at
+    // the cut, masked by the icon swap.
     double direction = ctx->animTargetCollapse ? -1.0 : 1.0;
-    double totalExtra = ctx->animSwapped
-                            ? -direction * amplitude * (1 - eased)
-                            : direction * amplitude * eased;
+    double progress = eased;
+    double perGap = 0;
+    if (ctx->animCentered) {
+        double skip = (double)g_settings.animationAmplitudePct / 100.0;
+        progress = eased * (1 - skip) + (ctx->animSwapped ? skip : 0);
+    } else {
+        double foldExtra = direction * ctx->animAmplitude *
+                           (ctx->animSwapped ? 1 - eased : eased);
+        int gaps = (ctx->animSwapped ? ctx->animFoldCountAfter
+                                     : ctx->animFoldCountBefore) -
+                   1;
+        perGap = gaps > 0 ? foldExtra / gaps : 0;
+    }
 
-    ApplySpacing(ctx->animButtons, totalExtra);
+    try {
+        for (auto& entry : ctx->animPlan) {
+            bool visible = ctx->animSwapped ? entry.visibleAfter
+                                            : entry.visibleBefore;
+            if (!visible) {
+                entry.element.Translation(float3{0, 0, 0});
+                continue;
+            }
+            // One continuous expression per direction, no apex switch:
+            // reveal runs on the final layout throughout, collapse on the
+            // starting layout throughout.
+            double travel =
+                ctx->animTargetCollapse
+                    ? (entry.finalX - entry.startX) * progress
+                    : (entry.startX - entry.finalX) * (1 - progress);
+            double decoration = 0;
+            if (!ctx->animCentered) {
+                int fold = ctx->animSwapped ? entry.foldAfter
+                                            : entry.foldBefore;
+                decoration = fold >= 0 ? fold * perGap : 0;
+            }
+            entry.element.Translation(
+                float3{(float)(travel + decoration), 0, 0});
+        }
+    } catch (winrt::hresult_error const&) {
+    }
 }
 
 void RestoreFrame(FrameContext& ctx) {
@@ -1041,7 +1500,10 @@ void RestoreFrame(FrameContext& ctx) {
 
     for (auto& weak : ctx.lastButtons) {
         if (auto button = weak.get()) {
-            button.Translation(float3{0, 0, 0});
+            try {
+                button.Translation(float3{0, 0, 0});
+            } catch (winrt::hresult_error const&) {
+            }
         }
     }
 
@@ -1078,7 +1540,14 @@ void OnTimerTick(void* key) {
     }
 
     if (g_unloading) {
+        // Full teardown: a Tick handler must not outlive the unload sweeps.
         RestoreFrame(*ctx);
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        if (ctx->timer) {
+            ctx->timer.Stop();
+            ctx->timer.Tick(ctx->tickToken);
+        }
+        g_frames->erase(key);
         return;
     }
 
@@ -1155,23 +1624,33 @@ void OnTimerTick(void* key) {
     uint64_t instantGen = g_instantApplyGen;
     bool instant = ctx->instantGenSeen != instantGen;
 
+    // A finished collapse lands here, in dispatcher context.
+    if (ctx->animFinalizePending) {
+        FinalizeCollapseRun(*ctx);
+    }
+
     // Watchdog: Rendering stops when the bar is not being composed.
     if (ctx->animActive &&
         NowMs() - ctx->animStartMs >
             (double)g_settings.animationDurationMs * 3.0 + 1000.0) {
-        // Land the target, or the next apply starts the same animation again.
-        if (ctx->animKind == AnimKind::Accordion && !ctx->animSwapped) {
+        // Land the target, or the next apply starts the same animation
+        // again. Idempotent for a reveal that already landed.
+        if (ctx->animKind == AnimKind::Accordion) {
             SetCollapseState(*ctx, ctx->animButtons, ctx->animTargetCollapse);
         }
         StopAnimation(*ctx);
     }
 
-    // A running animation toward the right state owns the buttons.
+    // A running animation toward the right state owns the buttons. Killing
+    // one mid-flight lands instantly: a toggle faster than the animation
+    // is an instant flip, never a second animation.
+    bool killed = false;
     if (ctx->animActive && (instant || desired != ctx->animTargetCollapse)) {
         StopAnimation(*ctx);
+        killed = true;
     }
     if (!ctx->animActive) {
-        if (ApplyToFrame(*ctx, desired, instant)) {
+        if (ApplyToFrame(*ctx, desired, instant || killed)) {
             ctx->instantGenSeen = instantGen;
             ctx->applyRetries = 0;
         } else if (ctx->applyRetries > 0) {
@@ -1277,6 +1756,8 @@ void RegisterFrame(void* key, FrameworkElement frame) {
             it->second.applyPosted = false;
         }
     }
+    // Late Taskbar.View.dll loads skip the loader-lock path; catch up here.
+    StartHotkeyThread();
 }
 
 // A dead frame at a recycled address must not block re-registration.
@@ -1695,7 +2176,7 @@ int __cdecl TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     return ret;
 }
 
-// Released, not pressed: dragging off and letting go must not count.
+// Acts on release; where the release lands is all that decides.
 using TaskbarFrame_OnPointerReleased_t = int(__cdecl*)(void* pThis,
                                                        void* pArgs);
 TaskbarFrame_OnPointerReleased_t TaskbarFrame_OnPointerReleased_Original;
@@ -1790,7 +2271,6 @@ using TaskListButton_UpdateVisualStates_t = void(__cdecl*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
-    g_lastButtonChurnMs = NowMs();
     if (g_unloading) {
         return;
     }
@@ -1900,6 +2380,16 @@ void ToggleCollapse() {
     g_instantApplyGen++;
     Wh_Log(L"Hotkey toggled collapse to %d", (int)enabled);
     WakeAllFramesAsync();
+
+    // Nothing registered: the wake reached no one; nudge discovery.
+    bool anyFrames;
+    {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        anyFrames = !g_frames->empty();
+    }
+    if (!anyFrames) {
+        NudgeTaskbarsForDiscovery();
+    }
 }
 
 void OnStartMenuVisibility(bool visible) {
@@ -1977,6 +2467,11 @@ class StartVisibilitySink final : public IAppVisibilityEvents {
 
     HRESULT STDMETHODCALLTYPE
     LauncherVisibilityChange(BOOL currentVisibleState) override {
+        // One log so a build where IAppVisibility goes silent is diagnosable.
+        static std::atomic<bool> seen = false;
+        if (!seen.exchange(true)) {
+            Wh_Log(L"Start visibility events active");
+        }
         // Counted so teardown can wait out a call in flight.
         g_sinkCallbacks++;
         try {
@@ -1994,7 +2489,7 @@ class StartVisibilitySink final : public IAppVisibilityEvents {
 DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     // Create and announce the queue before anything slow: WM_QUIT must land.
     MSG queuePrimer;
-    PeekMessage(&queuePrimer, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    PeekMessageW(&queuePrimer, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     SetEvent(g_hotkeyThreadReady);
 
     // A raw thread entry: an escaping exception would terminate explorer.
@@ -2031,7 +2526,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     }
 
     MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (msg.message == WM_HOTKEY && msg.wParam == 1) {
             ToggleCollapse();
         }
@@ -2058,7 +2553,9 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
 
 void StartHotkeyThread() {
     std::lock_guard<std::mutex> guard(g_hotkeyThreadMutex);
-    if (g_hotkeyThread) {
+    // The unloading check closes the race with StopHotkeyThread: a start
+    // that lost this lock to unload must not spawn into a dying image.
+    if (g_hotkeyThread || g_unloading) {
         return;
     }
 
@@ -2078,7 +2575,7 @@ void StartHotkeyThread() {
         return;
     }
 
-    g_hotkeyThreadReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_hotkeyThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hotkeyThreadReady) {
         return;
     }
@@ -2100,7 +2597,7 @@ void StopHotkeyThread() {
     }
 
     WaitForSingleObject(g_hotkeyThreadReady, INFINITE);
-    PostThreadMessage(g_hotkeyThreadId, WM_QUIT, 0, 0);
+    PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
     WaitForSingleObject(g_hotkeyThread, INFINITE);
 
     CloseHandle(g_hotkeyThread);
@@ -2116,7 +2613,7 @@ bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
                          PVOID procParam) {
     static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RUN_FROM_WINDOW_THREAD_PARAM {
         RunFromWindowThreadProc_t proc;
@@ -2133,7 +2630,7 @@ bool RunFromWindowThread(HWND hWnd,
         return true;
     }
 
-    HHOOK hook = SetWindowsHookEx(
+    HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
@@ -2154,7 +2651,7 @@ bool RunFromWindowThread(HWND hWnd,
     RUN_FROM_WINDOW_THREAD_PARAM param;
     param.proc = proc;
     param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
     return true;
@@ -2182,12 +2679,12 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
 
     // Iterated: the first Shell_TrayWnd can belong to another process.
     HWND hPrimary = nullptr;
-    while ((hPrimary = FindWindowEx(nullptr, hPrimary, L"Shell_TrayWnd",
+    while ((hPrimary = FindWindowExW(nullptr, hPrimary, L"Shell_TrayWnd",
                                     nullptr))) {
         consider(hPrimary);
     }
     HWND hSecondary = nullptr;
-    while ((hSecondary = FindWindowEx(nullptr, hSecondary,
+    while ((hSecondary = FindWindowExW(nullptr, hSecondary,
                                       L"Shell_SecondaryTrayWnd", nullptr))) {
         consider(hSecondary);
     }
@@ -2197,37 +2694,58 @@ void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param) {
     }
 }
 
+// Kicks TrayUI::_HandleSettingChange down its DPI path (the taskbar-icon-size
+// pattern), whose recompute re-measures the XAML frame and fires the hooked
+// MeasureOverride — discovery for taskbars idle since before the mod loaded.
+void NudgeTaskbarsForDiscovery() {
+    auto nudge = [](HWND hWnd) {
+        DWORD processId = 0;
+        if (GetWindowThreadProcessId(hWnd, &processId) &&
+            processId == GetCurrentProcessId()) {
+            SendMessageTimeoutW(hWnd, WM_SETTINGCHANGE,
+                                SPI_SETLOGICALDPIOVERRIDE, 0,
+                                SMTO_ABORTIFHUNG, 1000, nullptr);
+        }
+    };
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_TrayWnd", nullptr))) {
+        nudge(hWnd);
+    }
+    hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_SecondaryTrayWnd",
+                                 nullptr))) {
+        nudge(hWnd);
+    }
+}
+
 void CleanupOnThisThread() {
     DWORD threadId = GetCurrentThreadId();
-    std::vector<void*> keys;
+    std::vector<FrameContext> mine;
 
     {
         std::lock_guard<std::mutex> guard(g_framesMutex);
-        for (auto& [key, ctx] : *g_frames) {
-            if (ctx.threadId == threadId) {
-                keys.push_back(key);
+        for (auto it = g_frames->begin(); it != g_frames->end();) {
+            if (it->second.threadId == threadId) {
+                mine.push_back(std::move(it->second));
+                it = g_frames->erase(it);
+            } else {
+                ++it;
             }
         }
     }
 
-    std::lock_guard<std::mutex> guard(g_framesMutex);
-    for (void* key : keys) {
-        auto it = g_frames->find(key);
-        if (it == g_frames->end()) {
-            continue;
-        }
-
-        // Runs inside a CALLWNDPROC hook or dispatcher lambda; an escaping
-        // throw is fatal or hangs unload. The erase must always run.
+    // Outside the lock: XAML teardown can re-enter hooks that take it. The
+    // contexts die here, on their owning thread. Runs inside a CALLWNDPROC
+    // hook or dispatcher lambda; an escaping throw is fatal or hangs unload.
+    for (auto& ctx : mine) {
         try {
-            if (it->second.timer) {
-                it->second.timer.Stop();
-                it->second.timer.Tick(it->second.tickToken);
+            if (ctx.timer) {
+                ctx.timer.Stop();
+                ctx.timer.Tick(ctx.tickToken);
             }
-            RestoreFrame(it->second);
+            RestoreFrame(ctx);
         } catch (winrt::hresult_error const&) {
         }
-        g_frames->erase(it);
     }
 }
 
@@ -2259,7 +2777,7 @@ void LoadSettings() {
     g_settings.animationDurationMs =
         std::clamp(Wh_GetIntSetting(L"AnimationDurationMs"), 0, 5000);
     g_settings.animationAmplitudePct =
-        std::clamp(Wh_GetIntSetting(L"AnimationAmplitudePct"), 0, 200);
+        std::clamp(Wh_GetIntSetting(L"AnimationAmplitudePct"), 0, 100);
 
     auto mode = WindhawkUtils::StringSetting::make(L"AnimationMode");
     g_settings.animationMode = wcscmp(mode.get(), L"spacing") == 0
@@ -2282,9 +2800,9 @@ void LoadSettings() {
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
     if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
     }
     return module;
 }
@@ -2358,10 +2876,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
     if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
-        // The exchange makes this exactly-once; no second flag needed.
+        // The exchange makes this exactly-once; no second flag needed. The
+        // hotkey thread is NOT started here: this runs under the loader
+        // lock, and a new thread blocks on it. RegisterFrame starts it.
         if (HookTaskbarViewDllSymbols(module)) {
             Wh_ApplyHookOperations();
-            StartHotkeyThread();
         }
     }
 
@@ -2382,7 +2901,7 @@ BOOL Wh_ModInit() {
         // must not grab the hotkey or the Start watcher.
         StartHotkeyThread();
     } else {
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
         if (!kernelBaseModule) {
             Wh_Log(L"kernelbase.dll not found");
             return FALSE;
@@ -2402,17 +2921,20 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_taskbarViewDllLoaded) {
-        return;
+    if (!g_taskbarViewDllLoaded) {
+        // Retry for a load that raced the LoadLibraryExW hook going live.
+        HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
+        if (taskbarViewModule && !g_taskbarViewDllLoaded.exchange(true)) {
+            if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                Wh_ApplyHookOperations();
+                StartHotkeyThread();
+            }
+        }
     }
 
-    // Retry for a load that raced the LoadLibraryExW hook going live.
-    HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
-    if (taskbarViewModule && !g_taskbarViewDllLoaded.exchange(true)) {
-        if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            Wh_ApplyHookOperations();
-            StartHotkeyThread();
-        }
+    // An already-idle taskbar fires no hook on its own.
+    if (g_taskbarViewDllLoaded) {
+        NudgeTaskbarsForDiscovery();
     }
 }
 
@@ -2428,6 +2950,16 @@ void Wh_ModSettingsChanged() {
     g_instantApplyGen++;
     // The timers are stopped while idle, so the new settings must be pushed.
     WakeAllFramesAsync();
+
+    // Nothing registered yet: the wake reached no one; nudge discovery.
+    bool anyFrames;
+    {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        anyFrames = !g_frames->empty();
+    }
+    if (!anyFrames && g_taskbarViewDllLoaded) {
+        NudgeTaskbarsForDiscovery();
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -2483,7 +3015,7 @@ void Wh_ModBeforeUninit() {
             CloseHandle(hThread);
             continue;
         }
-        HANDLE done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!done) {
             CloseHandle(hThread);
             continue;
