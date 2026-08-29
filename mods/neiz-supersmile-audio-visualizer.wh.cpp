@@ -9169,6 +9169,7 @@ static bool EqHookTaskbarSymbols() {
     // Primary-taskbar TaskbarHost access is required. Secondary-taskbar symbols
     // are optional so a build can still provide the primary EQ button when the
     // secondary taskbar ABI has changed.
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllRequiredHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
@@ -9184,6 +9185,7 @@ static bool EqHookTaskbarSymbols() {
         return false;
     }
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
@@ -9200,6 +9202,7 @@ static bool EqHookTaskbarSymbols() {
     // FrameHeight is needed to derive the TaskbarHost -> hosted XAML element
     // offset on supported x64/ARM64 builds. This is the same mechanism used by
     // the actively maintained Taskbar Fluent Media Player mod.
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllFrameHeightHooks[] = {
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
          &g_eqTaskbarHostFrameHeight},
@@ -9215,6 +9218,7 @@ static bool EqHookTaskbarSymbols() {
 
     // Hook the taskbar rebuild path as an immediate reinjection trigger. Keep
     // the periodic poll as a fallback for rebuilds not routed through this hook.
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllTrayStartHooks[] = {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &g_eqTrayUIStartTaskbarOriginal,
