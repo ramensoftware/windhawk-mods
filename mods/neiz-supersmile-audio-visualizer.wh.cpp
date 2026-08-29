@@ -9096,6 +9096,20 @@ static void EqEnsureXamlButton() {
     if (!taskbar || !IsWindow(taskbar))
         return;
 
+    static ULONGLONG lastDeepCheckMs = 0;
+    const ULONGLONG nowMs = GetTickCount64();
+
+    // TrayUI::StartTaskbar is the primary immediate recovery path. The deep
+    // reconciliation below is only a periodic safety net for XAML changes that
+    // are not accompanied by that notification.
+    if (g_eqXamlInjectionReady.load(std::memory_order_acquire) &&
+        g_eqTaskbarHwnd == taskbar &&
+        nowMs - lastDeepCheckMs < 30000) {
+        return;
+    }
+
+    lastDeepCheckMs = nowMs;
+
     EqHideLegacyNativeButtons(taskbar);
 
     struct Payload { HWND taskbar; } payload{taskbar};
@@ -9135,6 +9149,7 @@ static void EqEnsureXamlButton() {
     }, &payload)) {
         Wh_Log(L"EqEnsureXamlButton: failed to marshal to taskbar UI thread");
     }
+
 }
 
 static void WINAPI EqTrayUIStartTaskbarHook(void* pThis) {
@@ -9166,68 +9181,40 @@ static bool EqHookTaskbarSymbols() {
     if (!h)
         return false;
 
-    // Primary-taskbar TaskbarHost access is required. Secondary-taskbar symbols
-    // are optional so a build can still provide the primary EQ button when the
-    // secondary taskbar ABI has changed.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllRequiredHooks[] = {
+    // Resolve all taskbar symbols in one call so the Windhawk symbol cache is
+    // shared across the complete taskbar integration. Secondary-taskbar,
+    // FrameHeight, and StartTaskbar symbols are optional across builds.
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &g_eqCTaskBandGetTaskbarHost},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &g_eqStdRefDecref},
-    };
-
-    if (!WindhawkUtils::HookSymbols(
-            h, taskbarDllRequiredHooks, ARRAYSIZE(taskbarDllRequiredHooks))) {
-        Wh_Log(L"EqHookTaskbarSymbols: primary taskbar symbols could not be resolved");
-        return false;
-    }
-
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
+         &g_eqCSecondaryTaskBandTaskListWndSiteVftable, nullptr, true},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &g_eqCSecondaryTaskBandGetTaskbarHost},
-    };
-    if (!WindhawkUtils::HookSymbols(
-            h, taskbarDllSecondaryHooks, ARRAYSIZE(taskbarDllSecondaryHooks))) {
-        g_eqCSecondaryTaskBandTaskListWndSiteVftable = nullptr;
-        g_eqCSecondaryTaskBandGetTaskbarHost = nullptr;
-        Wh_Log(L"EqHookTaskbarSymbols: secondary taskbar symbols unavailable; continuing for primary taskbar");
-    }
-
-    // FrameHeight is needed to derive the TaskbarHost -> hosted XAML element
-    // offset on supported x64/ARM64 builds. This is the same mechanism used by
-    // the actively maintained Taskbar Fluent Media Player mod.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllFrameHeightHooks[] = {
+         &g_eqCSecondaryTaskBandGetTaskbarHost, nullptr, true},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-         &g_eqTaskbarHostFrameHeight},
+         &g_eqTaskbarHostFrameHeight, nullptr, true},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &g_eqTrayUIStartTaskbarOriginal, EqTrayUIStartTaskbarHook, true},
     };
+
     if (!WindhawkUtils::HookSymbols(
-            h, taskbarDllFrameHeightHooks, ARRAYSIZE(taskbarDllFrameHeightHooks))) {
-        g_eqTaskbarHostFrameHeight = nullptr;
-        Wh_Log(L"EqHookTaskbarSymbols: TaskbarHost::FrameHeight not found");
-#if defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__)
+            h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"EqHookTaskbarSymbols: taskbar symbols could not be resolved");
         return false;
-#endif
     }
 
-    // Hook the taskbar rebuild path as an immediate reinjection trigger. Keep
-    // the periodic poll as a fallback for rebuilds not routed through this hook.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllTrayStartHooks[] = {
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
-         &g_eqTrayUIStartTaskbarOriginal,
-         EqTrayUIStartTaskbarHook},
-    };
-    if (!WindhawkUtils::HookSymbols(
-            h, taskbarDllTrayStartHooks, ARRAYSIZE(taskbarDllTrayStartHooks))) {
-        g_eqTrayUIStartTaskbarOriginal = nullptr;
-        Wh_Log(L"EqHookTaskbarSymbols: TrayUI::StartTaskbar not found; using polling fallback");
+    // The primary TaskbarHost symbols are required. FrameHeight is also
+    // required by EqGetTaskbarXamlRoot on supported x64/ARM64 builds.
+    if (!g_eqCTaskBandTaskListWndSiteVftable ||
+        !g_eqCTaskBandGetTaskbarHost ||
+        !g_eqStdRefDecref ||
+        !g_eqTaskbarHostFrameHeight) {
+        Wh_Log(L"EqHookTaskbarSymbols: required taskbar symbols are missing");
+        return false;
     }
 
     return true;
