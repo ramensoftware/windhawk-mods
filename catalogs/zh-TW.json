@@ -9612,7 +9612,7 @@
           4
         ],
         "ratingUsers": 5,
-        "updated": 1787249946000,
+        "updated": 1787994198000,
         "users": 88
       },
       "metadata": {
@@ -9621,13 +9621,13 @@
         ],
         "author": "mario0318",
         "compilerOptions": "-lshcore",
-        "description": "Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers",
+        "description": "Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers",
         "github": "https://github.com/mario0318",
         "include": [
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.1.4"
+        "version": "1.2.6"
       }
     },
     "one-hair": {
