@@ -37,6 +37,8 @@ three projects listed in Credits are not installation requirements.
   maximized or fullscreen.
 - Apply the state independently on every monitor.
 - Delay the return to the desktop theme to prevent distracting rapid changes.
+- Track window-state changes with WinEvent notifications, plus a periodic safety
+  refresh for shell events that Windows might not deliver.
 - Customize Minecraft Hotbar slot size, icon size, taskbar height, padding,
   running indicators, and distance from the bottom of the screen.
 - Keep the raised Minecraft taskbar below normal application windows.
@@ -116,6 +118,9 @@ state tracking, so the helper isn't required.
   TranslucentTB and similar Windhawk mods, can conflict with this mod.
 - Theme switching is per monitor, but Windows itself can move shell surfaces
   and taskbar XAML islands between monitors during display reconfiguration.
+- LayerMicaUI, Pills, and Blob use application-wide XAML resources. Mixing one
+  of them with a different theme across monitors can allow some colors or
+  brushes to affect more than one taskbar.
 - The raised-from-bottom option is intentionally limited to Minecraft Hotbar as
   the desktop theme.
 - While raised, Minecraft Hotbar is intentionally made non-topmost and placed
@@ -305,6 +310,9 @@ listed above. Original authors retain copyright in their contributions.
     - verticalOffset: -4
       $name: Vertical position
       $description: Positive moves it down. Negative moves it up.
+    - iconGap: 0
+      $name: Extra spacing from icons
+      $description: Adds extra space between the Minecraft icons and their indicators.
     - cornerRadius: 2
       $name: Indicator corner radius
     $name: Minecraft indicators
@@ -332,7 +340,7 @@ listed above. Original authors retain copyright in their contributions.
   - cornerRadius: 2
     $name: Indicator corner radius
   $name: Native Windows taskbar indicators
-- clickThroughTaskbar: 1
+- clickThroughTaskbar: true
   $name: Click through empty taskbar space
   $description: Keeps only the visible taskbar shape interactive and removes the surrounding desktop-sized taskbar area.
 - clipCornerRadius: 22
@@ -10577,15 +10585,16 @@ std::atomic<DynamicThemeTrigger> g_dynamicThemeTrigger{
     DynamicThemeTrigger::maximized};
 std::atomic<bool> g_forceTaskbarBottom{false};
 std::wstring g_desktopThemeName{L"Minecraft_Hotbar"};
-std::wstring g_windowThemeName{L"FrostyGlass"};
+std::wstring g_windowThemeName{L"Native"};
 HANDLE g_dynamicThemeStopEvent;
+HANDLE g_dynamicThemeRefreshEvent;
 HANDLE g_dynamicThemeThread;
 
 HANDLE g_restartExplorerPromptThread;
 std::atomic<HWND> g_restartExplorerPromptWindow;
 
 constexpr WCHAR kRestartExplorerPromptTitle[] =
-    L"Windows 11 Taskbar Styler - Windhawk";
+    L"Dynamic Taskbar Theme Switcher - Windhawk";
 constexpr WCHAR kRestartExplorerPromptTextFormat[] =
     L"Restarting Explorer is required for the mod to activate.\n\nDo you want "
     L"to restart Explorer now?\n\nStatus code: 0x%08X";
@@ -11262,6 +11271,12 @@ using MonitorSet = std::unordered_set<HMONITOR>;
 std::mutex g_windowThemeMonitorsMutex;
 MonitorSet g_windowThemeMonitors;
 
+// Updated by the existing dynamic-window scan and read by taskbar positioning
+// hooks. Keeping this snapshot out of the hooks avoids walking every top-level
+// window, querying DWM and opening processes during SetWindowPos.
+std::mutex g_dynamicWindowSnapshotMutex;
+std::unordered_map<HMONITOR, HWND> g_lowestDynamicWindowByMonitor;
+
 MonitorSet GetWindowThemeMonitorsSnapshot() {
     std::scoped_lock lock(g_windowThemeMonitorsMutex);
     return g_windowThemeMonitors;
@@ -11310,7 +11325,7 @@ struct MinecraftSettings {
     IndicatorSettings indicator;
 };
 
-struct {
+struct ModSettings {
     bool clickThroughTaskbar;
     int clipCornerRadius;
     int desktopReturnDelaySeconds;
@@ -11318,7 +11333,21 @@ struct {
     int nativeIconSize;
     IndicatorSettings nativeIndicator;
     XamlDiagnosticsHandling xamlDiagnosticsHandling;
-} g_settings;
+};
+
+ModSettings g_settings;
+std::mutex g_settingsMutex;
+
+// Values read by process-wide hooks and background threads. Keep these
+// independent from g_settings so settings reloads never expose partially
+// written strings or structs to another Explorer thread.
+std::atomic<bool> g_raiseTaskbarFromBottomEnabled{true};
+std::atomic<int> g_raiseFromBottomDip{90};
+std::atomic<int> g_desktopReturnDelaySeconds{6};
+std::atomic<bool> g_clickThroughTaskbarEnabled{true};
+std::atomic<int> g_clipCornerRadius{22};
+std::atomic<XamlDiagnosticsHandling> g_xamlDiagnosticsHandling{
+    XamlDiagnosticsHandling::kBlock};
 
 // https://stackoverflow.com/a/51274008
 template <auto fn>
@@ -17569,8 +17598,14 @@ bool IsTaskbarTopLevelWindow(HWND hWnd) {
         return false;
     }
 
-    return _wcsicmp(className, L"Shell_TrayWnd") == 0 ||
-           _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
+    if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+        _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+        return false;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    return processId == GetCurrentProcessId();
 }
 
 // Click-through taskbar: clip the top-level taskbar window to the union of the
@@ -17682,7 +17717,8 @@ void UpdateClickThroughRegion(ClickThroughTaskbarState& state) {
     signature.push_back(QuantizeLayoutSize(scale * 100));
     appendRect(signature, taskbarFrameRect);
     appendRect(signature, systemTrayFrameRect);
-    signature.push_back(g_settings.clipCornerRadius);
+    int clipCornerRadius = g_clipCornerRadius.load();
+    signature.push_back(clipCornerRadius);
 
     // Skip the redundant SetWindowRgn (and the redraw it forces) only when the
     // desired region is unchanged AND the window still carries the region we
@@ -17726,7 +17762,7 @@ void UpdateClickThroughRegion(ClickThroughTaskbarState& state) {
 
     const int cornerRadius = std::max(
         0, static_cast<int>(
-               std::lround(g_settings.clipCornerRadius * scale)));
+               std::lround(clipCornerRadius * scale)));
     const int cornerDiameter = cornerRadius * 2;
 
     auto createFrameRegion = [cornerDiameter](const RECT& rect) -> HRGN {
@@ -17886,6 +17922,16 @@ void HandleClickThroughElement(FrameworkElement element) {
         state->systemTrayFrame = element;
     }
 
+    // Raising needs the top-level HWND subclass even when click-through is
+    // disabled. Resolve the island without applying a clipping region so the
+    // two features don't depend on each other.
+    if (!state->islandHwnd) {
+        state->islandHwnd = ResolveClickThroughIslandHwnd(xamlRoot);
+        if (state->islandHwnd) {
+            QueueThemeRefreshForXamlRoot(xamlRoot);
+        }
+    }
+
     // Hook LayoutUpdated once per XamlRoot, on the taskbar frame (always
     // present; its layout passes also cover system tray changes in the same
     // tree).
@@ -17900,13 +17946,17 @@ void HandleClickThroughElement(FrameworkElement element) {
                     return;
                 }
                 if (auto* state = GetClickThroughState(strongXamlRoot)) {
-                    UpdateClickThroughRegion(*state);
+                    if (g_clickThroughTaskbarEnabled.load()) {
+                        UpdateClickThroughRegion(*state);
+                    }
                     EnsureClickThroughSubclass(*state);
                 }
             });
     }
 
-    UpdateClickThroughRegion(*state);
+    if (g_clickThroughTaskbarEnabled.load()) {
+        UpdateClickThroughRegion(*state);
+    }
     EnsureClickThroughSubclass(*state);
 }
 
@@ -18170,7 +18220,8 @@ void ApplyCustomizations(ElementId elementId,
     // Handle click-through before the no-customizations early return below,
     // since it must run for the taskbar elements even with no styles
     // configured.
-    if (g_settings.clickThroughTaskbar) {
+    if (g_clickThroughTaskbarEnabled.load() ||
+        g_raiseTaskbarFromBottomEnabled.load()) {
         HandleClickThroughElement(element);
     }
 
@@ -19561,8 +19612,7 @@ void ProcessThemeStyles(PCWSTR themeName,
     if (theme == &g_themeMinecraft_Hotbar) {
         AddIndicatorCustomizationRules(g_settings.minecraft.indicator,
                                        themeScope);
-    } else if (themeScope == RuleThemeScope::window &&
-               wcscmp(themeName, L"Native") == 0) {
+    } else if (wcscmp(themeName, L"Native") == 0) {
         AddTaskIconSizeRules(g_settings.nativeIconSize, themeScope);
         AddIndicatorCustomizationRules(g_settings.nativeIndicator,
                                        themeScope);
@@ -19591,6 +19641,7 @@ void ProcessThemeStyles(PCWSTR themeName,
 }
 
 void ProcessAllStylesFromSettings() {
+    std::scoped_lock settingsLock(g_settingsMutex);
     ProcessThemeStyles(g_desktopThemeName.c_str(), RuleThemeScope::desktop,
                        false, true);
     ProcessThemeStyles(g_windowThemeName.c_str(), RuleThemeScope::window,
@@ -19955,7 +20006,7 @@ InitializeXamlDiagnosticsEx_Hook(_In_ PCWSTR endPointName,
 
     bool blockCall = false;
 
-    switch (g_settings.xamlDiagnosticsHandling) {
+    switch (g_xamlDiagnosticsHandling.load()) {
         case XamlDiagnosticsHandling::kAlert: {
             void* retAddress = __builtin_return_address(0);
 
@@ -19989,7 +20040,7 @@ InitializeXamlDiagnosticsEx_Hook(_In_ PCWSTR endPointName,
                 L"Note: You can change this behavior in the mod settings.",
                 modulePathStr);
             int result = MessageBox(nullptr, message,
-                                    L"Windows 11 Taskbar Styler - Windhawk",
+                                    L"Dynamic Taskbar Theme Switcher - Windhawk",
                                     MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
             blockCall = (result == IDYES);
             break;
@@ -20184,134 +20235,6 @@ HWND GetTaskbarUiWnd() {
                         nullptr);
 }
 
-PTP_TIMER g_statsTimer;
-
-bool StartStatsTimer() {
-    static constexpr WCHAR kStatsBaseUrl[] =
-        L"https://github.com/ramensoftware/"
-        L"windows-11-taskbar-styling-guide/"
-        L"releases/download/stats-v6/";
-
-    ULONGLONG lastStatsTime = 0;
-    Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
-                      sizeof(lastStatsTime));
-
-    // -1 can be set for disabling the stats timer.
-    if (lastStatsTime == 0xFFFFFFFF'FFFFFFFF) {
-        return false;
-    }
-
-    FILETIME currentTimeFt;
-    GetSystemTimeAsFileTime(&currentTimeFt);
-
-    ULONGLONG currentTime = ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
-                            currentTimeFt.dwLowDateTime;
-
-    constexpr ULONGLONG k10Minutes = 10 * 60 * 10000000LL;
-    constexpr ULONGLONG k24Hours = 24 * 60 * 60 * 10000000LL;
-
-    ULONGLONG minDueTime = currentTime + k10Minutes;
-    ULONGLONG maxDueTime = currentTime + k24Hours;
-
-    ULONGLONG dueTime = lastStatsTime + k24Hours;
-    if (dueTime < minDueTime) {
-        dueTime = minDueTime;
-    } else if (dueTime > maxDueTime) {
-        dueTime = maxDueTime;
-    }
-
-    g_statsTimer = CreateThreadpoolTimer(
-        [](PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
-            Wh_Log(L">");
-
-            string_setting_unique_ptr themeName(Wh_GetStringSetting(L"theme"));
-            if (!*themeName.get()) {
-                return;
-            }
-
-            HANDLE mutex =
-                CreateMutex(nullptr, FALSE, L"WindhawkStats_" WH_MOD_ID);
-            if (mutex) {
-                WaitForSingleObject(mutex, INFINITE);
-            }
-
-            ULONGLONG lastStatsTime = 0;
-            Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
-                              sizeof(lastStatsTime));
-
-            FILETIME currentTimeFt;
-            GetSystemTimeAsFileTime(&currentTimeFt);
-            ULONGLONG currentTime =
-                ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
-                currentTimeFt.dwLowDateTime;
-
-            const WH_URL_CONTENT* content = nullptr;
-            if (currentTime - lastStatsTime >= k10Minutes) {
-                Wh_SetBinaryValue(L"statsTimerLastTime", &currentTime,
-                                  sizeof(currentTime));
-
-                std::wstring themeNameEscaped = themeName.get();
-                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
-                             L' ', L'_');
-                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
-                             L'&', L'_');
-                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
-                             L'.', L'_');
-
-                std::wstring statsUrl = kStatsBaseUrl;
-                statsUrl += themeNameEscaped;
-                statsUrl += L".txt";
-
-                Wh_Log(L"Submitting stats to %s", statsUrl.c_str());
-
-                content = Wh_GetUrlContent(statsUrl.c_str(), nullptr);
-            } else {
-                Wh_Log(L"Skipping, last submission %llu seconds ago",
-                       (currentTime - lastStatsTime) / 10000000LL);
-            }
-
-            if (mutex) {
-                ReleaseMutex(mutex);
-                CloseHandle(mutex);
-            }
-
-            if (!content) {
-                Wh_Log(L"Failed to get stats content");
-                return;
-            }
-
-            if (content->statusCode != 200) {
-                Wh_Log(L"Stats content status code: %d", content->statusCode);
-            }
-
-            Wh_FreeUrlContent(content);
-            Wh_Log(L"Stats content submitted");
-        },
-        nullptr, nullptr);
-    if (!g_statsTimer) {
-        Wh_Log(L"Failed to create stats timer");
-        return false;
-    }
-
-    constexpr DWORD k24HoursInMs = 24 * 60 * 60 * 1000;
-    constexpr ULONGLONG k10MinutesInMs = 10 * 60 * 1000;
-
-    FILETIME dueTimeFt;
-    dueTimeFt.dwLowDateTime = (DWORD)(dueTime & 0xFFFFFFFF);
-    dueTimeFt.dwHighDateTime = (DWORD)(dueTime >> 32);
-    SetThreadpoolTimer(g_statsTimer, &dueTimeFt, k24HoursInMs, k10MinutesInMs);
-    return true;
-}
-
-void StopStatsTimer() {
-    if (g_statsTimer) {
-        SetThreadpoolTimer(g_statsTimer, nullptr, 0, 0);
-        WaitForThreadpoolTimerCallbacks(g_statsTimer, TRUE);
-        CloseThreadpoolTimer(g_statsTimer);
-        g_statsTimer = nullptr;
-    }
-}
-
 #ifndef DWMWA_CLOAKED
 #define DWMWA_CLOAKED 14
 #endif
@@ -20341,11 +20264,19 @@ bool IsIgnoredDynamicWindowClass(PCWSTR className) {
            _wcsicmp(className, L"#32768") == 0;
 }
 
-std::wstring DynamicWindowProcessName(HWND hWnd) {
+using DynamicProcessNameCache = std::unordered_map<DWORD, std::wstring>;
+
+std::wstring DynamicWindowProcessName(HWND hWnd,
+                                      DynamicProcessNameCache& cache) {
     DWORD processId = 0;
     GetWindowThreadProcessId(hWnd, &processId);
     if (!processId) {
         return {};
+    }
+
+    auto cached = cache.find(processId);
+    if (cached != cache.end()) {
+        return cached->second;
     }
 
     HANDLE process =
@@ -20367,6 +20298,7 @@ std::wstring DynamicWindowProcessName(HWND hWnd) {
     }
 
     CloseHandle(process);
+    cache.emplace(processId, result);
     return result;
 }
 
@@ -20378,7 +20310,8 @@ bool IsIgnoredDynamicWindowProcess(const std::wstring& processName) {
            processName == L"textinputhost.exe";
 }
 
-bool IsDynamicWindowCandidate(HWND hWnd) {
+bool IsDynamicWindowCandidate(HWND hWnd,
+                              DynamicProcessNameCache& processNameCache) {
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd) ||
         IsDynamicWindowCloaked(hWnd) || GetAncestor(hWnd, GA_ROOT) != hWnd) {
         return false;
@@ -20395,7 +20328,8 @@ bool IsDynamicWindowCandidate(HWND hWnd) {
         return false;
     }
 
-    const std::wstring processName = DynamicWindowProcessName(hWnd);
+    const std::wstring processName =
+        DynamicWindowProcessName(hWnd, processNameCache);
     if (IsIgnoredDynamicWindowProcess(processName)) {
         return false;
     }
@@ -20411,7 +20345,12 @@ bool IsDynamicWindowCandidate(HWND hWnd) {
         return false;
     }
 
-    return rect.right - rect.left >= 120 && rect.bottom - rect.top >= 80;
+    UINT dpi = GetDpiForWindow(hWnd);
+    dpi = dpi ? dpi : 96;
+    int minimumWidth = MulDiv(120, dpi, 96);
+    int minimumHeight = MulDiv(80, dpi, 96);
+    return rect.right - rect.left >= minimumWidth &&
+           rect.bottom - rect.top >= minimumHeight;
 }
 
 bool DynamicWindowCoversMonitor(HWND hWnd) {
@@ -20436,33 +20375,49 @@ bool DynamicWindowCoversMonitor(HWND hWnd) {
 struct DynamicWindowSearchContext {
     DynamicThemeTrigger trigger;
     MonitorSet* monitors;
+    std::unordered_map<HMONITOR, HWND>* lowestWindows;
+    DynamicProcessNameCache processNameCache;
 };
 
 BOOL CALLBACK FindDynamicWindowProc(HWND hWnd, LPARAM lParam) {
     auto* context =
         reinterpret_cast<DynamicWindowSearchContext*>(lParam);
-    if (!IsDynamicWindowCandidate(hWnd)) {
+    if (!IsDynamicWindowCandidate(hWnd, context->processNameCache)) {
         return TRUE;
     }
+
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
+    if (!monitor) {
+        return TRUE;
+    }
+
+    // EnumWindows visits top-level windows from top to bottom. Overwriting the
+    // entry leaves the lowest eligible app window for each monitor, which the
+    // raised taskbar can sit behind without doing process/DWM work in hooks.
+    (*context->lowestWindows)[monitor] = hWnd;
 
     if (context->trigger != DynamicThemeTrigger::anyWindow &&
         !IsZoomed(hWnd) && !DynamicWindowCoversMonitor(hWnd)) {
         return TRUE;
     }
 
-    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
-    if (monitor) {
-        context->monitors->insert(monitor);
-    }
+    context->monitors->insert(monitor);
 
     return TRUE;
 }
 
 MonitorSet FindDynamicThemeMonitors() {
     MonitorSet monitors;
+    std::unordered_map<HMONITOR, HWND> lowestWindows;
     DynamicWindowSearchContext context{g_dynamicThemeTrigger.load(),
-                                       &monitors};
+                                       &monitors, &lowestWindows, {}};
     EnumWindows(FindDynamicWindowProc, reinterpret_cast<LPARAM>(&context));
+
+    {
+        std::scoped_lock lock(g_dynamicWindowSnapshotMutex);
+        g_lowestDynamicWindowByMonitor = std::move(lowestWindows);
+    }
+
     return monitors;
 }
 
@@ -20480,18 +20435,99 @@ MonitorSet GetConnectedMonitors() {
 
 struct TaskbarPositionContext {
     bool forceBottom;
-    int distanceInDip;
 };
 
 using SetWindowPos_t = decltype(&SetWindowPos);
 SetWindowPos_t SetWindowPos_Original;
 
+struct RaisedTaskbarState {
+    int originalBottomOffset;
+    bool wasTopmost;
+};
+
+std::mutex g_raisedTaskbarsMutex;
+std::unordered_map<HWND, RaisedTaskbarState> g_raisedTaskbars;
+
+void RememberRaisedTaskbarState(HWND hWnd) {
+    {
+        std::scoped_lock lock(g_raisedTaskbarsMutex);
+        std::erase_if(g_raisedTaskbars,
+                      [](const auto& entry) { return !IsWindow(entry.first); });
+        if (g_raisedTaskbars.contains(hWnd)) {
+            return;
+        }
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{.cbSize = sizeof(monitorInfo)};
+    RECT taskbarRect{};
+    if (!GetMonitorInfoW(monitor, &monitorInfo) ||
+        !GetWindowRect(hWnd, &taskbarRect)) {
+        return;
+    }
+
+    RaisedTaskbarState state{
+        .originalBottomOffset =
+            monitorInfo.rcMonitor.bottom - taskbarRect.bottom,
+        .wasTopmost =
+            (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0,
+    };
+
+    std::scoped_lock lock(g_raisedTaskbarsMutex);
+    g_raisedTaskbars.try_emplace(hWnd, state);
+}
+
+bool RestoreRaisedTaskbar(HWND hWnd) {
+    RaisedTaskbarState state{};
+    {
+        std::scoped_lock lock(g_raisedTaskbarsMutex);
+        auto it = g_raisedTaskbars.find(hWnd);
+        if (it == g_raisedTaskbars.end()) {
+            return false;
+        }
+        state = it->second;
+    }
+
+    if (!IsWindow(hWnd)) {
+        std::scoped_lock lock(g_raisedTaskbarsMutex);
+        g_raisedTaskbars.erase(hWnd);
+        return false;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{.cbSize = sizeof(monitorInfo)};
+    RECT taskbarRect{};
+    if (!GetMonitorInfoW(monitor, &monitorInfo) ||
+        !GetWindowRect(hWnd, &taskbarRect)) {
+        return false;
+    }
+
+    int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
+    if (taskbarHeight <= 0) {
+        return false;
+    }
+
+    int targetTop = monitorInfo.rcMonitor.bottom - taskbarHeight -
+                    state.originalBottomOffset;
+    auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
+                                              : SetWindowPos;
+    HWND insertAfter = state.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST;
+    if (!setWindowPos(hWnd, insertAfter, taskbarRect.left, targetTop, 0, 0,
+                      SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                          SWP_NOSENDCHANGING)) {
+        return false;
+    }
+
+    std::scoped_lock lock(g_raisedTaskbarsMutex);
+    g_raisedTaskbars.erase(hWnd);
+    return true;
+}
+
 bool ShouldRaiseTaskbarFromBottom(HWND hWnd) {
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     return !g_forceTaskbarBottom.load() &&
            !IsMonitorUsingWindowTheme(monitor) &&
-           g_desktopThemeName == L"Minecraft_Hotbar" &&
-           g_settings.minecraft.raiseFromBottom > 0;
+           g_raiseTaskbarFromBottomEnabled.load();
 }
 
 int GetRaisedTaskbarTop(HWND hWnd, int taskbarHeight) {
@@ -20502,30 +20538,19 @@ int GetRaisedTaskbarTop(HWND hWnd, int taskbarHeight) {
     }
 
     UINT dpi = GetDpiForWindow(hWnd);
-    int distanceInPixels = MulDiv(
-        g_settings.minecraft.raiseFromBottom, dpi ? dpi : 96, 96);
+    int distanceInPixels =
+        MulDiv(g_raiseFromBottomDip.load(), dpi ? dpi : 96, 96);
     return monitorInfo.rcMonitor.bottom - taskbarHeight - distanceInPixels;
 }
 
 HWND FindLowestDynamicWindowForTaskbar(HWND taskbarWindow) {
     HMONITOR taskbarMonitor =
         MonitorFromWindow(taskbarWindow, MONITOR_DEFAULTTONEAREST);
-    HWND lowestWindow = nullptr;
-
-    for (HWND hWnd = GetTopWindow(nullptr); hWnd;
-         hWnd = GetWindow(hWnd, GW_HWNDNEXT)) {
-        if (hWnd == taskbarWindow || !IsDynamicWindowCandidate(hWnd)) {
-            continue;
-        }
-
-        HMONITOR windowMonitor =
-            MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
-        if (windowMonitor == taskbarMonitor) {
-            lowestWindow = hWnd;
-        }
-    }
-
-    return lowestWindow;
+    std::scoped_lock lock(g_dynamicWindowSnapshotMutex);
+    auto it = g_lowestDynamicWindowByMonitor.find(taskbarMonitor);
+    return it != g_lowestDynamicWindowByMonitor.end() && IsWindow(it->second)
+               ? it->second
+               : nullptr;
 }
 
 bool IsWindowAboveInZOrder(HWND upperWindow, HWND lowerWindow) {
@@ -20547,19 +20572,19 @@ void EnsureTaskbarWindowZOrder(HWND hWnd) {
         return;
     }
 
+    if (!ShouldRaiseTaskbarFromBottom(hWnd)) {
+        RestoreRaisedTaskbar(hWnd);
+        return;
+    }
+
+    RememberRaisedTaskbarState(hWnd);
+
     auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
                                               : SetWindowPos;
     constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                            SWP_NOOWNERZORDER | SWP_NOSENDCHANGING;
     bool isTopmost =
         (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-
-    if (!ShouldRaiseTaskbarFromBottom(hWnd)) {
-        if (!isTopmost) {
-            setWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
-        }
-        return;
-    }
 
     if (isTopmost) {
         setWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
@@ -20577,6 +20602,8 @@ void AdjustTaskbarWindowZOrder(HWND hWnd, WINDOWPOS* windowPos) {
         (windowPos->flags & SWP_NOZORDER)) {
         return;
     }
+
+    RememberRaisedTaskbarState(hWnd);
 
     if (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
         auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
@@ -20611,6 +20638,7 @@ void AdjustTaskbarWindowPos(HWND hWnd, WINDOWPOS* windowPos) {
         return;
     }
 
+    RememberRaisedTaskbarState(hWnd);
     windowPos->y = targetTop;
     windowPos->flags |= SWP_NOSENDCHANGING;
 }
@@ -20637,6 +20665,7 @@ void CorrectTaskbarPositionBeforePaint(HWND hWnd) {
     }
 
     g_correctingTaskbarPositionBeforePaint = true;
+    RememberRaisedTaskbarState(hWnd);
     auto setWindowPos =
         SetWindowPos_Original ? SetWindowPos_Original : SetWindowPos;
     setWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
@@ -20733,17 +20762,18 @@ BOOL CALLBACK PositionTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
         return TRUE;
     }
 
-    int distanceInPixels = 0;
     bool raiseFromBottom =
         !context->forceBottom && ShouldRaiseTaskbarFromBottom(hWnd);
-    if (raiseFromBottom) {
-        UINT dpi = GetDpiForWindow(hWnd);
-        distanceInPixels =
-            MulDiv(context->distanceInDip, dpi ? dpi : 96, 96);
+    if (!raiseFromBottom) {
+        RestoreRaisedTaskbar(hWnd);
+        return TRUE;
     }
 
-    int targetTop = monitorInfo.rcMonitor.bottom - taskbarHeight -
-                    distanceInPixels;
+    RememberRaisedTaskbarState(hWnd);
+    int targetTop = GetRaisedTaskbarTop(hWnd, taskbarHeight);
+    if (targetTop == INT_MIN) {
+        return TRUE;
+    }
     if (std::abs(taskbarRect.top - targetTop) > 1) {
         auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
                                                   : SetWindowPos;
@@ -20756,10 +20786,7 @@ BOOL CALLBACK PositionTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
 }
 
 void UpdateTaskbarPositions(bool forceBottom = false) {
-    TaskbarPositionContext context{
-        forceBottom,
-        g_settings.minecraft.raiseFromBottom,
-    };
+    TaskbarPositionContext context{forceBottom};
     EnumWindows(PositionTaskbarWindowProc,
                 reinterpret_cast<LPARAM>(&context));
 }
@@ -20865,11 +20892,71 @@ void ReinitializeDynamicTheme() {
     }
 }
 
+void CALLBACK DynamicWindowWinEventProc(HWINEVENTHOOK,
+                                        DWORD event,
+                                        HWND hWnd,
+                                        LONG idObject,
+                                        LONG idChild,
+                                        DWORD,
+                                        DWORD) {
+    if (!g_dynamicThemeRefreshEvent || idObject != OBJID_WINDOW ||
+        idChild != CHILDID_SELF) {
+        return;
+    }
+
+    // A destroyed window may no longer have a queryable root or class, but it
+    // still has to invalidate the per-monitor snapshot.
+    if (event != EVENT_OBJECT_DESTROY) {
+        if (!hWnd || GetAncestor(hWnd, GA_ROOT) != hWnd) {
+            return;
+        }
+
+        WCHAR className[128]{};
+        GetClassNameW(hWnd, className, ARRAYSIZE(className));
+        if (IsIgnoredDynamicWindowClass(className)) {
+            return;
+        }
+    }
+
+    SetEvent(g_dynamicThemeRefreshEvent);
+}
+
 DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
-    std::unordered_map<HMONITOR, int> windowThemeStableChecks;
     std::unordered_map<HMONITOR, ULONGLONG> desktopCandidateStart;
 
-    while (WaitForSingleObject(g_dynamicThemeStopEvent, 250) == WAIT_TIMEOUT) {
+    MSG message{};
+    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+
+    // Out-of-context WinEvent callbacks are delivered on this thread while it
+    // pumps messages. These hooks cover the state changes that can affect
+    // whether a monitor uses the desktop or window theme.
+    std::vector<HWINEVENTHOOK> eventHooks;
+    auto addEventHook = [&](DWORD eventMin, DWORD eventMax) {
+        HWINEVENTHOOK hook = SetWinEventHook(
+            eventMin, eventMax, nullptr, DynamicWindowWinEventProc, 0, 0,
+            WINEVENT_OUTOFCONTEXT);
+        if (hook) {
+            eventHooks.push_back(hook);
+        } else {
+            Wh_Log(L"Failed to register WinEvent hook %08X-%08X",
+                   eventMin, eventMax);
+        }
+    };
+
+    addEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE);
+    addEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE);
+    addEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED);
+    addEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND);
+    addEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND);
+
+    constexpr DWORD kSafetyRefreshMilliseconds = 5000;
+    DWORD nextRefreshMilliseconds = 0;
+
+    while (true) {
+        if (WaitForSingleObject(g_dynamicThemeStopEvent, 0) == WAIT_OBJECT_0) {
+            break;
+        }
+
         MonitorSet connectedMonitors = GetConnectedMonitors();
         MonitorSet matchingMonitors = FindDynamicThemeMonitors();
         MonitorSet activeMonitors = GetWindowThemeMonitorsSnapshot();
@@ -20877,7 +20964,7 @@ DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
         ULONGLONG now = GetTickCount64();
         ULONGLONG delayMilliseconds =
             static_cast<ULONGLONG>(
-                g_settings.desktopReturnDelaySeconds) *
+                g_desktopReturnDelaySeconds.load()) *
             1000;
 
         for (auto it = desiredMonitors.begin();
@@ -20889,25 +20976,15 @@ DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
             }
         }
 
+        nextRefreshMilliseconds = kSafetyRefreshMilliseconds;
         for (HMONITOR monitor : connectedMonitors) {
             bool hasMatchingWindow = matchingMonitors.contains(monitor);
             bool windowThemeActive = activeMonitors.contains(monitor);
 
             if (hasMatchingWindow) {
                 desktopCandidateStart.erase(monitor);
-
-                if (windowThemeActive) {
-                    windowThemeStableChecks.erase(monitor);
-                    continue;
-                }
-
-                if (++windowThemeStableChecks[monitor] >= 2) {
-                    desiredMonitors.insert(monitor);
-                    windowThemeStableChecks.erase(monitor);
-                }
+                desiredMonitors.insert(monitor);
             } else {
-                windowThemeStableChecks.erase(monitor);
-
                 if (!windowThemeActive) {
                     desktopCandidateStart.erase(monitor);
                     continue;
@@ -20918,20 +20995,53 @@ DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
                 if (now - it->second >= delayMilliseconds) {
                     desiredMonitors.erase(monitor);
                     desktopCandidateStart.erase(it);
+                } else {
+                    DWORD remaining = static_cast<DWORD>(std::min<ULONGLONG>(
+                        delayMilliseconds - (now - it->second),
+                        kSafetyRefreshMilliseconds));
+                    nextRefreshMilliseconds =
+                        std::min(nextRefreshMilliseconds, remaining);
                 }
             }
         }
 
         UpdateTaskbarZOrders();
 
-        if (desiredMonitors == activeMonitors) {
-            continue;
+        if (desiredMonitors != activeMonitors) {
+            SetWindowThemeMonitors(desiredMonitors);
+            UpdateTaskbarPositions();
+            UpdateTaskbarZOrders();
+            ReinitializeDynamicTheme();
         }
 
-        SetWindowThemeMonitors(desiredMonitors);
-        UpdateTaskbarPositions();
-        UpdateTaskbarZOrders();
-        ReinitializeDynamicTheme();
+        HANDLE waitHandles[]{g_dynamicThemeStopEvent,
+                             g_dynamicThemeRefreshEvent};
+        DWORD waitResult = MsgWaitForMultipleObjects(
+            ARRAYSIZE(waitHandles), waitHandles, FALSE,
+            nextRefreshMilliseconds, QS_ALLINPUT);
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Dynamic theme wait failed: %u", GetLastError());
+            break;
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + ARRAYSIZE(waitHandles)) {
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+
+            // Consume a refresh signalled by a WinEvent callback while the
+            // message queue was being drained. The next loop performs one
+            // coalesced scan even if several window events arrived together.
+            WaitForSingleObject(g_dynamicThemeRefreshEvent, 0);
+        }
+    }
+
+    for (HWINEVENTHOOK hook : eventHooks) {
+        UnhookWinEvent(hook);
     }
 
     return 0;
@@ -20949,6 +21059,19 @@ void StartDynamicThemeThread() {
     g_dynamicThemeStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_dynamicThemeStopEvent) {
         Wh_Log(L"Failed to create dynamic theme stop event");
+        g_forceTaskbarBottom = true;
+        UpdateTaskbarPositions(true);
+        return;
+    }
+
+    g_dynamicThemeRefreshEvent =
+        CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_dynamicThemeRefreshEvent) {
+        Wh_Log(L"Failed to create dynamic theme refresh event");
+        CloseHandle(g_dynamicThemeStopEvent);
+        g_dynamicThemeStopEvent = nullptr;
+        g_forceTaskbarBottom = true;
+        UpdateTaskbarPositions(true);
         return;
     }
 
@@ -20956,8 +21079,12 @@ void StartDynamicThemeThread() {
         CreateThread(nullptr, 0, DynamicThemeThreadProc, nullptr, 0, nullptr);
     if (!g_dynamicThemeThread) {
         Wh_Log(L"Failed to create dynamic theme thread");
+        CloseHandle(g_dynamicThemeRefreshEvent);
         CloseHandle(g_dynamicThemeStopEvent);
+        g_dynamicThemeRefreshEvent = nullptr;
         g_dynamicThemeStopEvent = nullptr;
+        g_forceTaskbarBottom = true;
+        UpdateTaskbarPositions(true);
     }
 }
 
@@ -20973,8 +21100,10 @@ void StopDynamicThemeThread() {
     SetEvent(g_dynamicThemeStopEvent);
     WaitForSingleObject(g_dynamicThemeThread, INFINITE);
     CloseHandle(g_dynamicThemeThread);
+    CloseHandle(g_dynamicThemeRefreshEvent);
     CloseHandle(g_dynamicThemeStopEvent);
     g_dynamicThemeThread = nullptr;
+    g_dynamicThemeRefreshEvent = nullptr;
     g_dynamicThemeStopEvent = nullptr;
     UpdateTaskbarPositions(true);
     UpdateTaskbarZOrders();
@@ -20986,6 +21115,8 @@ void LoadSettings() {
         return std::wstring(*value.get() ? value.get() : fallback);
     };
 
+    ModSettings settings{};
+
     auto loadIndicator = [&](PCWSTR prefix, IndicatorSettings& indicator,
                              PCWSTR defaultInactiveColor,
                              PCWSTR defaultActiveColor,
@@ -20995,7 +21126,8 @@ void LoadSettings() {
         indicator.inactiveColor =
             loadString(settingName.c_str(), defaultInactiveColor);
         settingName = std::wstring(prefix) + L".activeColor";
-        indicator.activeColor = loadString(settingName.c_str(), defaultActiveColor);
+        indicator.activeColor =
+            loadString(settingName.c_str(), defaultActiveColor);
 
         settingName = std::wstring(prefix) + L".inactiveWidth";
         int value = Wh_GetIntSetting(settingName.c_str());
@@ -21024,55 +21156,76 @@ void LoadSettings() {
             std::clamp(Wh_GetIntSetting(settingName.c_str()), 0, 20);
     };
 
-    g_settings.clickThroughTaskbar = Wh_GetIntSetting(L"clickThroughTaskbar");
-    g_settings.clipCornerRadius =
+    settings.clickThroughTaskbar = Wh_GetIntSetting(L"clickThroughTaskbar");
+    settings.clipCornerRadius =
         std::clamp(Wh_GetIntSetting(L"clipCornerRadius"), 0, 100);
-    g_settings.desktopReturnDelaySeconds = std::clamp(
+    settings.desktopReturnDelaySeconds = std::clamp(
         Wh_GetIntSetting(L"desktopReturnDelaySeconds"), 0, 3600);
 
-    g_settings.minecraft.slotSize =
+    settings.minecraft.slotSize =
         std::clamp(Wh_GetIntSetting(L"minecraft.slotSize"), 32, 100);
-    g_settings.minecraft.iconSize =
+    settings.minecraft.iconSize =
         std::clamp(Wh_GetIntSetting(L"minecraft.iconSize"), 12, 80);
-    g_settings.minecraft.iconSize = std::min(
-        g_settings.minecraft.iconSize, g_settings.minecraft.slotSize);
-    g_settings.minecraft.taskbarHeight =
+    settings.minecraft.iconSize = std::min(
+        settings.minecraft.iconSize, settings.minecraft.slotSize);
+    settings.minecraft.taskbarHeight =
         std::clamp(Wh_GetIntSetting(L"minecraft.taskbarHeight"), 40, 140);
-    g_settings.minecraft.horizontalPadding = std::clamp(
+    settings.minecraft.horizontalPadding = std::clamp(
         Wh_GetIntSetting(L"minecraft.horizontalPadding"), 0, 100);
-    g_settings.minecraft.raiseFromBottom = std::clamp(
+    settings.minecraft.raiseFromBottom = std::clamp(
         Wh_GetIntSetting(L"minecraft.raiseFromBottom"), 0, 1000);
-    g_settings.nativeIconSize =
+    settings.nativeIconSize =
         std::clamp(Wh_GetIntSetting(L"nativeIconSize"), 12, 64);
 
-    loadIndicator(L"minecraft.indicator", g_settings.minecraft.indicator,
+    loadIndicator(L"minecraft.indicator", settings.minecraft.indicator,
                   L"#009DD6", L"#FF9D00", 12, 24, 5);
-    loadIndicator(L"nativeIndicator", g_settings.nativeIndicator,
+    loadIndicator(L"nativeIndicator", settings.nativeIndicator,
                   L"#009DD6", L"#FF9D00", 12, 26, 5);
 
-    PCWSTR desktopTheme = Wh_GetStringSetting(L"desktopTheme");
-    g_desktopThemeName = *desktopTheme ? desktopTheme : L"Minecraft_Hotbar";
-    Wh_FreeStringSetting(desktopTheme);
+    std::wstring desktopTheme =
+        loadString(L"desktopTheme", L"Minecraft_Hotbar");
+    std::wstring windowTheme = loadString(L"windowTheme", L"Native");
+    std::wstring dynamicTrigger =
+        loadString(L"dynamicTrigger", L"maximized");
+    std::wstring xamlDiagnosticsHandling =
+        loadString(L"xamlDiagnosticsHandling", L"block");
 
-    PCWSTR windowTheme = Wh_GetStringSetting(L"windowTheme");
-    g_windowThemeName = *windowTheme ? windowTheme : L"Native";
-    Wh_FreeStringSetting(windowTheme);
-
-    PCWSTR dynamicTrigger = Wh_GetStringSetting(L"dynamicTrigger");
-    g_dynamicThemeTrigger = wcscmp(dynamicTrigger, L"anyWindow") == 0
-                                ? DynamicThemeTrigger::anyWindow
-                                : DynamicThemeTrigger::maximized;
-    Wh_FreeStringSetting(dynamicTrigger);
-
-    PCWSTR xamlDiagnosticsHandling =
-        Wh_GetStringSetting(L"xamlDiagnosticsHandling");
-    g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kAlert;
-    if (wcscmp(xamlDiagnosticsHandling, L"block") == 0) {
-        g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kBlock;
-    } else if (wcscmp(xamlDiagnosticsHandling, L"allow") == 0) {
-        g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kAllow;
+    DynamicThemeTrigger trigger = dynamicTrigger == L"anyWindow"
+                                      ? DynamicThemeTrigger::anyWindow
+                                      : DynamicThemeTrigger::maximized;
+    settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kBlock;
+    if (xamlDiagnosticsHandling == L"block") {
+        settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kBlock;
+    } else if (xamlDiagnosticsHandling == L"allow") {
+        settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kAllow;
     }
-    Wh_FreeStringSetting(xamlDiagnosticsHandling);
+
+    const bool raiseEnabled = desktopTheme == L"Minecraft_Hotbar" &&
+                              settings.minecraft.raiseFromBottom > 0;
+    const int raiseFromBottomDip = settings.minecraft.raiseFromBottom;
+    const int returnDelaySeconds = settings.desktopReturnDelaySeconds;
+    const bool clickThroughEnabled = settings.clickThroughTaskbar;
+    const int clipCornerRadius = settings.clipCornerRadius;
+    const XamlDiagnosticsHandling diagnosticsHandling =
+        settings.xamlDiagnosticsHandling;
+
+    // Disable the hot-path decision before replacing the backing strings and
+    // structs. It is re-enabled after the complete settings snapshot is ready.
+    g_raiseTaskbarFromBottomEnabled.store(false);
+    {
+        std::scoped_lock settingsLock(g_settingsMutex);
+        g_settings = std::move(settings);
+        g_desktopThemeName = std::move(desktopTheme);
+        g_windowThemeName = std::move(windowTheme);
+    }
+
+    g_raiseFromBottomDip.store(raiseFromBottomDip);
+    g_desktopReturnDelaySeconds.store(returnDelaySeconds);
+    g_clickThroughTaskbarEnabled.store(clickThroughEnabled);
+    g_clipCornerRadius.store(clipCornerRadius);
+    g_xamlDiagnosticsHandling.store(diagnosticsHandling);
+    g_dynamicThemeTrigger.store(trigger);
+    g_raiseTaskbarFromBottomEnabled.store(raiseEnabled);
 }
 
 BOOL Wh_ModInit() {
@@ -21133,8 +21286,6 @@ BOOL Wh_ModInit() {
     // Hook immediately if DLL is already loaded.
     HookInitializeXamlDiagnosticsExIfNeeded();
 
-    StartStatsTimer();
-
     return TRUE;
 }
 
@@ -21181,8 +21332,6 @@ void Wh_ModUninit() {
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
     }
-
-    StopStatsTimer();
 
     StopImageDownloads();
 
