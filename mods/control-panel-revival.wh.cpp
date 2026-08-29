@@ -1,14 +1,14 @@
 // ==WindhawkMod==
-// @id              control-panel-revival
+// @id              control-panel-revival-admxp8
 // @name            Control Panel Revival
 // @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
-// @version         0.9.8
+// @version         0.9.9
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshlwapi
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -36,9 +36,10 @@ You can also add the ID of your desired applet to prevent it from being redirect
 
 **How it works:** the mod hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
 
-**A note on `CompareStringOrdinal` scoping:** we tried restricting the override to calls whose return address falls inside `shell32.dll` (and later, `shell32.dll` or `windows.storage.dll`), using `GetModuleHandleExW(..., GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, ...)` on the caller's return address. Both attempts broke the mod's actual functionality in testing, which means the real comparison this mod needs to influence isn't reliably reachable that way (most likely it happens through a COM/vtable call chain, or a helper whose return address doesn't resolve the way a direct call would). Given that, the hook is intentionally left unscoped by caller. The blast radius is still bounded in a few concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`; it requires an exact, full-length match against a small, specific set of applet-identifier strings (6 built-in + whatever the user adds in `CustomApplets`); and it never fires for a comparison that wasn't already reporting equality. We're open to a more surgical fix if a maintainer can point at the actual call site.
+**A note on `CompareStringOrdinal` scoping:** we tried restricting the override to calls whose return address falls inside `shell32.dll` (and later, `shell32.dll` or `windows.storage.dll`), using `GetModuleHandleExW(..., GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, ...)` on the caller's return address. Both attempts broke the mod's actual functionality in testing, which means the real comparison this mod needs to influence isn't reliably reachable that way (most likely it happens through a COM/vtable call chain, or a helper whose return address doesn't resolve the way a direct call would). Given that, the hook is intentionally left unscoped by caller. The blast radius is still bounded in a few concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`; it requires an exact, full-length match against a small, specific set of applet-identifier strings (12 built-in + whatever the user adds in `CustomApplets`); and it never fires for a comparison that wasn't already reporting equality. We're open to a more surgical fix if a maintainer can point at the actual call site.
 
 **Difference from `settings-to-control-panel`:** that mod also hooks `_MapLegacyName`, but its behavior differs for the applets this mod targets. For Troubleshooting, it launches `msdt.exe` directly instead of opening the applet itself; for Installed Updates and Default Programs, it has no mechanism at all to stop the redirect to Settings. This mod specifically restores the classic in-Control-Panel behavior for those items.
+
 */
 // ==/WindhawkModReadme==
 
@@ -62,13 +63,13 @@ You can also add the ID of your desired applet to prevent it from being redirect
 
 #include <windows.h>
 #include <windhawk_utils.h>
-#include <shlwapi.h>
 
 #include <string>
 #include <string_view>
 #include <vector>
 #include <algorithm>
 #include <cwctype>
+#include <exception>
 
 // These applets exist but they redirect to the modern Settings app on 23H2+.
 // constexpr std::wstring_view (rather than LPCWSTR) so .size() is computed
@@ -233,29 +234,6 @@ bool IsSupportedWindowsVersion() {
     return false;
 }
 
-// rundll32.exe hosts arbitrary DLLs and Windows spawns it constantly for
-// completely unrelated work. Without this check, every such instance would
-// still hook CompareStringOrdinal/LoadLibraryExW for nothing. Only bail out
-// for rundll32.exe specifically, and only when its command line doesn't
-// look like a Control Panel applet host - explorer.exe/control.exe are
-// never affected by this check.
-static bool ShouldBailOutForThisProcess() {
-    wchar_t exePath[MAX_PATH];
-    DWORD len = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    if (len == 0 || len >= ARRAYSIZE(exePath)) {
-        return false; // couldn't determine the process name; don't risk bailing incorrectly
-    }
-
-    LPCWSTR exeName = wcsrchr(exePath, L'\\');
-    exeName = exeName ? exeName + 1 : exePath;
-
-    if (_wcsicmp(exeName, L"rundll32.exe") != 0) {
-        return false; // not rundll32.exe - always proceed (explorer.exe / control.exe)
-    }
-
-    return StrStrIW(GetCommandLineW(), L"Control_RunDLL") == nullptr;
-}
-
 // Hooks
 bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
 
@@ -266,28 +244,34 @@ bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, boo
 // settings-to-control-panel's own whitelist is doing if both mods are
 // enabled together.
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
-    bool isTargeted = false;
+    // Same reasoning as CompareStringOrdinal_hook: never let a C++
+    // exception escape into shell32's non-C++ call frames.
+    try {
+        bool isTargeted = false;
 
-    if (pszLegacyName) {
-        for (const auto& applet : g_szAppletsToUnhide) {
-            if (applet.compare(pszLegacyName) == 0) { isTargeted = true; break; }
-        }
-        if (!isTargeted) {
-            for (const auto& name : g_szCanonicalNames) {
-                if (name.compare(pszLegacyName) == 0) { isTargeted = true; break; }
+        if (pszLegacyName) {
+            for (const auto& applet : g_szAppletsToUnhide) {
+                if (applet.compare(pszLegacyName) == 0) { isTargeted = true; break; }
+            }
+            if (!isTargeted) {
+                for (const auto& name : g_szCanonicalNames) {
+                    if (name.compare(pszLegacyName) == 0) { isTargeted = true; break; }
+                }
+            }
+            if (!isTargeted) {
+                for (const auto& entry : g_customApplets) {
+                    if (entry == pszLegacyName) { isTargeted = true; break; }
+                }
             }
         }
-        if (!isTargeted) {
-            for (const auto& entry : g_customApplets) {
-                if (entry == pszLegacyName) { isTargeted = true; break; }
-            }
-        }
-    }
 
-    if (isTargeted) {
-        if (nameChanged) *nameChanged = false;
-        if (pszNewName && uUnused > 0) *pszNewName = L'\0';
-        return false;
+        if (isTargeted) {
+            if (nameChanged) *nameChanged = false;
+            if (pszNewName && uUnused > 0) *pszNewName = L'\0';
+            return false;
+        }
+    } catch (...) {
+        Wh_Log(L"COpenControlPanel__MapLegacyName_hook: caught an exception, falling back to the original implementation");
     }
 
     if (COpenControlPanel__MapLegacyName_orig) {
@@ -368,15 +352,26 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
 
-    int result = CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
+    // A hook function is called from non-C++ trampolines (kernelbase's own
+    // dispatch code). If a C++ exception (e.g. std::bad_alloc from a
+    // std::vector/std::wstring operation) escaped this function
+    // uncaught, it would unwind into stack frames that don't know how to
+    // handle it - almost certainly crashing the host process outright.
+    // Catch anything here and fall back to the real, unmodified comparison.
+    try {
+        int result = CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
 
-    if (result == CSTR_EQUAL && lpString1 && lpString2 &&
-        (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
-         MatchesTargetList(lpString2, cchCount2, bIgnoreCase))) {
-        return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
+        if (result == CSTR_EQUAL && lpString1 && lpString2 &&
+            (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
+             MatchesTargetList(lpString2, cchCount2, bIgnoreCase))) {
+            return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
+        }
+
+        return result;
+    } catch (...) {
+        Wh_Log(L"CompareStringOrdinal_hook: caught an exception, falling back to the real comparison result");
+        return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
     }
-
-    return result;
 }
 
 // Resolved against shell32.dll - see ApplyShell32Hooks below.
@@ -389,16 +384,10 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     }
 };
 
-// rundll32.exe does NOT statically import shell32.dll - it loads it later,
-// at runtime, when asked to run "shell32.dll,Control_RunDLL". Wh_ModInit
-// runs before that happens, so GetModuleHandleW(L"shell32.dll") returns
-// NULL there and the _MapLegacyName hook would never get installed in
-// exactly the host process that actually runs Control Panel applets.
-//
-// Fix: hook LoadLibraryExW in kernelbase.dll (internal callers go straight
-// to kernelbase, not through the kernel32 import) and install the shell32
-// hook the moment shell32.dll actually gets loaded, whenever that happens -
-// at Wh_ModInit time (explorer.exe, control.exe) or later (rundll32.exe).
+// control.exe/explorer.exe aren't guaranteed to have shell32.dll loaded
+// yet at Wh_ModInit time in every scenario. Fix: hook LoadLibraryExW in
+// kernelbase.dll and install the shell32 hook the moment shell32.dll
+// actually gets loaded, whenever that happens - at Wh_ModInit time or later.
 //
 // g_shell32HookApplied is claimed atomically BEFORE any work happens (not
 // after), so concurrent calls from different threads can't race each other
@@ -447,24 +436,31 @@ LoadLibraryExW_t LoadLibraryExW_orig = nullptr;
 HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE result = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
 
-    if (result && !g_shell32HookApplied) {
-        // Resource-only loads don't map the module the normal way (no
-        // import resolution, no DllMain) - not a meaningful "shell32 is now
-        // usable" signal, so skip them rather than act on them.
-        constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
-                                              LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
-                                              LOAD_LIBRARY_AS_IMAGE_RESOURCE;
-        if ((dwFlags & kResourceOnlyFlags) == 0) {
-            // Compare the returned handle against shell32.dll's actual base
-            // address instead of matching the requested file name string:
-            // shell32 can arrive as a static dependency of some other DLL
-            // loaded through this same API, in which case lpLibFileName
-            // would be that other DLL's name/path, not "shell32.dll" - a
-            // name-based check would miss that case entirely.
-            if (result == GetModuleHandleW(L"shell32.dll")) {
-                ApplyShell32Hooks(/*isLateLoad=*/true);
+    try {
+        if (result && !g_shell32HookApplied) {
+            // Resource-only loads don't map the module the normal way (no
+            // import resolution, no DllMain) - not a meaningful "shell32 is
+            // now usable" signal, so skip them rather than act on them.
+            constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
+                                                  LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                                  LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+            if ((dwFlags & kResourceOnlyFlags) == 0) {
+                // Compare the returned handle against shell32.dll's actual
+                // base address instead of matching the requested file name
+                // string: shell32 can arrive as a static dependency of some
+                // other DLL loaded through this same API, in which case
+                // lpLibFileName would be that other DLL's name/path, not
+                // "shell32.dll" - a name-based check would miss that case
+                // entirely.
+                if (result == GetModuleHandleW(L"shell32.dll")) {
+                    ApplyShell32Hooks(/*isLateLoad=*/true);
+                }
             }
         }
+    } catch (...) {
+        // Never let an exception escape into the loader's call frames - the
+        // real LoadLibraryExW result is still returned either way below.
+        Wh_Log(L"LoadLibraryExW_hook: caught an exception while checking for shell32.dll");
     }
 
     return result;
@@ -476,58 +472,66 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    if (ShouldBailOutForThisProcess()) {
-        Wh_Log(L"This rundll32.exe instance isn't hosting a Control Panel applet; mod bypassed for this process.");
+    // Wraps all of initialization: this runs before the host process has
+    // fully started, and a stray uncaught exception here would take
+    // explorer.exe/control.exe down with it. Fail the mod's
+    // own init cleanly instead - the process itself keeps running normally,
+    // just without this mod's changes.
+    try {
+        Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
+
+        LoadCustomAppletSettings();
+
+        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+        if (hKernelBase) {
+            auto pCompareStringOrdinal = (CompareStringOrdinal_t)GetProcAddress(hKernelBase, "CompareStringOrdinal");
+            if (pCompareStringOrdinal) {
+                if (!WindhawkUtils::SetFunctionHook(
+                        (void *)pCompareStringOrdinal,
+                        (void *)CompareStringOrdinal_hook,
+                        (void **)&CompareStringOrdinal_orig)) {
+                    Wh_Log(L"Failed to hook CompareStringOrdinal; the configured applets may not be unhidden in this process");
+                } else {
+                    Wh_Log(L"Successfully hooked CompareStringOrdinal");
+                }
+            } else {
+                Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
+            }
+
+            // Covers a process where shell32.dll hasn't been loaded yet at
+            // this point. If it's already loaded (the common case), this
+            // hook simply won't fire and ApplyShell32Hooks() below handles
+            // that case directly.
+            auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
+            if (pLoadLibraryExW) {
+                if (!WindhawkUtils::SetFunctionHook(
+                        (void *)pLoadLibraryExW,
+                        (void *)LoadLibraryExW_hook,
+                        (void **)&LoadLibraryExW_orig)) {
+                    Wh_Log(L"Failed to hook LoadLibraryExW; a late-loaded shell32.dll in this process won't be patched");
+                } else {
+                    Wh_Log(L"Successfully hooked LoadLibraryExW");
+                }
+            } else {
+                Wh_Log(L"LoadLibraryExW not found in kernelbase.dll");
+            }
+        }
+
+        g_isInitialized = true;
+
+        // Handles the common case: shell32.dll is already loaded. If it
+        // isn't loaded yet in this process, this is a no-op for now and
+        // LoadLibraryExW_hook picks it up later.
+        ApplyShell32Hooks(/*isLateLoad=*/false);
+
+        return TRUE;
+    } catch (const std::exception& e) {
+        Wh_Log(L"Wh_ModInit: caught an exception during initialization: %S", e.what());
+        return FALSE;
+    } catch (...) {
+        Wh_Log(L"Wh_ModInit: caught an unknown exception during initialization");
         return FALSE;
     }
-
-    Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
-
-    LoadCustomAppletSettings();
-
-    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (hKernelBase) {
-        auto pCompareStringOrdinal = (CompareStringOrdinal_t)GetProcAddress(hKernelBase, "CompareStringOrdinal");
-        if (pCompareStringOrdinal) {
-            if (!WindhawkUtils::SetFunctionHook(
-                    (void *)pCompareStringOrdinal,
-                    (void *)CompareStringOrdinal_hook,
-                    (void **)&CompareStringOrdinal_orig)) {
-                Wh_Log(L"Failed to hook CompareStringOrdinal; the configured applets may not be unhidden in this process");
-            } else {
-                Wh_Log(L"Successfully hooked CompareStringOrdinal");
-            }
-        } else {
-            Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
-        }
-
-        // Covers processes where shell32.dll hasn't been loaded yet at this
-        // point (notably rundll32.exe). If it's already loaded
-        // (explorer.exe, control.exe), this hook simply won't fire for it
-        // and ApplyShell32Hooks() below handles that case directly.
-        auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
-        if (pLoadLibraryExW) {
-            if (!WindhawkUtils::SetFunctionHook(
-                    (void *)pLoadLibraryExW,
-                    (void *)LoadLibraryExW_hook,
-                    (void **)&LoadLibraryExW_orig)) {
-                Wh_Log(L"Failed to hook LoadLibraryExW; a late-loaded shell32.dll in this process won't be patched");
-            } else {
-                Wh_Log(L"Successfully hooked LoadLibraryExW");
-            }
-        } else {
-            Wh_Log(L"LoadLibraryExW not found in kernelbase.dll");
-        }
-    }
-
-    g_isInitialized = true;
-
-    // Handles the common case: shell32.dll is already loaded (explorer.exe,
-    // control.exe). If it isn't loaded yet in this process (rundll32.exe),
-    // this is a no-op for now and LoadLibraryExW_hook picks it up later.
-    ApplyShell32Hooks(/*isLateLoad=*/false);
-
-    return TRUE;
 }
 
 void Wh_ModUninit(void) {
