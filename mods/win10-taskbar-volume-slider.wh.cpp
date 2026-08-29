@@ -23,7 +23,7 @@
 // ==WindhawkModReadme==
 /*
 # Windows 10 Taskbar Volume Slider
-<img width="548" height="331" alt="20260826_214734" src="https://github.com/user-attachments/assets/5368ad65-e470-4849-baae-577c7a81b81d" />
+<img width="548" height="331" alt="20260826_214734" src="https://raw.githubusercontent.com/didrmt1/windhawk-mods/main/mods/screenshot9.png" />
 Adds a permanently visible volume slider directly on the Windows 10 taskbar (left side of the system tray).
 
 ### Features
