@@ -10,7 +10,7 @@
 // @include         LogonUI.exe
 // @include         winlogon.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore
+// @compilerOptions -lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore -lshlwapi
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -68,16 +68,19 @@ settings. If you do not do this, it will silently fail to inject.
 #include <string>
 #include <optional>
 #include <mutex>
+#include <atomic>
 #include <regex>
 #include <vector>
 #include <cstdlib>
 #include <cstring>
+#include <climits>
 #include <wrl/client.h>
 #include <winstring.h>
 #include <windows.storage.streams.h>
 #include <wincodec.h>
 #include <shcore.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <eventtoken.h>
 #include <Uxtheme.h>
 
@@ -97,7 +100,7 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 HINSTANCE g_hLogonControllerDll;
 HINSTANCE g_hBlockedShutdownDll;
 
-HANDLE g_doModalExitEvent = nullptr;
+std::atomic<HANDLE> g_hDoModalExitEvent = nullptr;
 
 #pragma region resources
 // Resource IDs
@@ -1792,6 +1795,7 @@ namespace CustomBSDR {
     static int bgWidth = 0;
     static int bgHeight = 0;
     static int scrollPos = 0;
+    static unsigned int scrollLines = 3;
     static int totalContentHeight = 0;
     static bool isOnSecureDesktop = true;
     
@@ -1926,6 +1930,7 @@ void CustomBSDR::CenterWindow(HWND hWnd) {
         return;
     }
 
+    // Center on primary monitor
     RECT rcWindow, rcWorkArea;
     GetWindowRect(hWnd, &rcWindow);
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWorkArea, 0);
@@ -2122,8 +2127,6 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
             if (bgBitmap) {
                 POINT pt = { pDIS->rcItem.left, pDIS->rcItem.top };
                 MapWindowPoints(pDIS->hwndItem, hBgWnd, &pt, 1);
-                pt.x -= bgOffsetX;
-                pt.y -= bgOffsetY;
 
                 HDC hdcBg = CreateCompatibleDC(pDIS->hDC);
                 HBITMAP hOldBg = (HBITMAP)SelectObject(hdcBg, bgBitmap);
@@ -2244,8 +2247,6 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
                 if (bgBitmap) {
                     POINT pt = { rcButton.left, rcButton.top };
                     MapWindowPoints(pDIS->hwndItem, hBgWnd, &pt, 1);
-                    pt.x -= bgOffsetX;
-                    pt.y -= bgOffsetY;
 
                     HDC hdcBg = CreateCompatibleDC(hdc);
                     HBITMAP hOldBg = (HBITMAP)SelectObject(hdcBg, bgBitmap);
@@ -2665,6 +2666,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SetWindowSubclass(hAppListScroll, AppListSubclassProc, 0, 0);
 
             // Calculate the height of the app list container then resize it, also moving the controls below it
+            // Note: Win10+ LogonUI is per-monitor scaled by manifest, and we're only showing the dialog on the primary monitor,
+            // so handling per-monitor DPI is not much trouble. Screenshotting works fine
+            // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
+            // during logoff phase either so it's low priority
             int dpi = GetDpiForWindow(hWndDlg);
 
             int itemHeight = MulDiv(83, dpi, 96);
@@ -2734,6 +2739,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             int newDialogHeight = rcNo.bottom - rcDialog.top + topPadding - 1;
             SetWindowPos(hWndDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
         }
+
+        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
 
         SetWindowSubclass(hForceButton, ButtonSubclassProc, 0, 0);
         LRESULT forceButtonUIState = SendMessageW(hForceButton, WM_QUERYUISTATE, 0, 0);
@@ -2828,10 +2835,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         if (bgBitmap) {
             RECT rcDlg;
             GetClientRect(hWndDlg, &rcDlg);
+            SIZE szDlg = { rcDlg.right, rcDlg.bottom };
             MapWindowPoints(hWndDlg, hBgWnd, (LPPOINT)&rcDlg, 2);
             HDC memDC = CreateCompatibleDC(hdc);
             HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bgBitmap);
-            BitBlt(hdc, 0, 0, rcDlg.right, rcDlg.bottom, memDC, rcDlg.left, rcDlg.top, SRCCOPY);
+            BitBlt(hdc, 0, 0, szDlg.cx, szDlg.cy, memDC, rcDlg.left, rcDlg.top, SRCCOPY);
             SelectObject(memDC, oldBitmap);
             DeleteDC(memDC);
         }
@@ -2871,8 +2879,9 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                 // and makes the thread stuck in WaitForSingleObject
                 // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
                 // (I still haven't found neither the culprint nor which code signals that event)
-                if (g_doModalExitEvent) {
-                    SetEvent(g_doModalExitEvent);
+                HANDLE hDoModalExitEvent = g_hDoModalExitEvent.load();
+                if (hDoModalExitEvent) {
+                    SetEvent(hDoModalExitEvent);
                 } else {
                     // Event capture failed, oh noes!
                     // Here comes the old terrible workaround
@@ -2881,7 +2890,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                     ExitProcess(0);
                 }
             }
-            SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, 0);
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -2893,7 +2902,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return TRUE;
         case IDYES:
             Resolve(BlockedShutdownResolution_Force);
-            SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, 0);
             return TRUE;
         case IDNO:
             ShowWindow(hWarningText, SW_HIDE);
@@ -2931,7 +2940,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
 
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
         int oldPos = scrollPos;
-        scrollPos -= delta / 4;
+        scrollPos -= MulDiv(delta, scrollLines, WHEEL_DELTA);
         if (scrollPos < 0) scrollPos = 0;
 
         int maxScroll = totalContentHeight - visibleHeight;
@@ -2982,6 +2991,12 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SetScrollInfo(hScrollBar, SB_CTL, &si, FALSE);
             SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOREDRAW);
             RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
+        return TRUE;
+    }
+    case WM_SETTINGCHANGE: {
+        if (wParam == SPI_SETWHEELSCROLLLINES) {
+            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
         }
         return TRUE;
     }
@@ -3059,6 +3074,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_DISPLAYCHANGE: {
+        // Keep bgOffsetX/Y/Width/Height; they are only used in the initial screenshot path and WM_PAINT that redraws the same screenshot
         int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
         int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
         int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -3522,13 +3538,13 @@ CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
     if (lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
-        if (g_doModalExitEvent) {
-            Wh_Log(L"Warning: Overwrote DoModal event");
+        if (g_hDoModalExitEvent.load()) {
+            Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
         } else {
             // Works cleanly on LTSC 2021 and 11 25H2
+            g_hDoModalExitEvent.store(result);
             Wh_Log(L"Caught DoModal event");
         }
-        g_doModalExitEvent = result;
     }
     return result;
 }
@@ -3547,7 +3563,7 @@ bool IsAuthUxInstalled() {
         dllPath,
         &size
     ) == ERROR_SUCCESS) {
-        if (wcsstr(_wcsupr(dllPath), L"\\WINDOWS.UI.BLOCKEDSHUTDOWN.DLL") == NULL) { // non stock dll
+        if (_wcsicmp(PathFindFileNameW(dllPath), L"Windows.UI.BlockedShutdown.dll") != 0) { // non stock dll
             return true;
         }
     }
@@ -3647,8 +3663,7 @@ bool IsLogonUiInjectionEnabled() {
     }
 
     // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code
-    // 20 seconds: Wait for symbol download (it's not that big; better than infinite. probe path isn't blocking shutdown either)
-    DWORD result = WaitForSingleObject(pi.hProcess, 40000);
+    DWORD result = WaitForSingleObject(pi.hProcess, 2000);
     if (result != WAIT_OBJECT_0) {
         // Should exit immediately but just to be safe
         Wh_Log(L"LogonUI wait timed out or failed");
@@ -3685,9 +3700,9 @@ WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    wchar_t exeName[MAX_PATH];
-    GetModuleFileNameW(NULL, exeName, MAX_PATH);
-    g_isWinlogon = wcsstr(_wcsupr(exeName), L"\\WINLOGON.EXE") != NULL;
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    g_isWinlogon = _wcsicmp(PathFindFileNameW(exePath), L"winlogon.exe") == 0;
     if (g_isWinlogon) {
         if (!Wh_GetIntSetting(L"disableAsyncLogoff")) {
             Wh_Log(L"Running in winlogon.exe, but winlogon hooks are disabled");
@@ -3703,7 +3718,7 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    if (wcsstr(exeName, L"\\LOGONUI.EXE") == NULL) {
+    if (_wcsicmp(PathFindFileNameW(exePath), L"LogonUI.exe") != 0) {
         // User decided to mess with the mod advanced settings
         Wh_Log(L"Loaded in unexpected process!");
         return FALSE;
@@ -3712,30 +3727,6 @@ BOOL Wh_ModInit() {
     // Needed for getting at least the logoff sequence part to work with AuthUX on Windhawk portable
     if (IsAuthUxInstalled()) {
         Wh_Log(L"AuthUX installed, skipping LogonUI hooks...");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook((void*)CreateEventW, (void*)CreateEventW_hook, (void**)&CreateEventW_orig)) {
-        Wh_Log(L"CreateEventW hook failed");
-        // not critical, well, there still is a terrrible workaround path
-    }
-
-    g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (g_hLogonControllerDll) {
-        if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
-            Wh_Log(L"Failed to hook symbols in LogonController.dll");
-            // Ditto
-        }
-    }
-
-    g_hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (g_hBlockedShutdownDll) {
-        if (!WindhawkUtils::HookSymbols(g_hBlockedShutdownDll, blockedShutdownHooks, ARRAYSIZE(blockedShutdownHooks))) {
-            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
         return FALSE;
     }
 
@@ -3754,6 +3745,7 @@ BOOL Wh_ModInit() {
             if (checkValue != -1) {
                 Wh_Log(L"Writing load check value %d+%d=%d...", checkValue, pid, checkValue + pid);
                 Wh_SetIntValue(L"LogonUiLoadCheck", checkValue + pid);
+                LocalFree(argv);
                 return FALSE; // Let LogonUI automatically exit immediately (because it lacks proper args)
             }
             break;
@@ -3762,9 +3754,44 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
+    if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
+        Wh_Log(L"CreateEventW hook failed");
+        // not critical, well, there still is a terrrible workaround path
+    }
+
+    g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (g_hLogonControllerDll) {
+        if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
+            Wh_Log(L"Failed to hook symbols in LogonController.dll");
+            // Ditto
+        }
+    }
+
+    g_hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (g_hBlockedShutdownDll) {
+        if (!WindhawkUtils::HookSymbols(g_hBlockedShutdownDll, blockedShutdownHooks, ARRAYSIZE(blockedShutdownHooks))) {
+            Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
+            if (g_hLogonControllerDll) {
+                FreeLibrary(g_hLogonControllerDll);
+            }
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
+        return FALSE;
+    }
+
     CustomBSDR::hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!CustomBSDR::hStopEvent) {
         Wh_Log(L"CreateEventW failed, GLE=%u", GetLastError());
+        if (g_hLogonControllerDll) {
+            FreeLibrary(g_hLogonControllerDll);
+        }
+        if (g_hBlockedShutdownDll) {
+            FreeLibrary(g_hBlockedShutdownDll);
+        }
         return FALSE;
     }
 
@@ -3785,8 +3812,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (g_isWinlogon && p_g_fShutdownResolverDisabled) {
-        if (IsLogonUiInjectionEnabled()) {
-            g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
+        g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
+        if (g_origResolverDisabledState) { // Maybe the allowblockingappsatshutdown registry is set
+            Wh_Log(L"g_fShutdownResolverDisabled is already set to 1");
+        } else if (IsLogonUiInjectionEnabled()) {
             *p_g_fShutdownResolverDisabled = 1; // Disable the async logoff resolver
             Wh_Log(L"Set g_fShutdownResolverDisabled to 1");
         } else {
@@ -3853,6 +3882,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     } else {
         // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
         // and reloading already loaded resources/dialog etc. is tedious so just ignore it
-        return FALSE;
+        return TRUE;
     }
 }
