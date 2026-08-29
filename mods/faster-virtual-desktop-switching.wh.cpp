@@ -18,6 +18,8 @@ Removes the long-standing pre-animation lag caused by oversized wallpaper thumbn
 
 ![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif)
 
+_Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10._
+
 Windows 11 can synchronously request a full-monitor-sized wallpaper thumbnail
 before beginning a virtual desktop transition. On a high-DPI display with specific wallpaper
 configurations, that request can take roughly 136-169 ms when warm and more than one second 
@@ -72,15 +74,8 @@ ThumbnailCacheGetThumbnail g_thumbnailCacheApiGetThumbnailOriginal = nullptr;
 MakeBackgroundThumbnailFromThumbnailCache
     g_makeBackgroundThumbnailOriginal = nullptr;
 LoadLibraryExW_t g_loadLibraryExWOriginal = nullptr;
-HMODULE g_twinuiPcShell = nullptr;
-HMODULE g_thumbnailCacheServer = nullptr;
 thread_local int g_makeBackgroundThumbnailDepth = 0;
-constexpr LONG kHookPending = 0;
-constexpr LONG kHookInstalling = 1;
-constexpr LONG kHookInstalled = 2;
-constexpr LONG kHookFailed = 3;
-volatile LONG g_backgroundHookState = kHookPending;
-volatile LONG g_thumbnailHookState = kHookPending;
+volatile LONG g_twinuiPcShellHookAttempted = FALSE;
 volatile LONG g_thumbcacheHookAttempted = FALSE;
 volatile LONG g_windowsStorageHookAttempted = FALSE;
 volatile LONG g_maximumThumbnailSize = 1024;
@@ -150,6 +145,9 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheGetThumbnailHook(
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId) {
     requestedSize = ClampTransitionThumbnailSize(requestedSize);
+    if (!g_thumbnailCacheGetThumbnailOriginal) {
+        return E_FAIL;
+    }
     return g_thumbnailCacheGetThumbnailOriginal(
         self,
         shellItem,
@@ -169,6 +167,9 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheApiGetThumbnailHook(
     DWORD* outFlags,
     WtsThumbnailId* thumbnailId) {
     requestedSize = ClampTransitionThumbnailSize(requestedSize);
+    if (!g_thumbnailCacheApiGetThumbnailOriginal) {
+        return E_FAIL;
+    }
     return g_thumbnailCacheApiGetThumbnailOriginal(
         self,
         shellItem,
@@ -182,7 +183,8 @@ HRESULT STDMETHODCALLTYPE ThumbnailCacheApiGetThumbnailHook(
 // Hook the outer wallpaper helper so the thumbnail-cache detour can identify
 // its dynamic call context without relying on compiler code layout.
 bool HookBackgroundThumbnailHelper(HMODULE module) {
-    if (!module) {
+    if (!module || InterlockedExchange(
+                       &g_twinuiPcShellHookAttempted, TRUE)) {
         return false;
     }
 
@@ -199,11 +201,15 @@ bool HookBackgroundThumbnailHelper(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(
-            module, symbolHooks, ARRAYSIZE(symbolHooks)) ||
-        !g_makeBackgroundThumbnailOriginal) {
+    const bool symbolsHooked = WindhawkUtils::HookSymbols(
+        module, symbolHooks, ARRAYSIZE(symbolHooks));
+    if (!g_makeBackgroundThumbnailOriginal) {
         Wh_Log(L"Failed to hook the virtual desktop wallpaper helper");
         return false;
+    }
+    if (!symbolsHooked) {
+        Wh_Log(L"HookSymbols reported a failure after registering the "
+               L"virtual desktop wallpaper helper hook");
     }
     return true;
 }
@@ -211,30 +217,9 @@ bool HookBackgroundThumbnailHelper(HMODULE module) {
 // The implementation moved from windows.storage.dll to thumbcache.dll. Hook
 // the concrete method by symbol in whichever naturally loaded module provides
 // it, avoiding COM activation and a hard-coded vtable slot.
-bool HookThumbnailCache(HMODULE module) {
-    if (!module || InterlockedCompareExchange(
-                       &g_thumbnailHookState,
-                       kHookInstalling,
-                       kHookPending) != kHookPending) {
-        return false;
-    }
-
-    volatile LONG* attemptState =
-        GetModuleHandleW(L"thumbcache.dll") == module
-            ? &g_thumbcacheHookAttempted
-            : &g_windowsStorageHookAttempted;
-    if (InterlockedExchange(attemptState, TRUE)) {
-        InterlockedExchange(&g_thumbnailHookState, kHookPending);
-        return false;
-    }
-
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<LPCWSTR>(module),
-            &g_thumbnailCacheServer)) {
-        Wh_Log(L"Failed to retain the thumbnail-cache module: %lu",
-               GetLastError());
-        InterlockedExchange(&g_thumbnailHookState, kHookPending);
+bool HookThumbnailCache(
+    HMODULE module, volatile LONG* hookAttempted, PCWSTR moduleName) {
+    if (!module || InterlockedExchange(hookAttempted, TRUE)) {
         return false;
     }
 
@@ -260,97 +245,48 @@ bool HookThumbnailCache(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(
-            module, symbolHooks, ARRAYSIZE(symbolHooks)) ||
-        (!g_thumbnailCacheGetThumbnailOriginal &&
-         !g_thumbnailCacheApiGetThumbnailOriginal)) {
-        g_thumbnailCacheGetThumbnailOriginal = nullptr;
-        g_thumbnailCacheApiGetThumbnailOriginal = nullptr;
-        FreeLibrary(g_thumbnailCacheServer);
-        g_thumbnailCacheServer = nullptr;
-        InterlockedExchange(&g_thumbnailHookState, kHookPending);
+    const bool symbolsHooked = WindhawkUtils::HookSymbols(
+        module, symbolHooks, ARRAYSIZE(symbolHooks));
+    const bool registeredHook = g_thumbnailCacheGetThumbnailOriginal ||
+                                g_thumbnailCacheApiGetThumbnailOriginal;
+    if (!registeredHook) {
+        Wh_Log(L"Failed to hook thumbnail cache in %s", moduleName);
         return false;
     }
+    if (!symbolsHooked) {
+        Wh_Log(L"HookSymbols reported a failure after registering a "
+               L"thumbnail cache hook in %s",
+               moduleName);
+    }
 
-    InterlockedExchange(&g_thumbnailHookState, kHookInstalled);
     Wh_Log(L"Hooked thumbnail cache in %s (concrete=%d api=%d)",
-           GetModuleHandleW(L"thumbcache.dll") == module
-               ? L"thumbcache.dll"
-               : L"windows.storage.dll",
+           moduleName,
            g_thumbnailCacheGetThumbnailOriginal != nullptr,
            g_thumbnailCacheApiGetThumbnailOriginal != nullptr);
     return true;
 }
 
 bool HookLoadedThumbnailCache() {
-    constexpr PCWSTR moduleNames[] = {
-        L"thumbcache.dll",
-        L"windows.storage.dll",
-    };
-    for (PCWSTR moduleName : moduleNames) {
-        HMODULE module = GetModuleHandleW(moduleName);
-        if (module && HookThumbnailCache(module)) {
-            return true;
-        }
+    if (g_thumbnailCacheGetThumbnailOriginal ||
+        g_thumbnailCacheApiGetThumbnailOriginal) {
+        return false;
     }
 
-    if (InterlockedCompareExchange(
-            &g_thumbcacheHookAttempted, FALSE, FALSE) &&
-        InterlockedCompareExchange(
-            &g_windowsStorageHookAttempted, FALSE, FALSE)) {
-        InterlockedCompareExchange(
-            &g_thumbnailHookState, kHookFailed, kHookPending);
+    if (HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll");
+        thumbcache && HookThumbnailCache(
+                          thumbcache,
+                          &g_thumbcacheHookAttempted,
+                          L"thumbcache.dll")) {
+        return true;
+    }
+    if (HMODULE windowsStorage = GetModuleHandleW(L"windows.storage.dll");
+        windowsStorage && HookThumbnailCache(
+                              windowsStorage,
+                              &g_windowsStorageHookAttempted,
+                              L"windows.storage.dll")) {
+        return true;
     }
     return false;
-}
-
-// Balance the module references retained for the lifetime of the hooks.
-void ReleaseModuleReferences() {
-    if (g_thumbnailCacheServer) {
-        FreeLibrary(g_thumbnailCacheServer);
-        g_thumbnailCacheServer = nullptr;
-    }
-
-    if (g_twinuiPcShell) {
-        FreeLibrary(g_twinuiPcShell);
-        g_twinuiPcShell = nullptr;
-    }
-}
-
-bool HookBackgroundThumbnailModule(HMODULE twinuiPcShell) {
-    if (InterlockedCompareExchange(
-            &g_backgroundHookState,
-            kHookInstalling,
-            kHookPending) != kHookPending) {
-        return false;
-    }
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<LPCWSTR>(twinuiPcShell),
-            &g_twinuiPcShell)) {
-        Wh_Log(L"Failed to retain twinui.pcshell.dll: %lu", GetLastError());
-        InterlockedExchange(&g_backgroundHookState, kHookFailed);
-        return false;
-    }
-
-    if (!HookBackgroundThumbnailHelper(twinuiPcShell)) {
-        FreeLibrary(g_twinuiPcShell);
-        g_twinuiPcShell = nullptr;
-        InterlockedExchange(&g_backgroundHookState, kHookFailed);
-        return false;
-    }
-
-    InterlockedExchange(&g_backgroundHookState, kHookInstalled);
-    return true;
-}
-
-bool ApplyLateHooks() {
-    SetLastError(ERROR_SUCCESS);
-    if (!Wh_ApplyHookOperations()) {
-        Wh_Log(L"Failed to apply late-loaded hooks: %lu", GetLastError());
-        return false;
-    }
-    return true;
 }
 
 HMODULE WINAPI LoadLibraryExWHook(
@@ -364,30 +300,14 @@ HMODULE WINAPI LoadLibraryExWHook(
     }
 
     HMODULE twinuiPcShell = GetModuleHandleW(L"twinui.pcshell.dll");
-    HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll");
-    HMODULE windowsStorage = GetModuleHandleW(L"windows.storage.dll");
-    if (module != twinuiPcShell && module != thumbcache &&
-        module != windowsStorage) {
-        return module;
-    }
-
-    bool registeredHook = false;
-    if (twinuiPcShell &&
-        InterlockedCompareExchange(
-            &g_backgroundHookState, kHookPending, kHookPending) ==
-            kHookPending) {
-        registeredHook = HookBackgroundThumbnailModule(twinuiPcShell);
-    }
-
-    if ((thumbcache || windowsStorage) &&
-        InterlockedCompareExchange(
-            &g_thumbnailHookState, kHookPending, kHookPending) ==
-            kHookPending) {
-        registeredHook = HookLoadedThumbnailCache() || registeredHook;
-    }
+    bool registeredHook = HookBackgroundThumbnailHelper(twinuiPcShell);
+    registeredHook = HookLoadedThumbnailCache() || registeredHook;
 
     if (registeredHook) {
-        ApplyLateHooks();
+        SetLastError(ERROR_SUCCESS);
+        if (!Wh_ApplyHookOperations()) {
+            Wh_Log(L"Failed to apply late-loaded hooks: %lu", GetLastError());
+        }
     }
     return module;
 }
@@ -419,49 +339,16 @@ BOOL Wh_ModInit() {
 
     if (HMODULE twinuiPcShell =
             GetModuleHandleW(L"twinui.pcshell.dll")) {
-        if (!HookBackgroundThumbnailModule(twinuiPcShell)) {
+        if (!HookBackgroundThumbnailHelper(twinuiPcShell)) {
             return FALSE;
         }
     }
 
     HookLoadedThumbnailCache();
-    if (InterlockedCompareExchange(
-            &g_thumbnailHookState, kHookPending, kHookPending) ==
-        kHookFailed) {
-        return FALSE;
-    }
 
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    bool registeredHook = false;
-    if (HMODULE twinuiPcShell =
-            GetModuleHandleW(L"twinui.pcshell.dll")) {
-        if (InterlockedCompareExchange(
-                &g_backgroundHookState, kHookPending, kHookPending) ==
-            kHookPending) {
-            registeredHook = HookBackgroundThumbnailModule(twinuiPcShell);
-        }
-    }
-
-    if (InterlockedCompareExchange(
-            &g_thumbnailHookState, kHookPending, kHookPending) ==
-        kHookPending) {
-        registeredHook = HookLoadedThumbnailCache() || registeredHook;
-    }
-
-    if (registeredHook) {
-        ApplyLateHooks();
-    }
-}
-
 void Wh_ModSettingsChanged() {
     LoadSettings();
-}
-
-void Wh_ModUninit() {
-    // Windhawk calls this after removing registered hooks, so the implementation
-    // DLLs can no longer be entered through this mod's detour.
-    ReleaseModuleReferences();
 }
