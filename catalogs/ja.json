@@ -13700,6 +13700,39 @@
         "version": "1.3.2"
       }
     },
+    "taskbar-system-info": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788003811000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788003811000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Yevhenii Starychenko",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -DWIN32_LEAN_AND_MEAN",
+        "description": "A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.",
+        "github": "https://github.com/starychenko",
+        "homepage": "https://github.com/starychenko/windhawk-taskbar-system-info",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar System Info",
+        "version": "1.3.3"
+      }
+    },
     "taskbar-thumbnail-hover-fix": {
       "details": {
         "defaultSorting": 728,
