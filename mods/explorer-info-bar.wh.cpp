@@ -8,7 +8,7 @@
 // @homepage        https://github.com/digart11/explorer-info-bar
 // @license         GPL-3.0-only
 // @include         explorer.exe
-// @compilerOptions -lole32 -lshell32 -luuid -lgdi32 -lcomctl32 -lpropsys
+// @compilerOptions -lole32 -lshell32 -luuid -lgdi32 -lcomctl32 -lpropsys -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -50,6 +50,14 @@ Unlike mods that restore the classic status bar or focus only on metadata, Explo
 - Custom text and panel colors
 - Automatic theme-derived colors by default
 - Works with File Explorer's native status area rather than replacing Explorer itself
+
+## Compatibility / Why this mod is separate
+
+Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic `msctls_statusbar32`-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.
+
+Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.
+
+Explorer Status Bar Metadata overlaps functionally because Explorer Info Bar+ already includes optional single-file metadata. Its metadata functionality is integrated here; no broader incompatibility is implied.
 
 ## Examples
 
@@ -164,6 +172,7 @@ static constexpr DWORD kInitialRefreshDelayMs = 1000;
 static constexpr DWORD kRefreshIntervalMs = 10000;
 static constexpr ULONGLONG kContentFailedRetryMs = 60000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
+static constexpr ULONGLONG kStatusRowValidationIntervalMs = 500;
 
 thread_local bool g_insideFinalPaint = false;
 
@@ -214,13 +223,16 @@ struct TrackedDirectUiState
     ULONGLONG selectionGeneration = 1;
     bool hasLayout = false;
     InfoBarLayoutGeometry layout;
-    COLORREF stableRowBackground = CLR_INVALID;
-    COLORREF stableNativeTextColor = CLR_INVALID;
+    COLORREF automaticRowBackground = CLR_INVALID;
+    bool hasSampledNativeRowBackground = false;
+    UINT dpi = 96;
+    HFONT infoBarFont = nullptr;
     HWND shellTab = nullptr;
     DWORD shellBrowserCookie = 0;
     HWND validatedDefView = nullptr;
     bool hasValidatedStatusRow = false;
     RECT validatedStatusRow{};
+    ULONGLONG lastStatusRowValidationTick = 0;
 };
 
 static std::vector<TrackedDirectUiState> g_trackedWindows;
@@ -1276,6 +1288,27 @@ static bool EnsureShellBrowserRegistration(
         return false;
     }
 
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    const bool alreadyRegistered =
+        existing != g_trackedWindows.end() &&
+        existing->shellBrowserCookie != 0;
+
+    ReleaseSRWLockShared(&g_subclassLock);
+
+    if (alreadyRegistered)
+        return true;
+
     const DWORD ownerThread =
         GetWindowThreadProcessId(
             hwnd,
@@ -1298,28 +1331,6 @@ static bool EnsureShellBrowserRegistration(
 
     if (!shellTab)
         return false;
-
-    AcquireSRWLockShared(&g_subclassLock);
-
-    const auto existing =
-        std::find_if(
-            g_trackedWindows.begin(),
-            g_trackedWindows.end(),
-            [&](const TrackedDirectUiState& value)
-            {
-                return value.hwnd == hwnd;
-            }
-        );
-
-    const bool alreadyRegistered =
-        existing != g_trackedWindows.end() &&
-        existing->shellTab == shellTab &&
-        existing->shellBrowserCookie != 0;
-
-    ReleaseSRWLockShared(&g_subclassLock);
-
-    if (alreadyRegistered)
-        return true;
 
     IShellBrowser* browser =
         TryGetShellBrowserOnOwnerThread(shellTab);
@@ -1405,6 +1416,18 @@ static bool EnsureShellBrowserRegistration(
 // Redraw
 // ============================================================
 
+static int ScaleForDpi(
+    UINT dpi,
+    int value
+)
+{
+    return MulDiv(
+        value,
+        dpi ? static_cast<int>(dpi) : 96,
+        96
+    );
+}
+
 static int ScaleForWindow(
     HWND hwnd,
     int value
@@ -1413,11 +1436,136 @@ static int ScaleForWindow(
     const UINT dpi =
         hwnd ? GetDpiForWindow(hwnd) : 96;
 
-    return MulDiv(
-        value,
-        dpi ? static_cast<int>(dpi) : 96,
-        96
+    return ScaleForDpi(dpi, value);
+}
+
+static HFONT CreateInfoBarFont(UINT dpi)
+{
+    return CreateFontW(
+        -ScaleForDpi(dpi, 12),
+        0,
+        0,
+        0,
+        FW_NORMAL,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH,
+        L"Segoe UI"
     );
+}
+
+static void RefreshTrackedDpiAndFont(HWND hwnd)
+{
+    UINT dpi = hwnd ? GetDpiForWindow(hwnd) : 96;
+
+    if (!dpi)
+        dpi = 96;
+
+    bool needsFont = false;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (
+        existing != g_trackedWindows.end() &&
+        (
+            existing->dpi != dpi ||
+            !existing->infoBarFont
+        )
+    )
+    {
+        needsFont = true;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
+
+    if (!needsFont)
+        return;
+
+    HFONT newFont = CreateInfoBarFont(dpi);
+    HFONT oldFont = nullptr;
+
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    auto tracked =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (
+        tracked != g_trackedWindows.end() &&
+        (
+            tracked->dpi != dpi ||
+            !tracked->infoBarFont
+        )
+    )
+    {
+        oldFont = tracked->infoBarFont;
+        tracked->dpi = dpi;
+        tracked->infoBarFont = newFont;
+        newFont = nullptr;
+    }
+
+    ReleaseSRWLockExclusive(&g_subclassLock);
+
+    if (oldFont)
+        DeleteObject(oldFont);
+
+    if (newFont)
+        DeleteObject(newFont);
+}
+
+static bool GetPaintResources(
+    HWND hwnd,
+    UINT* dpi,
+    HFONT* font
+)
+{
+    if (!dpi || !font)
+        return false;
+
+    bool found = false;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (existing != g_trackedWindows.end())
+    {
+        *dpi = existing->dpi ? existing->dpi : 96;
+        *font = existing->infoBarFont;
+        found = true;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
+    return found;
 }
 
 static HWND FindShellDefViewDescendant(HWND directUi)
@@ -1472,6 +1620,7 @@ static void StoreValidatedStatusRow(
         existing->validatedDefView = row ? defView : nullptr;
         existing->hasValidatedStatusRow = row != nullptr;
         existing->validatedStatusRow = row ? *row : RECT{};
+        existing->lastStatusRowValidationTick = GetTickCount64();
     }
 
     ReleaseSRWLockExclusive(&g_subclassLock);
@@ -1481,6 +1630,17 @@ static bool RefreshValidatedStatusRow(HWND hwnd)
 {
     if (!hwnd || !IsWindow(hwnd))
         return false;
+
+    UINT dpi = 96;
+    HFONT unusedFont = nullptr;
+
+    if (!GetPaintResources(hwnd, &dpi, &unusedFont))
+    {
+        dpi = GetDpiForWindow(hwnd);
+
+        if (!dpi)
+            dpi = 96;
+    }
 
     const HWND defView = FindShellDefViewDescendant(hwnd);
 
@@ -1522,7 +1682,7 @@ static bool RefreshValidatedStatusRow(HWND hwnd)
             valid = false;
     }
 
-    const LONG tolerance = ScaleForWindow(hwnd, 2);
+    const LONG tolerance = ScaleForDpi(dpi, 2);
 
     if (
         valid &&
@@ -1553,7 +1713,7 @@ static bool RefreshValidatedStatusRow(HWND hwnd)
         // Require a small DPI-scaled minimum before treating it as a row.
         if (
             row.bottom - row.top <
-                static_cast<LONG>(ScaleForWindow(hwnd, 8))
+                static_cast<LONG>(ScaleForDpi(dpi, 8))
         )
         {
             valid = false;
@@ -1567,6 +1727,36 @@ static bool RefreshValidatedStatusRow(HWND hwnd)
     );
 
     return valid;
+}
+
+static bool IsStatusRowRevalidationDue(HWND hwnd)
+{
+    ULONGLONG lastValidationTick = 0;
+
+    AcquireSRWLockShared(&g_subclassLock);
+
+    const auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (existing != g_trackedWindows.end())
+    {
+        lastValidationTick =
+            existing->lastStatusRowValidationTick;
+    }
+
+    ReleaseSRWLockShared(&g_subclassLock);
+
+    return
+        !lastValidationTick ||
+        GetTickCount64() - lastValidationTick >=
+            kStatusRowValidationIntervalMs;
 }
 
 static bool GetValidatedStatusRow(
@@ -1692,10 +1882,10 @@ static size_t GetSectionGeometryIndex(
     return 2;
 }
 
-struct StableThemeSnapshot
+struct AutomaticThemeSnapshot
 {
     COLORREF rowBackground = CLR_INVALID;
-    COLORREF nativeTextColor = CLR_INVALID;
+    bool hasSampledNativeRowBackground = false;
 };
 
 static void StoreLayoutGeometry(
@@ -1724,7 +1914,8 @@ static void StoreLayoutGeometry(
 }
 
 static DWORD UntrackDirectUiWindowLocked(
-    HWND hwnd
+    HWND hwnd,
+    HFONT* infoBarFont = nullptr
 )
 {
     DWORD shellBrowserCookie = 0;
@@ -1743,6 +1934,9 @@ static DWORD UntrackDirectUiWindowLocked(
     {
         shellBrowserCookie =
             existing->shellBrowserCookie;
+
+        if (infoBarFont)
+            *infoBarFont = existing->infoBarFont;
 
         g_trackedWindows.erase(existing);
     }
@@ -1775,11 +1969,11 @@ static DWORD GetShellBrowserCookieSnapshot(
     return cookie;
 }
 
-static StableThemeSnapshot GetStableThemeStateSnapshot(
+static AutomaticThemeSnapshot GetAutomaticThemeSnapshot(
     HWND hwnd
 )
 {
-    StableThemeSnapshot result;
+    AutomaticThemeSnapshot result;
 
     AcquireSRWLockShared(&g_subclassLock);
 
@@ -1796,22 +1990,20 @@ static StableThemeSnapshot GetStableThemeStateSnapshot(
     if (existing != g_trackedWindows.end())
     {
         result.rowBackground =
-            existing->stableRowBackground;
+            existing->automaticRowBackground;
 
-        result.nativeTextColor =
-            existing->stableNativeTextColor;
+        result.hasSampledNativeRowBackground =
+            existing->hasSampledNativeRowBackground;
     }
 
     ReleaseSRWLockShared(&g_subclassLock);
     return result;
 }
 
-static void UpdateStableThemeState(
+static void UpdateAutomaticRowBackground(
     HWND hwnd,
     COLORREF rowBackground,
-    bool updateBackground,
-    COLORREF nativeTextColor,
-    bool updateTextColor
+    bool sampledNativeRowBackground
 )
 {
     AcquireSRWLockExclusive(&g_subclassLock);
@@ -1828,11 +2020,32 @@ static void UpdateStableThemeState(
 
     if (existing != g_trackedWindows.end())
     {
-        if (updateBackground)
-            existing->stableRowBackground = rowBackground;
+        existing->automaticRowBackground = rowBackground;
+        existing->hasSampledNativeRowBackground =
+            sampledNativeRowBackground;
+    }
 
-        if (updateTextColor)
-            existing->stableNativeTextColor = nativeTextColor;
+    ReleaseSRWLockExclusive(&g_subclassLock);
+}
+
+static void InvalidateAutomaticTheme(HWND hwnd)
+{
+    AcquireSRWLockExclusive(&g_subclassLock);
+
+    auto existing =
+        std::find_if(
+            g_trackedWindows.begin(),
+            g_trackedWindows.end(),
+            [&](const TrackedDirectUiState& value)
+            {
+                return value.hwnd == hwnd;
+            }
+        );
+
+    if (existing != g_trackedWindows.end())
+    {
+        existing->automaticRowBackground = CLR_INVALID;
+        existing->hasSampledNativeRowBackground = false;
     }
 
     ReleaseSRWLockExclusive(&g_subclassLock);
@@ -2789,6 +3002,13 @@ static bool ScanFilesystemDirectory(
     if (IsWorkerStopRequested())
         return false;
 
+    SHELLSTATE state{};
+    SHGetSetSettings(
+        &state,
+        SSF_SHOWALLOBJECTS | SSF_SHOWSUPERHIDDEN,
+        FALSE
+    );
+
     std::wstring searchPath = directoryPath;
 
     if (
@@ -2858,8 +3078,31 @@ static bool ScanFilesystemDirectory(
             wcscmp(findData.cFileName, L"..") != 0
         )
         {
+            const DWORD attributes =
+                findData.dwFileAttributes;
+
+            const bool hidden =
+                (attributes & FILE_ATTRIBUTE_HIDDEN) != 0;
+
+            const bool system =
+                (attributes & FILE_ATTRIBUTE_SYSTEM) != 0;
+
             if (
-                findData.dwFileAttributes &
+                hidden &&
+                (
+                    !state.fShowAllObjects ||
+                    (
+                        system &&
+                        !state.fShowSuperHidden
+                    )
+                )
+            )
+            {
+                goto nextEntry;
+            }
+
+            if (
+                attributes &
                 FILE_ATTRIBUTE_DIRECTORY
             )
             {
@@ -2877,6 +3120,7 @@ static bool ScanFilesystemDirectory(
             }
         }
 
+nextEntry:
         if (FindNextFileW(findHandle, &findData))
             continue;
 
@@ -3816,6 +4060,31 @@ static int MeasureGapWidth(
     return 26;
 }
 
+static COLORREF GetAppThemeFallbackBackground()
+{
+    DWORD appsUseLightTheme = 1;
+    DWORD valueSize = sizeof(appsUseLightTheme);
+
+    const LSTATUS status =
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            L"AppsUseLightTheme",
+            RRF_RT_REG_DWORD,
+            nullptr,
+            &appsUseLightTheme,
+            &valueSize
+        );
+
+    const bool useLightTheme =
+        status != ERROR_SUCCESS ||
+        appsUseLightTheme != 0;
+
+    return useLightTheme
+        ? RGB(255, 255, 255)
+        : RGB(32, 32, 32);
+}
+
 static COLORREF PickBackgroundColor(
     HDC hdc,
     HWND hwnd,
@@ -3824,24 +4093,31 @@ static COLORREF PickBackgroundColor(
     int selected
 )
 {
-    // Keep the native unselected status-row background stable per window.
-    // Explorer can temporarily tint the row while items are selected.
-    const StableThemeSnapshot stable =
-        GetStableThemeStateSnapshot(hwnd);
+    AutomaticThemeSnapshot theme =
+        GetAutomaticThemeSnapshot(hwnd);
 
-    if (
-        selected > 0 &&
-        stable.rowBackground != CLR_INVALID
-    )
+    if (theme.hasSampledNativeRowBackground)
     {
-        return stable.rowBackground;
+        return theme.rowBackground;
     }
 
-    COLORREF chosen = CLR_INVALID;
+    if (theme.rowBackground == CLR_INVALID)
+    {
+        theme.rowBackground =
+            GetAppThemeFallbackBackground();
+
+        UpdateAutomaticRowBackground(
+            hwnd,
+            theme.rowBackground,
+            false
+        );
+    }
+
     const int rowWidth = row.right - row.left;
     const int rowHeight = row.bottom - row.top;
 
     if (
+        selected <= 0 &&
         nativePaintRect &&
         rowWidth > 0 &&
         rowHeight > 0
@@ -3871,32 +4147,20 @@ static COLORREF PickBackgroundColor(
 
             if (sample != CLR_INVALID)
             {
-                chosen = sample;
-                break;
+                UpdateAutomaticRowBackground(
+                    hwnd,
+                    sample,
+                    true
+                );
+
+                return sample;
             }
         }
     }
 
-    if (chosen == CLR_INVALID)
-    {
-        if (stable.rowBackground != CLR_INVALID)
-            return stable.rowBackground;
-
-        return GetSysColor(COLOR_WINDOW);
-    }
-
-    if (selected <= 0)
-    {
-        UpdateStableThemeState(
-            hwnd,
-            chosen,
-            true,
-            CLR_INVALID,
-            false
-        );
-    }
-
-    return chosen;
+    // A partial first paint might not expose any safe native pixels. Keep
+    // sampling pending while using the app-theme preference as a safe fallback.
+    return theme.rowBackground;
 }
 
 static void DrawFinalPiece(
@@ -4034,55 +4298,6 @@ static COLORREF GetContrastingTextColor(
         : RGB(232, 232, 232);
 }
 
-static COLORREF PickNativeTextColor(
-    HDC hdc,
-    HWND hwnd,
-    COLORREF background,
-    int selected
-)
-{
-    const StableThemeSnapshot stable =
-        GetStableThemeStateSnapshot(hwnd);
-
-    if (
-        selected > 0 &&
-        stable.nativeTextColor != CLR_INVALID
-    )
-    {
-        return stable.nativeTextColor;
-    }
-
-    COLORREF candidate =
-        GetTextColor(hdc);
-
-    if (
-        candidate == CLR_INVALID ||
-        std::abs(
-            ColorLuminance(candidate) -
-            ColorLuminance(background)
-        ) < 70
-    )
-    {
-        candidate =
-            GetContrastingTextColor(
-                background
-            );
-    }
-
-    if (selected <= 0)
-    {
-        UpdateStableThemeState(
-            hwnd,
-            CLR_INVALID,
-            false,
-            candidate,
-            true
-        );
-    }
-
-    return candidate;
-}
-
 static COLORREF ResolveColor(
     const ColorOverride& colorOverride,
     COLORREF automaticColor
@@ -4102,6 +4317,12 @@ static void PaintFinalInfoBar(
     if (!hdc || !hwnd)
         return;
 
+    UINT dpi = 96;
+    HFONT font = nullptr;
+
+    if (!GetPaintResources(hwnd, &dpi, &font))
+        return;
+
     RECT client{};
 
     if (!GetClientRect(
@@ -4113,12 +4334,21 @@ static void PaintFinalInfoBar(
 
     RECT row{};
 
+    bool hasValidatedRow =
+        GetValidatedStatusRow(hwnd, &row);
+
     if (
-        !RefreshValidatedStatusRow(hwnd) ||
-        !GetValidatedStatusRow(hwnd, &row)
+        !hasValidatedRow ||
+        IsStatusRowRevalidationDue(hwnd)
     )
     {
-        return;
+        if (
+            !RefreshValidatedStatusRow(hwnd) ||
+            !GetValidatedStatusRow(hwnd, &row)
+        )
+        {
+            return;
+        }
     }
 
     RECT coverRow = row;
@@ -4129,10 +4359,10 @@ static void PaintFinalInfoBar(
     coverRow.right =
         std::max(
             coverRow.left,
-            client.right - ScaleForWindow(hwnd, 64)
+            client.right - ScaleForDpi(dpi, 64)
         );
 
-    row.left = ScaleForWindow(hwnd, 6);
+    row.left = ScaleForDpi(dpi, 6);
 
     // Keep the existing conservative content margin without leaving the
     // native status-text area uncovered when the window is narrow.
@@ -4141,8 +4371,8 @@ static void PaintFinalInfoBar(
             row.left,
             std::min(
                 coverRow.right,
-                client.right > ScaleForWindow(hwnd, 220)
-                    ? client.right - ScaleForWindow(hwnd, 220)
+                client.right > ScaleForDpi(dpi, 220)
+                    ? client.right - ScaleForDpi(dpi, 220)
                     : coverRow.right
             )
         );
@@ -4256,25 +4486,6 @@ static void PaintFinalInfoBar(
             hdc
         );
 
-    // Match Explorer's native info-bar font metrics.
-    HFONT font =
-        CreateFontW(
-            -ScaleForWindow(hwnd, 12),
-            0,
-            0,
-            0,
-            FW_NORMAL,
-            FALSE,
-            FALSE,
-            FALSE,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            DEFAULT_PITCH,
-            L"Segoe UI"
-        );
-
     HFONT oldFont = nullptr;
 
     if (font)
@@ -4289,11 +4500,8 @@ static void PaintFinalInfoBar(
     }
 
     const COLORREF nativeText =
-        PickNativeTextColor(
-            hdc,
-            hwnd,
-            background,
-            selected
+        GetContrastingTextColor(
+            background
         );
 
     const COLORREF textColor =
@@ -4378,7 +4586,7 @@ static void PaintFinalInfoBar(
         };
 
     int x =
-        ScaleForWindow(hwnd, 14);
+        ScaleForDpi(dpi, 14);
 
     bool drew =
         false;
@@ -4464,16 +4672,16 @@ static void PaintFinalInfoBar(
             settings.style == InfoBarStyle::Cards;
 
         const int padX =
-            ScaleForWindow(hwnd, cards ? 10 : 12);
+            ScaleForDpi(dpi, cards ? 10 : 12);
 
         const int gap =
-            ScaleForWindow(hwnd, cards ? 8 : 6);
+            ScaleForDpi(dpi, cards ? 8 : 6);
 
         // Flat panes should begin flush with the left edge.
         // Cards keep a tiny 2 px inset so the rounded border isn't clipped.
         int paneX =
             cards
-                ? row.left + ScaleForWindow(hwnd, 2)
+                ? row.left + ScaleForDpi(dpi, 2)
                 : 0;
 
         auto DrawBox =
@@ -4494,9 +4702,9 @@ static void PaintFinalInfoBar(
 
             RECT box{
                 paneX,
-                row.top + ScaleForWindow(hwnd, cards ? 3 : 1),
+                row.top + ScaleForDpi(dpi, cards ? 3 : 1),
                 paneX + width,
-                row.bottom - ScaleForWindow(hwnd, cards ? 3 : 1)
+                row.bottom - ScaleForDpi(dpi, cards ? 3 : 1)
             };
 
             if (box.right > row.right)
@@ -4532,8 +4740,8 @@ static void PaintFinalInfoBar(
                         box.top,
                         box.right,
                         box.bottom,
-                        ScaleForWindow(hwnd, 6),
-                        ScaleForWindow(hwnd, 6)
+                        ScaleForDpi(dpi, 6),
+                        ScaleForDpi(dpi, 6)
                     );
 
                     SelectObject(hdc, oldPen);
@@ -4646,13 +4854,6 @@ static void PaintFinalInfoBar(
         SelectObject(
             hdc,
             oldFont
-        );
-    }
-
-    if (font)
-    {
-        DeleteObject(
-            font
         );
     }
 
@@ -4832,6 +5033,7 @@ static DirectUiSubclassResult EnsureDirectUiSubclass(
         return DirectUiSubclassResult::Failed;
     }
 
+    RefreshTrackedDpiAndFont(hwnd);
     EnsureWindowDataCache(hwnd);
     EnsureShellBrowserRegistration(hwnd);
 
@@ -4888,12 +5090,13 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         const DWORD shellBrowserCookie =
             GetShellBrowserCookieSnapshot(hwnd);
+        HFONT infoBarFont = nullptr;
 
         EraseWindowDataCache(hwnd);
         RevokeShellBrowserCookie(shellBrowserCookie);
 
         AcquireSRWLockExclusive(&g_subclassLock);
-        UntrackDirectUiWindowLocked(hwnd);
+        UntrackDirectUiWindowLocked(hwnd, &infoBarFont);
         g_installingDirectUiWindows.erase(
             std::remove(
                 g_installingDirectUiWindows.begin(),
@@ -4903,6 +5106,9 @@ static LRESULT CALLBACK DirectUiSubclassProc(
             g_installingDirectUiWindows.end()
         );
         ReleaseSRWLockExclusive(&g_subclassLock);
+
+        if (infoBarFont)
+            DeleteObject(infoBarFont);
 
         return DefSubclassProc(
             hwnd,
@@ -4928,7 +5134,8 @@ static LRESULT CALLBACK DirectUiSubclassProc(
 
     if (
         msg == WM_SIZE ||
-        msg == WM_WINDOWPOSCHANGED
+        msg == WM_WINDOWPOSCHANGED ||
+        msg == WM_DPICHANGED
     )
     {
         const LRESULT result =
@@ -4939,7 +5146,34 @@ static LRESULT CALLBACK DirectUiSubclassProc(
                 lParam
             );
 
+        if (
+            msg == WM_WINDOWPOSCHANGED ||
+            msg == WM_DPICHANGED
+        )
+        {
+            RefreshTrackedDpiAndFont(hwnd);
+        }
+
         RefreshValidatedStatusRow(hwnd);
+        InvalidateInfoBarWindow(hwnd);
+        return result;
+    }
+
+    if (
+        msg == WM_THEMECHANGED ||
+        msg == WM_SETTINGCHANGE ||
+        msg == WM_SYSCOLORCHANGE
+    )
+    {
+        const LRESULT result =
+            DefSubclassProc(
+                hwnd,
+                msg,
+                wParam,
+                lParam
+            );
+
+        InvalidateAutomaticTheme(hwnd);
         InvalidateInfoBarWindow(hwnd);
         return result;
     }
@@ -5361,9 +5595,14 @@ void Wh_ModBeforeUninit()
         }
 
         DWORD shellBrowserCookie = 0;
+        HFONT infoBarFont = nullptr;
         AcquireSRWLockExclusive(&g_subclassLock);
-        shellBrowserCookie = UntrackDirectUiWindowLocked(hwnd);
+        shellBrowserCookie =
+            UntrackDirectUiWindowLocked(hwnd, &infoBarFont);
         ReleaseSRWLockExclusive(&g_subclassLock);
+
+        if (infoBarFont)
+            DeleteObject(infoBarFont);
 
         EraseWindowDataCache(hwnd);
         RevokeShellBrowserCookie(shellBrowserCookie);
