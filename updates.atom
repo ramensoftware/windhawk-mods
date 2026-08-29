@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-29T09:03:18.000Z</updated>
+    <updated>2026-08-29T09:38:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota Bars 1.5.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#d8be922fa99b327d58f6085971c84cfea5863f47</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-08-29T09:38:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a new settings system (Right Click taskbar -&gt; Settings) with account management and display controls.</li>
+<li>Add Google Antigravity quota support through its running local app or CLI session.</li>
+<li>Add per-account quota selection, Anthropic Fable and extra-usage bars, pace ticks, compact labels, percentage alignment, and visual previews.</li>
+<li>Improve monitor selection, DPI rendering, tooltip readability, and taskbar layouts.</li>
+<li>Fixed minor bugs and rare crashes (harden OAuth, HTTP retry handling, taskbar lifecycle)</li>
+</ul>
+<p>Note: existing Windhawk settings are imported automatically, and stored credentials are preserved.</p>]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[On-Screen Indicator Position 1.2.6]]></title>
         <id>https://windhawk.net/mods/on-screen-indicator-position#3a64981cd805fadceec72d0b4db1aecadadc3408</id>
@@ -490,19 +508,6 @@ determines the target monitor using the cursor position, and repositions the win
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.17.3]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#fa893122b9e544bd3605075f8fed427f84e6141a</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-08-23T17:59:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Recognizes .tif, .tiff, and .jfif images in a watched folder, alongside the PNG, JPEG, BMP, GIF, and WebP it already handled.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>

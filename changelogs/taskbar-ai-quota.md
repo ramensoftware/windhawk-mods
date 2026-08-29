@@ -1,3 +1,13 @@
+## 1.5.8 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d8be922fa99b327d58f6085971c84cfea5863f47/mods/taskbar-ai-quota.wh.cpp))
+
+- Add a new settings system (Right Click taskbar -> Settings) with account management and display controls.
+- Add Google Antigravity quota support through its running local app or CLI session.
+- Add per-account quota selection, Anthropic Fable and extra-usage bars, pace ticks, compact labels, percentage alignment, and visual previews.
+- Improve monitor selection, DPI rendering, tooltip readability, and taskbar layouts.
+- Fixed minor bugs and rare crashes (harden OAuth, HTTP retry handling, taskbar lifecycle)
+
+Note: existing Windhawk settings are imported automatically, and stored credentials are preserved.
+
 ## 0.10.3 ([Jul 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bb827ab3f6f8cd2dfa0348865e30cb50c3f99fdc/mods/taskbar-ai-quota.wh.cpp))
 
 - Fix tooltip hover being inconsistent (occasionally not showing or not dismissing)
