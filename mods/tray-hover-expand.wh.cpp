@@ -481,7 +481,9 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
         for (size_t i = 0; i < cands.size(); i++) {
             if (NameMatches(cands[i].name, s)) {
                 chosen = (int)i;
-                Wh_Log(L"Chevron matched by name, not by class name");
+                if (logCandidates) {
+                    Wh_Log(L"Chevron matched by name, not by class name");
+                }
                 break;
             }
         }
@@ -538,7 +540,7 @@ static const ULONGLONG ACTION_COOLDOWN_MS = 300;
 // Retry the (expensive) chevron lookup quickly while the cursor is at the
 // taskbar, and only occasionally while it is elsewhere. See the worker loop.
 static const ULONGLONG REFIND_NEAR_MS = 250;
-static const ULONGLONG REFIND_IDLE_MS = 1000;
+static const ULONGLONG REFIND_MAX_MS = 4000;
 // How far from the taskbar the cursor still counts as "at the taskbar". Covers
 // the sliver an auto-hidden taskbar leaves at the screen edge while it slides in.
 static const int TASKBAR_REVEAL_PAD = 32;
@@ -573,8 +575,15 @@ static HWND GetVisibleFlyout(const Settings& s, DWORD taskbarPid) {
 // window class, so their presence is a reliable "the user is still busy" signal
 // even when the click that opened the menu was never observed.
 static bool IsPopupMenuOpen() {
-    HWND h = FindWindowW(L"#32768", nullptr);
-    return h && IsWindowVisible(h);
+    // Enumerate rather than sampling the first hit: menu windows are created
+    // per thread and kept alive hidden afterwards, so the first one in Z-order
+    // is often a leftover from some process that showed a menu earlier, and
+    // testing only that one would report "no menu" while one is on screen.
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, L"#32768", nullptr))) {
+        if (IsWindowVisible(h)) return true;
+    }
+    return false;
 }
 
 static bool PtOverWindow(HWND hwnd, POINT pt) {
@@ -699,6 +708,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     bool loggedCandidates = false;
     bool clickedInFlyout = false;
     bool anyBtnDownPrev = false;
+    bool nearTaskbarPrev = false;
+    int refindFailures = 0;
 
     while (g_running) {
         ULONGLONG now = GetTickCount64();
@@ -723,6 +734,17 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
         POINT pt; GetCursorPos(&pt);
 
+        // Sampled every tick, not only when the chevron is available: the low
+        // bit reports a press since the previous call, so skipping calls would
+        // let an arbitrarily old click be reported as fresh once the chevron
+        // comes back. The state bit alone misses a click that starts and ends
+        // between two ticks, which at a large polling interval is most clicks.
+        SHORT kl = GetAsyncKeyState(VK_LBUTTON);
+        SHORT kr = GetAsyncKeyState(VK_RBUTTON);
+        SHORT km = GetAsyncKeyState(VK_MBUTTON);
+        bool anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
+        bool pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
+
         // Lazily (re-)find the button only when we don't have a valid one. A
         // destroyed or stale element makes the rectangle query below fail,
         // which clears pBtn and triggers a re-find — so there is no need for a
@@ -734,30 +756,51 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         // so a fixed interval would leave the mod idle for up to that interval
         // after each reveal. Conversely, when nothing is hidden the chevron does
         // not exist at all and a timer would walk the taskbar subtree forever.
-        // Retry quickly while the cursor is at the taskbar, and not at all while
-        // it is elsewhere, since the chevron cannot be hovered from there anyway.
-        if (!pBtn && now >= nextRefind) {
-            RECT tb;
-            HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-            bool nearTaskbar = hTaskbar && GetWindowRect(hTaskbar, &tb) &&
-                               PtInRectPad(tb, pt, TASKBAR_REVEAL_PAD);
-            if (nearTaskbar) {
-                bool didLog = false;
-                pBtn = FindOverflowButton(pAuto, s, !loggedCandidates, &didLog);
-                loggedCandidates = pBtn ? false : (loggedCandidates || didLog);
-                nextRefind = now + REFIND_NEAR_MS;
-                nextRectRefresh = 0;    // force a fresh rectangle below
-                taskbarPid = 0;
-                GetWindowThreadProcessId(hTaskbar, &taskbarPid);
+        // Retry while the cursor is at the taskbar, and not at all while it is
+        // elsewhere, since the chevron cannot be hovered from there anyway.
+        //
+        // Consecutive failures back off. Without that, a user with no hidden
+        // icons has no chevron to find, so every lookup fails and the fast
+        // cadence would walk the taskbar subtree several times a second for the
+        // whole session, forcing explorer to build automation peers on its UI
+        // thread exactly while the user is working with the taskbar. The
+        // counter resets when the chevron is found and when the cursor enters
+        // the band, so an auto-hiding taskbar still re-acquires on the first or
+        // second try after a reveal.
+        RECT tb;
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        bool nearTaskbar = hTaskbar && GetWindowRect(hTaskbar, &tb) &&
+                           PtInRectPad(tb, pt, TASKBAR_REVEAL_PAD);
+        if (nearTaskbar && !nearTaskbarPrev) {
+            refindFailures = 0;
+            nextRefind = 0;
+        }
+        nearTaskbarPrev = nearTaskbar;
+
+        if (!pBtn && nearTaskbar && now >= nextRefind) {
+            bool didLog = false;
+            pBtn = FindOverflowButton(pAuto, s, !loggedCandidates, &didLog);
+            loggedCandidates = pBtn ? false : (loggedCandidates || didLog);
+            nextRectRefresh = 0;        // force a fresh rectangle below
+            taskbarPid = 0;
+            GetWindowThreadProcessId(hTaskbar, &taskbarPid);
+            if (pBtn) {
+                refindFailures = 0;
             } else {
-                nextRefind = now + REFIND_IDLE_MS;
+                ULONGLONG delay = REFIND_NEAR_MS << (refindFailures < 4 ? refindFailures : 4);
+                if (delay > REFIND_MAX_MS) delay = REFIND_MAX_MS;
+                if (refindFailures < 100) refindFailures++;
+                nextRefind = now + delay;
             }
         }
 
         if (pBtn) {
             // Expensive and RARE: query the button rectangle through UIA only
             // periodically, not every tick. The chevron rarely moves.
-            if (now >= nextRectRefresh) {
+            // Only while the cursor is at the taskbar: elsewhere the refreshed
+            // rectangle cannot change any decision, so paying two cross-process
+            // calls a second forever would be pure waste.
+            if (nearTaskbar && now >= nextRectRefresh) {
                 // An element that is alive but not currently rendered (the
                 // taskbar auto-hid, or the last hidden icon was removed) returns
                 // S_OK with an empty rectangle rather than an error. Keeping it
@@ -834,9 +877,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             }
 
             // Suppress the chevron's tooltip for as long as the cursor is on it:
-            // the "Hide" tooltip covers the bottom row of icons once the flyout
-            // is open, and the "Show hidden icons" one can appear before the
-            // flyout does, which is most noticeable when a hover delay is set.
+            // Suppress the chevron's tooltip while the cursor is on it, both
+            // the "Hide" tooltip covering the bottom row of icons once the
+            // flyout is open, and the "Show hidden icons" one that can appear
+            // before the flyout does.
             if (s.hideTooltip && overBtn) {
                 HideChevronTooltip(s, cachedRect, flyoutHwnd, taskbarPid);
             }
@@ -865,21 +909,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // Suspend auto-collapse until the flyout closes on its own —
             // collapsing via Invoke would steal focus and dismiss the popup
             // the user just opened.
-            // The state bit alone misses a click that starts and ends between
-            // two ticks, which at a large polling interval is most clicks. The
-            // low bit reports a press since the previous call, so it catches
-            // those regardless of the interval.
-            SHORT kl = GetAsyncKeyState(VK_LBUTTON);
-            SHORT kr = GetAsyncKeyState(VK_RBUTTON);
-            SHORT km = GetAsyncKeyState(VK_MBUTTON);
-            bool anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
-            bool pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
             if ((pressedSinceTick || (anyBtnDown && !anyBtnDownPrev)) &&
                 flyoutVisible && PtOverWindow(flyoutHwnd, pt)) {
                 clickedInFlyout = true;
                 Wh_Log(L"Click inside flyout: auto-collapse suspended");
             }
-            anyBtnDownPrev = anyBtnDown;
             if (!flyoutVisible && !cooling) {
                 clickedInFlyout = false;
             }
@@ -907,6 +941,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             }
         }
 
+        anyBtnDownPrev = anyBtnDown;
+
         // Interruptible sleep: WhTool_ModUninit signals g_stopEvent so the
         // thread wakes immediately regardless of the polling interval.
         WaitForSingleObject(g_stopEvent, s.pollInterval);
@@ -931,6 +967,10 @@ static void LoadSettings() {
     s.hideTooltip = Wh_GetIntSetting(L"hideTooltip") != 0;
     s.suppressInFullscreen = Wh_GetIntSetting(L"suppressInFullscreen") != 0;
     s.positionalFallback = Wh_GetIntSetting(L"positionalFallback") != 0;
+    if (s.pad < 0) s.pad = 0;
+    if (s.pad > 64) s.pad = 64;     // a large pad turns much of the screen into
+                                    // a hover hotspot; a negative one shrinks
+                                    // the hit area below the button itself
     if (s.pollInterval < 10) s.pollInterval = 10;
     if (s.hoverDelay < 0) s.hoverDelay = 0;
     if (s.grace < 0) s.grace = 0;
