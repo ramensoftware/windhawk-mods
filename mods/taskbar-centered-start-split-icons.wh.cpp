@@ -47,6 +47,12 @@ after a drag/move settles, not on every intermediate pixel of the drag.
 Search, Task View and Widgets can either stay at the far left edge, or move
 right next to Start on whichever side you prefer.
 
+The window-tracking behind position-based splitting and drag-follow can be
+turned off entirely with `trackWindowPositions`, if you'd rather keep just
+the centered Start button and system-button placement with no background
+probing of taskbar buttons and no system-wide event hooks - every app is
+then classified the same way as a pinned-but-not-running one instead.
+
 ## Known limitations (please read before reporting issues)
 
 - **Windows 11 only.** Windows 10's taskbar has no XAML layer to hook into.
@@ -85,13 +91,7 @@ right next to Start on whichever side you prefer.
   made by native layout logic (this mod only overrides each button's
   final X position afterward, it never touches sizing), evaluated against
   the taskbar's native, unsplit layout rather than this mod's split one -
-  unconfirmed, not yet investigated further. **Separately reported:** with
-  "Always" enabled, multiple windows of the same app have been observed
-  not combining into one button at all, appearing as separate icons
-  regardless of count. This mod has no code path that could cause that -
-  grouping is a native decision made before this mod's hooks ever see a
-  button - but it's flagged here as a planned follow-up pending
-  confirmation of whether it reproduces with the mod disabled.
+  unconfirmed, not yet investigated further.
 - **A grouped button (multiple windows combined under one icon) follows
   only its first window.** With "Combine taskbar buttons" set to "Always",
   a group's side and ordering are both decided by whichever of its windows
@@ -100,6 +100,10 @@ right next to Start on whichever side you prefer.
   won't visually reflect all of them. There's no exposed way to pick a
   more meaningful "primary" window for a group, so this is a documented
   tradeoff rather than a bug.
+- **The taskbar's own overflow button, when it appears on a crowded
+  taskbar, keeps its native position** rather than being classified and
+  placed like the buttons around it - this mod doesn't give it a slot in
+  the split layout.
 - **Undocumented internals.** This mod hooks private, unversioned classes
   inside `taskbar.dll` and `Taskbar.View.dll` (via symbols resolved from
   Microsoft's public symbol server at runtime, not hardcoded offsets). A
@@ -116,7 +120,12 @@ right next to Start on whichever side you prefer.
   confirmed cause of an explorer.exe crash (specifically when Windows'
   "show taskbar apps on" setting is anything other than "All taskbars",
   since that's when a window moving across monitors structurally adds/
-  removes taskbar buttons rather than just repositioning them).
+  removes taskbar buttons rather than just repositioning them). As a
+  further safeguard, the very first such probe of a session is held back
+  until a real (non-sentinel) click has been seen passing through the same
+  interception point - so a running app's icon may briefly show on its
+  default side, rather than by window position, until you click any
+  taskbar button once.
 - **Taskbar buttons can disappear when a display is deactivated** (via
   Settings, unplugging, or a third-party display on/off tool) - if
   "Taskbar behaviors > When using multiple displays, show my taskbar apps
@@ -172,7 +181,7 @@ community.
 - rightApps: ""
   $name: Force these apps to the right
   $description: Same idea as leftApps, but for the right side.
-- unresolvedAppsDefaultSide: left
+- unresolvedAppsDefaultSide: contralateral-to-system-buttons
   $name: Default side for unclassified apps
   $options:
     - left: Left of Start
@@ -210,6 +219,18 @@ community.
     when "App icon ordering" above is "Closer to center" - with "Preserve
     existing taskbar order" there's no outer-edge/adjacent-to-Start
     distinction to begin with.
+- trackWindowPositions: true
+  $name: Track window positions
+  $description: >-
+    When on, each running app's taskbar button is matched to its window so
+    it can be classified by live position and follow it if it's dragged
+    across the screen - this involves probing the taskbar's internal click
+    handler on a background timer and two system-wide window-event hooks.
+    Turn off to disable all of that: every running app is then classified
+    the same way as a pinned-but-not-running one, via leftApps/rightApps/
+    "Default side for unclassified apps" below, with no drag-follow. Start
+    centering and Search/Task View/Widgets placement are unaffected either
+    way. Takes effect immediately, no need to reload the mod.
 */
 // ==/WindhawkModSettings==
 
@@ -277,6 +298,7 @@ struct ModSettings {
     UnresolvedAppsDefaultSide unresolvedAppsDefaultSide;
     TaskListOrder taskListOrder;
     PinnedAppsAnchor pinnedAppsAnchor;
+    bool trackWindowPositions;
 };
 ModSettings g_settings;
 
@@ -405,6 +427,8 @@ ModSettings LoadSettingsFromStore() {
 
     s.pinnedAppsAnchor = ParsePinnedAppsAnchor(
         WindhawkUtils::StringSetting::make(L"pinnedAppsAnchor"));
+
+    s.trackWindowPositions = Wh_GetIntSetting(L"trackWindowPositions") != 0;
 
     return s;
 }
@@ -738,6 +762,13 @@ constexpr int kClickSentinelMissesBeforeBroken = 3;
 // dispatched it.
 thread_local bool g_clickSentinelProbingGroup;
 
+// Set the first time a genuine (non-sentinel) click reaches this hook -
+// gates the very first unattended sentinel probe of the session on proof
+// that CTaskListWnd::HandleClick's hook is actually installed and
+// dispatching real clicks through it correctly, before ever risking one
+// becoming a real click if interception is broken. See RATIONALE.md.
+std::atomic<bool> g_realTaskbarClickObserved;
+
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                               void* taskGroup,
                                               void* taskItem,
@@ -758,6 +789,7 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
         return S_OK;
     }
 
+    g_realTaskbarClickObserved = true;
     return CTaskListWnd_HandleClick_Original(pThis, taskGroup, taskItem,
                                               launcherOptions);
 }
@@ -910,6 +942,14 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
         return nullptr;
     }
 
+    // Bails out before dispatching a click if the interception point
+    // hasn't proven reachable this session yet - see
+    // g_realTaskbarClickObserved's own comment.
+    if (!g_realTaskbarClickObserved) {
+        g_resolveStats.failure++;
+        return nullptr;
+    }
+
     IUnknown* elementAbi = (IUnknown*)winrt::get_abi(element);
 
     winrt::com_ptr<IUnknown> windowViewModel;
@@ -955,6 +995,14 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
         !TryGetItemFromContainer_TaskListGroupViewModel_Original ||
         !TaskListGroupViewModel_IsMultiWindow_Original ||
         !TaskGroup_ReportClicked_Original || !CTaskGroup_GetNumItems_Original) {
+        return nullptr;
+    }
+
+    // Bails out before dispatching a click if the interception point
+    // hasn't proven reachable this session yet - see
+    // g_realTaskbarClickObserved's own comment.
+    if (!g_realTaskbarClickObserved) {
+        g_resolveStats.failure++;
         return nullptr;
     }
 
@@ -1402,19 +1450,6 @@ constexpr double kFarLeftSystemButtonMarginPx = 8;
 // system tray's own left edge (see RecomputeLayoutPlan's rightBoundLocal).
 constexpr double kTrayMarginPx = 8;
 
-int SystemButtonRank(SystemButton b) {
-    switch (b) {
-        case SystemButton::Search:
-            return 0;
-        case SystemButton::TaskView:
-            return 1;
-        case SystemButton::Widgets:
-            return 2;
-        default:
-            return -1;
-    }
-}
-
 // Total footprint of Search+TaskView+Widgets together, used both to lay
 // them out and to reserve room for them next to Start (adjacent mode).
 // Recomputed every pass so a hidden cluster reads as genuinely 0.
@@ -1435,19 +1470,21 @@ struct ChildInfo {
 // already-classified children (avoids re-walking/re-classifying).
 double ComputeSystemButtonX(const std::vector<ChildInfo>& childInfos,
                             FrameworkElement targetElement,
-                            SystemButton target,
                             double startCenterX,
                             double startWidth,
                             double clusterWidth) {
-    int targetRank = SystemButtonRank(target);
-    if (targetRank < 0) {
-        return 0;
-    }
-
+    // Sums every other system button's footprint that appears earlier than
+    // targetElement in taskbar order - tracks whatever order the taskbar
+    // itself presents these in, rather than a fixed Search/TaskView/Widgets
+    // table, so this stays correct even if a build ever surfaces more than
+    // one of a given button type. See RATIONALE.md.
     double widthBefore = 0;
     for (auto& info : childInfos) {
-        int r = SystemButtonRank(info.systemButton);
-        if (r >= 0 && r < targetRank) {
+        if (info.element == targetElement) {
+            break;
+        }
+        if (info.systemButton != SystemButton::None &&
+            info.systemButton != SystemButton::Start) {
             widthBefore += SystemButtonFootprintWidth(info.element);
         }
     }
@@ -1460,9 +1497,9 @@ double ComputeSystemButtonX(const std::vector<ChildInfo>& childInfos,
     double ownWidth = SystemButtonFootprintWidth(targetElement);
 
     if (g_settings.systemButtonsAdjacentSide == Side::Left) {
-        // Stack right-to-left outward from Start: highest rank closest to
-        // Start, so reading left-to-right still shows the same low-to-high
-        // rank order (Search, Task View, Widgets) as far-left mode does.
+        // Stack right-to-left outward from Start: taskbar-order-earliest
+        // button ends up closest to Start, so reading left-to-right still
+        // shows the same order as far-left mode does.
         double widthAfter = clusterWidth - widthBefore - ownWidth;
         return startCenterX - startWidth / 2.0 - gap - widthAfter - ownWidth;
     }
@@ -1659,8 +1696,18 @@ void InvalidateTaskbarLayout();
 // which item an element represents without changing the button count).
 constexpr DWORD kIdleResolveTickMs = 30000;
 
+// Retry cadence for a pass that couldn't enumerate the live button set at
+// all (e.g. a taskbar rebuild transiently breaks GetCachedTaskbarRepeater).
+// Much shorter than kIdleResolveTickMs, which is only meant for a pass that
+// actually confirmed the live set - see ScheduleNextResolveTick.
+constexpr DWORD kEnumerationFailedRetryMs = 1000;
+
 // Defined later (Mod lifecycle section).
 void StartWinEventHook();
+
+// Defined later (Mod lifecycle section); lets a live trackWindowPositions
+// toggle stop the WinEventHook thread reversibly - see RATIONALE.md.
+void StopWinEventHookForToggle();
 
 // Defined later (Mod lifecycle section); lets the ArrangeOverride hook
 // request an immediate HWND-resolve attempt.
@@ -1707,7 +1754,18 @@ HWND EnsureTaskbarWnd() {
             return nullptr;
         }
         Wh_Log(L"Resolved taskbar window: %p", (HWND)g_hTaskbarWnd);
-        StartWinEventHook();
+        // Starting this thread is what turns on window-position tracking
+        // at all - see trackWindowPositions' own settings description.
+        // Only checked here at initial resolve, not on every call; a live
+        // settings change afterward is handled separately by
+        // TaskbarWndSubclassProc's SettingsChangedMsg case, via
+        // StartWinEventHook/StopWinEventHookForToggle directly.
+        if (g_settings.trackWindowPositions) {
+            StartWinEventHook();
+        } else {
+            Wh_Log(L"trackWindowPositions is off - skipping the WinEventHook "
+                   L"thread and all HWND resolution");
+        }
     }
 
     // Retried on every call until it succeeds, not just the pass that
@@ -1818,14 +1876,16 @@ void ResolvePendingButtonHwnds() {
     // are done (doing it from ButtonHwndResolveTimerProc instead would
     // race g_buttonHwndCache). `enumerated` tracks whether the walk below
     // actually completed, since NextResolveDelayMs' INFINITE answer is
-    // only trustworthy then - the destructor falls back to
-    // kIdleResolveTickMs otherwise.
+    // only trustworthy then - the destructor falls back to the much
+    // shorter kEnumerationFailedRetryMs otherwise, so a transient failure
+    // (e.g. a taskbar rebuild) recovers quickly rather than leaving every
+    // button on its default-side classification for up to 30s.
     bool enumerated = false;
     struct ScheduleNextResolveTick {
         bool* enumerated;
         ~ScheduleNextResolveTick() {
-            DWORD delay =
-                *enumerated ? NextResolveDelayMs() : kIdleResolveTickMs;
+            DWORD delay = *enumerated ? NextResolveDelayMs()
+                                      : kEnumerationFailedRetryMs;
             if (delay != INFINITE) {
                 ArmButtonHwndResolveTimer(delay);
             }
@@ -2133,7 +2193,8 @@ void RecomputeLayoutPlan() {
         // so an empty cluster reads as genuinely 0.
         double systemClusterWidth = 0;
         for (auto& info : childInfos) {
-            if (SystemButtonRank(info.systemButton) >= 0) {
+            if (info.systemButton != SystemButton::None &&
+                info.systemButton != SystemButton::Start) {
                 systemClusterWidth += SystemButtonFootprintWidth(info.element);
             }
         }
@@ -2156,7 +2217,7 @@ void RecomputeLayoutPlan() {
                 continue;
             }
             newPlan[winrt::get_abi(info.element)] = ComputeSystemButtonX(
-                childInfos, info.element, info.systemButton, startCenterX,
+                childInfos, info.element, startCenterX,
                 g_lastStartWidth, systemClusterWidth);
         }
 
@@ -2398,10 +2459,27 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
     if (uMsg == SettingsChangedMsg()) {
         std::unique_ptr<ModSettings> heapSettings(
             reinterpret_cast<ModSettings*>(lParam));
+        bool wasTracking = g_settings.trackWindowPositions;
         g_settings = std::move(*heapSettings);
         // Marks the previous plan stale now that the settings it was built
         // from just changed. See RATIONALE.md.
         g_planDirty = true;
+        // Starts/stops the WinEventHook thread live on a trackWindowPositions
+        // change, rather than only at the next mod reload - see RATIONALE.md.
+        if (g_settings.trackWindowPositions != wasTracking) {
+            if (g_settings.trackWindowPositions) {
+                StartWinEventHook();
+            } else {
+                StopWinEventHookForToggle();
+                // Without this, an already-resolved button keeps using its
+                // last-known (now frozen) window position instead of
+                // immediately falling back to leftApps/rightApps/default -
+                // GetButtonHwnd would otherwise keep finding a stale entry
+                // here. Safe to clear directly: every other access to this
+                // cache also runs on this same taskbar thread.
+                g_buttonHwndCache.clear();
+            }
+        }
         return 0;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -2607,12 +2685,14 @@ bool HookTaskbarDllSymbols() {
 
     bool ok = HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
     Wh_Log(L"HookTaskbarDllSymbols: %s", ok ? L"OK" : L"FAILED");
-    Wh_Log(L"  TaskItem::ReportClicked: %s",
-           TaskItem_ReportClicked_Original ? L"resolved" : L"MISSING");
-    Wh_Log(L"  CTaskGroup::GetNumItems: %s",
-           CTaskGroup_GetNumItems_Original ? L"resolved" : L"MISSING");
-    Wh_Log(L"  TaskGroup::ReportClicked: %s",
-           TaskGroup_ReportClicked_Original ? L"resolved" : L"MISSING");
+    // Only logged individually on failure - these three are optional (see
+    // the hooks table above), so there's nothing to report when ok is true.
+    if (!ok) {
+        Wh_Log(L"  Missing (optional, click-sentinel chain only): %s%s%s",
+               TaskItem_ReportClicked_Original ? L"" : L"TaskItem::ReportClicked ",
+               CTaskGroup_GetNumItems_Original ? L"" : L"CTaskGroup::GetNumItems ",
+               TaskGroup_ReportClicked_Original ? L"" : L"TaskGroup::ReportClicked ");
+    }
     return ok;
 }
 
@@ -2664,23 +2744,29 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     bool ok = HookSymbols(module, hooks, ARRAYSIZE(hooks));
     Wh_Log(L"HookTaskbarViewDllSymbols: %s", ok ? L"OK" : L"FAILED");
+    // ArrangeOverride is the one required symbol here, so it's always
+    // worth confirming directly. The rest are optional (HWND-resolution
+    // chain only) - only worth naming individually on failure.
     Wh_Log(L"  ArrangeOverride: %s",
            TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original ? L"resolved"
                                                                         : L"MISSING");
-    Wh_Log(L"  TryGetItemFromContainer<TaskListWindowViewModel>: %s",
-           TryGetItemFromContainer_TaskListWindowViewModel_Original ? L"resolved"
-                                                                     : L"MISSING");
-    Wh_Log(L"  TaskListWindowViewModel::get_TaskItem: %s",
-           TaskListWindowViewModel_get_TaskItem_Original ? L"resolved"
-                                                          : L"MISSING");
-    Wh_Log(L"  TryGetItemFromContainer<TaskListGroupViewModel>: %s",
-           TryGetItemFromContainer_TaskListGroupViewModel_Original ? L"resolved"
-                                                                    : L"MISSING");
-    Wh_Log(L"  TaskListGroupViewModel::IsMultiWindow: %s",
-           TaskListGroupViewModel_IsMultiWindow_Original ? L"resolved"
-                                                          : L"MISSING");
-    Wh_Log(L"  ITaskGroup::IsRunning: %s",
-           ITaskGroup_IsRunning_Original ? L"resolved" : L"MISSING");
+    if (!ok) {
+        Wh_Log(L"  Missing (optional, HWND-resolution chain only): "
+               L"%s%s%s%s%s",
+               TryGetItemFromContainer_TaskListWindowViewModel_Original
+                   ? L""
+                   : L"TryGetItemFromContainer<TaskListWindowViewModel> ",
+               TaskListWindowViewModel_get_TaskItem_Original
+                   ? L""
+                   : L"TaskListWindowViewModel::get_TaskItem ",
+               TryGetItemFromContainer_TaskListGroupViewModel_Original
+                   ? L""
+                   : L"TryGetItemFromContainer<TaskListGroupViewModel> ",
+               TaskListGroupViewModel_IsMultiWindow_Original
+                   ? L""
+                   : L"TaskListGroupViewModel::IsMultiWindow ",
+               ITaskGroup_IsRunning_Original ? L"" : L"ITaskGroup::IsRunning ");
+    }
     return ok;
 }
 
@@ -2842,16 +2928,23 @@ void StartWinEventHook() {
 }
 
 // Waits for the thread to fully exit, guaranteeing UnhookWinEvent and the
-// resolve timer's KillTimer have run before Windhawk unmaps this module.
-void StopWinEventHook() {
+// resolve timer's KillTimer have run before returning. Shared by
+// StopWinEventHook (permanent, mod-teardown) and StopWinEventHookForToggle
+// (reversible, live trackWindowPositions toggle) - see RATIONALE.md for why
+// only the former sets g_winEventThreadStopped.
+void StopWinEventHookInternal(bool permanent) {
     HANDLE thread;
     DWORD threadId;
     {
         std::lock_guard<std::mutex> guard(g_winEventThreadMutex);
         // Set before releasing the lock, so a StartWinEventHook call
         // arriving after this point can't recreate a thread nobody would
-        // tear down.
-        g_winEventThreadStopped = true;
+        // tear down. Unconditional (even if thread turns out already null
+        // below) so a concurrent StopWinEventHookForToggle racing this
+        // permanent stop can't leave the latch unset.
+        if (permanent) {
+            g_winEventThreadStopped = true;
+        }
         thread = g_winEventThread;
         threadId = g_winEventThreadId;
         g_winEventThread = nullptr;
@@ -2874,6 +2967,18 @@ void StopWinEventHook() {
     // module's code while the thread is still running inside it.
     WaitForSingleObject(thread, INFINITE);
     CloseHandle(thread);
+}
+
+void StopWinEventHook() {
+    StopWinEventHookInternal(/*permanent=*/true);
+}
+
+// Lets trackWindowPositions be turned off live, without tripping the
+// permanent g_winEventThreadStopped latch StopWinEventHook sets - a later
+// StartWinEventHook (from turning the setting back on) still works. See
+// RATIONALE.md.
+void StopWinEventHookForToggle() {
+    StopWinEventHookInternal(/*permanent=*/false);
 }
 
 // Capped exponential backoff for the click-sentinel probe, shared by
