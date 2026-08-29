@@ -22,7 +22,7 @@ including floating - and simple, predictable controls.
 ![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif)
 
 ## Notes
-- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) to preserve workspace across Explorer restarts.*
+- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) and benefit from better stability & workspace preservation across Explorer restarts.*
 - *MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).*
 
 ## Features
@@ -2163,10 +2163,10 @@ static WindowRecord MakeWindowRecord(HWND hwnd, ManageState state = ManageState:
 
     RECT frame{};
     HMONITOR monitor = GetWindowPhysicalMonitor(hwnd);
-    // Only a restored window exposes meaningful natural/floating geometry.
-    // Minimized/maximized admission should fall back to the configured size
-    // rather than remembering an iconic or maximized rectangle.
-    if (monitor && IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd) &&
+    // Only a participating restored window exposes meaningful natural/floating
+    // geometry. Suspended admission should fall back to the configured size.
+    if (monitor &&
+        GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
         GetWindowFrameRect(hwnd, &frame) &&
         frame.right > frame.left && frame.bottom > frame.top) {
       record.floatingRect = frame;
@@ -2421,9 +2421,9 @@ static HMONITOR GetCurrentManagedWindowMonitor(HWND hwnd) {
   // (example: VSCode unstaged commit dialog)
   if (!IsWindowTrackedInAnyState(hwnd) && !IsWindowEnabled(hwnd)) return nullptr;
 
-  // FancyWM only tiles windows in the Restored state. Maximized windows remain
-  // managed logically but do not participate until Windows reports Restored.
-  if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd)) return nullptr;
+  // FancyWM only tiles windows in the Restored state. Minimized, maximized and
+  // native-fullscreen windows remain managed logically until they are restored.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) return nullptr;
   if (!WindowCanBeManaged(hwnd)) return nullptr;
   if (IsWindowCloaked(hwnd)) return nullptr;
 
@@ -2795,6 +2795,9 @@ static bool RepairFloatingGeometry(
 
   RECT target = ClampFloatingRectToWorkArea(
       CenteredRect(center, width, height), workArea);
+  // The window can enter a suspended physical state while the placement target
+  // is being calculated. Never overwrite that newer application-owned state.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) return false;
   PlacementObservation observation =
       PlaceWindowChecked(hwnd, record->canMove, target);
   if (observation.result != PlacementResult::Success &&
@@ -3319,6 +3322,28 @@ static SuspensionReason GetPhysicalSuspensionReason(HWND hwnd) {
   if (IsIconic(hwnd)) return SuspensionReason::Minimized;
   if (!IsWindowVisible(hwnd)) return SuspensionReason::Hidden;
   if (IsZoomed(hwnd)) return SuspensionReason::Maximized;
+
+  // Match FancyWM's native-fullscreen fallback: Chromium and similar apps can
+  // cover a complete display while Windows still reports the HWND as Restored.
+  // Maximized is the right model reason because both states have identical
+  // suspend/save-slot/restore semantics here.
+  RECT windowRect{};
+  if (GetWindowRect(hwnd, &windowRect)) {
+    HMONITOR monitor = MonitorFromRect(&windowRect, MONITOR_DEFAULTTONULL);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    constexpr LONG kFullscreenTolerancePx = 2;
+    if (monitor && GetMonitorInfoW(monitor, &monitorInfo) &&
+        !Differs(windowRect.left, monitorInfo.rcMonitor.left,
+                 kFullscreenTolerancePx) &&
+        !Differs(windowRect.top, monitorInfo.rcMonitor.top,
+                 kFullscreenTolerancePx) &&
+        !Differs(windowRect.right, monitorInfo.rcMonitor.right,
+                 kFullscreenTolerancePx) &&
+        !Differs(windowRect.bottom, monitorInfo.rcMonitor.bottom,
+                 kFullscreenTolerancePx)) {
+      return SuspensionReason::Maximized;
+    }
+  }
   return SuspensionReason::None;
 }
 
@@ -4056,8 +4081,8 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
 
       if (!IsWindow(hwnd)) {
         action = Workspace::PlacementAction::Forget;
-      } else if (!IsIconic(hwnd) && IsWindowVisible(hwnd) && !IsWindowCloaked(hwnd) &&
-                 !IsZoomed(hwnd)) {
+      } else if (GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
+                 !IsWindowCloaked(hwnd)) {
         const WindowRecord* record = workspace.Find(hwnd);
         if (!record) {
           action = Workspace::PlacementAction::Forget;
@@ -4192,8 +4217,9 @@ static void FinalizeExpiredConformanceLease(
     ++Diagnostics::g_runtime.counters.conformanceLeaseExpiredStale;
   };
 
-  if (!IsWindow(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
-      !IsWindowVisible(hwnd) || IsWindowCloaked(hwnd) ||
+  if (!IsWindow(hwnd) ||
+      GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd) ||
       IsMoveSizeGestureInProgress(hwnd)) {
     stale();
     return;
@@ -4238,6 +4264,14 @@ static void FinalizeExpiredConformanceLease(
     return;
   }
 
+  // Expiry processing performs several live queries after its initial preflight.
+  // A window that entered fullscreen/maximized meanwhile must remain suspended,
+  // not be permanently converted to Floating by this stale lease verdict.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) {
+    stale();
+    return;
+  }
+
   if (!workspace.Float(hwnd)) {
     stale();
     return;
@@ -4269,8 +4303,9 @@ static bool HandleTiledWindowLocationChange(HWND hwnd) {
   }
   const bool hasLease = leaseState == ConformanceLeaseReadResult::Active;
 
-  if (!IsWindow(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
-      !IsWindowVisible(hwnd) || IsWindowCloaked(hwnd)) {
+  if (!IsWindow(hwnd) ||
+      GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd)) {
     if (hasLease) CancelConformanceLease(hwnd, lease.generation);
     return false;
   }
@@ -4340,6 +4375,13 @@ static bool HandleTiledWindowLocationChange(HWND hwnd) {
   // before we act. Earlier actor work can have cancelled or replaced it; the
   // generation check prevents stale work from accounting against the replacement.
   if (!IsCurrentConformanceLease(hwnd, lease.generation)) return false;
+
+  // Re-check at the mutation boundary: Chromium can finish entering fullscreen
+  // while the ownership/layout queries above are in progress.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) {
+    CancelConformanceLease(hwnd, lease.generation);
+    return false;
+  }
 
   PlacementObservation observation =
       PlaceWindowChecked(hwnd, record->canMove, authoritative);
@@ -4904,13 +4946,13 @@ static std::vector<DesktopMonitorKey> ReconcileWindowOwnership(
 static void ReconcileWindowParticipation(
     HWND hwnd, const std::vector<DesktopMonitorKey>& ownerKeys,
     std::vector<DesktopMonitorKey>* changedKeys) {
-  const SuspensionReason reason = GetPhysicalSuspensionReason(hwnd);
+  const SuspensionReason physicalReason = GetPhysicalSuspensionReason(hwnd);
 
   // In Manual mode, minimizing is an explicit departure from the managed group.
   // Forget the logical member entirely; restoring the HWND won't re-admit it
   // because Manual discovery remains closed. Maximization is intentionally
   // different: suspend it so restore returns to the exact saved slot/weight.
-  if (IsManualMode() && reason == SuspensionReason::Minimized) {
+  if (IsManualMode() && physicalReason == SuspensionReason::Minimized) {
     ForgetWindowFromOwners(hwnd, ownerKeys, changedKeys);
     return;
   }
@@ -4921,6 +4963,23 @@ static void ReconcileWindowParticipation(
 
     const WindowRecord* record = workspace.Find(hwnd);
     if (!record) continue;
+
+    SuspensionReason reason = physicalReason;
+    if (reason == SuspensionReason::Maximized && !IsZoomed(hwnd) &&
+        record->state == ManageState::Tiled) {
+      // FancyWM's full-monitor fallback can also describe a legitimate
+      // borderless tile when the work area, gaps and insets consume no space.
+      // If this window already occupies its authoritative tile, there is no
+      // layout violation to suspend or repair.
+      RECT authoritative{};
+      RECT current{};
+      if (GetCurrentAuthoritativeTiledRect(
+              ownerKey, workspace, hwnd, &authoritative) &&
+          GetWindowFrameRect(hwnd, &current) &&
+          RectsNear(current, authoritative)) {
+        reason = SuspensionReason::None;
+      }
+    }
 
     bool changed = false;
     bool restoredIntoFloatingLayout = false;
@@ -5202,7 +5261,7 @@ static std::vector<HWND> GetTileWindowsAfterDesktopSwitch(
         ++Diagnostics::g_runtime.counters.enumWindowsVisited;
         auto* ctx = reinterpret_cast<EnumContext*>(lParam);
 
-        if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd)) return TRUE;
+        if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) return TRUE;
         if (!WindowCanBeManaged(hwnd)) return TRUE;
         if (!IsWindowTrackedInAnyState(hwnd) && !IsWindowEnabled(hwnd)) return TRUE;
 
@@ -5396,8 +5455,8 @@ static void ReconcileDeferredLifecycle() {
   g_wm.reconciledDesktop = currentDesktop;
   g_wm.reconciledDesktopState = ReconciledDesktopState::Settled;
 
-  // Repair liveness/exclusions and settled hidden/minimized/maximized participation
-  // globally before doing current-desktop discovery.
+  // Repair liveness/exclusions and settled suspended participation globally
+  // before doing current-desktop discovery.
   std::vector<DesktopMonitorKey> globallyChanged;
   ReconcileKnownWindows(ReconcileScope::Participation, &globallyChanged);
   if (fallbackDesktopChange) {
