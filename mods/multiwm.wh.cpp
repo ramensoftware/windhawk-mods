@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              multiwme
-// @name            MultiWME
+// @id              multiwm
+// @name            MultiWM
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
 // @version         1.13.19
 // @author          meteoni
