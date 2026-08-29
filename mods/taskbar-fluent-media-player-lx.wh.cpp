@@ -3,9 +3,9 @@
 // @name            任务栏 Fluent 媒体播放器（LX Music 歌词版）
 // @description     基于 Taskbar Fluent Media Player 二开的 Windhawk 插件，在 Windows 11 任务栏嵌入 Fluent 风格媒体播放器，并额外显示 LX Music 桌面版的当前歌词（歌词位于底部，可蔓延至播放控件下方）。仅适配 LX Music，需在 LX Music 设置中启用"开放 API 服务"。
 // @description:ru-RU Форк Windhawk-мода Taskbar Fluent Media Player, добавляющий отображение текущего текста песни LX Music в панели задач (внизу, под элементами управления). Только для LX Music, требуется включить "Open API service" в настройках LX Music.
-// @version         1.6.0-lx.10
-// @author          张大帅
-// @github          https://github.com/zq20180515/windhawk-mods/new/main/mods
+// @version         1.6.0.10
+// @author          zq20180515 (forked from Salyts)
+// @github          https://github.com/zq20180515
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser -lwinhttp
 // ==/WindhawkMod==
@@ -14,33 +14,97 @@
 /*
 # 任务栏 Fluent 媒体播放器（LX Music 歌词版）
 
-> **本插件基于 [Taskbar Fluent Media Player](https://github.com/Salyts/Taskbar-Fluent-Media-Player) 1.6.0 二开，仅适配 LX Music 桌面版。**
->
-> 在原版任务栏媒体播放器的基础上，新增 **LX Music 歌词显示**：当前歌词行显示在播放器底部，可蔓延至播放控件下方；封面、歌名、播放控件等全部原版功能保留。
->
-> **使用前提**：在 LX Music → 设置中启用「开放 API 服务」（默认端口 23330），插件通过 `http://127.0.0.1:端口/status` 获取当前歌词。
->
-> **新增设置**：在「LX Music 歌词」设置组中可配置 API 地址/端口、是否显示歌词、歌词是否滚动等。
+> 基于 [Taskbar Fluent Media Player](https://github.com/Salyts/Taskbar-Fluent-Media-Player) 1.6.0 二开，仅适配 LX Music 桌面版。在任务栏嵌入 Fluent 风格媒体播放器的基础上，新增 **LX Music 实时歌词显示**、**频谱重叠模式**、**全中文设置界面**等功能。
+
+## ✨ 核心功能
+
+### 🎵 LX Music 歌词显示
+- 当前歌词行显示在播放器底部，可蔓延至播放控件下方
+- **双行歌词**：当前行（大号）+ 下一句（小号半透明），通过 LX Music 开放 API 获取完整 LRC 并解析时间轴
+- 歌词字号、字体、颜色（支持 `#RRGGBB` 和 `R G B` 格式）可自定义
+- 可选歌词文字阴影，频谱重叠模式下增强可读性
+- 歌词与歌名间距可调（支持负值重叠）
+- 无歌词时自动回退：显示演唱者名称，或完全收起歌词行
+- 纯音乐歌词自动识别（如"纯音乐，请欣赏"视为无歌词）
+- 可禁用迷你播放器弹窗
+
+### 📊 频谱重叠模式
+- 频谱新增「重叠」显示模式：覆盖在歌名、歌词下方（封面除外）
+- 重叠模式下频谱默认浅灰半透明，不影响文字阅读
+- 重叠透明度可独立调节（0-100）
+
+### 🇨🇳 全中文本地化
+- 所有设置项（播放器、外观、行为、动画、频谱、调试等）均已翻译为简体中文
+- Mod 名称、描述、设置说明均支持中英文
+
+### 🔧 原版功能完整保留
+- 20+ 任务栏位置、Acrylic/Mica 等 Fluent 材质、自适应颜色
+- 完整媒体控制（播放/暂停/上一首/下一首/快进快退/随机/循环）
+- 媒体会话切换、迷你播放器弹窗、右键上下文菜单
+- 实时音频频谱（WASAPI 回环 + FFT，5 种形状）
+- 智能隐藏（无媒体/全屏/闲置超时）
+
+## 📋 使用前提
+
+1. 安装 **LX Music 桌面版** v2.7.0+
+2. 在 LX Music → 设置中启用「**开放 API 服务**」（默认端口 23330）
+3. 插件通过 `http://127.0.0.1:端口/status` 获取播放状态和完整 LRC 歌词
+
+## ⚙️ 关键设置
+
+| 设置组 | 说明 |
+|---|---|
+| **LX Music 歌词** | API 地址/端口、歌词开关、双行歌词、字号/字体/颜色/阴影、间距、无歌词行为 |
+| **频谱设置** | 频谱位置（左/右/重叠）、重叠透明度 |
+| **行为设置** | 迷你播放器弹窗开关 |
+
+## 🙏 致谢
+
+- **[Salyts](https://github.com/Salyts)** — Taskbar Fluent Media Player 原作者
+- **[GR0UD](https://github.com/GR0UD)** — 音频频谱（采集 + FFT 引擎）
+- **[lyswhut](https://github.com/lyswhut)** — LX Music 桌面版及开放 API
 
 ---
 
-# Taskbar Fluent Media Player 1.6.0
+# Taskbar Fluent Media Player (LX Music Lyrics Edition)
 
-**Taskbar Fluent Media Player —** is a Windhawk mod that embeds a fully functional media player directly into your Windows 11 taskbar. No popups, no separate windows — just your music, always one glance away.
+> A fork of [Taskbar Fluent Media Player](https://github.com/Salyts/Taskbar-Fluent-Media-Player) 1.6.0, tailored for LX Music Desktop. Adds real-time **LX Music lyrics display**, **visualizer overlay mode**, and **full Chinese localization** on top of the original taskbar media player.
 
-### [> Russian documentation <](https://github.com/Salyts/Taskbar-Fluent-Media-Player/blob/main/README_RU.md)
+## Key Features
 
-### Key Features:
-* **Deep Integration —** Place the player anywhere on the taskbar or tray — left/right of the clock, next to system icons, near the Start button, or overlaid on the taskbar edge. 20+ positions to choose from.
-* **Fluent UI Effects —** Native Windows 11 materials: **Acrylic**, **Mica**, **Mica Alt**, blurred album art background, solid color, and gradient — all with per-theme light/dark color support.
-* **Adaptive Colors —** Every color field accepts a `light$dark` pair. Use the album art dominant color or the system accent color as a value for any element.
-* **Full Media Control —** Play/Pause, Previous, Next, Rewind/Forward 5s, Shuffle, and Repeat. Button order is fully configurable — show only what you need.
-* **Right-Click Context Menu —** Repeat and Shuffle each have their own submenu or single-button toggle mode. All items are optional, reorderable.
-* **Session Switching —** Multiple apps playing at once? Switch between media sessions with a dedicated button, a click, or by scrolling the mouse wheel over the album art — no need to open anything.
-* **Mini Player Popup —** Bind the new "Open player menu" click action to any click type to pop open a compact popup showing album art, title/artist, and Play/Pause, Previous, Next, and Switch Session buttons. Choose in **Player Menu Settings** whether it opens directly above the media player, or at a fixed position on the screen (any corner/edge, with distance offsets and slide-in animation direction — like the Notifications placement mod).
-* **Audio Visualizer —** Real-time spectrum bars (WASAPI loopback + FFT) with 5 shapes (Stereo, Mountain, Mirror, Wave, Breathe), 5 color modes, 6 EQ presets, and full size/position/sensitivity control.
-* **Smart Behavior —** Auto-hides when there is no media, in full-screen, or after a configurable idle timeout. Shows again the moment playback resumes.
+### LX Music Lyrics
+- Current lyric line at the bottom of the player, extending beneath playback controls
+- **Dual-line lyrics**: current line (large) + next line (small, semi-transparent), parsed from full LRC via LX Music Open API
+- Customizable lyric font size, family, color (supports `#RRGGBB` and `R G B`), and optional text shadow
+- Adjustable title-lyric spacing (supports negative values for overlap)
+- No-lyric fallback: show artist name or collapse the lyric row
+- Pure music lyric auto-detection (e.g. "纯音乐，请欣赏" treated as no lyric)
+- Option to disable mini player popup
 
+### Visualizer Overlay Mode
+- New "overlay" placement: visualizer beneath song title and lyrics (except album art)
+- Light gray semi-transparent by default for readability
+- Adjustable overlay opacity (0-100)
+
+### Chinese Localization
+- All settings (player, appearance, behavior, animation, visualizer, debug, etc.) fully translated to Simplified Chinese
+
+### All Original Features Preserved
+- 20+ taskbar positions, Acrylic/Mica materials, adaptive colors
+- Full media controls, session switching, mini player popup, context menu
+- Real-time audio visualizer (WASAPI loopback + FFT, 5 shapes)
+- Smart auto-hide (no media / fullscreen / idle timeout)
+
+## Requirements
+
+- **LX Music Desktop** v2.7.0+ with "Open API service" enabled (default port: 23330)
+- The mod fetches status and full LRC lyrics via `http://127.0.0.1:port/status`
+
+## Credits
+
+- **[Salyts](https://github.com/Salyts)** — Original Taskbar Fluent Media Player author
+- **[GR0UD](https://github.com/GR0UD)** — Audio visualizer (capture + FFT engine)
+- **[lyswhut](https://github.com/lyswhut)** — LX Music Desktop and Open API
 */
 // ==/WindhawkModReadme==
 
