@@ -3648,7 +3648,7 @@ bool IsLogonUiInjectionEnabled() {
 
     // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code
     // 20 seconds: Wait for symbol download (it's not that big; better than infinite. probe path isn't blocking shutdown either)
-    DWORD result = WaitForSingleObject(pi.hProcess, 20000);
+    DWORD result = WaitForSingleObject(pi.hProcess, 40000);
     if (result != WAIT_OBJECT_0) {
         // Should exit immediately but just to be safe
         Wh_Log(L"LogonUI wait timed out or failed");
