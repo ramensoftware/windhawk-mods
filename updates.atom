@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-29T11:43:31.000Z</updated>
+    <updated>2026-08-29T14:05:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar: no minimize on click 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-no-minimize#0406877a8b83b629d25289ca25b1370f7906118e</id>
+        <link href="https://windhawk.net/mods/taskbar-no-minimize"/>
+        <updated>2026-08-29T14:05:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to minimize on double-click.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar System Info 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-system-info#5305a79fdc7c0a10a0a04af1dcddf2578dd59545</id>
@@ -576,23 +589,6 @@ determines the target monitor using the cursor position, and repositions the win
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.4]]></title>
-        <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#be13fba7112e7504c68607c9f2ca8dee08de621c</id>
-        <link href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe"/>
-        <updated>2026-08-24T17:37:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix initial layout of breadcrumbs</li>
-<li>Fix restoring breadcrumbs from the minimized state</li>
-<li>Apply lock/unlock to all open windows</li>
-<li>Toolbar height is DPI-aware</li>
-<li>Fix navbar re-appearing after fullscreen (F11)</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

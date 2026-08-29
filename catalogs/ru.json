@@ -13249,7 +13249,7 @@
           7
         ],
         "ratingUsers": 7,
-        "updated": 1773398540000,
+        "updated": 1788012304000,
         "users": 150
       },
       "metadata": {
@@ -13266,7 +13266,7 @@
         ],
         "name": "Taskbar: no minimize on click",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-notification-icon-spacing": {
