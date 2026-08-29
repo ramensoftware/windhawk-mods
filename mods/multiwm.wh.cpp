@@ -143,7 +143,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 - hotkeys:
   - TilingModifier: alt
     $name: Modifier
-    $description: Modifier used by all window-manager hotkeys.
+    $description: "Modifier used by all window-manager hotkeys. \nNote: Alt+<Key> can shadow some system hotkeys - if you don't know what they are, there's likely no need to worry. "
     $options:
       - alt: Alt
       - ctrl: Ctrl
