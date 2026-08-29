@@ -82,6 +82,9 @@ thread_local int g_makeBackgroundThumbnailDepth = 0;
 std::atomic_bool g_twinuiPcShellHookAttempted{false};
 std::atomic_bool g_thumbcacheHookAttempted{false};
 std::atomic_bool g_windowsStorageHookAttempted{false};
+std::atomic_bool g_hookWorkInProgress{false};
+std::atomic_bool g_hookWorkPending{false};
+std::atomic_bool g_hookSetupComplete{false};
 std::atomic_bool g_thumbnailClampLogged{false};
 std::atomic<int> g_maximumThumbnailSize{1024};
 
@@ -365,30 +368,92 @@ bool HookThumbnailCache(
 
 bool HookLoadedThumbnailCache() {
     bool registeredHook = false;
-    if (HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll");
-        thumbcache) {
-        registeredHook = HookThumbnailCache(
-            thumbcache,
-            &g_thumbcacheHookAttempted,
-            L"thumbcache.dll",
-            &g_thumbcacheGetThumbnailOriginal,
-            ThumbcacheGetThumbnailHook,
-            &g_thumbcacheApiGetThumbnailOriginal,
-            ThumbcacheApiGetThumbnailHook);
+    if (!g_thumbcacheHookAttempted.load()) {
+        if (HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll")) {
+            registeredHook = HookThumbnailCache(
+                thumbcache,
+                &g_thumbcacheHookAttempted,
+                L"thumbcache.dll",
+                &g_thumbcacheGetThumbnailOriginal,
+                ThumbcacheGetThumbnailHook,
+                &g_thumbcacheApiGetThumbnailOriginal,
+                ThumbcacheApiGetThumbnailHook);
+        }
     }
-    if (HMODULE windowsStorage = GetModuleHandleW(L"windows.storage.dll");
-        windowsStorage) {
-        registeredHook = HookThumbnailCache(
-                             windowsStorage,
-                             &g_windowsStorageHookAttempted,
-                             L"windows.storage.dll",
-                             &g_windowsStorageGetThumbnailOriginal,
-                             WindowsStorageGetThumbnailHook,
-                             &g_windowsStorageApiGetThumbnailOriginal,
-                             WindowsStorageApiGetThumbnailHook) ||
-                         registeredHook;
+    if (!g_windowsStorageHookAttempted.load()) {
+        if (HMODULE windowsStorage =
+                GetModuleHandleW(L"windows.storage.dll")) {
+            registeredHook = HookThumbnailCache(
+                                 windowsStorage,
+                                 &g_windowsStorageHookAttempted,
+                                 L"windows.storage.dll",
+                                 &g_windowsStorageGetThumbnailOriginal,
+                                 WindowsStorageGetThumbnailHook,
+                                 &g_windowsStorageApiGetThumbnailOriginal,
+                                 WindowsStorageApiGetThumbnailHook) ||
+                             registeredHook;
+        }
     }
     return registeredHook;
+}
+
+bool IsHookSetupComplete() {
+    if (!g_twinuiPcShellHookAttempted.load()) {
+        return false;
+    }
+    if (!g_makeBackgroundThumbnailOriginal) {
+        return true;
+    }
+    return g_thumbcacheHookAttempted.load() &&
+           g_windowsStorageHookAttempted.load();
+}
+
+void ProcessLateHookWork() {
+    // Never wait inside the loader hook. A nested or concurrent load asks the
+    // current owner to rescan and returns immediately.
+    g_hookWorkPending.store(true);
+
+    for (;;) {
+        bool expected = false;
+        if (!g_hookWorkInProgress.compare_exchange_strong(expected, true)) {
+            return;
+        }
+
+        do {
+            g_hookWorkPending.store(false);
+
+            bool registeredHook = false;
+            if (!g_twinuiPcShellHookAttempted.load()) {
+                registeredHook = HookBackgroundThumbnailHelper(
+                    GetModuleHandleW(L"twinui.pcshell.dll"));
+            }
+            if (g_makeBackgroundThumbnailOriginal) {
+                registeredHook =
+                    HookLoadedThumbnailCache() || registeredHook;
+            }
+
+            if (registeredHook) {
+                SetLastError(ERROR_SUCCESS);
+                if (!Wh_ApplyHookOperations()) {
+                    Wh_Log(L"Failed to apply late-loaded hooks: %lu",
+                           GetLastError());
+                }
+            }
+
+            if (IsHookSetupComplete()) {
+                g_hookSetupComplete.store(true);
+            }
+        } while (!g_hookSetupComplete.load() &&
+                 g_hookWorkPending.exchange(false));
+
+        g_hookWorkInProgress.store(false);
+        // Close the handoff race where a request arrives after the final
+        // pending check but before ownership is released.
+        if (g_hookSetupComplete.load() ||
+            !g_hookWorkPending.exchange(false)) {
+            return;
+        }
+    }
 }
 
 HMODULE WINAPI LoadLibraryExWHook(
@@ -401,17 +466,8 @@ HMODULE WINAPI LoadLibraryExWHook(
         return module;
     }
 
-    HMODULE twinuiPcShell = GetModuleHandleW(L"twinui.pcshell.dll");
-    bool registeredHook = HookBackgroundThumbnailHelper(twinuiPcShell);
-    if (g_makeBackgroundThumbnailOriginal) {
-        registeredHook = HookLoadedThumbnailCache() || registeredHook;
-    }
-
-    if (registeredHook) {
-        SetLastError(ERROR_SUCCESS);
-        if (!Wh_ApplyHookOperations()) {
-            Wh_Log(L"Failed to apply late-loaded hooks: %lu", GetLastError());
-        }
+    if (!g_hookSetupComplete.load(std::memory_order_relaxed)) {
+        ProcessLateHookWork();
     }
     return module;
 }
@@ -452,6 +508,7 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
         HookLoadedThumbnailCache();
+        g_hookSetupComplete.store(IsHookSetupComplete());
     }
 
     return TRUE;
