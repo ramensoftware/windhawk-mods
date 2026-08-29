@@ -3645,7 +3645,6 @@ BOOL Wh_ModInit() {
                 return FALSE;
             }
         }
-        Wh_Log(L"lui? %d", IsLogonUiInjectionEnabled());
         return TRUE;
     }
 
