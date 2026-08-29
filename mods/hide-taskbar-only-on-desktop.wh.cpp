@@ -185,27 +185,13 @@ bool IsShellChromeClass(const WCHAR* className) {
         return false;
     }
 
-    static const WCHAR* kShellClasses[] = {
-        L"Progman",
-        L"WorkerW",
-        L"Shell_TrayWnd",
-        L"Shell_SecondaryTrayWnd",
-        L"Windows.UI.Core.CoreWindow",
-        L"Xaml_WindowedPopupClass",
-        L"TaskListThumbnailWnd",
-        L"SysShadow",
-        L"tooltips_class32",
-        L"MSCTFIME UI",
-        L"IME",
-    };
-
-    for (const WCHAR* shellClass : kShellClasses) {
-        if (wcscmp(className, shellClass) == 0) {
-            return true;
-        }
-    }
-
-    return false;
+    return
+        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(className, L"ApplicationFrameWindow") == 0 ||
+        wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
+        wcscmp(className, L"ControlCenterWindow") == 0 ||
+        wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
+        wcscmp(className, L"NotifyIconOverflowWindow") == 0;
 }
 
 
@@ -439,10 +425,12 @@ bool IsKnownShellUiProcess(const WCHAR* processName) {
     }
 
     return
+        _wcsicmp(processName, L"explorer.exe") == 0 ||
         _wcsicmp(processName, L"StartMenuExperienceHost.exe") == 0 ||
         _wcsicmp(processName, L"ShellExperienceHost.exe") == 0 ||
         _wcsicmp(processName, L"ShellHost.exe") == 0 ||
         _wcsicmp(processName, L"SearchHost.exe") == 0 ||
+        _wcsicmp(processName, L"SearchApp.exe") == 0 ||
         _wcsicmp(processName, L"TextInputHost.exe") == 0;
 }
 
