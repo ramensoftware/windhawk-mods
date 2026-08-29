@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), or Defolder to unpack folders back out, with a workaround hotkey for other file managers
-// @version         2.6.1
+// @version         2.6.2
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -305,6 +305,8 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -312,6 +314,7 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 #include <string>
 #include <vector>
 #include <cwctype>   // towupper (BuildHotkeyVk)
+#include <atomic>
 
 // Not pulled in by this toolchain's <windows.h>/<winuser.h> headers even
 // though it's a long-standing documented static-control style; define it
@@ -347,7 +350,8 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 // ============================================================
 static std::wstring LoadShell32String(UINT id, const wchar_t* fallback) {
     static HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr,
-                                             LOAD_LIBRARY_AS_DATAFILE);
+                                             LOAD_LIBRARY_AS_DATAFILE |
+                                             LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hShell32) {
         // LoadStringW with cchBufferMax == 0 returns a read-only pointer to the
         // resource and its length, avoiding a guess at the buffer size.
@@ -1684,7 +1688,7 @@ static void DestroyDlgTheme(DlgTheme& t) {
 static void ApplyDarkTitleBar(HWND hwnd, bool dark) {
     using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
     static DwmSetWindowAttribute_t pDwmSet = []() -> DwmSetWindowAttribute_t {
-        HMODULE h = LoadLibraryW(L"dwmapi.dll");
+        HMODULE h = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (DwmSetWindowAttribute_t)GetProcAddress(h, "DwmSetWindowAttribute")
                  : nullptr;
     }();
@@ -1711,7 +1715,7 @@ using FlushMenuThemes_t = void(WINAPI*)();
 
 static SetWindowTheme_t GetSetWindowTheme() {
     static SetWindowTheme_t p = []() -> SetWindowTheme_t {
-        HMODULE h = LoadLibraryW(L"uxtheme.dll");
+        HMODULE h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (SetWindowTheme_t)GetProcAddress(h, "SetWindowTheme") : nullptr;
     }();
     return p;
@@ -1720,7 +1724,7 @@ static SetWindowTheme_t GetSetWindowTheme() {
 static AllowDarkModeForWindow_t GetAllowDarkModeForWindow() {
     static AllowDarkModeForWindow_t p = []() -> AllowDarkModeForWindow_t {
         HMODULE h = GetModuleHandleW(L"uxtheme.dll");
-        if (!h) h = LoadLibraryW(L"uxtheme.dll");
+        if (!h) h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (AllowDarkModeForWindow_t)GetProcAddress(h, MAKEINTRESOURCEA(133))
                  : nullptr;
     }();
@@ -1730,7 +1734,7 @@ static AllowDarkModeForWindow_t GetAllowDarkModeForWindow() {
 static SetPreferredAppMode_t GetSetPreferredAppMode() {
     static SetPreferredAppMode_t p = []() -> SetPreferredAppMode_t {
         HMODULE h = GetModuleHandleW(L"uxtheme.dll");
-        if (!h) h = LoadLibraryW(L"uxtheme.dll");
+        if (!h) h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (SetPreferredAppMode_t)GetProcAddress(h, MAKEINTRESOURCEA(135))
                  : nullptr;
     }();
@@ -2468,7 +2472,7 @@ static bool    g_isHotkeyOwner = false;
 // Set by StopHotkeyThread before it tears the thread down. Read on the hotkey
 // thread so HandleHotkeyTriggered won't open a fresh modal while teardown is
 // dismissing modals — otherwise StopHotkeyThread could race a new dialog.
-static volatile LONG g_hotkeyShuttingDown = 0;
+static std::atomic<bool> g_hotkeyShuttingDown{false};
 static const UINT WM_F2F_TRIGGER  = WM_APP + 1;
 static const UINT WM_F2F_SHUTDOWN = WM_APP + 2;
 static const int  HOTKEY_ID = 0xF2F0;
@@ -2767,7 +2771,7 @@ static void StopHotkeyThread() {
 
     // Signal first so HandleHotkeyTriggered won't open a new modal once we
     // start closing the current one.
-    InterlockedExchange(&g_hotkeyShuttingDown, 1);
+    g_hotkeyShuttingDown = true;
 
     if (g_hotkeyWnd) PostMessageW(g_hotkeyWnd, WM_F2F_SHUTDOWN, 0, 0);
     else if (g_hotkeyThreadId) PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
@@ -2791,7 +2795,7 @@ static void StopHotkeyThread() {
     g_hotkeyThread = nullptr;
     g_hotkeyThreadId = 0;
     // Reset for the next StartHotkeyThread (settings changes stop then start).
-    InterlockedExchange(&g_hotkeyShuttingDown, 0);
+    g_hotkeyShuttingDown = false;
 }
 
 // ============================================================
@@ -2801,12 +2805,14 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx,
-                       (void*)TrackPopupMenuEx_Hook,
-                       (void**)&TrackPopupMenuEx_Orig);
-    Wh_SetFunctionHook((void*)PostMessageW,
-                       (void*)PostMessageW_Hook,
-                       (void**)&PostMessageW_Orig);
+    // WindhawkUtils::SetFunctionHook rather than the raw Wh_SetFunctionHook:
+    // it binds the target, the hook and the original pointer through the same
+    // function type, so a signature mismatch is a compile error instead of a
+    // crash at the first call. The void* casts hid that.
+    WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
+                                   &TrackPopupMenuEx_Orig);
+    WindhawkUtils::SetFunctionHook(PostMessageW, PostMessageW_Hook,
+                                   &PostMessageW_Orig);
 
     StartHotkeyThread();
     return TRUE;
