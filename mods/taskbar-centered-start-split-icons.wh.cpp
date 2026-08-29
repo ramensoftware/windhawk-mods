@@ -930,7 +930,14 @@ HWND GetWindowFromNativeTaskItem(void* nativeTaskItem) {
                : nullptr;
 }
 
-HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
+// outClickDispatched is set true iff this call actually reached
+// TaskItem_ReportClicked_Original - see g_realTaskbarClickObserved's
+// caller (ResolveAndCacheButtonHwnd) for why bail-outs before that point
+// must be distinguished from a genuinely dispatched-and-missed click.
+HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element,
+                                       bool& outClickDispatched) {
+    outClickDispatched = false;
+
     // CTaskListWnd_HandleClick_Original proves the interception hook is
     // actually installed - it's optional (see HookTaskbarDllSymbols), so
     // on a build where it didn't resolve, the ReportClicked call below
@@ -970,6 +977,7 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
 
     g_clickSentinel_TaskItem = nullptr;
     g_clickSentinelProbingGroup = false;
+    outClickDispatched = true;
     TaskItem_ReportClicked_Original(windowsUdkTaskItem.get(),
                                      &g_clickSentinel);
 
@@ -987,8 +995,12 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element) {
 
 // Grouped button (all windows of one app collapsed under a single icon,
 // e.g. "Combine taskbar buttons" set to Always) - see the resolution
-// overview comment above this section for the full chain.
-HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
+// overview comment above this section for the full chain. outClickDispatched
+// - see ResolveHwndFromIndividualTaskItem's own comment.
+HWND ResolveHwndFromTaskGroup(FrameworkElement element,
+                              bool& outClickDispatched) {
+    outClickDispatched = false;
+
     // Same interception hook as ResolveHwndFromIndividualTaskItem
     // (CTaskListWnd::HandleClick handles both item and group paths).
     if (!CTaskListWnd_HandleClick_Original ||
@@ -1057,6 +1069,7 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
 
     g_clickSentinel_TaskGroup = nullptr;
     g_clickSentinelProbingGroup = true;
+    outClickDispatched = true;
     TaskGroup_ReportClicked_Original(windowsUdkTaskGroup, &g_clickSentinel);
     void* nativeTaskGroup = g_clickSentinel_TaskGroup;
     g_clickSentinel_TaskGroup = nullptr;
@@ -1082,21 +1095,29 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element) {
     return hwnd;
 }
 
-HWND ResolveHwndFromTaskListButton(FrameworkElement element) {
+HWND ResolveHwndFromTaskListButton(FrameworkElement element,
+                                   bool& outClickDispatched) {
     // Each path bails out once its own sentinel is known broken, rather
     // than dispatching more genuine clicks - see g_clickSentinelItemBroken/
     // g_clickSentinelGroupBroken.
+    bool itemDispatched = false;
     HWND hwnd = g_clickSentinelItemBroken
                     ? nullptr
-                    : ResolveHwndFromIndividualTaskItem(element);
-    if (hwnd) {
+                    : ResolveHwndFromIndividualTaskItem(element, itemDispatched);
+    if (hwnd || itemDispatched) {
+        // A dispatched-and-missed item-path click already proves this
+        // button is bound to a TaskListWindowViewModel, not a group - the
+        // group path would just dispatch a second, wholly redundant click
+        // for the same button. See RATIONALE.md.
+        outClickDispatched = itemDispatched;
         return hwnd;
     }
 
     if (g_clickSentinelGroupBroken) {
+        outClickDispatched = false;
         return nullptr;
     }
-    return ResolveHwndFromTaskGroup(element);
+    return ResolveHwndFromTaskGroup(element, outClickDispatched);
 }
 
 // Per-button HWND cache, keyed by the XAML element's ABI pointer. Avoids
@@ -1130,7 +1151,12 @@ constexpr int kMaxForcedRetryFailures = 3;
 // trips) would keep dispatching a real ReportClicked on this entry every
 // ResolveBackoffMs interval, forever. A button whose identity changes, or
 // that gets pruned and recreated, still gets a fresh consecutiveFailures
-// count and resumes retrying normally.
+// count and resumes retrying normally. Only counts a genuinely dispatched-
+// and-missed click (see ResolveAndCacheButtonHwnd) - a bail-out before
+// ever dispatching one doesn't risk anything and must not count toward
+// this. NextResolveDelayMs must treat a terminal entry exactly like a
+// resolved one (idle cadence, not the backoff schedule) - see its own
+// comment for the busy-loop that requires. See RATIONALE.md.
 constexpr int kMaxResolveFailures = 8;
 
 // The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end of
@@ -1157,8 +1183,21 @@ bool ResolveAndCacheButtonHwnd(FrameworkElement element,
         failures = it->second.consecutiveFailures;
     }
 
-    HWND hwnd = ResolveHwndFromTaskListButton(element);
-    failures = hwnd ? 0 : failures + 1;
+    bool clickDispatched = false;
+    HWND hwnd = ResolveHwndFromTaskListButton(element, clickDispatched);
+    // Only a genuinely dispatched-and-missed click counts toward
+    // kMaxResolveFailures' terminal cap - a bail-out before ever
+    // dispatching one (not yet confirmed reachable, a view-model lookup
+    // miss, a not-currently-running group) isn't a click-safety risk and
+    // must not count against a button that may resolve fine later. See
+    // RATIONALE.md. lastAttempt still advances either way, so a
+    // persistently-bailing-out entry keeps retrying at ResolveBackoffMs(0)
+    // - a cheap, indefinite cadence - rather than escalating toward the cap.
+    if (hwnd) {
+        failures = 0;
+    } else if (clickDispatched) {
+        failures = failures + 1;
+    }
     g_buttonHwndCache[key] = {hwnd, identity, GetTickCount64(), failures};
     return hwnd != previous;
 }
@@ -2996,13 +3035,21 @@ ULONGLONG ResolveBackoffMs(int consecutiveFailures) {
 DWORD NextResolveDelayMs() {
     ULONGLONG now = GetTickCount64();
     bool anyPending = false;
-    bool anyResolved = false;
+    // True for a resolved entry OR a terminal one (consecutiveFailures at
+    // kMaxResolveFailures) - either way, only the slow idle-rebind cadence
+    // below still applies to it, never the backoff schedule. Must exactly
+    // match ResolvePendingButtonHwnds' own backoffElapsed check, which
+    // never retries a terminal entry - see RATIONALE.md for the busy-loop
+    // this closes: without this, a terminal entry's fixed, no-longer-
+    // advancing dueAt falls further into the past every tick, pinning
+    // pendingDelay at 0 (SetTimer's 10ms floor) forever.
+    bool anyIdleWorthy = false;
     ULONGLONG earliestDue = 0;
 
     for (auto& kv : g_buttonHwndCache) {
         const ButtonHwndCacheEntry& entry = kv.second;
-        if (entry.hwnd) {
-            anyResolved = true;
+        if (entry.hwnd || entry.consecutiveFailures >= kMaxResolveFailures) {
+            anyIdleWorthy = true;
             continue;
         }
         ULONGLONG dueAt =
@@ -3016,19 +3063,21 @@ DWORD NextResolveDelayMs() {
     if (!anyPending) {
         // A periodic re-check even once everything resolves, so a
         // drag-reorder rebind (see ButtonHwndCacheEntry) still gets
-        // picked up. Only armed when something is actually resolved; goes
-        // fully idle (INFINITE) only when the cache is empty.
-        if (anyResolved) {
+        // picked up. Only armed when something is actually resolved or
+        // terminal; goes fully idle (INFINITE) only when the cache is
+        // empty (or holds only genuinely-still-retryable entries, which
+        // can't happen here since anyPending would then be true).
+        if (anyIdleWorthy) {
             return kIdleResolveTickMs;
         }
         return INFINITE;
     }
 
     DWORD pendingDelay = earliestDue > now ? (DWORD)(earliestDue - now) : 0;
-    if (anyResolved) {
-        // Mixed cache: cap at kIdleResolveTickMs so already-resolved
-        // entries still get their rebind re-check on the normal cadence,
-        // without waiting on a pending entry's own long backoff.
+    if (anyIdleWorthy) {
+        // Mixed cache: cap at kIdleResolveTickMs so already-resolved/
+        // terminal entries still get their rebind re-check on the normal
+        // cadence, without waiting on a pending entry's own long backoff.
         return std::min(pendingDelay, kIdleResolveTickMs);
     }
     return pendingDelay;
