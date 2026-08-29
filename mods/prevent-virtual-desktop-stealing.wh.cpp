@@ -3612,8 +3612,7 @@ static bool InstallVirtualDesktopHooks() {
     }
 
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK
-        twinuiPcshellHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
         {
             {
                 LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"
