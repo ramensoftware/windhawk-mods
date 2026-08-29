@@ -2,7 +2,7 @@
 // @id              taskbar-fluent-media-player-lx
 // @name            Taskbar Fluent Media Player (LX Music Lyrics)
 // @name:zh-CN     任务栏 Fluent 媒体播放器（LX Music 歌词版）
-// @description     A Windhawk mod based on Taskbar Fluent Media Player, embedding a Fluent-style media player in the Windows 11 taskbar with additional real-time LX Music lyrics display (lyrics at the bottom, extending beneath playback controls). Only compatible with LX Music; requires enabling "Open API service" in LX Music settings.
+// @description     Fluent-style media player in the Windows 11 taskbar, based on Taskbar Fluent Media Player, with real-time LX Music lyrics display. Only for LX Music; requires Open API service enabled.
 // @description:zh-CN 基于 Taskbar Fluent Media Player 二开的 Windhawk 插件，在 Windows 11 任务栏嵌入 Fluent 风格媒体播放器，并额外显示 LX Music 桌面版的当前歌词（歌词位于底部，可蔓延至播放控件下方）。仅适配 LX Music，需在 LX Music 设置中启用"开放 API 服务"。
 // @description:ru-RU Форк Windhawk-мода Taskbar Fluent Media Player, добавляющий отображение текущего текста песни LX Music в панели задач (внизу, под элементами управления). Только для LX Music, требуется включить "Open API service" в настройках LX Music.
 // @version         1.6.0.10
