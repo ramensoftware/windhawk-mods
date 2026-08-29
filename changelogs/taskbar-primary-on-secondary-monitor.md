@@ -1,3 +1,9 @@
+## 1.2.1 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9455e7ee79a80d6d65829456b0c7e0738dcfe720/mods/taskbar-primary-on-secondary-monitor.wh.cpp))
+
+* Fixed taskbar alignment not affecting the Start menu in some cases when the taskbar is only shown on the primary monitor.
+* Fixed invisible taskbar if after switching the primary taskbar with a double/middle click that taskbar is gone, e.g. if the monitor is detached.
+* Fixed the taskbar remaining on the secondary monitor when the mod is disabled.
+
 ## 1.2 ([Feb 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5d4844394ed3a8fc048dee7e2721c49be96dc87e/mods/taskbar-primary-on-secondary-monitor.wh.cpp))
 
 * Added an option to switch the primary taskbar by clicking on its empty space.

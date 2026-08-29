@@ -13423,7 +13423,7 @@
           160
         ],
         "ratingUsers": 180,
-        "updated": 1771103590000,
+        "updated": 1788020337000,
         "users": 7019
       },
       "metadata": {
@@ -13437,11 +13437,12 @@
         "homepage": "https://m417z.com/",
         "include": [
           "explorer.exe",
-          "ShellHost.exe"
+          "ShellHost.exe",
+          "StartMenuExperienceHost.exe"
         ],
         "name": "Primary taskbar on secondary monitor",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.2"
+        "version": "1.2.1"
       }
     },
     "taskbar-reorder-right-drag": {

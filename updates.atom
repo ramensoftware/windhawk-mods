@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-29T14:05:04.000Z</updated>
+    <updated>2026-08-29T16:18:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#9455e7ee79a80d6d65829456b0c7e0738dcfe720</id>
+        <link href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor"/>
+        <updated>2026-08-29T16:18:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed taskbar alignment not affecting the Start menu in some cases when the taskbar is only shown on the primary monitor.</li>
+<li>Fixed invisible taskbar if after switching the primary taskbar with a double/middle click that taskbar is gone, e.g. if the monitor is detached.</li>
+<li>Fixed the taskbar remaining on the secondary monitor when the mod is disabled.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar: no minimize on click 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-no-minimize#0406877a8b83b629d25289ca25b1370f7906118e</id>
@@ -572,19 +587,6 @@ determines the target monitor using the cursor position, and repositions the win
 <li>Cleaned up some unnecessary error-handling code that wasn't actually protecting against anything</li>
 <li>Fixed the "Display" settings redirect being removed by accident, and added a toggle so this mod works together with the Classic Display Control Panel Restorer mod instead of conflicting with it</li>
 <li>Updated the README to be more accurate about what the mod actually protects against</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Update Control Panel Page Restorer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/windows-update-control-panel-restorer#521269c59796b23e265e4cb38f0be3daf0d84ad8</id>
-        <link href="https://windhawk.net/mods/windows-update-control-panel-restorer"/>
-        <updated>2026-08-25T21:41:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed Windows 11 compatibility</li>
 </ul>]]></content>
         <author>
             <name>babamohammed</name>
