@@ -2,7 +2,7 @@
 // @id              neiz-supersmile-audio-visualizer
 // @name            Desktop Audio Visualizer Plus
 // @description     A highly customizable audio visualizer with synced lyrics, featuring optional network access to fetch lyrics from lrclib.net
-// @version         1.0.0
+// @version         1.0.1
 // @license         MIT
 // @author          NeiZ
 // @github          https://github.com/NeiZqwe
@@ -1048,6 +1048,8 @@ using winrt::Windows::UI::Xaml::HorizontalAlignment;
 using winrt::Windows::UI::Xaml::VerticalAlignment;
 using winrt::Windows::UI::Xaml::Controls::Button;
 using winrt::Windows::UI::Xaml::Controls::Grid;
+using winrt::Windows::UI::Xaml::Controls::Panel;
+using winrt::Windows::UI::Xaml::Controls::StackPanel;
 // using winrt::Windows::UI::Xaml::Controls::TextBlock;
 using winrt::Windows::UI::Xaml::Controls::ToolTip;
 // using winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase;
@@ -8319,11 +8321,10 @@ static void DestroyEqPopup() {
 // -----------------------------------------------------------------------------
 // Custom EQ taskbar integration.
 //
-// IMPORTANT: The EQ button is a real XAML child of Windows 11's
-// SystemTrayFrameGrid, rather than a separate HWND. This is the same integration
-// model used by Taskbar Fluent Media Player for its tray positions. As a result,
-// the button participates in the taskbar's visual tree/layout and can be styled
-// by Windows 11 Taskbar Styler and other tray-aware mods.
+// IMPORTANT: The EQ button is a real XAML child of the Windows 11
+// system-tray XAML tree, rather than a separate HWND. The code adapts to
+// Grid/StackPanel changes in recent Windows 11 builds and avoids changing the
+// outer tray Grid's ColumnDefinitions, reducing conflicts with Taskbar Styler.
 // -----------------------------------------------------------------------------
 static constexpr wchar_t kEqXamlButtonName[] = L"WindhawkVisualizerEQButton";
 static constexpr wchar_t kEqXamlTrayGridName[] = L"SystemTrayFrameGrid";
@@ -8334,6 +8335,7 @@ static bool g_eqTaskbarSymbolsHooked = false;
 static std::atomic<bool> g_eqXamlInjectionReady{false};
 [[clang::no_destroy]] static FrameworkElement g_eqXamlButton = nullptr;
 [[clang::no_destroy]] static Grid g_eqXamlTrayGrid = nullptr;
+[[clang::no_destroy]] static FrameworkElement g_eqXamlParent = nullptr;
 static int g_eqXamlColumn = -1;
 static winrt::event_token g_eqXamlClickToken{};
 static bool g_eqXamlClickTokenValid = false;
@@ -8411,7 +8413,7 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     auto getTaskbarHost = isSecondary
         ? g_eqCSecondaryTaskBandGetTaskbarHost
         : g_eqCTaskBandGetTaskbarHost;
-    if (!expectedVftable || !getTaskbarHost || !g_eqTaskbarHostFrameHeight)
+    if (!expectedVftable || !getTaskbarHost || !g_eqStdRefDecref)
         return nullptr;
 
     void* taskListWndSite = taskBand;
@@ -8435,20 +8437,21 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     }
 
     size_t taskbarElementIUnknownOffset = 0;
-    bool recognized = false;
+    bool frameHeightPatternRecognized = false;
+
 #if defined(_M_X64) || defined(__x86_64__)
-    {
+    if (g_eqTaskbarHostFrameHeight) {
         const BYTE* b = reinterpret_cast<const BYTE*>(g_eqTaskbarHostFrameHeight);
         if (EqIsReadableMemoryRange(b, 8) &&
             b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
             b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
             b[7] <= 0x7F) {
             taskbarElementIUnknownOffset = b[7];
-            recognized = true;
+            frameHeightPatternRecognized = true;
         }
     }
 #elif defined(_M_ARM64) || defined(__aarch64__)
-    {
+    if (g_eqTaskbarHostFrameHeight) {
         const DWORD* p = reinterpret_cast<const DWORD*>(g_eqTaskbarHostFrameHeight);
         if (EqIsReadableMemoryRange(p, sizeof(DWORD) * 4) &&
             p[0] == 0xD503237F &&
@@ -8456,15 +8459,22 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
             p[2] == 0x910003FD &&
             (p[3] & 0xFFF00FE0) == 0xF8400C00) {
             taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
-            recognized = true;
+            frameHeightPatternRecognized = true;
         }
     }
 #else
     taskbarElementIUnknownOffset = 0x10;
-    recognized = true;
+    frameHeightPatternRecognized = true;
 #endif
 
-    if (!recognized || !EqIsReadableMemoryRange(
+    if (!frameHeightPatternRecognized) {
+        Wh_Log(L"EqGetTaskbarXamlRoot: TaskbarHost::FrameHeight pattern not recognized");
+        if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
+            g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
+
+    if (!EqIsReadableMemoryRange(
             static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
                 taskbarElementIUnknownOffset,
             sizeof(IUnknown*))) {
@@ -8721,45 +8731,265 @@ static void EqShowPopupForXamlButton(Button const& button) {
     }
 }
 
-static void EqRemoveXamlButtonOnUiThread() {
+static bool EqIsCurrentXamlButtonAlive(FrameworkElement const& root) {
+    if (!root || !g_eqXamlButton)
+        return false;
+
     try {
-        if (g_eqXamlTrayGrid && g_eqXamlButton) {
-            if (g_eqXamlClickTokenValid) {
-                if (auto button = g_eqXamlButton.try_as<Button>())
-                    button.Click(g_eqXamlClickToken);
-            }
-            for (uint32_t i = 0; i < g_eqXamlTrayGrid.Children().Size(); ++i) {
-                auto child = g_eqXamlTrayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child == g_eqXamlButton) {
-                    g_eqXamlTrayGrid.Children().RemoveAt(i);
+        auto current = EqFindChildByName(root, kEqXamlButtonName);
+        return current && current == g_eqXamlButton;
+    } catch (...) {
+        return false;
+    }
+}
+
+static FrameworkElement EqFindDirectChildContaining(
+    FrameworkElement const& parent, FrameworkElement const& target) {
+    if (!parent || !target)
+        return nullptr;
+    try {
+        auto children = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(parent);
+        for (int i = 0; i < children; ++i) {
+            auto child = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChild(parent, i)
+                .try_as<FrameworkElement>();
+            if (!child)
+                continue;
+            if (child == target)
+                return child;
+
+            auto targetParent = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(target)
+                .try_as<FrameworkElement>();
+            if (targetParent == child)
+                return child;
+
+            // Walk upward from target until we reach this parent.
+            auto cursor = targetParent;
+            for (int depth = 0; cursor && depth < 64; ++depth) {
+                if (cursor == child)
+                    return child;
+                if (cursor == parent)
                     break;
-                }
-            }
-            if (g_eqXamlColumn >= 0 &&
-                g_eqXamlColumn < static_cast<int>(g_eqXamlTrayGrid.ColumnDefinitions().Size())) {
-                for (uint32_t i = 0; i < g_eqXamlTrayGrid.Children().Size(); ++i) {
-                    auto child = g_eqXamlTrayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                    if (!child || child == g_eqXamlButton)
-                        continue;
-                    const int column = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(child);
-                    if (column > g_eqXamlColumn)
-                        winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(child, column - 1);
-                }
-                g_eqXamlTrayGrid.ColumnDefinitions().RemoveAt(g_eqXamlColumn);
+                cursor = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(cursor)
+                    .try_as<FrameworkElement>();
             }
         }
     } catch (...) {
     }
+    return nullptr;
+}
+
+static void EqResetXamlStateOnly() {
     g_eqXamlClickTokenValid = false;
     g_eqXamlColumn = -1;
     g_eqXamlButton = nullptr;
+    g_eqXamlParent = nullptr;
     g_eqXamlTrayGrid = nullptr;
     g_eqXamlInjectionReady.store(false, std::memory_order_release);
+}
+
+static void EqRemoveXamlButtonOnUiThread() {
+    try {
+        if (g_eqXamlParent && g_eqXamlButton) {
+            if (g_eqXamlClickTokenValid) {
+                if (auto button = g_eqXamlButton.try_as<Button>())
+                    button.Click(g_eqXamlClickToken);
+            }
+
+            auto panel = g_eqXamlParent.try_as<Panel>();
+            if (panel) {
+                for (uint32_t i = 0; i < panel.Children().Size(); ++i) {
+                    auto child = panel.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (child == g_eqXamlButton) {
+                        panel.Children().RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+        }
+    } catch (...) {
+    }
+
+    EqResetXamlStateOnly();
     EqClosePopup();
 }
 
+static void EqSetupButtonCommon(Button const& button, winrt::event_token* tokenOut) {
+    button.Name(kEqXamlButtonName);
+    button.Width(EQ_BUTTON_WIDTH);
+    button.Height(EQ_BUTTON_HEIGHT);
+    button.MinWidth(EQ_BUTTON_WIDTH);
+    button.MinHeight(EQ_BUTTON_HEIGHT);
+    button.HorizontalAlignment(HorizontalAlignment::Center);
+    button.VerticalAlignment(VerticalAlignment::Center);
+    button.Padding({0, 0, 0, 0});
+    button.BorderThickness({0, 0, 0, 0});
+    button.Background(nullptr);
+    button.IsHitTestVisible(true);
+    button.IsTabStop(true);
+
+    winrt::Windows::UI::Xaml::Controls::FontIcon icon;
+    icon.Glyph(kEqButtonGlyph);
+    icon.FontSize(18.0);
+    icon.HorizontalAlignment(HorizontalAlignment::Center);
+    icon.VerticalAlignment(VerticalAlignment::Center);
+    try {
+        icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe Fluent Icons"));
+    } catch (...) {
+        try {
+            icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe MDL2 Assets"));
+        } catch (...) {
+        }
+    }
+    const BYTE iconChannel = IsDarkThemeEnabled() ? 255 : 32;
+    icon.Foreground(winrt::Windows::UI::Xaml::Media::SolidColorBrush(
+        winrt::Windows::UI::Color{255, iconChannel, iconChannel, iconChannel}));
+    button.Content(icon);
+
+    ToolTip tooltip;
+    tooltip.Content(winrt::box_value(winrt::hstring{L"Equalizer"}));
+    try {
+        winrt::Windows::UI::Xaml::Controls::ToolTipService::SetToolTip(button, tooltip);
+    } catch (...) {
+    }
+
+    auto clickToken = button.Click([button](
+        winrt::Windows::Foundation::IInspectable const&,
+        winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
+        EqShowPopupForXamlButton(button);
+    });
+
+    if (tokenOut)
+        *tokenOut = clickToken;
+}
+
+static bool EqInsertIntoGrid(Grid const& trayGrid, Button const& button) {
+    if (!trayGrid || !button)
+        return false;
+
+    int insertCol = -1;
+    if (auto languageStack = EqFindChildByName(trayGrid, L"NonActivatableStack")) {
+        insertCol = Grid::GetColumn(languageStack);
+    } else if (auto notifyStack = EqFindChildByName(trayGrid, L"NotifyIconStack")) {
+        insertCol = Grid::GetColumn(notifyStack) + 1;
+    }
+
+    const int columnCount = static_cast<int>(trayGrid.ColumnDefinitions().Size());
+    if (insertCol < 0 || insertCol > columnCount)
+        insertCol = columnCount;
+
+    for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+        auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+        if (!child)
+            continue;
+        const int column = Grid::GetColumn(child);
+        if (column >= insertCol)
+            Grid::SetColumn(child, column + 1);
+    }
+
+    winrt::Windows::UI::Xaml::Controls::ColumnDefinition newCol;
+    newCol.Width({1.0, winrt::Windows::UI::Xaml::GridUnitType::Auto});
+    trayGrid.ColumnDefinitions().InsertAt(insertCol, newCol);
+    Grid::SetColumn(button, insertCol);
+    trayGrid.Children().Append(button);
+    g_eqXamlColumn = insertCol;
+    return true;
+}
+
+static bool EqIsDescendantOf(
+    FrameworkElement const& element, FrameworkElement const& ancestor) {
+    if (!element || !ancestor)
+        return false;
+
+    try {
+        auto cursor = element;
+        for (int depth = 0; cursor && depth < 64; ++depth) {
+            if (cursor == ancestor)
+                return true;
+            cursor = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(cursor)
+                .try_as<FrameworkElement>();
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+static FrameworkElement EqFindCommonPanelParent(
+    FrameworkElement const& root,
+    FrameworkElement const& first,
+    FrameworkElement const& second) {
+    if (!root || !first || !second)
+        return nullptr;
+
+    try {
+        auto cursor = first;
+        for (int depth = 0; cursor && depth < 64; ++depth) {
+            if (auto panel = cursor.try_as<Panel>()) {
+                if (EqIsDescendantOf(second, panel))
+                    return panel;
+            }
+
+            if (cursor == root)
+                break;
+
+            cursor = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(cursor)
+                .try_as<FrameworkElement>();
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+static bool EqInsertIntoStackPanel(
+    FrameworkElement const& trayFrame,
+    StackPanel const& stack,
+    Button const& button,
+    FrameworkElement const& notifyIconStack,
+    FrameworkElement const& languageStack,
+    FrameworkElement* insertionParentOut) {
+    if (!trayFrame || !stack || !button)
+        return false;
+
+    // The desired location is between the notification/hidden-icon group and
+    // the language/input group. On the new StackPanel-based tray, those groups
+    // are often siblings under an inner container such as SystemTray.Stack.
+    // Insert into that shared parent, immediately before the language group.
+    auto commonParent = EqFindCommonPanelParent(
+        trayFrame, notifyIconStack, languageStack);
+
+    Panel targetPanel = commonParent ? commonParent.try_as<Panel>() : nullptr;
+    if (!targetPanel)
+        targetPanel = stack;
+
+    uint32_t index = targetPanel.Children().Size();
+
+    FrameworkElement anchor = nullptr;
+    if (languageStack) {
+        anchor = EqFindDirectChildContaining(targetPanel, languageStack);
+    }
+    if (!anchor && notifyIconStack) {
+        anchor = EqFindDirectChildContaining(targetPanel, notifyIconStack);
+    }
+
+    if (anchor) {
+        for (uint32_t i = 0; i < targetPanel.Children().Size(); ++i) {
+            auto child = targetPanel.Children().GetAt(i).try_as<FrameworkElement>();
+            if (child == anchor) {
+                index = i;
+                break;
+            }
+        }
+    }
+
+    targetPanel.Children().InsertAt(index, button);
+
+    if (insertionParentOut)
+        *insertionParentOut = targetPanel;
+
+    return true;
+}
+
 static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
-    if (!taskbar || !xamlRoot || g_eqXamlInjectionReady.load(std::memory_order_acquire))
+    if (!taskbar || !xamlRoot)
         return;
 
     try {
@@ -8767,108 +8997,71 @@ static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
         if (!root)
             return;
 
-        auto trayFrame = EqFindChildByName(root, L"SystemTrayFrameGrid");
-        auto trayGrid = trayFrame.try_as<Grid>();
-        if (!trayGrid)
+        // The outer SystemTrayFrameGrid is the stable named anchor across the
+        // current rollout. Its runtime type may now be Grid OR StackPanel.
+        auto trayFrame = EqFindChildByName(root, kEqXamlTrayGridName);
+        if (!trayFrame) {
+            Wh_Log(L"EqInjectXamlButton: SystemTrayFrameGrid not found");
             return;
+        }
 
-        // Remove any previous copy belonging to us. This is especially important
-        // after TrayUI::StartTaskbar rebuilt the XAML tree.
-        for (int i = static_cast<int>(trayGrid.Children().Size()) - 1; i >= 0; --i) {
-            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+        auto trayGrid = trayFrame.try_as<Grid>();
+        auto trayStack = trayFrame.try_as<StackPanel>();
+        auto trayPanel = trayFrame.try_as<Panel>();
+        if (!trayPanel) {
+            Wh_Log(L"EqInjectXamlButton: SystemTrayFrameGrid is not a Panel");
+            return;
+        }
+
+        // Remove only our own stale child from the currently selected container.
+        for (int i = static_cast<int>(trayPanel.Children().Size()) - 1; i >= 0; --i) {
+            auto child = trayPanel.Children().GetAt(i).try_as<FrameworkElement>();
             if (child && child.Name() == kEqXamlButtonName)
-                trayGrid.Children().RemoveAt(i);
+                trayPanel.Children().RemoveAt(i);
         }
 
         Button button;
-        button.Name(kEqXamlButtonName);
-        button.Width(EQ_BUTTON_WIDTH);
-        button.Height(EQ_BUTTON_HEIGHT);
-        button.MinWidth(EQ_BUTTON_WIDTH);
-        button.MinHeight(EQ_BUTTON_HEIGHT);
-        button.HorizontalAlignment(HorizontalAlignment::Center);
-        button.VerticalAlignment(VerticalAlignment::Center);
-        button.Padding({0, 0, 0, 0});
-        button.BorderThickness({0, 0, 0, 0});
-        button.Background(nullptr);
-        button.IsHitTestVisible(true);
-        button.IsTabStop(true);
+        EqSetupButtonCommon(button, &g_eqXamlClickToken);
 
-        // Use XAML FontIcon rather than TextBlock so the glyph is rendered as
-        // an actual icon by the XAML framework. E9E9 is Microsoft's official
-        // Segoe Fluent Icons Equalizer glyph.
-        winrt::Windows::UI::Xaml::Controls::FontIcon icon;
-        icon.Glyph(kEqButtonGlyph);
-        icon.FontSize(18.0);
-        icon.HorizontalAlignment(HorizontalAlignment::Center);
-        icon.VerticalAlignment(VerticalAlignment::Center);
-        try {
-            icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe Fluent Icons"));
-        } catch (...) {
-            try {
-                icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe MDL2 Assets"));
-            } catch (...) {
-            }
-        }
-        // Explicitly set a visible theme-aware brush. This avoids inheriting a
-        // null/transparent foreground from the system tray Button template.
-        const BYTE iconChannel = IsDarkThemeEnabled() ? 255 : 32;
-        icon.Foreground(winrt::Windows::UI::Xaml::Media::SolidColorBrush(
-            winrt::Windows::UI::Color{255, iconChannel, iconChannel, iconChannel}));
-        button.Content(icon);
-
-        ToolTip tooltip;
-        tooltip.Content(winrt::box_value(winrt::hstring{L"Equalizer"}));
-        try {
-            winrt::Windows::UI::Xaml::Controls::ToolTipService::SetToolTip(button, tooltip);
-        } catch (...) {
+        bool inserted = false;
+        FrameworkElement insertionParent = nullptr;
+        if (trayGrid) {
+            inserted = EqInsertIntoGrid(trayGrid, button);
+            if (inserted)
+                insertionParent = trayFrame;
+        } else if (trayStack) {
+            auto notifyIconStack = EqFindChildByName(root, L"NotifyIconStack");
+            auto languageStack = EqFindChildByName(root, L"NonActivatableStack");
+            inserted = EqInsertIntoStackPanel(
+                trayFrame, trayStack, button, notifyIconStack, languageStack,
+                &insertionParent);
+        } else {
+            trayPanel.Children().Append(button);
+            insertionParent = trayFrame;
+            inserted = true;
         }
 
-        auto clickToken = button.Click([button](
-            winrt::Windows::Foundation::IInspectable const&,
-            winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
-            EqShowPopupForXamlButton(button);
-        });
+        if (!insertionParent)
+            insertionParent = trayFrame;
 
-        // Windows 11's SystemTrayFrameGrid puts the language/input indicator
-        // in NonActivatableStack. Insert our column immediately before it so the
-        // EQ button lands between the hidden-icons area and the language button,
-        // instead of becoming the trailing-most tray item.
-        int insertCol = -1;
-        if (auto languageStack = EqFindChildByName(root, L"NonActivatableStack")) {
-            insertCol = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(languageStack);
-        } else if (auto notifyStack = EqFindChildByName(root, L"NotifyIconStack")) {
-            // Fallback for taskbar builds where the language stack has a different name.
-            insertCol = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(notifyStack) + 1;
+
+        if (!inserted) {
+            Wh_Log(L"EqInjectXamlButton: failed to insert button");
+            return;
         }
-
-        const int columnCount = static_cast<int>(trayGrid.ColumnDefinitions().Size());
-        if (insertCol < 0 || insertCol > columnCount)
-            insertCol = std::min(1, columnCount);
-
-        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-            if (!child)
-                continue;
-            const int column = winrt::Windows::UI::Xaml::Controls::Grid::GetColumn(child);
-            if (column >= insertCol)
-                winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(child, column + 1);
-        }
-
-        winrt::Windows::UI::Xaml::Controls::ColumnDefinition newCol;
-        newCol.Width({1.0, winrt::Windows::UI::Xaml::GridUnitType::Auto});
-        trayGrid.ColumnDefinitions().InsertAt(insertCol, newCol);
-        winrt::Windows::UI::Xaml::Controls::Grid::SetColumn(button, insertCol);
-        trayGrid.Children().Append(button);
 
         g_eqTaskbarHwnd = taskbar;
+        g_eqXamlParent = insertionParent;
         g_eqXamlTrayGrid = trayGrid;
         g_eqXamlButton = button;
-        g_eqXamlColumn = insertCol;
-        g_eqXamlClickToken = clickToken;
         g_eqXamlClickTokenValid = true;
         g_eqXamlInjectionReady.store(true, std::memory_order_release);
+
+        Wh_Log(L"EqInjectXamlButton: injected into %s#%s",
+               trayGrid ? L"Grid" : (trayStack ? L"StackPanel" : L"Panel"),
+               kEqXamlTrayGridName);
     } catch (...) {
+        Wh_Log(L"EqInjectXamlButton: exception");
         EqRemoveXamlButtonOnUiThread();
     }
 }
@@ -8902,25 +9095,45 @@ static void EqEnsureXamlButton() {
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!taskbar || !IsWindow(taskbar))
         return;
+
     EqHideLegacyNativeButtons(taskbar);
-    if (g_eqTaskbarHwnd != taskbar || !g_eqXamlInjectionReady.load(std::memory_order_acquire)) {
-        struct Payload {
-            HWND taskbar;
-        } payload{taskbar};
-        EqRunFromWindowThread(taskbar, [](void* raw) {
-            auto* p = static_cast<Payload*>(raw);
-            if (!p || !p->taskbar)
-                return;
-            try {
-                if (g_eqTaskbarHwnd != p->taskbar)
-                    EqRemoveXamlButtonOnUiThread();
-                auto root = EqGetTaskbarXamlRoot(p->taskbar);
-                if (root)
-                    EqInjectXamlButtonOnUiThread(p->taskbar, root);
-            } catch (...) {
+
+    struct Payload { HWND taskbar; } payload{taskbar};
+    if (!EqRunFromWindowThread(taskbar, [](void* raw) {
+        auto* p = static_cast<Payload*>(raw);
+        if (!p || !p->taskbar)
+            return;
+
+        try {
+            auto root = EqGetTaskbarXamlRoot(p->taskbar);
+            if (!root) {
+                Wh_Log(L"EqEnsureXamlButton: XamlRoot unavailable");
                 g_eqXamlInjectionReady.store(false, std::memory_order_release);
+                return;
             }
-        }, &payload);
+
+            auto rootElement = root.Content().try_as<FrameworkElement>();
+            if (!rootElement)
+                return;
+
+            if (g_eqTaskbarHwnd == p->taskbar &&
+                EqIsCurrentXamlButtonAlive(rootElement)) {
+                g_eqXamlInjectionReady.store(true, std::memory_order_release);
+                return;
+            }
+
+            if (g_eqXamlButton)
+                EqRemoveXamlButtonOnUiThread();
+            else
+                EqResetXamlStateOnly();
+
+            EqInjectXamlButtonOnUiThread(p->taskbar, root);
+        } catch (...) {
+            Wh_Log(L"EqEnsureXamlButton: exception");
+            g_eqXamlInjectionReady.store(false, std::memory_order_release);
+        }
+    }, &payload)) {
+        Wh_Log(L"EqEnsureXamlButton: failed to marshal to taskbar UI thread");
     }
 }
 
@@ -8935,6 +9148,9 @@ static void WINAPI EqTrayUIStartTaskbarHook(void* pThis) {
     if (!taskbar)
         return;
 
+    // StartTaskbar is called when Windows rebuilds the taskbar/tray XAML.
+    // Immediately invalidate our cached object graph and reinject on the taskbar
+    // UI thread instead of waiting for the 1-second polling fallback.
     EqHideLegacyNativeButtons(taskbar);
     g_eqTaskbarHwnd = taskbar;
     EqRunFromWindowThread(taskbar, [](void*) {
@@ -8950,23 +9166,67 @@ static bool EqHookTaskbarSymbols() {
     if (!h)
         return false;
 
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+    // Primary-taskbar TaskbarHost access is required. Secondary-taskbar symbols
+    // are optional so a build can still provide the primary EQ button when the
+    // secondary taskbar ABI has changed.
+    WindhawkUtils::SYMBOL_HOOK requiredHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &g_eqCTaskBandGetTaskbarHost},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &g_eqCSecondaryTaskBandGetTaskbarHost},
-        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-         &g_eqTaskbarHostFrameHeight},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &g_eqStdRefDecref},
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
-         &g_eqTrayUIStartTaskbarOriginal, EqTrayUIStartTaskbarHook},
     };
-    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+
+    if (!WindhawkUtils::HookSymbols(
+            h, requiredHooks, ARRAYSIZE(requiredHooks))) {
+        Wh_Log(L"EqHookTaskbarSymbols: primary taskbar symbols could not be resolved");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &g_eqCSecondaryTaskBandTaskListWndSiteVftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &g_eqCSecondaryTaskBandGetTaskbarHost},
+    };
+    if (!WindhawkUtils::HookSymbols(
+            h, secondaryHooks, ARRAYSIZE(secondaryHooks))) {
+        g_eqCSecondaryTaskBandTaskListWndSiteVftable = nullptr;
+        g_eqCSecondaryTaskBandGetTaskbarHost = nullptr;
+        Wh_Log(L"EqHookTaskbarSymbols: secondary taskbar symbols unavailable; continuing for primary taskbar");
+    }
+
+    // FrameHeight is needed to derive the TaskbarHost -> hosted XAML element
+    // offset on supported x64/ARM64 builds. This is the same mechanism used by
+    // the actively maintained Taskbar Fluent Media Player mod.
+    WindhawkUtils::SYMBOL_HOOK frameHeightHook[] = {
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &g_eqTaskbarHostFrameHeight},
+    };
+    if (!WindhawkUtils::HookSymbols(
+            h, frameHeightHook, ARRAYSIZE(frameHeightHook))) {
+        g_eqTaskbarHostFrameHeight = nullptr;
+        Wh_Log(L"EqHookTaskbarSymbols: TaskbarHost::FrameHeight not found");
+#if defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__)
+        return false;
+#endif
+    }
+
+    // Hook the taskbar rebuild path as an immediate reinjection trigger. Keep
+    // the periodic poll as a fallback for rebuilds not routed through this hook.
+    WindhawkUtils::SYMBOL_HOOK trayStartHook[] = {
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &g_eqTrayUIStartTaskbarOriginal,
+         EqTrayUIStartTaskbarHook},
+    };
+    if (!WindhawkUtils::HookSymbols(
+            h, trayStartHook, ARRAYSIZE(trayStartHook))) {
+        g_eqTrayUIStartTaskbarOriginal = nullptr;
+        Wh_Log(L"EqHookTaskbarSymbols: TrayUI::StartTaskbar not found; using polling fallback");
+    }
+
+    return true;
 }
 
 static void EqCleanupIntegration() {
