@@ -21,8 +21,12 @@ a floating, always-on-top overlay indicator while it does.
 
 ## Features
 
-- Global hotkey (default `Ctrl+Alt+M`) toggles mute on the default capture
-  device via the Core Audio API (`IAudioEndpointVolume`).
+- Global hotkey (default `Ctrl+Alt+M`), configured as a plain string like
+  `"Ctrl+Alt+Shift+M"` rather than a raw modifier bitmask + VK code.
+- Toggles mute on the default capture device via the Core Audio API
+  (`IAudioEndpointVolume`). The endpoint is resolved once and kept cached;
+  it's only re-resolved when the default device actually changes (event-
+  driven via `IMMNotificationClient`), not on every hotkey press.
 - The overlay and mute state stay in sync with **any** source of mute
   changes (this hotkey, Windows Sound settings, another app) and with the
   **default microphone changing** (headset plugged in, device switched in
@@ -31,17 +35,22 @@ a floating, always-on-top overlay indicator while it does.
   while unmuted, so the animation reflects actual mic input, not a fixed
   pattern. Falls back to a synthetic pulse only if peak metering isn't
   available on a given system.
+- The render target (DIB section + memory DC) is cached and only rebuilt
+  when the overlay's pixel size changes, instead of being recreated on
+  every animation frame.
 - Per-monitor DPI aware; auto-position respects the taskbar (work area),
   not just the raw screen size.
+- When click-through is turned off, the overlay can be dragged to a custom
+  position instead of just blocking clicks with no other purpose.
 - Configurable size, position, hotkey, and auto-hide delay, all applied
   live without reloading the mod.
 
 ## Settings
 
 See the settings panel for the full list and description of each option.
-Hotkey modifiers are a bitmask (`1`=Alt, `2`=Ctrl, `4`=Shift, `8`=Win);
-at least one modifier is required — a `0` mask is rejected rather than
-silently grabbing a bare key system-wide.
+The hotkey is a single string, e.g. `"Ctrl+Alt+M"`; at least one modifier
+is required — a hotkey with no modifier is rejected rather than silently
+grabbing a bare key system-wide.
 
 ## Known limitations
 
@@ -50,7 +59,9 @@ silently grabbing a bare key system-wide.
 - A topmost overlay in a normal window won't render over exclusive-
   fullscreen apps/games — worth knowing since a call/game is often the
   moment the indicator matters most.
-- No drag-to-reposition yet; position is set only through settings.
+- No drag-to-reposition when click-through is on — by design, click-through
+  means the overlay doesn't intercept the mouse at all, so dragging only
+  works with click-through disabled.
 
 ### Preview
 | Muted | Unmuted |
@@ -61,15 +72,14 @@ silently grabbing a bare key system-wide.
 
 // ==WindhawkModSettings==
 /*
-- hotkeyModifiers: 3
-  $name: Hotkey modifiers
+- hotkey: "Ctrl+Alt+M"
+  $name: Hotkey
   $description: >-
-    Bitmask: 1=Alt, 2=Ctrl, 4=Shift, 8=Win. At least one modifier is
-    required — 0 disables the hotkey instead of registering a bare key
-    system-wide. Default 3 = Ctrl+Alt.
-- hotkeyVK: 77
-  $name: Hotkey virtual-key code
-  $description: "Decimal VK code, default 77 = 'M'"
+    Combine modifiers with '+': Ctrl, Alt, Shift, Win, plus exactly one
+    key (a letter, digit, F1-F24, or a name like Space/Tab/Enter/Esc/Up/
+    Down/Left/Right/Insert/Delete/Home/End/PageUp/PageDown). At least one
+    modifier is required — a hotkey with no modifier is rejected instead
+    of registering a bare key system-wide. Example: "Ctrl+Alt+M".
 - overlaySize: 72
   $name: Overlay size (px)
   $description: "Logical pixels at 96 DPI; scaled automatically for the target monitor's DPI"
@@ -78,7 +88,8 @@ silently grabbing a bare key system-wide.
   $description: >-
     Place the overlay at the bottom-right of the primary monitor's work
     area (excludes the taskbar). Disable to set an exact position with
-    overlayPosX/overlayPosY.
+    overlayPosX/overlayPosY, or drag the overlay directly (requires
+    click-through to be off).
 - overlayPosX: 0
   $name: Overlay X position
   $description: >-
@@ -98,6 +109,10 @@ silently grabbing a bare key system-wide.
   $name: Always show overlay (ignore auto-hide)
 - clickThrough: true
   $name: Click-through overlay (don't block mouse)
+  $description: >-
+    When enabled, clicks pass through the overlay to whatever's underneath.
+    When disabled, the overlay blocks clicks and can be dragged to
+    reposition it.
 */
 // ==/WindhawkModSettings==
 
@@ -109,6 +124,7 @@ silently grabbing a bare key system-wide.
 #include <gdiplus.h>
 #include <cmath>
 #include <cwchar>
+#include <cwctype>
 
 #pragma comment(lib, "gdiplus.lib")
 
@@ -152,11 +168,108 @@ HINSTANCE GetCurrentModuleHandle() {
 }
 
 // ---------------------------------------------------------------------------
-// Settings
+// Hotkey string parsing ("Ctrl+Alt+M" -> MOD_* bitmask + VK code)
 // ---------------------------------------------------------------------------
+UINT VKFromKeyName(const wchar_t* name) {
+    if (name[0] != L'\0' && name[1] == L'\0') {
+        wchar_t c = towupper(name[0]);
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) {
+            return (UINT)c;
+        }
+    }
+
+    if ((name[0] == L'F' || name[0] == L'f') && name[1] != L'\0') {
+        int num = 0;
+        const wchar_t* d = name + 1;
+        bool allDigits = true;
+        for (; *d; d++) {
+            if (*d < L'0' || *d > L'9') {
+                allDigits = false;
+                break;
+            }
+            num = num * 10 + (*d - L'0');
+        }
+        if (allDigits && num >= 1 && num <= 24) {
+            return VK_F1 + (num - 1);
+        }
+    }
+
+    struct NamedKey {
+        const wchar_t* name;
+        UINT vk;
+    };
+    static const NamedKey kNamedKeys[] = {
+        {L"SPACE", VK_SPACE},       {L"TAB", VK_TAB},
+        {L"ENTER", VK_RETURN},      {L"RETURN", VK_RETURN},
+        {L"ESC", VK_ESCAPE},        {L"ESCAPE", VK_ESCAPE},
+        {L"UP", VK_UP},             {L"DOWN", VK_DOWN},
+        {L"LEFT", VK_LEFT},         {L"RIGHT", VK_RIGHT},
+        {L"INSERT", VK_INSERT},     {L"DELETE", VK_DELETE},
+        {L"HOME", VK_HOME},         {L"END", VK_END},
+        {L"PAGEUP", VK_PRIOR},      {L"PAGEDOWN", VK_NEXT},
+        {L"BACKSPACE", VK_BACK},    {L"CAPSLOCK", VK_CAPITAL},
+        {L"NUMLOCK", VK_NUMLOCK},   {L"SCROLLLOCK", VK_SCROLL},
+        {L"PRINTSCREEN", VK_SNAPSHOT}, {L"PAUSE", VK_PAUSE},
+    };
+
+    wchar_t upper[32];
+    int i = 0;
+    for (; name[i] && i < 31; i++) upper[i] = towupper(name[i]);
+    upper[i] = L'\0';
+
+    for (const auto& e : kNamedKeys) {
+        if (wcscmp(upper, e.name) == 0) return e.vk;
+    }
+    return 0;
+}
+
+// Returns true only if at least one modifier AND a recognized key were
+// found — a hotkey with no modifier is rejected by the caller rather than
+// grabbing a bare key system-wide.
+bool ParseHotkeyString(const wchar_t* str, UINT* outMods, UINT* outVK) {
+    UINT mods = 0;
+    UINT vk = 0;
+    const wchar_t* p = str;
+
+    while (*p) {
+        while (*p == L' ') p++;
+
+        wchar_t token[32];
+        int len = 0;
+        while (*p && *p != L'+' && len < 31) token[len++] = *p++;
+        token[len] = L'\0';
+        while (len > 0 && token[len - 1] == L' ') token[--len] = L'\0';
+        if (*p == L'+') p++;
+        if (len == 0) continue;
+
+        wchar_t upper[32];
+        int i = 0;
+        for (; token[i] && i < 31; i++) upper[i] = towupper(token[i]);
+        upper[i] = L'\0';
+
+        if (wcscmp(upper, L"CTRL") == 0 || wcscmp(upper, L"CONTROL") == 0) {
+            mods |= MOD_CONTROL;
+        } else if (wcscmp(upper, L"ALT") == 0) {
+            mods |= MOD_ALT;
+        } else if (wcscmp(upper, L"SHIFT") == 0) {
+            mods |= MOD_SHIFT;
+        } else if (wcscmp(upper, L"WIN") == 0 ||
+                   wcscmp(upper, L"WINDOWS") == 0) {
+            mods |= MOD_WIN;
+        } else {
+            vk = VKFromKeyName(token);
+        }
+    }
+
+    *outMods = mods;
+    *outVK = vk;
+    return mods != 0 && vk != 0;
+}
+
 struct ModSettings {
     UINT hotkeyModifiers;
     UINT hotkeyVK;
+    wchar_t hotkeyRaw[64];
     int overlaySize;
     bool overlayAutoPosition;
     int overlayPosX;
@@ -168,8 +281,19 @@ struct ModSettings {
 } g_settings;
 
 void LoadSettings() {
-    g_settings.hotkeyModifiers = (UINT)Wh_GetIntSetting(L"hotkeyModifiers");
-    g_settings.hotkeyVK = (UINT)Wh_GetIntSetting(L"hotkeyVK");
+    PCWSTR hotkeyStr = Wh_GetStringSetting(L"hotkey");
+    g_settings.hotkeyModifiers = 0;
+    g_settings.hotkeyVK = 0;
+    g_settings.hotkeyRaw[0] = L'\0';
+    if (hotkeyStr) {
+        wcsncpy(g_settings.hotkeyRaw, hotkeyStr,
+                ARRAYSIZE(g_settings.hotkeyRaw) - 1);
+        g_settings.hotkeyRaw[ARRAYSIZE(g_settings.hotkeyRaw) - 1] = L'\0';
+        ParseHotkeyString(hotkeyStr, &g_settings.hotkeyModifiers,
+                           &g_settings.hotkeyVK);
+        Wh_FreeStringSetting(hotkeyStr);
+    }
+
     g_settings.overlaySize = (int)Wh_GetIntSetting(L"overlaySize");
     g_settings.overlayAutoPosition =
         Wh_GetIntSetting(L"overlayAutoPosition") != 0;
@@ -353,7 +477,17 @@ void CleanupAudio() {
 }
 
 void ToggleMicMute() {
-    ResolveAudioEndpoint();
+    EnterCriticalSection(&g_audioLock);
+    bool haveEndpoint = g_pEndpointVolume != nullptr;
+    LeaveCriticalSection(&g_audioLock);
+
+    // The cached endpoint is kept fresh by OnDefaultDeviceChanged (event-
+    // driven), so a full re-resolve here isn't needed on the hot path —
+    // only as a one-time fallback if nothing has been resolved yet.
+    if (!haveEndpoint) {
+        ResolveAudioEndpoint();
+    }
+
     EnterCriticalSection(&g_audioLock);
     if (g_pEndpointVolume) {
         BOOL muted = FALSE;
@@ -394,7 +528,26 @@ UINT MonitorDpi(HMONITOR hMonitor) {
     return dpiX;
 }
 
+// Set when the user drags the overlay (only possible while click-through
+// is off — see WM_NCHITTEST/WM_MOVE). Overrides the settings-computed
+// position until the next settings change, which snaps back to configured
+// placement.
+bool g_manualPosition = false;
+POINT g_manualPos = {0, 0};
+
 void ComputeOverlayRect(RECT* out) {
+    if (g_manualPosition) {
+        HMONITOR hMonitor =
+            MonitorFromPoint(g_manualPos, MONITOR_DEFAULTTONEAREST);
+        UINT dpi = MonitorDpi(hMonitor);
+        int size = MulDiv(g_settings.overlaySize, dpi, 96);
+        out->left = g_manualPos.x;
+        out->top = g_manualPos.y;
+        out->right = g_manualPos.x + size;
+        out->bottom = g_manualPos.y + size;
+        return;
+    }
+
     POINT pt;
     HMONITOR hMonitor;
     if (g_settings.overlayAutoPosition) {
@@ -439,9 +592,28 @@ constexpr UINT_PTR TIMER_ANIM = 1;
 constexpr UINT ANIM_MS = 33;  // ~30 fps
 constexpr UINT_PTR kHotkeyId = 1;
 
-void RenderOverlay(HWND hwnd, const RECT& rc, float peak, bool muted) {
-    int size = rc.right - rc.left;
-    if (size < 1) return;
+// Cached render target: recreated only when the overlay's pixel size
+// changes (e.g. a settings change or a DPI/monitor change), not on every
+// animation frame — avoids ~30 GDI object create/destroy pairs per second
+// while the overlay is up.
+HDC g_memDC = nullptr;
+HBITMAP g_hBitmap = nullptr;
+void* g_bits = nullptr;
+int g_renderTargetSize = 0;
+
+bool EnsureRenderTarget(int size) {
+    if (g_hBitmap && g_renderTargetSize == size) return true;
+
+    if (g_memDC) {
+        DeleteDC(g_memDC);
+        g_memDC = nullptr;
+    }
+    if (g_hBitmap) {
+        DeleteObject(g_hBitmap);
+        g_hBitmap = nullptr;
+        g_bits = nullptr;
+    }
+    g_renderTargetSize = 0;
 
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -451,15 +623,48 @@ void RenderOverlay(HWND hwnd, const RECT& rc, float peak, bool muted) {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* bits = nullptr;
     HDC screenDC = GetDC(nullptr);
-    HBITMAP hBitmap =
-        CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    g_hBitmap =
+        CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &g_bits, nullptr, 0);
     ReleaseDC(nullptr, screenDC);
-    if (!hBitmap || !bits) return;
+    if (!g_hBitmap || !g_bits) {
+        g_hBitmap = nullptr;
+        g_bits = nullptr;
+        return false;
+    }
+
+    g_memDC = CreateCompatibleDC(nullptr);
+    if (!g_memDC) {
+        DeleteObject(g_hBitmap);
+        g_hBitmap = nullptr;
+        g_bits = nullptr;
+        return false;
+    }
+    SelectObject(g_memDC, g_hBitmap);
+    g_renderTargetSize = size;
+    return true;
+}
+
+void ReleaseRenderTarget() {
+    if (g_memDC) {
+        DeleteDC(g_memDC);
+        g_memDC = nullptr;
+    }
+    if (g_hBitmap) {
+        DeleteObject(g_hBitmap);
+        g_hBitmap = nullptr;
+        g_bits = nullptr;
+    }
+    g_renderTargetSize = 0;
+}
+
+void RenderOverlay(HWND hwnd, const RECT& rc, float peak, bool muted) {
+    int size = rc.right - rc.left;
+    if (size < 1) return;
+    if (!EnsureRenderTarget(size)) return;
 
     {
-        Bitmap bmp(size, size, size * 4, PixelFormat32bppPARGB, (BYTE*)bits);
+        Bitmap bmp(size, size, size * 4, PixelFormat32bppPARGB, (BYTE*)g_bits);
         Graphics g(&bmp);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.Clear(Color(0, 0, 0, 0));
@@ -528,20 +733,13 @@ void RenderOverlay(HWND hwnd, const RECT& rc, float peak, bool muted) {
         }
     }
 
-    HDC memDC = CreateCompatibleDC(nullptr);
-    HGDIOBJ oldBmp = SelectObject(memDC, hBitmap);
-
     POINT ptDst = {rc.left, rc.top};
     SIZE sizeWnd = {size, size};
     POINT ptSrc = {0, 0};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
 
-    UpdateLayeredWindow(hwnd, nullptr, &ptDst, &sizeWnd, memDC, &ptSrc, 0,
+    UpdateLayeredWindow(hwnd, nullptr, &ptDst, &sizeWnd, g_memDC, &ptSrc, 0,
                          &blend, ULW_ALPHA);
-
-    SelectObject(memDC, oldBmp);
-    DeleteDC(memDC);
-    DeleteObject(hBitmap);
 }
 
 void RenderCurrentState(HWND hwnd, float peak) {
@@ -591,10 +789,9 @@ void RegisterGlobalHotkey(HWND hwnd) {
 
     if (mods == 0 || g_settings.hotkeyVK == 0) {
         Wh_Log(
-            L"Hotkey not registered: at least one modifier and a key are "
-            L"required (mods=%u, vk=%u), to avoid grabbing a bare key "
-            L"system-wide",
-            g_settings.hotkeyModifiers, g_settings.hotkeyVK);
+            L"Hotkey not registered: could not parse a valid hotkey from "
+            L"'%s' (need at least one modifier and one key)",
+            g_settings.hotkeyRaw);
         return;
     }
 
@@ -642,6 +839,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                                           : (ex & ~WS_EX_TRANSPARENT);
             SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex);
 
+            g_manualPosition = false;
             ApplyOverlayPositionAndSize(hwnd);
 
             if (g_settings.alwaysShow && !g_overlayVisible) {
@@ -671,6 +869,23 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                     }
                 }
                 EnsureTimerState(hwnd);
+            }
+            return 0;
+        }
+        case WM_NCHITTEST: {
+            // Only draggable while click-through is off — with it on, the
+            // window is WS_EX_TRANSPARENT and never receives mouse input
+            // anyway, so this only matters in the non-click-through case.
+            if (!g_settings.clickThrough) {
+                return HTCAPTION;
+            }
+            return DefWindowProc(hwnd, msg, wParam, lParam);
+        }
+        case WM_MOVE: {
+            if (!g_settings.clickThrough) {
+                g_manualPos.x = (short)LOWORD(lParam);
+                g_manualPos.y = (short)HIWORD(lParam);
+                g_manualPosition = true;
             }
             return 0;
         }
@@ -757,6 +972,7 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     }
     UnregisterClass(kClassName, GetCurrentModuleHandle());
 
+    ReleaseRenderTarget();
     if (g_gdiplusToken) GdiplusShutdown(g_gdiplusToken);
     CoUninitialize();
     return 0;
