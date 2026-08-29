@@ -228,7 +228,7 @@ community.
     handler on a background timer and two system-wide window-event hooks.
     Turn off to disable all of that: every running app is then classified
     the same way as a pinned-but-not-running one, via leftApps/rightApps/
-    "Default side for unclassified apps" below, with no drag-follow. Start
+    "Default side for unclassified apps" above, with no drag-follow. Start
     centering and Search/Task View/Widgets placement are unaffected either
     way. Takes effect immediately, no need to reload the mod.
 */
@@ -3269,7 +3269,11 @@ void ApplyLoadedSettings(ModSettings settings) {
     auto heapSettings = std::make_unique<ModSettings>(std::move(settings));
     if (PostMessage(hTaskbarWnd, SettingsChangedMsg(), 0,
                     (LPARAM)heapSettings.get())) {
-        heapSettings.release();
+        // The pointer itself was already captured via .get() above; this
+        // call's own return value is the same pointer, discarded here on
+        // purpose - release() is invoked purely so the unique_ptr's
+        // destructor doesn't free what PostMessage's receiver now owns.
+        (void)heapSettings.release();
         return;
     }
     Wh_Log(L"ApplyLoadedSettings: PostMessage failed, error=%lu, "
