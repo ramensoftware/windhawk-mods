@@ -4,7 +4,7 @@
 // @description     Global hotkey to mute/unmute the default microphone, with a floating always-on-top overlay that animates while the mic is active
 // @description:id-ID Hotkey global untuk mute/unmute mikrofon default, dengan indikator overlay melayang yang selalu di atas dan beranimasi saat mikrofon aktif
 // @version         1.0.0
-// @author          Farel
+// @author          Farael Hanafi
 // @github          https://github.com/Eliasilyz
 // @homepage        https://farelhanafi.my.id/
 // @include         windhawk.exe
@@ -471,8 +471,11 @@ bool ResolveAudioEndpoint() {
     if (SUCCEEDED(hr) && g_pEndpointVolume) {
         g_pEndpointVolume->RegisterControlChangeNotify(&g_volumeCallback);
         BOOL muted = FALSE;
-        g_pEndpointVolume->GetMute(&muted);
-        g_micMuted = muted != FALSE;
+        if (SUCCEEDED(g_pEndpointVolume->GetMute(&muted))) {
+            g_micMuted = muted != FALSE;
+        } else {
+            Wh_Log(L"GetMute failed; assuming unmuted until the next update");
+        }
     } else {
         Wh_Log(L"Failed to activate IAudioEndpointVolume: 0x%08X", hr);
     }
@@ -519,9 +522,12 @@ void ToggleMicMute() {
     EnterCriticalSection(&g_audioLock);
     if (g_pEndpointVolume) {
         BOOL muted = FALSE;
-        g_pEndpointVolume->GetMute(&muted);
-        g_pEndpointVolume->SetMute(!muted, nullptr);
-        g_micMuted = !muted;
+        if (SUCCEEDED(g_pEndpointVolume->GetMute(&muted)) &&
+            SUCCEEDED(g_pEndpointVolume->SetMute(!muted, nullptr))) {
+            g_micMuted = !muted;
+        } else {
+            Wh_Log(L"Mute toggle failed; leaving indicator state unchanged");
+        }
     }
     LeaveCriticalSection(&g_audioLock);
 }
@@ -563,6 +569,13 @@ UINT MonitorDpi(HMONITOR hMonitor) {
 // placement.
 bool g_manualPosition = false;
 POINT g_manualPos = {0, 0};
+
+// True for the duration of a user-driven move loop (WM_ENTERSIZEMOVE to
+// WM_EXITSIZEMOVE). While dragging, RenderOverlay must not pass pptDst to
+// UpdateLayeredWindow — the move loop already owns the window's position,
+// and doing both fights every ~33ms timer tick, producing a jittering drag
+// whose drop position is whichever repositioning happened to run last.
+bool g_dragging = false;
 
 void ComputeOverlayRect(RECT* out) {
     if (g_manualPosition) {
@@ -773,8 +786,8 @@ void RenderOverlay(HWND hwnd, const RECT& rc, float peak, bool muted) {
     POINT ptSrc = {0, 0};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
 
-    UpdateLayeredWindow(hwnd, nullptr, &ptDst, &sizeWnd, g_memDC, &ptSrc, 0,
-                         &blend, ULW_ALPHA);
+    UpdateLayeredWindow(hwnd, nullptr, g_dragging ? nullptr : &ptDst,
+                         &sizeWnd, g_memDC, &ptSrc, 0, &blend, ULW_ALPHA);
 }
 
 void RenderCurrentState(HWND hwnd, float peak) {
@@ -810,6 +823,8 @@ void ShowOverlayTemporarily(HWND hwnd) {
     if (!g_overlayVisible) {
         g_overlayVisible = true;
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
 
@@ -843,8 +858,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
         case WM_HOTKEY: {
             if (wParam == kHotkeyId) {
                 ToggleMicMute();
-                ShowOverlayTemporarily(hwnd);
                 RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
+                ShowOverlayTemporarily(hwnd);
                 EnsureTimerState(hwnd);
             }
             return 0;
@@ -860,8 +875,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                 return 0;
             }
             g_micMuted = muted;
-            ShowOverlayTemporarily(hwnd);
             RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
+            ShowOverlayTemporarily(hwnd);
             EnsureTimerState(hwnd);
             return 0;
         }
@@ -882,12 +897,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
 
             g_manualPosition = false;
             ApplyOverlayPositionAndSize(hwnd);
+            RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
 
             if (g_settings.alwaysShow && !g_overlayVisible) {
                 ShowOverlayTemporarily(hwnd);
             }
 
-            RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
             EnsureTimerState(hwnd);
             return 0;
         }
@@ -922,17 +937,37 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             }
             return DefWindowProc(hwnd, msg, wParam, lParam);
         }
+        case WM_DISPLAYCHANGE:
+        case WM_SETTINGCHANGE: {
+            // Resolution, monitor arrangement, or work-area (taskbar
+            // size/auto-hide) changes need to re-anchor the overlay even
+            // when EnsureTimerState has the render timer off (alwaysShow
+            // + muted), since nothing else would trigger a reposition.
+            if (g_overlayVisible && !g_manualPosition) {
+                ApplyOverlayPositionAndSize(hwnd);
+                RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
+            }
+            return 0;
+        }
+        case WM_ENTERSIZEMOVE: {
+            g_dragging = true;
+            return 0;
+        }
         case WM_EXITSIZEMOVE: {
             // Fires only at the end of a real user-driven move loop
             // (started via the WM_NCHITTEST -> HTCAPTION drag below) —
             // unlike WM_MOVE, this can't be confused with the
             // programmatic repositioning that ApplyOverlayPositionAndSize
             // and UpdateLayeredWindow's pptDst also trigger.
+            g_dragging = false;
             if (!g_settings.clickThrough) {
                 RECT wr;
                 GetWindowRect(hwnd, &wr);
                 g_manualPos = {wr.left, wr.top};
                 g_manualPosition = true;
+                // Resume owning the position for subsequent frames now
+                // that the move loop has released it.
+                RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
             }
             return 0;
         }
@@ -1001,10 +1036,10 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     if (g_hOverlay) {
         ResolveAudioEndpoint();
         RegisterGlobalHotkey(g_hOverlay);
+        RenderCurrentState(g_hOverlay, g_micMuted ? 0.0f : GetMicPeak());
         if (g_settings.alwaysShow) {
             ShowOverlayTemporarily(g_hOverlay);
         }
-        RenderCurrentState(g_hOverlay, g_micMuted ? 0.0f : GetMicPeak());
         EnsureTimerState(g_hOverlay);
     }
 
