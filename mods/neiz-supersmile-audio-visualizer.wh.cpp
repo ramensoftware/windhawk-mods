@@ -24,7 +24,7 @@ Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highl
 - Optional per-application audio source
 - 1024-point FFT
 - 32 logarithmic frequency bands
-- 10-band custom EQ curve applied across the FFT bands
+- 10-band custom EQ curve applied across the FFT bands ( Win 11 )
 - Up to 256 rendered visual bars
 - Auto-Gain normalization
 - Attack / decay controls
@@ -60,7 +60,7 @@ The widget supports artist/title metadata, synchronized highlighting, previous/u
 
 When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.
 
-## Custom EQ
+## Custom EQ ( Win 11 )
 
 The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.
 
@@ -7962,11 +7962,6 @@ static void ApplyEqPopupWindowAttributes(HWND hwnd) {
     const BOOL dark = IsDarkThemeEnabled() ? TRUE : FALSE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
                           &dark, sizeof(dark));
-#if defined(DWMWA_WINDOW_CORNER_PREFERENCE)
-    const DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
-    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                          &corner, sizeof(corner));
-#endif
 }
 
 static POINT GetEqSliderPoint(int index) {
@@ -8955,8 +8950,7 @@ static bool EqHookTaskbarSymbols() {
     if (!h)
         return false;
 
-    // explorer.exe, taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_eqCTaskBandTaskListWndSiteVftable},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
@@ -8972,7 +8966,7 @@ static bool EqHookTaskbarSymbols() {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &g_eqTrayUIStartTaskbarOriginal, EqTrayUIStartTaskbarHook},
     };
-    return WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 static void EqCleanupIntegration() {
