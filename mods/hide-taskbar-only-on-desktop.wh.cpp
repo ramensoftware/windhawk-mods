@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
-// @version 1.10.0
+// @version 1.11.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -98,6 +98,8 @@ This mod was created with AI assistance.
 #include <dwmapi.h>
 #include <atomic>
 #include <stdio.h>
+#include <string.h>
+#include <wchar.h>
 
 struct Settings {
     std::atomic<int> extraHoverMarginMm{5};
@@ -131,6 +133,7 @@ struct TaskbarState {
     bool hasApplication = false;
     bool taskbarIsForeground = false;
     bool shellUiForeground = false;
+    bool shellFlyoutVisible = false;
     bool shownDueToHover = false;
     bool shownDueToAltTab = false;
     ULONGLONG hideDeadline = 0;
@@ -138,6 +141,8 @@ struct TaskbarState {
 
 TaskbarState g_taskbars[kMaxTaskbars] = {};
 size_t g_taskbarCount = 0;
+
+bool g_altTabActive = false;
 
 HWINEVENTHOOK g_hWinEventHooks[kMaxWinEventHooks] = {};
 
@@ -187,7 +192,6 @@ bool IsShellChromeClass(const WCHAR* className) {
 
     return
         wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-        wcscmp(className, L"ApplicationFrameWindow") == 0 ||
         wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
         wcscmp(className, L"ControlCenterWindow") == 0 ||
         wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
@@ -223,12 +227,21 @@ HWND FindPrimaryTaskbar();
 bool IsTaskbarActuallyHidden(HWND hwnd);
 bool IsShellUiClass(const WCHAR* className);
 
+bool IsAltTabWindowClass(const WCHAR* className);
+bool GetWindowProcessName(HWND hwnd, WCHAR* name, size_t nameCount);
+bool IsKnownShellUiProcess(const WCHAR* processName);
+bool IsShellUiWindow(HWND hwnd);
+
 struct AppMonitorScan {
     TaskbarState* taskbars;
     size_t count;
+    bool altTabActive;
 };
 
-BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+BOOL CALLBACK EnumWindowsProc(
+    HWND hwnd,
+    LPARAM lParam
+) {
     AppMonitorScan* scan =
         reinterpret_cast<AppMonitorScan*>(lParam);
 
@@ -244,16 +257,105 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    WCHAR className[256] = {};
-
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+    /*
+     * Explicitly ignore the desktop itself.
+     */
+    if (IsDesktopWindow(hwnd)) {
         return TRUE;
     }
 
+    WCHAR className[256] = {};
+
     if (
-        IsShellChromeClass(className) ||
-        IsShellUiClass(className)
+        GetClassNameW(
+            hwnd,
+            className,
+            ARRAYSIZE(className)
+        ) == 0
     ) {
+        return TRUE;
+    }
+
+    /*
+     * Detect the Alt+Tab switcher in this same EnumWindows pass.
+     */
+    if (IsAltTabWindowClass(className)) {
+        if (
+            wcscmp(
+                className,
+                L"XamlExplorerHostIslandWindow"
+            ) == 0
+        ) {
+            WCHAR processName[MAX_PATH] = {};
+
+            if (
+                GetWindowProcessName(
+                    hwnd,
+                    processName,
+                    ARRAYSIZE(processName)
+                ) &&
+                (
+                    _wcsicmp(
+                        processName,
+                        L"explorer.exe"
+                    ) == 0 ||
+                    _wcsicmp(
+                        processName,
+                        L"ShellExperienceHost.exe"
+                    ) == 0
+                )
+            ) {
+                scan->altTabActive = true;
+            }
+        } else {
+            scan->altTabActive = true;
+        }
+
+        return TRUE;
+    }
+
+    /*
+     * CoreWindow and XAML popup classes can belong to normal apps too.
+     * Only shell-owned instances are treated as shell UI.
+     */
+    if (
+        IsShellChromeClass(className) &&
+        IsShellUiWindow(hwnd)
+    ) {
+        BOOL cloaked = FALSE;
+
+        if (
+            !(
+                SUCCEEDED(
+                    DwmGetWindowAttribute(
+                        hwnd,
+                        DWMWA_CLOAKED,
+                        &cloaked,
+                        sizeof(cloaked)
+                    )
+                ) &&
+                cloaked
+            )
+        ) {
+            RECT rect = {};
+
+            if (GetWindowRect(hwnd, &rect)) {
+                for (size_t i = 0; i < scan->count; ++i) {
+                    RECT intersection = {};
+
+                    if (
+                        IntersectRect(
+                            &intersection,
+                            &scan->taskbars[i].monitorRect,
+                            &rect
+                        )
+                    ) {
+                        scan->taskbars[i].shellFlyoutVisible = true;
+                    }
+                }
+            }
+        }
+
         return TRUE;
     }
 
@@ -261,22 +363,6 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
     if (exStyle & WS_EX_TOOLWINDOW) {
-        return TRUE;
-    }
-
-    BOOL cloaked = FALSE;
-
-    if (
-        SUCCEEDED(
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
-            )
-        ) &&
-        cloaked
-    ) {
         return TRUE;
     }
 
@@ -296,6 +382,25 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     if (
         GetWindow(hwnd, GW_OWNER) != nullptr &&
         !(exStyle & WS_EX_APPWINDOW)
+    ) {
+        return TRUE;
+    }
+
+    /*
+     * DWM is deliberately queried after the cheaper filters.
+     */
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
     ) {
         return TRUE;
     }
@@ -321,7 +426,10 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
 void ScanApplicationWindows() {
     for (size_t i = 0; i < g_taskbarCount; ++i) {
         g_taskbars[i].hasApplication = false;
+        g_taskbars[i].shellFlyoutVisible = false;
     }
+
+    g_altTabActive = false;
 
     if (!g_taskbarCount) {
         return;
@@ -329,13 +437,16 @@ void ScanApplicationWindows() {
 
     AppMonitorScan scan{
         g_taskbars,
-        g_taskbarCount
+        g_taskbarCount,
+        false
     };
 
     EnumWindows(
         EnumWindowsProc,
         reinterpret_cast<LPARAM>(&scan)
     );
+
+    g_altTabActive = scan.altTabActive;
 }
 
 
@@ -575,158 +686,6 @@ bool IsVisibleShellFlyoutForMonitor(
         &mi.rcMonitor,
         &windowRect
     ) != FALSE;
-}
-
-
-struct ShellFlyoutScan {
-    HMONITOR monitor;
-    bool found;
-};
-
-
-BOOL CALLBACK EnumShellFlyoutProc(
-    HWND hwnd,
-    LPARAM lParam
-) {
-    ShellFlyoutScan* scan =
-        reinterpret_cast<ShellFlyoutScan*>(lParam);
-
-    if (!scan || scan->found) {
-        return FALSE;
-    }
-
-    if (
-        IsVisibleShellFlyoutForMonitor(
-            scan->monitor,
-            hwnd
-        )
-    ) {
-        scan->found = true;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-
-bool HasVisibleShellFlyout(HMONITOR monitor) {
-    if (!monitor) {
-        return false;
-    }
-
-    ShellFlyoutScan scan = {};
-    scan.monitor = monitor;
-
-    EnumWindows(
-        EnumShellFlyoutProc,
-        reinterpret_cast<LPARAM>(&scan)
-    );
-
-    return scan.found;
-}
-
-
-BOOL CALLBACK EnumAltTabWindowProc(
-    HWND hwnd,
-    LPARAM lParam
-) {
-    bool* found =
-        reinterpret_cast<bool*>(lParam);
-
-    if (!found || !IsWindowVisible(hwnd)) {
-        return TRUE;
-    }
-
-    WCHAR className[128] = {};
-
-    if (
-        GetClassNameW(
-            hwnd,
-            className,
-            ARRAYSIZE(className)
-        ) == 0 ||
-        !IsAltTabWindowClass(className)
-    ) {
-        return TRUE;
-    }
-
-    /*
-     * The modern Windows 11 switcher uses
-     * XamlExplorerHostIslandWindow. Restrict it to the shell processes
-     * that actually host the task switcher.
-     */
-    if (
-        wcscmp(
-            className,
-            L"XamlExplorerHostIslandWindow"
-        ) == 0
-    ) {
-        WCHAR processName[MAX_PATH] = {};
-
-        if (
-            !GetWindowProcessName(
-                hwnd,
-                processName,
-                ARRAYSIZE(processName)
-            )
-        ) {
-            return TRUE;
-        }
-
-        if (
-            _wcsicmp(processName, L"explorer.exe") != 0 &&
-            _wcsicmp(processName, L"ShellExperienceHost.exe") != 0
-        ) {
-            return TRUE;
-        }
-    }
-
-    BOOL cloaked = FALSE;
-
-    if (
-        SUCCEEDED(
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
-            )
-        ) &&
-        cloaked
-    ) {
-        return TRUE;
-    }
-
-    *found = true;
-    return FALSE;
-}
-
-
-bool IsAltTabActive() {
-    /*
-     * Modern Windows versions do not always expose the task switcher
-     * through the legacy #32771 window class. Detect the actual Alt+Tab
-     * shortcut while it is being held, and keep the legacy class check
-     * as a fallback.
-     */
-    bool altTabWindow = false;
-
-    EnumWindows(
-        EnumAltTabWindowProc,
-        reinterpret_cast<LPARAM>(&altTabWindow)
-    );
-
-    if (altTabWindow) {
-        return true;
-    }
-
-    bool altDown =
-        (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-
-    bool tabDown =
-        (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
-
-    return altDown && tabDown;
 }
 
 
@@ -1202,10 +1161,10 @@ void UpdateTaskbarState() {
 
         bool shellFlyoutOpen =
             taskbar.shellUiForeground ||
-            HasVisibleShellFlyout(taskbar.monitor);
+            taskbar.shellFlyoutVisible;
 
         bool altTabActive =
-            IsAltTabActive();
+            g_altTabActive;
 
         /*
          * If a normal application is present on this monitor, that
@@ -1298,6 +1257,12 @@ void UpdateTaskbarState() {
                 taskbar.hwnd,
                 true
             );
+
+            if (!taskbar.hideDeadline) {
+                taskbar.hideDeadline =
+                    now +
+                    static_cast<ULONGLONG>(delay);
+            }
 
             continue;
         }
@@ -1441,21 +1406,13 @@ LRESULT CALLBACK SystemMessageWindowProc(
 
     switch (message) {
     case WM_SETTINGCHANGE:
-        /*
-         * Native taskbar auto-hide can be changed from Windows Settings.
-         * Re-query it only when this targeted system notification arrives.
-         */
-        RefreshPerMonitorState();
-        UpdateTaskbarState();
-        return 0;
-
     case WM_DISPLAYCHANGE:
     case WM_DPICHANGED:
         /*
-         * Monitor layout or DPI can change taskbar geometry.
+         * Queue the state refresh on the worker thread rather than doing
+         * a complete EnumWindows sweep synchronously in this callback.
          */
-        RefreshPerMonitorState();
-        UpdateTaskbarState();
+        RequestStateRefresh();
         return 0;
 
     case WM_NCDESTROY:
@@ -2017,12 +1974,19 @@ void WhTool_ModUninit() {
 }
 
 
-// ============================================================
-// Windhawk Tool Mod launcher
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// IMPORTANT:
-// Keep the official Windhawk launcher section below unchanged.
-// ============================================================
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -2033,99 +1997,51 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-
-    if (
-        ProcessIdToSessionId(
-            GetCurrentProcessId(),
-            &sessionId
-        ) &&
-        sessionId == 0
-    ) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
+    bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-
     int argc;
-
-    LPWSTR* argv =
-        CommandLineToArgvW(
-            GetCommandLine(),
-            &argc
-        );
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
 
     if (!argv) {
-        Wh_Log(
-            L"CommandLineToArgvW failed"
-        );
-
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
     for (int i = 1; i < argc; i++) {
-        if (
-            wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0
-        ) {
-            isExcluded = true;
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
             break;
         }
     }
 
     for (int i = 1; i < argc - 1; i++) {
-        if (
-            wcscmp(argv[i], L"-tool-mod") == 0
-        ) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-
-            if (
-                wcscmp(
-                    argv[i + 1],
-                    WH_MOD_ID
-                ) == 0
-            ) {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
-
             break;
         }
     }
 
     LocalFree(argv);
 
-    if (isExcluded) {
+    if (isService) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(
-                nullptr,
-                TRUE,
-                L"windhawk-tool-mod_" WH_MOD_ID
-            );
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
 
         if (!g_toolModProcessMutex) {
-            Wh_Log(
-                L"CreateMutex failed"
-            );
-
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        if (
-            GetLastError() ==
-            ERROR_ALREADY_EXISTS
-        ) {
-            Wh_Log(
-                L"Tool mod already running (%s)",
-                WH_MOD_ID
-            );
-
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -2134,32 +2050,14 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(
-                GetModuleHandle(nullptr)
-            );
-
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<BYTE*>(dosHeader) +
-                dosHeader->e_lfanew
-            );
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD entryPointRVA =
-            ntHeaders->OptionalHeader
-                .AddressOfEntryPoint;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) +
-            entryPointRVA;
-
-        Wh_SetFunctionHook(
-            entryPoint,
-            reinterpret_cast<void*>(
-                EntryPoint_Hook
-            ),
-            nullptr
-        );
-
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -2168,10 +2066,8 @@ BOOL Wh_ModInit() {
     }
 
     g_isToolModProcessLauncher = true;
-
     return TRUE;
 }
-
 
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
@@ -2179,128 +2075,60 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-
-    switch (
-        GetModuleFileNameW(
-            nullptr,
-            currentProcessPath,
-            ARRAYSIZE(currentProcessPath)
-        )
-    ) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
-            Wh_Log(
-                L"GetModuleFileName failed"
-            );
-
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[
-        MAX_PATH +
-        2 +
-        (sizeof(
-            L" -tool-mod \"" WH_MOD_ID "\""
-        ) / sizeof(WCHAR)) -
-        1
-    ];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    swprintf_s(
-        commandLine,
-        L"\"%s\" -tool-mod \"%s\"",
-        currentProcessPath,
-        WH_MOD_ID
-    );
-
-    HMODULE kernelModule =
-        GetModuleHandleW(
-            L"kernelbase.dll"
-        );
-
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule =
-            GetModuleHandleW(
-                L"kernel32.dll"
-            );
-
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
-            Wh_Log(
-                L"No kernelbase.dll/kernel32.dll"
-            );
-
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
 
-    using CreateProcessInternalW_t =
-        BOOL(WINAPI*)(
-            HANDLE,
-            LPCWSTR,
-            LPWSTR,
-            LPSECURITY_ATTRIBUTES,
-            LPSECURITY_ATTRIBUTES,
-            WINBOOL,
-            DWORD,
-            LPVOID,
-            LPCWSTR,
-            LPSTARTUPINFO,
-            LPPROCESS_INFORMATION,
-            PHANDLE
-        );
-
-    CreateProcessInternalW_t
-        pCreateProcessInternalW =
-            reinterpret_cast<
-                CreateProcessInternalW_t
-            >(
-                GetProcAddress(
-                    kernelModule,
-                    "CreateProcessInternalW"
-                )
-            );
-
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(
-            L"No CreateProcessInternalW"
-        );
-
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si = {};
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-
-    PROCESS_INFORMATION pi = {};
-
-    if (
-        !pCreateProcessInternalW(
-            nullptr,
-            currentProcessPath,
-            commandLine,
-            nullptr,
-            nullptr,
-            FALSE,
-            NORMAL_PRIORITY_CLASS,
-            nullptr,
-            nullptr,
-            &si,
-            &pi,
-            nullptr
-        )
-    ) {
-        Wh_Log(
-            L"CreateProcess failed: %lu",
-            GetLastError()
-        );
-
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
-
 
 void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
@@ -2310,13 +2138,11 @@ void Wh_ModSettingsChanged() {
     WhTool_ModSettingsChanged();
 }
 
-
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
 
     WhTool_ModUninit();
-
     ExitProcess(0);
 }
