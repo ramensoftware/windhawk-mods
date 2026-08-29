@@ -3,7 +3,7 @@
 // @name            Global Hotkey Mute Microphone + Floating Overlay
 // @description     Global hotkey to mute/unmute the default microphone, with a floating always-on-top overlay that animates while the mic is active
 // @description:id-ID Hotkey global untuk mute/unmute mikrofon default, dengan indikator overlay melayang yang selalu di atas dan beranimasi saat mikrofon aktif
-// @version         2.0.0
+// @version         1.0.0
 // @author          Farel
 // @github          https://github.com/Eliasilyz
 // @homepage        https://farelhanafi.my.id/
@@ -51,6 +51,21 @@ See the settings panel for the full list and description of each option.
 The hotkey is a single string, e.g. `"Ctrl+Alt+M"`; at least one modifier
 is required — a hotkey with no modifier is rejected rather than silently
 grabbing a bare key system-wide.
+
+## How this differs from similar mods
+
+- [mic-tray-control](https://windhawk.net/mods/mic-tray-control) and
+  [mutealert](https://windhawk.net/mods/mutealert) both surface the default
+  mic's mute state and let you toggle it, but through the tray/taskbar —
+  neither has a global hotkey or a floating overlay.
+- [keyboard-shortcut-actions](https://windhawk.net/mods/keyboard-shortcut-actions)
+  is a general hotkey→action framework and already includes a "Mute system
+  volume" action using the same `Ctrl+Alt+M`-style hotkey string format.
+  This mod overlaps it on the hotkey side, but its actions target output
+  (render) devices, not the default microphone (capture), and it has no
+  overlay indicator. The floating, animated overlay is this mod's actual
+  differentiator; the hotkey parsing exists mainly to drive that overlay
+  reliably rather than to duplicate a general-purpose action framework.
 
 ## Known limitations
 
@@ -126,20 +141,19 @@ grabbing a bare key system-wide.
 #include <cwchar>
 #include <cwctype>
 
-#pragma comment(lib, "gdiplus.lib")
-
 using namespace Gdiplus;
 
 // ---------------------------------------------------------------------------
 // Manually-declared interface
 // ---------------------------------------------------------------------------
 // IAudioMeterInformation is only forward-declared (no method table) by this
-// compiler's endpointvolume.h, so we declare our own copy under a different
-// name and activate it via an explicit IID, the same pattern used elsewhere
-// in this repo for undocumented/incompletely-declared COM interfaces (see
-// audio-scroll-switcher.wh.cpp's IPolicyConfig).
-MIDL_INTERFACE("C02216F6-8C67-4B5B-9D00-D008E73E0064")
-IAudioMeterInformation2 : public IUnknown {
+// compiler's endpointvolume.h. Declared here under its canonical name,
+// guarded so it's skipped once the toolchain header provides a full
+// definition — same approach as mutealert.wh.cpp in this repo.
+#ifndef __IAudioMeterInformation_INTERFACE_DEFINED__
+#define __IAudioMeterInformation_INTERFACE_DEFINED__
+MIDL_INTERFACE("c02216f6-8c67-4b5b-9d00-d008e73e0064")
+IAudioMeterInformation : public IUnknown {
    public:
     virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* pfPeak) = 0;
     virtual HRESULT STDMETHODCALLTYPE
@@ -149,15 +163,25 @@ IAudioMeterInformation2 : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE
     QueryHardwareSupport(DWORD* pdwHardwareSupportMask) = 0;
 };
-
-const IID IID_IAudioMeterInformation2 = {
-    0xc02216f6,
-    0x8c67,
-    0x4b5b,
-    {0x9d, 0x00, 0xd0, 0x08, 0xe7, 0x3e, 0x00, 0x64}};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IAudioMeterInformation,
+                 0xc02216f6,
+                 0x8c67,
+                 0x4b5b,
+                 0x9d,
+                 0x00,
+                 0xd0,
+                 0x08,
+                 0xe7,
+                 0x3e,
+                 0x00,
+                 0x64)
+#endif
+#endif
 
 // ---------------------------------------------------------------------------
-// Module handle (NOT GetModuleHandle(nullptr) — see item 7 of the review)
+// Module handle — NOT GetModuleHandle(nullptr), which would return the
+// host windhawk.exe's handle rather than this mod DLL's.
 // ---------------------------------------------------------------------------
 HINSTANCE GetCurrentModuleHandle() {
     HINSTANCE hInst = nullptr;
@@ -281,18 +305,16 @@ struct ModSettings {
 } g_settings;
 
 void LoadSettings() {
+    // Wh_GetStringSetting never returns NULL (it returns L"" on error/unset).
     PCWSTR hotkeyStr = Wh_GetStringSetting(L"hotkey");
+    wcsncpy(g_settings.hotkeyRaw, hotkeyStr,
+            ARRAYSIZE(g_settings.hotkeyRaw) - 1);
+    g_settings.hotkeyRaw[ARRAYSIZE(g_settings.hotkeyRaw) - 1] = L'\0';
     g_settings.hotkeyModifiers = 0;
     g_settings.hotkeyVK = 0;
-    g_settings.hotkeyRaw[0] = L'\0';
-    if (hotkeyStr) {
-        wcsncpy(g_settings.hotkeyRaw, hotkeyStr,
-                ARRAYSIZE(g_settings.hotkeyRaw) - 1);
-        g_settings.hotkeyRaw[ARRAYSIZE(g_settings.hotkeyRaw) - 1] = L'\0';
-        ParseHotkeyString(hotkeyStr, &g_settings.hotkeyModifiers,
-                           &g_settings.hotkeyVK);
-        Wh_FreeStringSetting(hotkeyStr);
-    }
+    ParseHotkeyString(hotkeyStr, &g_settings.hotkeyModifiers,
+                       &g_settings.hotkeyVK);
+    Wh_FreeStringSetting(hotkeyStr);
 
     g_settings.overlaySize = (int)Wh_GetIntSetting(L"overlaySize");
     g_settings.overlayAutoPosition =
@@ -315,11 +337,16 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 // Audio (Core Audio API) — resolved fresh on demand, event-driven updates
 // ---------------------------------------------------------------------------
+// g_audioLock is defensive, not actually contended today: ResolveAudioEndpoint,
+// ToggleMicMute, GetMicPeak, and CleanupAudio only ever run on the overlay
+// thread, and the two COM notification callbacks below deliberately only
+// PostMessage rather than touching these pointers directly. Kept in case
+// that assumption changes.
 CRITICAL_SECTION g_audioLock;
 IMMDeviceEnumerator* g_pEnumerator = nullptr;
 IMMDevice* g_pCaptureDevice = nullptr;
 IAudioEndpointVolume* g_pEndpointVolume = nullptr;
-IAudioMeterInformation2* g_pMeterInfo = nullptr;
+IAudioMeterInformation* g_pMeterInfo = nullptr;
 bool g_micMuted = false;
 
 constexpr UINT kMsgMuteChanged = WM_APP + 2;
@@ -408,9 +435,10 @@ void ReleaseAudioEndpoint_NoLock() {
     }
 }
 
-// Re-resolves the default capture device and its interfaces. Cheap enough
-// to call on every toggle (rare, user-triggered), which also guards
-// against a stale device if the event-driven path is ever missed.
+// Re-resolves the default capture device and its interfaces. Called once
+// at startup, on an OnDefaultDeviceChanged event, and as a one-time
+// fallback from ToggleMicMute if nothing has been resolved yet — not on
+// every toggle, since the cached endpoint is kept fresh by the event path.
 bool ResolveAudioEndpoint() {
     EnterCriticalSection(&g_audioLock);
     ReleaseAudioEndpoint_NoLock();
@@ -450,7 +478,7 @@ bool ResolveAudioEndpoint() {
     }
 
     HRESULT hrMeter = g_pCaptureDevice->Activate(
-        IID_IAudioMeterInformation2, CLSCTX_ALL, nullptr,
+        __uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr,
         (void**)&g_pMeterInfo);
     if (FAILED(hrMeter)) {
         Wh_Log(
@@ -518,7 +546,8 @@ float GetMicPeak() {
 }
 
 // ---------------------------------------------------------------------------
-// Monitor / DPI helpers (item 6: work area, multi-monitor, DPI awareness)
+// Monitor / DPI helpers — work area (not raw screen size), multi-monitor,
+// and per-monitor DPI scaling.
 // ---------------------------------------------------------------------------
 UINT MonitorDpi(HMONITOR hMonitor) {
     UINT dpiX = 96, dpiY = 96;
@@ -529,7 +558,7 @@ UINT MonitorDpi(HMONITOR hMonitor) {
 }
 
 // Set when the user drags the overlay (only possible while click-through
-// is off — see WM_NCHITTEST/WM_MOVE). Overrides the settings-computed
+// is off — see WM_NCHITTEST/WM_EXITSIZEMOVE). Overrides the settings-computed
 // position until the next settings change, which snaps back to configured
 // placement.
 bool g_manualPosition = false;
@@ -567,6 +596,12 @@ void ComputeOverlayRect(RECT* out) {
     int x, y;
     if (g_settings.overlayAutoPosition) {
         int margin = MulDiv(g_settings.overlayMargin, dpi, 96);
+        int workW = mi.rcWork.right - mi.rcWork.left;
+        int workH = mi.rcWork.bottom - mi.rcWork.top;
+        int smallerDim = workW < workH ? workW : workH;
+        int maxMargin = (smallerDim - size) / 2;
+        if (maxMargin < 0) maxMargin = 0;
+        if (margin > maxMargin) margin = maxMargin;
         x = mi.rcWork.right - size - margin;
         y = mi.rcWork.bottom - size - margin;
     } else {
@@ -755,12 +790,12 @@ void ApplyOverlayPositionAndSize(HWND hwnd) {
                  rc.bottom - rc.top, SWP_NOACTIVATE);
 }
 
-// Timer only needs to run while there's something to animate (unmuted) or
-// an auto-hide countdown in flight — never spins forever in the muted +
-// alwaysShow case (item 8).
+// The timer only needs to run while the overlay is actually visible —
+// nothing animates or auto-hides while it's hidden, and peak level never
+// triggers a show by itself (only the hotkey and mute-change messages do).
 void EnsureTimerState(HWND hwnd) {
     bool needTimer =
-        !g_micMuted || (g_overlayVisible && !g_settings.alwaysShow);
+        g_overlayVisible && (!g_micMuted || !g_settings.alwaysShow);
     if (needTimer && !g_timerActive) {
         SetTimer(hwnd, TIMER_ANIM, ANIM_MS, nullptr);
         g_timerActive = true;
@@ -781,11 +816,7 @@ void ShowOverlayTemporarily(HWND hwnd) {
 void RegisterGlobalHotkey(HWND hwnd) {
     UnregisterHotKey(hwnd, kHotkeyId);
 
-    UINT mods = 0;
-    if (g_settings.hotkeyModifiers & 1) mods |= MOD_ALT;
-    if (g_settings.hotkeyModifiers & 2) mods |= MOD_CONTROL;
-    if (g_settings.hotkeyModifiers & 4) mods |= MOD_SHIFT;
-    if (g_settings.hotkeyModifiers & 8) mods |= MOD_WIN;
+    UINT mods = g_settings.hotkeyModifiers;
 
     if (mods == 0 || g_settings.hotkeyVK == 0) {
         Wh_Log(
@@ -819,7 +850,16 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             return 0;
         }
         case kMsgMuteChanged: {
-            g_micMuted = wParam != 0;
+            bool muted = wParam != 0;
+            if (muted == g_micMuted) {
+                // Volume-only notification (e.g. slider moved in Sound
+                // settings, or an app's AGC) — mute state didn't actually
+                // change, so don't flash the overlay. Also covers the
+                // duplicate OnNotify that fires right after our own
+                // SetMute in ToggleMicMute, which already rendered.
+                return 0;
+            }
+            g_micMuted = muted;
             ShowOverlayTemporarily(hwnd);
             RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
             EnsureTimerState(hwnd);
@@ -832,6 +872,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             return 0;
         }
         case kMsgSettingsChanged: {
+            LoadSettings();
             RegisterGlobalHotkey(hwnd);
 
             LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
@@ -881,10 +922,16 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             }
             return DefWindowProc(hwnd, msg, wParam, lParam);
         }
-        case WM_MOVE: {
+        case WM_EXITSIZEMOVE: {
+            // Fires only at the end of a real user-driven move loop
+            // (started via the WM_NCHITTEST -> HTCAPTION drag below) —
+            // unlike WM_MOVE, this can't be confused with the
+            // programmatic repositioning that ApplyOverlayPositionAndSize
+            // and UpdateLayeredWindow's pptDst also trigger.
             if (!g_settings.clickThrough) {
-                g_manualPos.x = (short)LOWORD(lParam);
-                g_manualPos.y = (short)HIWORD(lParam);
+                RECT wr;
+                GetWindowRect(hwnd, &wr);
+                g_manualPos = {wr.left, wr.top};
                 g_manualPosition = true;
             }
             return 0;
@@ -945,7 +992,10 @@ DWORD WINAPI ModThreadProc(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     GdiplusStartupInput gdiInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiInput, nullptr);
+    if (GdiplusStartup(&g_gdiplusToken, &gdiInput, nullptr) != Ok) {
+        Wh_Log(L"GdiplusStartup failed; the overlay will render nothing");
+        g_gdiplusToken = 0;
+    }
 
     g_hOverlay = CreateOverlayWindow();
     if (g_hOverlay) {
@@ -990,12 +1040,18 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    LoadSettings();
     if (g_hOverlay) {
+        // Loaded on the overlay thread itself (kMsgSettingsChanged handler)
+        // rather than here on Windhawk's callback thread, so g_settings
+        // only ever has one writer.
         PostMessage(g_hOverlay, kMsgSettingsChanged, 0, 0);
+    } else {
+        // Window not created yet — load directly so ModThreadProc picks up
+        // fresh settings when it creates the window (no second writer once
+        // the window exists, since that only happens before the thread's
+        // message loop is reachable).
+        LoadSettings();
     }
-    // If g_hOverlay isn't created yet, ModThreadProc will pick up the
-    // already-updated g_settings when it creates the window.
 }
 
 void WhTool_ModUninit() {
