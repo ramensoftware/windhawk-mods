@@ -34,9 +34,9 @@ You can also add the ID of your desired applet to prevent it from being redirect
 **After:**
 ![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
 
-**How it works:** the mod hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
+**How it works:** the mod hooks two functions - `COpenControlPanel::_MapLegacyName` (scoped to a configurable list of applet IDs, GUIDs, canonical names, and bare legacy keywords; every other legacy name resolves normally) and `CompareStringOrdinal` (only overrides a result that was genuinely "equal" for a targeted string; every other comparison in the process keeps its real result). It does **not** patch or modify any module's memory - earlier versions did, but testing showed the two hooks alone are sufficient, so the memory-patching code was removed entirely.
 
-**A note on `CompareStringOrdinal` scoping:** we tried restricting the override to calls whose return address falls inside `shell32.dll` (and later, `shell32.dll` or `windows.storage.dll`), using `GetModuleHandleExW(..., GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, ...)` on the caller's return address. Both attempts broke the mod's actual functionality in testing, which means the real comparison this mod needs to influence isn't reliably reachable that way (most likely it happens through a COM/vtable call chain, or a helper whose return address doesn't resolve the way a direct call would). Given that, the hook is intentionally left unscoped by caller. The blast radius is still bounded in a few concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`; it requires an exact, full-length match against a small, specific set of applet-identifier strings (12 built-in + whatever the user adds in `CustomApplets`); and it never fires for a comparison that wasn't already reporting equality. We're open to a more surgical fix if a maintainer can point at the actual call site.
+**A note on `CompareStringOrdinal` scoping:** we've made three separate attempts to restrict this override to a specific caller instead of leaving it process-wide: (1) return-address matching against `shell32.dll`, (2) the same against `shell32.dll` or `windows.storage.dll`, and (3) a multi-frame stack walk that empirically identified `explorerframe.dll` as a caller and added it to the accepted set. All three broke the mod's actual functionality in testing. Per a reviewer's feedback, this is consistent with a known limitation of the technique itself: `__builtin_return_address` / `RtlCaptureStackBackTrace`-based caller detection is unreliable across hook trampolines and inlined helpers, so it can misidentify or miss the real call site even when a match is observed in some cases. The more reliable alternative - a thread-local "armed" flag set only around a call into a specific, already-hooked outer shell32 entry point - requires confidently identifying which outer function precedes the actual redirect-check comparison, which we have not been able to establish. Given that, the hook is intentionally left unscoped by caller for now. The blast radius is still bounded in concrete ways: it never touches a comparison unless the real result was already `CSTR_EQUAL`, and it requires an exact, full-length, case-insensitive match against a small, specific set of applet-identifier strings (built-in list + whatever the user adds in `CustomApplets`). We're open to a properly-scoped fix if a maintainer can identify the actual redirect-decision call site.
 
 **Difference from `settings-to-control-panel`:** that mod also hooks `_MapLegacyName`, but its behavior differs for the applets this mod targets. For Troubleshooting, it launches `msdt.exe` directly instead of opening the applet itself; for Installed Updates and Default Programs, it has no mechanism at all to stop the redirect to Settings. This mod specifically restores the classic in-Control-Panel behavior for those items.
 
@@ -48,16 +48,15 @@ You can also add the ID of your desired applet to prevent it from being redirect
 - CustomApplets: [""]
   $name: Custom applet IDs
   $description: >-
-    Add extra Control Panel applets to unhide, in addition to the 6 built-in
+    Add extra Control Panel applets to unhide, in addition to the built-in
     ones. For GUID-based applets you can enter just the GUID, with or without
     braces (e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE or
     {BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) — the "::" prefix is added
-    automatically. Canonical names (e.g. Microsoft.SomeApplet) must be at
-    least 8 characters and contain a dot, same shape as Microsoft's own
-    names — this is a safety floor, not a real validation of the name.
-    One entry per row. IMPORTANT: an empty row ends the list — any rows
-    after a blank one are ignored, so don't leave gaps in the middle. The
-    mod reloads automatically after saving.
+    automatically. Canonical names (e.g. Microsoft.SomeApplet) or bare
+    legacy keywords (e.g. system) can be entered as-is - any non-empty entry
+    up to 128 characters is accepted. One entry per row. IMPORTANT: an empty
+    row ends the list — any rows after a blank one are ignored, so don't
+    leave gaps in the middle. The mod reloads automatically after saving.
 */
 // ==/WindhawkModSettings==
 
@@ -93,10 +92,24 @@ constexpr std::wstring_view g_szCanonicalNames[] = {
     L"Microsoft.Fonts"
 };
 
+// Bare legacy keywords Control Panel can also hand to _MapLegacyName for
+// these same six applets, alongside (or instead of) the canonical/GUID
+// forms above - settings-to-control-panel's own whitelist confirms these
+// exact spellings for the same six items. Without these, a call using the
+// bare form would silently fall through unmatched.
+constexpr std::wstring_view g_szBareLegacyNames[] = {
+    L"troubleshooting",
+    L"installedupdates",
+    L"defaultprograms",
+    L"devicesandprinters",
+    L"fonts",
+    L"system",
+};
+
 bool g_isInitialized = false;
 
 // User-provided applet GUIDs / canonical names, loaded from the "CustomApplets"
-// array setting, in addition to the 6 built-in ones above.
+// array setting, in addition to the built-in ones above.
 std::vector<std::wstring> g_customApplets;
 
 static std::wstring Trim(const std::wstring& s) {
@@ -122,8 +135,8 @@ static bool LooksLikeBareGuid(const std::wstring& s) {
 
 // Lets the user type just the GUID (with or without braces), instead of
 // requiring the "::{...}" CLSID-path syntax Explorer actually expects.
-// Canonical names (e.g. "Microsoft.System") are left untouched, since those
-// never use the "::" prefix to begin with.
+// Canonical names (e.g. "Microsoft.System") and bare legacy keywords (e.g.
+// "system") are left untouched, since neither uses the "::" prefix.
 static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
     std::wstring raw = Trim(rawInput);
     if (raw.empty()) return raw;
@@ -137,21 +150,17 @@ static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
     if (LooksLikeBareGuid(raw)) {
         return L"::{" + raw + L"}"; // bare GUID, no braces -> add both
     }
-    return raw; // assume canonical name (e.g. "Microsoft.System")
+    return raw; // assume canonical name or bare legacy keyword
 }
 
 // A generous sanity cap - no memory-patch buffer to size against anymore
 // (memory patching was removed after testing showed it wasn't needed), this
 // just guards against absurd/garbage input reaching the hooks' comparisons.
-//
-// FIX: this used to also require >= 8 characters, a dot, and
-// letters/digits/dots only for non-GUID entries. That rejected short bare
-// legacy names Control Panel actually uses (e.g. "system", "fonts") and
-// anything containing '-' or '_' - which meant a user could never add the
-// bare spelling via CustomApplets even if it was exactly what was needed.
-// Since the CompareStringOrdinal hook only ever fires on a genuine exact
-// match now (see MatchesTargetList), a short/garbage entry can't do harm -
-// it just never matches anything real.
+// No dot/length/charset heuristics: those used to reject legitimate short
+// bare legacy names (e.g. "system", "fonts"), and since the
+// CompareStringOrdinal hook only ever fires on a genuine exact match (see
+// MatchesTargetList), a short/garbage entry can't do harm - it just never
+// matches anything real.
 constexpr size_t kMaxAppletIdLength = 128;
 
 static bool IsPlausibleAppletId(const std::wstring& id) {
@@ -177,7 +186,7 @@ void LoadCustomAppletSettings() {
                     Wh_Log(L"Custom applet entry #%d: \"%s\" -> \"%s\"", i, value, normalized.c_str());
                     g_customApplets.push_back(std::move(normalized));
                 } else {
-                    Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): doesn't look like a valid applet ID/GUID, is too long, or is too short", i, value);
+                    Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): too long", i, value);
                 }
             } else {
                 Wh_Log(L"Ignoring empty custom applet entry #%d", i);
@@ -212,40 +221,45 @@ bool IsSupportedWindowsVersion() {
 // Hooks
 bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
 
+static bool NameMatches(const std::wstring_view& candidate, LPCWSTR pszLegacyName, size_t legacyLen) {
+    return candidate.size() == legacyLen && _wcsnicmp(candidate.data(), pszLegacyName, candidate.size()) == 0;
+}
+
 // Only suppresses the mapping for names actually in our target list;
 // everything else falls through to the real implementation. This keeps
 // legacy->canonical name resolution intact for every Control Panel item
 // this mod doesn't care about, and avoids clobbering whatever
 // settings-to-control-panel's own whitelist is doing if both mods are
 // enabled together.
+//
+// FIX: all comparisons are case-insensitive (Windows treats CLSID strings
+// and canonical/legacy names case-insensitively; the built-in GUIDs are
+// stored uppercase to match what StringFromGUID2 actually generates, but a
+// caller could still hand either case).
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
-    // Same reasoning as CompareStringOrdinal_hook: never let a C++
-    // exception escape into shell32's non-C++ call frames.
+    // Never let a C++ exception escape into shell32's non-C++ call frames.
     try {
         bool isTargeted = false;
 
-        // FIX: was using exact (case-sensitive) comparison here
-        // (wstring_view::compare / operator==), which meant a differently-
-        // cased spelling of a target string would silently never match -
-        // notably two of the built-in GUIDs used to be stored in lowercase
-        // while Windows' own StringFromGUID2 always generates uppercase
-        // hex. CLSID strings and canonical names are case-insensitive in
-        // Windows, so this now uses _wcsicmp for all three lists.
         if (pszLegacyName) {
+            size_t legacyLen = wcslen(pszLegacyName);
+
             for (const auto& applet : g_szAppletsToUnhide) {
-                if (applet.size() == wcslen(pszLegacyName) &&
-                    _wcsnicmp(applet.data(), pszLegacyName, applet.size()) == 0) { isTargeted = true; break; }
+                if (NameMatches(applet, pszLegacyName, legacyLen)) { isTargeted = true; break; }
             }
             if (!isTargeted) {
                 for (const auto& name : g_szCanonicalNames) {
-                    if (name.size() == wcslen(pszLegacyName) &&
-                        _wcsnicmp(name.data(), pszLegacyName, name.size()) == 0) { isTargeted = true; break; }
+                    if (NameMatches(name, pszLegacyName, legacyLen)) { isTargeted = true; break; }
+                }
+            }
+            if (!isTargeted) {
+                for (const auto& name : g_szBareLegacyNames) {
+                    if (NameMatches(name, pszLegacyName, legacyLen)) { isTargeted = true; break; }
                 }
             }
             if (!isTargeted) {
                 for (const auto& entry : g_customApplets) {
-                    if (entry.size() == wcslen(pszLegacyName) &&
-                        _wcsnicmp(entry.c_str(), pszLegacyName, entry.size()) == 0) { isTargeted = true; break; }
+                    if (entry.size() == legacyLen && _wcsnicmp(entry.c_str(), pszLegacyName, entry.size()) == 0) { isTargeted = true; break; }
                 }
             }
         }
@@ -254,21 +268,6 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
             if (nameChanged) *nameChanged = false;
             if (pszNewName && uUnused > 0) *pszNewName = L'\0';
             return false;
-        }
-
-        // TEMPORARY DIAGNOSTIC (remove once the bare legacy-name spellings
-        // are known): settings-to-control-panel's whitelist covers BOTH the
-        // canonical form (e.g. "Microsoft.System") and a bare legacy
-        // keyword (e.g. "system") for each entry, because Control Panel can
-        // hand either one to this function. This mod currently only checks
-        // the Microsoft.* / ::{GUID} forms above, so any bare-keyword call
-        // for one of our 6 target applets silently falls through here
-        // instead of being caught. Open each target applet once with this
-        // build installed, then check Wh_Log for the exact strings Windows
-        // sent - add whichever ones matter to CustomApplets (now unrestricted
-        // in length/shape - see IsPlausibleAppletId) or to the built-in list.
-        if (pszLegacyName) {
-            Wh_Log(L"_MapLegacyName: unmatched legacy name reached the hook: \"%s\"", pszLegacyName);
         }
     } catch (...) {
         Wh_Log(L"COpenControlPanel__MapLegacyName_hook: caught an exception, falling back to the original implementation");
@@ -309,18 +308,12 @@ static int GetEffectiveLength(LPCWCH str, int cch) {
 // Compares using the *known* length from cchCount1/cchCount2 instead of
 // wcscmp/_wcsicmp, which would assume the input was null-terminated (it
 // might not be - CompareStringOrdinal callers can pass substrings).
-// Target-list lengths are precomputed constexpr std::wstring_view sizes,
-// not recomputed via wcslen on every call.
-//
-// FIX: always compares case-insensitively, regardless of the caller's
-// bIgnoreCase. This function is only ever reached after the real
-// CompareStringOrdinal already reported the two input strings as equal (see
-// CompareStringOrdinal_hook below) - so matching that already-equal value
-// against our target list case-insensitively can only make a real match
-// MORE likely to be recognized, never incorrectly less strict. This also
-// protects against any casing difference between how Windows happens to
-// generate a GUID string internally (StringFromGUID2 always produces
-// uppercase hex) and however a user typed a CustomApplets entry.
+// Always compares case-insensitively, regardless of the caller's
+// bIgnoreCase: this function is only ever reached after the real
+// CompareStringOrdinal already reported the two input strings as equal, so
+// matching that already-equal value against our target list
+// case-insensitively can only make a real match MORE likely to be
+// recognized, never incorrectly less strict.
 static bool MatchesTargetList(LPCWCH str, int cch, BOOL /*bIgnoreCase*/) {
     if (!str) return false;
     int len = GetEffectiveLength(str, cch);
@@ -337,6 +330,7 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL /*bIgnoreCase*/) {
 
     if (checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide))) return true;
     if (checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames))) return true;
+    if (checkList(g_szBareLegacyNames, ARRAYSIZE(g_szBareLegacyNames))) return true;
 
     for (const auto& entry : g_customApplets) {
         if ((size_t)len != entry.size()) continue;
@@ -355,10 +349,18 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL /*bIgnoreCase*/) {
 // still won't report CSTR_EQUAL for itself), but it avoids corrupting
 // comparisons between unrelated strings.
 //
-// NOTE: caller-module scoping was attempted here (restricting the override
-// to calls returning into shell32.dll, then shell32.dll-or-windows.storage.dll)
-// and broke the mod's actual functionality both times - see the README's
-// "note on CompareStringOrdinal scoping" for details. Reverted intentionally.
+// NOTE: three separate attempts at caller-module scoping (shell32.dll only;
+// shell32.dll-or-windows.storage.dll; and a multi-frame stack walk that
+// added explorerframe.dll after empirically observing it as a caller) each
+// broke the mod's functionality in testing. Left intentionally unscoped -
+// see the README's "note on CompareStringOrdinal scoping" for the full
+// account and why the underlying technique (return-address/stack-walk
+// caller detection across hook trampolines) isn't reliable here. No debug
+// diagnostics remain in this build - a raw stack walk on every match has a
+// real, unconditional cost (RtlCaptureStackBackTrace + up to several
+// GetModuleHandleExW/GetModuleFileNameW calls, and it clobbers the calling
+// thread's last-error value), so it isn't something to ship even gated
+// behind logging.
 int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
     if (!CompareStringOrdinal_orig) return 0;
 
@@ -374,30 +376,6 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
         if (result == CSTR_EQUAL && lpString1 && lpString2 &&
             (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
              MatchesTargetList(lpString2, cchCount2, bIgnoreCase))) {
-            // TEMPORARY DIAGNOSTIC (log-only, doesn't affect behavior):
-            // earlier attempts to scope this override to a specific caller
-            // module used only the immediate return address
-            // (__builtin_return_address(0)), which can land in a hook
-            // trampoline/thunk rather than the real caller - and both
-            // attempts were made before the case-sensitivity bug above was
-            // found, so a failed match there could just as easily explain
-            // why scoping "didn't work". This walks a few stack frames and
-            // logs module+offset for each, so a real caller-scoping attempt
-            // can be re-evaluated with actual data instead of another guess.
-            void* frames[6] = {};
-            USHORT frameCount = RtlCaptureStackBackTrace(1, ARRAYSIZE(frames), frames, nullptr);
-            for (USHORT i = 0; i < frameCount; i++) {
-                HMODULE frameModule = nullptr;
-                if (GetModuleHandleExW(
-                        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                        (PCWSTR)frames[i], &frameModule) && frameModule) {
-                    wchar_t modulePath[MAX_PATH];
-                    GetModuleFileNameW(frameModule, modulePath, ARRAYSIZE(modulePath));
-                    Wh_Log(L"CompareStringOrdinal match, frame %u: %s+0x%zX", i, modulePath,
-                           (size_t)frames[i] - (size_t)frameModule);
-                }
-            }
-
             return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
         }
 
