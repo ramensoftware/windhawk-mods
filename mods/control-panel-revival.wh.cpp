@@ -78,8 +78,8 @@ You can also add the ID of your desired applet to prevent it from being redirect
 constexpr std::wstring_view g_szAppletsToUnhide[] = {
     L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
     L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", // Devices and Printers
-    L"::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}", // Installed Updates
-    L"::{17cd9488-1228-4b2f-88ce-4298e93e0966}", // Default Programs
+    L"::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", // Installed Updates
+    L"::{17CD9488-1228-4B2F-88CE-4298E93E0966}", // Default Programs
     L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", // Troubleshooting
     L"::{BD84B380-8CA2-1069-AB1D-08000948F534}", // Fonts
 };
@@ -143,44 +143,19 @@ static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
 // A generous sanity cap - no memory-patch buffer to size against anymore
 // (memory patching was removed after testing showed it wasn't needed), this
 // just guards against absurd/garbage input reaching the hooks' comparisons.
+//
+// FIX: this used to also require >= 8 characters, a dot, and
+// letters/digits/dots only for non-GUID entries. That rejected short bare
+// legacy names Control Panel actually uses (e.g. "system", "fonts") and
+// anything containing '-' or '_' - which meant a user could never add the
+// bare spelling via CustomApplets even if it was exactly what was needed.
+// Since the CompareStringOrdinal hook only ever fires on a genuine exact
+// match now (see MatchesTargetList), a short/garbage entry can't do harm -
+// it just never matches anything real.
 constexpr size_t kMaxAppletIdLength = 128;
 
-// A canonical name shorter than this is unlikely to be a real Control Panel
-// canonical name (all of Microsoft's known ones are well above this
-// length), and requiring a dot matches the "Vendor.Item" shape every real
-// canonical name has. This is a basic sanity floor, not real validation.
-constexpr size_t kMinCanonicalNameLength = 8;
-
-// Rejects anything that clearly isn't a plausible Control Panel applet
-// identifier (garbage input, pasted text, anything absurdly long or short).
 static bool IsPlausibleAppletId(const std::wstring& id) {
-    if (id.empty() || id.size() > kMaxAppletIdLength) {
-        return false;
-    }
-
-    if (id.rfind(L"::{", 0) == 0) {
-        // Expect exactly "::{" + 36-char GUID + "}"
-        if (id.size() != 3 + 36 + 1 || id.back() != L'}') {
-            return false;
-        }
-        return LooksLikeBareGuid(id.substr(3, 36));
-    }
-
-    // Otherwise, treat it as a canonical name: must start with a letter,
-    // contain only letters/digits/dots, contain at least one dot, and meet
-    // the minimum length above.
-    if (id.size() < kMinCanonicalNameLength || !iswalpha(id.front())) {
-        return false;
-    }
-    bool hasDot = false;
-    for (wchar_t c : id) {
-        if (c == L'.') {
-            hasDot = true;
-        } else if (!iswalnum(c)) {
-            return false;
-        }
-    }
-    return hasDot;
+    return !id.empty() && id.size() <= kMaxAppletIdLength;
 }
 
 // Reads the CustomApplets[i] setting entries until an empty one is hit.
@@ -249,18 +224,28 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
     try {
         bool isTargeted = false;
 
+        // FIX: was using exact (case-sensitive) comparison here
+        // (wstring_view::compare / operator==), which meant a differently-
+        // cased spelling of a target string would silently never match -
+        // notably two of the built-in GUIDs used to be stored in lowercase
+        // while Windows' own StringFromGUID2 always generates uppercase
+        // hex. CLSID strings and canonical names are case-insensitive in
+        // Windows, so this now uses _wcsicmp for all three lists.
         if (pszLegacyName) {
             for (const auto& applet : g_szAppletsToUnhide) {
-                if (applet.compare(pszLegacyName) == 0) { isTargeted = true; break; }
+                if (applet.size() == wcslen(pszLegacyName) &&
+                    _wcsnicmp(applet.data(), pszLegacyName, applet.size()) == 0) { isTargeted = true; break; }
             }
             if (!isTargeted) {
                 for (const auto& name : g_szCanonicalNames) {
-                    if (name.compare(pszLegacyName) == 0) { isTargeted = true; break; }
+                    if (name.size() == wcslen(pszLegacyName) &&
+                        _wcsnicmp(name.data(), pszLegacyName, name.size()) == 0) { isTargeted = true; break; }
                 }
             }
             if (!isTargeted) {
                 for (const auto& entry : g_customApplets) {
-                    if (entry == pszLegacyName) { isTargeted = true; break; }
+                    if (entry.size() == wcslen(pszLegacyName) &&
+                        _wcsnicmp(entry.c_str(), pszLegacyName, entry.size()) == 0) { isTargeted = true; break; }
                 }
             }
         }
@@ -269,6 +254,21 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
             if (nameChanged) *nameChanged = false;
             if (pszNewName && uUnused > 0) *pszNewName = L'\0';
             return false;
+        }
+
+        // TEMPORARY DIAGNOSTIC (remove once the bare legacy-name spellings
+        // are known): settings-to-control-panel's whitelist covers BOTH the
+        // canonical form (e.g. "Microsoft.System") and a bare legacy
+        // keyword (e.g. "system") for each entry, because Control Panel can
+        // hand either one to this function. This mod currently only checks
+        // the Microsoft.* / ::{GUID} forms above, so any bare-keyword call
+        // for one of our 6 target applets silently falls through here
+        // instead of being caught. Open each target applet once with this
+        // build installed, then check Wh_Log for the exact strings Windows
+        // sent - add whichever ones matter to CustomApplets (now unrestricted
+        // in length/shape - see IsPlausibleAppletId) or to the built-in list.
+        if (pszLegacyName) {
+            Wh_Log(L"_MapLegacyName: unmatched legacy name reached the hook: \"%s\"", pszLegacyName);
         }
     } catch (...) {
         Wh_Log(L"COpenControlPanel__MapLegacyName_hook: caught an exception, falling back to the original implementation");
@@ -311,7 +311,17 @@ static int GetEffectiveLength(LPCWCH str, int cch) {
 // might not be - CompareStringOrdinal callers can pass substrings).
 // Target-list lengths are precomputed constexpr std::wstring_view sizes,
 // not recomputed via wcslen on every call.
-static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
+//
+// FIX: always compares case-insensitively, regardless of the caller's
+// bIgnoreCase. This function is only ever reached after the real
+// CompareStringOrdinal already reported the two input strings as equal (see
+// CompareStringOrdinal_hook below) - so matching that already-equal value
+// against our target list case-insensitively can only make a real match
+// MORE likely to be recognized, never incorrectly less strict. This also
+// protects against any casing difference between how Windows happens to
+// generate a GUID string internally (StringFromGUID2 always produces
+// uppercase hex) and however a user typed a CustomApplets entry.
+static bool MatchesTargetList(LPCWCH str, int cch, BOOL /*bIgnoreCase*/) {
     if (!str) return false;
     int len = GetEffectiveLength(str, cch);
     if (len <= 0) return false;
@@ -319,7 +329,7 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
     auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
         for (size_t i = 0; i < count; i++) {
             if ((size_t)len != list[i].size()) continue; // length mismatch: can't be this entry
-            int cmp = SafeCompareString(str, cch, list[i].data(), (int)list[i].size(), bIgnoreCase);
+            int cmp = SafeCompareString(str, cch, list[i].data(), (int)list[i].size(), /*bIgnoreCase=*/TRUE);
             if (cmp == 0) return true;
         }
         return false;
@@ -330,7 +340,7 @@ static bool MatchesTargetList(LPCWCH str, int cch, BOOL bIgnoreCase) {
 
     for (const auto& entry : g_customApplets) {
         if ((size_t)len != entry.size()) continue;
-        int cmp = SafeCompareString(str, cch, entry.c_str(), (int)entry.size(), bIgnoreCase);
+        int cmp = SafeCompareString(str, cch, entry.c_str(), (int)entry.size(), /*bIgnoreCase=*/TRUE);
         if (cmp == 0) return true;
     }
 
@@ -364,6 +374,30 @@ int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpS
         if (result == CSTR_EQUAL && lpString1 && lpString2 &&
             (MatchesTargetList(lpString1, cchCount1, bIgnoreCase) ||
              MatchesTargetList(lpString2, cchCount2, bIgnoreCase))) {
+            // TEMPORARY DIAGNOSTIC (log-only, doesn't affect behavior):
+            // earlier attempts to scope this override to a specific caller
+            // module used only the immediate return address
+            // (__builtin_return_address(0)), which can land in a hook
+            // trampoline/thunk rather than the real caller - and both
+            // attempts were made before the case-sensitivity bug above was
+            // found, so a failed match there could just as easily explain
+            // why scoping "didn't work". This walks a few stack frames and
+            // logs module+offset for each, so a real caller-scoping attempt
+            // can be re-evaluated with actual data instead of another guess.
+            void* frames[6] = {};
+            USHORT frameCount = RtlCaptureStackBackTrace(1, ARRAYSIZE(frames), frames, nullptr);
+            for (USHORT i = 0; i < frameCount; i++) {
+                HMODULE frameModule = nullptr;
+                if (GetModuleHandleExW(
+                        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (PCWSTR)frames[i], &frameModule) && frameModule) {
+                    wchar_t modulePath[MAX_PATH];
+                    GetModuleFileNameW(frameModule, modulePath, ARRAYSIZE(modulePath));
+                    Wh_Log(L"CompareStringOrdinal match, frame %u: %s+0x%zX", i, modulePath,
+                           (size_t)frames[i] - (size_t)frameModule);
+                }
+            }
+
             return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
         }
 
