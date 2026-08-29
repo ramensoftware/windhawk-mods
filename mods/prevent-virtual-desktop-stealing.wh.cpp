@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              prevent-virtual-desktop-stealing
-// @name            Prevent Window Activation from Stealing Virtual Desktop
-// @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.14
+// @name            Don’t Pull Me to Another Desktop
+// @description     Summon existing windows to the current desktop, instead of pulling you away. 
+// @version         0.4.0
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -12,39 +12,39 @@
 
 // ==WindhawkModReadme==
 /*
-# Prevent Window Activation from Stealing Virtual Desktop
+# Don’t Pull Me to Another Desktop
 
-Take back control over your virtual desktops!
+Windows can switch you to another virtual desktop simply because a window on
+that desktop was activated. This can happen after clicking a flashing taskbar
+button, following a notification, using an app's tray icon, or launching
+something that reuses an existing window.
+
+This mod keeps you on the desktop you're using and brings that activated window
+to you instead.
 
 ![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif)
-_Effect of redirecting window activation_
-
-Windows can switch you to another virtual desktop just because a window that was left open on that
-desktop is activated.
-
-Clicking a flashing taskbar button, following a notification, opening an app through its tray icon,
-or launching something that insists on reusing an existing window can all unexpectedly pull you away
-from your current desktop. This mod keeps you where you are and brings the activated window to you instead.
-
-If you don't know what "virtual desktop stealing" is, try this small experiment:
-
-- Open Windhawk on your first virtual desktop.
-- Switch to another virtual desktop.
-- Click the Windhawk tray icon.
-
-Normally, Windows jumps back to the first desktop - not anymore with this mod.
-
-Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right and
-Task View. The mod also remains compatible with **Disable Virtual Desktop
-Transition Animation**.
 
 ### Notes
 
-Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
-shell interfaces, including the private IApplicationView layout, so future
-Windows updates may require adjustments.
+- Designed for Windows 11 24H2 and newer: future Windows updates may require adjustments.
+- Some applications can briefly activate an old window while processing a window 
+creation that is actually on the current desktop. Summon requests therefore have 
+a short settling period to correlate a newly-added view. If that view appears first, 
+the old window is left where it was.
+
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- rescueStabilizationMs: 50
+  $name: "Rescue stabilization (ms)"
+  $description: "Basic settling time before moving an activated window. Applies to all rescue candidates. Set to 0 to disable. Default: 50 ms."
+- rescueViewSupersessionMs: 200
+  $name: "View supersession window (ms)"
+  $description: "Maximum event-driven grace period for apps with a stable PFN/AUMID. A different newly-added view from the same process and app identity cancels the pending rescue only after the worker confirms that the new view belongs to the current/source desktop. Set to 0 to disable. Default: 200 ms."
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <objbase.h>
@@ -85,6 +85,10 @@ static const IID kIidVirtualDesktopNotificationService = {
     0x0CD45E71, 0xD927, 0x4F15,
     {0x8B, 0x0A, 0x8F, 0xEF, 0x52, 0x53, 0x37, 0xBF}
 };
+
+// IVirtualDesktopManagerInternal slots for the 24H2 IID above.
+static constexpr int kVtableMoveViewToDesktop = 4;
+static constexpr int kVtableGetCurrentDesktop = 6;
 
 // Windows 11 24H2+ IVirtualDesktopManagerInternal / Internal2 IID.
 static const IID kIidVirtualDesktopManagerInternal24H2 = {
@@ -133,12 +137,6 @@ struct IApplicationViewCollection : IUnknown {
 
 struct IVirtualDesktopManagerInternal : IUnknown {};
 
-// Windows 11 24H2 (build 26100) uses 14 total vtable slots for IID
-// B9E5E94D-233E-49AB-AF5C-2B4541C3AADE: IUnknown at slots 0-2, the
-// callbacks below at slots 3-13, CurrentVirtualDesktopChanged at slot 10,
-// VirtualDesktopSwitched at slot 12, and RemoteVirtualDesktopConnected at
-// slot 13. The older CD403E52-... monitor-aware interface has a different
-// layout, including VirtualDesktopIsPerMonitorChanged, and is not used here.
 struct IVirtualDesktopNotification : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(
         IVirtualDesktop* desktop) = 0;
@@ -192,6 +190,115 @@ struct IVirtualDesktopNotificationService : IUnknown {
 };
 
 // -----------------------------------------------------------------------------
+// Settings.
+// -----------------------------------------------------------------------------
+
+static constexpr DWORD kDefaultRescueStabilizationMs = 50;
+static constexpr DWORD kDefaultRescueViewSupersessionMs = 200;
+static constexpr DWORD kMaxRescueStabilizationSettingMs = 2000;
+static constexpr DWORD kMaxRescueViewSupersessionSettingMs = 2000;
+
+struct ModSettings {
+    std::atomic<DWORD> rescueStabilizationMs{
+        kDefaultRescueStabilizationMs};
+    std::atomic<DWORD> rescueViewSupersessionMs{
+        kDefaultRescueViewSupersessionMs};
+};
+
+static ModSettings g_settings;
+
+// Process-lifetime cancellation used to keep late shell-host initialization,
+// COM startup, and worker waits from racing Windhawk unload.
+static HANDLE g_runtimeCancelEvent = nullptr;  // manual-reset
+static std::atomic<bool> g_startUnsupported{false};
+static std::atomic<HRESULT> g_startHr{E_PENDING};
+
+static void ResetStartResult() {
+    g_startHr.store(
+        E_PENDING,
+        std::memory_order_relaxed);
+    g_startUnsupported.store(
+        false,
+        std::memory_order_release);
+}
+
+static void PublishStartResult(
+    bool unsupported,
+    HRESULT hr,
+    HANDLE readyEvent) {
+
+    g_startHr.store(
+        hr,
+        std::memory_order_relaxed);
+    g_startUnsupported.store(
+        unsupported,
+        std::memory_order_release);
+
+    if (readyEvent) {
+        SetEvent(readyEvent);
+    }
+}
+
+static bool RuntimeCancellationRequested() {
+    return g_runtimeCancelEvent &&
+        WaitForSingleObject(
+            g_runtimeCancelEvent,
+            0) == WAIT_OBJECT_0;
+}
+
+static bool RecordStartFailure(HRESULT hr) {
+    g_startHr.store(
+        hr,
+        std::memory_order_relaxed);
+    return false;
+}
+
+
+static DWORD ClampMillisecondSetting(
+    int value,
+    DWORD maximum) {
+
+    if (value <= 0) {
+        return 0;
+    }
+
+    DWORD unsignedValue =
+        static_cast<DWORD>(value);
+
+    return unsignedValue > maximum
+        ? maximum
+        : unsignedValue;
+}
+
+static void LoadSettings() {
+    DWORD rescueStabilizationMs =
+        ClampMillisecondSetting(
+            Wh_GetIntSetting(
+                L"rescueStabilizationMs"),
+            kMaxRescueStabilizationSettingMs);
+
+    DWORD rescueViewSupersessionMs =
+        ClampMillisecondSetting(
+            Wh_GetIntSetting(
+                L"rescueViewSupersessionMs"),
+            kMaxRescueViewSupersessionSettingMs);
+
+    g_settings.rescueStabilizationMs.store(
+        rescueStabilizationMs,
+        std::memory_order_release);
+
+    g_settings.rescueViewSupersessionMs.store(
+        rescueViewSupersessionMs,
+        std::memory_order_release);
+
+    Wh_Log(
+        L"Settings: rescueStabilizationMs=%lu "
+        L"rescueViewSupersessionMs=%lu",
+        rescueStabilizationMs,
+        rescueViewSupersessionMs);
+}
+
+// -----------------------------------------------------------------------------
 // Helpers.
 // -----------------------------------------------------------------------------
 
@@ -200,38 +307,6 @@ static T GetVTableFunction(void* object, int index) {
     return reinterpret_cast<T>(
         (*reinterpret_cast<void***>(object))[index]);
 }
-
-static HANDLE g_runtimeCancelEvent = nullptr;  // manual-reset, process lifetime
-// Set only for a missing required QueryService interface. Early ImmersiveShell
-// activation failures, including REGDB_E_CLASSNOTREG, remain retryable.
-static std::atomic<bool> g_startUnsupported{false};
-static std::atomic<HRESULT> g_startHr{E_PENDING};
-
-static void ResetStartResult() {
-    g_startHr.store(E_PENDING, std::memory_order_relaxed);
-    g_startUnsupported.store(false, std::memory_order_release);
-}
-
-static void PublishStartResult(
-    bool unsupported,
-    HRESULT hr,
-    HANDLE readyEvent) {
-
-    g_startHr.store(hr, std::memory_order_relaxed);
-    g_startUnsupported.store(unsupported, std::memory_order_release);
-    SetEvent(readyEvent);
-}
-
-static bool RuntimeCancellationRequested() {
-    return g_runtimeCancelEvent &&
-        WaitForSingleObject(g_runtimeCancelEvent, 0) == WAIT_OBJECT_0;
-}
-
-static bool RecordStartFailure(HRESULT hr) {
-    g_startHr.store(hr, std::memory_order_relaxed);
-    return false;
-}
-
 
 static bool GuidEqual(const GUID& a, const GUID& b) {
     return IsEqualGUID(a, b) != FALSE;
@@ -351,7 +426,7 @@ static void LogWindow(const wchar_t* label, HWND hwnd) {
 }
 
 // -----------------------------------------------------------------------------
-// Explicit user-switch attribution.
+// Foreground-policy and navigation attribution.
 // -----------------------------------------------------------------------------
 
 // Cross-desktop activation switches were probed to originate synchronously
@@ -367,43 +442,296 @@ static thread_local int g_foregroundPolicyDepth = 0;
 
 // Exact window identity supplied by the active foreground-policy view.
 //
-// The active IApplicationView is mapped to an HWND only through symbol-resolved
-// concrete implementations whose vtable identity is known. Probing confirmed
-// that this returns the HWND of the exact view driving cross-desktop activation.
+// The HWND is resolved only for the symbol-identified CWin32ApplicationView and
+// CWinRTApplicationView implementations, using their symbol-resolved
+// v_GetNativeWindow methods. Unknown IApplicationView implementations fail open.
 //
-// Keep only the plain HWND in TLS. Never carry the raw IApplicationView pointer
-// into the rescue worker apartment.
+// Keep the plain HWND plus an opaque IApplicationView identity in TLS.
+// The raw pointer is never dereferenced outside the synchronous FVP stack; it
+// is copied into rescue metadata only so a later OnViewAddedInternal callback
+// can prove that a different shell view was created.
 static thread_local HWND g_foregroundPolicyHwnd = nullptr;
+static thread_local IApplicationView*
+    g_foregroundPolicyViewIdentity = nullptr;
 
-// Task View and direct shell/API desktop switches are asynchronous: their public
-// SwitchDesktop* entry point can return before CurrentVirtualDesktopChanged is
-// delivered. Keep an event-driven transaction alive until the notification
-// service reports that the explicitly requested desktop finished switching.
-//
-// This state is process-global rather than thread_local because the public
-// switch call, SwitchDesktopInternal, and virtual-desktop notifications can run
-// on different Explorer threads.
-struct ExplicitSwitchTransaction {
-    bool active = false;
-    GUID sourceDesktopId = {};
-    GUID targetDesktopId = {};
+static const wchar_t* GuidToStringForLog(const GUID& guid);
+
+// CVirtualDesktopForegroundPolicy::DesktopChanged is downstream of the
+// navigation input mechanism. It is reached for an actual shell desktop change
+// whether navigation originated from Task View, a hotkey, a touchpad gesture,
+// Virtual Desktop Helper, or another shell/API route. Each outermost
+// DesktopChanged call therefore owns one navigation generation. Rescue requests
+// and foreground-policy callbacks snapshot the generation so newer navigation
+// invalidates older work even if the user later returns to the same desktop.
+static std::atomic<uint64_t> g_navigationGeneration{1};
+
+// DesktopChanged synchronously calls
+// GetNewForegroundViewForDesktopSwitch before invoking IApplicationView::SetFocus
+// on the selected view. Keep its generation in TLS so the nested hook can bind
+// that exact view to the actual desktop-change event without relying on the
+// particular SwitchDesktop* route used to initiate navigation.
+static thread_local int g_desktopChangedDepth = 0;
+static thread_local uint64_t g_activeNavigationGeneration = 0;
+
+// Navigation-selected focus records are semantic causality tokens, not timers.
+// The IApplicationView pointer is stored only as an opaque identity value; it is
+// never dereferenced after the selecting call. A later FVP must also resolve to
+// the same HWND and PID/TID before the record can match, guarding against stale
+// pointer reuse.
+struct NavigationFocusRecord {
+    bool valid = false;
     uint64_t sequence = 0;
-    bool targetChangeObserved = false;
-    ULONGLONG startedAt = 0;
+    uint64_t generation = 0;
+    ULONGLONG recordedAt = 0;
+    GUID desktopId = {};
+    IApplicationView* viewIdentity = nullptr;
+    HWND hwnd = nullptr;
+    DWORD pid = 0;
+    DWORD tid = 0;
 };
 
-static constexpr ULONGLONG kExplicitSwitchExpiryMs = 2000;
-static SRWLOCK g_explicitSwitchLock = SRWLOCK_INIT;
-static ExplicitSwitchTransaction g_explicitSwitch = {};
-static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
+static constexpr size_t kNavigationFocusHistoryCapacity = 32;
+// Safety lifetime for a navigation-selected focus token that never receives
+// its expected FVP callback. Normal delayed deliveries observed in testing are
+// well below this; the bound prevents an orphan token from surviving forever.
+static constexpr ULONGLONG kNavigationFocusRecordMaxAgeMs = 2000;
+static SRWLOCK g_navigationFocusLock = SRWLOCK_INIT;
+static NavigationFocusRecord
+    g_navigationFocusHistory[kNavigationFocusHistoryCapacity] = {};
+static size_t g_navigationFocusWriteIndex = 0;
+static std::atomic<uint64_t> g_nextNavigationFocusSequence{1};
 
-// IVirtualDesktopManagerInternal slots for the 24H2 IID above.
-static constexpr int kVtableMoveViewToDesktop = 4;
-static constexpr int kVtableGetCurrentDesktop = 6;
+// FVP entry consumes at most one matching navigation-selected focus record and
+// keeps that attribution synchronously in TLS for the nested
+// SwitchDesktopInternal call. Nested FVP calls save/restore the snapshot.
+static thread_local uint64_t
+    g_foregroundPolicyNavigationGeneration = 0;
+static thread_local NavigationFocusRecord
+    g_foregroundPolicyNavigationFocus = {};
 
-// SwitchDesktopWithAnimation synchronously calls SwitchDesktop on current
-// builds. Only the outermost public switch entry should create a transaction.
-static thread_local int g_explicitSwitchEntryDepth = 0;
+static void DiscardNavigationFocusGeneration(
+    uint64_t generation) {
+
+    if (!generation) {
+        return;
+    }
+
+    AcquireSRWLockExclusive(&g_navigationFocusLock);
+
+    for (auto& record :
+         g_navigationFocusHistory) {
+
+        if (record.valid &&
+            record.generation == generation) {
+            record = {};
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_navigationFocusLock);
+}
+
+static void RecordNavigationSelectedFocus(
+    uint64_t generation,
+    const GUID& desktopId,
+    IApplicationView* view,
+    HWND hwnd) {
+
+    if (!generation ||
+        !view ||
+        !hwnd ||
+        !IsWindow(hwnd)) {
+        return;
+    }
+
+    DWORD pid = 0;
+    DWORD tid =
+        GetWindowThreadProcessId(
+            hwnd,
+            &pid);
+
+    if (!pid || !tid) {
+        return;
+    }
+
+    NavigationFocusRecord record;
+    record.valid = true;
+    record.sequence =
+        g_nextNavigationFocusSequence.fetch_add(
+            1,
+            std::memory_order_relaxed);
+    record.generation = generation;
+    record.recordedAt = GetTickCount64();
+    record.desktopId = desktopId;
+    record.viewIdentity = view;
+    record.hwnd = hwnd;
+    record.pid = pid;
+    record.tid = tid;
+
+    AcquireSRWLockExclusive(&g_navigationFocusLock);
+
+    g_navigationFocusHistory[
+        g_navigationFocusWriteIndex] =
+            record;
+
+    g_navigationFocusWriteIndex =
+        (g_navigationFocusWriteIndex + 1) %
+        kNavigationFocusHistoryCapacity;
+
+    ReleaseSRWLockExclusive(&g_navigationFocusLock);
+
+    Wh_Log(
+        L"Navigation focus #%llu recorded generation=%llu "
+        L"desktop=%s view=%p hwnd=%p pid=%lu tid=%lu",
+        static_cast<unsigned long long>(
+            record.sequence),
+        static_cast<unsigned long long>(
+            record.generation),
+        GuidToStringForLog(
+            record.desktopId),
+        record.viewIdentity,
+        record.hwnd,
+        record.pid,
+        record.tid);
+}
+
+static bool ConsumeNavigationSelectedFocus(
+    IApplicationView* view,
+    HWND hwnd,
+    NavigationFocusRecord* matchedRecord) {
+
+    if (matchedRecord) {
+        *matchedRecord = {};
+    }
+
+    if (!view ||
+        !hwnd ||
+        !IsWindow(hwnd)) {
+        return false;
+    }
+
+    DWORD pid = 0;
+    DWORD tid =
+        GetWindowThreadProcessId(
+            hwnd,
+            &pid);
+
+    if (!pid || !tid) {
+        return false;
+    }
+
+    size_t matchedIndex =
+        kNavigationFocusHistoryCapacity;
+    NavigationFocusRecord matched = {};
+
+    const ULONGLONG now = GetTickCount64();
+
+    AcquireSRWLockExclusive(&g_navigationFocusLock);
+
+    // Consume the oldest still-pending focus selection for this exact view.
+    // If the same view was selected by several rapid navigations, suppressing
+    // an older delivery is always safe: the depth-zero navigation itself has
+    // already performed the actual desktop transition. A later delivery can
+    // consume the newer record.
+    for (size_t i = 0;
+         i < kNavigationFocusHistoryCapacity;
+         ++i) {
+
+        NavigationFocusRecord& record =
+            g_navigationFocusHistory[i];
+
+        if (!record.valid) {
+            continue;
+        }
+
+        if (!record.recordedAt ||
+            now - record.recordedAt >
+                kNavigationFocusRecordMaxAgeMs) {
+            record = {};
+            continue;
+        }
+
+        if (record.viewIdentity != view) {
+            continue;
+        }
+
+        if (record.hwnd != hwnd ||
+            record.pid != pid ||
+            record.tid != tid) {
+
+            // The opaque view address or HWND identity was recycled. Discard
+            // the stale token rather than letting it classify anything.
+            record = {};
+            continue;
+        }
+
+        if (!matched.valid ||
+            record.generation < matched.generation ||
+            (record.generation == matched.generation &&
+             record.sequence < matched.sequence)) {
+
+            matched = record;
+            matchedIndex = i;
+        }
+    }
+
+    if (matchedIndex <
+        kNavigationFocusHistoryCapacity) {
+
+        g_navigationFocusHistory[
+            matchedIndex] = {};
+    }
+
+    ReleaseSRWLockExclusive(&g_navigationFocusLock);
+
+    if (!matched.valid) {
+        return false;
+    }
+
+    if (matchedRecord) {
+        *matchedRecord = matched;
+    }
+
+    Wh_Log(
+        L"Navigation focus #%llu consumed by FVP "
+        L"generation=%llu desktop=%s view=%p hwnd=%p",
+        static_cast<unsigned long long>(
+            matched.sequence),
+        static_cast<unsigned long long>(
+            matched.generation),
+        GuidToStringForLog(
+            matched.desktopId),
+        matched.viewIdentity,
+        matched.hwnd);
+
+    return true;
+}
+
+static void InvalidateNavigationState(
+    const wchar_t* reason) {
+
+    const uint64_t generation =
+        g_navigationGeneration.fetch_add(
+            1,
+            std::memory_order_acq_rel) + 1;
+
+    AcquireSRWLockExclusive(&g_navigationFocusLock);
+
+    for (auto& record :
+         g_navigationFocusHistory) {
+        record = {};
+    }
+
+    g_navigationFocusWriteIndex = 0;
+
+    ReleaseSRWLockExclusive(&g_navigationFocusLock);
+
+    Wh_Log(
+        L"Navigation state invalidated generation=%llu reason=%s",
+        static_cast<unsigned long long>(generation),
+        reason ? reason : L"<unknown>");
+}
+
+// Formatting helper used only by diagnostics/logging.
 
 static const wchar_t* GuidToStringForLog(const GUID& guid) {
     // A ring keeps multiple GUID arguments in one Wh_Log call distinct. Since
@@ -417,256 +745,6 @@ static const wchar_t* GuidToStringForLog(const GUID& guid) {
     return buffer[0] ? buffer : L"<invalid>";
 }
 
-static bool ExplicitSwitchExpired(
-    const ExplicitSwitchTransaction& transaction,
-    ULONGLONG now) {
-
-    return transaction.active &&
-        now - transaction.startedAt > kExplicitSwitchExpiryMs;
-}
-
-static void ClearExplicitSwitchTransaction(const wchar_t* reason) {
-    ExplicitSwitchTransaction cleared = {};
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    if (g_explicitSwitch.active) {
-        cleared = g_explicitSwitch;
-        g_explicitSwitch = {};
-    }
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    if (cleared.active) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu cleared: %s",
-            static_cast<unsigned long long>(cleared.sequence),
-            reason ? reason : L"<unknown>");
-    }
-}
-
-static uint64_t BeginExplicitSwitchTransaction(
-    IVirtualDesktop* targetDesktop,
-    const wchar_t* route) {
-
-    if (!targetDesktop) {
-        return 0;
-    }
-
-    GUID targetId = {};
-    if (FAILED(targetDesktop->GetId(&targetId))) {
-        return 0;
-    }
-
-    GUID sourceId = {};
-    if (!LoadCurrentDesktopId(&sourceId)) {
-        return 0;
-    }
-
-    if (GuidEqual(sourceId, targetId)) {
-        return 0;
-    }
-
-    const uint64_t sequence =
-        g_nextExplicitSwitchSequence.fetch_add(
-            1,
-            std::memory_order_relaxed);
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    g_explicitSwitch.active = true;
-    g_explicitSwitch.sourceDesktopId = sourceId;
-    g_explicitSwitch.targetDesktopId = targetId;
-    g_explicitSwitch.sequence = sequence;
-    g_explicitSwitch.targetChangeObserved = false;
-    g_explicitSwitch.startedAt = GetTickCount64();
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    Wh_Log(
-        L"Explicit switch transaction #%llu begin route=%s "
-        L"source=%s target=%s",
-        static_cast<unsigned long long>(sequence),
-        route ? route : L"<unknown>",
-        GuidToStringForLog(sourceId),
-        GuidToStringForLog(targetId));
-
-    return sequence;
-}
-
-static void CancelExplicitSwitchTransaction(
-    uint64_t sequence,
-    const wchar_t* reason) {
-
-    if (!sequence) {
-        return;
-    }
-
-    bool cancelled = false;
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    if (g_explicitSwitch.active &&
-        g_explicitSwitch.sequence == sequence) {
-        g_explicitSwitch = {};
-        cancelled = true;
-    }
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    if (cancelled) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu cancelled: %s",
-            static_cast<unsigned long long>(sequence),
-            reason ? reason : L"<unknown>");
-    }
-}
-
-enum class ExplicitInternalSwitchDisposition {
-    None,
-    AllowTarget,
-    SuppressStaleSource,
-};
-
-static ExplicitInternalSwitchDisposition
-ClassifyInternalSwitchAgainstExplicitTransaction(
-    const GUID& requestedId,
-    ExplicitSwitchTransaction* snapshot) {
-
-    ExplicitSwitchTransaction current = {};
-
-    bool expired = false;
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    current = g_explicitSwitch;
-    if (ExplicitSwitchExpired(current, GetTickCount64())) {
-        g_explicitSwitch = {};
-        expired = true;
-    }
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    if (expired) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu expired",
-            static_cast<unsigned long long>(current.sequence));
-        current = {};
-    }
-
-    if (snapshot) {
-        *snapshot = current;
-    }
-
-    if (!current.active) {
-        return ExplicitInternalSwitchDisposition::None;
-    }
-
-    if (GuidEqual(requestedId, current.targetDesktopId)) {
-        return ExplicitInternalSwitchDisposition::AllowTarget;
-    }
-
-    if (!GuidEqual(
-            current.sourceDesktopId,
-            current.targetDesktopId) &&
-        GuidEqual(requestedId, current.sourceDesktopId)) {
-        return ExplicitInternalSwitchDisposition::SuppressStaleSource;
-    }
-
-    return ExplicitInternalSwitchDisposition::None;
-}
-
-static void ObserveExplicitSwitchDesktopChange(const GUID& newDesktopId) {
-    ExplicitSwitchTransaction transaction = {};
-    bool expired = false;
-    bool targetObserved = false;
-    bool unexpected = false;
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    transaction = g_explicitSwitch;
-
-    if (ExplicitSwitchExpired(transaction, GetTickCount64())) {
-        g_explicitSwitch = {};
-        expired = true;
-    } else if (transaction.active &&
-               GuidEqual(newDesktopId, transaction.targetDesktopId)) {
-        g_explicitSwitch.targetChangeObserved = true;
-        targetObserved = true;
-    } else if (transaction.active &&
-               !GuidEqual(newDesktopId, transaction.sourceDesktopId)) {
-        // A change to neither endpoint can't be attributed to this
-        // transaction. Disarm it rather than retaining ambiguous suppression.
-        g_explicitSwitch = {};
-        unexpected = true;
-    }
-
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    if (expired) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu expired on desktop change",
-            static_cast<unsigned long long>(transaction.sequence));
-    } else if (targetObserved) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu observed target change",
-            static_cast<unsigned long long>(transaction.sequence));
-    } else if (unexpected) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu cleared by unexpected "
-            L"desktop change",
-            static_cast<unsigned long long>(transaction.sequence));
-    }
-}
-
-static void FinishExplicitSwitchTransaction(
-    IVirtualDesktop* switchedDesktop) {
-
-    if (!switchedDesktop) {
-        return;
-    }
-
-    GUID switchedId = {};
-    if (FAILED(switchedDesktop->GetId(&switchedId))) {
-        return;
-    }
-
-    ExplicitSwitchTransaction transaction = {};
-    bool expired = false;
-    bool completed = false;
-    bool ignored = false;
-
-    AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    transaction = g_explicitSwitch;
-
-    if (ExplicitSwitchExpired(transaction, GetTickCount64())) {
-        g_explicitSwitch = {};
-        expired = true;
-    } else if (transaction.active &&
-               transaction.targetChangeObserved &&
-               GuidEqual(switchedId, transaction.targetDesktopId)) {
-        g_explicitSwitch = {};
-        completed = true;
-    } else if (transaction.active) {
-        ignored = true;
-    }
-    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
-
-    if (!transaction.active) {
-        return;
-    }
-
-    if (expired) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu expired on completion",
-            static_cast<unsigned long long>(transaction.sequence));
-    } else if (completed) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu complete switched=%s",
-            static_cast<unsigned long long>(transaction.sequence),
-            GuidToStringForLog(switchedId));
-    } else if (ignored) {
-        Wh_Log(
-            L"Explicit switch transaction #%llu ignored stale completion "
-            L"switched=%s target=%s targetChangeObserved=%d",
-            static_cast<unsigned long long>(transaction.sequence),
-            GuidToStringForLog(switchedId),
-            GuidToStringForLog(transaction.targetDesktopId),
-            transaction.targetChangeObserved);
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Symbol-resolved shell functions.
 // -----------------------------------------------------------------------------
@@ -675,17 +753,6 @@ using SwitchDesktopInternal_t =
     HRESULT (*)(void* pThis, IVirtualDesktop* desktop);
 
 static SwitchDesktopInternal_t g_switchDesktopInternalOriginal = nullptr;
-
-using SwitchDesktop_t =
-    HRESULT (*)(void* pThis, IVirtualDesktop* desktop);
-
-static SwitchDesktop_t g_switchDesktopOriginal = nullptr;
-
-using SwitchDesktopWithAnimation_t =
-    HRESULT (*)(void* pThis, IVirtualDesktop* desktop);
-
-static SwitchDesktopWithAnimation_t
-    g_switchDesktopWithAnimationOriginal = nullptr;
 
 using ForegroundViewChanged_t =
     HRESULT (*)(
@@ -701,70 +768,45 @@ static void* g_win32ApplicationViewVtable = nullptr;
 static void* g_winRtApplicationViewVtable = nullptr;
 
 using ApplicationViewGetNativeWindow_t =
-    HRESULT (WINAPI*)(void* pThis, HWND* windowHandle);
+    HRESULT (WINAPI*)(
+        void* pThis,
+        HWND* windowHandle);
 
 static ApplicationViewGetNativeWindow_t
     g_win32ApplicationViewGetNativeWindow = nullptr;
 static ApplicationViewGetNativeWindow_t
     g_winRtApplicationViewGetNativeWindow = nullptr;
 
-static HRESULT SwitchDesktop_Hook(
-    void* pThis,
-    IVirtualDesktop* desktop) {
+using DesktopChanged_t =
+    HRESULT (*)(
+        void* pThis,
+        IVirtualDesktop* desktop);
 
-    ++g_explicitSwitchEntryDepth;
+static DesktopChanged_t
+    g_desktopChangedOriginal = nullptr;
 
-    uint64_t sequence = 0;
-    if (g_explicitSwitchEntryDepth == 1) {
-        sequence =
-            BeginExplicitSwitchTransaction(
-                desktop,
-                L"SwitchDesktop");
-    }
 
-    HRESULT hr =
-        g_switchDesktopOriginal(
-            pThis,
-            desktop);
+using GetNewForegroundViewForDesktopSwitch_t =
+    HRESULT (*)(
+        void* pThis,
+        IVirtualDesktop* desktop,
+        IApplicationView** view,
+        bool* shouldFocus);
 
-    if (FAILED(hr) && sequence) {
-        CancelExplicitSwitchTransaction(
-            sequence,
-            L"SwitchDesktop failed");
-    }
+static GetNewForegroundViewForDesktopSwitch_t
+    g_getNewForegroundViewForDesktopSwitchOriginal = nullptr;
 
-    --g_explicitSwitchEntryDepth;
-    return hr;
-}
 
-static HRESULT SwitchDesktopWithAnimation_Hook(
-    void* pThis,
-    IVirtualDesktop* desktop) {
+using OnViewAddedInternal_t =
+    HRESULT (*)(
+        void* pThis,
+        IApplicationView* view);
 
-    ++g_explicitSwitchEntryDepth;
+static OnViewAddedInternal_t
+    g_onViewAddedInternalOriginal = nullptr;
 
-    uint64_t sequence = 0;
-    if (g_explicitSwitchEntryDepth == 1) {
-        sequence =
-            BeginExplicitSwitchTransaction(
-                desktop,
-                L"SwitchDesktopWithAnimation");
-    }
-
-    HRESULT hr =
-        g_switchDesktopWithAnimationOriginal(
-            pThis,
-            desktop);
-
-    if (FAILED(hr) && sequence) {
-        CancelExplicitSwitchTransaction(
-            sequence,
-            L"SwitchDesktopWithAnimation failed");
-    }
-
-    --g_explicitSwitchEntryDepth;
-    return hr;
-}
+static std::atomic<bool>
+    g_viewSupersessionAvailable{false};
 
 static HWND GetForegroundPolicyViewHwnd(
     IApplicationView* view) {
@@ -773,18 +815,33 @@ static HWND GetForegroundPolicyViewHwnd(
         return nullptr;
     }
 
-    void* vtable = *reinterpret_cast<void**>(view);
-    ApplicationViewGetNativeWindow_t getNativeWindow = nullptr;
+    // Only call a native-window accessor after positively identifying the
+    // concrete IApplicationView implementation by its symbol-resolved vtable.
+    // Unknown view implementations fail open rather than relying on a private
+    // slot number which could silently change across shell builds.
+    void* vtable =
+        *reinterpret_cast<void**>(
+            view);
 
-    if (vtable == g_win32ApplicationViewVtable &&
+    ApplicationViewGetNativeWindow_t
+        getNativeWindow = nullptr;
+
+    if (vtable ==
+            g_win32ApplicationViewVtable &&
         g_win32ApplicationViewGetNativeWindow) {
-        getNativeWindow = g_win32ApplicationViewGetNativeWindow;
-    } else if (vtable == g_winRtApplicationViewVtable &&
-               g_winRtApplicationViewGetNativeWindow) {
-        getNativeWindow = g_winRtApplicationViewGetNativeWindow;
+
+        getNativeWindow =
+            g_win32ApplicationViewGetNativeWindow;
+    } else if (
+        vtable ==
+            g_winRtApplicationViewVtable &&
+        g_winRtApplicationViewGetNativeWindow) {
+
+        getNativeWindow =
+            g_winRtApplicationViewGetNativeWindow;
     } else {
         Wh_Log(
-            L"ForegroundViewChanged: unknown IApplicationView vtable=%p; "
+            L"IApplicationView: unknown vtable=%p; "
             L"failing open",
             vtable);
         return nullptr;
@@ -798,13 +855,131 @@ static HWND GetForegroundPolicyViewHwnd(
 
     if (FAILED(hr)) {
         Wh_Log(
-            L"ForegroundViewChanged: "
-            L"v_GetNativeWindow failed hr=0x%08X",
-            static_cast<unsigned int>(hr));
+            L"IApplicationView::v_GetNativeWindow failed "
+            L"hr=0x%08X",
+            static_cast<unsigned int>(
+                hr));
         return nullptr;
     }
 
     return hwnd;
+}
+
+static HRESULT DesktopChanged_Hook(
+    void* pThis,
+    IVirtualDesktop* desktop) {
+
+    const bool outermost =
+        g_desktopChangedDepth == 0;
+
+    const uint64_t previousGeneration =
+        g_activeNavigationGeneration;
+
+    uint64_t generation =
+        previousGeneration;
+
+    GUID desktopId = {};
+    const bool desktopIdValid =
+        desktop &&
+        SUCCEEDED(
+            desktop->GetId(
+                &desktopId));
+
+    if (outermost) {
+        generation =
+            g_navigationGeneration.fetch_add(
+                1,
+                std::memory_order_acq_rel) + 1;
+
+        g_activeNavigationGeneration =
+            generation;
+
+        Wh_Log(
+            L"DesktopChanged navigation generation #%llu begin "
+            L"target=%s",
+            static_cast<unsigned long long>(
+                generation),
+            desktopIdValid
+                ? GuidToStringForLog(desktopId)
+                : L"<unknown>");
+    }
+
+    ++g_desktopChangedDepth;
+
+    HRESULT hr =
+        g_desktopChangedOriginal(
+            pThis,
+            desktop);
+
+    --g_desktopChangedDepth;
+
+    if (outermost) {
+        if (FAILED(hr)) {
+            DiscardNavigationFocusGeneration(
+                generation);
+        }
+
+        Wh_Log(
+            L"DesktopChanged navigation generation #%llu return "
+            L"hr=0x%08X",
+            static_cast<unsigned long long>(
+                generation),
+            static_cast<unsigned int>(hr));
+
+        g_activeNavigationGeneration =
+            previousGeneration;
+    }
+
+    return hr;
+}
+
+static HRESULT GetNewForegroundViewForDesktopSwitch_Hook(
+    void* pThis,
+    IVirtualDesktop* desktop,
+    IApplicationView** view,
+    bool* shouldFocus) {
+
+    HRESULT hr =
+        g_getNewForegroundViewForDesktopSwitchOriginal(
+            pThis,
+            desktop,
+            view,
+            shouldFocus);
+
+    // Only selections made synchronously inside DesktopChanged belong to the
+    // shell's own foreground selection for an actual desktop navigation.
+    const uint64_t generation =
+        g_activeNavigationGeneration;
+
+    if (!generation ||
+        FAILED(hr) ||
+        !desktop ||
+        !view ||
+        !*view ||
+        !shouldFocus ||
+        !*shouldFocus) {
+
+        return hr;
+    }
+
+    GUID desktopId = {};
+    if (FAILED(
+            desktop->GetId(
+                &desktopId))) {
+        return hr;
+    }
+
+    HWND hwnd =
+        GetForegroundPolicyViewHwnd(
+            *view);
+
+    RecordNavigationSelectedFocus(
+        generation,
+        desktopId,
+        *view,
+        hwnd);
+
+    return hr;
 }
 
 static HRESULT ForegroundViewChanged_Hook(
@@ -815,14 +990,32 @@ static HRESULT ForegroundViewChanged_Hook(
 
     HWND previousHwnd =
         g_foregroundPolicyHwnd;
+    IApplicationView* previousViewIdentity =
+        g_foregroundPolicyViewIdentity;
+    uint64_t previousNavigationGeneration =
+        g_foregroundPolicyNavigationGeneration;
+    NavigationFocusRecord previousNavigationFocus =
+        g_foregroundPolicyNavigationFocus;
 
     ++g_foregroundPolicyDepth;
 
+    g_foregroundPolicyNavigationGeneration =
+        g_navigationGeneration.load(
+            std::memory_order_acquire);
+
     // Resolve the exact view synchronously, while the IApplicationView pointer
-    // is valid on this shell call stack. Only the HWND crosses into the nested
-    // SwitchDesktopInternal hook and, later, the worker queue.
+    // is valid on this shell call stack. Only plain Win32 identity and the
+    // semantic navigation-focus snapshot cross into nested classification.
     g_foregroundPolicyHwnd =
         GetForegroundPolicyViewHwnd(view);
+    g_foregroundPolicyViewIdentity =
+        view;
+
+    g_foregroundPolicyNavigationFocus = {};
+    ConsumeNavigationSelectedFocus(
+        view,
+        g_foregroundPolicyHwnd,
+        &g_foregroundPolicyNavigationFocus);
 
     HRESULT hr =
         g_foregroundViewChangedOriginal(
@@ -833,6 +1026,12 @@ static HRESULT ForegroundViewChanged_Hook(
 
     g_foregroundPolicyHwnd =
         previousHwnd;
+    g_foregroundPolicyViewIdentity =
+        previousViewIdentity;
+    g_foregroundPolicyNavigationGeneration =
+        previousNavigationGeneration;
+    g_foregroundPolicyNavigationFocus =
+        previousNavigationFocus;
 
     --g_foregroundPolicyDepth;
     return hr;
@@ -851,7 +1050,9 @@ static std::atomic<bool> g_notificationReady = false;
 static bool NotificationStopRequested() {
     return RuntimeCancellationRequested() ||
         (g_notificationStopEvent &&
-         WaitForSingleObject(g_notificationStopEvent, 0) == WAIT_OBJECT_0);
+         WaitForSingleObject(
+             g_notificationStopEvent,
+             0) == WAIT_OBJECT_0);
 }
 
 class VirtualDesktopNotificationListener final
@@ -942,7 +1143,6 @@ public:
 
         if (SUCCEEDED(newHr)) {
             StoreCurrentDesktopId(newId);
-            ObserveExplicitSwitchDesktopChange(newId);
 
             Wh_Log(
                 L"Current desktop cache updated old=%s new=%s",
@@ -968,9 +1168,7 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE VirtualDesktopSwitched(
-        IVirtualDesktop* desktop) override {
-
-        FinishExplicitSwitchTransaction(desktop);
+        IVirtualDesktop*) override {
         return S_OK;
     }
 
@@ -984,27 +1182,41 @@ private:
 };
 
 static DWORD WINAPI NotificationThreadProc(void*) {
-    // Create the thread message queue before doing anything that can block. If
-    // StopNotificationCache posted too early for PostThreadMessage to succeed,
-    // the durable stop event below still prevents entry into GetMessage.
+    // Own a message queue before anything that can block so a concurrent stop
+    // can always post WM_QUIT. The durable stop event covers the earlier race.
     MSG msg = {};
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    PeekMessageW(
+        &msg,
+        nullptr,
+        WM_USER,
+        WM_USER,
+        PM_NOREMOVE);
 
     if (NotificationStopRequested()) {
         PublishStartResult(
             false,
-            HRESULT_FROM_WIN32(ERROR_CANCELLED),
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED),
             g_notificationReadyEvent);
         return 0;
     }
 
-    HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool shouldUninitialize = SUCCEEDED(coHr);
+    HRESULT coHr =
+        CoInitializeEx(
+            nullptr,
+            COINIT_APARTMENTTHREADED);
 
-    if (FAILED(coHr) && coHr != RPC_E_CHANGED_MODE) {
+    const bool shouldUninitialize =
+        SUCCEEDED(coHr);
+
+    if (FAILED(coHr) &&
+        coHr != RPC_E_CHANGED_MODE) {
+
         Wh_Log(
-            L"Notification CoInitializeEx failed hr=0x%08X",
-            static_cast<unsigned int>(coHr));
+            L"Notification CoInitializeEx failed "
+            L"hr=0x%08X",
+            static_cast<unsigned int>(
+                coHr));
 
         PublishStartResult(
             false,
@@ -1016,7 +1228,8 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     if (NotificationStopRequested()) {
         PublishStartResult(
             false,
-            HRESULT_FROM_WIN32(ERROR_CANCELLED),
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED),
             g_notificationReadyEvent);
 
         if (shouldUninitialize) {
@@ -1027,114 +1240,183 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     }
 
     IServiceProvider* serviceProvider = nullptr;
-    IVirtualDesktopManagerInternal* managerInternal = nullptr;
-    IVirtualDesktopNotificationService* notificationService = nullptr;
-    VirtualDesktopNotificationListener* listener = nullptr;
+    IVirtualDesktopManagerInternal*
+        managerInternal = nullptr;
+    IVirtualDesktopNotificationService*
+        notificationService = nullptr;
+    VirtualDesktopNotificationListener*
+        listener = nullptr;
     DWORD cookie = 0;
     bool unsupported = false;
 
-    HRESULT hr = CoCreateInstance(
-        kClsidImmersiveShell,
-        nullptr,
-        CLSCTX_LOCAL_SERVER,
-        __uuidof(IServiceProvider),
-        reinterpret_cast<void**>(&serviceProvider));
+    HRESULT hr =
+        CoCreateInstance(
+            kClsidImmersiveShell,
+            nullptr,
+            CLSCTX_LOCAL_SERVER,
+            __uuidof(IServiceProvider),
+            reinterpret_cast<void**>(
+                &serviceProvider));
 
-    if (SUCCEEDED(hr) && serviceProvider) {
-        hr = serviceProvider->QueryService(
-            kClsidVirtualDesktopManagerInternal,
-            kIidVirtualDesktopManagerInternal24H2,
-            reinterpret_cast<void**>(&managerInternal));
+    if (SUCCEEDED(hr) &&
+        serviceProvider) {
 
-        if (SUCCEEDED(hr) && !managerInternal) {
+        hr =
+            serviceProvider->QueryService(
+                kClsidVirtualDesktopManagerInternal,
+                kIidVirtualDesktopManagerInternal24H2,
+                reinterpret_cast<void**>(
+                    &managerInternal));
+
+        if (SUCCEEDED(hr) &&
+            !managerInternal) {
             hr = E_NOINTERFACE;
         }
 
-        unsupported = hr == E_NOINTERFACE;
+        unsupported =
+            hr == E_NOINTERFACE;
     }
 
-    if (SUCCEEDED(hr) && serviceProvider) {
-        hr = serviceProvider->QueryService(
-            kServiceVirtualDesktopNotification,
-            kIidVirtualDesktopNotificationService,
-            reinterpret_cast<void**>(&notificationService));
+    if (SUCCEEDED(hr) &&
+        serviceProvider) {
 
-        if (SUCCEEDED(hr) && !notificationService) {
+        hr =
+            serviceProvider->QueryService(
+                kServiceVirtualDesktopNotification,
+                kIidVirtualDesktopNotificationService,
+                reinterpret_cast<void**>(
+                    &notificationService));
+
+        if (SUCCEEDED(hr) &&
+            !notificationService) {
             hr = E_NOINTERFACE;
         }
 
-        unsupported = unsupported || hr == E_NOINTERFACE;
+        unsupported =
+            unsupported ||
+            hr == E_NOINTERFACE;
     }
 
-    if (SUCCEEDED(hr) && notificationService) {
-        listener = new VirtualDesktopNotificationListener();
-        hr = notificationService->Register(listener, &cookie);
+    // Register before seeding the cache so a desktop change during GetCurrent
+    // cannot fall into a gap between the seed and notification subscription.
+    if (SUCCEEDED(hr) &&
+        notificationService) {
+
+        listener =
+            new VirtualDesktopNotificationListener();
+
+        hr =
+            notificationService->Register(
+                listener,
+                &cookie);
     }
 
-    // Register before seeding so a desktop change during the seed isn't lost.
-    if (SUCCEEDED(hr) && managerInternal) {
-        auto getCurrentDesktop = GetVTableFunction<
-            HRESULT(STDMETHODCALLTYPE*)(
-                void*,
-                IVirtualDesktop**)>(
-            managerInternal,
-            kVtableGetCurrentDesktop);
+    if (SUCCEEDED(hr) &&
+        managerInternal) {
 
-        IVirtualDesktop* currentDesktop = nullptr;
+        auto getCurrentDesktop =
+            GetVTableFunction<
+                HRESULT(
+                    STDMETHODCALLTYPE*)(
+                        void*,
+                        IVirtualDesktop**)>(
+                managerInternal,
+                kVtableGetCurrentDesktop);
+
+        IVirtualDesktop*
+            currentDesktop = nullptr;
+
         HRESULT currentHr =
-            getCurrentDesktop(managerInternal, &currentDesktop);
+            getCurrentDesktop(
+                managerInternal,
+                &currentDesktop);
 
-        if (SUCCEEDED(currentHr) && currentDesktop) {
+        if (SUCCEEDED(currentHr) &&
+            currentDesktop) {
+
             GUID id = {};
-            if (SUCCEEDED(currentDesktop->GetId(&id))) {
-                StoreCurrentDesktopId(id);
+            if (SUCCEEDED(
+                    currentDesktop->GetId(
+                        &id))) {
+                StoreCurrentDesktopId(
+                    id);
             }
+
             currentDesktop->Release();
         }
     }
 
-    if (SUCCEEDED(hr) && cookie) {
+    if (SUCCEEDED(hr) &&
+        cookie) {
+
         GUID currentId = {};
-        if (LoadCurrentDesktopId(&currentId)) {
-            g_notificationReady.store(true);
+        if (LoadCurrentDesktopId(
+                &currentId)) {
+
+            g_notificationReady.store(
+                true,
+                std::memory_order_release);
         } else {
             hr = E_FAIL;
         }
     }
 
     if (NotificationStopRequested()) {
-        g_notificationReady.store(false, std::memory_order_release);
-        hr = HRESULT_FROM_WIN32(ERROR_CANCELLED);
-    } else if (g_notificationReady.load(std::memory_order_acquire)) {
+        g_notificationReady.store(
+            false,
+            std::memory_order_release);
+        hr =
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED);
+    } else if (
+        g_notificationReady.load(
+            std::memory_order_acquire)) {
+
         hr = S_OK;
     } else if (SUCCEEDED(hr)) {
         hr = E_FAIL;
     }
 
     Wh_Log(
-        L"Notification/cache init hr=0x%08X cookie=%lu ready=%d",
+        L"Notification/cache init hr=0x%08X "
+        L"cookie=%lu ready=%d",
         static_cast<unsigned int>(hr),
         cookie,
-        g_notificationReady.load());
+        g_notificationReady.load(
+            std::memory_order_acquire));
 
     PublishStartResult(
         unsupported,
         hr,
         g_notificationReadyEvent);
 
-    if (g_notificationReady.load(std::memory_order_acquire) &&
+    if (g_notificationReady.load(
+            std::memory_order_acquire) &&
         !NotificationStopRequested()) {
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+
+        while (GetMessageW(
+                   &msg,
+                   nullptr,
+                   0,
+                   0) > 0) {
+
+            TranslateMessage(
+                &msg);
+            DispatchMessageW(
+                &msg);
         }
     }
 
-    g_notificationReady.store(false);
+    g_notificationReady.store(
+        false,
+        std::memory_order_release);
     ClearCurrentDesktopId();
 
-    if (notificationService && cookie) {
-        notificationService->Unregister(cookie);
+    if (notificationService &&
+        cookie) {
+
+        notificationService->Unregister(
+            cookie);
     }
 
     if (listener) {
@@ -1157,29 +1439,44 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         CoUninitialize();
     }
 
-    Wh_Log(L"Notification thread exiting");
+    Wh_Log(
+        L"Notification thread exiting");
     return 0;
 }
 
 static bool StartNotificationCache() {
-    // Each start attempt owns its readiness result. Don't inherit a true value
-    // from a previous notification thread that exited during startup retry.
-    g_notificationReady.store(false, std::memory_order_release);
+    g_notificationReady.store(
+        false,
+        std::memory_order_release);
     ResetStartResult();
 
     if (RuntimeCancellationRequested()) {
-        return RecordStartFailure(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED));
     }
 
     g_notificationReadyEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
 
     g_notificationStopEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
 
-    if (!g_notificationReadyEvent || !g_notificationStopEvent) {
-        Wh_Log(L"Failed to create notification events");
-        return RecordStartFailure(E_FAIL);
+    if (!g_notificationReadyEvent ||
+        !g_notificationStopEvent) {
+
+        Wh_Log(
+            L"Failed to create notification events");
+        return RecordStartFailure(
+            E_FAIL);
     }
 
     g_notificationThread =
@@ -1192,11 +1489,17 @@ static bool StartNotificationCache() {
             &g_notificationThreadId);
 
     if (!g_notificationThread) {
-        DWORD error = GetLastError();
+        DWORD error =
+            GetLastError();
+
         Wh_Log(
-            L"Notification CreateThread failed error=%lu",
+            L"Notification CreateThread failed "
+            L"error=%lu",
             error);
-        return RecordStartFailure(HRESULT_FROM_WIN32(error));
+
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                error));
     }
 
     HANDLE waits[] = {
@@ -1204,39 +1507,55 @@ static bool StartNotificationCache() {
         g_notificationReadyEvent,
     };
 
-    DWORD waitResult = WaitForMultipleObjects(
-        ARRAYSIZE(waits),
-        waits,
-        FALSE,
-        5000);
+    DWORD waitResult =
+        WaitForMultipleObjects(
+            ARRAYSIZE(waits),
+            waits,
+            FALSE,
+            5000);
 
-    if (waitResult == WAIT_OBJECT_0) {
-        return RecordStartFailure(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+    if (waitResult ==
+        WAIT_OBJECT_0) {
+
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED));
     }
 
-    if (waitResult == WAIT_OBJECT_0 + 1) {
-        return g_notificationReady.load(std::memory_order_acquire);
+    if (waitResult ==
+        WAIT_OBJECT_0 + 1) {
+
+        return g_notificationReady.load(
+            std::memory_order_acquire);
     }
 
-    HRESULT waitHr = waitResult == WAIT_TIMEOUT
-        ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
-        : HRESULT_FROM_WIN32(GetLastError());
+    HRESULT waitHr =
+        waitResult == WAIT_TIMEOUT
+            ? HRESULT_FROM_WIN32(
+                  ERROR_TIMEOUT)
+            : HRESULT_FROM_WIN32(
+                  GetLastError());
 
     Wh_Log(
-        L"Notification/current-desktop cache unavailable "
-        L"(waitResult=%lu hr=0x%08X)",
+        L"Notification/current-desktop cache "
+        L"unavailable (waitResult=%lu "
+        L"hr=0x%08X)",
         waitResult,
-        static_cast<unsigned int>(waitHr));
+        static_cast<unsigned int>(
+            waitHr));
 
-    return RecordStartFailure(waitHr);
+    return RecordStartFailure(
+        waitHr);
 }
 
 static void StopNotificationCache() {
-    g_notificationReady.store(false, std::memory_order_release);
-    ClearExplicitSwitchTransaction(L"notification cache stopping");
+    g_notificationReady.store(
+        false,
+        std::memory_order_release);
 
     if (g_notificationStopEvent) {
-        SetEvent(g_notificationStopEvent);
+        SetEvent(
+            g_notificationStopEvent);
     }
 
     if (g_notificationThread) {
@@ -1248,19 +1567,25 @@ static void StopNotificationCache() {
                 0);
         }
 
-        WaitForSingleObject(g_notificationThread, INFINITE);
-        CloseHandle(g_notificationThread);
+        WaitForSingleObject(
+            g_notificationThread,
+            INFINITE);
+
+        CloseHandle(
+            g_notificationThread);
         g_notificationThread = nullptr;
         g_notificationThreadId = 0;
     }
 
     if (g_notificationReadyEvent) {
-        CloseHandle(g_notificationReadyEvent);
+        CloseHandle(
+            g_notificationReadyEvent);
         g_notificationReadyEvent = nullptr;
     }
 
     if (g_notificationStopEvent) {
-        CloseHandle(g_notificationStopEvent);
+        CloseHandle(
+            g_notificationStopEvent);
         g_notificationStopEvent = nullptr;
     }
 
@@ -1271,13 +1596,162 @@ static void StopNotificationCache() {
 // Rescue worker.
 // -----------------------------------------------------------------------------
 
+// Extended view-supersession waits are intentionally restricted to processes
+// that expose a stable application identity. The same PID is still required;
+// PFN/AUMID are extra positive checks, not a way to correlate unrelated broker
+// processes.
+struct RescueAppIdentity {
+    wchar_t packageFamily[256] = {};
+    wchar_t appUserModelId[512] = {};
+};
+
+using GetPackageFamilyName_t =
+    LONG (WINAPI*)(
+        HANDLE process,
+        UINT32* packageFamilyNameLength,
+        PWSTR packageFamilyName);
+
+using GetApplicationUserModelId_t =
+    LONG (WINAPI*)(
+        HANDLE process,
+        UINT32* applicationUserModelIdLength,
+        PWSTR applicationUserModelId);
+
+static void QueryRescueAppIdentity(
+    DWORD pid,
+    RescueAppIdentity* identity) {
+
+    if (!identity) {
+        return;
+    }
+
+    *identity = {};
+
+    HANDLE process =
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION,
+            FALSE,
+            pid);
+
+    if (!process) {
+        return;
+    }
+
+    HMODULE kernel32 =
+        GetModuleHandleW(
+            L"kernel32.dll");
+
+    if (kernel32) {
+        auto getPackageFamilyName =
+            reinterpret_cast<GetPackageFamilyName_t>(
+                GetProcAddress(
+                    kernel32,
+                    "GetPackageFamilyName"));
+
+        if (getPackageFamilyName) {
+            UINT32 length =
+                ARRAYSIZE(
+                    identity->packageFamily);
+
+            if (getPackageFamilyName(
+                    process,
+                    &length,
+                    identity->packageFamily) !=
+                ERROR_SUCCESS) {
+
+                identity->packageFamily[0] =
+                    L'\0';
+            }
+        }
+
+        auto getApplicationUserModelId =
+            reinterpret_cast<GetApplicationUserModelId_t>(
+                GetProcAddress(
+                    kernel32,
+                    "GetApplicationUserModelId"));
+
+        if (getApplicationUserModelId) {
+            UINT32 length =
+                ARRAYSIZE(
+                    identity->appUserModelId);
+
+            if (getApplicationUserModelId(
+                    process,
+                    &length,
+                    identity->appUserModelId) !=
+                ERROR_SUCCESS) {
+
+                identity->appUserModelId[0] =
+                    L'\0';
+            }
+        }
+    }
+
+    CloseHandle(process);
+}
+
+static bool HasStableRescueAppIdentity(
+    const RescueAppIdentity& identity) {
+
+    return identity.packageFamily[0] ||
+        identity.appUserModelId[0];
+}
+
+static bool RescueAppIdentityMatches(
+    const RescueAppIdentity& expected,
+    const RescueAppIdentity& actual) {
+
+    if (!HasStableRescueAppIdentity(expected)) {
+        return false;
+    }
+
+    if (expected.packageFamily[0]) {
+        if (!actual.packageFamily[0] ||
+            _wcsicmp(
+                expected.packageFamily,
+                actual.packageFamily) != 0) {
+            return false;
+        }
+    }
+
+    if (expected.appUserModelId[0]) {
+        if (!actual.appUserModelId[0] ||
+            _wcsicmp(
+                expected.appUserModelId,
+                actual.appUserModelId) != 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct RescueRequest {
     uint64_t sequence = 0;
+    uint64_t navigationGeneration = 0;
+    ULONGLONG queuedAt = 0;
+    DWORD stabilizationMs = 0;
+    DWORD viewSupersessionMs = 0;
+
+    IApplicationView* viewIdentity = nullptr;  // opaque, never dereferenced
     HWND hwnd = nullptr;
     DWORD pid = 0;
     DWORD tid = 0;
+
     GUID sourceDesktopId = {};
     GUID requestedDesktopId = {};
+
+    // Filled on the worker, never queried on the FVP/SwitchDesktopInternal
+    // call stack.
+    RescueAppIdentity appIdentity = {};
+
+    // Written only under g_requestLock by OnViewAddedInternal after a
+    // same-process, different-view match inside the configured observation
+    // window. The worker validates stable app identity and desktop/view state
+    // before treating this as a real superseder.
+    IApplicationView* supersedingViewIdentity = nullptr;
+    HWND supersedingHwnd = nullptr;
+    ULONGLONG supersedingObservedAt = 0;
 };
 
 static constexpr size_t kRescueQueueCapacity = 16;
@@ -1285,10 +1759,13 @@ static SRWLOCK g_requestLock = SRWLOCK_INIT;
 static RescueRequest g_rescueQueue[kRescueQueueCapacity] = {};
 static size_t g_rescueQueueHead = 0;
 static size_t g_rescueQueueCount = 0;
+static RescueRequest g_activeRescueWatch = {};
+static bool g_activeRescueWatchValid = false;
 static std::atomic<uint64_t> g_nextSequence = 1;
 
-static HANDLE g_requestEvent = nullptr;  // auto-reset
-static HANDLE g_stopEvent = nullptr;     // manual-reset
+static HANDLE g_requestEvent = nullptr;       // auto-reset
+static HANDLE g_supersessionEvent = nullptr;  // auto-reset
+static HANDLE g_stopEvent = nullptr;          // manual-reset
 static HANDLE g_workerThread = nullptr;
 static HANDLE g_workerReadyEvent = nullptr;
 static std::atomic<bool> g_workerReady = false;
@@ -1296,7 +1773,9 @@ static std::atomic<bool> g_workerReady = false;
 static bool WorkerStopRequested() {
     return RuntimeCancellationRequested() ||
         (g_stopEvent &&
-         WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0);
+         WaitForSingleObject(
+             g_stopEvent,
+             0) == WAIT_OBJECT_0);
 }
 
 struct WorkerComState {
@@ -1332,85 +1811,124 @@ static void ReleaseWorkerComState(WorkerComState* state) {
     }
 }
 
-static bool InitializeWorkerComState(WorkerComState* state) {
-    HRESULT hr = CoCreateInstance(
-        kClsidImmersiveShell,
-        nullptr,
-        CLSCTX_LOCAL_SERVER,
-        __uuidof(IServiceProvider),
-        reinterpret_cast<void**>(&state->serviceProvider));
+static bool InitializeWorkerComState(
+    WorkerComState* state) {
 
-    if (FAILED(hr) || !state->serviceProvider) {
+    HRESULT hr =
+        CoCreateInstance(
+            kClsidImmersiveShell,
+            nullptr,
+            CLSCTX_LOCAL_SERVER,
+            __uuidof(IServiceProvider),
+            reinterpret_cast<void**>(
+                &state->serviceProvider));
+
+    if (FAILED(hr) ||
+        !state->serviceProvider) {
+
         if (SUCCEEDED(hr)) {
             hr = E_FAIL;
         }
 
         Wh_Log(
-            L"Worker: CoCreateInstance(ImmersiveShell) failed "
+            L"Worker: CoCreateInstance("
+            L"ImmersiveShell) failed "
             L"hr=0x%08X",
-            static_cast<unsigned int>(hr));
-        g_startHr.store(hr, std::memory_order_relaxed);
+            static_cast<unsigned int>(
+                hr));
+
+        g_startHr.store(
+            hr,
+            std::memory_order_relaxed);
         return false;
     }
 
-    hr = state->serviceProvider->QueryService(
-        kClsidVirtualDesktopManagerInternal,
-        kIidVirtualDesktopManagerInternal24H2,
-        reinterpret_cast<void**>(&state->managerInternal));
+    hr =
+        state->serviceProvider->QueryService(
+            kClsidVirtualDesktopManagerInternal,
+            kIidVirtualDesktopManagerInternal24H2,
+            reinterpret_cast<void**>(
+                &state->managerInternal));
 
-    if (FAILED(hr) || !state->managerInternal) {
+    if (FAILED(hr) ||
+        !state->managerInternal) {
+
         if (SUCCEEDED(hr)) {
             hr = E_NOINTERFACE;
         }
 
         Wh_Log(
-            L"Worker: QueryService(managerInternal) failed "
+            L"Worker: QueryService("
+            L"managerInternal) failed "
             L"hr=0x%08X",
-            static_cast<unsigned int>(hr));
-        g_startHr.store(hr, std::memory_order_relaxed);
+            static_cast<unsigned int>(
+                hr));
+
+        g_startHr.store(
+            hr,
+            std::memory_order_relaxed);
         g_startUnsupported.store(
             hr == E_NOINTERFACE,
             std::memory_order_release);
         return false;
     }
 
-    hr = state->serviceProvider->QueryService(
-        kIidApplicationViewCollection,
-        kIidApplicationViewCollection,
-        reinterpret_cast<void**>(&state->viewCollection));
+    hr =
+        state->serviceProvider->QueryService(
+            kIidApplicationViewCollection,
+            kIidApplicationViewCollection,
+            reinterpret_cast<void**>(
+                &state->viewCollection));
 
-    if (FAILED(hr) || !state->viewCollection) {
+    if (FAILED(hr) ||
+        !state->viewCollection) {
+
         if (SUCCEEDED(hr)) {
             hr = E_NOINTERFACE;
         }
 
         Wh_Log(
-            L"Worker: QueryService(viewCollection) failed "
+            L"Worker: QueryService("
+            L"viewCollection) failed "
             L"hr=0x%08X",
-            static_cast<unsigned int>(hr));
-        g_startHr.store(hr, std::memory_order_relaxed);
+            static_cast<unsigned int>(
+                hr));
+
+        g_startHr.store(
+            hr,
+            std::memory_order_relaxed);
         g_startUnsupported.store(
             hr == E_NOINTERFACE,
             std::memory_order_release);
         return false;
     }
 
-    hr = CoCreateInstance(
-        __uuidof(VirtualDesktopManager),
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&state->publicManager));
+    hr =
+        CoCreateInstance(
+            __uuidof(
+                VirtualDesktopManager),
+            nullptr,
+            CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(
+                &state->publicManager));
 
-    if (FAILED(hr) || !state->publicManager) {
+    if (FAILED(hr) ||
+        !state->publicManager) {
+
         if (SUCCEEDED(hr)) {
             hr = E_FAIL;
         }
 
         Wh_Log(
-            L"Worker: CoCreateInstance(public manager) failed "
+            L"Worker: CoCreateInstance("
+            L"public manager) failed "
             L"hr=0x%08X",
-            static_cast<unsigned int>(hr));
-        g_startHr.store(hr, std::memory_order_relaxed);
+            static_cast<unsigned int>(
+                hr));
+
+        g_startHr.store(
+            hr,
+            std::memory_order_relaxed);
         return false;
     }
 
@@ -1449,6 +1967,310 @@ static HRESULT WorkerMoveViewToDesktop(
     return fn(state->managerInternal, view, desktop);
 }
 
+static bool IsRescueGenerationCurrent(
+    const RescueRequest& request) {
+
+    return request.navigationGeneration ==
+        g_navigationGeneration.load(
+            std::memory_order_acquire);
+}
+
+static bool TryGetObservedSuperseder(
+    uint64_t sequence,
+    IApplicationView** viewIdentity,
+    HWND* hwnd,
+    ULONGLONG* observedAt) {
+
+    if (viewIdentity) {
+        *viewIdentity = nullptr;
+    }
+    if (hwnd) {
+        *hwnd = nullptr;
+    }
+    if (observedAt) {
+        *observedAt = 0;
+    }
+
+    bool found = false;
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    if (g_activeRescueWatchValid &&
+        g_activeRescueWatch.sequence == sequence &&
+        g_activeRescueWatch.supersedingHwnd) {
+
+        if (viewIdentity) {
+            *viewIdentity =
+                g_activeRescueWatch.supersedingViewIdentity;
+        }
+        if (hwnd) {
+            *hwnd =
+                g_activeRescueWatch.supersedingHwnd;
+        }
+        if (observedAt) {
+            *observedAt =
+                g_activeRescueWatch.supersedingObservedAt;
+        }
+
+        // Consume this observation. If validation fails, a later VIEWADD can
+        // supply another candidate and wake the worker again.
+        g_activeRescueWatch.supersedingViewIdentity = nullptr;
+        g_activeRescueWatch.supersedingHwnd = nullptr;
+        g_activeRescueWatch.supersedingObservedAt = 0;
+        found = true;
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+    return found;
+}
+
+static bool ValidateObservedSuperseder(
+    WorkerComState* state,
+    const RescueRequest& request,
+    IApplicationView* observedViewIdentity,
+    HWND observedHwnd) {
+
+    if (!state ||
+        !observedViewIdentity ||
+        !observedHwnd ||
+        observedViewIdentity == request.viewIdentity ||
+        observedHwnd == request.hwnd ||
+        !IsWindow(observedHwnd)) {
+        return false;
+    }
+
+    DWORD observedPid = 0;
+    GetWindowThreadProcessId(
+        observedHwnd,
+        &observedPid);
+
+    if (!observedPid ||
+        observedPid != request.pid) {
+        return false;
+    }
+
+    RescueAppIdentity observedIdentity;
+    QueryRescueAppIdentity(
+        observedPid,
+        &observedIdentity);
+
+    if (!RescueAppIdentityMatches(
+            request.appIdentity,
+            observedIdentity)) {
+        return false;
+    }
+
+    GUID observedDesktopId = {};
+    HRESULT hr =
+        state->publicManager->GetWindowDesktopId(
+            observedHwnd,
+            &observedDesktopId);
+
+    if (FAILED(hr) ||
+        !GuidEqual(
+            observedDesktopId,
+            request.sourceDesktopId)) {
+        return false;
+    }
+
+    // Require the HWND to resolve to an actual shell application view after
+    // OnViewAddedInternal returned. This is intentionally checked in the worker
+    // apartment rather than re-entering virtual-desktop COM from the hook.
+    IApplicationView* observedView = nullptr;
+    hr =
+        state->viewCollection->GetViewForHwnd(
+            observedHwnd,
+            &observedView);
+
+    if (FAILED(hr) ||
+        !observedView) {
+        return false;
+    }
+
+    observedView->Release();
+    return true;
+}
+
+static bool WaitForRescueSettling(
+    WorkerComState* state,
+    const RescueRequest& request) {
+
+    DWORD waitWindow =
+        request.stabilizationMs;
+
+    if (g_viewSupersessionAvailable.load(
+            std::memory_order_acquire) &&
+        HasStableRescueAppIdentity(
+            request.appIdentity) &&
+        request.viewSupersessionMs >
+            waitWindow) {
+
+        waitWindow =
+            request.viewSupersessionMs;
+    }
+
+    if (!waitWindow) {
+        return true;
+    }
+
+    while (true) {
+        if (!IsRescueGenerationCurrent(request)) {
+            Wh_Log(
+                L"[#%llu] Abort: navigation generation changed "
+                L"during rescue settling",
+                static_cast<unsigned long long>(
+                    request.sequence));
+            return false;
+        }
+
+        IApplicationView* observedViewIdentity = nullptr;
+        HWND observedHwnd = nullptr;
+        ULONGLONG observedAt = 0;
+
+        if (TryGetObservedSuperseder(
+                request.sequence,
+                &observedViewIdentity,
+                &observedHwnd,
+                &observedAt)) {
+
+            const ULONGLONG observedElapsed =
+                observedAt >= request.queuedAt
+                    ? observedAt - request.queuedAt
+                    : 0;
+
+            const bool insideSupersessionWindow =
+                HasStableRescueAppIdentity(
+                    request.appIdentity) &&
+                request.viewSupersessionMs != 0 &&
+                observedAt != 0 &&
+                observedElapsed <=
+                    request.viewSupersessionMs;
+
+            if (insideSupersessionWindow &&
+                ValidateObservedSuperseder(
+                    state,
+                    request,
+                    observedViewIdentity,
+                    observedHwnd)) {
+
+                Wh_Log(
+                    L"[#%llu] Abort: newly-added same-app view "
+                    L"superseded rescue hwnd=%p",
+                    static_cast<unsigned long long>(
+                        request.sequence),
+                    observedHwnd);
+
+                return false;
+            }
+
+            Wh_Log(
+                L"[#%llu] Ignored VIEWADD supersession candidate "
+                L"hwnd=%p observedElapsed=%llu ms "
+                L"window=%lu ms",
+                static_cast<unsigned long long>(
+                    request.sequence),
+                observedHwnd,
+                static_cast<unsigned long long>(
+                    observedElapsed),
+                request.viewSupersessionMs);
+        }
+
+        const ULONGLONG now =
+            GetTickCount64();
+
+        const ULONGLONG elapsed =
+            now >= request.queuedAt
+                ? now - request.queuedAt
+                : 0;
+
+        if (elapsed >= waitWindow) {
+            return true;
+        }
+
+        const DWORD remaining =
+            waitWindow -
+            static_cast<DWORD>(elapsed);
+
+        HANDLE waits[] = {
+            g_runtimeCancelEvent,
+            g_stopEvent,
+            g_supersessionEvent,
+        };
+
+        DWORD waitResult =
+            WaitForMultipleObjects(
+                ARRAYSIZE(waits),
+                waits,
+                FALSE,
+                remaining);
+
+        if (waitResult == WAIT_TIMEOUT) {
+            return true;
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + 2) {
+            // A VIEWADD matching either the active or a queued rescue arrived.
+            // Re-read our own active observation at the top of the loop.
+            continue;
+        }
+
+        Wh_Log(
+            L"[#%llu] Abort: rescue settling interrupted "
+            L"(waitResult=%lu)",
+            static_cast<unsigned long long>(
+                request.sequence),
+            waitResult);
+
+        return false;
+    }
+}
+
+static bool IsForegroundReplacementOnSourceDesktop(
+    WorkerComState* state,
+    const RescueRequest& request,
+    HWND* replacementHwnd) {
+
+    HWND foreground =
+        GetForegroundWindow();
+
+    if (!foreground ||
+        foreground == request.hwnd ||
+        !IsRescueCandidate(foreground)) {
+        return false;
+    }
+
+    DWORD foregroundPid = 0;
+    GetWindowThreadProcessId(
+        foreground,
+        &foregroundPid);
+
+    // Explorer/taskbar can transiently retain foreground after tray input.
+    // Don't let shell-owned UI cancel an otherwise valid rescue.
+    if (!foregroundPid ||
+        foregroundPid == GetCurrentProcessId()) {
+        return false;
+    }
+
+    GUID foregroundDesktopId = {};
+    HRESULT hr =
+        state->publicManager->GetWindowDesktopId(
+            foreground,
+            &foregroundDesktopId);
+
+    if (FAILED(hr) ||
+        !GuidEqual(
+            foregroundDesktopId,
+            request.sourceDesktopId)) {
+        return false;
+    }
+
+    if (replacementHwnd) {
+        *replacementHwnd = foreground;
+    }
+
+    return true;
+}
+
 static bool TakePendingRequest(RescueRequest* request) {
     if (!request) {
         return false;
@@ -1467,8 +2289,30 @@ static bool TakePendingRequest(RescueRequest* request) {
         (g_rescueQueueHead + 1) % kRescueQueueCapacity;
     --g_rescueQueueCount;
 
+    // Publish the request as active before releasing the queue lock. This
+    // closes the queued->worker handoff race for OnViewAddedInternal.
+    g_activeRescueWatch =
+        *request;
+    g_activeRescueWatchValid =
+        true;
+
     ReleaseSRWLockExclusive(&g_requestLock);
     return true;
+}
+
+static void ClearActiveRescueWatch(
+    uint64_t sequence) {
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    if (g_activeRescueWatchValid &&
+        g_activeRescueWatch.sequence == sequence) {
+
+        g_activeRescueWatch = {};
+        g_activeRescueWatchValid = false;
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
 }
 
 static void ProcessRescueRequest(
@@ -1476,16 +2320,36 @@ static void ProcessRescueRequest(
     const RescueRequest& request) {
 
     // Abort paths below intentionally don't replay the suppressed switch.
-    // By the time this worker runs, a newer user navigation may have superseded
-    // the request; switching here would override it and would re-enter the
-    // shell hooks from this worker apartment. Keep every abort fail-stationary
-    // and logged rather than manufacturing a stale cross-thread switch.
+    // By the time this worker runs, a newer user navigation or a locally
+    // resolved app launch may have superseded the request. Every delayed
+    // action must still own the navigation generation captured at FVP entry.
 
     Wh_Log(
-        L"[#%llu] Rescue begin hwnd=%p requested=%s",
+        L"[#%llu] Rescue begin hwnd=%p requested=%s "
+        L"generation=%llu stabilizationMs=%lu "
+        L"viewSupersessionMs=%lu stableAppId=%d",
         static_cast<unsigned long long>(request.sequence),
         request.hwnd,
-        GuidToStringForLog(request.requestedDesktopId));
+        GuidToStringForLog(request.requestedDesktopId),
+        static_cast<unsigned long long>(
+            request.navigationGeneration),
+        request.stabilizationMs,
+        request.viewSupersessionMs,
+        HasStableRescueAppIdentity(
+            request.appIdentity));
+
+    if (!IsRescueGenerationCurrent(request)) {
+        Wh_Log(
+            L"[#%llu] Abort: navigation generation already superseded "
+            L"(request=%llu current=%llu)",
+            static_cast<unsigned long long>(request.sequence),
+            static_cast<unsigned long long>(
+                request.navigationGeneration),
+            static_cast<unsigned long long>(
+                g_navigationGeneration.load(
+                    std::memory_order_acquire)));
+        return;
+    }
 
     if (!IsRescueCandidate(request.hwnd)) {
         Wh_Log(
@@ -1511,8 +2375,52 @@ static void ProcessRescueRequest(
         return;
     }
 
+    // Keep a short generic foreground-settling period for every app. Processes
+    // with a stable PFN/AUMID get an extended event-driven supersession window
+    // during which OnViewAddedInternal can wake us immediately. The deadline is
+    // measured from queue time, so worker scheduling never adds a second delay.
+    if (!WaitForRescueSettling(
+            state,
+            request)) {
+        return;
+    }
+
+    if (!IsRescueGenerationCurrent(request)) {
+        Wh_Log(
+            L"[#%llu] Abort: user navigated during rescue stabilization",
+            static_cast<unsigned long long>(request.sequence));
+        return;
+    }
+
+    if (request.stabilizationMs) {
+        HWND replacementHwnd = nullptr;
+
+        if (IsForegroundReplacementOnSourceDesktop(
+                state,
+                request,
+                &replacementHwnd)) {
+
+            Wh_Log(
+                L"[#%llu] Abort: activation resolved/superseded by "
+                L"local foreground hwnd=%p",
+                static_cast<unsigned long long>(request.sequence),
+                replacementHwnd);
+            return;
+        }
+
+    }
+
+    if (!IsRescueGenerationCurrent(request)) {
+        Wh_Log(
+            L"[#%llu] Abort: navigation generation changed "
+            L"during local-replacement validation",
+            static_cast<unsigned long long>(request.sequence));
+        return;
+    }
+
     // Read the real current desktop after the intercepted switch returned.
-    // Since SwitchDesktopInternal was suppressed, this is the desktop we stayed on.
+    // Since SwitchDesktopInternal was suppressed, this must still be the
+    // desktop on which this request originated.
     IVirtualDesktop* currentDesktop = nullptr;
     HRESULT hr =
         WorkerGetCurrentDesktop(state, &currentDesktop);
@@ -1566,9 +2474,8 @@ static void ProcessRescueRequest(
         return;
     }
 
-    // Verify that the foreground window really belongs to the desktop Windows
-    // wanted to switch to. This makes the teleport much less likely to grab an
-    // unrelated foreground window.
+    // Verify the exact FVP HWND still belongs to the desktop Windows originally
+    // wanted to switch to.
     GUID windowDesktopId = {};
     hr = state->publicManager->GetWindowDesktopId(
         request.hwnd,
@@ -1623,9 +2530,50 @@ static void ProcessRescueRequest(
         return;
     }
 
-    // Re-check the source desktop immediately before committing the move.
-    // This prevents a legitimate desktop switch that happened while resolving
-    // the IApplicationView from dragging the rescued window along with it.
+    if (!IsRescueGenerationCurrent(request)) {
+        Wh_Log(
+            L"[#%llu] Abort: navigation generation changed "
+            L"while resolving application view",
+            static_cast<unsigned long long>(request.sequence));
+        view->Release();
+        currentDesktop->Release();
+        return;
+    }
+
+    // Close the small race between the initial stabilization check and commit.
+    // This is a zero-delay recheck; it does not add latency.
+    if (request.stabilizationMs) {
+        HWND replacementHwnd = nullptr;
+
+        if (IsForegroundReplacementOnSourceDesktop(
+                state,
+                request,
+                &replacementHwnd)) {
+
+            Wh_Log(
+                L"[#%llu] Abort: local replacement appeared "
+                L"before rescue commit hwnd=%p",
+                static_cast<unsigned long long>(request.sequence),
+                replacementHwnd);
+
+            view->Release();
+            currentDesktop->Release();
+            return;
+        }
+    }
+
+    // Re-check both generation ownership and source desktop immediately before
+    // committing the move. Generation catches A->B->A cases where the desktop
+    // GUID alone would look unchanged after newer navigation.
+    if (!IsRescueGenerationCurrent(request)) {
+        Wh_Log(
+            L"[#%llu] Abort: navigation generation changed before commit",
+            static_cast<unsigned long long>(request.sequence));
+        view->Release();
+        currentDesktop->Release();
+        return;
+    }
+
     IVirtualDesktop* commitDesktop = nullptr;
     HRESULT commitHr =
         WorkerGetCurrentDesktop(state, &commitDesktop);
@@ -1675,37 +2623,47 @@ static void ProcessRescueRequest(
 
     // Virtual Desktop Helper similarly restores/focuses the moved window.
     if (IsIconic(request.hwnd)) {
-        ShowWindowAsync(request.hwnd, SW_RESTORE);
+        ShowWindow(request.hwnd, SW_RESTORE);
     }
 
     SetForegroundWindow(request.hwnd);
 }
 
 static DWORD WINAPI WorkerThreadProc(void*) {
-    g_workerReady.store(false, std::memory_order_release);
+    g_workerReady.store(
+        false,
+        std::memory_order_release);
 
     HRESULT coHr =
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        CoInitializeEx(
+            nullptr,
+            COINIT_MULTITHREADED);
 
     const bool shouldUninitialize =
         SUCCEEDED(coHr);
 
     if (FAILED(coHr)) {
         Wh_Log(
-            L"Worker: CoInitializeEx failed hr=0x%08X",
-            static_cast<unsigned int>(coHr));
+            L"Worker: CoInitializeEx failed "
+            L"hr=0x%08X",
+            static_cast<unsigned int>(
+                coHr));
 
-        PublishStartResult(
-            false,
+        g_startHr.store(
             coHr,
+            std::memory_order_relaxed);
+        SetEvent(
             g_workerReadyEvent);
         return 0;
     }
 
     if (WorkerStopRequested()) {
-        PublishStartResult(
-            false,
-            HRESULT_FROM_WIN32(ERROR_CANCELLED),
+        g_startHr.store(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED),
+            std::memory_order_relaxed);
+
+        SetEvent(
             g_workerReadyEvent);
 
         if (shouldUninitialize) {
@@ -1716,29 +2674,52 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     }
 
     WorkerComState state;
-    if (!InitializeWorkerComState(&state)) {
-        ReleaseWorkerComState(&state);
+
+    if (!InitializeWorkerComState(
+            &state)) {
+
+        ReleaseWorkerComState(
+            &state);
 
         if (shouldUninitialize) {
             CoUninitialize();
         }
 
-        PublishStartResult(
-            g_startUnsupported.load(std::memory_order_acquire),
-            g_startHr.load(std::memory_order_relaxed),
+        SetEvent(
             g_workerReadyEvent);
         return 0;
     }
 
-    g_workerReady.store(true, std::memory_order_release);
-    PublishStartResult(
-        false,
-        S_OK,
+    if (WorkerStopRequested()) {
+        g_startHr.store(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED),
+            std::memory_order_relaxed);
+
+        ReleaseWorkerComState(
+            &state);
+
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+
+        SetEvent(
+            g_workerReadyEvent);
+        return 0;
+    }
+
+    g_workerReady.store(
+        true,
+        std::memory_order_release);
+
+    SetEvent(
         g_workerReadyEvent);
 
-    Wh_Log(L"Worker ready");
+    Wh_Log(
+        L"Worker ready");
 
     HANDLE waits[] = {
+        g_runtimeCancelEvent,
         g_stopEvent,
         g_requestEvent,
     };
@@ -1751,56 +2732,96 @@ static DWORD WINAPI WorkerThreadProc(void*) {
                 FALSE,
                 INFINITE);
 
-        if (waitResult == WAIT_OBJECT_0) {
+        if (waitResult ==
+                WAIT_OBJECT_0 ||
+            waitResult ==
+                WAIT_OBJECT_0 + 1) {
             break;
         }
 
-        if (waitResult == WAIT_OBJECT_0 + 1) {
+        if (waitResult ==
+            WAIT_OBJECT_0 + 2) {
+
             RescueRequest request;
-            while (TakePendingRequest(&request)) {
+
+            while (TakePendingRequest(
+                       &request)) {
+
+                QueryRescueAppIdentity(
+                    request.pid,
+                    &request.appIdentity);
+
+                if (WorkerStopRequested()) {
+                    ClearActiveRescueWatch(
+                        request.sequence);
+                    break;
+                }
+
                 ProcessRescueRequest(
                     &state,
                     request);
 
-                if (WaitForSingleObject(g_stopEvent, 0) ==
-                    WAIT_OBJECT_0) {
+                ClearActiveRescueWatch(
+                    request.sequence);
+
+                if (WorkerStopRequested()) {
                     break;
                 }
             }
         }
     }
 
-    g_workerReady.store(false, std::memory_order_release);
-    ReleaseWorkerComState(&state);
+    g_workerReady.store(
+        false,
+        std::memory_order_release);
+
+    ReleaseWorkerComState(
+        &state);
 
     if (shouldUninitialize) {
         CoUninitialize();
     }
 
-    Wh_Log(L"Worker exiting");
+    Wh_Log(
+        L"Worker exiting");
     return 0;
 }
 
 static bool QueueRescue(
+    IApplicationView* viewIdentity,
     HWND hwnd,
     DWORD pid,
     DWORD tid,
     const GUID& sourceDesktopId,
-    const GUID& requestedDesktopId) {
+    const GUID& requestedDesktopId,
+    uint64_t navigationGeneration) {
+
+    if (RuntimeCancellationRequested()) {
+        return false;
+    }
 
     RescueRequest request;
     request.sequence = g_nextSequence.fetch_add(1);
+    request.navigationGeneration = navigationGeneration;
+    request.queuedAt = GetTickCount64();
+    request.stabilizationMs =
+        g_settings.rescueStabilizationMs.load(
+            std::memory_order_acquire);
+    request.viewSupersessionMs =
+        g_settings.rescueViewSupersessionMs.load(
+            std::memory_order_acquire);
+    request.viewIdentity = viewIdentity;
     request.hwnd = hwnd;
     request.pid = pid;
     request.tid = tid;
     request.sourceDesktopId = sourceDesktopId;
     request.requestedDesktopId = requestedDesktopId;
-
     bool queued = false;
 
     AcquireSRWLockExclusive(&g_requestLock);
 
-    if (g_workerReady.load(std::memory_order_acquire) &&
+    if (!RuntimeCancellationRequested() &&
+        g_workerReady.load(std::memory_order_acquire) &&
         g_requestEvent &&
         g_rescueQueueCount < kRescueQueueCapacity) {
         size_t index =
@@ -1825,6 +2846,216 @@ static bool QueueRescue(
     return queued;
 }
 
+
+static bool RescueRequestCanObserveViewAdded(
+    const RescueRequest& request,
+    DWORD pid) {
+
+    return g_viewSupersessionAvailable.load(
+            std::memory_order_acquire) &&
+        request.viewSupersessionMs != 0 &&
+        request.pid == pid &&
+        request.viewIdentity != nullptr;
+}
+
+static bool ViewAddedMatchesRescueRequest(
+    const RescueRequest& request,
+    IApplicationView* viewIdentity,
+    HWND hwnd,
+    DWORD pid,
+    ULONGLONG observedAt) {
+
+    if (!RescueRequestCanObserveViewAdded(
+            request,
+            pid) ||
+        !viewIdentity ||
+        !hwnd ||
+        viewIdentity == request.viewIdentity ||
+        hwnd == request.hwnd ||
+        !observedAt ||
+        observedAt < request.queuedAt ||
+        observedAt - request.queuedAt >
+            request.viewSupersessionMs) {
+
+        return false;
+    }
+
+    return request.navigationGeneration ==
+        g_navigationGeneration.load(
+            std::memory_order_acquire);
+}
+
+static bool HasPendingSupersessionWatchForPid(
+    DWORD pid) {
+
+    bool found = false;
+
+    AcquireSRWLockShared(&g_requestLock);
+
+    if (g_activeRescueWatchValid &&
+        RescueRequestCanObserveViewAdded(
+            g_activeRescueWatch,
+            pid)) {
+        found = true;
+    }
+
+    for (size_t i = 0;
+         !found && i < g_rescueQueueCount;
+         ++i) {
+
+        size_t index =
+            (g_rescueQueueHead + i) %
+            kRescueQueueCapacity;
+
+        if (RescueRequestCanObserveViewAdded(
+                g_rescueQueue[index],
+                pid)) {
+            found = true;
+        }
+    }
+
+    ReleaseSRWLockShared(&g_requestLock);
+    return found;
+}
+
+static void ObserveViewAddedForPendingRescues(
+    IApplicationView* viewIdentity,
+    HWND hwnd) {
+
+    if (RuntimeCancellationRequested() ||
+        !viewIdentity ||
+        !hwnd ||
+        !IsWindow(hwnd)) {
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(
+        hwnd,
+        &pid);
+
+    if (!pid ||
+        !HasPendingSupersessionWatchForPid(
+            pid)) {
+        return;
+    }
+
+    // Keep this shell callback lightweight. It publishes only same-process
+    // view/HWND identity; stable PFN/AUMID and desktop ownership are checked by
+    // the worker before this observation can cancel anything.
+    const ULONGLONG observedAt =
+        GetTickCount64();
+    bool matched = false;
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    if (g_activeRescueWatchValid &&
+        ViewAddedMatchesRescueRequest(
+            g_activeRescueWatch,
+            viewIdentity,
+            hwnd,
+            pid,
+            observedAt)) {
+
+        g_activeRescueWatch.supersedingViewIdentity =
+            viewIdentity;
+        g_activeRescueWatch.supersedingHwnd =
+            hwnd;
+        g_activeRescueWatch.supersedingObservedAt =
+            observedAt;
+        matched = true;
+
+        Wh_Log(
+            L"[#%llu] VIEWADD candidate observed "
+            L"view=%p hwnd=%p",
+            static_cast<unsigned long long>(
+                g_activeRescueWatch.sequence),
+            viewIdentity,
+            hwnd);
+    }
+
+    for (size_t i = 0;
+         i < g_rescueQueueCount;
+         ++i) {
+
+        size_t index =
+            (g_rescueQueueHead + i) %
+            kRescueQueueCapacity;
+
+        RescueRequest& request =
+            g_rescueQueue[index];
+
+        if (ViewAddedMatchesRescueRequest(
+                request,
+                viewIdentity,
+                hwnd,
+                pid,
+                observedAt)) {
+
+            request.supersedingViewIdentity =
+                viewIdentity;
+            request.supersedingHwnd =
+                hwnd;
+            request.supersedingObservedAt =
+                observedAt;
+            matched = true;
+
+            Wh_Log(
+                L"[#%llu] VIEWADD candidate observed while queued "
+                L"view=%p hwnd=%p",
+                static_cast<unsigned long long>(
+                    request.sequence),
+                viewIdentity,
+                hwnd);
+        }
+    }
+
+    if (matched &&
+        g_supersessionEvent) {
+        SetEvent(
+            g_supersessionEvent);
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+}
+
+static HRESULT OnViewAddedInternal_Hook(
+    void* pThis,
+    IApplicationView* view) {
+
+    // Hold a temporary reference because the post-call observation intentionally
+    // runs after the shell has finished registering/assigning the view.
+    if (view) {
+        view->AddRef();
+    }
+
+    HRESULT hr =
+        g_onViewAddedInternalOriginal(
+            pThis,
+            view);
+
+    if (SUCCEEDED(hr) &&
+        view) {
+
+        // Publish only symbol-resolved HWND/process identity. No
+        // virtual-desktop COM or package-identity query is performed on this
+        // internal shell callback.
+        HWND hwnd =
+            GetForegroundPolicyViewHwnd(
+                view);
+
+        ObserveViewAddedForPendingRescues(
+            view,
+            hwnd);
+    }
+
+    if (view) {
+        view->Release();
+    }
+
+    return hr;
+}
+
 // -----------------------------------------------------------------------------
 // SwitchDesktopInternal hook.
 // -----------------------------------------------------------------------------
@@ -1833,14 +3064,19 @@ static HRESULT SwitchDesktopInternal_Hook(
     void* pThis,
     IVirtualDesktop* requestedDesktop) {
 
-    if (!pThis || !requestedDesktop) {
+    if (!pThis ||
+        !requestedDesktop ||
+        RuntimeCancellationRequested()) {
+
         return g_switchDesktopInternalOriginal(
             pThis,
             requestedDesktop);
     }
 
-    // Hard blast-radius boundary: if the foreground policy didn't synchronously
-    // cause this switch, don't inspect or classify it at all.
+    // Hard blast-radius boundary: if foreground policy didn't synchronously
+    // cause this switch, do not classify it as an activation at all. Navigation
+    // generation ownership lives in DesktopChanged instead, which is downstream
+    // of Task View/hotkey/gesture/Virtual Desktop Helper route differences.
     if (g_foregroundPolicyDepth <= 0) {
         return g_switchDesktopInternalOriginal(
             pThis,
@@ -1849,12 +3085,6 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     // From here down, the switch is positively attributed to
     // CVirtualDesktopForegroundPolicy::ForegroundViewChanged.
-    if (!g_workerReady.load()) {
-        return g_switchDesktopInternalOriginal(
-            pThis,
-            requestedDesktop);
-    }
-
     GUID requestedId = {};
     HRESULT requestedIdHr =
         requestedDesktop->GetId(&requestedId);
@@ -1870,52 +3100,130 @@ static HRESULT SwitchDesktopInternal_Hook(
             requestedDesktop);
     }
 
-    // Task View can briefly try to restore/reactivate the foreground window
-    // from the desktop we just left (especially a fullscreen app) after the
-    // explicit SwitchDesktop* entry point has already returned. During the
-    // event-bounded explicit transaction, suppress exactly that request back
-    // to the captured source desktop. This is shell transition cleanup, so do
-    // NOT queue a teleport.
-    ExplicitSwitchTransaction explicitSnapshot = {};
-    ExplicitInternalSwitchDisposition explicitDisposition =
-        ClassifyInternalSwitchAgainstExplicitTransaction(
-            requestedId,
-            &explicitSnapshot);
+    const uint64_t currentNavigationGeneration =
+        g_navigationGeneration.load(
+            std::memory_order_acquire);
 
-    if (explicitDisposition ==
-        ExplicitInternalSwitchDisposition::AllowTarget) {
+    const NavigationFocusRecord navigationFocus =
+        g_foregroundPolicyNavigationFocus;
+
+    if (navigationFocus.valid &&
+        GuidEqual(
+            requestedId,
+            navigationFocus.desktopId)) {
+
+        if (navigationFocus.generation <
+            currentNavigationGeneration) {
+
+            // Directly attributed to an earlier DesktopChanged ->
+            // GetNewForegroundViewForDesktopSwitch -> SetFocus selection.
+            // A newer depth-zero navigation already superseded it, so this is
+            // delayed shell foreground settling, not a fresh activation.
+            Wh_Log(
+                L"SUPPRESS SwitchDesktopInternal: stale navigation-selected "
+                L"focus #%llu generation=%llu current=%llu desktop=%s",
+                static_cast<unsigned long long>(
+                    navigationFocus.sequence),
+                static_cast<unsigned long long>(
+                    navigationFocus.generation),
+                static_cast<unsigned long long>(
+                    currentNavigationGeneration),
+                GuidToStringForLog(
+                    navigationFocus.desktopId));
+
+            return S_OK;
+        }
+
+        if (navigationFocus.generation ==
+            currentNavigationGeneration) {
+
+            // This is the foreground view Windows itself selected for the
+            // navigation that is still current. Let the shell finish its own
+            // foreground maintenance untouched.
+            Wh_Log(
+                L"ALLOW SwitchDesktopInternal: current navigation-selected "
+                L"focus #%llu generation=%llu desktop=%s",
+                static_cast<unsigned long long>(
+                    navigationFocus.sequence),
+                static_cast<unsigned long long>(
+                    navigationFocus.generation),
+                GuidToStringForLog(
+                    navigationFocus.desktopId));
+
+            return g_switchDesktopInternalOriginal(
+                pThis,
+                requestedDesktop);
+        }
+
+        // A focus token from a future generation is impossible under the
+        // expected synchronous shell ordering. Treat it as ABI/state
+        // uncertainty and leave Windows untouched.
         Wh_Log(
-            L"ALLOW SwitchDesktopInternal: "
-            L"explicit transaction #%llu target",
+            L"ALLOW SwitchDesktopInternal: navigation focus generation "
+            L"is newer than current (focus=%llu current=%llu)",
             static_cast<unsigned long long>(
-                explicitSnapshot.sequence));
+                navigationFocus.generation),
+            static_cast<unsigned long long>(
+                currentNavigationGeneration));
 
         return g_switchDesktopInternalOriginal(
             pThis,
             requestedDesktop);
     }
 
-    if (explicitDisposition ==
-        ExplicitInternalSwitchDisposition::SuppressStaleSource) {
-
-        // Rapid Task View switching can make foreground policy try to restore
-        // the view from the desktop we just left. Suppress that exact rebound,
-        // but don't queue a rescue/teleport.
+    if (navigationFocus.valid) {
+        // We positively matched this FVP to a view Windows selected for desktop
+        // navigation, but the nested switch target doesn't match that selected
+        // desktop. Don't reinterpret inconsistent shell state as an activation
+        // and never teleport from it.
         Wh_Log(
-            L"SUPPRESS SwitchDesktopInternal: stale source rebound "
-            L"during explicit transaction #%llu target=%s "
-            L"foregroundPolicyDepth=%d",
+            L"ALLOW SwitchDesktopInternal: navigation-selected focus #%llu "
+            L"target mismatch selected=%s requested=%s",
             static_cast<unsigned long long>(
-                explicitSnapshot.sequence),
-            GuidToStringForLog(explicitSnapshot.targetDesktopId),
-            g_foregroundPolicyDepth);
+                navigationFocus.sequence),
+            GuidToStringForLog(
+                navigationFocus.desktopId),
+            GuidToStringForLog(
+                requestedId));
+
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
+
+    // Even without a navigation-focus identity match, an FVP that began before
+    // a newer navigation generation was started no longer owns current desktop
+    // state. Never manufacture a rescue or stale switch from that obsolete
+    // synchronous call stack.
+    if (g_foregroundPolicyNavigationGeneration == 0 ||
+        currentNavigationGeneration !=
+            g_foregroundPolicyNavigationGeneration) {
+
+        Wh_Log(
+            L"SUPPRESS SwitchDesktopInternal: FVP superseded by "
+            L"newer navigation (fvpGeneration=%llu current=%llu)",
+            static_cast<unsigned long long>(
+                g_foregroundPolicyNavigationGeneration),
+            static_cast<unsigned long long>(
+                currentNavigationGeneration));
 
         return S_OK;
     }
 
+    // Only the activation-rescue path depends on the worker. Navigation
+    // attribution above is synchronous and remains valid during startup.
+    if (!g_workerReady.load(
+            std::memory_order_acquire)) {
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
+
     GUID sourceDesktopId = {};
-    if (!g_notificationReady.load() ||
+    if (!g_notificationReady.load(
+            std::memory_order_acquire) ||
         !LoadCurrentDesktopId(&sourceDesktopId)) {
+
         Wh_Log(
             L"SwitchDesktopInternal allowed: "
             L"current-desktop cache unavailable");
@@ -1930,8 +3238,7 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     // Even inside the positively attributed activation path, fail open unless
     // the exact foreground-policy view resolved to a plausible top-level app
-    // window. Do not fall back to GetForegroundWindow(): doing so would throw
-    // away the precise view identity that ForegroundViewChanged supplied.
+    // window. Do not fall back to GetForegroundWindow().
     if (!IsRescueCandidate(candidate)) {
         Wh_Log(
             L"SwitchDesktopInternal allowed: "
@@ -1966,36 +3273,54 @@ static HRESULT SwitchDesktopInternal_Hook(
             requestedDesktop);
     }
 
+    const uint64_t navigationGeneration =
+        g_foregroundPolicyNavigationGeneration;
+
+    if (navigationGeneration == 0 ||
+        g_navigationGeneration.load(
+            std::memory_order_acquire) !=
+            navigationGeneration) {
+
+        Wh_Log(
+            L"SUPPRESS SwitchDesktopInternal: navigation changed "
+            L"before rescue could be queued");
+        return S_OK;
+    }
+
     Wh_Log(
         L"Candidate activation-driven SwitchDesktopInternal "
         L"source=%s requested=%s exactViewHwnd=%p "
-        L"foregroundPolicyDepth=%d",
+        L"foregroundPolicyDepth=%d generation=%llu",
         GuidToStringForLog(sourceDesktopId),
         GuidToStringForLog(requestedId),
         candidate,
-        g_foregroundPolicyDepth);
+        g_foregroundPolicyDepth,
+        static_cast<unsigned long long>(
+            navigationGeneration));
 
     LogWindow(L"candidate", candidate);
 
     if (!QueueRescue(
+            g_foregroundPolicyViewIdentity,
             candidate,
             candidatePid,
             candidateTid,
             sourceDesktopId,
-            requestedId)) {
+            requestedId,
+            navigationGeneration)) {
+
         return g_switchDesktopInternalOriginal(
             pThis,
             requestedDesktop);
     }
 
     Wh_Log(
-        L"BLOCK SwitchDesktopInternal: rescue queued");
+        L"BLOCK SwitchDesktopInternal: generation-owned rescue queued");
 
     // Pretend the internal switch succeeded only after the rescue has been
-    // safely queued. Every failure before this point fails open. If the worker
-    // later aborts, it deliberately doesn't replay this request: the desktop
-    // may have changed meanwhile, and replay from the worker apartment would
-    // risk overriding newer navigation and re-entering this hook.
+    // safely queued. The worker is allowed to act only while this navigation
+    // generation and source desktop remain current. Superseded requests stay
+    // fail-stationary and are never replayed from the worker apartment.
     return S_OK;
 }
 
@@ -2004,27 +3329,54 @@ static HRESULT SwitchDesktopInternal_Hook(
 // -----------------------------------------------------------------------------
 
 static bool StartWorker() {
-    // Each start attempt owns its readiness result. A slow previous worker can
-    // otherwise publish true after StopWorker already cleared the flag.
-    g_workerReady.store(false, std::memory_order_release);
+    g_workerReady.store(
+        false,
+        std::memory_order_release);
     ResetStartResult();
 
     if (RuntimeCancellationRequested()) {
-        return RecordStartFailure(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED));
     }
 
     g_requestEvent =
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            FALSE,
+            FALSE,
+            nullptr);
+
+    g_supersessionEvent =
+        CreateEventW(
+            nullptr,
+            FALSE,
+            FALSE,
+            nullptr);
 
     g_stopEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
 
     g_workerReadyEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
 
-    if (!g_requestEvent || !g_stopEvent || !g_workerReadyEvent) {
-        Wh_Log(L"Failed to create worker events");
-        return RecordStartFailure(E_FAIL);
+    if (!g_requestEvent ||
+        !g_supersessionEvent ||
+        !g_stopEvent ||
+        !g_workerReadyEvent) {
+
+        Wh_Log(
+            L"Failed to create worker events");
+        return RecordStartFailure(
+            E_FAIL);
     }
 
     g_workerThread =
@@ -2037,11 +3389,16 @@ static bool StartWorker() {
             nullptr);
 
     if (!g_workerThread) {
-        DWORD error = GetLastError();
+        DWORD error =
+            GetLastError();
+
         Wh_Log(
             L"CreateThread failed error=%lu",
             error);
-        return RecordStartFailure(HRESULT_FROM_WIN32(error));
+
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                error));
     }
 
     HANDLE waits[] = {
@@ -2049,38 +3406,56 @@ static bool StartWorker() {
         g_workerReadyEvent,
     };
 
-    DWORD waitResult = WaitForMultipleObjects(
-        ARRAYSIZE(waits),
-        waits,
-        FALSE,
-        5000);
+    DWORD waitResult =
+        WaitForMultipleObjects(
+            ARRAYSIZE(waits),
+            waits,
+            FALSE,
+            5000);
 
-    if (waitResult == WAIT_OBJECT_0) {
-        return RecordStartFailure(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+    if (waitResult ==
+        WAIT_OBJECT_0) {
+
+        return RecordStartFailure(
+            HRESULT_FROM_WIN32(
+                ERROR_CANCELLED));
     }
 
-    if (waitResult == WAIT_OBJECT_0 + 1) {
-        return g_workerReady.load(std::memory_order_acquire);
+    if (waitResult ==
+        WAIT_OBJECT_0 + 1) {
+
+        return g_workerReady.load(
+            std::memory_order_acquire);
     }
 
-    HRESULT waitHr = waitResult == WAIT_TIMEOUT
-        ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
-        : HRESULT_FROM_WIN32(GetLastError());
+    HRESULT waitHr =
+        waitResult == WAIT_TIMEOUT
+            ? HRESULT_FROM_WIN32(
+                  ERROR_TIMEOUT)
+            : HRESULT_FROM_WIN32(
+                  GetLastError());
 
     Wh_Log(
         L"Worker initialization failed "
         L"(waitResult=%lu hr=0x%08X)",
         waitResult,
-        static_cast<unsigned int>(waitHr));
+        static_cast<unsigned int>(
+            waitHr));
 
-    return RecordStartFailure(waitHr);
+    return RecordStartFailure(
+        waitHr);
 }
 
 static void StopWorker() {
+    InvalidateNavigationState(
+        L"worker stopping");
+
     AcquireSRWLockExclusive(&g_requestLock);
     g_workerReady.store(false, std::memory_order_release);
     g_rescueQueueHead = 0;
     g_rescueQueueCount = 0;
+    g_activeRescueWatch = {};
+    g_activeRescueWatchValid = false;
     ReleaseSRWLockExclusive(&g_requestLock);
 
     if (g_stopEvent) {
@@ -2107,10 +3482,19 @@ static void StopWorker() {
     }
 
     AcquireSRWLockExclusive(&g_requestLock);
+
+    if (g_supersessionEvent) {
+        CloseHandle(
+            g_supersessionEvent);
+        g_supersessionEvent = nullptr;
+    }
+
     if (g_requestEvent) {
-        CloseHandle(g_requestEvent);
+        CloseHandle(
+            g_requestEvent);
         g_requestEvent = nullptr;
     }
+
     ReleaseSRWLockExclusive(&g_requestLock);
 
 }
@@ -2122,16 +3506,14 @@ static void StopWorker() {
 // Windhawk's @include explorer.exe can inject this mod into more than one
 // explorer.exe when folder windows are hosted in separate processes.
 //
-// Therefore Wh_ModInit deliberately installs only one lightweight process-local
-// observer: CreateWindowExW. The process is promoted to "shell Explorer" only
-// after it creates (or already owns) the PRIMARY taskbar window:
+// TrayUI::primary-taskbar startup is the primary positive signal that this process is the
+// shell Explorer and that taskbar startup has completed far enough for deferred
+// virtual-desktop runtime initialization. Wh_ModAfterInit also checks for an
+// already-existing primary Shell_TrayWnd so manual enable/reload and late
+// injection don't miss the one-shot primary-taskbar startup call.
 //
-//     Shell_TrayWnd
-//
-// Shell_SecondaryTrayWnd is intentionally ignored. Once shell ownership has
-// been proven, the twinui virtual-desktop hooks and COM runtime are installed
-// exactly once. Non-shell explorer.exe processes never load twinui.pcshell.dll
-// for this mod and never start the virtual-desktop worker/cache.
+// Heavy twinui symbol resolution and COM initialization remain deferred to the
+// transient shell-host initialization thread.
 
 enum class RuntimeState {
     Stopped,
@@ -2140,27 +3522,40 @@ enum class RuntimeState {
     Unsupported,
 };
 
-static std::atomic<RuntimeState> g_runtimeState{RuntimeState::Stopped};
+static std::atomic<RuntimeState>
+    g_runtimeState{
+        RuntimeState::Stopped};
 
-static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_shellHostConfirmed{false};
-static std::atomic<bool> g_virtualDesktopHooksInstalled{false};
+static std::atomic<bool>
+    g_unloading{false};
 
-static SRWLOCK g_runtimeInitLock = SRWLOCK_INIT;
-static HANDLE g_runtimeInitThread = nullptr;
+static std::atomic<bool>
+    g_virtualDesktopHooksInstalled{false};
+
+static SRWLOCK
+    g_runtimeInitLock =
+        SRWLOCK_INIT;
+
+static HANDLE
+    g_runtimeInitThread =
+        nullptr;
 
 static HWND FindCurrentProcessPrimaryTaskbar() {
-    HWND taskbar = FindWindowW(
-        L"Shell_TrayWnd",
-        nullptr);
+    HWND taskbar =
+        FindWindowW(
+            L"Shell_TrayWnd",
+            nullptr);
 
     if (!taskbar) {
         return nullptr;
     }
 
     DWORD pid = 0;
-    if (!GetWindowThreadProcessId(taskbar, &pid) ||
+    if (!GetWindowThreadProcessId(
+            taskbar,
+            &pid) ||
         pid != GetCurrentProcessId()) {
+
         return nullptr;
     }
 
@@ -2168,14 +3563,19 @@ static HWND FindCurrentProcessPrimaryTaskbar() {
 }
 
 static HWND FindCurrentProcessShellWindow() {
-    HWND shellWindow = GetShellWindow();
+    HWND shellWindow =
+        GetShellWindow();
+
     if (!shellWindow) {
         return nullptr;
     }
 
     DWORD pid = 0;
-    if (!GetWindowThreadProcessId(shellWindow, &pid) ||
+    if (!GetWindowThreadProcessId(
+            shellWindow,
+            &pid) ||
         pid != GetCurrentProcessId()) {
+
         return nullptr;
     }
 
@@ -2192,15 +3592,17 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
-    HMODULE twinui = LoadLibraryExW(
-        L"twinui.pcshell.dll",
-        nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE twinui =
+        LoadLibraryExW(
+            L"twinui.pcshell.dll",
+            nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!twinui) {
         Wh_Log(
-            L"Shell host: "
-            L"LoadLibrary(twinui.pcshell.dll) failed error=%lu",
+            L"Shell host: LoadLibrary("
+            L"twinui.pcshell.dll) failed "
+            L"error=%lu",
             GetLastError());
         return false;
     }
@@ -2210,7 +3612,8 @@ static bool InstallVirtualDesktopHooks() {
     }
 
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK
+        twinuiPcshellHooks[] = {
         {
             {
                 LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"
@@ -2242,7 +3645,8 @@ static bool InstallVirtualDesktopHooks() {
         {
             {
                 L"public: virtual long __cdecl "
-                L"CVirtualDesktopManager::SwitchDesktopInternal("
+                L"CVirtualDesktopManager::"
+                L"SwitchDesktopInternal("
                 L"struct IVirtualDesktop *)"
             },
             reinterpret_cast<void**>(
@@ -2253,29 +3657,33 @@ static bool InstallVirtualDesktopHooks() {
         {
             {
                 L"public: virtual long __cdecl "
-                L"CVirtualDesktopManager::SwitchDesktop("
-                L"struct IVirtualDesktop *)"
+                L"CVirtualDesktopManager::"
+                L"OnViewAddedInternal("
+                L"struct IApplicationView *)"
             },
             reinterpret_cast<void**>(
-                &g_switchDesktopOriginal),
+                &g_onViewAddedInternalOriginal),
             reinterpret_cast<void*>(
-                SwitchDesktop_Hook)
+                OnViewAddedInternal_Hook),
+            true
         },
         {
             {
                 L"public: virtual long __cdecl "
-                L"CVirtualDesktopManager::SwitchDesktopWithAnimation("
+                L"CVirtualDesktopForegroundPolicy::"
+                L"DesktopChanged("
                 L"struct IVirtualDesktop *)"
             },
             reinterpret_cast<void**>(
-                &g_switchDesktopWithAnimationOriginal),
+                &g_desktopChangedOriginal),
             reinterpret_cast<void*>(
-                SwitchDesktopWithAnimation_Hook)
+                DesktopChanged_Hook)
         },
         {
             {
                 L"public: virtual long __cdecl "
-                L"CVirtualDesktopForegroundPolicy::ForegroundViewChanged("
+                L"CVirtualDesktopForegroundPolicy::"
+                L"ForegroundViewChanged("
                 L"struct IVirtualDesktopManagerPrivate *,"
                 L"struct IVirtualDesktopSwitchAnimator *,"
                 L"struct IApplicationView *)"
@@ -2285,51 +3693,98 @@ static bool InstallVirtualDesktopHooks() {
             reinterpret_cast<void*>(
                 ForegroundViewChanged_Hook)
         },
+        {
+            {
+                L"public: virtual long __cdecl "
+                L"CVirtualDesktopForegroundPolicy::"
+                L"GetNewForegroundViewForDesktopSwitch("
+                L"struct IVirtualDesktop *,"
+                L"struct IApplicationView * *,"
+                L"bool *)"
+            },
+            reinterpret_cast<void**>(
+                &g_getNewForegroundViewForDesktopSwitchOriginal),
+            reinterpret_cast<void*>(
+                GetNewForegroundViewForDesktopSwitch_Hook)
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(
             twinui,
             twinuiPcshellHooks,
-            ARRAYSIZE(twinuiPcshellHooks))) {
+            ARRAYSIZE(
+                twinuiPcshellHooks))) {
+
         Wh_Log(
-            L"Shell host: failed to resolve/install "
-            L"virtual-desktop symbols");
+            L"Shell host: failed to resolve/"
+            L"install virtual-desktop symbols");
         return false;
     }
 
-    // These hooks are installed after Wh_ModInit, so explicitly apply the
-    // pending hook operations now.
-    SetLastError(ERROR_SUCCESS);
-    if (!Wh_ApplyHookOperations()) {
-        DWORD error = GetLastError();
+    const bool viewSupersessionResolved =
+        g_onViewAddedInternalOriginal != nullptr;
+
+    if (!viewSupersessionResolved) {
         Wh_Log(
-            L"Shell host: Wh_ApplyHookOperations failed error=%lu",
+            L"Shell host: OnViewAddedInternal "
+            L"symbol unavailable; extended view "
+            L"supersession disabled");
+    }
+
+    if (RuntimeCancellationRequested()) {
+        return false;
+    }
+
+    // These hooks are registered after Wh_ModInit.
+    SetLastError(
+        ERROR_SUCCESS);
+
+    if (!Wh_ApplyHookOperations()) {
+        DWORD error =
+            GetLastError();
+
+        Wh_Log(
+            L"Shell host: "
+            L"Wh_ApplyHookOperations failed "
+            L"error=%lu",
             error);
         return false;
     }
+
+    g_viewSupersessionAvailable.store(
+        viewSupersessionResolved,
+        std::memory_order_release);
 
     g_virtualDesktopHooksInstalled.store(
         true,
         std::memory_order_release);
 
     Wh_Log(
-        L"Shell host: virtual-desktop hooks installed");
+        L"Shell host: virtual-desktop "
+        L"hooks installed");
 
     return !RuntimeCancellationRequested();
 }
 
 static bool WaitForShellHostRetryDelay() {
-    // Keep shell-host startup retries cancellable, fixed, and bounded.
     DWORD waitResult =
-        WaitForSingleObject(g_runtimeCancelEvent, 500);
+        WaitForSingleObject(
+            g_runtimeCancelEvent,
+            500);
 
-    if (waitResult == WAIT_TIMEOUT) {
-        return !g_unloading.load(std::memory_order_acquire);
+    if (waitResult ==
+        WAIT_TIMEOUT) {
+
+        return !g_unloading.load(
+            std::memory_order_acquire);
     }
 
-    if (waitResult == WAIT_FAILED) {
+    if (waitResult ==
+        WAIT_FAILED) {
+
         Wh_Log(
-            L"Shell-host retry wait failed error=%lu",
+            L"Shell-host retry wait failed "
+            L"error=%lu",
             GetLastError());
     }
 
@@ -2340,34 +3795,56 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"Shell-host initialization begin");
 
-    if (g_unloading.load(std::memory_order_acquire) ||
+    if (g_unloading.load(
+            std::memory_order_acquire) ||
         RuntimeCancellationRequested()) {
-        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
+
+        g_runtimeState.store(
+            RuntimeState::Stopped,
+            std::memory_order_release);
         return 0;
     }
 
-    constexpr int kMaxRuntimeStartAttempts = 30;
+    constexpr int
+        kMaxRuntimeStartAttempts = 30;
 
-    for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
+    for (int attempt = 1;
+         attempt <= kMaxRuntimeStartAttempts;
+         ++attempt) {
+
         bool hookInstallFailed = false;
-        bool started = StartWorker();
+        bool started =
+            StartWorker();
 
-        if (started && !RuntimeCancellationRequested()) {
-            started = StartNotificationCache();
+        if (started &&
+            !RuntimeCancellationRequested()) {
+
+            started =
+                StartNotificationCache();
         }
 
-        if (started && !RuntimeCancellationRequested()) {
+        if (started &&
+            !RuntimeCancellationRequested()) {
+
             if (InstallVirtualDesktopHooks() &&
                 !RuntimeCancellationRequested()) {
+
                 g_runtimeState.store(
                     RuntimeState::Ready,
                     std::memory_order_release);
-                Wh_Log(L"Runtime ready after attempt %d", attempt);
+
+                Wh_Log(
+                    L"Runtime ready after attempt %d: "
+                    L"source-desktop cache active, "
+                    L"bounded rescue queue active",
+                    attempt);
                 return 0;
             }
 
             if (!RuntimeCancellationRequested()) {
-                g_startHr.store(E_FAIL, std::memory_order_relaxed);
+                g_startHr.store(
+                    E_FAIL,
+                    std::memory_order_relaxed);
                 hookInstallFailed = true;
             }
         }
@@ -2379,17 +3856,25 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
             g_runtimeState.store(
                 RuntimeState::Stopped,
                 std::memory_order_release);
+
             Wh_Log(
-                L"Shell-host hook installation failed; remaining fail-open");
+                L"Shell-host hook installation "
+                L"failed; remaining fail-open");
             return 0;
         }
 
-        bool unsupported =
-            g_startUnsupported.load(std::memory_order_acquire);
-        HRESULT failureHr = g_startHr.load(std::memory_order_relaxed);
+        const bool unsupported =
+            g_startUnsupported.load(
+                std::memory_order_acquire);
 
-        if (g_unloading.load(std::memory_order_acquire) ||
+        const HRESULT failureHr =
+            g_startHr.load(
+                std::memory_order_relaxed);
+
+        if (g_unloading.load(
+                std::memory_order_acquire) ||
             RuntimeCancellationRequested()) {
+
             g_runtimeState.store(
                 RuntimeState::Stopped,
                 std::memory_order_release);
@@ -2402,18 +3887,23 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
                 std::memory_order_release);
 
             Wh_Log(
-                L"Shell-host runtime unsupported hr=0x%08X; "
-                L"remaining fail-open",
-                static_cast<unsigned int>(failureHr));
+                L"Shell-host runtime unsupported "
+                L"hr=0x%08X; remaining fail-open",
+                static_cast<unsigned int>(
+                    failureHr));
             return 0;
         }
 
-        if (attempt < kMaxRuntimeStartAttempts) {
+        if (attempt <
+            kMaxRuntimeStartAttempts) {
+
             Wh_Log(
-                L"Shell-host runtime unavailable on attempt %d "
-                L"hr=0x%08X; retrying",
+                L"Shell-host runtime unavailable "
+                L"on attempt %d hr=0x%08X; "
+                L"retrying",
                 attempt,
-                static_cast<unsigned int>(failureHr));
+                static_cast<unsigned int>(
+                    failureHr));
 
             if (!WaitForShellHostRetryDelay()) {
                 g_runtimeState.store(
@@ -2424,62 +3914,78 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         }
     }
 
-    g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
+    g_runtimeState.store(
+        RuntimeState::Stopped,
+        std::memory_order_release);
+
     Wh_Log(
-        L"Shell-host initialization failed after %d attempts; "
-        L"remaining fail-open",
+        L"Shell-host initialization failed "
+        L"after %d attempts; remaining "
+        L"fail-open",
         kMaxRuntimeStartAttempts);
+
     return 0;
 }
 
 static void PromoteCurrentProcessToShellHost(
     const wchar_t* reason) {
 
-    if (g_unloading.load(std::memory_order_acquire)) {
+    if (g_unloading.load(
+            std::memory_order_acquire)) {
         return;
     }
-
-    g_shellHostConfirmed.store(
-        true,
-        std::memory_order_release);
 
     RuntimeState state =
-        g_runtimeState.load(std::memory_order_acquire);
-    if (state == RuntimeState::Ready ||
-        state == RuntimeState::Unsupported) {
+        g_runtimeState.load(
+            std::memory_order_acquire);
+
+    if (state ==
+            RuntimeState::Ready ||
+        state ==
+            RuntimeState::Unsupported) {
         return;
     }
 
-    AcquireSRWLockExclusive(&g_runtimeInitLock);
+    AcquireSRWLockExclusive(
+        &g_runtimeInitLock);
 
-    if (g_unloading.load(std::memory_order_relaxed) ||
-        g_runtimeState.load(std::memory_order_relaxed) !=
+    if (g_unloading.load(
+            std::memory_order_relaxed) ||
+        g_runtimeState.load(
+            std::memory_order_relaxed) !=
             RuntimeState::Stopped) {
-        ReleaseSRWLockExclusive(&g_runtimeInitLock);
+
+        ReleaseSRWLockExclusive(
+            &g_runtimeInitLock);
         return;
     }
 
-    // A previous runtime attempt may have failed after the VD hooks were
-    // installed. If the primary taskbar is recreated in the same Explorer
-    // process, allow another runtime attempt without installing the hooks twice.
     if (g_runtimeInitThread) {
         if (WaitForSingleObject(
                 g_runtimeInitThread,
-                0) == WAIT_OBJECT_0) {
-            CloseHandle(g_runtimeInitThread);
+                0) ==
+            WAIT_OBJECT_0) {
+
+            CloseHandle(
+                g_runtimeInitThread);
             g_runtimeInitThread = nullptr;
         } else {
-            ReleaseSRWLockExclusive(&g_runtimeInitLock);
+            ReleaseSRWLockExclusive(
+                &g_runtimeInitLock);
             return;
         }
     }
 
-    g_runtimeState.store(RuntimeState::Initializing, std::memory_order_release);
+    g_runtimeState.store(
+        RuntimeState::Initializing,
+        std::memory_order_release);
 
     Wh_Log(
-        L"Primary Shell_TrayWnd confirmed; "
-        L"promoting this Explorer process reason=%s",
-        reason ? reason : L"<unknown>");
+        L"Primary shell Explorer confirmed; "
+        L"promoting process reason=%s",
+        reason
+            ? reason
+            : L"<unknown>");
 
     g_runtimeInitThread =
         CreateThread(
@@ -2492,16 +3998,24 @@ static void PromoteCurrentProcessToShellHost(
 
     if (!g_runtimeInitThread) {
         Wh_Log(
-            L"Shell-host init CreateThread failed error=%lu",
+            L"Shell-host init CreateThread "
+            L"failed error=%lu",
             GetLastError());
-        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
+
+        g_runtimeState.store(
+            RuntimeState::Stopped,
+            std::memory_order_release);
     }
 
-    ReleaseSRWLockExclusive(&g_runtimeInitLock);
+    ReleaseSRWLockExclusive(
+        &g_runtimeInitLock);
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-static CreateWindowExW_t g_createWindowExWOriginal = nullptr;
+using CreateWindowExW_t =
+    decltype(&CreateWindowExW);
+
+static CreateWindowExW_t
+    g_createWindowExWOriginal = nullptr;
 
 static HWND WINAPI CreateWindowExW_Hook(
     DWORD dwExStyle,
@@ -2533,38 +4047,41 @@ static HWND WINAPI CreateWindowExW_Hook(
             lpParam);
 
     if (!hwnd ||
-        g_unloading.load(std::memory_order_acquire)) {
+        g_unloading.load(
+            std::memory_order_acquire)) {
         return hwnd;
     }
 
-    // Once the runtime is healthy, the observer becomes effectively free.
-    // If initialization failed, keep watching for a recreated primary taskbar
-    // so the same Explorer process gets a natural retry opportunity.
-    if (g_shellHostConfirmed.load(std::memory_order_acquire)) {
-        RuntimeState state =
-            g_runtimeState.load(std::memory_order_acquire);
-        if (state == RuntimeState::Ready ||
-            state == RuntimeState::Unsupported) {
-            return hwnd;
-        }
+    RuntimeState state =
+        g_runtimeState.load(
+            std::memory_order_acquire);
+
+    if (state ==
+            RuntimeState::Ready ||
+        state ==
+            RuntimeState::Unsupported) {
+        return hwnd;
     }
 
     bool isPrimaryTaskbar = false;
 
     if (lpClassName &&
-        !IS_INTRESOURCE(lpClassName)) {
+        !IS_INTRESOURCE(
+            lpClassName)) {
+
         isPrimaryTaskbar =
             _wcsicmp(
                 lpClassName,
                 L"Shell_TrayWnd") == 0;
     } else {
-        // Registered classes may be passed to CreateWindowExW by atom. Resolve
-        // the actual class from the resulting HWND in that case.
         wchar_t className[32] = {};
+
         if (GetClassNameW(
                 hwnd,
                 className,
-                ARRAYSIZE(className))) {
+                ARRAYSIZE(
+                    className))) {
+
             isPrimaryTaskbar =
                 _wcsicmp(
                     className,
@@ -2573,7 +4090,6 @@ static HWND WINAPI CreateWindowExW_Hook(
     }
 
     if (!isPrimaryTaskbar) {
-        // Shell_SecondaryTrayWnd intentionally lands here and is ignored.
         return hwnd;
     }
 
@@ -2582,12 +4098,12 @@ static HWND WINAPI CreateWindowExW_Hook(
         hwnd,
         &ownerPid);
 
-    if (ownerPid != GetCurrentProcessId()) {
+    if (ownerPid !=
+        GetCurrentProcessId()) {
         return hwnd;
     }
 
-    // Never do symbol resolution / COM initialization while still inside
-    // CreateWindowExW. Only schedule the process promotion here.
+    // Never resolve symbols or initialize COM on the CreateWindowExW stack.
     PromoteCurrentProcessToShellHost(
         L"primary Shell_TrayWnd created");
 
@@ -2595,39 +4111,74 @@ static HWND WINAPI CreateWindowExW_Hook(
 }
 
 static void StopRuntimeBeforeUninit() {
-    g_unloading.store(true, std::memory_order_release);
+    g_unloading.store(
+        true,
+        std::memory_order_release);
+
+    g_viewSupersessionAvailable.store(
+        false,
+        std::memory_order_release);
 
     if (g_runtimeCancelEvent) {
-        SetEvent(g_runtimeCancelEvent);
+        SetEvent(
+            g_runtimeCancelEvent);
     }
 
     HANDLE initThread = nullptr;
 
-    AcquireSRWLockExclusive(&g_runtimeInitLock);
-    initThread = g_runtimeInitThread;
+    AcquireSRWLockExclusive(
+        &g_runtimeInitLock);
+
+    initThread =
+        g_runtimeInitThread;
     g_runtimeInitThread = nullptr;
-    ReleaseSRWLockExclusive(&g_runtimeInitLock);
+
+    ReleaseSRWLockExclusive(
+        &g_runtimeInitLock);
 
     if (initThread) {
         WaitForSingleObject(
             initThread,
             INFINITE);
-        CloseHandle(initThread);
+
+        CloseHandle(
+            initThread);
     }
+
+    // v0.4 has delayed/event-driven rescue work. Stop those threads before
+    // Windhawk begins removing hooks so no rescue can outlive the callbacks
+    // whose causal state it consumes.
+    StopNotificationCache();
+    StopWorker();
+
+    g_runtimeState.store(
+        RuntimeState::Stopped,
+        std::memory_order_release);
 }
 
 static void StopRuntime() {
     StopNotificationCache();
     StopWorker();
-    g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
+
+    g_runtimeState.store(
+        RuntimeState::Stopped,
+        std::memory_order_release);
 }
 
 BOOL Wh_ModInit() {
+    LoadSettings();
+
     g_runtimeCancelEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
+
     if (!g_runtimeCancelEvent) {
         Wh_Log(
-            L"Failed to create runtime cancellation event error=%lu",
+            L"Failed to create runtime "
+            L"cancellation event error=%lu",
             GetLastError());
         return FALSE;
     }
@@ -2636,17 +4187,19 @@ BOOL Wh_ModInit() {
         L"Init: installing lightweight "
         L"primary-taskbar observer");
 
-    // Deliberately don't load twinui.pcshell.dll or taskbar.dll here. This code
-    // executes in every explorer.exe matched by @include. Non-shell Explorer
-    // processes should remain as inert as possible.
+    // @include explorer.exe can match separate folder processes. Keep those
+    // inert: don't load taskbar.dll or twinui.pcshell.dll until this PID proves
+    // it owns the shell's primary taskbar.
     if (!WindhawkUtils::SetFunctionHook(
             CreateWindowExW,
             CreateWindowExW_Hook,
             &g_createWindowExWOriginal)) {
+
         Wh_Log(
             L"Failed to hook CreateWindowExW");
 
-        CloseHandle(g_runtimeCancelEvent);
+        CloseHandle(
+            g_runtimeCancelEvent);
         g_runtimeCancelEvent = nullptr;
         return FALSE;
     }
@@ -2655,16 +4208,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // Injection/reload can happen after the primary taskbar was already created,
-    // so don't rely solely on observing CreateWindowExW. Detect Shell_TrayWnd
-    // directly first; GetShellWindow is retained as an additional shell-host
-    // signal for manual reloads and unusual startup ordering.
     HWND primaryTaskbar =
         FindCurrentProcessPrimaryTaskbar();
 
     if (primaryTaskbar) {
         Wh_Log(
-            L"Existing primary taskbar=%p belongs to this Explorer process",
+            L"Existing primary taskbar=%p "
+            L"belongs to this Explorer process",
             primaryTaskbar);
 
         PromoteCurrentProcessToShellHost(
@@ -2677,15 +4227,17 @@ void Wh_ModAfterInit() {
 
     if (shellWindow) {
         Wh_Log(
-            L"Existing shell window=%p belongs to this Explorer process",
+            L"Existing shell window=%p "
+            L"belongs to this Explorer process",
             shellWindow);
 
         PromoteCurrentProcessToShellHost(
             L"existing shell window");
     } else {
         Wh_Log(
-            L"No primary taskbar or shell window owned by this PID; "
-            L"remaining inert unless Shell_TrayWnd is created");
+            L"No primary taskbar or shell window "
+            L"owned by this PID; remaining inert "
+            L"unless Shell_TrayWnd is created");
     }
 }
 
@@ -2694,11 +4246,19 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+    Wh_Log(
+        L"Uninit");
+
     StopRuntime();
 
     if (g_runtimeCancelEvent) {
-        CloseHandle(g_runtimeCancelEvent);
+        CloseHandle(
+            g_runtimeCancelEvent);
         g_runtimeCancelEvent = nullptr;
     }
 }
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
+
