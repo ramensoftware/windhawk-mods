@@ -63,7 +63,9 @@
 
 ## 📸 效果截图
 
-![taskbar lyrics](https://i.imgur.com/REPLACE_WITH_YOUR_IMGUR_ID.png)
+![taskbar lyrics](https://github.com/user-attachments/assets/2f91faae-5e25-4d63-a1e8-cfd210967ff3)
+
+![settings](https://github.com/user-attachments/assets/1e7518ef-963d-4214-a7ae-d83dc57360ab)
 
 > 歌词显示在任务栏播放器底部，支持双行（当前行+下一句）、频谱重叠、全中文设置。
 
@@ -111,7 +113,9 @@
 
 ## Screenshots
 
-![taskbar lyrics](https://i.imgur.com/REPLACE_WITH_YOUR_IMGUR_ID.png)
+![taskbar lyrics](https://github.com/user-attachments/assets/2f91faae-5e25-4d63-a1e8-cfd210967ff3)
+
+![settings](https://github.com/user-attachments/assets/1e7518ef-963d-4214-a7ae-d83dc57360ab)
 
 > Lyrics displayed at the bottom of the taskbar player, with dual-line (current + next), visualizer overlay, and full Chinese settings.
 
