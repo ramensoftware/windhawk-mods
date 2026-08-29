@@ -30,7 +30,7 @@
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
-    *   * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
+    * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
 
 ![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 ## ⚠ Important usage note ⚠
@@ -3460,7 +3460,6 @@ bool IsLogonUiInjectionEnabled() {
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {0};
 
-    srand((unsigned int)time(nullptr));
     DWORD myPid = GetCurrentProcessId();
 
     if (!CreateProcessW(
