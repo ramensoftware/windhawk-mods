@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.2
+// @version         1.1.3
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -88,13 +88,13 @@ keeps overhead low and avoids tying Num Lock to the shell process.
     - win: Win (left or right)
     - none: None (always force ON, no override)
 - numLockKeyMode: block
-  $name: Num Lock key without modifier
+  $name: Pressing Num Lock alone
   $description: >-
-    What happens when Num Lock is pressed without the override modifier.
-    Block swallows the key for every process, including games that bind it.
+    What should happen when you press Num Lock without holding Shift (or
+    whichever override you picked).
   $options:
-    - block: Block the key (does nothing)
-    - allow: Allow the press, then force Num Lock back ON on key-up. Holding the key can leave it off until release.
+    - block: Ignore it. Games and other apps will not see the key either.
+    - allow: Let it toggle, then turn Num Lock back on when you let go. If you hold the key, Num Lock can stay off until you release it.
 - safetyCheckSeconds: 10
   $name: Safety check interval (seconds)
   $description: >-
