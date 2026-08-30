@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.1
+// @version         1.1.2
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -26,7 +26,7 @@ covers the few cases the hook cannot see.
 | Normal use | Num Lock stays ON. The Num Lock key does nothing (default). |
 | Hold Shift + press Num Lock | Normal toggle is allowed. |
 | Release Shift | Num Lock is forced back ON if it is off. |
-| Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, or on the safety check. |
+| Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, on unlock/resume/focus change, or on the safety check. |
 | Mod disabled | The Num Lock *key* behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |
 
 Hold **Left Shift** or **Right Shift** to temporarily turn Num Lock off (for
@@ -50,7 +50,9 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   when an elevated window is focused, the injected Num Lock pulse is
   dropped and neither the return value nor `GetLastError` reports it. Run
   Windhawk as administrator if you need the force-on to work while an
-  elevated app is in front. The safety check retries after focus changes.
+  elevated app is in front. When focus moves back to a normal window, a
+  foreground-change hook retries the pulse. The safety check is a slower
+  fallback for cases with no focus change.
 - The hook also cannot see some Remote Desktop / KVM paths. Session-unlock
   / resume handlers and the safety check cover those.
 - If the hook misses a modifier key-up (elevated window or secure desktop),
@@ -58,8 +60,11 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   the worker does the same before skipping a force-on.
 - **Block** also swallows the ToggleKeys accessibility shortcut (hold Num
   Lock for 5 seconds). Use **Allow** if you need that shortcut.
-- Synthetic Num Lock presses this mod sends are tagged and ignored by the
-  hook, so the force-on path cannot fight itself.
+- Synthetic Num Lock presses this mod sends are tagged and ignored by
+  *this* hook, so the force-on path cannot fight itself. Other apps still
+  see those injected presses (the pulse has to reach the OS to move the
+  LED). A game bound to Num Lock can therefore see a synthetic press when
+  a force-on fires, even in **Block** mode.
 - In "allow" mode, holding Num Lock without the modifier can leave it off
   until you release the key. Auto-repeat is swallowed so the LED does not
   flicker; force-on runs on key-up.
@@ -94,8 +99,9 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   $name: Safety check interval (seconds)
   $description: >-
     Optional fallback that re-checks Num Lock in case it was turned off by
-    sleep, RDP, or an elevated app the hook cannot see. 0 disables the timer.
-    10 seconds is a light default.
+    sleep, RDP, or an elevated app the hook cannot see. Focus change, unlock,
+    and resume already retry without this timer. 0 disables it. 10 seconds
+    is a light default.
 */
 // ==/WindhawkModSettings==
 
@@ -119,9 +125,6 @@ constexpr UINT WM_APP_UPDATE_TIMER = WM_APP + 2;
 constexpr UINT WM_APP_QUIT = WM_APP + 3;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
-constexpr UINT_PTR kDeferredForceTimerId = 2;
-constexpr UINT kDeferredForceDelayMs = 50;
-constexpr int kDeferredForceMaxTries = 2;
 
 // dwExtraInfo stamped on every synthetic Num Lock we send, so the hook can
 // let our own keystrokes through without treating them as user input.
@@ -167,9 +170,6 @@ std::atomic<bool> g_swallowedNumLockDown{false};
 // taps during typing do not wake the worker.
 std::atomic<bool> g_overrideUsedThisHold{false};
 
-// Worker thread only. Counts deferred "toggle may not have landed" retries.
-int g_deferredForceTries = 0;
-
 // ---------------------------------------------------------------------------
 // Worker thread / window / hook
 // ---------------------------------------------------------------------------
@@ -186,6 +186,7 @@ std::atomic<bool> g_hookQuit{false};
 HANDLE g_workerReadyEvent = nullptr;
 HANDLE g_hookReadyEvent = nullptr;
 HPOWERNOTIFY g_suspendResumeNotify = nullptr;
+HWINEVENTHOOK g_foregroundHook = nullptr;
 bool g_sessionNotifyRegistered = false;
 
 // ---------------------------------------------------------------------------
@@ -264,11 +265,11 @@ void LoadSettings() {
 bool IsOverrideVk(DWORD vk) {
     switch (CurrentModifier()) {
         case OverrideModifier::Shift:
-            return vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT;
+            return vk == VK_LSHIFT || vk == VK_RSHIFT;
         case OverrideModifier::Ctrl:
-            return vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL;
+            return vk == VK_LCONTROL || vk == VK_RCONTROL;
         case OverrideModifier::Alt:
-            return vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU;
+            return vk == VK_LMENU || vk == VK_RMENU;
         case OverrideModifier::Win:
             return vk == VK_LWIN || vk == VK_RWIN;
         case OverrideModifier::None:
@@ -290,13 +291,6 @@ void SetModifierDown(DWORD vk, bool down) {
         case VK_RMENU:
         case VK_RWIN:
             g_rightModDown.store(down, std::memory_order_relaxed);
-            break;
-        case VK_SHIFT:
-        case VK_CONTROL:
-        case VK_MENU:
-            // Generic VK_* (no L/R). Treat as the left key so a single
-            // flag still covers "modifier is held".
-            g_leftModDown.store(down, std::memory_order_relaxed);
             break;
         default:
             break;
@@ -388,30 +382,15 @@ void SendNumLockPulse() {
     }
 }
 
-enum class ForceResult {
-    Sent,
-    AlreadyOn,
-    OverrideHeld,
-};
-
 // Must run on the worker thread, never inside the LL hook.
-ForceResult ForceNumLockOn(bool logSafety) {
-    if (IsOverrideHeldVerified()) {
-        return ForceResult::OverrideHeld;
-    }
-    if (IsNumLockOn()) {
-        return ForceResult::AlreadyOn;
+void ForceNumLockOn(bool logSafety) {
+    if (IsOverrideHeldVerified() || IsNumLockOn()) {
+        return;
     }
     if (logSafety) {
         Wh_Log(L"Safety check: Num Lock was off, forcing ON");
     }
     SendNumLockPulse();
-    return ForceResult::Sent;
-}
-
-void ArmDeferredForceOn(HWND hwnd) {
-    g_deferredForceTries = 0;
-    SetTimer(hwnd, kDeferredForceTimerId, kDeferredForceDelayMs, nullptr);
 }
 
 void UninstallKeyboardHook() {
@@ -542,6 +521,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         if (IsOverrideHeld()) {
+            // Allow mode: Num Lock went down alone, then Shift was held
+            // before key-up. Honour the hold, and mark it used so Shift-up
+            // still forces ON.
+            g_overrideUsedThisHold.store(true, std::memory_order_relaxed);
             return Pass(nCode, wParam, lParam);
         }
 
@@ -580,26 +563,19 @@ void UnregisterPowerAndSession(HWND hwnd) {
         }
         g_suspendResumeNotify = nullptr;
     }
+
+    if (g_foregroundHook) {
+        UnhookWinEvent(g_foregroundHook);
+        g_foregroundHook = nullptr;
+    }
 }
 
 LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                LPARAM lParam) {
     switch (msg) {
-        case WM_APP_FORCE_ON: {
-            const ForceResult result = ForceNumLockOn(false);
-            switch (result) {
-                case ForceResult::AlreadyOn:
-                    // Toggle may not have been applied yet. Look again shortly.
-                    // Do not retry after Sent: a second pulse would toggle OFF.
-                    // Do not retry after OverrideHeld: the hold is real.
-                    ArmDeferredForceOn(hwnd);
-                    break;
-                case ForceResult::Sent:
-                case ForceResult::OverrideHeld:
-                    break;
-            }
+        case WM_APP_FORCE_ON:
+            ForceNumLockOn(false);
             return 0;
-        }
 
         case WM_APP_UPDATE_TIMER:
             SeedModifierState();
@@ -614,14 +590,6 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_TIMER:
             if (wParam == kSafetyTimerId) {
                 ForceNumLockOn(true);
-            } else if (wParam == kDeferredForceTimerId) {
-                KillTimer(hwnd, kDeferredForceTimerId);
-                if (ForceNumLockOn(false) == ForceResult::AlreadyOn &&
-                    g_deferredForceTries < kDeferredForceMaxTries) {
-                    ++g_deferredForceTries;
-                    SetTimer(hwnd, kDeferredForceTimerId, kDeferredForceDelayMs,
-                             nullptr);
-                }
             }
             return 0;
 
@@ -662,6 +630,22 @@ HMODULE GetCurrentModuleHandle() {
                        reinterpret_cast<LPCWSTR>(&LowLevelKeyboardProc),
                        &module);
     return module;
+}
+
+void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD,
+                                  DWORD) {
+    RequestForceOn();
+}
+
+void RegisterForegroundHook() {
+    g_foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        ForegroundEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_foregroundHook) {
+        Wh_Log(L"SetWinEventHook(EVENT_SYSTEM_FOREGROUND) failed: %lu",
+               GetLastError());
+    }
 }
 
 void RegisterPowerAndSession(HWND hwnd) {
@@ -729,6 +713,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     RegisterPowerAndSession(hwnd);
+    RegisterForegroundHook();
 
     SeedModifierState();
     ForceNumLockOn(false);
@@ -746,7 +731,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     hwnd = g_workerHwnd.exchange(nullptr, std::memory_order_acq_rel);
     if (hwnd) {
         KillTimer(hwnd, kSafetyTimerId);
-        KillTimer(hwnd, kDeferredForceTimerId);
         UnregisterPowerAndSession(hwnd);
         DestroyWindow(hwnd);
     }
@@ -789,6 +773,13 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     TryInstallKeyboardHook();
+    for (int attempt = 1; attempt < 3 &&
+                          !g_keyboardHook.load(std::memory_order_acquire) &&
+                          !g_hookQuit.load(std::memory_order_relaxed);
+         ++attempt) {
+        Sleep(100);
+        TryInstallKeyboardHook();
+    }
 
     if (g_hookReadyEvent) {
         SetEvent(g_hookReadyEvent);
@@ -832,6 +823,8 @@ BOOL WhTool_ModInit() {
 
     if (WaitForSingleObject(g_workerReadyEvent, 5000) != WAIT_OBJECT_0) {
         Wh_Log(L"Worker thread did not become ready in time");
+        WhTool_ModUninit();
+        return FALSE;
     }
 
     g_hookThread =
@@ -844,6 +837,8 @@ BOOL WhTool_ModInit() {
 
     if (WaitForSingleObject(g_hookReadyEvent, 5000) != WAIT_OBJECT_0) {
         Wh_Log(L"Hook thread did not become ready in time");
+        WhTool_ModUninit();
+        return FALSE;
     }
 
     if (!g_workerHwnd.load(std::memory_order_acquire)) {
