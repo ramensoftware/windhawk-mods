@@ -91,9 +91,12 @@ grabbing a bare key system-wide.
   $name: Hotkey
   $description: >-
     Combine modifiers with '+': Ctrl, Alt, Shift, Win, plus exactly one
-    key (a letter, digit, F1-F24, or a name like Space/Tab/Enter/Esc/Up/
-    Down/Left/Right/Insert/Delete/Home/End/PageUp/PageDown). At least one
-    modifier is required — a hotkey with no modifier is rejected instead
+    key — a letter, digit, F1-F24, a name like Space/Tab/Enter/Esc/Up/
+    Down/Left/Right/Insert/Delete/Home/End/PageUp/PageDown/Menu, a numpad
+    key like Num0-Num9/NumAdd/NumSub/NumMul/NumDiv, or a single
+    punctuation/OEM character (e.g. ';', '/', '[') resolved for your
+    current keyboard layout. At least one modifier is required — a hotkey
+    with no modifier is rejected instead
     of registering a bare key system-wide. Example: "Ctrl+Alt+M".
 - overlaySize: 72
   $name: Overlay size (px)
@@ -245,6 +248,15 @@ UINT VKFromKeyName(const wchar_t* name) {
         {L"BACKSPACE", VK_BACK},    {L"CAPSLOCK", VK_CAPITAL},
         {L"NUMLOCK", VK_NUMLOCK},   {L"SCROLLLOCK", VK_SCROLL},
         {L"PRINTSCREEN", VK_SNAPSHOT}, {L"PAUSE", VK_PAUSE},
+        {L"MENU", VK_APPS},
+        {L"NUM0", VK_NUMPAD0},      {L"NUM1", VK_NUMPAD1},
+        {L"NUM2", VK_NUMPAD2},      {L"NUM3", VK_NUMPAD3},
+        {L"NUM4", VK_NUMPAD4},      {L"NUM5", VK_NUMPAD5},
+        {L"NUM6", VK_NUMPAD6},      {L"NUM7", VK_NUMPAD7},
+        {L"NUM8", VK_NUMPAD8},      {L"NUM9", VK_NUMPAD9},
+        {L"NUMADD", VK_ADD},        {L"NUMSUB", VK_SUBTRACT},
+        {L"NUMMUL", VK_MULTIPLY},   {L"NUMDIV", VK_DIVIDE},
+        {L"NUMDECIMAL", VK_DECIMAL},
     };
 
     wchar_t upper[32];
@@ -255,6 +267,18 @@ UINT VKFromKeyName(const wchar_t* name) {
     for (const auto& e : kNamedKeys) {
         if (wcscmp(upper, e.name) == 0) return e.vk;
     }
+
+    // Fallback for anything not covered above: punctuation and other
+    // OEM-layout keys (';', '/', '[', etc.) that VkKeyScanW can resolve
+    // for the current keyboard layout, letters/digits already handled
+    // earlier. Only applies to single-character tokens.
+    if (name[0] != L'\0' && name[1] == L'\0') {
+        SHORT scan = VkKeyScanW(name[0]);
+        if (scan != -1) {
+            return LOBYTE(scan);
+        }
+    }
+
     return 0;
 }
 
@@ -351,12 +375,10 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 // Audio (Core Audio API) — resolved fresh on demand, event-driven updates
 // ---------------------------------------------------------------------------
-// g_audioLock is defensive, not actually contended today: ResolveAudioEndpoint,
-// ToggleMicMute, GetMicPeak, and CleanupAudio only ever run on the overlay
-// thread, and the two COM notification callbacks below deliberately only
-// PostMessage rather than touching these pointers directly. Kept in case
-// that assumption changes.
-CRITICAL_SECTION g_audioLock;
+// ResolveAudioEndpoint, ToggleMicMute, GetMicPeak, and CleanupAudio only
+// ever run on the overlay thread; the two COM notification callbacks below
+// deliberately only PostMessage rather than touching these pointers
+// directly, so no locking is needed here.
 IMMDeviceEnumerator* g_pEnumerator = nullptr;
 IMMDevice* g_pCaptureDevice = nullptr;
 IAudioEndpointVolume* g_pEndpointVolume = nullptr;
@@ -454,7 +476,6 @@ void ReleaseAudioEndpoint_NoLock() {
 // fallback from ToggleMicMute if nothing has been resolved yet — not on
 // every toggle, since the cached endpoint is kept fresh by the event path.
 bool ResolveAudioEndpoint() {
-    EnterCriticalSection(&g_audioLock);
     ReleaseAudioEndpoint_NoLock();
 
     if (!g_pEnumerator) {
@@ -464,7 +485,6 @@ bool ResolveAudioEndpoint() {
                               (void**)&g_pEnumerator);
         if (FAILED(hr) || !g_pEnumerator) {
             Wh_Log(L"Failed to create device enumerator: 0x%08X", hr);
-            LeaveCriticalSection(&g_audioLock);
             return false;
         }
         g_pEnumerator->RegisterEndpointNotificationCallback(
@@ -475,7 +495,6 @@ bool ResolveAudioEndpoint() {
                                                           &g_pCaptureDevice);
     if (FAILED(hr) || !g_pCaptureDevice) {
         Wh_Log(L"No default capture device: 0x%08X", hr);
-        LeaveCriticalSection(&g_audioLock);
         return false;
     }
 
@@ -505,12 +524,10 @@ bool ResolveAudioEndpoint() {
         g_pMeterInfo = nullptr;
     }
 
-    LeaveCriticalSection(&g_audioLock);
     return true;
 }
 
 void CleanupAudio() {
-    EnterCriticalSection(&g_audioLock);
     ReleaseAudioEndpoint_NoLock();
     if (g_pEnumerator) {
         g_pEnumerator->UnregisterEndpointNotificationCallback(
@@ -518,22 +535,16 @@ void CleanupAudio() {
         g_pEnumerator->Release();
         g_pEnumerator = nullptr;
     }
-    LeaveCriticalSection(&g_audioLock);
 }
 
 void ToggleMicMute() {
-    EnterCriticalSection(&g_audioLock);
-    bool haveEndpoint = g_pEndpointVolume != nullptr;
-    LeaveCriticalSection(&g_audioLock);
-
     // The cached endpoint is kept fresh by OnDefaultDeviceChanged (event-
     // driven), so a full re-resolve here isn't needed on the hot path —
     // only as a one-time fallback if nothing has been resolved yet.
-    if (!haveEndpoint) {
+    if (!g_pEndpointVolume) {
         ResolveAudioEndpoint();
     }
 
-    EnterCriticalSection(&g_audioLock);
     if (g_pEndpointVolume) {
         BOOL muted = FALSE;
         if (SUCCEEDED(g_pEndpointVolume->GetMute(&muted)) &&
@@ -543,26 +554,19 @@ void ToggleMicMute() {
             Wh_Log(L"Mute toggle failed; leaving indicator state unchanged");
         }
     }
-    LeaveCriticalSection(&g_audioLock);
 }
 
 float g_animPhase = 0.0f;
 
 float GetMicPeak() {
-    float peak = 0.0f;
-    bool haveMeter;
-    EnterCriticalSection(&g_audioLock);
-    haveMeter = g_pMeterInfo != nullptr;
-    if (haveMeter) {
+    if (g_pMeterInfo) {
+        float peak = 0.0f;
         g_pMeterInfo->GetPeakValue(&peak);
+        return peak;
     }
-    LeaveCriticalSection(&g_audioLock);
-    if (!haveMeter) {
-        // Fallback so the ring still animates if real peak metering isn't
-        // available on this system/build.
-        peak = (sinf(g_animPhase * 6.2831853f) * 0.5f + 0.5f) * 0.5f;
-    }
-    return peak;
+    // Fallback so the ring still animates if real peak metering isn't
+    // available on this system/build.
+    return (sinf(g_animPhase * 6.2831853f) * 0.5f + 0.5f) * 0.5f;
 }
 
 // ---------------------------------------------------------------------------
@@ -572,7 +576,12 @@ float GetMicPeak() {
 UINT MonitorDpi(HMONITOR hMonitor) {
     UINT dpiX = 96, dpiY = 96;
     if (hMonitor) {
-        GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        UINT resultX = 96, resultY = 96;
+        if (SUCCEEDED(GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &resultX,
+                                        &resultY)) &&
+            resultX > 0) {
+            dpiX = resultX;
+        }
     }
     return dpiX;
 }
@@ -921,29 +930,34 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             return 0;
         }
         case WM_TIMER: {
-            if (wParam == TIMER_ANIM) {
-                if (!g_micMuted) {
-                    g_animPhase += 0.045f;
-                    if (g_animPhase > 1.0f) g_animPhase -= 1.0f;
-                }
-                float peak = g_micMuted ? 0.0f : GetMicPeak();
-                RenderCurrentState(hwnd, peak);
-
-                if (!g_settings.alwaysShow && g_overlayVisible &&
-                    !g_dragging) {
-                    bool activeSignal = g_settings.keepVisibleWhileActive &&
-                                        !g_micMuted && peak > 0.03f;
-                    DWORD elapsed = GetTickCount() - g_lastActivityTick;
-                    if (!activeSignal &&
-                        elapsed > (DWORD)g_settings.overlayDurationMs) {
-                        ShowWindow(hwnd, SW_HIDE);
-                        g_overlayVisible = false;
-                    }
-                }
-                EnsureTimerState(hwnd);
-            }
-            return 0;
+    if (wParam == TIMER_ANIM) {
+        if (!g_micMuted) {
+            g_animPhase += 0.045f;
+            if (g_animPhase > 1.0f) g_animPhase -= 1.0f;
         }
+        float peak = g_micMuted ? 0.0f : GetMicPeak();
+        RenderCurrentState(hwnd, peak);
+
+        if (!g_settings.alwaysShow && g_overlayVisible && !g_dragging) {
+            bool activeSignal = g_settings.keepVisibleWhileActive &&
+                                !g_micMuted && peak > 0.03f;
+            
+            // Perbarui tick jika ada sinyal suara aktif
+            if (activeSignal) {
+                g_lastActivityTick = GetTickCount();
+            }
+
+            DWORD elapsed = GetTickCount() - g_lastActivityTick;
+            if (!activeSignal &&
+                elapsed > (DWORD)g_settings.overlayDurationMs) {
+                ShowWindow(hwnd, SW_HIDE);
+                g_overlayVisible = false;
+            }
+        }
+        EnsureTimerState(hwnd);
+    }
+    return 0;
+}
         case WM_NCHITTEST: {
             // Only draggable while click-through is off — with it on, the
             // window is WS_EX_TRANSPARENT and never receives mouse input
@@ -1089,7 +1103,6 @@ DWORD WINAPI ModThreadProc(LPVOID) {
 // ---------------------------------------------------------------------------
 BOOL WhTool_ModInit() {
     LoadSettings();
-    InitializeCriticalSection(&g_audioLock);
     g_hThread = CreateThread(nullptr, 0, ModThreadProc, nullptr, 0,
                               &g_threadId);
     return g_hThread != nullptr;
@@ -1126,9 +1139,9 @@ void WhTool_ModUninit() {
         CloseHandle(g_hThread);
         g_hThread = nullptr;
     }
-    DeleteCriticalSection(&g_audioLock);
 }
 
+// clang-format off
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1237,7 +1250,7 @@ void Wh_ModAfterInit() {
 
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -1246,8 +1259,7 @@ void Wh_ModAfterInit() {
 
     WCHAR
     commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                1];
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -1264,13 +1276,13 @@ void Wh_ModAfterInit() {
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                  "CreateProcessInternalW");
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -1282,9 +1294,8 @@ void Wh_ModAfterInit() {
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                  nullptr, nullptr, FALSE,
-                                  NORMAL_PRIORITY_CLASS, nullptr, nullptr,
-                                  &si, &pi, nullptr)) {
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
@@ -1309,3 +1320,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on
