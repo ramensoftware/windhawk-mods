@@ -2,8 +2,8 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.0
-// @author          Tony Thompson
+// @version         1.1.1
+// @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32 -lwtsapi32
