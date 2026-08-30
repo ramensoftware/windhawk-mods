@@ -407,9 +407,16 @@ struct Settings
     bool DisableCtrlEsc;
 } g_settings;
 
-bool StandardShortcutsEqual(const Settings& a, const Settings& b)
+bool ExplorerShortcutsEqual(const Settings& a, const Settings& b)
 {
-    return a.DisableWinB == b.DisableWinB &&
+    return (a.DisableWinA == 1) == (b.DisableWinA == 1) &&
+           (a.DisableWinC == 1) == (b.DisableWinC == 1) &&
+           (a.DisableWinK == 1) == (b.DisableWinK == 1) &&
+           (a.DisableWinN == 1) == (b.DisableWinN == 1) &&
+           (a.DisableWinP == 1) == (b.DisableWinP == 1) &&
+           (a.DisableWinU == 1) == (b.DisableWinU == 1) &&
+           (a.DisableWinSlash == 1) == (b.DisableWinSlash == 1) &&
+           a.DisableWinB == b.DisableWinB &&
            a.DisableWinD == b.DisableWinD &&
            a.DisableWinE == b.DisableWinE &&
            a.DisableWinF == b.DisableWinF &&
@@ -429,14 +436,11 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinX == b.DisableWinX &&
            a.DisableWinY == b.DisableWinY &&
            a.DisableWinZ == b.DisableWinZ &&
-           a.DisableWinTab == b.DisableWinTab &&
-           a.DisableWinUp == b.DisableWinUp &&
-           a.DisableWinDown == b.DisableWinDown &&
-           a.DisableWinLeft == b.DisableWinLeft &&
-           a.DisableWinRight == b.DisableWinRight &&
            a.DisableWinHome == b.DisableWinHome &&
            a.DisableWinShiftC == b.DisableWinShiftC &&
            a.DisableWinShiftM == b.DisableWinShiftM &&
+           a.DisableWinShiftR == b.DisableWinShiftR &&
+           a.DisableWinShiftS == b.DisableWinShiftS &&
            a.DisableWinComma == b.DisableWinComma &&
            a.DisableWinPause == b.DisableWinPause &&
            a.DisableWinCtrlD == b.DisableWinCtrlD &&
@@ -456,18 +460,10 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinCtrlN == b.DisableWinCtrlN &&
            a.DisableWinCtrlO == b.DisableWinCtrlO &&
            a.DisableWinCtrlS == b.DisableWinCtrlS &&
-           a.DisableWinSpace == b.DisableWinSpace &&
-           a.DisableWinShiftR == b.DisableWinShiftR &&
-           a.DisableWinShiftS == b.DisableWinShiftS &&
            a.DisableWinAltK == b.DisableWinAltK &&
            a.DisableWinPeriod == b.DisableWinPeriod &&
            a.DisableWinSemicolon == b.DisableWinSemicolon &&
            a.DisableWinPrtSc == b.DisableWinPrtSc &&
-           a.DisableWinShiftLeft == b.DisableWinShiftLeft &&
-           a.DisableWinShiftRight == b.DisableWinShiftRight &&
-           a.DisableWinShiftUp == b.DisableWinShiftUp &&
-           a.DisableWinShiftDown == b.DisableWinShiftDown &&
-           a.DisableOfficeHotkeys == b.DisableOfficeHotkeys &&
            a.DisableWinAltD == b.DisableWinAltD &&
            a.DisableWinAltB == b.DisableWinAltB &&
            a.DisableWinAltR == b.DisableWinAltR &&
@@ -475,29 +471,13 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinAltPrtSc == b.DisableWinAltPrtSc &&
            a.DisableWinAltT == b.DisableWinAltT &&
            a.DisableWinAltM == b.DisableWinAltM &&
-           a.DisableWinCtrlShiftB == b.DisableWinCtrlShiftB &&
-           a.DisableWinCtrlQ == b.DisableWinCtrlQ &&
-           a.DisableAltShift == b.DisableAltShift &&
-           a.DisableWinKey == b.DisableWinKey &&
-           a.DisableCtrlEsc == b.DisableCtrlEsc;
+           a.DisableWinCtrlQ == b.DisableWinCtrlQ;
 }
 
-bool HasAnyStandardShortcutsDisabled()
+bool HasAnyExplorerShortcutsDisabled()
 {
     Settings emptySettings{};
-    return !StandardShortcutsEqual(g_settings, emptySettings);
-}
-
-bool SettingsEqual(const Settings& a, const Settings& b)
-{
-    return a.DisableWinA == b.DisableWinA &&
-           a.DisableWinC == b.DisableWinC &&
-           a.DisableWinK == b.DisableWinK &&
-           a.DisableWinN == b.DisableWinN &&
-           a.DisableWinP == b.DisableWinP &&
-           a.DisableWinU == b.DisableWinU &&
-           a.DisableWinSlash == b.DisableWinSlash &&
-           StandardShortcutsEqual(a, b);
+    return !ExplorerShortcutsEqual(g_settings, emptySettings);
 }
 
 
@@ -765,13 +745,13 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
             // Hardcoded keys that bypass RegisterHotKey
             if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_SPACE)
                 return true;
-            if (vk == 'A' && g_settings.DisableWinA > 0) return true;
-            if (vk == 'C' && g_settings.DisableWinC > 0) return true;
-            if (vk == 'K' && g_settings.DisableWinK > 0) return true;
-            if (vk == 'N' && g_settings.DisableWinN > 0) return true;
-            if (vk == 'P' && g_settings.DisableWinP > 0) return true;
-            if (vk == 'U' && g_settings.DisableWinU > 0) return true;
-            if (vk == VK_OEM_2 && g_settings.DisableWinSlash > 0) return true;
+            if (vk == 'A' && g_settings.DisableWinA == 2) return true;
+            if (vk == 'C' && g_settings.DisableWinC == 2) return true;
+            if (vk == 'K' && g_settings.DisableWinK == 2) return true;
+            if (vk == 'N' && g_settings.DisableWinN == 2) return true;
+            if (vk == 'P' && g_settings.DisableWinP == 2) return true;
+            if (vk == 'U' && g_settings.DisableWinU == 2) return true;
+            if (vk == VK_OEM_2 && g_settings.DisableWinSlash == 2) return true;
         } else {
             // Win+Shift+Arrows
             if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
@@ -932,10 +912,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         {
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
         }
-
-        // Fast path for dummy keys (used to mask Start Menu or language switch)
-        if (vkCode == 0xFF || vkCode == 0xE8)
-            return CallNextHookEx(g_hHook, nCode, wParam, lParam);
 
         bool isInitialDown = false;
         if (vkCode < 256)
@@ -1184,10 +1160,10 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return (g_settings.DisableWinA > 0) || (g_settings.DisableWinC > 0) || 
-           (g_settings.DisableWinK > 0) || (g_settings.DisableWinN > 0) || 
-           (g_settings.DisableWinP > 0) || (g_settings.DisableWinU > 0) || 
-           (g_settings.DisableWinSlash > 0) || 
+    return (g_settings.DisableWinA == 2) || (g_settings.DisableWinC == 2) || 
+           (g_settings.DisableWinK == 2) || (g_settings.DisableWinN == 2) || 
+           (g_settings.DisableWinP == 2) || (g_settings.DisableWinU == 2) || 
+           (g_settings.DisableWinSlash == 2) || 
            g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
@@ -1228,10 +1204,59 @@ bool IsExplorerUptimeLarge()
         current.LowPart = systemTime.dwLowDateTime;
         current.HighPart = systemTime.dwHighDateTime;
         
-        // 5 seconds = 50,000,000 intervals of 100ns (distinguishes fresh boot from mid-session re-enable)
-        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 50000000ULL)
+        // 15 seconds = 150,000,000 intervals of 100ns (distinguishes fresh boot from mid-session re-enable)
+        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 150000000ULL)
             return true;
     }
+    return false;
+}
+
+bool ProbeIsHotkeyRegistered(UINT fsModifiers, UINT vk)
+{
+    const int kProbeHotkeyId = 0xBEEF;
+    if (RegisterHotKey(NULL, kProbeHotkeyId, fsModifiers, vk))
+    {
+        UnregisterHotKey(NULL, kProbeHotkeyId);
+        return false; // Hotkey is free: Explorer does not hold it
+    }
+    return true; // Hotkey is registered by Explorer or another process
+}
+
+bool AreAnyDisabledExplorerHotkeysRegistered()
+{
+    if (g_settings.DisableWinE && ProbeIsHotkeyRegistered(MOD_WIN, 'E')) return true;
+    if (g_settings.DisableWinR && ProbeIsHotkeyRegistered(MOD_WIN, 'R')) return true;
+    if (g_settings.DisableWinD && ProbeIsHotkeyRegistered(MOD_WIN, 'D')) return true;
+    if (g_settings.DisableWinI && ProbeIsHotkeyRegistered(MOD_WIN, 'I')) return true;
+    if (g_settings.DisableWinS && ProbeIsHotkeyRegistered(MOD_WIN, 'S')) return true;
+    if (g_settings.DisableWinV && ProbeIsHotkeyRegistered(MOD_WIN, 'V')) return true;
+    if (g_settings.DisableWinX && ProbeIsHotkeyRegistered(MOD_WIN, 'X')) return true;
+    if (g_settings.DisableWinB && ProbeIsHotkeyRegistered(MOD_WIN, 'B')) return true;
+    if (g_settings.DisableWinG && ProbeIsHotkeyRegistered(MOD_WIN, 'G')) return true;
+    if (g_settings.DisableWinH && ProbeIsHotkeyRegistered(MOD_WIN, 'H')) return true;
+    if (g_settings.DisableWinM && ProbeIsHotkeyRegistered(MOD_WIN, 'M')) return true;
+    if (g_settings.DisableWinZ && ProbeIsHotkeyRegistered(MOD_WIN, 'Z')) return true;
+    if ((g_settings.DisableWinA == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'A')) return true;
+    if ((g_settings.DisableWinC == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'C')) return true;
+    if ((g_settings.DisableWinK == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'K')) return true;
+    if ((g_settings.DisableWinN == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'N')) return true;
+    if ((g_settings.DisableWinP == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'P')) return true;
+    if ((g_settings.DisableWinU == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'U')) return true;
+    if ((g_settings.DisableWinSlash == 1) && ProbeIsHotkeyRegistered(MOD_WIN, VK_OEM_2)) return true;
+    if (g_settings.DisableWinShiftS && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'S')) return true;
+    if (g_settings.DisableWinShiftR && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'R')) return true;
+    if (g_settings.DisableWinShiftC && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'C')) return true;
+    if (g_settings.DisableWinCtrlD && ProbeIsHotkeyRegistered(MOD_WIN | MOD_CONTROL, 'D')) return true;
+    if (g_settings.DisableWinCtrlQ && ProbeIsHotkeyRegistered(MOD_WIN | MOD_CONTROL, 'Q')) return true;
+    if (g_settings.DisableWinAltD && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'D')) return true;
+    if (g_settings.DisableWinAltG && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'G')) return true;
+    if (g_settings.DisableWinAltR && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'R')) return true;
+    if (g_settings.DisableWinAltB && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'B')) return true;
+
+    // Fallback probe for general Explorer registration state
+    if (ProbeIsHotkeyRegistered(MOD_WIN, 'R') || ProbeIsHotkeyRegistered(MOD_WIN, 'E'))
+        return true;
+
     return false;
 }
 
@@ -1267,8 +1292,8 @@ BOOL Wh_ModInit()
                 Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
         }
 
-        // Prompt ONLY if Explorer is running mid-session (>5s) AND at least one standard shortcut is disabled
-        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyStandardShortcutsDisabled())
+        // Prompt ONLY if Explorer is running mid-session (>15s) AND at least one Explorer shortcut is disabled AND Explorer holds it
+        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyExplorerShortcutsDisabled() && AreAnyDisabledExplorerHotkeysRegistered())
         {
             PromptForExplorerRestart();
         }
@@ -1289,40 +1314,16 @@ void Wh_ModUninit()
 
     if (g_isExplorer)
     {
-        // 1. Close any pending prompt from a previous settings change
-        if (HWND promptWindow = g_restartExplorerPromptWindow)
+        // 1. Signal any pending prompt dialog from a prior settings change to close
+        if (HWND promptWindow = g_restartExplorerPromptWindow.load())
         {
             PostMessage(promptWindow, WM_CLOSE, 0, 0);
         }
 
+        // 2. Safe bounded wait to let the prompt thread exit cleanly
         if (g_restartExplorerPromptThread)
         {
-            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-            CloseHandle(g_restartExplorerPromptThread);
-            g_restartExplorerPromptThread = nullptr;
-        }
-
-        // 2. If standard shortcuts were disabled, prompt the user on mod unload/disable
-        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN))
-        {
-            if (HasAnyStandardShortcutsDisabled())
-            {
-                PromptForExplorerRestart();
-            }
-        }
-
-        // 3. Bounded wait for the unload prompt to guarantee safety without hanging
-        if (g_restartExplorerPromptThread)
-        {
-            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
-            {
-                // User did not respond within 30 seconds: close dialog
-                if (HWND promptWindow = g_restartExplorerPromptWindow)
-                {
-                    PostMessage(promptWindow, WM_CLOSE, 0, 0);
-                }
-                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-            }
+            WaitForSingleObject(g_restartExplorerPromptThread, 1000);
             CloseHandle(g_restartExplorerPromptThread);
             g_restartExplorerPromptThread = nullptr;
         }
@@ -1342,7 +1343,7 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
+    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !ExplorerShortcutsEqual(oldSettings, g_settings))
     {
         PromptForExplorerRestart();
     }
