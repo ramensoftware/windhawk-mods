@@ -194,6 +194,8 @@ namespace WindhawkUtils {
 #define WM_APP_CYCLE_AND_SWITCH  (WM_USER + 113)
 #define WM_APP_APPLY_SELECTION   (WM_USER + 114)
 #define WM_APP_HIDE_SWITCHER     (WM_USER + 115)
+#define WM_APP_CLICK_OUTSIDE_TEST (WM_USER + 116)
+#define WM_APP_REFRESH_INSTALL   (WM_USER + 117)
 
 static const wchar_t* kFlyoutClassName = L"Windhawk_Win78LanguageFlyout";
 
@@ -224,7 +226,6 @@ static bool g_flyoutClassRegistered = false;
 
 static ModContext g_Ctx;
 static BOOL g_Initialized = FALSE;
-static UINT g_uTaskbarCreated = 0;
 
 static std::atomic<HWND> g_hFlyoutWnd{nullptr};
 static std::atomic<DWORD> g_dwFlyoutOwnerThreadId{0};
@@ -234,7 +235,10 @@ static std::atomic<HWND> g_hClickedTaskbar{nullptr};
 
 static HWND G_hSubclassedToolbar = NULL;
 static HWND G_hSubclassedIndicator = NULL;
-static HWND G_hSubclassedSecToolbar = NULL;
+// All secondary taskbars (one per additional monitor) that we've subclassed.
+// The primary taskbar lives in G_hSubclassedToolbar; every secondary taskbar's
+// toolbar needs its own entry so multi-monitor setups all get interception.
+static std::vector<HWND> G_hSubclassedSecToolbars;
 
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
@@ -471,6 +475,11 @@ static std::atomic<bool> g_enableAltShift{true};
 static std::atomic<bool> g_hookTrayClicks{true};
 static std::atomic<bool> g_enableCustomHotkey{false};
 
+// Set after the worker thread confirms this explorer instance is the one that
+// owns Shell_TrayWnd. Re-evaluated periodically (the owner can change during an
+// Explorer/taskbar restart), and gates the LL hooks and ShowWindow hook so a
+// second explorer instance never double-handles input.
+static std::atomic<bool> g_isMainShell{false};
 static std::atomic<bool> g_isWinSpaceCycling{false};
 static std::atomic<bool> g_altPressed{false};
 static std::atomic<bool> g_shiftPressed{false};
@@ -478,6 +487,13 @@ static std::atomic<bool> g_ctrlPressed{false};
 static std::atomic<bool> g_interveningKeyPressed{false};
 static std::atomic<bool> g_altShiftChordArmed{false};
 static std::atomic<bool> g_ctrlShiftChordArmed{false};
+
+// Forward declarations: these are defined further down but are used by the
+// worker / hook threads above their definitions.
+static bool IsExplorerProcess();
+static bool IsMainExplorerShell();
+static void EvaluateShellRole();
+static bool WinKeysReleased();
 
 class ScopedHookHolder {
 public:
@@ -724,6 +740,52 @@ static std::wstring GetSubstituteKlid(const std::wstring& klid) {
     return klid;
 }
 
+// Some keyboard layouts carry a hardware "Layout Id" in the HKL's high word
+// (top nibble == 0xF) rather than a KLID prefix. Those must be resolved by
+// scanning HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layouts for a
+// subkey whose "Layout Id" value matches devId & 0x0FFF; the subkey name is
+// the real KLID. Returns empty when no match is found.
+static std::wstring FindKlidByLayoutId(WORD layoutId) {
+    std::wstring result;
+    try {
+        if (layoutId == 0) return result;
+        HKEY hRoot = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts",
+                          0, KEY_READ, &hRoot) != ERROR_SUCCESS) {
+            return result;
+        }
+
+        for (DWORD i = 0; ; ++i) {
+            wchar_t subKey[256] = {};
+            DWORD subLen = ARRAYSIZE(subKey);
+            FILETIME ft{};
+            if (RegEnumKeyExW(hRoot, i, subKey, &subLen, nullptr, nullptr, nullptr, &ft) != ERROR_SUCCESS) {
+                break;
+            }
+
+            HKEY hSub = nullptr;
+            if (RegOpenKeyExW(hRoot, subKey, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+                wchar_t idBuf[16] = {};
+                DWORD cb = sizeof(idBuf);
+                if (RegQueryValueExW(hSub, L"Layout Id", nullptr, nullptr,
+                                     reinterpret_cast<LPBYTE>(idBuf), &cb) == ERROR_SUCCESS && idBuf[0]) {
+                    wchar_t* end = nullptr;
+                    unsigned long parsed = wcstoul(idBuf, &end, 16);
+                    if (end != idBuf && (parsed & 0xFFFF) == layoutId) {
+                        result = subKey;
+                        RegCloseKey(hSub);
+                        break;
+                    }
+                }
+                RegCloseKey(hSub);
+            }
+        }
+        RegCloseKey(hRoot);
+    } catch (...) {}
+    return result;
+}
+
 static void RefreshKeyboardLayouts() {
     try {
         UINT count = GetKeyboardLayoutList(0, nullptr);
@@ -761,14 +823,30 @@ static void RefreshKeyboardLayouts() {
                 foundActiveIndex = i;
             }
 
-            wchar_t klidBuf[16] = {};
-            DWORD devId = static_cast<DWORD>(HIWORD(reinterpret_cast<uintptr_t>(hkl)));
-            if ((devId & 0xF000) == 0xF000) {
-                wsprintfW(klidBuf, L"%08X", devId);
+            // Derive the KLID from the HKL. The low word is the LANGID, the
+            // high word is the device/layout id. Standard layouts have a zero
+            // (or language-equal) high word; a 0xFxxx high word is a hardware
+            // "Layout Id" that must be resolved through the registry.
+            WORD dev = HIWORD(reinterpret_cast<uintptr_t>(hkl));
+            WORD lang = LOWORD(reinterpret_cast<uintptr_t>(hkl));
+            if ((dev & 0xF000) == 0xF000) {
+                // Layout-Id variant: resolve the real KLID from the registry.
+                std::wstring klid = FindKlidByLayoutId(dev & 0x0FFF);
+                if (klid.empty()) {
+                    wchar_t buf[16] = {};
+                    wsprintfW(buf, L"%08X", static_cast<UINT>(lang));
+                    klid = buf;
+                }
+                item.klid = klid;
+            } else if (dev == 0 || dev == lang) {
+                wchar_t klidBuf[16] = {};
+                wsprintfW(klidBuf, L"%08X", static_cast<UINT>(lang));
+                item.klid = klidBuf;
             } else {
-                wsprintfW(klidBuf, L"%08X", static_cast<UINT>(item.langId));
+                wchar_t klidBuf[16] = {};
+                wsprintfW(klidBuf, L"%04X%04X", static_cast<UINT>(dev), static_cast<UINT>(lang));
+                item.klid = klidBuf;
             }
-            item.klid = klidBuf;
 
             std::wstring effectiveKlid = GetSubstituteKlid(item.klid);
 
@@ -1878,6 +1956,12 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
         return ShowWindow_Original ? ShowWindow_Original(hWnd, nCmdShow) : ShowWindow(hWnd, nCmdShow);
     }
 
+    // Only the shell's explorer may suppress/replace the modern input-switch
+    // overlay; a second instance must leave Shows alone.
+    if (!g_isMainShell.load(std::memory_order_relaxed)) {
+        return ShowWindow_Original ? ShowWindow_Original(hWnd, nCmdShow) : ShowWindow(hWnd, nCmdShow);
+    }
+
     if (g_hookTrayClicks.load(std::memory_order_relaxed) && hWnd && IsWindow(hWnd) && nCmdShow != SW_HIDE) {
         WCHAR className[128] = {0};
         if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) > 0) {
@@ -1951,7 +2035,13 @@ static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_NCDESTROY) {
         EnterCriticalSection(&g_Ctx.csLock);
         if (hWnd == G_hSubclassedToolbar) G_hSubclassedToolbar = NULL;
-        if (hWnd == G_hSubclassedSecToolbar) G_hSubclassedSecToolbar = NULL;
+        for (size_t i = 0; i < G_hSubclassedSecToolbars.size(); ) {
+            if (G_hSubclassedSecToolbars[i] == hWnd) {
+                G_hSubclassedSecToolbars.erase(G_hSubclassedSecToolbars.begin() + i);
+            } else {
+                ++i;
+            }
+        }
         LeaveCriticalSection(&g_Ctx.csLock);
         return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
@@ -2059,6 +2149,19 @@ static BOOL InstallTrayInterceptionInternal() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (!hTray) return FALSE;
 
+    // The tray tree (and the WNDPROC subclasses we attach, which point into
+    // this image) can only be subclassed if the taskbar belongs to this
+    // process. FindWindow returns whichever Explorer currently owns the
+    // taskbar, which need not be us (e.g. during a restart). Subclassing a
+    // foreign window would fail at install time but we'd still record the
+    // HWND — and then unload would SendMessage a dangling subclass across
+    // processes. Refuse foreign trays up front.
+    DWORD trayPid = 0;
+    GetWindowThreadProcessId(hTray, &trayPid);
+    if (trayPid != GetCurrentProcessId()) {
+        return FALSE;
+    }
+
     HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
     HWND hSysPager = hNotify ? FindWindowExW(hNotify, NULL, L"SysPager", NULL) : NULL;
     HWND hToolbar = hSysPager ? FindWindowExW(hSysPager, NULL, L"ToolbarWindow32", NULL) : NULL;
@@ -2081,8 +2184,9 @@ static BOOL InstallTrayInterceptionInternal() {
         if (oldToolbar) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(oldToolbar, ToolbarWndProc);
         }
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, ToolbarWndProc, 0);
-        Wh_Log(L"Win78LangSwitcher: Subclassed ToolbarWindow32 (0x%p)", hToolbar);
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, ToolbarWndProc, 0)) {
+            Wh_Log(L"Win78LangSwitcher: Subclassed ToolbarWindow32 (0x%p)", hToolbar);
+        }
     }
 
     if (hNotify) {
@@ -2107,8 +2211,9 @@ static BOOL InstallTrayInterceptionInternal() {
                         if (prev) {
                             WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, InputIndicatorButtonProc);
                         }
-                        WindhawkUtils::SetWindowSubclassFromAnyThread(hChild, InputIndicatorButtonProc, 0);
-                        Wh_Log(L"Win78LangSwitcher: Subclassed Input Indicator %s (0x%p)", cls, hChild);
+                        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hChild, InputIndicatorButtonProc, 0)) {
+                            Wh_Log(L"Win78LangSwitcher: Subclassed Input Indicator %s (0x%p)", cls, hChild);
+                        }
                     }
                     break;
                 }
@@ -2116,40 +2221,69 @@ static BOOL InstallTrayInterceptionInternal() {
         }
     }
 
-    HWND hSecTray = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
-    if (hSecTray) {
-        HWND hSecToolbar = FindWindowExW(hSecTray, NULL, L"ToolbarWindow32", NULL);
-        if (hSecToolbar) {
-            HWND prev = NULL;
-            bool needSubclass = false;
-            EnterCriticalSection(&g_Ctx.csLock);
-            if (hSecToolbar != G_hSubclassedSecToolbar) {
-                prev = G_hSubclassedSecToolbar;
-                G_hSubclassedSecToolbar = hSecToolbar;
-                needSubclass = true;
+    // Enumerate every secondary taskbar (one per additional monitor) instead
+    // of a single FindWindow, otherwise only one is intercepted and the
+    // "old vs new" tracking below would thrash each time this runs.
+    std::vector<HWND> newSec;       // to subclass outside the lock
+    std::vector<HWND> staleSec;     // to unsubclass outside the lock
+    EnterCriticalSection(&g_Ctx.csLock);
+    {
+        HWND hEnum = NULL;
+        while ((hEnum = FindWindowExW(NULL, hEnum, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
+            HWND hSecToolbar = FindWindowExW(hEnum, NULL, L"ToolbarWindow32", NULL);
+            if (!hSecToolbar) continue;
+
+            bool alreadyPresent = false;
+            for (HWND h : G_hSubclassedSecToolbars) {
+                if (h == hSecToolbar) { alreadyPresent = true; break; }
             }
-            LeaveCriticalSection(&g_Ctx.csLock);
-            if (needSubclass) {
-                if (prev) {
-                    WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, ToolbarWndProc);
-                }
-                WindhawkUtils::SetWindowSubclassFromAnyThread(hSecToolbar, ToolbarWndProc, 0);
+            if (!alreadyPresent) {
+                G_hSubclassedSecToolbars.push_back(hSecToolbar);
+                newSec.push_back(hSecToolbar);
+            }
+        }
+        // Drop recorded secondary toolbars that no longer exist.
+        for (auto it = G_hSubclassedSecToolbars.begin(); it != G_hSubclassedSecToolbars.end(); ) {
+            if (!IsWindow(*it)) {
+                staleSec.push_back(*it);
+                it = G_hSubclassedSecToolbars.erase(it);
+            } else {
+                ++it;
             }
         }
     }
+    LeaveCriticalSection(&g_Ctx.csLock);
 
-    return TRUE;
+    for (HWND h : staleSec) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, ToolbarWndProc);
+    }
+    for (HWND h : newSec) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(h, ToolbarWndProc, 0)) {
+            Wh_Log(L"Win78LangSwitcher: Subclassed secondary toolbar (0x%p)", h);
+        }
+    }
+
+    // Report success only when at least one intended target is actually
+    // subclassed. The caller keeps retrying otherwise, so a layout indicator
+    // or tray tree rebuilt later is still picked up.
+    EnterCriticalSection(&g_Ctx.csLock);
+    const bool anySubclassed =
+        (G_hSubclassedToolbar != NULL && IsWindow(G_hSubclassedToolbar)) ||
+        (G_hSubclassedIndicator != NULL && IsWindow(G_hSubclassedIndicator)) ||
+        !G_hSubclassedSecToolbars.empty();
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return anySubclassed;
 }
 
 static void RemoveTrayInterception() {
-    HWND hToolbar = NULL, hIndicator = NULL, hSec = NULL;
+    HWND hToolbar = NULL, hIndicator = NULL;
+    std::vector<HWND> secToolbars;
     EnterCriticalSection(&g_Ctx.csLock);
     hToolbar = G_hSubclassedToolbar;
     hIndicator = G_hSubclassedIndicator;
-    hSec = G_hSubclassedSecToolbar;
+    secToolbars.swap(G_hSubclassedSecToolbars);
     G_hSubclassedToolbar = NULL;
     G_hSubclassedIndicator = NULL;
-    G_hSubclassedSecToolbar = NULL;
     LeaveCriticalSection(&g_Ctx.csLock);
 
     if (hToolbar) {
@@ -2158,7 +2292,7 @@ static void RemoveTrayInterception() {
     if (hIndicator) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hIndicator, InputIndicatorButtonProc);
     }
-    if (hSec) {
+    for (HWND hSec : secToolbars) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hSec, ToolbarWndProc);
     }
 }
@@ -2178,8 +2312,18 @@ static void RememberForegroundTarget() {
     }
 }
 
+static bool WinKeysReleased() {
+    return ((GetAsyncKeyState(VK_LWIN) & 0x8000) == 0) &&
+           ((GetAsyncKeyState(VK_RWIN) & 0x8000) == 0);
+}
+
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode < 0 || !lParam || g_Ctx.isUninitializing) {
+        return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    // A second explorer instance must never process input on our behalf.
+    if (!g_isMainShell.load(std::memory_order_relaxed)) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
@@ -2195,6 +2339,17 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     try {
         bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool isKeyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+
+        // Fallback: if a Win+Space cycle is stuck (the VK_LWIN/RWIN key-up was
+        // swallowed by an earlier low-level hook, or the mod was enabled while
+        // the Win key was held), clear the flag as soon as both Win keys are
+        // observably released. Otherwise the topmost flyout can't auto-hide on
+        // focus loss and layout re-syncing stays frozen. (The worker's retry
+        // timer mirrors this as a safety net even if no further key events
+        // arrive.)
+        if (g_isWinSpaceCycling.load(std::memory_order_relaxed) && WinKeysReleased()) {
+            g_isWinSpaceCycling.store(false, std::memory_order_relaxed);
+        }
 
         HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
 
@@ -2347,15 +2502,19 @@ static bool IsPointOnHookedTrayControl(const POINT& pt) {
     if (!hHit) {
         return false;
     }
-    HWND hToolbar = NULL, hIndicator = NULL, hSec = NULL;
+    HWND hToolbar = NULL, hIndicator = NULL;
+    std::vector<HWND> secToolbars;
     EnterCriticalSection(&g_Ctx.csLock);
     hToolbar = G_hSubclassedToolbar;
     hIndicator = G_hSubclassedIndicator;
-    hSec = G_hSubclassedSecToolbar;
+    secToolbars = G_hSubclassedSecToolbars;
     LeaveCriticalSection(&g_Ctx.csLock);
 
-    if (hHit == hToolbar || hHit == hIndicator || hHit == hSec) {
+    if (hHit == hToolbar || hHit == hIndicator) {
         return true;
+    }
+    for (HWND hSec : secToolbars) {
+        if (hHit == hSec) return true;
     }
     HWND hParent = GetAncestor(hHit, GA_PARENT);
     return (hParent == hIndicator);
@@ -2387,14 +2546,20 @@ static void HideFlyoutIfClickOutside(const POINT& pt) {
 }
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && lParam && !g_Ctx.isUninitializing) {
+    // Low-level hooks run on the installing thread and block all system input
+    // until they return, so never do anything heavy (WindowFromPoint hit-tests
+    // by sending WM_NCHITTEST across processes, which can stall the whole mouse
+    // on a hung app). Just pack the point and hand it to the worker thread.
+    if (nCode == HC_ACTION && lParam && !g_Ctx.isUninitializing &&
+        g_isMainShell.load(std::memory_order_relaxed)) {
         if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN ||
             wParam == WM_NCLBUTTONDOWN || wParam == WM_NCRBUTTONDOWN) {
             auto* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
             if (ms && !(ms->flags & LLMHF_INJECTED)) {
-                try {
-                    HideFlyoutIfClickOutside(ms->pt);
-                } catch (...) {}
+                if (g_Ctx.dwWorkerThreadId) {
+                    PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_CLICK_OUTSIDE_TEST,
+                                       (WPARAM)(LONG)ms->pt.x, (LPARAM)(LONG)ms->pt.y);
+                }
             }
         }
     }
@@ -2405,6 +2570,14 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
 static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
+
+    // Force the thread message queue into existence before signalling, so
+    // SafeCleanup's PostThreadMessageW(WM_QUIT) can never fail with
+    // ERROR_INVALID_THREAD_ID (a thread has no queue until it first calls a
+    // message API).
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(ctx->hHookReadyEvent);
 
     HHOOK hKbd = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModInstance(), 0);
     if (hKbd) {
@@ -2418,7 +2591,6 @@ static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
         Wh_Log(L"Win78LangSwitcher: WH_MOUSE_LL install failed, outside-click dismissal will rely on WM_ACTIVATE only");
     }
 
-    MSG msg = {0};
     while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -2429,35 +2601,45 @@ static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     return 0;
 }
 
+// Dedicated worker thread: owns the flyout window, the layout state, and the
+// tray interception. It re-evaluates the shell role on a periodic tick because
+// the owner of Shell_TrayWnd (and the shape of the tray tree) can change at any
+// time, and because TaskbarCreated is a HWND_BROADCAST message that is never
+// delivered to a thread's message queue — so a timer is the only reliable way
+// to pick up a rebuilt tray / late-appearing layout indicator.
 static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
+
+    // Force the thread message queue into existence before signalling (see
+    // HookThreadProc).
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(ctx->hWorkerReadyEvent);
 
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     InitGdiPlusRendering();
     RefreshKeyboardLayouts();
 
-    UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    // Establish the shell role immediately, then keep re-evaluating it. This is
+    // intentionally never baked in once at Wh_ModInit time.
+    EvaluateShellRole();
+    UINT_PTR trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
 
-    BOOL trayAlreadyHooked = false;
-    EnterCriticalSection(&g_Ctx.csLock);
-    trayAlreadyHooked = (G_hSubclassedToolbar != NULL || G_hSubclassedIndicator != NULL);
-    LeaveCriticalSection(&g_Ctx.csLock);
-    UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
-
-    MSG msg = {0};
     while (GetMessageW(&msg, NULL, 0, 0)) {
-        if (trayRetryTimer && msg.message == WM_TIMER && msg.wParam == trayRetryTimer) {
-            if (ctx->isUninitializing || InstallTrayInterceptionInternal()) {
-                KillTimer(NULL, trayRetryTimer);
-                trayRetryTimer = 0;
+        if (msg.message == WM_TIMER && msg.wParam == trayRetryTimer) {
+            if (!ctx->isUninitializing) {
+                EvaluateShellRole();
             }
-        }
-
-        if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing) {
+        } else if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing) {
             ToggleFlyoutWindow();
         } else if (msg.message == WM_SHOW_FLYOUT && !ctx->isUninitializing) {
             ShowFlyoutWindow();
+        } else if (msg.message == WM_APP_CLICK_OUTSIDE_TEST && !ctx->isUninitializing) {
+            POINT pt;
+            pt.x = (LONG)msg.wParam;
+            pt.y = (LONG)msg.lParam;
+            HideFlyoutIfClickOutside(pt);
         } else if (msg.message == WM_APP_CYCLE_SWITCHER && !ctx->isUninitializing) {
             bool forward = (msg.wParam != 0);
             CycleSwitcher(forward, false);
@@ -2471,22 +2653,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
             if (hFlyout && IsWindow(hFlyout)) {
                 ShowWindow(hFlyout, SW_HIDE);
             }
+        } else if (msg.message == WM_APP_REFRESH_INSTALL && !ctx->isUninitializing) {
+            EvaluateShellRole();
         } else if (msg.message == WM_SAFE_CLOSE) {
             HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
             if (hFlyout && IsWindow(hFlyout)) {
                 DestroyWindow(hFlyout);
-            }
-        } else if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
-            RemoveTrayInterception();
-            // Keep pumping so the hook thread is not affected; this thread
-            // owns the flyout, not the LL hooks.
-            HANDLE timerEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-            if (timerEvent) {
-                MsgWaitForMultipleObjects(1, &timerEvent, FALSE, 1000, QS_ALLINPUT);
-                CloseHandle(timerEvent);
-            }
-            if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
-                trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
         }
         TranslateMessage(&msg);
@@ -2497,6 +2669,11 @@ static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     if (hFlyout && IsWindow(hFlyout)) {
         DestroyWindow(hFlyout);
     }
+
+    // Safety net: if SafeCleanup's RemoveTrayInterception ran just before this
+    // thread finished installing subclasses, remove them here so no WNDPROC
+    // pointing into the soon-to-be-unmapped image survives this thread.
+    RemoveTrayInterception();
 
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
     CoUninitialize();
@@ -2579,6 +2756,10 @@ static void SafeCleanup() {
         PostThreadMessageW(ownerTid, WM_SAFE_CLOSE, 0, 0);
     }
 
+    // Wh_ModInit waited on the ready events before returning, so both threads
+    // are guaranteed to have created a message queue (via PeekMessage) by now
+    // and these WM_QUIT posts cannot be silently dropped with
+    // ERROR_INVALID_THREAD_ID.
     if (g_Ctx.dwHookThreadId) {
         PostThreadMessageW(g_Ctx.dwHookThreadId, WM_QUIT, 0, 0);
     }
@@ -2600,6 +2781,9 @@ static void SafeCleanup() {
         g_Ctx.hWorkerThread = NULL;
         g_Ctx.dwWorkerThreadId = 0;
     }
+
+    if (g_Ctx.hWorkerReadyEvent) { CloseHandle(g_Ctx.hWorkerReadyEvent); g_Ctx.hWorkerReadyEvent = NULL; }
+    if (g_Ctx.hHookReadyEvent) { CloseHandle(g_Ctx.hHookReadyEvent); g_Ctx.hHookReadyEvent = NULL; }
 
     ShutdownGdiPlusRendering();
     g_hFlyoutWnd.store(NULL, std::memory_order_release);
@@ -2623,16 +2807,42 @@ static DWORD GetTrayOwnerPid() {
     return pid;
 }
 
-// Only the explorer that owns the taskbar can run this mod: the input
-// indicator, its flyout and the tray toolbars all live in that process,
-// and a second explorer instance in the same session (e.g. a stale one
-// still running after a taskbar restart) must not install its own
-// low-level keyboard/mouse hooks — they would double-handle every
-// Win+Space / Alt+Shift / click.
+// Only the explorer that owns the taskbar may actively handle input: the input
+// indicator, its flyout and the tray toolbars all live in that process. A
+// second explorer instance in the same session (e.g. a stale one still running
+// after a taskbar restart) must not install its own low-level keyboard/mouse
+// hooks, or it would double-handle every Win+Space / Alt+Shift / click. The
+// decision is re-checked over time (see EvaluateShellRole), never baked in.
 static bool IsMainExplorerShell() {
     DWORD owner = GetTrayOwnerPid();
     if (!owner) return true;
     return owner == GetCurrentProcessId();
+}
+
+// The owner of Shell_TrayWnd and the shape of the tray tree are not fixed for
+// the lifetime of a process, so this is re-run by the worker thread's retry
+// tick (and on settings changes). It installs tray interception and enables
+// input handling only while this explorer instance is the shell; otherwise it
+// tears everything down so a second explorer never double-handles input.
+static void EvaluateShellRole() {
+    if (g_Ctx.isUninitializing) return;
+
+    // Safety-net for a stuck Win+Space cycle (see LowLevelKeyboardProc).
+    if (g_isWinSpaceCycling.load(std::memory_order_relaxed) && WinKeysReleased()) {
+        g_isWinSpaceCycling.store(false, std::memory_order_relaxed);
+    }
+
+    // Re-check this explorer's identity rather than trusting a value baked in
+    // at Wh_ModInit time.
+    const bool isShell = IsExplorerProcess() && IsMainExplorerShell();
+    g_isMainShell.store(isShell, std::memory_order_relaxed);
+
+    if (isShell) {
+        // Idempotent; keeps retrying until at least one target is subclassed.
+        InstallTrayInterceptionInternal();
+    } else {
+        RemoveTrayInterception();
+    }
 }
 
 BOOL Wh_ModInit() {
@@ -2642,7 +2852,6 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_Ctx.csLock);
 
     LoadSettings();
-    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     if (!IsExplorerProcess()) {
         g_Initialized = TRUE;
@@ -2652,10 +2861,26 @@ BOOL Wh_ModInit() {
     const DWORD dwTrayOwner = GetTrayOwnerPid();
     const bool mainShell = IsMainExplorerShell();
     Wh_Log(L"Win78LangSwitcher: pid=%lu trayOwner=%lu mainShell=%d", GetCurrentProcessId(), dwTrayOwner, mainShell ? 1 : 0);
-    if (!mainShell) {
-        Wh_Log(L"Win78LangSwitcher: secondary explorer, hooks not installed");
-        g_Initialized = TRUE;
-        return TRUE;
+    // Seed the shell flag before any thread runs. This is NOT a permanent
+    // decision: the worker thread re-evaluates it on its retry tick, because
+    // the owner of Shell_TrayWnd can change later (e.g. after an Explorer /
+    // taskbar restart). We always start our threads so this instance can
+    // become (or stop being) the active shell without a reload.
+    g_isMainShell.store(mainShell, std::memory_order_relaxed);
+
+    // Readiness events let us wait until each thread has created its message
+    // queue (PeekMessage) before Wh_ModInit returns — which is what makes the
+    // unconditional waits in SafeCleanup safe.
+    g_Ctx.hWorkerReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    g_Ctx.hHookReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_Ctx.hWorkerReadyEvent || !g_Ctx.hHookReadyEvent) {
+        Wh_Log(L"Win78LangSwitcher: CreateEvent failed");
+        InterlockedExchange(&g_Ctx.isUninitializing, 1L);
+        if (g_Ctx.hWorkerReadyEvent) CloseHandle(g_Ctx.hWorkerReadyEvent);
+        if (g_Ctx.hHookReadyEvent) CloseHandle(g_Ctx.hHookReadyEvent);
+        g_Ctx.hWorkerReadyEvent = g_Ctx.hHookReadyEvent = NULL;
+        DeleteCriticalSection(&g_Ctx.csLock);
+        return FALSE;
     }
 
     HMODULE hUser = GetModuleHandleW(L"user32.dll");
@@ -2670,34 +2895,52 @@ BOOL Wh_ModInit() {
 
     g_Ctx.hWorkerThread = CreateThread(NULL, 0, WorkerThreadProc, &g_Ctx, 0, &g_Ctx.dwWorkerThreadId);
     if (!g_Ctx.hWorkerThread) {
+        Wh_Log(L"Win78LangSwitcher: worker thread creation failed");
+        InterlockedExchange(&g_Ctx.isUninitializing, 1L);
+        if (g_Ctx.hWorkerReadyEvent) CloseHandle(g_Ctx.hWorkerReadyEvent);
+        if (g_Ctx.hHookReadyEvent) CloseHandle(g_Ctx.hHookReadyEvent);
+        g_Ctx.hWorkerReadyEvent = g_Ctx.hHookReadyEvent = NULL;
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
+    WaitForSingleObject(g_Ctx.hWorkerReadyEvent, 5000);
 
     g_Ctx.hHookThread = CreateThread(NULL, 0, HookThreadProc, &g_Ctx, 0, &g_Ctx.dwHookThreadId);
     if (!g_Ctx.hHookThread) {
+        Wh_Log(L"Win78LangSwitcher: hook thread creation failed");
+        // The worker's queue is guaranteed to exist by now, so WM_QUIT will be
+        // delivered and the wait below cannot hang.
+        InterlockedExchange(&g_Ctx.isUninitializing, 1L);
         PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_Ctx.hWorkerThread, INFINITE);
         CloseHandle(g_Ctx.hWorkerThread);
         g_Ctx.hWorkerThread = NULL;
+        g_Ctx.dwWorkerThreadId = 0;
+        if (g_Ctx.hWorkerReadyEvent) CloseHandle(g_Ctx.hWorkerReadyEvent);
+        if (g_Ctx.hHookReadyEvent) CloseHandle(g_Ctx.hHookReadyEvent);
+        g_Ctx.hWorkerReadyEvent = g_Ctx.hHookReadyEvent = NULL;
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
+    WaitForSingleObject(g_Ctx.hHookReadyEvent, 5000);
 
-    InstallTrayInterceptionInternal();
-
+    // Tray installation happens on the worker thread (EvaluateShellRole).
     g_Initialized = TRUE;
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    // Guard against a stale/secondary explorer: InstallTrayInterceptionInternal
-    // would otherwise subclass the taskbar tree owned by another explorer
-    // process, with a WNDPROC pointing into this image — fatal for the other
-    // process when this mod is unloaded.
-    if (IsExplorerProcess() && IsMainExplorerShell()) {
-        InstallTrayInterceptionInternal();
+    if (!IsExplorerProcess()) {
+        return;
+    }
+    // Re-evaluate the shell role / tray installation immediately so a settings
+    // change (e.g. toggling callbacks off) is applied without waiting for the
+    // 1.5s retry tick. The worker thread is always started for an explorer
+    // process, and EvaluateShellRole itself re-verifies tray ownership, so we
+    // never subclass a foreign taskbar here.
+    if (g_Ctx.dwWorkerThreadId && !g_Ctx.isUninitializing) {
+        PostThreadMessageW(g_Ctx.dwWorkerThreadId, WM_APP_REFRESH_INSTALL, 0, 0);
     }
 }
 
