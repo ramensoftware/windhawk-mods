@@ -3119,7 +3119,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         } else {
             hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
         }
-        if (hDlgLocal) {
+        if (hDlgLocal && IsWindow(hDlgLocal)) {
             ShowWindow(hDlgLocal, SW_SHOW);
         } else {
             // Bail out
@@ -3198,23 +3198,25 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             return 0;
         }
 
-        // Drain the add app queue
-        MSG msg;
-        while (PeekMessageW(&msg, hDlg, WM_ADD_APP, WM_ADD_APP, PM_REMOVE)) {
-            reinterpret_cast<IShutdownBlockingApp*>(msg.lParam)->Release();
-        }
-
         for (auto& tile : appTiles) {
             if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
         }
         appTiles.clear();
 
-        if (hDlg) {
-            HWND hDlgLocal = hDlg;
-            {
-                std::lock_guard lock(pendingAppsMutex);
-                hDlg = nullptr;
+        HWND hDlgLocal = nullptr;
+        {
+            std::lock_guard lock(pendingAppsMutex);
+            hDlgLocal = hDlg;
+            hDlg = nullptr;
+        }
+
+        if (hDlgLocal) {
+            // Drain the add app queue after preventing AddApplication from posting new add app messages
+            MSG msg;
+            while (PeekMessageW(&msg, hDlgLocal, WM_ADD_APP, WM_ADD_APP, PM_REMOVE)) {
+                reinterpret_cast<IShutdownBlockingApp*>(msg.lParam)->Release();
             }
+
             DestroyWindow(hDlgLocal);
         }
 
