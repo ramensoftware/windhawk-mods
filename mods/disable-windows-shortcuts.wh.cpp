@@ -457,6 +457,7 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinCtrlO == b.DisableWinCtrlO &&
            a.DisableWinCtrlS == b.DisableWinCtrlS &&
            a.DisableWinSpace == b.DisableWinSpace &&
+           a.DisableWinShiftR == b.DisableWinShiftR &&
            a.DisableWinShiftS == b.DisableWinShiftS &&
            a.DisableWinAltK == b.DisableWinAltK &&
            a.DisableWinPeriod == b.DisableWinPeriod &&
@@ -1123,9 +1124,7 @@ DWORD WINAPI HookThread(LPVOID lpParam)
     );
     if (!g_desktopSwitchHook)
     {
-        UnhookWindowsHookEx(g_hHook);
-        g_hHook = NULL;
-        return 1;
+        Wh_Log(L"SetWinEventHook failed: %u (non-fatal, continuing keyboard hook)", GetLastError());
     }
 
     // Dedicated message pump to keep the hook alive and responsive
@@ -1135,8 +1134,11 @@ DWORD WINAPI HookThread(LPVOID lpParam)
         DispatchMessage(&msg);
     }
 
-    UnhookWinEvent(g_desktopSwitchHook);
-    g_desktopSwitchHook = NULL;
+    if (g_desktopSwitchHook)
+    {
+        UnhookWinEvent(g_desktopSwitchHook);
+        g_desktopSwitchHook = NULL;
+    }
     UnhookWindowsHookEx(g_hHook);
     g_hHook = NULL;
     return 0;
