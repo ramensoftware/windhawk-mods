@@ -106,7 +106,7 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 HINSTANCE g_hLogonControllerDll;
 HINSTANCE g_hBlockedShutdownDll;
 
-std::atomic<HANDLE> g_hDoModalExitEvent = nullptr;
+std::atomic<HANDLE> g_hDoModalExitEventDup = nullptr;
 
 #pragma region resources
 // Resource IDs
@@ -1940,8 +1940,12 @@ void CustomBSDR::CenterWindow(HWND hWnd) {
 
     // Center on primary monitor
     RECT rcWindow, rcWorkArea;
-    GetWindowRect(hWnd, &rcWindow);
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWorkArea, 0);
+    if (!GetWindowRect(hWnd, &rcWindow)) {
+        return;
+    }
+    if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWorkArea, 0)) {
+        return;
+    }
     int windowWidth = rcWindow.right - rcWindow.left;
     int windowHeight = rcWindow.bottom - rcWindow.top;
     int xPos = rcWorkArea.left + (rcWorkArea.right - rcWorkArea.left - windowWidth) / 2 - GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -2395,7 +2399,10 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
     int dpi = GetDpiForWindow(hDlg);
 
     AppTile tile = {};
-    blockingApp->get_Id(&tile.appId);
+    if (FAILED(blockingApp->get_Id(&tile.appId))) {
+        Wh_Log(L"get_Id failed");
+        return;
+    }
     blockingApp->get_IsBlocking(&tile.isBlocking);
     tile.hIconBitmap = nullptr;
 
@@ -2553,12 +2560,20 @@ void CustomBSDR::UpdateAppListLayout() {
     // Windows 7 decided the dialog height only on the initial load (and when the screen resolution was decreased), and never resized on late item add/remove
     // On Windows 10+, the BSDR backend sends the initial list of apps with random delays (whether pendingApps or WM_ADD_APP is used),
     // and never sends newly created windows after initialization. So consider all additions as initial item and always increase the dialog height
-    RECT rcScrollBar;
-    GetWindowRect(hScrollBar, &rcScrollBar);
-    int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+    int scrollBarWidth = 0;
+    if (hScrollBar) {
+        RECT rcScrollBar;
+        GetWindowRect(hScrollBar, &rcScrollBar);
+        scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+    } else {
+        scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
+    }
 
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int maxHeight = screenHeight - MulDiv(335, dpi, 96);
+
+    if (maxHeight < minHeight)
+        maxHeight = minHeight;
 
     int newHeight = totalContentHeight;
     if (paintedFirstFrame && newHeight < visibleHeight)
@@ -2693,7 +2708,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         SetWindowLongW(hWndDlg, GWL_STYLE, GetWindowLongW(hWndDlg, GWL_STYLE) & ~WS_CAPTION);
         // Use composited style on dialog, not bg window, to prevent the scrollbar control from flickering on drag
         SetWindowLongW(hWndDlg, GWL_EXSTYLE, GetWindowLongW(hWndDlg, GWL_EXSTYLE) | WS_EX_COMPOSITED);
-        
+
         hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
         hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
         hScrollBar = GetDlgItem(hWndDlg, IDC_BSDR_SCROLLBAR);
@@ -2934,9 +2949,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                 // and makes the thread stuck in WaitForSingleObject
                 // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
                 // (I still haven't found neither the culprint nor which code signals that event)
-                HANDLE hDoModalExitEvent = g_hDoModalExitEvent.load();
+                HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
                 if (hDoModalExitEvent) {
-                    SetEvent(hDoModalExitEvent);
+                    if (!SetEvent(hDoModalExitEvent)) {
+                        Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
+                    }
                 } else {
                     // Event capture failed, oh noes!
                     // Here comes the old terrible workaround
@@ -3437,7 +3454,17 @@ long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettin
 
 long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsigned int* scaleFactor) {
     Wh_Log(L"BlockedShutdownUXImpl::get_ScaleFactor");
-    *scaleFactor = 100;
+
+    using namespace CustomBSDR;
+
+    int dpi = 96;
+    if (hDlg) {
+        dpi = GetDpiForWindow(hDlg);
+    } else {
+        dpi = GetDpiForSystem();
+    }
+    *scaleFactor = MulDiv(dpi, 100, 96);
+
     return S_OK;
 }
 
@@ -3537,7 +3564,7 @@ WindhawkUtils::SYMBOL_HOOK blockedShutdownHooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Start(struct Windows::Internal::UI::Logon::Controller::IUserSettingManager *,struct Windows::Internal::UI::Logon::Controller::ILogonUIStateInfo *)",
         },
-        (void**)nullptr, // Cast is not needed on WH 1.7+
+        (void**)nullptr, // Cast is not needed on WH 1.7+; only needed for WH 1.6.1 and below
         (void*)BlockedShutdownUXImpl_Start_hook,
         FALSE
     },
@@ -3616,7 +3643,6 @@ long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsig
     Wh_Log(L"DoModal");
     int result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
     g_enteringDoModal = false;
-    g_hDoModalExitEvent.store(nullptr);
     return result;
 }
 
@@ -3636,12 +3662,27 @@ CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
     if (lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
-        if (g_hDoModalExitEvent.load()) {
-            Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
-        } else {
+        HANDLE duplicated = nullptr;
+        if (!DuplicateHandle(
+            GetCurrentProcess(),
+            result,
+            GetCurrentProcess(),
+            &duplicated,
+            0,
+            FALSE,
+            DUPLICATE_SAME_ACCESS
+        )) {
+            Wh_Log(L"DuplicateHandle failed, GLE=%d", GetLastError());
+            return result;
+        }
+
+        HANDLE expected = nullptr;
+        if (g_hDoModalExitEventDup.compare_exchange_strong(expected, duplicated, std::memory_order_release, std::memory_order_relaxed)) {
             // Works cleanly on LTSC 2021 and 11 25H2
-            g_hDoModalExitEvent.store(result);
             Wh_Log(L"Caught DoModal event");
+        } else {
+            CloseHandle(duplicated);
+            Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
         }
     }
     return result;
@@ -3651,6 +3692,7 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
 #pragma region Winlogon hooks (disable async logoff)
 bool g_isWinlogon = false;
 bool g_noSafetyChecks = false;
+thread_local bool g_isInitialThread = false;
 int* p_g_fShutdownResolverDisabled = nullptr;
 int g_origResolverDisabledState = 0;
 
@@ -3688,6 +3730,13 @@ bool IsLogonUiInjectionEnabled() {
     // Skip by user choice
     if (g_noSafetyChecks) {
         return true;
+    }
+
+    // Win10+ winlogon injection is always asynchronous because smss.exe, the parent of winlogon, is a protected process (PPL), so the probe shouldn't block its startup routine
+    // But if synchronous injection somehow happens, just check for existing LogonUiLoadCheck value (from previous probe) and call it a day
+    if (g_isInitialThread) {
+        Wh_Log(L"Synchronously injected into winlogon! Wow!");
+        return Wh_GetIntValue(L"LogonUiLoadCheck", -1) != -1;
     }
 
     // Skip if AuthUX is installed
@@ -3794,6 +3843,8 @@ WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
 };
 #pragma endregion Winlogon hooks (disable async logoff)
 
+static constexpr size_t OFFSET_SAME_TEB_FLAGS = 0x17EE; // Win64 only
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
@@ -3807,6 +3858,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Running in winlogon.exe, but winlogon hooks are disabled");
             return FALSE;
         }
+        g_isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
         HMODULE winlogon = GetModuleHandleW(NULL);
         if (winlogon) {
             if (!WindhawkUtils::HookSymbols(winlogon, winlogonExeHooks, ARRAYSIZE(winlogonExeHooks))) {
@@ -3873,6 +3925,7 @@ BOOL Wh_ModInit() {
     if (g_hBlockedShutdownDll) {
         if (!WindhawkUtils::HookSymbols(g_hBlockedShutdownDll, blockedShutdownHooks, ARRAYSIZE(blockedShutdownHooks))) {
             Wh_Log(L"Failed to hook symbols in Windows.UI.BlockedShutdown.dll");
+            FreeLibrary(g_hBlockedShutdownDll);
             if (g_hLogonControllerDll) {
                 FreeLibrary(g_hLogonControllerDll);
             }
@@ -3880,6 +3933,9 @@ BOOL Wh_ModInit() {
         }
     } else {
         Wh_Log(L"Failed to load Windows.UI.BlockedShutdown.dll");
+        if (g_hLogonControllerDll) {
+            FreeLibrary(g_hLogonControllerDll);
+        }
         return FALSE;
     }
 
@@ -3950,9 +4006,15 @@ void Wh_ModUninit() {
         }
         WaitForSingleObject(hThread, INFINITE);
         CloseHandle(hThread);
+        hThread = nullptr;
     }
     if (hDesktop) {
         CloseDesktop(hDesktop);
+    }
+
+    HANDLE hDoModalExitEventDup = g_hDoModalExitEventDup.exchange(nullptr, std::memory_order_acq_rel);
+    if (hDoModalExitEventDup) {
+        CloseHandle(hDoModalExitEventDup);
     }
 
     pendingApps.reset();
