@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.2.2
+// @version         1.3.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -19,82 +19,100 @@ Selectively disable Windows keyboard shortcuts with individual toggles for each 
 - Individual toggle for each shortcut
 - Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
 
-## Special Shortcuts
-A small number of system shortcuts (Win+A, Win+C, Win+K, Win+N, Win+P, Win+U) and hardcoded keys (Win+Tab, Win+Arrows) operate at a lower OS level.
-To handle these properly, this mod provides **three options** for them in a dedicated section at the top of the settings:
-- **0 - Off:** The shortcut is completely unaffected.
-- **1 - Disable hotkey:** Disables the shortcut natively. Lightweight, but third-party apps that simulate these keys (like custom taskbars) will also be blocked.
-- **2 - Block hotkey:** Blocks the physical keystroke but tricks Windows into thinking it was registered. This allows simulating apps to work while physically blocking the key, but **requires injecting into `dwm.exe`**.
+## How Shortcuts Are Handled
+This mod provides three organized categories of shortcuts:
+1. **Special Shortcuts (Flyouts):** Windows processes system flyouts (`Win+A`, `Win+N`, `Win+C`, `Win+K`, `Win+P`, `Win+U`, `Win+/`) at a lower compositor level. The mod physically suppresses keypresses via a low-level keyboard hook running in `dwm.exe`. Injected/simulated keystrokes (e.g. custom taskbars like YASB or macros) and native taskbar tray mouse clicks continue to work seamlessly.
+2. **Direct Shortcuts (No Restart Required):** Handled immediately via low-level keyboard hook in `dwm.exe`. Disabling shortcuts like `Win` or `Alt+Shift` allows third-party apps (such as Flow Launcher's Windows key launcher or custom `Alt+Shift` keybinds) to be used without Windows opening the Start Menu or switching keyboard layouts. Hardcoded shortcuts (`Ctrl+Esc`, `Win+Tab`, `Win+Arrows`, `Win+Space`, `Win+Ctrl+Shift+Alt`, `Win+Ctrl+Shift+B`) are blocked immediately without requiring an Explorer restart.
+3. **Standard Shortcuts (Requires Explorer Restart):** Handled via Explorer's `RegisterHotKey` API. When disabled, Explorer is prevented from claiming the key, freeing it in the OS kernel so other applications (such as PowerToys, GlazeWM, or Flow Launcher) can bind to it. Changes require an Explorer restart to release the key (a restart dialog will prompt you automatically).
 
 ## ⚠️ Important `dwm.exe` Installation Step ⚠️
-If you use the **"Block hotkey"** option, or if you disable window snapping (Win+Arrows), Task View (Win+Tab), Switch keyboard layout (Win+Space, Alt+Shift), or Start Menu (Win, Ctrl+Esc), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
+For **Special Shortcuts** and **Direct Shortcuts** to be blocked, you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
 1. Open Windhawk and go to **Settings**
 2. Click on **Advanced settings** at the bottom
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
-*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to completely release the hotkeys for other applications (such as PowerToys or GlazeWM). You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
+*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to completely release the hotkeys for other applications. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must restart Explorer to restore those standard shortcuts.*
 
 ## Notes
-- Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
 - Win+L (Lock PC) cannot be blocked through standard hooks
-- Win+Q is redundant with Win+S (both open Search)
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - SpecialShortcuts:
-  - DisableWinA: "off"
+  - DisableWinA: false
     $name: Win+A
     $description: Action Center / Quick Settings
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinC: "off"
+  - DisableWinC: false
     $name: Win+C
-    $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinK: "off"
+    $description: Cortana / Copilot
+  - DisableWinK: false
     $name: Win+K
-    $description: Connect (Cast)
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinN: "off"
+    $description: Connect / Cast
+  - DisableWinN: false
     $name: Win+N
     $description: Notification Center
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinP: "off"
+  - DisableWinP: false
     $name: Win+P
     $description: Project / Display mode
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinU: "off"
+  - DisableWinU: false
     $name: Win+U
     $description: Accessibility Settings
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinSlash: "off"
+  - DisableWinSlash: false
     $name: Win+/
     $description: IME reconversion
-    $options:
-    - "off": Off
-    - disable: Disable hotkey (Simulating apps affected)
-    - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  $name: Special Shortcuts (3-Tier Options)
-  $description: See 'Special Shortcuts' in Details
+  $name: Special Shortcuts
+  $description: System flyouts handled via DWM low-level hook. Requires dwm.exe in Process inclusion list.
+
+- DirectShortcuts:
+  - DisableWinKey: false
+    $name: Win
+    $description: Open Start Menu
+  - DisableCtrlEsc: false
+    $name: Ctrl+Esc
+    $description: Open Start Menu
+  - DisableAltShift: false
+    $name: Alt+Shift
+    $description: Switch keyboard layout
+  - DisableWinSpace: false
+    $name: Win+Space
+    $description: Switch keyboard layout
+  - DisableOfficeHotkeys: false
+    $name: Win+Ctrl+Shift+Alt
+    $description: Office Hub / Microsoft 365 app combinations
+  - DisableWinTab: false
+    $name: Win+Tab
+    $description: Task View
+  - DisableWinUp: false
+    $name: Win+Up
+    $description: Maximize window
+  - DisableWinDown: false
+    $name: Win+Down
+    $description: Restore/Minimize window
+  - DisableWinLeft: false
+    $name: Win+Left
+    $description: Snap window left
+  - DisableWinRight: false
+    $name: Win+Right
+    $description: Snap window right
+  - DisableWinShiftUp: false
+    $name: Win+Shift+Up
+    $description: Stretch window vertically
+  - DisableWinShiftDown: false
+    $name: Win+Shift+Down
+    $description: Restore/minimize height
+  - DisableWinShiftLeft: false
+    $name: Win+Shift+Left
+    $description: Move window to left monitor
+  - DisableWinShiftRight: false
+    $name: Win+Shift+Right
+    $description: Move window to right monitor
+  - DisableWinCtrlShiftB: false
+    $name: Win+Ctrl+Shift+B
+    $description: Restart graphics driver
+  $name: Direct Shortcuts
+  $description: Shortcuts handled immediately via low-level hook without requiring an Explorer restart. Requires dwm.exe in Process inclusion list.
 
 - StandardShortcuts:
   - DisableWinB: false
@@ -157,21 +175,6 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinZ: false
     $name: Win+Z
     $description: Snap Layouts
-  - DisableWinTab: false
-    $name: Win+Tab
-    $description: Task View
-  - DisableWinUp: false
-    $name: Win+Up
-    $description: Maximize window
-  - DisableWinDown: false
-    $name: Win+Down
-    $description: Restore/Minimize window
-  - DisableWinLeft: false
-    $name: Win+Left
-    $description: Snap window left
-  - DisableWinRight: false
-    $name: Win+Right
-    $description: Snap window right
   - DisableWinHome: false
     $name: Win+Home
     $description: Minimize inactive windows
@@ -238,9 +241,6 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinCtrlS: false
     $name: Win+Ctrl+S
     $description: Speech Recognition
-  - DisableWinSpace: false
-    $name: Win+Space
-    $description: Switch keyboard layout
   - DisableWinShiftR: false
     $name: Win+Shift+R
     $description: Snipping Tool record
@@ -259,21 +259,6 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinPrtSc: false
     $name: Win+PrtSc
     $description: Screenshot to file
-  - DisableWinShiftLeft: false
-    $name: Win+Shift+Left
-    $description: Move window to left monitor
-  - DisableWinShiftRight: false
-    $name: Win+Shift+Right
-    $description: Move window to right monitor
-  - DisableWinShiftUp: false
-    $name: Win+Shift+Up
-    $description: Stretch window vertically
-  - DisableWinShiftDown: false
-    $name: Win+Shift+Down
-    $description: Restore/minimize height
-  - DisableOfficeHotkeys: false
-    $name: Office Hotkeys
-    $description: Ctrl+Shift+Alt+Win combinations
   - DisableWinAltD: false
     $name: Win+Alt+D
     $description: Show date/time
@@ -295,23 +280,11 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
   - DisableWinAltM: false
     $name: Win+Alt+M
     $description: Toggle microphone (Game Bar)
-  - DisableWinCtrlShiftB: false
-    $name: Win+Ctrl+Shift+B
-    $description: Restart graphics driver
   - DisableWinCtrlQ: false
     $name: Win+Ctrl+Q
     $description: Quick Assist
-  - DisableAltShift: false
-    $name: Alt+Shift
-    $description: Switch keyboard layout
-  - DisableWinKey: false
-    $name: Win
-    $description: Open Start Menu
-  - DisableCtrlEsc: false
-    $name: Ctrl+Esc
-    $description: Open Start Menu
-  $name: Standard Shortcuts (On/Off)
-  $description: Regular shortcuts that only require Explorer
+  $name: Standard Shortcuts
+  $description: Regular shortcuts registered by Explorer. Requires restarting Explorer to apply changes and release hotkeys for third-party apps.
 */
 // ==/WindhawkModSettings==
 
@@ -327,9 +300,9 @@ bool g_isDWM = false;
 // Settings structure
 struct Settings
 {
-    int DisableWinA;
+    bool DisableWinA;
     bool DisableWinB;
-    int DisableWinC;
+    bool DisableWinC;
     bool DisableWinD;
     bool DisableWinE;
     bool DisableWinF;
@@ -338,22 +311,22 @@ struct Settings
     bool DisableWinH;
     bool DisableWinI;
     bool DisableWinJ;
-    int DisableWinK;
+    bool DisableWinK;
     bool DisableWinM;
-    int DisableWinN;
+    bool DisableWinN;
     bool DisableWinO;
-    int DisableWinP;
+    bool DisableWinP;
     bool DisableWinQ;
     bool DisableWinR;
     bool DisableWinS;
     bool DisableWinT;
-    int DisableWinU;
+    bool DisableWinU;
     bool DisableWinV;
     bool DisableWinW;
     bool DisableWinX;
     bool DisableWinY;
     bool DisableWinZ;
-    int DisableWinSlash;
+    bool DisableWinSlash;
     bool DisableWinTab;
     bool DisableWinUp;
     bool DisableWinDown;
@@ -407,16 +380,9 @@ struct Settings
     bool DisableCtrlEsc;
 } g_settings;
 
-bool ExplorerShortcutsEqual(const Settings& a, const Settings& b)
+bool StandardShortcutsEqual(const Settings& a, const Settings& b)
 {
-    return (a.DisableWinA == 1) == (b.DisableWinA == 1) &&
-           (a.DisableWinC == 1) == (b.DisableWinC == 1) &&
-           (a.DisableWinK == 1) == (b.DisableWinK == 1) &&
-           (a.DisableWinN == 1) == (b.DisableWinN == 1) &&
-           (a.DisableWinP == 1) == (b.DisableWinP == 1) &&
-           (a.DisableWinU == 1) == (b.DisableWinU == 1) &&
-           (a.DisableWinSlash == 1) == (b.DisableWinSlash == 1) &&
-           a.DisableWinB == b.DisableWinB &&
+    return a.DisableWinB == b.DisableWinB &&
            a.DisableWinD == b.DisableWinD &&
            a.DisableWinE == b.DisableWinE &&
            a.DisableWinF == b.DisableWinF &&
@@ -474,30 +440,42 @@ bool ExplorerShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinCtrlQ == b.DisableWinCtrlQ;
 }
 
-bool HasAnyExplorerShortcutsDisabled()
+bool HasAnyStandardShortcutsDisabled()
 {
     Settings emptySettings{};
-    return !ExplorerShortcutsEqual(g_settings, emptySettings);
-}
-
-
-int GetSettingIntSafe(PCWSTR settingName) {
-    PCWSTR val = Wh_GetStringSetting(settingName);
-    if (!val) return 0;
-    int res = 0;
-    if (wcscmp(val, L"true") == 0 || wcscmp(val, L"disable") == 0) res = 1;
-    else if (wcscmp(val, L"false") == 0 || wcscmp(val, L"off") == 0) res = 0;
-    else if (wcscmp(val, L"block") == 0) res = 2;
-    else res = _wtoi(val); // fallback for legacy numbers
-    Wh_FreeStringSetting(val);
-    return res;
+    return !StandardShortcutsEqual(g_settings, emptySettings);
 }
 
 void LoadSettings()
 {
-    g_settings.DisableWinA = GetSettingIntSafe(L"SpecialShortcuts.DisableWinA");
+    // Special Shortcuts (Flyouts handled via DWM)
+    g_settings.DisableWinA = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinA");
+    g_settings.DisableWinC = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinC");
+    g_settings.DisableWinK = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinK");
+    g_settings.DisableWinN = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinN");
+    g_settings.DisableWinP = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinP");
+    g_settings.DisableWinU = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinU");
+    g_settings.DisableWinSlash = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinSlash");
+
+    // Direct Shortcuts (No Explorer Restart Required - with backward-compatible fallback)
+    g_settings.DisableWinKey = Wh_GetIntSetting(L"DirectShortcuts.DisableWinKey") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinKey");
+    g_settings.DisableCtrlEsc = Wh_GetIntSetting(L"DirectShortcuts.DisableCtrlEsc") || Wh_GetIntSetting(L"StandardShortcuts.DisableCtrlEsc");
+    g_settings.DisableAltShift = Wh_GetIntSetting(L"DirectShortcuts.DisableAltShift") || Wh_GetIntSetting(L"StandardShortcuts.DisableAltShift");
+    g_settings.DisableWinSpace = Wh_GetIntSetting(L"DirectShortcuts.DisableWinSpace") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinSpace");
+    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"DirectShortcuts.DisableOfficeHotkeys") || Wh_GetIntSetting(L"StandardShortcuts.DisableOfficeHotkeys");
+    g_settings.DisableWinTab = Wh_GetIntSetting(L"DirectShortcuts.DisableWinTab") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinTab");
+    g_settings.DisableWinUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinUp") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinUp");
+    g_settings.DisableWinDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinDown") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinDown");
+    g_settings.DisableWinLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinLeft") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinLeft");
+    g_settings.DisableWinRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinRight") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinRight");
+    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftUp") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftUp");
+    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftDown") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftDown");
+    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftLeft") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftLeft");
+    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftRight") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftRight");
+    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"DirectShortcuts.DisableWinCtrlShiftB") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlShiftB");
+
+    // Standard Shortcuts (Requires Explorer Restart)
     g_settings.DisableWinB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinB");
-    g_settings.DisableWinC = GetSettingIntSafe(L"SpecialShortcuts.DisableWinC");
     g_settings.DisableWinD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinD");
     g_settings.DisableWinE = Wh_GetIntSetting(L"StandardShortcuts.DisableWinE");
     g_settings.DisableWinF = Wh_GetIntSetting(L"StandardShortcuts.DisableWinF");
@@ -506,27 +484,17 @@ void LoadSettings()
     g_settings.DisableWinH = Wh_GetIntSetting(L"StandardShortcuts.DisableWinH");
     g_settings.DisableWinI = Wh_GetIntSetting(L"StandardShortcuts.DisableWinI");
     g_settings.DisableWinJ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinJ");
-    g_settings.DisableWinK = GetSettingIntSafe(L"SpecialShortcuts.DisableWinK");
     g_settings.DisableWinM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinM");
-    g_settings.DisableWinN = GetSettingIntSafe(L"SpecialShortcuts.DisableWinN");
     g_settings.DisableWinO = Wh_GetIntSetting(L"StandardShortcuts.DisableWinO");
-    g_settings.DisableWinP = GetSettingIntSafe(L"SpecialShortcuts.DisableWinP");
     g_settings.DisableWinQ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinQ");
     g_settings.DisableWinR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinR");
     g_settings.DisableWinS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinS");
     g_settings.DisableWinT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinT");
-    g_settings.DisableWinU = GetSettingIntSafe(L"SpecialShortcuts.DisableWinU");
     g_settings.DisableWinV = Wh_GetIntSetting(L"StandardShortcuts.DisableWinV");
     g_settings.DisableWinW = Wh_GetIntSetting(L"StandardShortcuts.DisableWinW");
     g_settings.DisableWinX = Wh_GetIntSetting(L"StandardShortcuts.DisableWinX");
     g_settings.DisableWinY = Wh_GetIntSetting(L"StandardShortcuts.DisableWinY");
     g_settings.DisableWinZ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinZ");
-    g_settings.DisableWinSlash = GetSettingIntSafe(L"SpecialShortcuts.DisableWinSlash");
-    g_settings.DisableWinTab = Wh_GetIntSetting(L"StandardShortcuts.DisableWinTab");
-    g_settings.DisableWinUp = Wh_GetIntSetting(L"StandardShortcuts.DisableWinUp");
-    g_settings.DisableWinDown = Wh_GetIntSetting(L"StandardShortcuts.DisableWinDown");
-    g_settings.DisableWinLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinLeft");
-    g_settings.DisableWinRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinRight");
     g_settings.DisableWinHome = Wh_GetIntSetting(L"StandardShortcuts.DisableWinHome");
     g_settings.DisableWinShiftC = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftC");
     g_settings.DisableWinShiftM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftM");
@@ -549,18 +517,12 @@ void LoadSettings()
     g_settings.DisableWinCtrlN = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlN");
     g_settings.DisableWinCtrlO = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlO");
     g_settings.DisableWinCtrlS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlS");
-    g_settings.DisableWinSpace = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSpace");
     g_settings.DisableWinShiftR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftR");
     g_settings.DisableWinShiftS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftS");
     g_settings.DisableWinAltK = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltK");
     g_settings.DisableWinPeriod = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPeriod");
     g_settings.DisableWinSemicolon = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSemicolon");
     g_settings.DisableWinPrtSc = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPrtSc");
-    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftLeft");
-    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftRight");
-    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftUp");
-    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftDown");
-    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"StandardShortcuts.DisableOfficeHotkeys");
     g_settings.DisableWinAltD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltD");
     g_settings.DisableWinAltB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltB");
     g_settings.DisableWinAltR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltR");
@@ -568,11 +530,7 @@ void LoadSettings()
     g_settings.DisableWinAltPrtSc = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltPrtSc");
     g_settings.DisableWinAltT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltT");
     g_settings.DisableWinAltM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltM");
-    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlShiftB");
     g_settings.DisableWinCtrlQ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlQ");
-    g_settings.DisableAltShift = Wh_GetIntSetting(L"StandardShortcuts.DisableAltShift");
-    g_settings.DisableWinKey = Wh_GetIntSetting(L"StandardShortcuts.DisableWinKey");
-    g_settings.DisableCtrlEsc = Wh_GetIntSetting(L"StandardShortcuts.DisableCtrlEsc");
 }
 
 bool IsNumberKey(DWORD vkCode)
@@ -674,9 +632,9 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
         {
             switch (vk)
             {
-                case 'A': block = (g_settings.DisableWinA > 0); break;
+                case 'A': block = g_settings.DisableWinA; break;
                 case 'B': block = g_settings.DisableWinB; break;
-                case 'C': block = (g_settings.DisableWinC > 0); break;
+                case 'C': block = g_settings.DisableWinC; break;
                 case 'D': block = g_settings.DisableWinD; break;
                 case 'E': block = g_settings.DisableWinE; break;
                 case 'F': block = g_settings.DisableWinF; break;
@@ -685,16 +643,16 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'H': block = g_settings.DisableWinH; break;
                 case 'I': block = g_settings.DisableWinI; break;
                 case 'J': block = g_settings.DisableWinJ; break;
-                case 'K': block = (g_settings.DisableWinK > 0); break;
+                case 'K': block = g_settings.DisableWinK; break;
                 case 'M': block = g_settings.DisableWinM; break;
-                case 'N': block = (g_settings.DisableWinN > 0); break;
+                case 'N': block = g_settings.DisableWinN; break;
                 case 'O': block = g_settings.DisableWinO; break;
-                case 'P': block = (g_settings.DisableWinP > 0); break;
+                case 'P': block = g_settings.DisableWinP; break;
                 case 'Q': block = g_settings.DisableWinQ; break;
                 case 'R': block = g_settings.DisableWinR; break;
                 case 'S': block = g_settings.DisableWinS; break;
                 case 'T': block = g_settings.DisableWinT; break;
-                case 'U': block = (g_settings.DisableWinU > 0); break;
+                case 'U': block = g_settings.DisableWinU; break;
                 case 'V': block = g_settings.DisableWinV; break;
                 case 'W': block = g_settings.DisableWinW; break;
                 case 'X': block = g_settings.DisableWinX; break;
@@ -713,7 +671,7 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case VK_ESCAPE: block = g_settings.DisableWinEsc; break;
                 case VK_SPACE: block = g_settings.DisableWinSpace; break;
                 case VK_OEM_PERIOD: block = g_settings.DisableWinPeriod; break;
-                case VK_OEM_2: block = (g_settings.DisableWinSlash > 0); break;
+                case VK_OEM_2: block = g_settings.DisableWinSlash; break;
                 case VK_OEM_1: block = g_settings.DisableWinSemicolon; break;
                 case VK_SNAPSHOT: block = g_settings.DisableWinPrtSc; break;
             }
@@ -745,13 +703,13 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
             // Hardcoded keys that bypass RegisterHotKey
             if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_SPACE)
                 return true;
-            if (vk == 'A' && g_settings.DisableWinA == 2) return true;
-            if (vk == 'C' && g_settings.DisableWinC == 2) return true;
-            if (vk == 'K' && g_settings.DisableWinK == 2) return true;
-            if (vk == 'N' && g_settings.DisableWinN == 2) return true;
-            if (vk == 'P' && g_settings.DisableWinP == 2) return true;
-            if (vk == 'U' && g_settings.DisableWinU == 2) return true;
-            if (vk == VK_OEM_2 && g_settings.DisableWinSlash == 2) return true;
+            if (vk == 'A' && g_settings.DisableWinA) return true;
+            if (vk == 'C' && g_settings.DisableWinC) return true;
+            if (vk == 'K' && g_settings.DisableWinK) return true;
+            if (vk == 'N' && g_settings.DisableWinN) return true;
+            if (vk == 'P' && g_settings.DisableWinP) return true;
+            if (vk == 'U' && g_settings.DisableWinU) return true;
+            if (vk == VK_OEM_2 && g_settings.DisableWinSlash) return true;
         } else {
             // Win+Shift+Arrows
             if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
@@ -775,11 +733,12 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
     if (ShouldBlockHotkey(fsModifiers, vk))
     {
-        // If the hotkey is a known hardcoded shell key (like Win+A for Action Center),
-        // we MUST let Explorer successfully register it. If we fake a failure here, 
-        // Explorer components fail to initialize and the user can't even open them 
-        // with a manual mouse click on the taskbar tray icons!
-        // The physical keyboard shortcut will still be blocked safely by our DWM LL hook.
+        // For Special Shortcuts & hardcoded keys, IsKnownHardcodedHotkey returns true:
+        // Explorer registers the hotkey so internal shell flyouts initialize properly 
+        // and taskbar tray mouse clicks or simulating apps continue to work, 
+        // while the physical keystroke is blocked in DWM.
+        // For Standard shortcuts (like Win+E, Win+R, Win+D), IsKnownHardcodedHotkey returns false:
+        // Explorer is prevented from claiming the hotkey, freeing it at OS level for other apps.
         if (IsKnownHardcodedHotkey(fsModifiers, vk))
         {
             return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
@@ -902,17 +861,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         DWORD vkCode = pKeyBoard->vkCode;
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+        bool isInjected = (pKeyBoard->flags & LLKHF_INJECTED) != 0;
 
-        // Ignore programmatically injected keystrokes. 
-        // This is extremely important because when a user manually clicks on a taskbar
-        // tray icon (like Network/Volume to open Quick Settings), Explorer actually 
-        // synthesizes a fake Win+A keystroke to trigger the flyout. If we block 
-        // injected keys, clicking the tray icon with the mouse will fail!
-        if (pKeyBoard->flags & LLKHF_INJECTED)
-        {
-            return CallNextHookEx(g_hHook, nCode, wParam, lParam);
-        }
-
+        // --- STEP 1: Unconditionally update software key state FIRST ---
         bool isInitialDown = false;
         if (vkCode < 256)
         {
@@ -932,10 +883,32 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
                 g_keyState[vkCode] = true;
             }
-            if (isUp) g_keyState[vkCode] = false;
+            else if (isUp)
+            {
+                g_keyState[vkCode] = false;
+            }
         }
 
-        // --- 1. Pass Modifiers Through ---
+        // --- STEP 2: Evaluate 100% accurate modifier states ---
+        bool hasWin = g_keyState[VK_LWIN] || g_keyState[VK_RWIN] || (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
+        bool hasCtrl = g_keyState[VK_CONTROL] || g_keyState[VK_LCONTROL] || g_keyState[VK_RCONTROL] || (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_LCONTROL) & 0x8000) || (GetAsyncKeyState(VK_RCONTROL) & 0x8000);
+        bool hasShift = g_keyState[VK_SHIFT] || g_keyState[VK_LSHIFT] || g_keyState[VK_RSHIFT] || (GetAsyncKeyState(VK_SHIFT) & 0x8000) || (GetAsyncKeyState(VK_LSHIFT) & 0x8000) || (GetAsyncKeyState(VK_RSHIFT) & 0x8000);
+        bool hasAlt = g_keyState[VK_MENU] || g_keyState[VK_LMENU] || g_keyState[VK_RMENU] || (GetAsyncKeyState(VK_MENU) & 0x8000) || (GetAsyncKeyState(VK_LMENU) & 0x8000) || (GetAsyncKeyState(VK_RMENU) & 0x8000);
+
+        UINT fsModifiers = 0;
+        if (hasWin) fsModifiers |= MOD_WIN;
+        if (hasCtrl) fsModifiers |= MOD_CONTROL;
+        if (hasShift) fsModifiers |= MOD_SHIFT;
+        if (hasAlt) fsModifiers |= MOD_ALT;
+
+        // --- STEP 3: Handle Injected Keystrokes ---
+        // Allow injected/simulated keystrokes (e.g. from third-party tools, tray clicks, or macros)
+        if (isInjected)
+        {
+            return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+        }
+
+        // --- STEP 4: Pass Modifiers Through (Physical) ---
         // Never block modifiers themselves to preserve third-party app compatibility
         if ((vkCode >= VK_SHIFT && vkCode <= VK_MENU) ||
             vkCode == VK_LWIN || vkCode == VK_RWIN ||
@@ -952,11 +925,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 // to disrupt the layout switcher's sequence detection.
                 if (isUp && (isShift || isAlt))
                 {
-                    bool hasWinState = g_keyState[VK_LWIN] || g_keyState[VK_RWIN] || (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
-                    bool hasCtrlState = g_keyState[VK_CONTROL] || g_keyState[VK_LCONTROL] || g_keyState[VK_RCONTROL] || (GetAsyncKeyState(VK_CONTROL) & 0x8000);
-                    
-                    bool hasShiftState = g_keyState[VK_SHIFT] || g_keyState[VK_LSHIFT] || g_keyState[VK_RSHIFT] || (GetAsyncKeyState(VK_SHIFT) & 0x8000) || isShift;
-                    bool hasAltState = g_keyState[VK_MENU] || g_keyState[VK_LMENU] || g_keyState[VK_RMENU] || (GetAsyncKeyState(VK_MENU) & 0x8000) || isAlt;
+                    bool hasWinState = g_keyState[VK_LWIN] || g_keyState[VK_RWIN];
+                    bool hasCtrlState = g_keyState[VK_CONTROL] || g_keyState[VK_LCONTROL] || g_keyState[VK_RCONTROL];
+                    bool hasShiftState = g_keyState[VK_SHIFT] || g_keyState[VK_LSHIFT] || g_keyState[VK_RSHIFT] || isShift;
+                    bool hasAltState = g_keyState[VK_MENU] || g_keyState[VK_LMENU] || g_keyState[VK_RMENU] || isAlt;
 
                     if (hasAltState && hasShiftState && !hasWinState && !hasCtrlState)
                     {
@@ -982,12 +954,12 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 bool isShift = (vkCode == VK_LSHIFT || vkCode == VK_RSHIFT || vkCode == VK_SHIFT);
                 bool isAlt = (vkCode == VK_LMENU || vkCode == VK_RMENU || vkCode == VK_MENU);
 
-                bool hasWin = g_keyState[VK_LWIN] || g_keyState[VK_RWIN] || (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000) || isWin;
-                bool hasCtrl = g_keyState[VK_CONTROL] || g_keyState[VK_LCONTROL] || g_keyState[VK_RCONTROL] || (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_LCONTROL) & 0x8000) || (GetAsyncKeyState(VK_RCONTROL) & 0x8000) || isCtrl;
-                bool hasShift = g_keyState[VK_SHIFT] || g_keyState[VK_LSHIFT] || g_keyState[VK_RSHIFT] || (GetAsyncKeyState(VK_SHIFT) & 0x8000) || (GetAsyncKeyState(VK_LSHIFT) & 0x8000) || (GetAsyncKeyState(VK_RSHIFT) & 0x8000) || isShift;
-                bool hasAlt = g_keyState[VK_MENU] || g_keyState[VK_LMENU] || g_keyState[VK_RMENU] || (GetAsyncKeyState(VK_MENU) & 0x8000) || (GetAsyncKeyState(VK_LMENU) & 0x8000) || (GetAsyncKeyState(VK_RMENU) & 0x8000) || isAlt;
+                bool hasWinState = hasWin || isWin;
+                bool hasCtrlState = hasCtrl || isCtrl;
+                bool hasShiftState = hasShift || isShift;
+                bool hasAltState = hasAlt || isAlt;
                 
-                if (hasWin && hasCtrl && hasShift && hasAlt)
+                if (hasWinState && hasCtrlState && hasShiftState && hasAltState)
                 {
                     if (isDown)
                     {
@@ -1014,7 +986,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
         }
 
-        // --- 3. Handle UP Events ---
+        // --- STEP 5: Handle UP Events (Physical) ---
         if (isUp)
         {
             if (vkCode < 256 && g_suppressedKeys[vkCode])
@@ -1025,23 +997,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
         }
 
-        // --- 4. Handle DOWN Events ---
+        // --- STEP 6: Handle DOWN Events (Physical) ---
         if (isDown)
         {
-            // Use our own state tracking to ensure we don't miss modifiers 
-            // Fallback to GetAsyncKeyState in case hook missed the down event (e.g. started while key held)
-            bool hasWin = g_keyState[VK_LWIN] || g_keyState[VK_RWIN] || (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
-            bool hasCtrl = g_keyState[VK_CONTROL] || g_keyState[VK_LCONTROL] || g_keyState[VK_RCONTROL] || (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_LCONTROL) & 0x8000) || (GetAsyncKeyState(VK_RCONTROL) & 0x8000);
-            bool hasShift = g_keyState[VK_SHIFT] || g_keyState[VK_LSHIFT] || g_keyState[VK_RSHIFT] || (GetAsyncKeyState(VK_SHIFT) & 0x8000) || (GetAsyncKeyState(VK_LSHIFT) & 0x8000) || (GetAsyncKeyState(VK_RSHIFT) & 0x8000);
-            bool hasAlt = g_keyState[VK_MENU] || g_keyState[VK_LMENU] || g_keyState[VK_RMENU] || (GetAsyncKeyState(VK_MENU) & 0x8000) || (GetAsyncKeyState(VK_LMENU) & 0x8000) || (GetAsyncKeyState(VK_RMENU) & 0x8000);
-
-            // Convert to MOD_* flags for evaluating
-            UINT fsModifiers = 0;
-            if (hasWin) fsModifiers |= MOD_WIN;
-            if (hasCtrl) fsModifiers |= MOD_CONTROL;
-            if (hasShift) fsModifiers |= MOD_SHIFT;
-            if (hasAlt) fsModifiers |= MOD_ALT;
-
             // Check if this hotkey is disabled in settings AND is hardcoded
             if (ShouldBlockHotkey(fsModifiers, vkCode) && IsKnownHardcodedHotkey(fsModifiers, vkCode))
             {
@@ -1160,10 +1118,10 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return (g_settings.DisableWinA == 2) || (g_settings.DisableWinC == 2) || 
-           (g_settings.DisableWinK == 2) || (g_settings.DisableWinN == 2) || 
-           (g_settings.DisableWinP == 2) || (g_settings.DisableWinU == 2) || 
-           (g_settings.DisableWinSlash == 2) || 
+    return g_settings.DisableWinA || g_settings.DisableWinC || 
+           g_settings.DisableWinK || g_settings.DisableWinN || 
+           g_settings.DisableWinP || g_settings.DisableWinU || 
+           g_settings.DisableWinSlash || 
            g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
@@ -1236,13 +1194,6 @@ bool AreAnyDisabledExplorerHotkeysRegistered()
     if (g_settings.DisableWinH && ProbeIsHotkeyRegistered(MOD_WIN, 'H')) return true;
     if (g_settings.DisableWinM && ProbeIsHotkeyRegistered(MOD_WIN, 'M')) return true;
     if (g_settings.DisableWinZ && ProbeIsHotkeyRegistered(MOD_WIN, 'Z')) return true;
-    if ((g_settings.DisableWinA == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'A')) return true;
-    if ((g_settings.DisableWinC == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'C')) return true;
-    if ((g_settings.DisableWinK == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'K')) return true;
-    if ((g_settings.DisableWinN == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'N')) return true;
-    if ((g_settings.DisableWinP == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'P')) return true;
-    if ((g_settings.DisableWinU == 1) && ProbeIsHotkeyRegistered(MOD_WIN, 'U')) return true;
-    if ((g_settings.DisableWinSlash == 1) && ProbeIsHotkeyRegistered(MOD_WIN, VK_OEM_2)) return true;
     if (g_settings.DisableWinShiftS && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'S')) return true;
     if (g_settings.DisableWinShiftR && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'R')) return true;
     if (g_settings.DisableWinShiftC && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'C')) return true;
@@ -1278,7 +1229,7 @@ BOOL Wh_ModInit()
 
     if (g_isDWM && !NeedsDwmHook())
     {
-        return FALSE; // Unload from DWM if no hardcoded keys are disabled
+        return FALSE; // Unload from DWM if no hardcoded/special keys are disabled
     }
 
     // Hook RegisterHotKey in explorer (we don't need it in DWM)
@@ -1292,8 +1243,8 @@ BOOL Wh_ModInit()
                 Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
         }
 
-        // Prompt ONLY if Explorer is running mid-session (>15s) AND at least one Explorer shortcut is disabled AND Explorer holds it
-        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyExplorerShortcutsDisabled() && AreAnyDisabledExplorerHotkeysRegistered())
+        // Prompt ONLY if Explorer is running mid-session (>15s) AND standard shortcuts are disabled AND Explorer holds them
+        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyStandardShortcutsDisabled() && AreAnyDisabledExplorerHotkeysRegistered())
         {
             PromptForExplorerRestart();
         }
@@ -1312,7 +1263,7 @@ void Wh_ModUninit()
         StopHookThread();
     }
 
-    if (g_isExplorer)
+    if (g_isExplorer && IsMainExplorer())
     {
         // 1. Signal any pending prompt dialog from a prior settings change to close
         if (HWND promptWindow = g_restartExplorerPromptWindow.load())
@@ -1320,10 +1271,30 @@ void Wh_ModUninit()
             PostMessage(promptWindow, WM_CLOSE, 0, 0);
         }
 
-        // 2. Safe bounded wait to let the prompt thread exit cleanly
         if (g_restartExplorerPromptThread)
         {
-            WaitForSingleObject(g_restartExplorerPromptThread, 1000);
+            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            CloseHandle(g_restartExplorerPromptThread);
+            g_restartExplorerPromptThread = nullptr;
+        }
+
+        // 2. If standard shortcuts were disabled, prompt user on unload to restore them
+        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
+        {
+            PromptForExplorerRestart();
+        }
+
+        // 3. Safe bounded wait (30s) matching official simple-window-switcher pattern
+        if (g_restartExplorerPromptThread)
+        {
+            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
+            {
+                if (HWND promptWindow = g_restartExplorerPromptWindow.load())
+                {
+                    PostMessage(promptWindow, WM_CLOSE, 0, 0);
+                }
+                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            }
             CloseHandle(g_restartExplorerPromptThread);
             g_restartExplorerPromptThread = nullptr;
         }
@@ -1343,7 +1314,7 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !ExplorerShortcutsEqual(oldSettings, g_settings))
+    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
     {
         PromptForExplorerRestart();
     }
