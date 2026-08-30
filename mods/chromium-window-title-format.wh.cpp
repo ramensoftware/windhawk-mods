@@ -985,14 +985,12 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // ONE profile is enough. The evidence is the exact match, and how many
         // OTHER names exist does not make any single match stronger - it only
         // adds strings that can match at all, so a longer list is more
-        // false-positive surface, not less. Requiring two was a proxy for "a
-        // single-profile install does not show its profile", which is simply
-        // untrue: current Edge shows "Personal" with one profile, and the whole
-        // count clause sits behind that segment.
+        // false-positive surface, not less. Current Edge shows "Personal" on a
+        // single-profile install, and the whole count clause sits behind that
+        // segment, so a two-profile floor would cost both.
         //
         // profileCount, NOT profileNames.size(): two keys are read per profile,
         // so a size test cannot tell "no profiles" from "no names read".
-        bool stripped = false;
         if (out->profile.empty() && g.profileCount >= 1 &&
             !g.profileNames.empty()) {
             for (const std::wstring& sep : g.slot2Seps) {
@@ -1016,7 +1014,6 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
                 if (!known) continue;
                 out->profile = trimmed;
                 r3 = r2.substr(0, at);
-                stripped = true;
                 break;
             }
         }
@@ -1041,8 +1038,10 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // trade to installs whose names ARE readable - where the same title is
         // correctly left alone - and regress them for no gain.
         //
-        // The segment goes into {profile}, not away, so nothing is silently lost.
-        if (!stripped && out->profile.empty() && g.profileNames.empty()) {
+        // The segment goes into {profile}, not away, so nothing is silently
+        // lost. No flag separates the two branches: the gate above stores a name
+        // it matched, and a stored name is never empty.
+        if (out->profile.empty() && g.profileNames.empty()) {
             for (const std::wstring& sep : g.slot2Seps) {
                 const size_t at = r2.rfind(sep);
                 if (at == std::wstring::npos || at == 0) continue;
@@ -1051,10 +1050,9 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
                 Fields       probe = *out;
                 std::wstring rest;
                 if (!tryStripCount(r2.substr(0, at), &probe, &rest)) continue;
-                *out          = probe;
-                out->profile  = cand;
-                r3            = rest;
-                stripped      = true;
+                *out         = probe;
+                out->profile = cand;
+                r3           = rest;
                 break;
             }
         }
@@ -2196,14 +2194,9 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                 }
             }
             if (g.profileNames.empty()) {
-                Wh_Log(L"could not read this install's profile names, so "
-                       L"{profile} will stay empty rather than guess at a "
-                       L"trailing segment of the page title");
-            } else if (g.profileCount < 2) {
-                Wh_Log(L"this install has a single profile; with only one name "
-                       L"to compare against, a trailing segment cannot be told "
-                       L"from a page title that ends the same way, so {profile} "
-                       L"will stay empty");
+                Wh_Log(L"could not read this install's profile names; a "
+                       L"trailing segment becomes {profile} only where a "
+                       L"page-count form matches behind it");
             }
             break;
         }
@@ -2306,8 +2299,10 @@ void LoadSettings() {
     g_settings = std::move(s);
     ReleaseSRWLockExclusive(&g_settingsLock);
 
-    // After the swap, so a render that started on the old template cannot mark
-    // the new generation as already reported.
+    // After the swap, so the new template is in place for whatever the bump
+    // re-arms. This narrows the window, it does not close it: the counter is
+    // read where a diagnostic fires, not where the render began, so a render
+    // still holding the old template can consume the new generation.
     InterlockedIncrement(&g_templateGeneration);
 }
 
