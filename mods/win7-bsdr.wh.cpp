@@ -1777,7 +1777,7 @@ namespace CustomBSDR {
     void DrawSeparator(LPDRAWITEMSTRUCT pDIS);
     void DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS);
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
-    void RemoveAppTileControls(UINT appId);
+    void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
     void UpdateAppListLayout();
     LRESULT CALLBACK ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     LRESULT CALLBACK AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
@@ -1802,6 +1802,8 @@ namespace CustomBSDR {
     static int scrollPos = 0;
     static unsigned int scrollLines = 3;
     static int totalContentHeight = 0;
+    static int minHeight = 0;
+    static bool paintedFirstFrame = false;
     static bool isOnSecureDesktop = true;
 
     // app list data stuff
@@ -2411,6 +2413,11 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
     blockingApp->get_IsBlocking(&tile.isBlocking);
     tile.hIconBitmap = nullptr;
 
+    // When the blocking app changes (previous blocking app closes and there's a new blocking app),
+    // the BSDR backend sends the FULL list of blocking apps as AddApplication again, without calling RemoveApplication
+    // so deduplicate it
+    RemoveAppTileControls(tile.appId, true);
+
     HSTRING caption, blockReason;
     std::wstring titleText;
     std::wstring blockReasonText;
@@ -2500,7 +2507,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
     }
 }
 
-void CustomBSDR::RemoveAppTileControls(UINT appId) {
+void CustomBSDR::RemoveAppTileControls(UINT appId, bool noUpdateLayout) {
     for (auto it = appTiles.begin(); it != appTiles.end(); ++it) {
         if (it->appId == appId) {
             if (it->hIcon) {
@@ -2518,7 +2525,9 @@ void CustomBSDR::RemoveAppTileControls(UINT appId) {
 
             appTiles.erase(it);
 
-            UpdateAppListLayout();
+            if (!noUpdateLayout) {
+                UpdateAppListLayout();
+            }
             return;
         }
     }
@@ -2563,15 +2572,18 @@ void CustomBSDR::UpdateAppListLayout() {
     int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
 
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    int minHeight = visibleHeight;
     int maxHeight = screenHeight - MulDiv(335, dpi, 96);
 
     int newHeight = totalContentHeight;
-    if (newHeight < minHeight)
+    if (paintedFirstFrame && newHeight < visibleHeight)
+        newHeight = visibleHeight;
+    // Allow decreasing before the first hBgWnd WM_PAINT
+    else if (!paintedFirstFrame && newHeight < minHeight)
         newHeight = minHeight;
-    if (newHeight > maxHeight) // Allow decreasing on resolution decrease
+    // Allow decreasing on resolution decrease
+    if (newHeight > maxHeight)
         newHeight = maxHeight;
-    int heightDiff = newHeight - minHeight;
+    int heightDiff = newHeight - visibleHeight;
 
     if (heightDiff) {
         visibleHeight = newHeight;
@@ -2756,7 +2768,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
 
             int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-            int minHeight = rcAppList.bottom - rcAppList.top;
+            minHeight = rcAppList.bottom - rcAppList.top;
             int maxHeight = screenHeight - MulDiv(335, dpi, 96);
 
             if (maxHeight < minHeight)
@@ -3126,6 +3138,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             DeleteDC(memDC);
         }
         EndPaint(hWnd, &ps);
+        paintedFirstFrame = true;
         return 0;
     }
     case WM_WINDOWPOSCHANGING: {
