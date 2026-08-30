@@ -144,9 +144,10 @@ Style short prefixes like `{count}`, not `{title}`.
   install whose profile is `Personal`, whose tail moves into `{profile}`; the
   alternative - stripping whatever follows the last separator - would truncate
   every title containing a dash, so the name match is the floor.
-  Where the profile list cannot be read at all, the segment is recovered only
-  when the browser's own page-count wording sits behind it, which keeps `{count}`
-  working; anything else stays in `{title}` rather than being guessed at.
+  Where the profile list cannot be read at all, nothing is stripped, and any
+  count sitting behind the profile is lost with it. The setting `Guess the
+  profile when the profile list cannot be read` trades that back on weaker
+  evidence, and is off by default - its description says what it costs.
 - **The profile list is read once, at startup.** Add, rename or remove a profile
   and `{profile}` keeps working from the old list until the browser restarts or
   the mod is reloaded. This is deliberate: the list decides whether text is
@@ -165,15 +166,21 @@ Style short prefixes like `{count}`, not `{title}`.
   wrong one would make the mod appear to work and rewrite nothing, so the pack
   that was read, every page-count form found in it, and the browser suffix that
   actually matched a title are all logged to make that visible.
-- **A `UserDataDir` group policy is not read.** On a machine that sets one - and
-  on a portable or repacked install - the profile list and the browser's UI
-  language are looked for in the default location instead. Both fail closed, so
-  the name match is skipped rather than guessed. That is the one case where the
-  count-backed recovery above applies, and it is weaker than a name match: a page
-  whose own title ends in the browser's count wording, such as
-  `E-Mail and 16 more pages - Some Site`, is read as a 17-tab window in a profile
-  called `Some Site`. Multi-tab titles keep their counts at that price, and only
-  where nothing better is available.
+- **A `UserDataDir` group policy is read; a portable install still is not.** The
+  policy is taken from `HKLM` and then `HKCU` under
+  `SOFTWARE\Policies\Microsoft\Edge` (`Google\Chrome` for Chrome), which is where
+  the browser reads it and it outranks `--user-data-dir`, so a managed machine
+  matches profile names normally. A policy path still holding a `${...}` variable
+  that this mod cannot expand is treated as unknown rather than guessed at. What
+  remains unreadable - a portable or repacked install, a truncated `Local State` -
+  leaves `{profile}` empty and takes any count behind it, unless the guess setting
+  above is turned on.
+- **A profile that has never been renamed may not be matched.** A freshly created
+  profile can be shown under a localized default label - `Personal`,
+  `Henkilökohtainen` - that appears nowhere in `Local State`, which still records
+  the internal name. Once the profile has been used normally the browser writes
+  the displayed name and the match works. Nothing is mangled meanwhile; the
+  segment simply stays in `{title}`.
 */
 // ==/WindhawkModReadme==
 
@@ -229,6 +236,20 @@ Style short prefixes like `{count}`, not `{title}`.
         Leave empty for automatic discovery. Set only if the log reports that
         discovery failed for your build. This is the whole literal tail
         including its leading separator, for example " - Google Chrome".
+    - GuessProfileWhenUnknown: false
+      $name: Guess the profile when the profile list cannot be read
+      $description: >-
+        Off by default, and it trades away the mod's main guarantee. Normally a
+        trailing segment becomes {profile} only when it exactly matches a
+        profile name read from the browser's own data, so a title the mod cannot
+        account for is left untouched. On the rare install where no profile name
+        can be read - a portable or repacked build - turning this on
+        lets the mod accept a trailing segment on weaker evidence: that the
+        browser's own page-count wording sits behind it. That recovers {count}
+        on those installs, at the cost that a page whose title genuinely ends
+        that way, such as "E-Mail and 16 more pages - Some Site", is read as a
+        17-tab window in a profile called "Some Site". Leave it off unless the
+        count matters more to you than the guarantee.
   $name: Title parsing
 */
 // ==/WindhawkModSettings==
@@ -905,7 +926,11 @@ struct Fields {
 // Right-anchored and validating. Any step that cannot match exactly makes the
 // whole parse fail, and a failed parse means the title is left untouched.
 // Failure is a valid and preferred outcome - never a reason to guess.
-bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
+// `guessProfile` is the Parsing.GuessProfileWhenUnknown setting. It defaults to
+// false here as well as in the settings, so a caller that does not opt in gets
+// the fail-closed behaviour and nothing else has to know about the option.
+bool Decompose(const std::wstring& in, const Grammar& g, Fields* out,
+               bool guessProfile = false) {
     // 1. browser suffix (the entire literal tail, byte for byte)
     std::wstring r1;
     bool         matched = false;
@@ -1128,7 +1153,13 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // The segment goes into {profile}, not away, so nothing is silently
         // lost. No flag separates the two branches: the gate above stores a name
         // it matched, and a stored name is never empty.
-        if (out->profile.empty() && g.profileNames.empty()) {
+        //
+        // OFF BY DEFAULT, because it is the one path that can move a page's own
+        // text without a name to justify it, and the population it fires on is
+        // exactly the one that cannot check the result. The README's promise -
+        // what the mod cannot account for is left byte-identical - is therefore
+        // true unless the user has explicitly traded it away.
+        if (guessProfile && out->profile.empty() && g.profileNames.empty()) {
             for (const std::wstring& sep : g.slot2Seps) {
                 const size_t at = r2.rfind(sep);
                 if (at == std::wstring::npos || at == 0) continue;
@@ -1275,10 +1306,23 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
         } else if (const style::Kind k = style::FromName(m);
                    k != style::Kind::kNone) {
             v = style::Apply(v, k);
-        } else if (m != L"min2" && m != L"pad2" && m != L"pad3") {
-            // Those three are consumed by the numeric pass above; anything else
-            // reaching here is a typo, and skipping it silently is the other
-            // half of "my template does nothing".
+        } else if (m == L"min2" || m == L"pad2" || m == L"pad3") {
+            // Consumed by the numeric pass above - but only for a numeric token.
+            // On a text one they are silently inert, which is the same "my
+            // template does nothing" the unknown-modifier line exists to answer,
+            // so say so rather than letting {title:pad3} fail quietly while the
+            // neighbouring typo {title:padd3} is reported.
+            if (!numeric) {
+                static volatile LONG seen = -1;
+                if (FirstForThisTemplate(&seen)) {
+                    Wh_Log(L"template: '%s' only applies to {count} and "
+                           L"{extra}; ignored here",
+                           std::wstring(m).c_str());
+                }
+            }
+        } else {
+            // Anything else reaching here is a typo, and skipping it silently is
+            // the other half of "my template does nothing".
             static volatile LONG seen = -1;
             if (FirstForThisTemplate(&seen)) {
                 Wh_Log(L"template: unknown modifier '%s'",
@@ -1387,6 +1431,7 @@ struct Settings {
     std::wstring normal;
     std::wstring chromeOverride;
     std::wstring suffixOverride;
+    bool         guessProfile = false;
 };
 
 struct WindowState {
@@ -1468,8 +1513,16 @@ std::wstring ComposeFor(const std::wstring& source) {
     if (!InterlockedCompareExchange(&g_ready, 0, 0)) {
         return source;
     }
+    // Read before Decompose, under the same lock the template is copied with.
+    bool guessProfile;
+    {
+        AcquireSRWLockShared(&g_settingsLock);
+        guessProfile = g_settings.guessProfile;
+        ReleaseSRWLockShared(&g_settingsLock);
+    }
+
     Fields f;
-    if (!Decompose(source, g_grammar, &f)) {
+    if (!Decompose(source, g_grammar, &f, guessProfile)) {
         // Not a title this mod recognises: a window the user has named, a PWA, a
         // dialog, picture-in-picture. From the string alone those are
         // indistinguishable, and telling them apart needs the browser's own
@@ -1514,7 +1567,12 @@ std::wstring ComposeFor(const std::wstring& source) {
 //
 // The timeout is short because a sweep can cover ninety windows on the worker
 // thread teardown has to join: a per-window second would stall an uninstall.
-bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
+// `answered`, when given, reports whether the THREAD replied at all, which is a
+// different fact from whether the write took: a window procedure that handles
+// WM_SETTEXT and returns FALSE has answered. Only silence is evidence about the
+// thread, and only that may mute its remaining windows.
+bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text,
+                               bool* answered = nullptr) {
     // BOTH results matter. The return value says the message was delivered;
     // `result` is what the window procedure returned, and WM_SETTEXT reports
     // TRUE only when the text was set. Counting delivery alone is how a
@@ -1523,6 +1581,7 @@ bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
     const LRESULT ok = SendMessageTimeoutW(
         hWnd, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(text.c_str()),
         SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT, 250, &result);
+    if (answered) *answered = (ok != 0);
     return ok != 0 && result != 0;
 }
 
@@ -1684,18 +1743,21 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 
 // ---- discovery --------------------------------------------------------------
 
-// The one seam the test harness replaces. Production resolves through the
-// shell's known-folder store, which does not depend on the process having
-// inherited an intact environment block; the suite compiles this same
-// translation unit and points the override at a fixture directory.
+// The one seam the test harness replaces, and it exists ONLY there. The suite
+// compiles this same translation unit with -DWH_TITLEFMT_TEST and points the
+// override at a fixture directory; no Windhawk build defines that macro, so the
+// shipped mod contains neither the global nor the branch.
 //
-// Deliberately not behind a conditional. Compiling the seam only for the tests
-// would mean the function they exercise is not the one that ships; nothing in
-// the mod writes this, so the shipped build always falls through.
+// The macro is the harness's own on purpose. Windhawk's editing-mode define is
+// undocumented, and a mod should not key any behaviour off it.
+#ifdef WH_TITLEFMT_TEST
 std::wstring g_localAppDataOverride;
+#endif
 
 std::wstring LocalAppDataDir() {
+#ifdef WH_TITLEFMT_TEST
     if (!g_localAppDataOverride.empty()) return g_localAppDataOverride;
+#endif
     PWSTR        p = nullptr;
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) &&
@@ -1739,7 +1801,93 @@ std::wstring DirOfModule(const wchar_t* name) {
 // ${local_app_data} expansion). On a policy-managed machine this answers about
 // the default location instead; both callers treat a miss as "unknown", so the
 // failure is a missing {profile} rather than a wrong one.
+// The UserDataDir group policy. Chromium gives it precedence over
+// --user-data-dir, so this is read first, and HKLM before HKCU exactly as the
+// browser resolves it. Read-only: the mod never writes a policy key.
+//
+// Reading this is what lets a policy-managed machine match a real profile name
+// instead of falling back to guessing at a trailing segment.
+//
+// `unresolved` is the important half. A policy that EXISTS but cannot be turned
+// into a path here is not the same as no policy: falling back would read the
+// default directory, which is a Local State the browser is NOT using, and its
+// profile names would then be matched against - and cut out of - real titles.
+// So that case is reported separately and the caller fails closed.
+std::wstring PolicyUserDataDir(bool* unresolved) {
+    *unresolved = false;
+    const wchar_t* const key = g_isChrome
+                                   ? L"SOFTWARE\\Policies\\Google\\Chrome"
+                                   : L"SOFTWARE\\Policies\\Microsoft\\Edge";
+    for (const HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
+        HKEY h = nullptr;
+        if (RegOpenKeyExW(root, key, 0, KEY_QUERY_VALUE, &h) != ERROR_SUCCESS) {
+            continue;
+        }
+        wchar_t buf[1024];
+        DWORD   cb = sizeof buf, type = 0;
+        const LSTATUS st =
+            RegQueryValueExW(h, L"UserDataDir", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(buf), &cb);
+        RegCloseKey(h);
+        if (st == ERROR_FILE_NOT_FOUND) continue;  // no policy at this root
+        if (st != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) {
+            // Present and unreadable - too long for the buffer, or not a string.
+            *unresolved = true;
+            return {};
+        }
+        // RegQueryValueExW does not promise a terminator. The division rounds
+        // down, so an odd byte count cannot produce a partial character.
+        std::wstring v(buf, cb / sizeof(wchar_t));
+        const size_t nul = v.find(L'\0');
+        if (nul != std::wstring::npos) v.resize(nul);
+
+        // TERMINAL, not a miss. The browser reads HKLM and stops; an empty value
+        // there means it uses the default, and so must this.
+        if (v.empty()) return {};
+
+        // Chromium strips one matching quote pair before expanding, and a GPO
+        // written from a .reg file routinely carries them. Without this the
+        // quotes reach a file path and every read fails.
+        if (v.size() >= 2 && ((v.front() == L'"' && v.back() == L'"') ||
+                              (v.front() == L'\'' && v.back() == L'\''))) {
+            v = v.substr(1, v.size() - 2);
+        }
+
+        if (type == REG_EXPAND_SZ) {
+            wchar_t     ex[1024];
+            const DWORD n = ExpandEnvironmentStringsW(v.c_str(), ex, 1024);
+            if (n == 0 || n > 1024) {
+                *unresolved = true;  // needs more room than we gave it
+                return {};
+            }
+            v.assign(ex, n - 1);
+            if (v.empty()) return {};
+        }
+        // Chromium also expands its own ${...} variables here - ${local_app_data}
+        // and nine others. This mod does not, and a path still holding one names
+        // a directory it cannot find.
+        if (v.find(L"${") != std::wstring::npos) {
+            *unresolved = true;
+            return {};
+        }
+        return v;
+    }
+    return {};
+}
+
 std::wstring UserDataDir() {
+    bool               policyUnresolved = false;
+    const std::wstring fromPolicy       = PolicyUserDataDir(&policyUnresolved);
+    if (policyUnresolved) {
+        // A policy is in force and points somewhere this mod cannot follow.
+        // Every fallback below would read a directory the browser is not using,
+        // so report unknown and let the callers skip their slots.
+        Wh_Log(L"a UserDataDir policy is set but could not be resolved; "
+               L"profile names will not be read");
+        return {};
+    }
+    if (!fromPolicy.empty()) return fromPolicy;
+
     int     argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     std::wstring fromArgs;
@@ -2302,9 +2450,28 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                 }
             }
             if (g.profileNames.empty()) {
-                Wh_Log(L"could not read this install's profile names; a "
-                       L"trailing segment becomes {profile} only where a "
-                       L"page-count form matches behind it");
+                // BOTH STATES, because this line is read on exactly the installs
+                // the setting exists for, and a line that describes only one of
+                // them is the third such lie this review has turned up.
+                bool guess;
+                {
+                    AcquireSRWLockShared(&g_settingsLock);
+                    guess = g_settings.guessProfile;
+                    ReleaseSRWLockShared(&g_settingsLock);
+                }
+                if (guess) {
+                    Wh_Log(L"could not read this install's profile names; "
+                           L"guessing is ON, so a trailing segment becomes "
+                           L"{profile} where a page-count form matches behind "
+                           L"it - a page whose own title ends that way is "
+                           L"mis-split");
+                } else {
+                    Wh_Log(L"could not read this install's profile names, so "
+                           L"{profile} stays empty and any count behind it is "
+                           L"left alone. Turn on 'Guess the profile when the "
+                           L"profile list cannot be read' to recover the count "
+                           L"on weaker evidence");
+                }
             }
             break;
         }
@@ -2398,6 +2565,7 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"Format.ChromeOverride").get();
     s.suffixOverride =
         WindhawkUtils::StringSetting::make(L"Parsing.BrowserSuffix").get();
+    s.guessProfile = Wh_GetIntSetting(L"Parsing.GuessProfileWhenUnknown") != 0;
 
     if (s.normal.empty()) {
         s.normal = L"{title}?( {more})?( - {profile})";
@@ -2587,10 +2755,28 @@ void Wh_ModUninit() {
         if (!ReadTitleFromOtherThread(hWnd, &cur)) { mute.push_back(tid); ++failed; continue; }
         if (cur != st.applied) { ++skipped; continue; }
 
-        if (WriteTitleFromOtherThread(hWnd, st.source)) {
+        bool answered = false;
+        if (WriteTitleFromOtherThread(hWnd, st.source, &answered)) {
             ++restored;
         } else {
-            mute.push_back(tid);
+            // Mute ONLY on silence, and only when the window is still there to
+            // have been silent. A window that answered and refused says nothing
+            // about its siblings, and since every browser frame shares one UI
+            // thread, muting on a refusal abandons the restore for all of them -
+            // leaving our titles in place after the mod is gone. The sweep
+            // already gets this right.
+            //
+            // SMTO_ERRORONEXIT also fails a send whose window is being
+            // destroyed, which is ordinary during teardown and says nothing
+            // about the thread either - so re-check ownership rather than trust
+            // the failure. Recycling is not a concern here: a handle that now
+            // belongs to another process or thread fails this test too, and the
+            // only cost of a false negative is one unmuted thread.
+            DWORD pid2 = 0;
+            const DWORD tid2 = GetWindowThreadProcessId(hWnd, &pid2);
+            if (!answered && pid2 == GetCurrentProcessId() && tid2 == tid) {
+                mute.push_back(tid);
+            }
             ++failed;
         }
     }
