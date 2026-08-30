@@ -121,11 +121,16 @@ Style short prefixes like `{count}`, not `{title}`.
   needs no symbols and no PDB, so it is not pinned to a particular browser
   build, but other Chromium forks are not currently recognized and would each
   need their own entry and browser-name hint.
-- **`{profile}` needs more than one profile to appear.** A browser with a single
-  profile can still put its name in the title, but with only one profile to
-  compare against there is no way to tell a real profile from a page title that
-  happens to end the same way - so the mod leaves that text inside `{title}`
-  rather than risk deleting part of a page title.
+- **`{profile}` is matched by name, never by position.** A trailing segment is
+  removed only when it is exactly one of the profile names this install actually
+  has, read from the browser's own `Local State`. One profile is enough. The
+  cost of matching by name is a page genuinely titled `Notes - Personal` on an
+  install whose profile is `Personal`, whose tail moves into `{profile}`; the
+  alternative - stripping whatever follows the last separator - would truncate
+  every title containing a dash, so the name match is the floor.
+  Where the profile list cannot be read at all, the segment is recovered only
+  when the browser's own page-count wording sits behind it, which keeps `{count}`
+  working; anything else stays in `{title}` rather than being guessed at.
 - **The profile list is read once, at startup.** Add, rename or remove a profile
   and `{profile}` keeps working from the old list until the browser restarts or
   the mod is reloaded. This is deliberate: the list decides whether text is
@@ -141,12 +146,18 @@ Style short prefixes like `{count}`, not `{title}`.
   browser's stored UI language, then Windows' display-language list, then the
   regional-format locale, then `en-US`. Each is matched against the packs the
   browser actually ships, which are mostly bare language codes. Picking the
-  wrong one would make the mod appear to work and rewrite nothing, so the
-  discovered suffix is logged to make that visible.
-- **A `UserDataDir` group policy is not read.** On a machine that sets one, the
-  profile list and the browser's UI language are looked for in the default
-  location instead; both fail closed, so `{profile}` stays empty rather than
-  becoming wrong.
+  wrong one would make the mod appear to work and rewrite nothing, so the pack
+  that was read, every page-count form found in it, and the browser suffix that
+  actually matched a title are all logged to make that visible.
+- **A `UserDataDir` group policy is not read.** On a machine that sets one - and
+  on a portable or repacked install - the profile list and the browser's UI
+  language are looked for in the default location instead. Both fail closed, so
+  the name match is skipped rather than guessed. That is the one case where the
+  count-backed recovery above applies, and it is weaker than a name match: a page
+  whose own title ends in the browser's count wording, such as
+  `E-Mail and 16 more pages - Some Site`, is read as a 17-tab window in a profile
+  called `Some Site`. Multi-tab titles keep their counts at that price, and only
+  where nothing better is available.
 */
 // ==/WindhawkModReadme==
 
@@ -220,6 +231,7 @@ Style short prefixes like `{count}`, not `{title}`.
 #include <shellapi.h>  // CommandLineToArgvW
 #include <shlobj.h>    // SHGetKnownFolderPath, FOLDERID_LocalAppData
 
+#include <climits>   // INT_MAX
 #include <cstdint>   // uint32_t
 #include <cstdlib>   // _wtoi
 #include <cwchar>    // _wcsnicmp, _wcsicmp, wcsncmp
@@ -563,6 +575,16 @@ namespace {
 
 constexpr wchar_t kZwsp = 0x200B;
 
+// A backstop against a pathological template, not a preference - a template that
+// wants a shorter field uses the per-token `max<N>` modifier instead, and that
+// modifier is capped here too.
+//
+// Deliberately high enough that composition alone cannot reach it. It applies to
+// the composed result unconditionally, so a lower value would truncate a long
+// page title that no template had touched - and this mod's contract elsewhere is
+// to leave what it does not change byte-identical.
+constexpr size_t kMaxTitleChars = 4096;
+
 // One branch of the localized page-count message.
 struct CountForm {
     std::wstring pre;    // literal between the title and the number
@@ -838,6 +860,16 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
     bool         matched = false;
     for (const std::wstring& s : g.suffixes) {
         if (EndsWith(in, s)) {
+            // The suffix that MATCHED, once per load of this DLL. Every Edge
+            // channel's .pak carries all four product names, and the list is
+            // longest first, so naming a candidate at discovery time reports
+            // "Canary" on a stable install - a channel claim this mod cannot
+            // make.
+            static volatile LONG logged = 0;
+            if (InterlockedExchange(&logged, 1) == 0) {
+                Wh_Log(L"browser suffix in use: '%s' (of %zu discovered)",
+                       s.c_str(), g.suffixes.size());
+            }
             r1 = in.substr(0, in.size() - s.size());
             out->browser = TrimCopy(StripEffectors(s));
             // Drop a leading separator run from the display form.
@@ -950,16 +982,18 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // "GitHub - Some Repo - Microsoft Edge" into title "GitHub" with profile
         // "Some Repo" - silent truncation of the user's own text.
         //
-        // The count gate is CONSERVATIVE rather than a claim about the browser,
-        // since a single-profile install can still show a profile: with one
-        // profile a matching segment cannot be told from a page title that ends
-        // the same way, and the cost is asymmetric - a missing {profile} omits a
-        // field, a wrong one deletes text - so the tie goes to leaving it alone.
+        // ONE profile is enough. The evidence is the exact match, and how many
+        // OTHER names exist does not make any single match stronger - it only
+        // adds strings that can match at all, so a longer list is more
+        // false-positive surface, not less. Requiring two was a proxy for "a
+        // single-profile install does not show its profile", which is simply
+        // untrue: current Edge shows "Personal" with one profile, and the whole
+        // count clause sits behind that segment.
         //
         // profileCount, NOT profileNames.size(): two keys are read per profile,
-        // so a size test degenerates into no gate at all. Unreadable names skip
-        // the slot, which also costs any count sitting behind the profile.
-        if (out->profile.empty() && g.profileCount >= 2 &&
+        // so a size test cannot tell "no profiles" from "no names read".
+        bool stripped = false;
+        if (out->profile.empty() && g.profileCount >= 1 &&
             !g.profileNames.empty()) {
             for (const std::wstring& sep : g.slot2Seps) {
                 const size_t at = r2.rfind(sep);
@@ -982,12 +1016,52 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
                 if (!known) continue;
                 out->profile = trimmed;
                 r3 = r2.substr(0, at);
+                stripped = true;
                 break;
             }
         }
+
+        // NO NAME LIST AT ALL - a UserDataDir group policy, a portable or
+        // repacked install, an unparseable Local State. The gate above cannot
+        // run, and without this the count behind the segment is unreachable too,
+        // so every count-bearing preset collapses to "the title minus the
+        // browser name".
+        //
+        // Strip speculatively then, and accept ONLY where a count form matches
+        // behind the segment. That is weaker evidence than an exact name match
+        // and it is knowingly weaker: the count clause is ordinary prose, so a
+        // title-echoing site reproduces it -
+        // "E-Mail and 16 more pages - Google Search" parses here as a 17-tab
+        // "E-Mail" in a profile called "Google Search". The trade is a wrong
+        // {profile} and count on such a title against no count at all on every
+        // title, and it is taken ONLY where nothing better is available.
+        //
+        // Which is why the condition is "the list is missing", NOT "the match
+        // failed". Running it whenever a name did not match would apply that
+        // trade to installs whose names ARE readable - where the same title is
+        // correctly left alone - and regress them for no gain.
+        //
+        // The segment goes into {profile}, not away, so nothing is silently lost.
+        if (!stripped && out->profile.empty() && g.profileNames.empty()) {
+            for (const std::wstring& sep : g.slot2Seps) {
+                const size_t at = r2.rfind(sep);
+                if (at == std::wstring::npos || at == 0) continue;
+                const std::wstring cand = TrimCopy(r2.substr(at + sep.size()));
+                if (cand.empty() || cand.size() > 64) continue;
+                Fields       probe = *out;
+                std::wstring rest;
+                if (!tryStripCount(r2.substr(0, at), &probe, &rest)) continue;
+                *out          = probe;
+                out->profile  = cand;
+                r3            = rest;
+                stripped      = true;
+                break;
+            }
+        }
+
         if (TrimCopy(r3).empty()) return false;
         std::wstring r4 = r3;
-        if (tryStripCount(r3, out, &r4)) r3 = r4;
+        if (!out->hasCount && tryStripCount(r3, out, &r4)) r3 = r4;
     }
 
     out->title = TrimCopy(r3);
@@ -995,6 +1069,23 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
 }
 
 // ---- template rendering -----------------------------------------------------
+
+// Bumped by LoadSettings. The template diagnostics below run on the hook path,
+// once per title write per window, so a standing typo would repeat its message
+// for the life of the process and bury the lines worth reading. Reporting each
+// one once per template - not once per load - is what a typo needs: the user
+// fixes it, gets it wrong again, and is told again.
+volatile LONG g_templateGeneration = 0;
+
+// True the first time it is called for the current template at this call site.
+// A race can let two threads both report; a duplicated diagnostic line is a
+// price worth paying over a lock on the title-write path.
+bool FirstForThisTemplate(volatile LONG* seen) {
+    const LONG gen = InterlockedCompareExchange(&g_templateGeneration, 0, 0);
+    if (*seen == gen) return false;
+    *seen = gen;
+    return true;
+}
 
 std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) {
     // name[:mod[:mod...]]
@@ -1030,8 +1121,15 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
     } else if (name == L"count") {
         if (f.hasCount) { numeric = true; num = f.extra + 1; }
     } else {
+        // Resolves empty rather than printing itself, so a typo silently makes
+        // the template render less. Logged, or the log has no answer to "my
+        // template does nothing".
+        static volatile LONG seen = -1;
+        if (FirstForThisTemplate(&seen)) {
+            Wh_Log(L"template: unknown token '%s'", std::wstring(name).c_str());
+        }
         *empty = true;
-        return {};  // unknown token resolves empty rather than printing itself
+        return {};
     }
 
     // Numeric modifiers first, then styling.
@@ -1065,20 +1163,42 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
         } else if (m == L"trim") {
             v = TrimCopy(v);
         } else if (m.rfind(L"max", 0) == 0 && m.size() > 3) {
-            // Strictly digits. _wtoi turns "maxbanana" and "max-1" into 0, which
-            // silently means "no bound" - a typo that reads as if it worked.
+            // Strictly digits, and the case this buys is a MIXED argument:
+            // _wtoi stops at the first non-digit, so "max12abc" would silently
+            // apply 12. ("maxbanana" and "max-1" reach the same no-bound outcome
+            // either way - _wtoi yields 0, and -1 casts to a size_t no title can
+            // exceed.) The rejection is logged, because a bound that quietly
+            // does nothing is indistinguishable from one that worked.
             const std::wstring_view digits = m.substr(3);
             size_t n = 0;
             bool   good = true;
             for (const wchar_t c : digits) {
                 if (c < L'0' || c > L'9') { good = false; break; }
                 n = n * 10 + static_cast<size_t>(c - L'0');
-                if (n > 4096) { good = false; break; }
+                if (n > kMaxTitleChars) { good = false; break; }
             }
-            if (good && n > 0 && (bound == 0 || n < bound)) bound = n;
+            if (good && n > 0) {
+                if (bound == 0 || n < bound) bound = n;
+            } else {
+                static volatile LONG seen = -1;
+                if (FirstForThisTemplate(&seen)) {
+                    Wh_Log(L"template: ignoring '%s' - max<N> takes digits "
+                           L"only, 1 to %zu",
+                           std::wstring(m).c_str(), kMaxTitleChars);
+                }
+            }
         } else if (const style::Kind k = style::FromName(m);
                    k != style::Kind::kNone) {
             v = style::Apply(v, k);
+        } else if (m != L"min2" && m != L"pad2" && m != L"pad3") {
+            // Those three are consumed by the numeric pass above; anything else
+            // reaching here is a typo, and skipping it silently is the other
+            // half of "my template does nothing".
+            static volatile LONG seen = -1;
+            if (FirstForThisTemplate(&seen)) {
+                Wh_Log(L"template: unknown modifier '%s'",
+                       std::wstring(m).c_str());
+            }
         }
     }
     if (bound) v = style::Clamp(std::move(v), bound);
@@ -1175,10 +1295,6 @@ struct Settings {
     std::wstring chromeOverride;
     std::wstring suffixOverride;
 };
-
-// A safety clamp against a pathological template, not a preference - a template
-// that wants a shorter field uses the per-token `max<N>` modifier instead.
-constexpr size_t kMaxTitleChars = 512;
 
 struct WindowState {
     std::wstring source;   // last title the browser composed, pre-transform
@@ -1479,14 +1595,14 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 // shell's known-folder store, which does not depend on the process having
 // inherited an intact environment block; the suite compiles this same
 // translation unit and points the override at a fixture directory.
-#ifdef WH_EDITING
+//
+// Deliberately not behind a conditional. Compiling the seam only for the tests
+// would mean the function they exercise is not the one that ships; nothing in
+// the mod writes this, so the shipped build always falls through.
 std::wstring g_localAppDataOverride;
-#endif
 
 std::wstring LocalAppDataDir() {
-#ifdef WH_EDITING
     if (!g_localAppDataOverride.empty()) return g_localAppDataOverride;
-#endif
     PWSTR        p = nullptr;
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) &&
@@ -2019,14 +2135,13 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         Wh_Log(L"%s never loaded; nothing to do in this process", browserDll);
     }
 
+    // From the browser MODULE, with no fallback to the executable's directory.
+    // Locales\ sits beside the DLL under Application\<version>\, while the
+    // executable lives in Application\ - so that fallback could only ever look
+    // in a directory with no .pak in it.
     std::wstring dir;
     if (haveBrowser) {
         dir = DirOfModule(browserDll);
-        if (dir.empty()) {
-            const std::wstring s = ModulePath(nullptr);
-            const size_t at = s.rfind(L'\\');
-            if (at != std::wstring::npos) dir = s.substr(0, at);
-        }
     }
     const std::wstring hint = g_isChrome ? L"Chrome" : L"Edge";
 
@@ -2067,12 +2182,18 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
             // distinguish "found the right language" from "found English on a
             // German install" - both print a healthy-looking line - and that is
             // the one discovery failure that produces no other symptom.
-            if (!g.suffixes.empty()) {
-                Wh_Log(L"  suffix: '%s'", g.suffixes.front().c_str());
-            }
-            if (!g.countForms.empty()) {
-                Wh_Log(L"  count:  '%s' # '%s'", g.countForms.front().pre.c_str(),
-                       g.countForms.front().post.c_str());
+            //
+            // EVERY branch, in the shape it has: a "=N" branch keeps its whole
+            // tail in `fixed` and has no pre/post at all, so printing one form's
+            // pre and post reports a successful discovery as "'' # ''".
+            for (const CountForm& cf : g.countForms) {
+                if (cf.fixed.empty()) {
+                    Wh_Log(L"  count:  '%s' <number> '%s'", cf.pre.c_str(),
+                           cf.post.c_str());
+                } else {
+                    Wh_Log(L"  count:  =%d '%s'", cf.fixedValue,
+                           cf.fixed.c_str());
+                }
             }
             if (g.profileNames.empty()) {
                 Wh_Log(L"could not read this install's profile names, so "
@@ -2184,6 +2305,10 @@ void LoadSettings() {
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = std::move(s);
     ReleaseSRWLockExclusive(&g_settingsLock);
+
+    // After the swap, so a render that started on the old template cannot mark
+    // the new generation as already reported.
+    InterlockedIncrement(&g_templateGeneration);
 }
 
 }  // namespace
