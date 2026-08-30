@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
-// @version 1.11.0
+// @version 1.11.5
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -35,7 +35,7 @@ visible whenever an application or shell UI is active.
   showing the desktop, only the desktop monitor's taskbar is hidden.
 - Supports bottom, top, left and right taskbar positions.
 - Keeps the taskbar visible for Windows shell flyouts such as Start,
-  Search, Notifications and Quick Settings.
+  Search, Notifications, Quick Settings and the Start context menu.
 - Keeps the taskbar visible while Alt+Tab is open, then uses the same
   configurable hide delay after Alt+Tab closes.
 - Minimizing the last application clears any previous hover-reveal delay
@@ -129,11 +129,13 @@ struct TaskbarState {
     HWND hwnd = nullptr;
     HMONITOR monitor = nullptr;
     RECT monitorRect = {};
+    RECT taskbarRect = {};
     bool isSecondary = false;
     bool hasApplication = false;
     bool taskbarIsForeground = false;
     bool shellUiForeground = false;
     bool shellFlyoutVisible = false;
+    HWND shellFlyoutHwnd = nullptr;
     bool shownDueToHover = false;
     bool shownDueToAltTab = false;
     ULONGLONG hideDeadline = 0;
@@ -173,12 +175,11 @@ bool IsDesktopWindow(HWND hwnd) {
     }
 
     if (wcscmp(className, L"WorkerW") == 0) {
-        return FindWindowExW(
-            hwnd,
-            nullptr,
-            L"SHELLDLL_DefView",
-            nullptr
-        ) != nullptr;
+        /*
+         * Explorer can keep multiple WorkerW wallpaper windows alive.
+         * They are desktop infrastructure regardless of their children.
+         */
+        return true;
     }
 
     return false;
@@ -226,6 +227,8 @@ bool IsAltTabWindowClass(const WCHAR* className);
 HWND FindPrimaryTaskbar();
 bool IsTaskbarActuallyHidden(HWND hwnd);
 bool IsShellUiClass(const WCHAR* className);
+bool IsCursorOverTaskbarShellPopup(HWND taskbar);
+bool IsForegroundApplicationOnMonitor(HWND foreground, HMONITOR monitor);
 
 bool IsAltTabWindowClass(const WCHAR* className);
 bool GetWindowProcessName(HWND hwnd, WCHAR* name, size_t nameCount);
@@ -235,6 +238,7 @@ bool IsShellUiWindow(HWND hwnd);
 struct AppMonitorScan {
     TaskbarState* taskbars;
     size_t count;
+    HWND shellWindow;
     bool altTabActive;
 };
 
@@ -257,6 +261,10 @@ BOOL CALLBACK EnumWindowsProc(
         return TRUE;
     }
 
+    if (hwnd == scan->shellWindow) {
+        return TRUE;
+    }
+
     /*
      * Explicitly ignore the desktop itself.
      */
@@ -264,6 +272,10 @@ BOOL CALLBACK EnumWindowsProc(
         return TRUE;
     }
 
+    /*
+     * GetShellWindow() is also supplied in scan->shellWindow, but keep the
+     * explicit desktop shell class check as a second line of defense.
+     */
     WCHAR className[256] = {};
 
     if (
@@ -315,6 +327,53 @@ BOOL CALLBACK EnumWindowsProc(
     }
 
     /*
+     * UWP / Store applications such as Calculator and Settings use
+     * ApplicationFrameWindow hosted by ApplicationFrameHost.exe.
+     * Handle this before the generic owner/tool-window filters so the
+     * application's top-level frame is always counted as an application.
+     */
+    if (
+        wcscmp(
+            className,
+            L"ApplicationFrameWindow"
+        ) == 0
+    ) {
+        WCHAR processName[MAX_PATH] = {};
+
+        if (
+            GetWindowProcessName(
+                hwnd,
+                processName,
+                ARRAYSIZE(processName)
+            ) &&
+            _wcsicmp(
+                processName,
+                L"ApplicationFrameHost.exe"
+            ) == 0
+        ) {
+            RECT rect = {};
+
+            if (GetWindowRect(hwnd, &rect)) {
+                for (size_t i = 0; i < scan->count; ++i) {
+                    RECT intersection = {};
+
+                    if (
+                        IntersectRect(
+                            &intersection,
+                            &scan->taskbars[i].monitorRect,
+                            &rect
+                        )
+                    ) {
+                        scan->taskbars[i].hasApplication = true;
+                    }
+                }
+            }
+
+            return TRUE;
+        }
+    }
+
+    /*
      * CoreWindow and XAML popup classes can belong to normal apps too.
      * Only shell-owned instances are treated as shell UI.
      */
@@ -340,10 +399,30 @@ BOOL CALLBACK EnumWindowsProc(
             RECT rect = {};
 
             if (GetWindowRect(hwnd, &rect)) {
+                HWND owner =
+                    GetWindow(
+                        hwnd,
+                        GW_OWNER
+                    );
+
+                bool isContextMenu =
+                    wcscmp(
+                        className,
+                        L"#32768"
+                    ) == 0;
+
                 for (size_t i = 0; i < scan->count; ++i) {
                     RECT intersection = {};
 
+                    bool taskbarOwned =
+                        owner == scan->taskbars[i].hwnd;
+
+                    bool shouldTrack =
+                        !isContextMenu ||
+                        taskbarOwned;
+
                     if (
+                        shouldTrack &&
                         IntersectRect(
                             &intersection,
                             &scan->taskbars[i].monitorRect,
@@ -351,6 +430,7 @@ BOOL CALLBACK EnumWindowsProc(
                         )
                     ) {
                         scan->taskbars[i].shellFlyoutVisible = true;
+                        scan->taskbars[i].shellFlyoutHwnd = hwnd;
                     }
                 }
             }
@@ -427,6 +507,7 @@ void ScanApplicationWindows() {
     for (size_t i = 0; i < g_taskbarCount; ++i) {
         g_taskbars[i].hasApplication = false;
         g_taskbars[i].shellFlyoutVisible = false;
+        g_taskbars[i].shellFlyoutHwnd = nullptr;
     }
 
     g_altTabActive = false;
@@ -438,6 +519,7 @@ void ScanApplicationWindows() {
     AppMonitorScan scan{
         g_taskbars,
         g_taskbarCount,
+        GetShellWindow(),
         false
     };
 
@@ -476,6 +558,233 @@ bool IsTaskbarForegroundAndUnderCursor(HWND taskbar) {
     }
 
     return PtInRect(&rect, pt) != FALSE;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+bool IsCursorOverTaskbarShellPopup(HWND taskbar) {
+    if (!taskbar || !IsTaskbarWindow(taskbar)) {
+        return false;
+    }
+
+    POINT pt = {};
+
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    HWND hwnd =
+        WindowFromPoint(pt);
+
+    if (!hwnd) {
+        return false;
+    }
+
+    DWORD taskbarProcessId = 0;
+
+    GetWindowThreadProcessId(
+        taskbar,
+        &taskbarProcessId
+    );
+
+    if (!taskbarProcessId) {
+        return false;
+    }
+
+    /*
+     * Walk the window's parent/owner chain. A Start context menu may be a
+     * standard #32768 menu or a XAML popup and may never become foreground.
+     */
+    HWND current = hwnd;
+
+    for (int depth = 0; current && depth < 12; ++depth) {
+        if (current != taskbar) {
+            WCHAR className[128] = {};
+
+            if (
+                GetClassNameW(
+                    current,
+                    className,
+                    ARRAYSIZE(className)
+                ) != 0
+            ) {
+                bool popupClass =
+                    wcscmp(
+                        className,
+                        L"#32768"
+                    ) == 0 ||
+                    wcscmp(
+                        className,
+                        L"Xaml_WindowedPopupClass"
+                    ) == 0 ||
+                    wcscmp(
+                        className,
+                        L"Windows.UI.Core.CoreWindow"
+                    ) == 0;
+
+                if (
+                    popupClass &&
+                    IsWindowVisible(current)
+                ) {
+                    DWORD popupProcessId = 0;
+
+                    GetWindowThreadProcessId(
+                        current,
+                        &popupProcessId
+                    );
+
+                    if (
+                        popupProcessId == taskbarProcessId
+                    ) {
+                        return true;
+                    }
+
+                    WCHAR processName[MAX_PATH] = {};
+
+                    if (
+                        GetWindowProcessName(
+                            current,
+                            processName,
+                            ARRAYSIZE(processName)
+                        ) &&
+                        IsKnownShellUiProcess(
+                            processName
+                        )
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        HWND parent =
+            GetParent(current);
+
+        HWND owner =
+            GetWindow(
+                current,
+                GW_OWNER
+            );
+
+        if (
+            parent &&
+            parent != current
+        ) {
+            current = parent;
+        } else if (
+            owner &&
+            owner != current
+        ) {
+            current = owner;
+        } else {
+            break;
+        }
+    }
+
+    return false;
+}
+
+
+bool IsForegroundApplicationOnMonitor(
+    HWND foreground,
+    HMONITOR monitor
+) {
+    if (!foreground || !monitor) {
+        return false;
+    }
+
+    if (
+        !IsWindowVisible(foreground) ||
+        IsIconic(foreground)
+    ) {
+        return false;
+    }
+
+    if (
+        IsTaskbarWindow(foreground) ||
+        IsDesktopWindow(foreground)
+    ) {
+        return false;
+    }
+
+    WCHAR className[256] = {};
+
+    if (
+        GetClassNameW(
+            foreground,
+            className,
+            ARRAYSIZE(className)
+        ) == 0
+    ) {
+        return false;
+    }
+
+    if (IsAltTabWindowClass(className)) {
+        return false;
+    }
+
+    if (
+        IsShellChromeClass(className) &&
+        IsShellUiWindow(foreground)
+    ) {
+        return false;
+    }
+
+    LONG_PTR exStyle =
+        GetWindowLongPtrW(
+            foreground,
+            GWL_EXSTYLE
+        );
+
+    if (exStyle & WS_EX_TOOLWINDOW) {
+        return false;
+    }
+
+    BOOL cloaked = FALSE;
+
+    if (
+        SUCCEEDED(
+            DwmGetWindowAttribute(
+                foreground,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) &&
+        cloaked
+    ) {
+        return false;
+    }
+
+    RECT rect = {};
+
+    if (!GetWindowRect(foreground, &rect)) {
+        return false;
+    }
+
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+
+    if (!GetMonitorInfoW(monitor, &mi)) {
+        return false;
+    }
+
+    RECT intersection = {};
+
+    return IntersectRect(
+        &intersection,
+        &mi.rcMonitor,
+        &rect
+    ) != FALSE;
 }
 
 
@@ -551,6 +860,27 @@ bool IsShellUiWindow(HWND hwnd) {
         return false;
     }
 
+    WCHAR className[256] = {};
+
+    if (
+        GetClassNameW(
+            hwnd,
+            className,
+            ARRAYSIZE(className)
+        ) == 0
+    ) {
+        return false;
+    }
+
+    /*
+     * Do not classify ordinary explorer.exe windows (or arbitrary shell
+     * process windows) as shell UI. The class must first be one of the
+     * explicitly supported flyout/shell classes.
+     */
+    if (!IsShellUiClass(className)) {
+        return false;
+    }
+
     WCHAR processName[MAX_PATH] = {};
 
     if (!GetWindowProcessName(
@@ -575,7 +905,10 @@ bool IsShellUiClass(const WCHAR* className) {
         wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
         wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
         wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
-        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0;
+        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(className, L"ApplicationFrameWindow") == 0 ||
+        wcscmp(className, L"Windows.UI.Core.CoreComponent") == 0 ||
+        wcscmp(className, L"#32768") == 0;
 }
 
 
@@ -590,103 +923,7 @@ bool IsAltTabWindowClass(const WCHAR* className) {
 }
 
 
-bool IsVisibleShellFlyoutForMonitor(
-    HMONITOR monitor,
-    HWND hwnd
-) {
-    if (!monitor || !hwnd || !IsWindowVisible(hwnd)) {
-        return false;
-    }
 
-    if (IsTaskbarWindow(hwnd)) {
-        return false;
-    }
-
-    WCHAR className[256] = {};
-
-    if (
-        GetClassNameW(
-            hwnd,
-            className,
-            ARRAYSIZE(className)
-        ) == 0
-    ) {
-        return false;
-    }
-
-    if (!IsShellUiClass(className)) {
-        return false;
-    }
-
-    /*
-     * XAML popup classes are used by ordinary applications too.
-     * Require a known Windows shell process before treating one as a
-     * taskbar-preserving shell flyout.
-     */
-    WCHAR processName[MAX_PATH] = {};
-
-    if (
-        !GetWindowProcessName(
-            hwnd,
-            processName,
-            ARRAYSIZE(processName)
-        )
-    ) {
-        return false;
-    }
-
-    bool knownShellProcess =
-        _wcsicmp(processName, L"explorer.exe") == 0 ||
-        IsKnownShellUiProcess(processName);
-
-    if (!knownShellProcess) {
-        return false;
-    }
-
-    BOOL cloaked = FALSE;
-
-    if (
-        SUCCEEDED(
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
-            )
-        ) &&
-        cloaked
-    ) {
-        return false;
-    }
-
-    RECT windowRect = {};
-
-    if (!GetWindowRect(hwnd, &windowRect)) {
-        return false;
-    }
-
-    if (
-        windowRect.right <= windowRect.left ||
-        windowRect.bottom <= windowRect.top
-    ) {
-        return false;
-    }
-
-    MONITORINFO mi = {};
-    mi.cbSize = sizeof(mi);
-
-    if (!GetMonitorInfoW(monitor, &mi)) {
-        return false;
-    }
-
-    RECT intersection = {};
-
-    return IntersectRect(
-        &intersection,
-        &mi.rcMonitor,
-        &windowRect
-    ) != FALSE;
-}
 
 
 bool IsShellUiForegroundOnMonitor(
@@ -711,10 +948,6 @@ bool IsShellUiForegroundOnMonitor(
 
     if (IsAltTabWindowClass(className)) {
         return true;
-    }
-
-    if (!IsShellUiClass(className)) {
-        return false;
     }
 
     if (!IsShellUiWindow(foreground)) {
@@ -859,6 +1092,11 @@ void DiscoverTaskbars() {
         state.monitorRect = mi.rcMonitor;
         state.isSecondary = IsSecondaryTaskbar(hwnd);
 
+        GetWindowRect(
+            hwnd,
+            &state.taskbarRect
+        );
+
         for (size_t i = 0; i < oldCount; ++i) {
             if (oldStates[i].hwnd == hwnd) {
                 state.shownDueToHover =
@@ -867,6 +1105,10 @@ void DiscoverTaskbars() {
                     oldStates[i].shownDueToAltTab;
                 state.hideDeadline =
                     oldStates[i].hideDeadline;
+                state.shellFlyoutVisible =
+                    oldStates[i].shellFlyoutVisible;
+                state.shellFlyoutHwnd =
+                    oldStates[i].shellFlyoutHwnd;
                 break;
             }
         }
@@ -962,15 +1204,7 @@ void SetTaskbarVisibility(bool show) {
 }
 
 
-bool IsPrimaryTaskbarHidden() {
-    HWND primary = FindPrimaryTaskbar();
 
-    if (!primary) {
-        return false;
-    }
-
-    return IsWindowVisible(primary) == FALSE;
-}
 
 
 // ============================================================
@@ -1015,17 +1249,24 @@ bool IsCursorInTaskbarHoverZone(
         return false;
     }
 
-    RECT taskbarRect = {};
-
-    if (!GetWindowRect(taskbar.hwnd, &taskbarRect)) {
-        return false;
-    }
+    RECT taskbarRect = taskbar.taskbarRect;
 
     if (
         taskbarRect.right <= taskbarRect.left ||
         taskbarRect.bottom <= taskbarRect.top
     ) {
-        return false;
+        if (!GetWindowRect(taskbar.hwnd, &taskbarRect)) {
+            return false;
+        }
+
+        if (
+            taskbarRect.right <= taskbarRect.left ||
+            taskbarRect.bottom <= taskbarRect.top
+        ) {
+            return false;
+        }
+
+        taskbar.taskbarRect = taskbarRect;
     }
 
     UINT dpi = GetDpiForWindow(taskbar.hwnd);
@@ -1127,6 +1368,13 @@ void UpdateTaskbarState() {
         return;
     }
 
+    /*
+     * Shell flyouts can close without producing a useful foreground/minimize
+     * event for this tool. Refresh only the foreground shell state here;
+     * application state remains event-driven.
+     */
+    HWND foreground = GetForegroundWindow();
+
     ULONGLONG now = GetTickCount64();
 
     DWORD delay =
@@ -1159,9 +1407,44 @@ void UpdateTaskbarState() {
         bool hovering =
             IsCursorInTaskbarHoverZone(taskbar);
 
+        bool currentShellUi =
+            IsShellUiForegroundOnMonitor(
+                taskbar.monitor,
+                foreground
+            );
+
+        bool foregroundApplication =
+            IsForegroundApplicationOnMonitor(
+                foreground,
+                taskbar.monitor
+            );
+
+        taskbar.shellUiForeground =
+            currentShellUi;
+
+        /*
+         * A Start/taskbar context menu may not become the foreground HWND.
+         * Detect the popup under the cursor without doing a full enumeration.
+         */
+        bool taskbarShellPopup =
+            IsCursorOverTaskbarShellPopup(
+                taskbar.hwnd
+            );
+
+        /*
+         * Shell UI state is allowed to keep the taskbar visible while the
+         * corresponding shell surface is open.
+         */
         bool shellFlyoutOpen =
-            taskbar.shellUiForeground ||
-            taskbar.shellFlyoutVisible;
+            currentShellUi ||
+            taskbarShellPopup ||
+            (
+                taskbar.shellFlyoutVisible &&
+                taskbar.shellFlyoutHwnd &&
+                IsWindowVisible(
+                    taskbar.shellFlyoutHwnd
+                )
+            );
 
         bool altTabActive =
             g_altTabActive;
@@ -1171,8 +1454,13 @@ void UpdateTaskbarState() {
          * monitor's taskbar remains visible even when another monitor
          * is on the desktop.
          */
-        if (taskbar.hasApplication) {
+        if (
+            taskbar.hasApplication ||
+            foregroundApplication
+        ) {
+            taskbar.hasApplication = true;
             taskbar.shownDueToHover = false;
+            taskbar.shownDueToAltTab = false;
             taskbar.hideDeadline = 0;
 
             SetWindowVisibilityIfNeeded(
@@ -1253,15 +1541,31 @@ void UpdateTaskbarState() {
             taskbar.taskbarIsForeground &&
             !taskbar.shownDueToHover
         ) {
-            SetWindowVisibilityIfNeeded(
-                taskbar.hwnd,
-                true
-            );
-
             if (!taskbar.hideDeadline) {
                 taskbar.hideDeadline =
                     now +
                     static_cast<ULONGLONG>(delay);
+            }
+
+            if (now >= taskbar.hideDeadline) {
+                SetWindowVisibilityIfNeeded(
+                    taskbar.hwnd,
+                    false
+                );
+
+                taskbar.hideDeadline = 0;
+
+                /*
+                 * Shell_TrayWnd may remain the foreground HWND briefly
+                 * after it is hidden. Clear the stale cached state so
+                 * the next timer tick doesn't immediately show it again.
+                 */
+                taskbar.taskbarIsForeground = false;
+            } else {
+                SetWindowVisibilityIfNeeded(
+                    taskbar.hwnd,
+                    true
+                );
             }
 
             continue;
@@ -1697,11 +2001,10 @@ DWORD WINAPI HookThread(LPVOID) {
             msg.wParam == g_hoverTimerId
         ) {
             /*
-             * The timer exists only while hover handling is needed.
-             * Cursor movement is the one piece of state that Windows
-             * does not provide as a suitable global WinEvent.
+             * The timer is only for cursor hover and hide deadlines.
+             * Application, shell-flyout and Alt+Tab state is refreshed
+             * by WinEvent/system-notification messages.
              */
-            RefreshPerMonitorState();
             UpdateTaskbarState();
 
             continue;
@@ -1997,7 +2300,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -2009,8 +2318,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2027,7 +2338,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
