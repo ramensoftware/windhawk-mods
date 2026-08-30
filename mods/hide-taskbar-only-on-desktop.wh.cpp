@@ -2,7 +2,7 @@
 // @id hide-taskbar-only-on-desktop
 // @name Hide Taskbar Only on Desktop
 // @description Hides the taskbar on desktop while preserving taskbar and Windows shell UI interaction
-// @version 1.11.5
+// @version 1.13.0
 // @author Sahil Dashoni
 // @github https://github.com/Sahil-Dashoni
 // @include windhawk.exe
@@ -121,9 +121,11 @@ UINT_PTR g_hoverTimerId = 0;
 
 std::atomic<bool> g_refreshPosted{false};
 std::atomic<bool> g_immediateHidePending{false};
+ULONGLONG g_lastApplicationScanTick = 0;
+constexpr ULONGLONG kApplicationRescanIntervalMs = 1000;
 
 constexpr size_t kMaxTaskbars = 16;
-constexpr size_t kMaxWinEventHooks = 2;
+constexpr size_t kMaxWinEventHooks = 3;
 
 struct TaskbarState {
     HWND hwnd = nullptr;
@@ -152,6 +154,7 @@ HWINEVENTHOOK g_hWinEventHooks[kMaxWinEventHooks] = {};
 // Hidden window used to receive setting/display notifications without
 // installing broad system-wide EVENT_OBJECT_* hooks.
 HWND g_hSystemMessageWindow = nullptr;
+UINT g_taskbarCreatedMsg = 0;
 const wchar_t kSystemMessageWindowClass[] =
     L"HideTaskbarOnlyOnDesktop.SystemMessageWindow";
 
@@ -220,6 +223,14 @@ bool IsTaskbarWindow(HWND hwnd) {
 // Window detection
 // ============================================================
 
+struct ForegroundInfo {
+    HWND hwnd = nullptr;
+    WCHAR className[256] = {};
+    WCHAR processName[MAX_PATH] = {};
+    bool classValid = false;
+    bool processValid = false;
+};
+
 void DiscoverTaskbars();
 bool IsAltTabWindowClass(const WCHAR* className);
 
@@ -228,9 +239,14 @@ HWND FindPrimaryTaskbar();
 bool IsTaskbarActuallyHidden(HWND hwnd);
 bool IsShellUiClass(const WCHAR* className);
 bool IsCursorOverTaskbarShellPopup(HWND taskbar);
-bool IsForegroundApplicationOnMonitor(HWND foreground, HMONITOR monitor);
-
-bool IsAltTabWindowClass(const WCHAR* className);
+bool IsShellUiForegroundOnMonitor(
+    HMONITOR monitor,
+    const ForegroundInfo& info
+);
+bool IsForegroundApplicationOnMonitor(
+    const ForegroundInfo& info,
+    HMONITOR monitor
+);
 bool GetWindowProcessName(HWND hwnd, WCHAR* name, size_t nameCount);
 bool IsKnownShellUiProcess(const WCHAR* processName);
 bool IsShellUiWindow(HWND hwnd);
@@ -695,53 +711,46 @@ bool IsCursorOverTaskbarShellPopup(HWND taskbar) {
 
 
 bool IsForegroundApplicationOnMonitor(
-    HWND foreground,
+    const ForegroundInfo& info,
     HMONITOR monitor
 ) {
-    if (!foreground || !monitor) {
-        return false;
-    }
-
     if (
-        !IsWindowVisible(foreground) ||
-        IsIconic(foreground)
+        !monitor ||
+        !info.hwnd ||
+        !info.classValid
     ) {
         return false;
     }
 
     if (
-        IsTaskbarWindow(foreground) ||
-        IsDesktopWindow(foreground)
+        !IsWindowVisible(info.hwnd) ||
+        IsIconic(info.hwnd)
     ) {
         return false;
     }
 
-    WCHAR className[256] = {};
-
     if (
-        GetClassNameW(
-            foreground,
-            className,
-            ARRAYSIZE(className)
-        ) == 0
+        IsTaskbarWindow(info.hwnd) ||
+        IsDesktopWindow(info.hwnd)
     ) {
         return false;
     }
 
-    if (IsAltTabWindowClass(className)) {
+    if (IsAltTabWindowClass(info.className)) {
         return false;
     }
 
     if (
-        IsShellChromeClass(className) &&
-        IsShellUiWindow(foreground)
+        info.processValid &&
+        IsShellChromeClass(info.className) &&
+        IsKnownShellUiProcess(info.processName)
     ) {
         return false;
     }
 
     LONG_PTR exStyle =
         GetWindowLongPtrW(
-            foreground,
+            info.hwnd,
             GWL_EXSTYLE
         );
 
@@ -754,7 +763,7 @@ bool IsForegroundApplicationOnMonitor(
     if (
         SUCCEEDED(
             DwmGetWindowAttribute(
-                foreground,
+                info.hwnd,
                 DWMWA_CLOAKED,
                 &cloaked,
                 sizeof(cloaked)
@@ -767,7 +776,7 @@ bool IsForegroundApplicationOnMonitor(
 
     RECT rect = {};
 
-    if (!GetWindowRect(foreground, &rect)) {
+    if (!GetWindowRect(info.hwnd, &rect)) {
         return false;
     }
 
@@ -906,7 +915,6 @@ bool IsShellUiClass(const WCHAR* className) {
         wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
         wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
         wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-        wcscmp(className, L"ApplicationFrameWindow") == 0 ||
         wcscmp(className, L"Windows.UI.Core.CoreComponent") == 0 ||
         wcscmp(className, L"#32768") == 0;
 }
@@ -926,37 +934,66 @@ bool IsAltTabWindowClass(const WCHAR* className) {
 
 
 
-bool IsShellUiForegroundOnMonitor(
-    HMONITOR monitor,
-    HWND foreground
-) {
-    if (!monitor || !foreground) {
-        return false;
+
+
+ForegroundInfo GetForegroundInfo(HWND hwnd) {
+    ForegroundInfo info = {};
+    info.hwnd = hwnd;
+
+    if (!hwnd) {
+        return info;
     }
 
-    WCHAR className[256] = {};
-
-    if (
+    info.classValid =
         GetClassNameW(
-            foreground,
-            className,
-            ARRAYSIZE(className)
-        ) == 0
+            hwnd,
+            info.className,
+            ARRAYSIZE(info.className)
+        ) != 0;
+
+    if (info.classValid) {
+        info.processValid =
+            GetWindowProcessName(
+                hwnd,
+                info.processName,
+                ARRAYSIZE(info.processName)
+            );
+    }
+
+    return info;
+}
+
+
+
+
+
+bool IsShellUiForegroundOnMonitor(
+    HMONITOR monitor,
+    const ForegroundInfo& info
+) {
+    if (
+        !monitor ||
+        !info.hwnd ||
+        !info.classValid
     ) {
         return false;
     }
 
-    if (IsAltTabWindowClass(className)) {
+    if (IsAltTabWindowClass(info.className)) {
         return true;
     }
 
-    if (!IsShellUiWindow(foreground)) {
+    if (
+        !info.processValid ||
+        !IsShellUiClass(info.className) ||
+        !IsKnownShellUiProcess(info.processName)
+    ) {
         return false;
     }
 
     RECT rect = {};
 
-    if (!GetWindowRect(foreground, &rect)) {
+    if (!GetWindowRect(info.hwnd, &rect)) {
         return false;
     }
 
@@ -979,6 +1016,8 @@ bool IsShellUiForegroundOnMonitor(
 
 void RefreshTaskbarForegroundState() {
     HWND foreground = GetForegroundWindow();
+    ForegroundInfo foregroundInfo =
+        GetForegroundInfo(foreground);
 
     for (size_t i = 0; i < g_taskbarCount; ++i) {
         TaskbarState& taskbar = g_taskbars[i];
@@ -997,7 +1036,7 @@ void RefreshTaskbarForegroundState() {
         taskbar.shellUiForeground =
             IsShellUiForegroundOnMonitor(
                 taskbar.monitor,
-                foreground
+                foregroundInfo
             );
 
         if (cursorOverTaskbar) {
@@ -1016,6 +1055,7 @@ void RefreshPerMonitorState() {
      */
     DiscoverTaskbars();
     ScanApplicationWindows();
+    g_lastApplicationScanTick = GetTickCount64();
     RefreshTaskbarForegroundState();
 }
 
@@ -1373,12 +1413,33 @@ void UpdateTaskbarState() {
      * event for this tool. Refresh only the foreground shell state here;
      * application state remains event-driven.
      */
-    HWND foreground = GetForegroundWindow();
-
     ULONGLONG now = GetTickCount64();
+
+    /*
+     * Some background window closes/appearances do not change the
+     * foreground window. Reconcile application state once per second,
+     * rather than doing a full EnumWindows scan every 200 ms.
+     */
+    if (
+        g_lastApplicationScanTick == 0 ||
+        now - g_lastApplicationScanTick >=
+            kApplicationRescanIntervalMs
+    ) {
+        ScanApplicationWindows();
+        g_lastApplicationScanTick = now;
+    }
+
+    HWND foreground = GetForegroundWindow();
+    ForegroundInfo foregroundInfo =
+        GetForegroundInfo(foreground);
 
     DWORD delay =
         g_settings.autoHideDelayMs.load(
+            std::memory_order_relaxed
+        );
+
+    bool hideSecondaryTaskbars =
+        g_settings.hideSecondaryTaskbars.load(
             std::memory_order_relaxed
         );
 
@@ -1410,12 +1471,12 @@ void UpdateTaskbarState() {
         bool currentShellUi =
             IsShellUiForegroundOnMonitor(
                 taskbar.monitor,
-                foreground
+                foregroundInfo
             );
 
         bool foregroundApplication =
             IsForegroundApplicationOnMonitor(
-                foreground,
+                foregroundInfo,
                 taskbar.monitor
             );
 
@@ -1426,10 +1487,14 @@ void UpdateTaskbarState() {
          * A Start/taskbar context menu may not become the foreground HWND.
          * Detect the popup under the cursor without doing a full enumeration.
          */
-        bool taskbarShellPopup =
-            IsCursorOverTaskbarShellPopup(
-                taskbar.hwnd
-            );
+        bool taskbarShellPopup = false;
+
+        if (hovering) {
+            taskbarShellPopup =
+                IsCursorOverTaskbarShellPopup(
+                    taskbar.hwnd
+                );
+        }
 
         /*
          * Shell UI state is allowed to keep the taskbar visible while the
@@ -1708,6 +1773,14 @@ LRESULT CALLBACK SystemMessageWindowProc(
     UNREFERENCED_PARAMETER(wParam);
     UNREFERENCED_PARAMETER(lParam);
 
+    if (
+        g_taskbarCreatedMsg &&
+        message == g_taskbarCreatedMsg
+    ) {
+        RequestStateRefresh();
+        return 0;
+    }
+
     switch (message) {
     case WM_SETTINGCHANGE:
     case WM_DISPLAYCHANGE:
@@ -1731,6 +1804,16 @@ LRESULT CALLBACK SystemMessageWindowProc(
 
 
 bool CreateSystemMessageWindow() {
+    g_taskbarCreatedMsg =
+        RegisterWindowMessageW(L"TaskbarCreated");
+
+    if (!g_taskbarCreatedMsg) {
+        Wh_Log(
+            L"RegisterWindowMessageW(TaskbarCreated) failed: %lu",
+            GetLastError()
+        );
+    }
+
     WNDCLASSW wc = {};
     wc.lpfnWndProc = SystemMessageWindowProc;
     wc.hInstance = GetModuleHandleW(nullptr);
@@ -1781,6 +1864,8 @@ void DestroySystemMessageWindow() {
         DestroyWindow(g_hSystemMessageWindow);
         g_hSystemMessageWindow = nullptr;
     }
+
+    g_taskbarCreatedMsg = 0;
 }
 
 
@@ -1792,7 +1877,8 @@ bool IsRelevantWinEvent(DWORD event) {
     return
         event == EVENT_SYSTEM_FOREGROUND ||
         event == EVENT_SYSTEM_MINIMIZESTART ||
-        event == EVENT_SYSTEM_MINIMIZEEND;
+        event == EVENT_SYSTEM_MINIMIZEEND ||
+        event == EVENT_SYSTEM_MOVESIZEEND;
 }
 
 
@@ -1862,7 +1948,8 @@ bool InstallWinEventHookFor(
 
     if (!g_hWinEventHooks[index]) {
         Wh_Log(
-            L"SetWinEventHook(%lu, %lu) failed: %lu",
+            L"SetWinEventHook(index=%zu, %lu, %lu) failed: %lu",
+            index,
             eventMin,
             eventMax,
             GetLastError()
@@ -1914,7 +2001,9 @@ DWORD WINAPI HookThread(LPVOID) {
         SetEvent(g_hThreadReadyEvent);
     }
 
-    CreateSystemMessageWindow();
+    if (!CreateSystemMessageWindow()) {
+        Wh_Log(L"CreateSystemMessageWindow failed");
+    }
 
     /*
      * Only hook events that represent meaningful application-state
@@ -1936,6 +2025,12 @@ DWORD WINAPI HookThread(LPVOID) {
         1
     );
 
+    hookOk &= InstallWinEventHookFor(
+        EVENT_SYSTEM_MOVESIZEEND,
+        EVENT_SYSTEM_MOVESIZEEND,
+        2
+    );
+
     if (!hookOk) {
         Wh_Log(
             L"One or more WinEvent hooks failed"
@@ -1945,7 +2040,7 @@ DWORD WINAPI HookThread(LPVOID) {
     /*
      * Apply the correct initial state after the worker and hooks exist.
      */
-        RefreshPerMonitorState();
+    RefreshPerMonitorState();
     UpdateTaskbarState();
 
     MSG msg = {};
@@ -2205,11 +2300,6 @@ void WhTool_ModSettingsChanged() {
 
     LoadSettings();
 
-    /*
-     * Native taskbar auto-hide is a system setting, so refresh it here
-     * rather than on every foreground/minimize event.
-     */
-    
     /*
      * Apply settings immediately instead of waiting for a timer tick.
      * In particular, this restores secondary taskbars when the setting
