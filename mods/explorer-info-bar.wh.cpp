@@ -170,6 +170,7 @@ When one file is selected, additional details can appear:
 
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
 static constexpr DWORD kRefreshIntervalMs = 30000;
+static constexpr ULONGLONG kShellBrowserRegistrationRetryMs = 2000;
 static constexpr ULONGLONG kContentFailedRetryMs = 60000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
 static constexpr ULONGLONG kStatusRowValidationIntervalMs = 500;
@@ -229,6 +230,7 @@ struct TrackedDirectUiState
     HFONT infoBarFont = nullptr;
     HWND shellTab = nullptr;
     DWORD shellBrowserCookie = 0;
+    ULONGLONG lastShellBrowserRegistrationRetryTick = 0;
     HWND validatedDefView = nullptr;
     bool hasValidatedStatusRow = false;
     RECT validatedStatusRow{};
@@ -361,7 +363,7 @@ struct WindowDataCache
     int selectedFolders = 0;
     ULONGLONG selectedBytes = 0;
     ULONGLONG selectionGeneration = 0;
-    std::wstring contentGroup = L"Loading...";
+    std::wstring contentGroup;
     std::wstring selectionGroup;
     std::wstring driveGroup;
     std::wstring fileDetailsGroup;
@@ -2837,7 +2839,7 @@ static void GetCachedGroups(
     }
     else
     {
-        contentGroup = L"Loading...";
+        contentGroup.clear();
         selectionGroup.clear();
         driveGroup.clear();
         fileDetailsGroup.clear();
@@ -3978,16 +3980,19 @@ static DWORD WINAPI WorkerThreadProc(
     {
         std::vector<WorkerTarget> targetCandidates;
         std::vector<WorkerTarget> targets;
+        std::vector<HWND> registrationRetries;
 
         bool snapshotFailed = false;
+        const ULONGLONG now = GetTickCount64();
 
-        AcquireSRWLockShared(&g_subclassLock);
+        AcquireSRWLockExclusive(&g_subclassLock);
 
         try
         {
             targetCandidates.reserve(g_trackedWindows.size());
+            registrationRetries.reserve(g_trackedWindows.size());
 
-            for (const TrackedDirectUiState& state : g_trackedWindows)
+            for (TrackedDirectUiState& state : g_trackedWindows)
             {
                 if (state.shellBrowserCookie)
                 {
@@ -3997,6 +4002,15 @@ static DWORD WINAPI WorkerThreadProc(
                         state.selectionGeneration
                     });
                 }
+                else if (
+                    !state.lastShellBrowserRegistrationRetryTick ||
+                    now - state.lastShellBrowserRegistrationRetryTick >=
+                        kShellBrowserRegistrationRetryMs
+                )
+                {
+                    registrationRetries.push_back(state.hwnd);
+                    state.lastShellBrowserRegistrationRetryTick = now;
+                }
             }
         }
         catch (...)
@@ -4004,12 +4018,42 @@ static DWORD WINAPI WorkerThreadProc(
             snapshotFailed = true;
         }
 
-        ReleaseSRWLockShared(&g_subclassLock);
+        ReleaseSRWLockExclusive(&g_subclassLock);
 
         if (snapshotFailed)
         {
             Wh_Log(L"Worker target snapshot failed");
             targetCandidates.clear();
+            registrationRetries.clear();
+        }
+
+        for (HWND hwnd : registrationRetries)
+        {
+            if (
+                g_unloading.load(std::memory_order_acquire) ||
+                WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0
+            )
+            {
+                break;
+            }
+
+            if (
+                g_refreshDirectUiMessage &&
+                !PostMessageW(
+                    hwnd,
+                    g_refreshDirectUiMessage,
+                    0,
+                    0
+                )
+            )
+            {
+                Wh_Log(
+                    L"Shell browser registration retry post failed "
+                    L"hwnd=%p error=%lu",
+                    hwnd,
+                    GetLastError()
+                );
+            }
         }
 
         try
@@ -5732,6 +5776,76 @@ void Wh_ModSettingsChanged()
     RefreshInfoBars();
 }
 
+static void CancelWorkerComCall()
+{
+    if (!g_workerThread || !g_workerThreadId)
+        return;
+
+    const DWORD waitResult =
+        WaitForSingleObject(
+            g_workerThread,
+            0
+        );
+
+    if (waitResult == WAIT_OBJECT_0)
+        return;
+
+    if (waitResult != WAIT_TIMEOUT)
+    {
+        Wh_Log(
+            L"worker cancellation activity check failed "
+            L"result=%lu error=%lu",
+            waitResult,
+            waitResult == WAIT_FAILED ? GetLastError() : ERROR_SUCCESS
+        );
+        return;
+    }
+
+    const HRESULT comHr =
+        CoInitializeEx(
+            nullptr,
+            COINIT_MULTITHREADED
+        );
+
+    const bool shouldUninitialize =
+        comHr == S_OK ||
+        comHr == S_FALSE;
+
+    if (
+        !shouldUninitialize &&
+        comHr != RPC_E_CHANGED_MODE
+    )
+    {
+        Wh_Log(
+            L"worker cancellation COM initialization failed "
+            L"HRESULT=0x%08X",
+            static_cast<unsigned>(comHr)
+        );
+        return;
+    }
+
+    const HRESULT cancelHr =
+        CoCancelCall(
+            g_workerThreadId,
+            0
+        );
+
+    if (shouldUninitialize)
+        CoUninitialize();
+
+    if (
+        cancelHr != S_OK &&
+        cancelHr != RPC_E_CALL_COMPLETE &&
+        cancelHr != RPC_E_CALL_CANCELED
+    )
+    {
+        Wh_Log(
+            L"worker COM-call cancellation failed HRESULT=0x%08X",
+            static_cast<unsigned>(cancelHr)
+        );
+    }
+}
+
 void Wh_ModBeforeUninit()
 {
     g_unloading.store(
@@ -5742,8 +5856,7 @@ void Wh_ModBeforeUninit()
     if (g_stopEvent)
         SetEvent(g_stopEvent);
 
-    if (g_workerThreadId)
-        CoCancelCall(g_workerThreadId, 0);
+    CancelWorkerComCall();
 
     if (g_workerThread)
         CancelSynchronousIo(g_workerThread);
@@ -5828,8 +5941,7 @@ void Wh_ModUninit()
         // Never terminate a thread while it may own COM, CRT or cache locks.
         while (true)
         {
-            if (g_workerThreadId)
-                CoCancelCall(g_workerThreadId, 0);
+            CancelWorkerComCall();
 
             CancelSynchronousIo(g_workerThread);
 
