@@ -4096,7 +4096,17 @@ static COLORREF PickBackgroundColor(
     AutomaticThemeSnapshot theme =
         GetAutomaticThemeSnapshot(hwnd);
 
-    if (theme.hasSampledNativeRowBackground)
+    const bool fullRowRepaint =
+        nativePaintRect &&
+        nativePaintRect->left <= row.left &&
+        nativePaintRect->right >= row.right &&
+        nativePaintRect->top <= row.top &&
+        nativePaintRect->bottom >= row.bottom;
+
+    if (
+        theme.hasSampledNativeRowBackground &&
+        !fullRowRepaint
+    )
     {
         return theme.rowBackground;
     }
@@ -5182,7 +5192,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         EnsureWindowDataCache(hwnd);
         EnsureShellBrowserRegistration(hwnd);
-        WakeWorkerFromPaint();
 
         RECT updateRect{};
 
@@ -5192,6 +5201,24 @@ static LRESULT CALLBACK DirectUiSubclassProc(
                 &updateRect,
                 FALSE
             );
+
+        RECT row{};
+        RECT intersection{};
+
+        if (
+            !hasUpdateRect ||
+            (
+                GetValidatedStatusRow(hwnd, &row) &&
+                IntersectRect(
+                    &intersection,
+                    &updateRect,
+                    &row
+                )
+            )
+        )
+        {
+            WakeWorkerFromPaint();
+        }
 
         // Let DirectUI finish ALL of its own buffered painting first.
         LRESULT result =
