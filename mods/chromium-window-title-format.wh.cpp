@@ -42,9 +42,12 @@ Some things you can ask for instead:
 ## How it works, and what it will not touch
 
 The mod never guesses at English text. On startup it reads the browser's **own
-localized resource file** to learn the exact browser suffix, the profile
-separator and the page-count wording for your language, then matches those
-literals right-anchored against each title.
+localized resource file** to learn the exact browser suffix, the private-window
+wording and the page-count wording for your language, then matches those
+literals right-anchored against each title. The profile is matched against the
+names the install actually has, rather than against punctuation - browsers do
+not always join the profile with the same character they use elsewhere in the
+title.
 
 If a title does not match the grammar it discovered, the title is left **exactly
 as it is**. That is a hard rule, not a setting, and it is what keeps the
@@ -114,9 +117,22 @@ Style short prefixes like `{count}`, not `{title}`.
 
 ## Limits worth knowing
 
-- **If all you want is the browser name gone**, [text-replace](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/text-replace.wh.cpp)
-  does that with far less machinery. This mod earns its weight only if you want
-  the parts of the title separately.
+- **If all you want is the browser name gone**, [Remove Taskbar Window Suffixes](https://windhawk.net/mods/file-explorer-remove-suffixes)
+  is designed for exactly that and does it for every program at once, with far
+  less machinery. Its *Universal* mode drops the last ` - ` or ` — ` segment from
+  any title, and its custom regex rules can target `msedge.exe` or `chrome.exe`
+  and rewrite with capture groups - which covers dropping the suffix and a fair
+  amount of reordering too.
+
+  Two things are genuinely different here, and neither is a criticism of that
+  mod. It edits **how a title appears on the taskbar**, by its own description,
+  while this one changes the **real window title** - so Alt+Tab, the window's own
+  title bar and jump lists follow. And a regex matches text, whereas this mod
+  decomposes a title into *named* fields - page title, tab count, profile,
+  privacy marker - using the browser's own localized resources, so `{count}` is
+  a number you can style or pad and stays right in every language the browser
+  ships. If you want the suffix gone, use that mod. Use this one when you want
+  the parts.
 - **Edge and Chrome only.** The mod targets `msedge.exe` and `chrome.exe`. It
   needs no symbols and no PDB, so it is not pinned to a particular browser
   build, but other Chromium forks are not currently recognized and would each
@@ -596,7 +612,11 @@ struct CountForm {
 struct Grammar {
     std::vector<std::wstring> suffixes;    // full literal tails, longest first
     std::vector<std::wstring> markerTails; // e.g. " - [InPrivate]"
-    std::vector<std::wstring> slot2Seps;   // profile separators, longest first
+    // Separators discovered from the privacy-marker resource. The profile match
+    // does NOT use these - it anchors on the name - because a browser can join
+    // the marker and the profile with different punctuation in the same title.
+    // This is the fallback boundary for an install whose names cannot be read.
+    std::vector<std::wstring> slot2Seps;   // longest first
     std::vector<CountForm>    countForms;
     // Display names of the profiles this install actually has, read from the
     // browser's own Local State. Empty means "could not be determined", which is
@@ -631,6 +651,35 @@ std::wstring TrimCopy(std::wstring_view s) {
 
 bool EndsWith(std::wstring_view s, std::wstring_view t) {
     return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0;
+}
+
+// Whether a character can be part of the punctuation run that a browser puts
+// between two parts of a title. Only used behind an exact profile-name match.
+//
+// ASCII is by exclusion, everything else by an explicit list, and that asymmetry
+// is deliberate: `iswalnum` answers for the C locale, where Cyrillic and CJK are
+// not letters, so excluding non-alphanumerics would treat a Russian profile name
+// as separator punctuation and walk straight through it. An unlisted non-ASCII
+// character is therefore text, never a separator.
+bool IsSepChar(wchar_t c) {
+    if (c < 0x80) {
+        return !((c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'Z') ||
+                 (c >= L'a' && c <= L'z'));
+    }
+    switch (c) {
+        case 0x00A0:  // no-break space
+        case 0x00B7:  // middle dot
+        case 0x200B:  // zero-width space
+        case 0x200E:  // left-to-right mark
+        case 0x200F:  // right-to-left mark
+        case 0x2013:  // en dash
+        case 0x2014:  // em dash
+        case 0x3000:  // ideographic space
+        case 0xFF1A:  // fullwidth colon
+            return true;
+        default:
+            return false;
+    }
 }
 
 // Decimal value of a Unicode Nd digit, or -1. Counts render in the locale's
@@ -916,15 +965,11 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         }
     }
     // 4. page-count clause, then the generic profile. THE COUNT IS TRIED FIRST,
-    // and the order carries real weight: the profile rule is "whatever follows
-    // the last separator", so
-    //
-    //     "Foo - Bar and 16 more pages - Microsoft Edge"
-    //
-    // reads as profile="Bar and 16 more pages" with no count. Trying the count
-    // against the whole remainder first, and stripping a profile only where that
-    // failed, resolves it toward the reading that finds a count. Merely swapping
-    // the two is NOT enough - the tail "Bar" is still taken as a profile.
+    // and the profile strip is NESTED in its failure rather than sequenced after
+    // it. A flat count-then-profile sequence would strip a profile from behind a
+    // count that already matched, taking the tail of the user's own title: with
+    // a profile named "Bar", "Foo - Bar and 16 more pages - Microsoft Edge"
+    // becomes title "Foo".
     const auto tryStripCount = [&g](const std::wstring& in, Fields* f,
                                     std::wstring* rest) -> bool {
         for (const CountForm& cf : g.countForms) {
@@ -977,8 +1022,7 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // strip one and try the count again behind it.
         //
         // MATCH A REAL PROFILE NAME, never just a trailing segment. Position is
-        // not evidence: slot2Seps is {" - "} on every Edge locale, so "strip
-        // whatever follows the last separator" turns
+        // not evidence: "strip whatever follows the last separator" turns
         // "GitHub - Some Repo - Microsoft Edge" into title "GitHub" with profile
         // "Some Repo" - silent truncation of the user's own text.
         //
@@ -989,31 +1033,53 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // single-profile install, and the whole count clause sits behind that
         // segment, so a two-profile floor would cost both.
         //
-        // profileCount, NOT profileNames.size(): two keys are read per profile,
-        // so a size test cannot tell "no profiles" from "no names read".
+        // The count test is redundant by construction and kept anyway: a name is
+        // recorded only inside a profile object, and entering one is what
+        // increments the count. That invariant lives in another function, and
+        // the all-or-nothing bail that upholds it reads like over-caution; this
+        // conjunct is what keeps a gate that DELETES text from a title closed if
+        // someone ever relaxes it to return what it found so far.
         if (out->profile.empty() && g.profileCount >= 1 &&
             !g.profileNames.empty()) {
-            for (const std::wstring& sep : g.slot2Seps) {
-                const size_t at = r2.rfind(sep);
-                if (at == std::wstring::npos || at == 0) continue;
-                const std::wstring cand = r2.substr(at + sep.size());
-                if (cand.empty() || cand.size() > 64) continue;
-                // EXACTLY equal, not case-insensitively. The browser renders
-                // the stored name verbatim, so folding case buys nothing real and
+            // ANCHOR ON THE NAME, not on a discovered separator. Measured on
+            // Finnish Edge: the privacy-marker resource yields an en dash, so
+            // slot2Seps is {" - "} with an EN dash, while the browser joins the
+            // profile with a plain hyphen and the suffix with the en dash in the
+            // same title - 13 of 84 shipped locale packs disagree this way.
+            // Looking for the separator first loses the profile on all of them,
+            // and the count sitting behind it with the profile.
+            //
+            // The exact name match was always the evidence; the punctuation in
+            // front of it never was. So find the name and accept whatever short
+            // run of punctuation precedes it.
+            const std::wstring t = TrimCopy(r2);
+            for (const std::wstring& name : g.profileNames) {
+                // EXACTLY equal, not case-insensitively. The browser renders the
+                // stored name verbatim, so folding case buys nothing real and
                 // only widens the false-positive window - with a profile named
                 // "Work", a case-insensitive test truncates
                 // "How to go on vacation - work - Microsoft Edge".
-                const std::wstring trimmed = TrimCopy(cand);
-                bool known = false;
-                for (const std::wstring& name : g.profileNames) {
-                    if (trimmed == name) {
-                        known = true;
+                if (name.empty() || name.size() >= t.size()) continue;
+                if (!EndsWith(t, name)) continue;
+                const size_t at = t.size() - name.size();
+                size_t s = at;
+                while (s > 0 && IsSepChar(t[s - 1])) --s;
+                // Something must separate them, it must be short enough to be
+                // punctuation rather than text, and it must leave a title.
+                if (s == at || at - s > 4 || s == 0) continue;
+                // AND IT MUST NOT BE ONLY SPACES. A single space is how ordinary
+                // prose ends: "My Personal" is a page title, not "My" in the
+                // profile "Personal".
+                bool solid = false;
+                for (size_t k = s; k < at; ++k) {
+                    if (t[k] != L' ') {
+                        solid = true;
                         break;
                     }
                 }
-                if (!known) continue;
-                out->profile = trimmed;
-                r3 = r2.substr(0, at);
+                if (!solid) continue;
+                out->profile = name;
+                r3 = t.substr(0, s);
                 break;
             }
         }
@@ -1209,8 +1275,16 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
 //
 // The depth cap is load-bearing: each `?(` recurses with a std::wstring in the
 // frame, and the template is a settings field, so a pasted template of a few
-// thousand nested `?(?(?(...` exhausts the browser UI thread's stack. Past the
-// cap the group renders as literal text rather than being silently dropped.
+// thousand nested `?(?(?(...` exhausts the browser UI thread's stack.
+//
+// Past the cap the `?(` stops being a group opener: its two characters go to
+// the enclosing frame, and the group's `)` then closes THAT frame, so the
+// parentheses shift by one. A capped group whose body resolves to nothing is
+// dropped like any other empty group and leaves a stray `)` behind - which is
+// enough for the composed result to be non-empty, so a template that is
+// nothing but capped groups writes `)` as the title instead of leaving it
+// alone. Reachable only by pasting 32 nested `?(`, and noted rather than
+// fixed because balancing it changes the parser.
 constexpr int kMaxGroupDepth = 32;
 
 size_t Render(const std::wstring& tpl, size_t i, bool inGroup, const Fields& f,
@@ -1722,7 +1796,9 @@ std::wstring UserDataDir() {
 //
 // The COUNT is collected in the same pass and is a different quantity: profile
 // objects are the depth 1 -> 2 transitions, while the name list is several keys
-// per profile flattened together. Conflating them removes the gate entirely.
+// per profile flattened together. It is what the discovery log reports beside
+// the name total, which is how a one-profile install is told from an unreadable
+// one.
 //
 // Malformed input returns nothing rather than a partial answer; empty means
 // "unknown", which the caller treats as "do not strip a profile".
@@ -2046,6 +2122,7 @@ void SweepAllWindows() {
     std::vector<DWORD> mute;
 
     int changed = 0;
+    int muted   = 0;
     for (HWND h : frames) {
         // Teardown must be able to cut a sweep short. Without this the worker
         // can still be walking dozens of windows when Wh_ModBeforeUninit tries
@@ -2056,12 +2133,16 @@ void SweepAllWindows() {
             return;
         }
         const DWORD owner = GetWindowThreadProcessId(h, nullptr);
-        if (std::find(mute.begin(), mute.end(), owner) != mute.end()) continue;
+        if (std::find(mute.begin(), mute.end(), owner) != mute.end()) {
+            ++muted;
+            continue;
+        }
         // Bounded, and shared with the restore path - see the helper for why
         // these reads cannot be the plain GetWindowTextW form.
         std::wstring cur;
         if (!ReadTitleFromOtherThread(h, &cur)) {
             mute.push_back(owner);
+            ++muted;
             continue;
         }
         if (cur.empty()) continue;
@@ -2109,7 +2190,13 @@ void SweepAllWindows() {
             ++changed;
         }
     }
-    Wh_Log(L"sweep: %zu frame(s), %d retitled", frames.size(), changed);
+    // `muted` is the one that answers "did the one-strike rule cost anything
+    // here". It prints unconditionally, because a line emitted only when the
+    // rule fires is invisible to a capture attached afterwards - and this
+    // number has never been observed to be anything but zero.
+    Wh_Log(L"sweep: %zu frame(s), %d retitled, %d skipped after a thread "
+           L"stopped answering",
+           frames.size(), changed, muted);
 }
 
 DWORD WINAPI DiscoveryThread(LPVOID) {
@@ -2449,6 +2536,7 @@ void Wh_ModUninit() {
     int restored = 0;
     int failed   = 0;
     int skipped  = 0;
+    int muted    = 0;
     // Threads that have already failed to answer, exactly as the sweep does:
     // every browser frame shares a UI thread, so one timeout is all the evidence
     // needed not to spend another 250 ms per window on an unresponsive one.
@@ -2471,7 +2559,7 @@ void Wh_ModUninit() {
         // and restoring over it would replace a current title with a stale one
         // on a window that may never write its own title again.
         if (std::find(mute.begin(), mute.end(), tid) != mute.end()) {
-            ++skipped;
+            ++muted;
             continue;
         }
         std::wstring cur;
@@ -2485,11 +2573,16 @@ void Wh_ModUninit() {
             ++failed;
         }
     }
-    // All three, because the ones that are not "restored" are the interesting
+    // All four, because the ones that are not "restored" are the interesting
     // ones: a window whose thread did not answer keeps our title after the mod
-    // is gone, and this log line is the only place that says so.
-    Wh_Log(L"restored %d title(s), %d not acknowledged, %d skipped", restored,
-           failed, skipped);
+    // is gone, and this log line is the only place that says so. The last count
+    // is kept apart from `skipped` deliberately - a skip is benign (the window
+    // moved on, or is not ours), while a mute means the one-strike rule gave up
+    // on every remaining window of that thread, and lumping the two together is
+    // what made the rule's cost unmeasurable.
+    Wh_Log(L"restored %d title(s), %d not acknowledged, %d skipped, %d skipped "
+           L"after a thread stopped answering",
+           restored, failed, skipped, muted);
 
     // Last, and only here. Wh_ModBeforeUninit has already joined the worker, so
     // nothing can still be waiting on this handle - closing it while a wait was
