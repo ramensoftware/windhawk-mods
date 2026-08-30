@@ -57,7 +57,7 @@ Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not re
 
 Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.
 
-Explorer Status Bar Metadata overlaps functionally because Explorer Info Bar+ already includes optional single-file metadata. Its metadata functionality is integrated here; no broader incompatibility is implied.
+Explorer Info Bar+ paints over the native status-row text, including output from Explorer Status Bar Metadata. Do not enable Explorer Status Bar Metadata at the same time because its output will be covered. When Explorer Status Bar Metadata is not used, Explorer Info Bar+'s optional Single File Details can provide file extension, dimensions, and duration when available.
 
 ## Examples
 
@@ -115,7 +115,7 @@ When one file is selected, additional details can appear:
   $name: Show Selected
   $description: Show information about the current selection.
 
-- singleFileDetails: true
+- singleFileDetails: false
   $name: Show Single File Details
   $description: Show file extension and details when possible.
 
@@ -169,12 +169,11 @@ When one file is selected, additional details can appear:
 #define CWM_GETISHELLBROWSER (WM_USER + 7)
 
 static constexpr DWORD kInitialRefreshDelayMs = 1000;
-static constexpr DWORD kRefreshIntervalMs = 10000;
+static constexpr DWORD kRefreshIntervalMs = 30000;
 static constexpr ULONGLONG kContentFailedRetryMs = 60000;
 static constexpr ULONGLONG kMetadataRetryMs = 5000;
 static constexpr ULONGLONG kStatusRowValidationIntervalMs = 500;
-
-thread_local bool g_insideFinalPaint = false;
+static constexpr ULONGLONG kNativeRowBackgroundSampleIntervalMs = 2000;
 
 static std::atomic<bool> g_unloading{false};
 
@@ -225,6 +224,7 @@ struct TrackedDirectUiState
     InfoBarLayoutGeometry layout;
     COLORREF automaticRowBackground = CLR_INVALID;
     bool hasSampledNativeRowBackground = false;
+    ULONGLONG lastNativeRowBackgroundSampleTick = 0;
     UINT dpi = 96;
     HFONT infoBarFont = nullptr;
     HWND shellTab = nullptr;
@@ -265,7 +265,7 @@ struct ModSettings
     bool showDrive = true;
     bool showContent = true;
     bool showSelection = true;
-    bool singleFileDetails = true;
+    bool singleFileDetails = false;
 };
 
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
@@ -298,7 +298,6 @@ static HANDLE g_selectionWinEventThreadReady = nullptr;
 static HANDLE g_selectionWinEventStopEvent = nullptr;
 static HWINEVENTHOOK g_selectionWinEventHook = nullptr;
 static HWINEVENTHOOK g_windowCreateWinEventHook = nullptr;
-static std::atomic<ULONGLONG> g_lastPaintWakeTick{0};
 static constexpr ULONGLONG kSelectionWinEventDebounceMs = 200;
 static constexpr ULONGLONG kSelectionWinEventMaxLatencyMs = 800;
 static ULONGLONG g_selectionWinEventBurstStartTick = 0;
@@ -339,6 +338,21 @@ struct SingleFileMetadataCache
     ULONGLONG retryAfterTick = 0;
 };
 
+struct DriveRefreshCache
+{
+    std::wstring path;
+    ULONGLONG freeBytes = 0;
+    ULONGLONG totalBytes = 0;
+    wchar_t driveLetter = L'?';
+    ULONGLONG lastRefreshTick = 0;
+};
+
+struct SingleSelectionRefreshCache
+{
+    std::wstring identity;
+    ULONGLONG lastFilesystemRefreshTick = 0;
+};
+
 struct WindowDataCache
 {
     HWND hwnd = nullptr;
@@ -353,6 +367,10 @@ struct WindowDataCache
     std::wstring fileDetailsGroup;
     ContentRefreshCache contentRefresh;
     SingleFileMetadataCache metadata;
+    DriveRefreshCache driveRefresh;
+    SingleSelectionRefreshCache singleSelectionRefresh;
+    ULONGLONG lastWorkerRefreshTick = 0;
+    ULONGLONG lastPaintWakeTick = 0;
 };
 
 static std::vector<WindowDataCache> g_windowDataCaches;
@@ -1886,6 +1904,7 @@ struct AutomaticThemeSnapshot
 {
     COLORREF rowBackground = CLR_INVALID;
     bool hasSampledNativeRowBackground = false;
+    ULONGLONG lastNativeRowBackgroundSampleTick = 0;
 };
 
 static void StoreLayoutGeometry(
@@ -1994,6 +2013,9 @@ static AutomaticThemeSnapshot GetAutomaticThemeSnapshot(
 
         result.hasSampledNativeRowBackground =
             existing->hasSampledNativeRowBackground;
+
+        result.lastNativeRowBackgroundSampleTick =
+            existing->lastNativeRowBackgroundSampleTick;
     }
 
     ReleaseSRWLockShared(&g_subclassLock);
@@ -2023,6 +2045,12 @@ static void UpdateAutomaticRowBackground(
         existing->automaticRowBackground = rowBackground;
         existing->hasSampledNativeRowBackground =
             sampledNativeRowBackground;
+
+        if (sampledNativeRowBackground)
+        {
+            existing->lastNativeRowBackgroundSampleTick =
+                GetTickCount64();
+        }
     }
 
     ReleaseSRWLockExclusive(&g_subclassLock);
@@ -2296,26 +2324,39 @@ static WindowDataCache* FindWindowDataCacheLocked(
 }
 
 
-static void WakeWorkerFromPaint()
+static void WakeWorkerFromPaint(HWND hwnd)
 {
-    if (!g_workerWakeEvent)
+    if (!hwnd || !g_workerWakeEvent)
         return;
 
     const ULONGLONG now = GetTickCount64();
-    ULONGLONG previous =
-        g_lastPaintWakeTick.load(std::memory_order_relaxed);
+    bool shouldWake = false;
 
-    if (
-        now - previous < 250 ||
-        !g_lastPaintWakeTick.compare_exchange_strong(
-            previous,
-            now,
-            std::memory_order_relaxed
-        )
-    )
+    EnterCriticalSection(&g_cacheLock);
+
+    if (WindowDataCache* cache = FindWindowDataCacheLocked(hwnd))
     {
-        return;
+        const bool dataIsStale =
+            !cache->lastWorkerRefreshTick ||
+            now - cache->lastWorkerRefreshTick >=
+                kRefreshIntervalMs;
+
+        const bool paintWakeIsDue =
+            !cache->lastPaintWakeTick ||
+            now - cache->lastPaintWakeTick >=
+                kRefreshIntervalMs;
+
+        if (dataIsStale && paintWakeIsDue)
+        {
+            cache->lastPaintWakeTick = now;
+            shouldWake = true;
+        }
     }
+
+    LeaveCriticalSection(&g_cacheLock);
+
+    if (!shouldWake)
+        return;
 
     SetEvent(g_workerWakeEvent);
 }
@@ -2823,7 +2864,9 @@ static unsigned UpdateCache(
     const std::wstring& fileDetailsText,
     ULONGLONG selectionGeneration,
     const ContentRefreshCache& contentRefreshCache,
-    const SingleFileMetadataCache& metadataCache
+    const SingleFileMetadataCache& metadataCache,
+    const DriveRefreshCache& driveRefreshCache,
+    const SingleSelectionRefreshCache& singleSelectionRefreshCache
 )
 {
     std::wstring driveText;
@@ -2977,6 +3020,9 @@ static unsigned UpdateCache(
     cache->selectionGeneration = selectionGeneration;
     cache->contentRefresh = contentRefreshCache;
     cache->metadata = metadataCache;
+    cache->driveRefresh = driveRefreshCache;
+    cache->singleSelectionRefresh = singleSelectionRefreshCache;
+    cache->lastWorkerRefreshTick = GetTickCount64();
 
     LeaveCriticalSection(&g_cacheLock);
     return changes;
@@ -3212,6 +3258,12 @@ static unsigned ReadCurrentView(
     SingleFileMetadataCache metadataCache =
         state.metadata;
 
+    DriveRefreshCache driveCache =
+        state.driveRefresh;
+
+    SingleSelectionRefreshCache singleSelectionCache =
+        state.singleSelectionRefresh;
+
     IShellView* shellView = nullptr;
 
     HRESULT hr =
@@ -3285,6 +3337,8 @@ static unsigned ReadCurrentView(
     if (folderIdentity.empty())
         folderIdentity = currentPath;
 
+    const ULONGLONG now = GetTickCount64();
+
     ULONGLONG freeBytes = 0;
     ULONGLONG driveTotalBytes = 0;
     wchar_t driveLetter = L'?';
@@ -3295,26 +3349,49 @@ static unsigned ReadCurrentView(
         currentPath[1] == L':'
     )
     {
-        ULARGE_INTEGER freeAvailable{};
-        ULARGE_INTEGER totalBytes{};
+        const bool drivePathChanged =
+            driveCache.path != currentPath;
 
-        if (
-            GetDiskFreeSpaceExW(
-                currentPath.c_str(),
-                &freeAvailable,
-                &totalBytes,
-                nullptr
-            )
-        )
+        const bool driveRefreshDue =
+            !driveCache.lastRefreshTick ||
+            now - driveCache.lastRefreshTick >=
+                kRefreshIntervalMs;
+
+        if (drivePathChanged || driveRefreshDue)
         {
-            freeBytes = freeAvailable.QuadPart;
-            driveTotalBytes = totalBytes.QuadPart;
+            ULARGE_INTEGER freeAvailable{};
+            ULARGE_INTEGER totalBytes{};
+
+            driveCache.path = currentPath;
+            driveCache.freeBytes = 0;
+            driveCache.totalBytes = 0;
+            driveCache.driveLetter =
+                static_cast<wchar_t>(
+                    towupper(currentPath[0])
+                );
+            driveCache.lastRefreshTick = now;
+
+            if (
+                GetDiskFreeSpaceExW(
+                    currentPath.c_str(),
+                    &freeAvailable,
+                    &totalBytes,
+                    nullptr
+                )
+            )
+            {
+                driveCache.freeBytes = freeAvailable.QuadPart;
+                driveCache.totalBytes = totalBytes.QuadPart;
+            }
         }
 
-        driveLetter =
-            static_cast<wchar_t>(
-                towupper(currentPath[0])
-            );
+        freeBytes = driveCache.freeBytes;
+        driveTotalBytes = driveCache.totalBytes;
+        driveLetter = driveCache.driveLetter;
+    }
+    else if (settings.showDrive)
+    {
+        driveCache = DriveRefreshCache{};
     }
 
     int total = -1;
@@ -3331,8 +3408,6 @@ static unsigned ReadCurrentView(
 
         itemCountAvailable = SUCCEEDED(hr);
     }
-
-    const ULONGLONG now = GetTickCount64();
 
     if (
         settings.showContent &&
@@ -3367,6 +3442,14 @@ static unsigned ReadCurrentView(
             sameFolder &&
             total != contentCache.itemCount;
 
+        const bool periodicFullScanDue =
+            sameFolder &&
+            (
+                !contentCache.lastFullScanTick ||
+                now - contentCache.lastFullScanTick >=
+                    kRefreshIntervalMs
+            );
+
         const bool sameFailedFolder =
             contentCache.scanFailed &&
             !folderIdentity.empty() &&
@@ -3384,7 +3467,8 @@ static unsigned ReadCurrentView(
         if (
             (
                 !sameFolder ||
-                itemCountChanged
+                itemCountChanged ||
+                periodicFullScanDue
             ) &&
             (
                 !sameFailedFolder ||
@@ -3528,9 +3612,9 @@ static unsigned ReadCurrentView(
                 contentCache.folderIdentity != state.contentRefresh.folderIdentity;
 
             // A one-item selection needs an identity-sensitive fallback:
-            // arrowing to another item keeps the count at one. Re-enumerate
-            // that single item on the existing worker refresh cadence so a
-            // missed/failed WinEvent cannot leave size or metadata stale.
+            // arrowing to another item keeps the count at one. Resolve that
+            // item's identity on worker passes, but throttle filesystem reads
+            // when the identity and event generation are unchanged.
             const bool singleSelectionFallback =
                 selectionCount == 1 &&
                 (
@@ -3541,11 +3625,13 @@ static unsigned ReadCurrentView(
             const bool selectionDirty =
                 selectionGeneration != state.selectionGeneration ||
                 selected != state.selected ||
-                folderChanged ||
-                singleSelectionFallback;
+                folderChanged;
 
             const bool enumerateSelection =
-                selectionDirty &&
+                (
+                    selectionDirty ||
+                    singleSelectionFallback
+                ) &&
                 selectionCount <= kMaxDetailedSelectionItems &&
                 (
                     settings.showSelection ||
@@ -3562,6 +3648,7 @@ static unsigned ReadCurrentView(
                 selectedBytes = 0;
                 singleFileDetails.clear();
                 keepSingleFileMetadataCache = false;
+                singleSelectionCache = SingleSelectionRefreshCache{};
             }
 
             if (enumerateSelection)
@@ -3597,24 +3684,99 @@ static unsigned ReadCurrentView(
                         continue;
                     }
 
-                    PWSTR path = nullptr;
+                    std::wstring filesystemPath;
+                    PWSTR rawPath = nullptr;
 
                     if (
                         SUCCEEDED(
                             item->GetDisplayName(
                                 SIGDN_FILESYSPATH,
-                                &path
+                                &rawPath
                             )
                         ) &&
-                        path
+                        rawPath
+                    )
+                    {
+                        filesystemPath = rawPath;
+                        CoTaskMemFree(rawPath);
+                    }
+
+                    std::wstring itemIdentity =
+                        filesystemPath;
+
+                    if (
+                        selectionCount == 1 &&
+                        itemIdentity.empty()
+                    )
+                    {
+                        PWSTR parsingName = nullptr;
+
+                        if (
+                            SUCCEEDED(
+                                item->GetDisplayName(
+                                    SIGDN_DESKTOPABSOLUTEPARSING,
+                                    &parsingName
+                                )
+                            ) &&
+                            parsingName
+                        )
+                        {
+                            itemIdentity = parsingName;
+                            CoTaskMemFree(parsingName);
+                        }
+                    }
+
+                    bool refreshFilesystem =
+                        selectionDirty;
+
+                    if (selectionCount == 1)
+                    {
+                        const bool identityChanged =
+                            itemIdentity != singleSelectionCache.identity;
+
+                        const bool filesystemFallbackDue =
+                            !singleSelectionCache.lastFilesystemRefreshTick ||
+                            now - singleSelectionCache.lastFilesystemRefreshTick >=
+                                kRefreshIntervalMs;
+
+                        refreshFilesystem =
+                            selectionDirty ||
+                            identityChanged ||
+                            filesystemFallbackDue;
+
+                        if (
+                            !selectionDirty &&
+                            refreshFilesystem
+                        )
+                        {
+                            selectedFiles = 0;
+                            selectedFolders = 0;
+                            selectedBytes = 0;
+                            singleFileDetails.clear();
+                            keepSingleFileMetadataCache = false;
+                        }
+
+                        singleSelectionCache.identity =
+                            itemIdentity;
+                    }
+
+                    if (
+                        refreshFilesystem &&
+                        !filesystemPath.empty()
                     )
                     {
                         bool directory = false;
                         ULONGLONG size = 0;
 
+                        if (selectionCount == 1)
+                        {
+                            singleSelectionCache.lastFilesystemRefreshTick =
+                                now;
+                        }
+
                         if (
                             GetFilesystemInfo(
-                                path,
+                                filesystemPath.c_str(),
                                 &directory,
                                 &size
                             )
@@ -3638,13 +3800,11 @@ static unsigned ReadCurrentView(
                                     singleFileDetails =
                                         GetSingleFileDetailsCached(
                                             &metadataCache,
-                                            path
+                                            filesystemPath
                                         );
                                 }
                             }
                         }
-
-                        CoTaskMemFree(path);
                     }
 
                     item->Release();
@@ -3707,7 +3867,9 @@ static unsigned ReadCurrentView(
             singleFileDetails,
             selectionGeneration,
             contentCache,
-            metadataCache
+            metadataCache,
+            driveCache,
+            singleSelectionCache
         );
 
     folderView->Release();
@@ -4103,14 +4265,6 @@ static COLORREF PickBackgroundColor(
         nativePaintRect->top <= row.top &&
         nativePaintRect->bottom >= row.bottom;
 
-    if (
-        theme.hasSampledNativeRowBackground &&
-        !fullRowRepaint
-    )
-    {
-        return theme.rowBackground;
-    }
-
     if (theme.rowBackground == CLR_INVALID)
     {
         theme.rowBackground =
@@ -4121,6 +4275,18 @@ static COLORREF PickBackgroundColor(
             theme.rowBackground,
             false
         );
+    }
+
+    if (!fullRowRepaint)
+        return theme.rowBackground;
+
+    if (
+        theme.hasSampledNativeRowBackground &&
+        GetTickCount64() - theme.lastNativeRowBackgroundSampleTick <
+            kNativeRowBackgroundSampleIntervalMs
+    )
+    {
+        return theme.rowBackground;
     }
 
     const int rowWidth = row.right - row.left;
@@ -5089,6 +5255,8 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         if (!g_unloading.load(std::memory_order_acquire))
         {
+            EnsureWindowDataCache(hwnd);
+            EnsureShellBrowserRegistration(hwnd);
             RefreshValidatedStatusRow(hwnd);
             InvalidateInfoBarWindow(hwnd);
         }
@@ -5164,7 +5332,14 @@ static LRESULT CALLBACK DirectUiSubclassProc(
             RefreshTrackedDpiAndFont(hwnd);
         }
 
-        RefreshValidatedStatusRow(hwnd);
+        if (
+            msg != WM_WINDOWPOSCHANGED ||
+            IsStatusRowRevalidationDue(hwnd)
+        )
+        {
+            RefreshValidatedStatusRow(hwnd);
+        }
+
         InvalidateInfoBarWindow(hwnd);
         return result;
     }
@@ -5190,9 +5365,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
 
     if (msg == WM_PAINT)
     {
-        EnsureWindowDataCache(hwnd);
-        EnsureShellBrowserRegistration(hwnd);
-
         RECT updateRect{};
 
         const BOOL hasUpdateRect =
@@ -5217,7 +5389,7 @@ static LRESULT CALLBACK DirectUiSubclassProc(
             )
         )
         {
-            WakeWorkerFromPaint();
+            WakeWorkerFromPaint(hwnd);
         }
 
         // Let DirectUI finish ALL of its own buffered painting first.
@@ -5234,9 +5406,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
 
         if (hdc)
         {
-            g_insideFinalPaint =
-                true;
-
             PaintFinalInfoBar(
                 hdc,
                 hwnd,
@@ -5244,9 +5413,6 @@ static LRESULT CALLBACK DirectUiSubclassProc(
                     ? &updateRect
                     : nullptr
             );
-
-            g_insideFinalPaint =
-                false;
 
             ReleaseDC(
                 hwnd,
