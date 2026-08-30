@@ -4,7 +4,7 @@
 // @description     دبل كليك على حافة النافذة اليسرى/اليمنى يكبر العرض، والعلوية/السفلية يكبر الطول
 // @version         1.0
 // @author          Hamid
-// @github          https://github.com/
+// @github          https://github.com/nh4700-ai
 // @include         *
 // @compilerOptions -luser32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
