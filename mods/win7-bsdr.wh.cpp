@@ -49,18 +49,22 @@ settings. If you do not do this, it will silently fail to inject.
   $name: AuthUX.dll/winsrv.dll path
   $name:ko-KR: AuthUX.dll/winsrv.dll 경로
   $description: Path to your copy of winsrv.dll from Windows 7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
+  $description:ko-KR: Windows 7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
 - themeScrollbar: false
   $name: Apply visual styles to the scroll bar
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
   $description: The original Windows 7 blocked shutdown resolver had an unthemed scroll bar. Enable this if you find it ugly.
-- disableAsyncLogoff: true
+  $description:ko-KR: Windows 7의 원본 BSDR은 스크롤 막대에 테마를 적용하지 않았습니다. 그것이 마음에 들지 않는 경우 이 옵션을 활성화하십시오.
+- disableAsyncLogoff: false
   $name: Restore Windows 7's logoff sequence
   $name:ko-KR: Windows 7의 로그오프 절차 복원
-  $description: Switch to the 'logging off' screen after all applications have been closed.
+  $description: Switch to the 'logging off' screen after all applications have been closed. If your user account has no password set, you might be immediately logged back on automatically after logging off.
+  $description:ko-KR: 모든 응용 프로그램이 닫힌 이후 '로그오프 중' 화면으로 전환합니다. 사용자 계정에 암호가 설정되지 않은 경우, 로그오프 직후 자동으로 다시 로그온 될 수 있습니다.
 - noSafetyChecks: false
   $name: (Advanced) Skip safety checks before restoring the classic logoff sequence
-  $name:ko-KR: 고전 로그오프 절차를 복원하기 전 안전 검사 생략
-  $description: This mod verifies that LogonUI injection was successful on every logoff before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
+  $name:ko-KR: (고급) 고전 로그오프 절차를 복원하기 전 안전 검사 생략
+  $description: This mod verifies that LogonUI injection was successful before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
+  $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사힙니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
 */
 // ==/WindhawkModSettings==
 
@@ -71,6 +75,7 @@ settings. If you do not do this, it will silently fail to inject.
 #include <atomic>
 #include <regex>
 #include <vector>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <climits>
@@ -1771,7 +1776,7 @@ namespace CustomBSDR {
     HBITMAP LoadAlphaBitmap(UINT resourceId, bool forceHardcoded = false);
     void DrawSeparator(LPDRAWITEMSTRUCT pDIS);
     void DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS);
-    void CreateAppTileControls(IShutdownBlockingApp* blockingApp);
+    void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId);
     void UpdateAppListLayout();
     LRESULT CALLBACK ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
@@ -1798,7 +1803,7 @@ namespace CustomBSDR {
     static unsigned int scrollLines = 3;
     static int totalContentHeight = 0;
     static bool isOnSecureDesktop = true;
-    
+
     // app list data stuff
     struct AppTile {
         UINT appId;
@@ -2394,7 +2399,7 @@ LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
+void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout) {
     if (!hDlg || !blockingApp) {
         return;
     }
@@ -2444,11 +2449,11 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
 
     int iconSize = MulDiv(32, dpi, 96);
 
-    tile.hIcon = CreateWindowExW(0, L"Static", nullptr, WS_CHILD | WS_VISIBLE | SS_BITMAP, 0, 0, iconSize, iconSize, hAppListScroll, nullptr, nullptr, nullptr);
-    tile.hTitle = CreateWindowExW(0, L"Static", titleText.c_str(), WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, 0, 0, 100, 20, hAppListScroll, nullptr, nullptr, nullptr);
+    tile.hIcon = CreateWindowExW(0, L"Static", nullptr, WS_CHILD | WS_VISIBLE | SS_BITMAP, -iconSize, -iconSize, iconSize, iconSize, hAppListScroll, nullptr, nullptr, nullptr);
+    tile.hTitle = CreateWindowExW(0, L"Static", titleText.c_str(), WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, -100, -20, 100, 20, hAppListScroll, nullptr, nullptr, nullptr);
 
     if (!blockReasonText.empty()) {
-        tile.hBlockReason = CreateWindowExW(0, L"Static", blockReasonText.c_str(), WS_CHILD | WS_VISIBLE | SS_EDITCONTROL, 0, 0, 100, 40, hAppListScroll, nullptr, nullptr, nullptr);
+        tile.hBlockReason = CreateWindowExW(0, L"Static", blockReasonText.c_str(), WS_CHILD | WS_VISIBLE | SS_EDITCONTROL, -100, -40, 100, 40, hAppListScroll, nullptr, nullptr, nullptr);
     } else {
         tile.hBlockReason = nullptr;
     }
@@ -2490,7 +2495,9 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp) {
         appTiles.push_back(tile);
     }
 
-    UpdateAppListLayout();
+    if (!noUpdateLayout) {
+        UpdateAppListLayout();
+    }
 }
 
 void CustomBSDR::RemoveAppTileControls(UINT appId) {
@@ -2547,6 +2554,56 @@ void CustomBSDR::UpdateAppListLayout() {
         totalContentHeight += (tile.hBlockReason != nullptr) ? itemHeight : itemHeightNoReason;
     }
 
+    // Increase the dialog size
+    // Windows 7 decided the dialog height only on the initial load (and when the screen resolution was decreased), and never resized on late item add/remove
+    // On Windows 10+, the BSDR backend sends the initial list of apps with random delays (whether pendingApps or WM_ADD_APP is used),
+    // and never sends newly created windows after initialization. So consider all additions as initial item and always increase the dialog height
+    RECT rcScrollBar;
+    GetWindowRect(hScrollBar, &rcScrollBar);
+    int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int minHeight = visibleHeight;
+    int maxHeight = screenHeight - MulDiv(335, dpi, 96);
+
+    if (maxHeight < minHeight)
+        maxHeight = minHeight;
+
+    int newHeight = totalContentHeight;
+    if (newHeight < minHeight)
+        newHeight = minHeight;
+    if (newHeight > maxHeight)
+        newHeight = maxHeight;
+    int heightDiff = newHeight - minHeight;
+
+    if (heightDiff) {
+        visibleHeight = newHeight;
+
+        SetWindowPos(hAppList, nullptr, 0, 0, currentWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hScrollBar, nullptr, 0, 0, scrollBarWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
+
+        for (HWND hwndSibling = GetWindow(hScrollBar, GW_HWNDNEXT); hwndSibling; hwndSibling = GetWindow(hwndSibling, GW_HWNDNEXT)) {
+            RECT rcSibling;
+            GetWindowRect(hwndSibling, &rcSibling);
+            MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcSibling, 2);
+            OffsetRect(&rcSibling, 0, heightDiff);
+            SetWindowPos(hwndSibling, nullptr, rcSibling.left, rcSibling.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        }
+
+        RECT rcTitle, rcNo;
+        GetWindowRect(hTitleText, &rcTitle);
+        MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcTitle, 2);
+        GetWindowRect(hNoButton, &rcNo);
+        MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcNo, 2);
+        int topPadding = rcTitle.top;
+        int dialogWidth = rcTitle.right;
+        int newDialogHeight = rcNo.bottom + topPadding - 1;
+        SetWindowPos(hDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
+
+        CenterWindow(hDlg);
+    }
+
+    // Calculate scroll info
     int maxScroll = totalContentHeight - visibleHeight;
     if (maxScroll < 0) maxScroll = 0;
 
@@ -2570,6 +2627,7 @@ void CustomBSDR::UpdateAppListLayout() {
         scrollPos = 0;
     }
 
+    // Relocate child controls
     int yPos = topMargin;
 
     for (auto& tile : appTiles) {
@@ -2727,16 +2785,14 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                 SetWindowPos(hwndSibling, nullptr, rcSibling.left, rcSibling.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
             }
 
-            RECT rcDialog, rcTitle, rcNo;
-            GetWindowRect(hWndDlg, &rcDialog);
-            OffsetRect(&rcDialog, -GetSystemMetrics(SM_XVIRTUALSCREEN), -GetSystemMetrics(SM_YVIRTUALSCREEN));
+            RECT rcTitle, rcNo;
             GetWindowRect(hTitleText, &rcTitle);
             MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcTitle, 2);
             GetWindowRect(hNoButton, &rcNo);
             MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcNo, 2);
-            int topPadding = rcTitle.top - rcDialog.top;
-            int dialogWidth = rcTitle.right - rcDialog.left;
-            int newDialogHeight = rcNo.bottom - rcDialog.top + topPadding - 1;
+            int topPadding = rcTitle.top;
+            int dialogWidth = rcTitle.right;
+            int newDialogHeight = rcNo.bottom + topPadding - 1;
             SetWindowPos(hWndDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
         }
 
@@ -2785,8 +2841,9 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         for (auto& app : pendingAppsLocal) {
-            CreateAppTileControls(app.Get());
+            CreateAppTileControls(app.Get(), true);
         }
+        UpdateAppListLayout();
 
         // Load and set the appropriate strings based on the current LogonUI state
         wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
@@ -2844,7 +2901,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             DeleteDC(memDC);
         }
         EndPaint(hWndDlg, &ps);
-        return 0;
+        return TRUE;
     }
     case WM_ERASEBKGND:
         if (!IsHighContrast()) {
@@ -2853,6 +2910,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             GetClientRect(hWndDlg, &rcDlg);
             HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
             FillRect(hdc, &rcDlg, hBrush);
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
             return TRUE;
         }
         break;
@@ -2860,9 +2918,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
         if (pDIS->CtlID == IDC_BSDR_SEPARATOR_TOP || pDIS->CtlID == IDC_BSDR_SEPARATOR_BOTTOM) {
             DrawSeparator(pDIS);
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
             return TRUE;
         } else if (pDIS->CtlType == ODT_BUTTON) {
             DrawButton(pDIS->hDC, pDIS);
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
             return TRUE;
         }
         break;
@@ -2885,12 +2945,14 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                 } else {
                     // Event capture failed, oh noes!
                     // Here comes the old terrible workaround
-                    Wh_Log(L"Force exiting LogonUI!");
                     Sleep(1000); // Make sure the resolve request reaches winlogon
+                    // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
+                    // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
+                    Wh_Log(L"Force exiting LogonUI!");
                     ExitProcess(0);
                 }
             }
-            PostMessageW(hBgWnd, WM_CLOSE, 0, 0);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, 1337);
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -2902,7 +2964,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return TRUE;
         case IDYES:
             Resolve(BlockedShutdownResolution_Force);
-            PostMessageW(hBgWnd, WM_CLOSE, 0, 0);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, 1377);
             return TRUE;
         case IDNO:
             ShowWindow(hWarningText, SW_HIDE);
@@ -2940,7 +3002,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
 
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
         int oldPos = scrollPos;
-        scrollPos -= MulDiv(delta, scrollLines, WHEEL_DELTA);
+        int lineHeight = MulDiv(20, dpi, 96);
+        scrollPos -= MulDiv(delta * lineHeight, scrollLines, WHEEL_DELTA);
         if (scrollPos < 0) scrollPos = 0;
 
         int maxScroll = totalContentHeight - visibleHeight;
@@ -3031,6 +3094,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         if (!IsHighContrast()) {
             // Screenshot desktop and dim it
+            // No DPI virtualization involved because LogonUI is per-monitor scaled by manifest
             HDC hDC = GetDC(nullptr);
             HDC hMemDC = CreateCompatibleDC(hDC);
             bgBitmap = CreateCompatibleBitmap(hDC, bgWidth, bgHeight);
@@ -3046,7 +3110,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             ReleaseDC(nullptr, hDC);
 
             separatorBitmap = LoadAlphaBitmap(IDB_BSDR_SEPARATOR);
-            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL);
+            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL); 
             btnHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_HOVER);
             btnPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_PRESSED);
             btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
@@ -3088,6 +3152,11 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_CLOSE: {
+        if (lParam != 1337) {
+            // Deny Alt+F4 or other external window closes (like Windows 7)
+            return 0;
+        }
+
         for (auto& tile : appTiles) {
             if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
         }
@@ -3189,7 +3258,17 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         bgWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         bgHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-        hBgWnd = CreateWindowExW(WS_EX_TOPMOST, wndClass.lpszClassName, NULL, WS_POPUP | WS_VISIBLE, bgOffsetX, bgOffsetY, bgWidth, bgHeight, NULL, NULL, NULL, NULL);
+        hBgWnd = CreateWindowExW(
+            WS_EX_TOPMOST,
+            BSDR_CLASSNAME,
+            nullptr,
+            WS_POPUP | WS_VISIBLE,
+            bgOffsetX, bgOffsetY, bgWidth, bgHeight,
+            nullptr,
+            nullptr,
+            HINST_THISCOMPONENT,
+            nullptr
+        );
 
         if (hBgWnd) {
             HANDLE waitHandles[1] = { hStopEvent };
@@ -3205,7 +3284,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
                 if (result == WAIT_OBJECT_0) { // hStopEvent
                     if (hBgWnd && IsWindow(hBgWnd)) {
-                        SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, 1337);
                     } else {
                         break;
                     }
@@ -3223,7 +3302,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                             SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
                         }
-                        if (hDlg && !IsDialogMessageW(hDlg, &msg)) {
+                        if (!hDlg || !IsDialogMessageW(hDlg, &msg)) {
                             TranslateMessage(&msg);
                             DispatchMessageW(&msg);
                         }
@@ -3234,8 +3313,18 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 } else {
                     ret = GetLastError();
                     Wh_Log(L"MsgWaitForMultipleObjects returned %d, GLE=%d", result, ret);
+
+                    bool needsResolve;
+                    {
+                        std::lock_guard lock(g_resolvedMutex);
+                        needsResolve = g_resolvedValue == BlockedShutdownResolution_None;
+                    }
+                    if (needsResolve) {
+                        Resolve(BlockedShutdownResolution_Cancel);
+                    }
+
                     if (hBgWnd && IsWindow(hBgWnd)) {
-                        SendMessageW(hBgWnd, WM_CLOSE, 0, 0);
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, 1337);
                     }
                     break;
                 }
@@ -3519,6 +3608,7 @@ long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsig
     Wh_Log(L"DoModal");
     int result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
     g_enteringDoModal = false;
+    g_hDoModalExitEvent.store(nullptr);
     return result;
 }
 
@@ -3551,6 +3641,11 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
 #pragma endregion LogonUI BSDR Hooks (Interface)
 
 #pragma region Winlogon hooks (disable async logoff)
+bool g_isWinlogon = false;
+bool g_noSafetyChecks = false;
+int* p_g_fShutdownResolverDisabled = nullptr;
+int g_origResolverDisabledState = 0;
+
 bool IsAuthUxInstalled() {
     wchar_t dllPath[MAX_PATH];
     DWORD size = sizeof(dllPath);
@@ -3583,7 +3678,7 @@ bool IsAuthUxInstalled() {
 // This approach, derived from the WH tool mod code, also doesn't mess with internal Windhawk configuration
 bool IsLogonUiInjectionEnabled() {
     // Skip by user choice
-    if (Wh_GetIntSetting(L"noSafetyChecks")) {
+    if (g_noSafetyChecks) {
         return true;
     }
 
@@ -3662,12 +3757,12 @@ bool IsLogonUiInjectionEnabled() {
         return false;
     }
 
-    // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code
+    // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code, before initializing the logon controller
     DWORD result = WaitForSingleObject(pi.hProcess, 2000);
     if (result != WAIT_OBJECT_0) {
         // Should exit immediately but just to be safe
         Wh_Log(L"LogonUI wait timed out or failed");
-        TerminateProcess(pi.hProcess, 0);
+        // Let it exit automatically
     }
 
     CloseHandle(pi.hThread);
@@ -3678,10 +3773,6 @@ bool IsLogonUiInjectionEnabled() {
     }
     return false;
 }
-
-bool g_isWinlogon = false;
-int* p_g_fShutdownResolverDisabled = nullptr;
-int g_origResolverDisabledState = 0;
 
 WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
     {
@@ -3715,6 +3806,7 @@ BOOL Wh_ModInit() {
                 return FALSE;
             }
         }
+        g_noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
         return TRUE;
     }
 
@@ -3876,12 +3968,23 @@ void Wh_ModUninit() {
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     if (g_isWinlogon) {
-        // Handle winlogon hook status change
-        *bReload = TRUE;
-        return TRUE;
-    } else {
-        // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
-        // and reloading already loaded resources/dialog etc. is tedious so just ignore it
-        return TRUE;
+        if (!Wh_GetIntSetting(L"disableAsyncLogoff")) {
+            // The global injection is enabled or disabled, need to unload the mod
+            // (Reloading unloaded mod on mod setting change is automatically handled by Windhawk)
+            return FALSE;
+        } else {
+            bool newNoSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
+            if (g_noSafetyChecks != newNoSafetyChecks) {
+                // Only update the winlogon variable instead of reloading the whole mod
+                if (p_g_fShutdownResolverDisabled) {
+                    *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
+                }
+                g_noSafetyChecks = newNoSafetyChecks;
+                Wh_ModAfterInit();
+            }
+        }
     }
+    // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
+    // and reloading already loaded resources/dialog etc. is tedious so just ignore it
+    return TRUE;
 }
