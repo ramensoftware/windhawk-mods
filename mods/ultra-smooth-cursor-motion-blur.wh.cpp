@@ -6,7 +6,7 @@
 // @author          Grok
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -lole32 -lgdi32 -lshell32
+// @compilerOptions -std=c++17 -ld2d1 -lole32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
