@@ -8391,8 +8391,10 @@ static bool EqIsReadableMemoryRange(const void* address, size_t size) {
 }
 
 static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    if (!hTaskbarWnd)
+    if (!hTaskbarWnd) {
+        Wh_Log(L"EqGetTaskbarXamlRoot: taskbar window is null");
         return nullptr;
+    }
 
     wchar_t clsBuf[64] = {};
     GetClassNameW(hTaskbarWnd, clsBuf, ARRAYSIZE(clsBuf));
@@ -8400,12 +8402,16 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     HWND hTaskSwWnd = isSecondary
         ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
         : (HWND)GetPropW(hTaskbarWnd, L"TaskbandHWND");
-    if (!hTaskSwWnd)
+    if (!hTaskSwWnd) {
+        Wh_Log(L"EqGetTaskbarXamlRoot: taskbar worker window not found");
         return nullptr;
+    }
 
     void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
-    if (!taskBand)
+    if (!taskBand) {
+        Wh_Log(L"EqGetTaskbarXamlRoot: taskband pointer unavailable");
         return nullptr;
+    }
 
     void* expectedVftable = isSecondary
         ? g_eqCSecondaryTaskBandTaskListWndSiteVftable
@@ -8413,18 +8419,24 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     auto getTaskbarHost = isSecondary
         ? g_eqCSecondaryTaskBandGetTaskbarHost
         : g_eqCTaskBandGetTaskbarHost;
-    if (!expectedVftable || !getTaskbarHost || !g_eqStdRefDecref)
+    if (!expectedVftable || !getTaskbarHost || !g_eqStdRefDecref) {
+        Wh_Log(L"EqGetTaskbarXamlRoot: required taskbar symbols unavailable");
         return nullptr;
+    }
 
     void* taskListWndSite = taskBand;
     constexpr int kMaxSlotsToScan = 20;
     for (int i = 0; i <= kMaxSlotsToScan; ++i) {
-        if (!EqIsReadableMemoryRange(taskListWndSite, sizeof(void*)))
+        if (!EqIsReadableMemoryRange(taskListWndSite, sizeof(void*))) {
+            Wh_Log(L"EqGetTaskbarXamlRoot: taskband memory is not readable");
             return nullptr;
+        }
         if (*(void**)taskListWndSite == expectedVftable)
             break;
-        if (i == kMaxSlotsToScan)
+        if (i == kMaxSlotsToScan) {
+            Wh_Log(L"EqGetTaskbarXamlRoot: expected TaskBand vftable not found");
             return nullptr;
+        }
         taskListWndSite = reinterpret_cast<void**>(taskListWndSite) + 1;
     }
 
@@ -8433,6 +8445,7 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!taskbarHostSharedPtr[0]) {
         if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
             g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        Wh_Log(L"EqGetTaskbarXamlRoot: TaskbarHost unavailable");
         return nullptr;
     }
 
@@ -8471,6 +8484,7 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
         Wh_Log(L"EqGetTaskbarXamlRoot: TaskbarHost::FrameHeight pattern not recognized");
         if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
             g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        Wh_Log(L"EqGetTaskbarXamlRoot: taskbarElement offset pattern unavailable");
         return nullptr;
     }
 
@@ -8480,6 +8494,7 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
             sizeof(IUnknown*))) {
         if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
             g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        Wh_Log(L"EqGetTaskbarXamlRoot: TaskbarHost element pointer is not readable");
         return nullptr;
     }
 
@@ -8488,6 +8503,7 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!taskbarElementIUnknown) {
         if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
             g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+        Wh_Log(L"EqGetTaskbarXamlRoot: taskbar XAML element is null");
         return nullptr;
     }
 
@@ -8499,6 +8515,8 @@ static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
 
     if (taskbarHostSharedPtr[1] && g_eqStdRefDecref)
         g_eqStdRefDecref(taskbarHostSharedPtr[1]);
+    if (FAILED(hr) || !result)
+        Wh_Log(L"EqGetTaskbarXamlRoot: QueryInterface/XamlRoot failed (hr=0x%08X)", static_cast<unsigned>(hr));
     return SUCCEEDED(hr) ? result : nullptr;
 }
 
@@ -8806,28 +8824,6 @@ static void EqRemoveXamlButtonOnUiThread() {
                 }
             }
         }
-
-        // Last-resort cleanup: find any button with our unique name in the
-        // current taskbar XAML tree, even if cached parent/button state is stale.
-        if (g_eqTaskbarHwnd && IsWindow(g_eqTaskbarHwnd)) {
-            auto root = EqGetTaskbarXamlRoot(g_eqTaskbarHwnd);
-            if (root) {
-                if (auto rootElement = root.Content().try_as<FrameworkElement>()) {
-                    if (auto button = EqFindChildByName(rootElement, kEqXamlButtonName)) {
-                        auto parent = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(button)
-                            .try_as<Panel>();
-                        if (parent) {
-                            for (uint32_t i = 0; i < parent.Children().Size(); ++i) {
-                                if (parent.Children().GetAt(i).try_as<FrameworkElement>() == button) {
-                                    parent.Children().RemoveAt(i);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     } catch (...) {
     }
 
@@ -9043,7 +9039,6 @@ static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
         }
 
         Button button;
-        g_eqXamlButton = button;
         EqSetupButtonCommon(button, &g_eqXamlClickToken);
 
         bool inserted = false;
@@ -9150,8 +9145,11 @@ static void EqEnsureXamlButton() {
             }
 
             auto rootElement = root.Content().try_as<FrameworkElement>();
-            if (!rootElement)
+            if (!rootElement) {
+                Wh_Log(L"EqEnsureXamlButton: XamlRoot content is not a FrameworkElement");
+                g_eqXamlInjectionReady.store(false, std::memory_order_release);
                 return;
+            }
 
             if (g_eqTaskbarHwnd == p->taskbar &&
                 EqIsCurrentXamlButtonAlive(rootElement)) {
@@ -9246,17 +9244,9 @@ static bool EqHookTaskbarSymbols() {
 static void EqCleanupIntegration() {
     HWND taskbar = g_eqTaskbarHwnd;
     if (taskbar && IsWindow(taskbar)) {
-        bool cleanupSuccess = false;
-        for (int attempt = 0; attempt < 3 && !cleanupSuccess; ++attempt) {
-            cleanupSuccess = EqRunFromWindowThread(taskbar, [](void*) {
-                EqRemoveXamlButtonOnUiThread();
-            }, nullptr);
-            if (!cleanupSuccess && attempt < 2)
-                Sleep(10);
-        }
-
-        if (!cleanupSuccess)
-            Wh_Log(L"EqCleanupIntegration: failed to marshal XAML cleanup to taskbar UI thread");
+        EqRunFromWindowThread(taskbar, [](void*) {
+            EqRemoveXamlButtonOnUiThread();
+        }, nullptr);
     } else {
         g_eqXamlInjectionReady.store(false, std::memory_order_release);
         g_eqTaskbarHwnd = nullptr;
@@ -9720,6 +9710,11 @@ static void EqUnregisterWindowClasses() {
     UnregisterClassW(kEqPopupClass, g_eqModuleHandle);
     g_eqClassesRegistered = false;
     g_eqModuleHandle = nullptr;
+}
+
+void Wh_ModAfterInit() {
+    if (g_eqTaskbarSymbolsHooked)
+        EqEnsureXamlButton();
 }
 
 BOOL Wh_ModInit() {
