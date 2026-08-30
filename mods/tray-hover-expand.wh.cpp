@@ -475,7 +475,8 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     }
     if (classMatches == 1) {
         chosen = firstClassMatch;
-    } else if (classMatches > 1 && logCandidates) {
+    } else if (classMatches > 1 && logWeakMatch) {
+        *logWeakMatch = true;
         Wh_Log(L"%d tray elements share the chevron signature, falling back to name",
                classMatches);
     }
@@ -497,7 +498,10 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     // 3) Optional positional guess, off by default.
     if (chosen < 0 && s.positionalFallback) {
         for (size_t i = 0; i < cands.size(); i++) {
-            if (cands[i].automationId != s.trayIconAutomationId) continue;
+            // Same admission test as isTrayElement, so a build exposing the
+            // chevron under the alternate id still has candidates here.
+            if (cands[i].automationId != s.trayIconAutomationId &&
+                cands[i].automationId != CHEVRON_AUTOMATION_ID_ALT) continue;
             if (chosen < 0 || cands[i].rect.left < cands[chosen].rect.left) {
                 chosen = (int)i;
             }
@@ -744,6 +748,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             insideSince = 0;
             dwellFired = false;
             leftAt = 0;             // don't collapse on the first tick back
+            flyoutBelievedOpen = false;
+            clickedInFlyout = false;
             nextRefind = 0;
             loggedCandidates = false;
             loggedWeakMatch = false;
@@ -767,9 +773,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             SHORT km = GetAsyncKeyState(VK_MBUTTON);
             anyBtnDown = ((kl | kr | km) & 0x8000) != 0;
             pressedSinceTick = ((kl | kr | km) & 0x0001) != 0;
-        } else {
-            anyBtnDownPrev = false;
         }
+        // Recorded here rather than at the end of the loop, which a `continue`
+        // can skip: that would keep a two-ticks-old value and let the next tick
+        // see a press edge that never happened.
+        bool anyBtnDownEdge = anyBtnDown && !anyBtnDownPrev;
+        anyBtnDownPrev = anyBtnDown;
 
         // Lazily (re-)find the button only when we don't have a valid one. A
         // destroyed or stale element makes the rectangle query below fail,
@@ -861,6 +870,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     insideSince = 0;
                     dwellFired = false;
                     leftAt = 0;             // don't collapse on the first tick back
+                    // Nothing recomputes these without haveRect, and the mouse
+                    // sampling gate reads flyoutBelievedOpen, so leaving it set
+                    // would resume polling the shared key state indefinitely.
+                    flyoutBelievedOpen = false;
+                    clickedInFlyout = false;
                     nextRefind = 0;
                     WaitForSingleObject(g_stopEvent, s.pollInterval);
                     continue;
@@ -946,7 +960,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // Suspend auto-collapse until the flyout closes on its own —
             // collapsing via Invoke would steal focus and dismiss the popup
             // the user just opened.
-            if ((pressedSinceTick || (anyBtnDown && !anyBtnDownPrev)) &&
+            if ((pressedSinceTick || anyBtnDownEdge) &&
                 flyoutVisible && PtOverWindow(flyoutHwnd, pt)) {
                 clickedInFlyout = true;
                 Wh_Log(L"Click inside flyout: auto-collapse suspended");
@@ -977,8 +991,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 leftAt = 0;
             }
         }
-
-        anyBtnDownPrev = anyBtnDown;
 
         // Interruptible sleep: WhTool_ModUninit signals g_stopEvent so the
         // thread wakes immediately regardless of the polling interval.
