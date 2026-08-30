@@ -32,16 +32,6 @@ Windows 11's modern taskbar is required.
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- MoveClockToLeft: true
-  $name: Move clock to taskbar left
-  $description: >-
-    Move the complete notification-center clock button to the left without
-    shifting centered Start/app buttons or leaving an empty area on the right.
-*/
-// ==/WindhawkModSettings==
-
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -83,7 +73,6 @@ struct DeferredClockData {
     uint32_t layoutUpdatedAttempts;
 };
 
-std::atomic<bool> g_moveClockToLeft;
 std::atomic<bool> g_callbacksEnabled;
 std::atomic<DWORD> g_callbackGeneration;
 std::atomic<bool> g_systemTrayHooked;
@@ -108,9 +97,8 @@ std::vector<MovedClockData>& MovedClocks() {
     return *g_movedClocks;
 }
 
-using DateTimeIconContent_OnApplyTemplate_t = HRESULT(WINAPI*)(LPVOID pThis);
-DateTimeIconContent_OnApplyTemplate_t
-    DateTimeIconContent_OnApplyTemplate_Original;
+using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
+DateTimeIconContent_OnApplyTemplate_t DateTimeIconContent_OnApplyTemplate_Original;
 
 using BadgeIconContent_get_ViewModel_t =
     HRESULT(WINAPI*)(LPVOID pThis, LPVOID pArgs);
@@ -556,7 +544,7 @@ bool MoveClock(FrameworkElement content) {
 }
 
 double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
-    if (!g_callbacksEnabled || !g_moveClockToLeft || !pThis) {
+    if (!g_callbacksEnabled || !pThis) {
         return 0;
     }
 
@@ -568,6 +556,7 @@ double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
         }
         return 0;
     }
+    g_extentThreadMismatchLogged = false;
 
     try {
         FrameworkElement taskbarFrame = nullptr;
@@ -610,17 +599,28 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     TaskbarFrame_SystemTrayExtent_Original(pThis,
                                            value + layoutReservedWidth);
 
-    int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
-    int previousAlignment =
-        g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
-    if (previousAlignment >= 0 && previousAlignment != centeredAlignment) {
-        Wh_Log(L"Taskbar alignment changed; clock placement will be updated");
-        QueueKnownClockPlacementUpdate();
-    }
+    try {
+        DWORD clockThreadId = g_clockThreadId;
+        if (g_callbacksEnabled && clockThreadId &&
+            clockThreadId == GetCurrentThreadId()) {
+            int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
+            int previousAlignment =
+                g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
+            if (previousAlignment >= 0 &&
+                previousAlignment != centeredAlignment) {
+                Wh_Log(L"Taskbar alignment changed; clock placement will be "
+                       L"updated");
+                QueueKnownClockPlacementUpdate();
+            }
+        }
 
-    if (layoutReservedWidth > 0) {
-        Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
-               value, layoutReservedWidth);
+        if (layoutReservedWidth > 0) {
+            Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
+                   value, layoutReservedWidth);
+        }
+    } catch (...) {
+        Wh_Log(L"Taskbar extent post-processing failed: %08X",
+               winrt::to_hresult());
     }
 }
 
@@ -742,7 +742,7 @@ bool LayoutUpdatedWaitExpired(FrameworkElement content) {
 }
 
 void MoveClockSafely(FrameworkElement content) {
-    if (!g_callbacksEnabled || !g_moveClockToLeft || !g_movedClocks) {
+    if (!g_callbacksEnabled || !g_movedClocks) {
         return;
     }
 
@@ -788,8 +788,7 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
                 }
             };
 
-    if (!g_callbacksEnabled || !g_moveClockToLeft ||
-        generation != g_callbackGeneration) {
+    if (!g_callbacksEnabled || generation != g_callbackGeneration) {
         return;
     }
 
@@ -825,8 +824,7 @@ void RegisterLoadedHandler(FrameworkElement content) {
             }
         };
 
-    if (!g_callbacksEnabled || !g_moveClockToLeft ||
-        generation != g_callbackGeneration) {
+    if (!g_callbacksEnabled || generation != g_callbackGeneration) {
         return;
     }
 
@@ -837,7 +835,8 @@ void RegisterLoadedHandler(FrameworkElement content) {
 }
 
 void QueueKnownClockPlacementUpdate() {
-    if (!g_callbacksEnabled || !g_moveClockToLeft || !g_deferredClocks) {
+    if (!g_callbacksEnabled || !g_deferredClocks ||
+        g_clockThreadId != GetCurrentThreadId()) {
         return;
     }
 
@@ -858,10 +857,17 @@ void UpdateClockPlacement(FrameworkElement content) {
         return;
     }
 
-    // On current Windows builds, SystemTray_Main can be owned by a different
-    // thread than Shell_TrayWnd. Remember the actual XAML owner thread from the
-    // clock callback and use it for teardown and settings changes.
-    g_clockThreadId = GetCurrentThreadId();
+    // The clock template and TaskbarFrame layout callbacks are expected to run
+    // on the same XAML UI thread. Capture the first clock callback's thread and
+    // reject later callbacks from any other thread before touching XAML state.
+    DWORD currentThreadId = GetCurrentThreadId();
+    DWORD clockThreadId = g_clockThreadId;
+    if (clockThreadId && clockThreadId != currentThreadId) {
+        Wh_Log(L"Clock callback skipped on a non-taskbar thread: %u != %u",
+               currentThreadId, clockThreadId);
+        return;
+    }
+    g_clockThreadId = currentThreadId;
 
     RememberClockContent(content);
 
@@ -871,7 +877,7 @@ void UpdateClockPlacement(FrameworkElement content) {
         return;
     }
 
-    if (!g_moveClockToLeft || !TaskbarUsesCenteredAlignment()) {
+    if (!TaskbarUsesCenteredAlignment()) {
         RemoveDeferredHandlers(content);
         RestoreClock(clock);
     } else if (content.IsLoaded()) {
@@ -957,7 +963,11 @@ void UpdateKnownClocksOnTaskbarThread() {
 }
 
 void UpdateKnownClocksCallback(void*) {
-    UpdateKnownClocksOnTaskbarThread();
+    try {
+        UpdateKnownClocksOnTaskbarThread();
+    } catch (...) {
+        Wh_Log(L"Known clock update failed: %08X", winrt::to_hresult());
+    }
 }
 
 struct CleanupTaskbarStateParameters {
@@ -1010,23 +1020,22 @@ void CleanupTaskbarStateSynchronously(bool releaseContainers) {
                        L"Clock layout cleanup");
 }
 
-HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
-    HRESULT result = DateTimeIconContent_OnApplyTemplate_Original(pThis);
+void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
+    DateTimeIconContent_OnApplyTemplate_Original(pThis);
 
-    FrameworkElement content = nullptr;
-    ((IUnknown*)pThis)
-        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                         winrt::put_abi(content));
-    if (content) {
-        try {
+    try {
+        FrameworkElement content = nullptr;
+        IUnknown* contentUnknown = pThis ? ((IUnknown**)pThis)[1] : nullptr;
+        if (contentUnknown &&
+            SUCCEEDED(contentUnknown->QueryInterface(
+                winrt::guid_of<FrameworkElement>(),
+                winrt::put_abi(content)))) {
             UpdateClockPlacement(content);
-        } catch (...) {
-            Wh_Log(L"Clock template handling failed: %08X",
-                   winrt::to_hresult());
         }
+    } catch (...) {
+        Wh_Log(L"Clock template handling failed: %08X",
+               winrt::to_hresult());
     }
-
-    return result;
 }
 
 HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis,
@@ -1182,6 +1191,11 @@ HMODULE GetSystemTrayModule() {
         if (major && major < 2604) {
             return module;
         }
+
+        // On newer builds the clock implementation is loaded later from
+        // SystemTray.dll. Don't latch an ExplorerExtensions fallback before
+        // that real module arrives.
+        return nullptr;
     }
 
     return GetModuleHandle(L"ExplorerExtensions.dll");
@@ -1212,7 +1226,7 @@ bool HookSystemTray(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
+            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
@@ -1236,7 +1250,7 @@ bool HookTaskbarViewAndSystemTray(HMODULE module) {
             TaskbarFrame_SystemTrayExtent_Hook,
         },
         {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
+            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
@@ -1363,7 +1377,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 }
 
 BOOL Wh_ModInit() {
-    g_moveClockToLeft = Wh_GetIntSetting(L"MoveClockToLeft");
+    g_clockThreadId = 0;
     g_lastTaskbarCenteredAlignment =
         TaskbarUsesCenteredAlignment() ? 1 : 0;
     g_callbacksEnabled = true;
@@ -1397,7 +1411,6 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
     // Revoke all mod-owned XAML delegates and release their containers while
@@ -1407,7 +1420,6 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    g_moveClockToLeft = false;
     g_callbacksEnabled = false;
     g_callbackGeneration.fetch_add(1);
     // Normally Wh_ModBeforeUninit already released both containers. Retry only
@@ -1415,21 +1427,4 @@ void Wh_ModUninit() {
     if (g_deferredClocks || g_movedClocks) {
         CleanupTaskbarStateSynchronously(true);
     }
-}
-
-BOOL Wh_ModSettingsChanged(BOOL*) {
-    bool wasEnabled = g_moveClockToLeft;
-    bool isEnabled = Wh_GetIntSetting(L"MoveClockToLeft");
-    g_moveClockToLeft = isEnabled;
-
-    if (wasEnabled && !isEnabled) {
-        g_callbackGeneration.fetch_add(1);
-        CleanupTaskbarStateSynchronously(false);
-    } else if (!wasEnabled && isEnabled) {
-        g_callbackGeneration.fetch_add(1);
-        UpdateKnownClocksSynchronously();
-        RefreshTaskbarClock();
-    }
-
-    return TRUE;
 }
