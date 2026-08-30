@@ -2,12 +2,108 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-29T18:07:20.000Z</updated>
+    <updated>2026-08-30T17:51:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.13.19]]></title>
+        <id>https://windhawk.net/mods/multiwm#128aed34e3f45734daf90ba9c1ef8923c42f61e4</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-08-30T17:51:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multiwm">MultiWM</h1>
+<p>MultiWM is a continuation of the original <a href="https://windhawk.net/mods/tiling-helper">Tiling Helper</a> by <a href="https://github.com/u2x1">U2X1</a>.</p>
+<p>A lightweight, low-cortisol window manager for Windows 11 with true per-virtual-desktop layouts - 
+including floating - and simple, predictable controls. </p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif" alt="GIF" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><em>Windhawk 2.0 (or higher) users can change the target process (<code>explorer.exe</code> -> <code>windhawk.exe</code>) for better stability and workspace preservation across Explorer restarts.</em></li>
+<li><em>MultiWM's virtual-desktop notification integration is based on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp">Taskbar Desktop Indicator by Simon Benedict</a> (MIT).</em></li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>First-class floating</strong> - use Floating as a whole-workspace layout 
+or float individual windows while retaining useful geometry.</li>
+<li><strong>Automatic or Manual management</strong> - let MultiWM continuously discover 
+and migrate windows, or keep explicitly tiled groups under your control.</li>
+<li><strong>True virtual-desktop layouts</strong> - uses Windows' existing virtual desktops 
+instead of implementing a separate desktop system.</li>
+<li><strong>Event-driven</strong> - changes are signaled through native events rather than 
+continuous polling.</li>
+</ul>
+<h2 id="layouts">Layouts</h2>
+<ul>
+<li>Floating</li>
+<li>Master + Stack (vertical or horizontal)</li>
+<li>Binary Space Partitioning (BSP)</li>
+<li>Columns / Rows</li>
+<li>Monocle</li>
+</ul>
+<h2 id="gettingstarted">Getting Started</h2>
+<p>Move a tiled window to <strong>float it</strong> or <strong>swap it with the window underneath</strong>. </p>
+<p>By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), setting the master window (Alt+M),
+moving windows through the logical order (Alt+, / .), floating a window (Alt+F), and switching between Automatic
+and Manual management (Alt+R).</p>
+<p>A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.</p>
+<h2 id="alsocheckout">Also check out</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/virtual-desktop-helper">Virtual Desktop Helper by u2x1</a></li>
+<li><a href="https://windhawk.net/mods/taskbar-desktop-indicator">Taskbar Desktop Indicator by Simon Benedict</a></li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Count Badges 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-count-badges#e51f6803f01ce956396f9577566cd0d7d28d5aa0</id>
+        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
+        <updated>2026-08-30T17:49:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added top and bottom dot positions.</li>
+<li>Top and bottom dots are displayed horizontally; left and right remain vertical.</li>
+<li>Bottom dots replace the native Windows running indicator and show from one running window.</li>
+<li>Added version history to the mod details documentation.</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#a9855f73d19de31e603101483d1fb85e8f027620</id>
+        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
+        <updated>2026-08-30T17:49:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7classicautoplaydialog">Windows 7 Classic AutoPlay Dialog</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.</p>
+<p>What is seen is a simple list of real actions (open folder, play with Windows
+Media Player, view pictures with Windows Photo Viewer, ReadyBoost). A program
+from the disc is offered only if clicked and only if the file is on that
+volume.</p>
+<p>The "Always do this" choice is remembered by the mod, not by Windows policy.
+A privacy setting can hide the volume or device name in this mod only.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/autoplay.png" alt="autoplay.png" /></p>
+<h2 id="notes">Notes</h2>
+<p>The mod has been tested on Windows 10 21H2 and Windows 11 24H2.
+This mod is a best-effort reimplementation using native Windows components.
+Native AutoPlay is suppressed by intercepting the shell's enumeration of
+<code>IQueryCancelAutoPlay</code> CLSIDs under
+<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID</code>
+and synthesizing this mod's handler. Nothing is written to that key. Leftover
+values from earlier versions of the mod are deleted when the owner instance
+starts.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 3.0.0]]></title>
         <id>https://windhawk.net/mods/win7-legacy-applet-restorer#f2eedecca227cd1f5c0d9fd3e95822dddd00fb8f</id>
@@ -520,79 +616,6 @@ Inert, not broken: the stock highlight simply comes back.</p>]]></content>
         <author>
             <name>RiteshK</name>
             <uri>https://github.com/RiteshKhandekar</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Action Center on Active Display 1.1.1]]></title>
-        <id>https://windhawk.net/mods/action-center-active-display#69c690341417623064c34f367305fa71072824ac</id>
-        <link href="https://windhawk.net/mods/action-center-active-display"/>
-        <updated>2026-08-26T11:42:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="actioncenteronactivedisplay">Action Center on Active Display</h1>
-<p>Opens the Windows Action Center (Quick Settings, <code>Win + A</code>), Cast pane (<code>Win + K</code>), and Project pane (<code>Win + P</code>) on the monitor where your mouse cursor is currently located.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>SetWindowPos</code> inside ShellExperienceHost.exe (pre-24H2) and ShellHost.exe (24H2+). 
-When any of these windows are positioned, the mod intercepts the call, 
-determines the target monitor using the cursor position, and repositions the window with proper DPI scaling to the active display.</p>
-<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
-<ul>
-<li>Windows 11 22H2 and 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>ereinaimer</name>
-            <uri>https://github.com/ereinaimer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Button Replacer 0.12.4]]></title>
-        <id>https://windhawk.net/mods/start-button-replacer#245e2afbfc6630d0dbda09e94d1fd7ebbce4e191</id>
-        <link href="https://windhawk.net/mods/start-button-replacer"/>
-        <updated>2026-08-26T10:28:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startbuttonreplacer">Start Button Replacer</h1>
-<p>Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.</p>
-<p><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif" alt="preview" /></p>
-<p>Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.</p>
-<h2 id="imagesources">Image sources</h2>
-<p>Local files:</p>
-<pre><code>C:\Users\YourName\Pictures\start.png
-</code></pre>
-<p>Environment variables are supported:</p>
-<pre><code>%USERPROFILE%\Pictures\start.jpg
-</code></pre>
-<p>HTTP/HTTPS URLs are also supported:</p>
-<pre><code>https://example.com/start.gif
-</code></pre>
-<h2 id="animatedgifplayback">Animated GIF playback</h2>
-<ul>
-<li>Always</li>
-<li>Hover</li>
-<li>Pressed</li>
-<li>Stopped</li>
-</ul>
-<h2 id="effects">Effects</h2>
-<p>Separate scale, rotation and opacity settings are available for hover and pressed states.</p>
-<h2 id="separatestateimages">Separate state images</h2>
-<p>The main <strong>Image source</strong> is always the normal image. Add a hover, pressed or activated image source to enable that state automatically. The activated image is shown while the Start menu is open. If it is blank or unavailable, activated falls back to the pressed image, then the hover image, then the main image. Other blank or unavailable state images fall back to the main image.</p>
-<p>While the Start menu is shown, pressing the button temporarily uses the pressed state. The activated state resumes on release and otherwise takes priority over the hover state.</p>
-<p>State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to <code>0</code> to switch instantly.</p>
-<h2 id="notes">Notes</h2>
-<p>For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.</p>]]></content>
-        <author>
-            <name>Ender</name>
-            <uri>https://github.com/EnderDragonEP</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 2.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#d5ad396ef8daa09e01e7a6bf3e110770b6550bf8</id>
-        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
-        <updated>2026-08-26T10:15:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Applied minor improvements</li>
-<li>Updated the README to clarify a mod suggestion</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

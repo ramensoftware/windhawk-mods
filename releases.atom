@@ -2,12 +2,92 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-29T11:43:31.000Z</updated>
+    <updated>2026-08-30T17:51:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.13.19]]></title>
+        <id>https://windhawk.net/mods/multiwm#128aed34e3f45734daf90ba9c1ef8923c42f61e4</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-08-30T17:51:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multiwm">MultiWM</h1>
+<p>MultiWM is a continuation of the original <a href="https://windhawk.net/mods/tiling-helper">Tiling Helper</a> by <a href="https://github.com/u2x1">U2X1</a>.</p>
+<p>A lightweight, low-cortisol window manager for Windows 11 with true per-virtual-desktop layouts - 
+including floating - and simple, predictable controls. </p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif" alt="GIF" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><em>Windhawk 2.0 (or higher) users can change the target process (<code>explorer.exe</code> -> <code>windhawk.exe</code>) for better stability and workspace preservation across Explorer restarts.</em></li>
+<li><em>MultiWM's virtual-desktop notification integration is based on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp">Taskbar Desktop Indicator by Simon Benedict</a> (MIT).</em></li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>First-class floating</strong> - use Floating as a whole-workspace layout 
+or float individual windows while retaining useful geometry.</li>
+<li><strong>Automatic or Manual management</strong> - let MultiWM continuously discover 
+and migrate windows, or keep explicitly tiled groups under your control.</li>
+<li><strong>True virtual-desktop layouts</strong> - uses Windows' existing virtual desktops 
+instead of implementing a separate desktop system.</li>
+<li><strong>Event-driven</strong> - changes are signaled through native events rather than 
+continuous polling.</li>
+</ul>
+<h2 id="layouts">Layouts</h2>
+<ul>
+<li>Floating</li>
+<li>Master + Stack (vertical or horizontal)</li>
+<li>Binary Space Partitioning (BSP)</li>
+<li>Columns / Rows</li>
+<li>Monocle</li>
+</ul>
+<h2 id="gettingstarted">Getting Started</h2>
+<p>Move a tiled window to <strong>float it</strong> or <strong>swap it with the window underneath</strong>. </p>
+<p>By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), setting the master window (Alt+M),
+moving windows through the logical order (Alt+, / .), floating a window (Alt+F), and switching between Automatic
+and Manual management (Alt+R).</p>
+<p>A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.</p>
+<h2 id="alsocheckout">Also check out</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/virtual-desktop-helper">Virtual Desktop Helper by u2x1</a></li>
+<li><a href="https://windhawk.net/mods/taskbar-desktop-indicator">Taskbar Desktop Indicator by Simon Benedict</a></li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#a9855f73d19de31e603101483d1fb85e8f027620</id>
+        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
+        <updated>2026-08-30T17:49:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7classicautoplaydialog">Windows 7 Classic AutoPlay Dialog</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.</p>
+<p>What is seen is a simple list of real actions (open folder, play with Windows
+Media Player, view pictures with Windows Photo Viewer, ReadyBoost). A program
+from the disc is offered only if clicked and only if the file is on that
+volume.</p>
+<p>The "Always do this" choice is remembered by the mod, not by Windows policy.
+A privacy setting can hide the volume or device name in this mod only.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/autoplay.png" alt="autoplay.png" /></p>
+<h2 id="notes">Notes</h2>
+<p>The mod has been tested on Windows 10 21H2 and Windows 11 24H2.
+This mod is a best-effort reimplementation using native Windows components.
+Native AutoPlay is suppressed by intercepting the shell's enumeration of
+<code>IQueryCancelAutoPlay</code> CLSIDs under
+<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID</code>
+and synthesizing this mod's handler. Nothing is written to that key. Leftover
+values from earlier versions of the mod are deleted when the owner instance
+starts.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar System Info 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-system-info#5305a79fdc7c0a10a0a04af1dcddf2578dd59545</id>
@@ -1257,81 +1337,6 @@ I focus a game (and the alternate command will reset it to the original type).</
         <author>
             <name>rom4ster</name>
             <uri>https://github.com/rom4ster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Replace Shell Format Dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/replace-format-dialog#1197822c535ab270b52cd878b9a49c7933d68fa0</id>
-        <link href="https://windhawk.net/mods/replace-format-dialog"/>
-        <updated>2026-08-20T17:12:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="replaceshellformatdialog">Replace Shell Format Dialog</h1>
-<p>A simple mod that allows you to replace the File Explorer disk format dialog with a custom one.</p>
-<h2 id="note">Note</h2>
-<p>This will replace the format dialog in all apps that use the Shell Format dialog, not just File Explorer. You can manually
-set the exclusion list in this mod's <strong>Advanced</strong> tab.</p>
-<h2 id="moredetailsabouttheformatargumentsoption">More details about the Format Arguments option</h2>
-<p>If you enable the <strong>Format Arguments</strong> option in the mod settings, the mod will automatically replace the first instance of %s in your
-argument string with the drive letter of the drive the app is attempting to format. This drive letter does not include the <code>:</code> suffix
-(e.g, it will say <code>C</code> instead of <code>C:</code>).</p>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Proportional cursor between monitors 1.0.0]]></title>
-        <id>https://windhawk.net/mods/proportional-monitor-cursor#47d6b37d08ed96f27b3be31913d8cb4ee1b9d994</id>
-        <link href="https://windhawk.net/mods/proportional-monitor-cursor"/>
-        <updated>2026-08-20T17:08:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="proportionalcursorbetweenmonitors">Proportional cursor between monitors</h1>
-<p>Windows moves the mouse cursor between monitors using <em>absolute</em> virtual-desktop
-pixels. With monitors of different resolutions (for example 2560x1440 next to
-1920x1080) this means that leaving the bottom of the small monitor puts the
-cursor somewhere in the middle of the big one - the pointer visually "jumps".</p>
-<p>This mod makes the transition <strong>proportional</strong>: the position along the shared
-edge is converted to a normalized 0-1 value on the monitor you leave, and
-applied to the monitor you enter. The bottom of the small monitor now maps to
-the bottom of the big one, the top to the top, the middle to the middle.</p>
-<pre><code>      leaving 1920x1080 at y = 1000        entering 2560x1440
-      (1000 / 1079 = 0.93 of the height)   (0.93 * 1439 = y 1334)
-
-      +--------------------+ 0.00          +--------------------+ 0.00
-      |                    |               |                    |
-      |                    |               |                    |
-      |                    |               |                    |
-      |                    |               |   without the mod  |
-      |                    |               | -&gt;  y stays 1000   | 0.69
-      |                    |               |                    |
-      | -&gt;  y = 1000       | 0.93          | -&gt;  y = 1334       | 0.93
-      +--------------------+ 1.00          |                    |
-                                           +--------------------+ 1.00
-</code></pre>
-<p>It works for left/right transitions (the Y coordinate is normalized) and for
-top/bottom transitions (the X coordinate is normalized).</p>
-<p><strong>Bonus:</strong> with <em>Cross gaps between monitors</em> enabled you can also leave the
-monitor through a part of the edge that has no neighbour at all (for example the
-lower 360 px of a 1440p monitor when the 1080p monitor is aligned to the top).
-Windows normally blocks the cursor there; the mod teleports it to the
-proportional spot on the monitor in that direction.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod needs neither injection nor function hooks, so it runs as a tool mod
-in a dedicated <code>windhawk.exe</code> process. Its low-level mouse hook therefore
-can't stall the shell, and Windhawk guarantees a single instance.</li>
-<li>Cursor movement reported as injected (<code>LLMHF_INJECTED</code>) is left untouched -
-it can't be told apart from the mod's own <code>SetCursorPos</code>. Some setups report
-regular movement that way, RDP sessions, VM guest tools and a few tablets and
-precision touchpads among them; on those the mod stays inactive.</li>
-<li>While an application confines the cursor with <code>ClipCursor</code> (most full-screen
-games do) the mod stays out of the way.</li>
-<li>When a window of an elevated process is in the foreground, low-level hooks
-from a non-elevated process don't receive input. That's a UIPI restriction,
-not something the mod can work around.</li>
-</ul>
-<p>Contact with me: vicitacal11@ya.ru</p>]]></content>
-        <author>
-            <name>Vitaliy</name>
-            <uri>https://github.com/vicitacal</uri>
         </author>
     </entry>
 </feed>
