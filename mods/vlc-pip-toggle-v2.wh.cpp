@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              vlc-pip-toggle
+// @id              vlc-pip-toggle-v2
 // @name            VLC One-Key PiP
 // @description     VLC PiP with F8 / Ctrl+Alt+V, title-bar double-click, dragging and resizing.
 // @version         4.2
@@ -9,6 +9,44 @@
 // @compilerOptions -luser32
 // @license         MIT
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# VLC One-Key PiP
+
+A simple Windhawk mod that adds a fast and convenient Picture-in-Picture mode to VLC Media Player.
+
+## Features
+
+* **F8** — Toggle Picture-in-Picture mode
+* **Ctrl + Alt + V** — Toggle Picture-in-Picture mode
+* **Double-click VLC's title bar** — Toggle PiP mode
+* Opens PiP at **480×270** by default
+* **Always-on-top** PiP window
+* Drag the borderless window anywhere on the screen
+* Resize the window from all four edges and four corners
+* Automatically restores VLC's original window size, position, and window style when exiting PiP
+
+## How to Use
+
+1. Install and enable the mod in Windhawk.
+2. Open VLC and play a video.
+3. Press **F8** or **Ctrl + Alt + V** to enter PiP mode.
+4. Drag the PiP window to move it.
+5. Drag any edge or corner to resize it.
+6. Press the same hotkey again to return VLC to its previous state.
+
+You can also **double-click VLC's normal title bar** to toggle PiP.
+
+## Notes
+
+The mod is designed for VLC's standard Windows window and does not require any additional PiP software or external utilities.
+
+The original VLC window position, size, window style, and Always-on-Top state are saved when entering PiP and restored when leaving it.
+
+*/
+// ==/WindhawkModReadme==
+
 
 #include <windows.h>
 
