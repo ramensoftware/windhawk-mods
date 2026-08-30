@@ -14,6 +14,8 @@
 // @include         SnippingTool.exe
 // @include         iexplore.exe
 // @include         regedit.exe
+// @include         diskmgmt.msc
+// @include         cleanmgr.exe
 // @include         rundll32.exe
 // @include         calc.exe
 // @include         charmap.exe
@@ -77,11 +79,10 @@ The mod is injected only into a predefined list. To add a program, add its `.exe
 ## Notes
 
 - The mod has been tested on Windows 10 21H2.
-- The mod works with OpenGlass and DWMBlurGlass.
 - The mod does not modify system files.
 - The mod does not replace parts of Windows.
 - The mod tries to replicate the exact timing and motion from Windows 7 (`uDWM.dll` 6.1.7600.16385).
-- The mod is injected only into a curated list of applications to limit overhead and potential issues.
+- The mod is injected only into a curated list of applications to limit potential issues.
 
 ## Credits
 
