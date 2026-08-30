@@ -2566,13 +2566,10 @@ void CustomBSDR::UpdateAppListLayout() {
     int minHeight = visibleHeight;
     int maxHeight = screenHeight - MulDiv(335, dpi, 96);
 
-    if (maxHeight < minHeight)
-        maxHeight = minHeight;
-
     int newHeight = totalContentHeight;
     if (newHeight < minHeight)
         newHeight = minHeight;
-    if (newHeight > maxHeight)
+    if (newHeight > maxHeight) // Allow decreasing on resolution decrease
         newHeight = maxHeight;
     int heightDiff = newHeight - minHeight;
 
@@ -3757,7 +3754,7 @@ bool IsLogonUiInjectionEnabled() {
         return false;
     }
 
-    // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code, before initializing the logon controller
+    // LogonUI normally auto exits when ran with invalid argument, even without this mod's injected code, without initializing the logon controller
     DWORD result = WaitForSingleObject(pi.hProcess, 2000);
     if (result != WAIT_OBJECT_0) {
         // Should exit immediately but just to be safe
@@ -3767,7 +3764,7 @@ bool IsLogonUiInjectionEnabled() {
 
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
-    
+
     if ((DWORD)Wh_GetIntValue(L"LogonUiLoadCheck", -1) == myPid + pi.dwProcessId) {
         return true;
     }
