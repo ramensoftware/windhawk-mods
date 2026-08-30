@@ -33,7 +33,7 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
-*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
+*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to completely release the hotkeys for other applications (such as PowerToys or GlazeWM). You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
 
 ## Notes
 - Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
@@ -322,7 +322,7 @@ bool g_isExplorer = false;
 bool g_isDWM = false;
 
 // Settings structure
-struct
+struct Settings
 {
     int DisableWinA;
     bool DisableWinB;
@@ -402,6 +402,98 @@ struct
     bool DisableWinKey;
     bool DisableCtrlEsc;
 } g_settings;
+
+bool StandardShortcutsEqual(const Settings& a, const Settings& b)
+{
+    return a.DisableWinB == b.DisableWinB &&
+           a.DisableWinD == b.DisableWinD &&
+           a.DisableWinE == b.DisableWinE &&
+           a.DisableWinF == b.DisableWinF &&
+           a.DisableWinF1 == b.DisableWinF1 &&
+           a.DisableWinG == b.DisableWinG &&
+           a.DisableWinH == b.DisableWinH &&
+           a.DisableWinI == b.DisableWinI &&
+           a.DisableWinJ == b.DisableWinJ &&
+           a.DisableWinM == b.DisableWinM &&
+           a.DisableWinO == b.DisableWinO &&
+           a.DisableWinQ == b.DisableWinQ &&
+           a.DisableWinR == b.DisableWinR &&
+           a.DisableWinS == b.DisableWinS &&
+           a.DisableWinT == b.DisableWinT &&
+           a.DisableWinV == b.DisableWinV &&
+           a.DisableWinW == b.DisableWinW &&
+           a.DisableWinX == b.DisableWinX &&
+           a.DisableWinY == b.DisableWinY &&
+           a.DisableWinZ == b.DisableWinZ &&
+           a.DisableWinTab == b.DisableWinTab &&
+           a.DisableWinUp == b.DisableWinUp &&
+           a.DisableWinDown == b.DisableWinDown &&
+           a.DisableWinLeft == b.DisableWinLeft &&
+           a.DisableWinRight == b.DisableWinRight &&
+           a.DisableWinHome == b.DisableWinHome &&
+           a.DisableWinShiftC == b.DisableWinShiftC &&
+           a.DisableWinShiftM == b.DisableWinShiftM &&
+           a.DisableWinComma == b.DisableWinComma &&
+           a.DisableWinPause == b.DisableWinPause &&
+           a.DisableWinCtrlD == b.DisableWinCtrlD &&
+           a.DisableWinCtrlF == b.DisableWinCtrlF &&
+           a.DisableWinCtrlF4 == b.DisableWinCtrlF4 &&
+           a.DisableWinCtrlLeft == b.DisableWinCtrlLeft &&
+           a.DisableWinCtrlRight == b.DisableWinCtrlRight &&
+           a.DisableWinNumbers == b.DisableWinNumbers &&
+           a.DisableWinShiftNumbers == b.DisableWinShiftNumbers &&
+           a.DisableWinCtrlNumbers == b.DisableWinCtrlNumbers &&
+           a.DisableWinAltNumbers == b.DisableWinAltNumbers &&
+           a.DisableWinPlus == b.DisableWinPlus &&
+           a.DisableWinMinus == b.DisableWinMinus &&
+           a.DisableWinEsc == b.DisableWinEsc &&
+           a.DisableWinCtrlEnter == b.DisableWinCtrlEnter &&
+           a.DisableWinCtrlC == b.DisableWinCtrlC &&
+           a.DisableWinCtrlN == b.DisableWinCtrlN &&
+           a.DisableWinCtrlO == b.DisableWinCtrlO &&
+           a.DisableWinCtrlS == b.DisableWinCtrlS &&
+           a.DisableWinSpace == b.DisableWinSpace &&
+           a.DisableWinShiftS == b.DisableWinShiftS &&
+           a.DisableWinAltK == b.DisableWinAltK &&
+           a.DisableWinPeriod == b.DisableWinPeriod &&
+           a.DisableWinSemicolon == b.DisableWinSemicolon &&
+           a.DisableWinPrtSc == b.DisableWinPrtSc &&
+           a.DisableWinShiftLeft == b.DisableWinShiftLeft &&
+           a.DisableWinShiftRight == b.DisableWinShiftRight &&
+           a.DisableWinShiftUp == b.DisableWinShiftUp &&
+           a.DisableWinShiftDown == b.DisableWinShiftDown &&
+           a.DisableOfficeHotkeys == b.DisableOfficeHotkeys &&
+           a.DisableWinAltD == b.DisableWinAltD &&
+           a.DisableWinAltB == b.DisableWinAltB &&
+           a.DisableWinAltR == b.DisableWinAltR &&
+           a.DisableWinAltG == b.DisableWinAltG &&
+           a.DisableWinAltPrtSc == b.DisableWinAltPrtSc &&
+           a.DisableWinAltT == b.DisableWinAltT &&
+           a.DisableWinAltM == b.DisableWinAltM &&
+           a.DisableWinCtrlShiftB == b.DisableWinCtrlShiftB &&
+           a.DisableWinCtrlQ == b.DisableWinCtrlQ &&
+           a.DisableAltShift == b.DisableAltShift &&
+           a.DisableWinKey == b.DisableWinKey &&
+           a.DisableCtrlEsc == b.DisableCtrlEsc;
+}
+
+bool HasAnyStandardShortcutsDisabled()
+{
+    Settings emptySettings{};
+    return !StandardShortcutsEqual(g_settings, emptySettings);
+}
+
+bool SettingsEqual(const Settings& a, const Settings& b)
+{
+    return a.DisableWinA == b.DisableWinA &&
+           a.DisableWinC == b.DisableWinC &&
+           a.DisableWinK == b.DisableWinK &&
+           a.DisableWinN == b.DisableWinN &&
+           a.DisableWinP == b.DisableWinP &&
+           a.DisableWinU == b.DisableWinU &&
+           a.DisableWinSlash == b.DisableWinSlash &&
+           StandardShortcutsEqual(a, b);
+}
 
 
 int GetSettingIntSafe(PCWSTR settingName) {
@@ -666,13 +758,13 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
             // Hardcoded keys that bypass RegisterHotKey
             if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_SPACE)
                 return true;
-            if (vk == 'A' && g_settings.DisableWinA == 2) return true;
-            if (vk == 'C' && g_settings.DisableWinC == 2) return true;
-            if (vk == 'K' && g_settings.DisableWinK == 2) return true;
-            if (vk == 'N' && g_settings.DisableWinN == 2) return true;
-            if (vk == 'P' && g_settings.DisableWinP == 2) return true;
-            if (vk == 'U' && g_settings.DisableWinU == 2) return true;
-            if (vk == VK_OEM_2 && g_settings.DisableWinSlash == 2) return true;
+            if (vk == 'A' && g_settings.DisableWinA > 0) return true;
+            if (vk == 'C' && g_settings.DisableWinC > 0) return true;
+            if (vk == 'K' && g_settings.DisableWinK > 0) return true;
+            if (vk == 'N' && g_settings.DisableWinN > 0) return true;
+            if (vk == 'P' && g_settings.DisableWinP > 0) return true;
+            if (vk == 'U' && g_settings.DisableWinU > 0) return true;
+            if (vk == VK_OEM_2 && g_settings.DisableWinSlash > 0) return true;
         } else {
             // Win+Shift+Arrows
             if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
@@ -716,22 +808,11 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 // Explorer restart prompt
 // ============================================================================
 
-bool IsFirstTimeInit()
-{
-    int initialized = Wh_GetIntValue(L"Initialized", 0);
-    if (initialized == 0)
-    {
-        Wh_SetIntValue(L"Initialized", 1);
-        return true; // First time
-    }
-    return false;
-}
-
 HANDLE g_restartExplorerPromptThread = NULL;
 std::atomic<HWND> g_restartExplorerPromptWindow = NULL;
 
 constexpr WCHAR kRestartExplorerPromptTitle[] = L"Disable Windows Shortcuts - Windhawk";
-constexpr WCHAR kRestartExplorerPromptText[] = L"Explorer needs to be restarted to apply the changes to standard shortcuts. Restart now?";
+constexpr WCHAR kRestartExplorerPromptText[] = L"Explorer needs to be restarted to apply changes and release standard shortcuts for other applications. Restart now?";
 
 void PromptForExplorerRestart()
 {
@@ -740,6 +821,7 @@ void PromptForExplorerRestart()
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0)
             return;
         CloseHandle(g_restartExplorerPromptThread);
+        g_restartExplorerPromptThread = NULL;
     }
 
     g_restartExplorerPromptThread = CreateThread(nullptr, 0, [](LPVOID) WINAPI -> DWORD {
@@ -765,16 +847,19 @@ void PromptForExplorerRestart()
             },
         };
 
-        int button;
-        if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button, nullptr, nullptr)) && button == IDYES)
+        static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
+            HMODULE hComctl32 = LoadLibraryExW(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if (!hComctl32) return (decltype(&TaskDialogIndirect))nullptr;
+            return (decltype(&TaskDialogIndirect))GetProcAddress(hComctl32, "TaskDialogIndirect");
+        }();
+
+        int button = 0;
+        if (pTaskDialogIndirect && SUCCEEDED(pTaskDialogIndirect(&taskDialogConfig, &button, nullptr, nullptr)) && button == IDYES)
         {
-            // By adding a slight timeout, we give Wh_ModUninit the exact chance to return gracefully to Windhawk
-            // *before* explorer.exe violently closes. This prevents Windhawk from registering an uninit crash,
-            // which avoids the backoff/slow re-init protection delays. We also use 'start' to detach the shell gracefully.
             WCHAR commandLine[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
-            STARTUPINFO si = { .cb = sizeof(si) };
+            STARTUPINFOW si = { .cb = sizeof(si) };
             PROCESS_INFORMATION pi{};
-            if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+            if (CreateProcessW(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
             {
                 CloseHandle(pi.hThread);
                 CloseHandle(pi.hProcess);
@@ -817,21 +902,23 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
         }
 
-        // Fast path for dummy key (used to mask Start Menu)
-        if (vkCode == 0xFF)
+        // Fast path for dummy keys (used to mask Start Menu or language switch)
+        if (vkCode == 0xFF || vkCode == 0xE8)
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
 
+        bool isInitialDown = false;
         if (vkCode < 256)
         {
             if (isDown)
             {
                 if (!g_keyState[vkCode])
                 {
+                    isInitialDown = true;
                     if (vkCode == VK_LWIN || vkCode == VK_RWIN)
                     {
                         g_winKeyUsed = false;
                     }
-                    else if (vkCode != 0xFF)
+                    else
                     {
                         g_winKeyUsed = true;
                     }
@@ -954,8 +1041,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 if (vkCode < 256)
                     g_suppressedKeys[vkCode] = true;
 
-                if (hasWin) {
-                    // AHK Start Menu Masking Trick
+                if (hasWin && isInitialDown) {
+                    // AHK Start Menu Masking Trick (sent once per modifier-key sequence)
                     // Forces the OS to see an unassigned keystroke, cancelling the Start Menu pop-up
                     INPUT inputs[2] = {};
                     inputs[0].type = INPUT_KEYBOARD;
@@ -989,7 +1076,11 @@ DWORD WINAPI HookThread(LPVOID lpParam)
 
     g_hHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
     if (!g_hHook)
+    {
+        Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
+        g_hookThreadRunning = false;
         return 1;
+    }
 
     // Dedicated message pump to keep the hook alive and responsive
     while (GetMessage(&msg, NULL, 0, 0) > 0)
@@ -999,6 +1090,7 @@ DWORD WINAPI HookThread(LPVOID lpParam)
     }
 
     UnhookWindowsHookEx(g_hHook);
+    g_hHook = NULL;
     return 0;
 }
 
@@ -1007,14 +1099,28 @@ void StartHookThread()
     if (g_hookThreadRunning) return;
     
     g_hookThreadRunning = true;
-    g_hookThread = CreateThread(NULL, 0, HookThread, NULL, 0, (LPDWORD)&g_hookThreadId);
+    DWORD threadId = 0;
+    g_hookThread = CreateThread(NULL, 0, HookThread, NULL, 0, &threadId);
+    if (g_hookThread)
+    {
+        g_hookThreadId = threadId;
+    }
+    else
+    {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        g_hookThreadRunning = false;
+    }
 }
 
 void StopHookThread()
 {
     if (g_hookThreadRunning)
     {
-        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+        while (!PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0))
+        {
+            if (WaitForSingleObject(g_hookThread, 10) == WAIT_OBJECT_0)
+                break; // thread already exited
+        }
         g_hookThreadRunning = false;
     }
 
@@ -1028,10 +1134,10 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return (g_settings.DisableWinA == 2) || (g_settings.DisableWinC == 2) || 
-           (g_settings.DisableWinK == 2) || (g_settings.DisableWinN == 2) || 
-           (g_settings.DisableWinP == 2) || (g_settings.DisableWinU == 2) || 
-           (g_settings.DisableWinSlash == 2) || 
+    return (g_settings.DisableWinA > 0) || (g_settings.DisableWinC > 0) || 
+           (g_settings.DisableWinK > 0) || (g_settings.DisableWinN > 0) || 
+           (g_settings.DisableWinP > 0) || (g_settings.DisableWinU > 0) || 
+           (g_settings.DisableWinSlash > 0) || 
            g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
@@ -1072,8 +1178,8 @@ bool IsExplorerUptimeLarge()
         current.LowPart = systemTime.dwLowDateTime;
         current.HighPart = systemTime.dwHighDateTime;
         
-        // 30 seconds = 300,000,000 intervals of 100ns
-        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 300000000ULL)
+        // 5 seconds = 50,000,000 intervals of 100ns (distinguishes fresh boot from mid-session re-enable)
+        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 50000000ULL)
             return true;
     }
     return false;
@@ -1111,20 +1217,10 @@ BOOL Wh_ModInit()
                 Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
         }
 
-        // Check if Explorer has already registered standard hotkeys.
-        // We use Win+R as a probe. If it fails, Explorer is mid-session and already owns it.
-        // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
-        // to avoid false prompts on system startup or when secondary Explorers are launched.
-        if (IsMainExplorer() && IsExplorerUptimeLarge() && !IsFirstTimeInit())
+        // Prompt ONLY if Explorer is running mid-session (>5s) AND at least one standard shortcut is disabled
+        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyStandardShortcutsDisabled())
         {
-            if (!RegisterHotKey(NULL, 0x1337, MOD_WIN | MOD_NOREPEAT, 'R'))
-            {
-                PromptForExplorerRestart();
-            }
-            else
-            {
-                UnregisterHotKey(NULL, 0x1337);
-            }
+            PromptForExplorerRestart();
         }
     }
 
@@ -1137,25 +1233,55 @@ BOOL Wh_ModInit()
 void Wh_ModUninit()
 {
     if (g_isDWM)
-        StopHookThread();
-
-    if (g_isExplorer && IsMainExplorer())
     {
-        // Use the native prompt instead of PowerShell. 
-        // We call the existing prompt function and wait for it to complete.
-        PromptForExplorerRestart();
+        StopHookThread();
     }
 
-    if (g_restartExplorerPromptThread)
+    if (g_isExplorer)
     {
-        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = nullptr;
+        // 1. Close any pending prompt from a previous settings change
+        if (HWND promptWindow = g_restartExplorerPromptWindow)
+        {
+            PostMessage(promptWindow, WM_CLOSE, 0, 0);
+        }
+
+        if (g_restartExplorerPromptThread)
+        {
+            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            CloseHandle(g_restartExplorerPromptThread);
+            g_restartExplorerPromptThread = nullptr;
+        }
+
+        // 2. If standard shortcuts were disabled, prompt the user on mod unload/disable
+        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN))
+        {
+            if (HasAnyStandardShortcutsDisabled())
+            {
+                PromptForExplorerRestart();
+            }
+        }
+
+        // 3. Bounded wait for the unload prompt to guarantee safety without hanging
+        if (g_restartExplorerPromptThread)
+        {
+            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
+            {
+                // User did not respond within 30 seconds: close dialog
+                if (HWND promptWindow = g_restartExplorerPromptWindow)
+                {
+                    PostMessage(promptWindow, WM_CLOSE, 0, 0);
+                }
+                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            }
+            CloseHandle(g_restartExplorerPromptThread);
+            g_restartExplorerPromptThread = nullptr;
+        }
     }
 }
 
 void Wh_ModSettingsChanged()
 {
+    Settings oldSettings = g_settings;
     LoadSettings();
     
     if (g_isDWM)
@@ -1166,6 +1292,8 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer && IsMainExplorer())
+    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
+    {
         PromptForExplorerRestart();
+    }
 }
