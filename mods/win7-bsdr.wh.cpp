@@ -64,7 +64,7 @@ settings. If you do not do this, it will silently fail to inject.
   $name: (Advanced) Skip safety checks before restoring the classic logoff sequence
   $name:ko-KR: (고급) 고전 로그오프 절차를 복원하기 전 안전 검사 생략
   $description: This mod verifies that LogonUI injection was successful before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
-  $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사힙니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
+  $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사합니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
 */
 // ==/WindhawkModSettings==
 
@@ -73,7 +73,6 @@ settings. If you do not do this, it will silently fail to inject.
 #include <optional>
 #include <mutex>
 #include <atomic>
-#include <regex>
 #include <vector>
 #include <cstdint>
 #include <cstdlib>
@@ -1748,6 +1747,7 @@ namespace CustomBSDR {
     void Stop();
     void AddApplication(IShutdownBlockingApp* app);
     void RemoveApplication(UINT appId);
+    int GetScaleFactor();
 
     static LogonUIState _logonUIState = LogonUIState::LogonUIState_LoggingOff;
 
@@ -1819,6 +1819,7 @@ namespace CustomBSDR {
     static std::vector<AppTile> appTiles;
     [[clang::no_destroy]] static std::optional<std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps{std::in_place};
     std::mutex pendingAppsMutex;
+    [[clang::no_destroy]] static Microsoft::WRL::ComPtr<IWICImagingFactory> spWICFactory;
 }
 #pragma endregion logoncontroller.h and CustomBSDR.h
 
@@ -1903,7 +1904,7 @@ HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBi
 
     Microsoft::WRL::ComPtr<IWICImagingFactory> spWICImagingFactory = pWICImagingFactory;
     if (!spWICImagingFactory.Get()) {
-        hr = CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICImagingFactory));
+        hr = E_ABORT;
     }
     if (SUCCEEDED(hr)) {
         Microsoft::WRL::ComPtr<IWICBitmapSource> spBitmapSourceConverted;
@@ -1917,17 +1918,18 @@ HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBi
     return hr;
 }
 
-HRESULT GetBitmapFromRandomStream(Microsoft::WRL::ComPtr<ABI::Windows::Storage::Streams::IRandomAccessStream> stream, HBITMAP* outBitmap) {
+HRESULT GetBitmapFromRandomStream(IWICImagingFactory* pWICImagingFactory, Microsoft::WRL::ComPtr<ABI::Windows::Storage::Streams::IRandomAccessStream> stream, HBITMAP* outBitmap) {
+    if (!pWICImagingFactory) {
+        return E_ABORT;
+    }
+
     Microsoft::WRL::ComPtr<IStream> spStream;
     RETURN_IF_FAILED(CreateStreamOverRandomAccessStream(stream.Get(), IID_PPV_ARGS(&spStream)));
 
-    Microsoft::WRL::ComPtr<IWICImagingFactory> spWICFactory;
-    RETURN_IF_FAILED(CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICFactory)));
-
     Microsoft::WRL::ComPtr<IWICBitmapSource> spWICBitmapSource;
-    RETURN_IF_FAILED(LoadImageWithWIC(spWICFactory.Get(), spStream.Get(), &spWICBitmapSource));
+    RETURN_IF_FAILED(LoadImageWithWIC(pWICImagingFactory, spStream.Get(), &spWICBitmapSource));
 
-    RETURN_IF_FAILED(ConvertWICBitmapToHBITMAP(spWICFactory.Get(), spWICBitmapSource.Get(), outBitmap));
+    RETURN_IF_FAILED(ConvertWICBitmapToHBITMAP(pWICImagingFactory, spWICBitmapSource.Get(), outBitmap));
     return S_OK;
 }
 #pragma endregion wicutil.cpp
@@ -2482,7 +2484,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
 
     ABI::Windows::Storage::Streams::IRandomAccessStream* iconStream = nullptr;
     if (SUCCEEDED(blockingApp->get_Icon(&iconStream)) && iconStream) {
-        GetBitmapFromRandomStream(iconStream, &tile.hIconBitmap);
+        GetBitmapFromRandomStream(spWICFactory.Get(), iconStream, &tile.hIconBitmap);
         if (tile.hIcon && tile.hIconBitmap) {
             SendMessageW(tile.hIcon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)tile.hIconBitmap);
         }
@@ -2560,13 +2562,12 @@ void CustomBSDR::UpdateAppListLayout() {
     // Windows 7 decided the dialog height only on the initial load (and when the screen resolution was decreased), and never resized on late item add/remove
     // On Windows 10+, the BSDR backend sends the initial list of apps with random delays (whether pendingApps or WM_ADD_APP is used),
     // and never sends newly created windows after initialization. So consider all additions as initial item and always increase the dialog height
-    int scrollBarWidth = 0;
+    int scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
     if (hScrollBar) {
         RECT rcScrollBar;
-        GetWindowRect(hScrollBar, &rcScrollBar);
-        scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
-    } else {
-        scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
+        if (GetWindowRect(hScrollBar, &rcScrollBar)) {
+            scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+        }
     }
 
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -2687,7 +2688,11 @@ void CustomBSDR::UpdateAppListLayout() {
             GetString(IDS_BSDR_BLOCKINGAPPCOUNT_MULTI, titleFormat, _countof(titleFormat));
         }
         // Avoid swprintf with format string from user supplied dll
-        std::wstring titleText = regex_replace(titleFormat, std::wregex(L"%d"), std::to_wstring(appTiles.size()));
+        auto titleText = std::wstring(titleFormat);
+        size_t pos = titleText.find(L"%d");
+        if (pos != std::wstring::npos) {
+            titleText.replace(pos, 2, std::to_wstring(appTiles.size()));
+        }
         SetWindowTextW(hTitleText, titleText.c_str());
     }
 
@@ -2697,6 +2702,23 @@ void CustomBSDR::UpdateAppListLayout() {
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
+        // Verify if all expected controls are there
+        hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
+        hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
+        hScrollBar = GetDlgItem(hWndDlg, IDC_BSDR_SCROLLBAR);
+        hWarningText = GetDlgItem(hWndDlg, IDC_BSDR_WARNING);
+        hForceButton = GetDlgItem(hWndDlg, IDC_BSDR_FORCE_BTN);
+        hCancelButton = GetDlgItem(hWndDlg, IDCANCEL);
+        hDescText = GetDlgItem(hWndDlg, IDC_BSDR_DESC);
+        hYesButton = GetDlgItem(hWndDlg, IDYES);
+        hNoButton = GetDlgItem(hWndDlg, IDNO);
+
+        if (!hTitleText || !hAppList || !hScrollBar || !hWarningText || !hForceButton || !hCancelButton || !hDescText || !hYesButton || !hNoButton) {
+            Wh_Log(L"Dialog is missing necessary controls");
+            DestroyWindow(hWndDlg);
+            return FALSE;
+        }
+
         std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
         {
             std::lock_guard lock(pendingAppsMutex);
@@ -2708,16 +2730,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         SetWindowLongW(hWndDlg, GWL_STYLE, GetWindowLongW(hWndDlg, GWL_STYLE) & ~WS_CAPTION);
         // Use composited style on dialog, not bg window, to prevent the scrollbar control from flickering on drag
         SetWindowLongW(hWndDlg, GWL_EXSTYLE, GetWindowLongW(hWndDlg, GWL_EXSTYLE) | WS_EX_COMPOSITED);
-
-        hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
-        hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
-        hScrollBar = GetDlgItem(hWndDlg, IDC_BSDR_SCROLLBAR);
-        hWarningText = GetDlgItem(hWndDlg, IDC_BSDR_WARNING);
-        hForceButton = GetDlgItem(hWndDlg, IDC_BSDR_FORCE_BTN);
-        hCancelButton = GetDlgItem(hWndDlg, IDCANCEL);
-        hDescText = GetDlgItem(hWndDlg, IDC_BSDR_DESC);
-        hYesButton = GetDlgItem(hWndDlg, IDYES);
-        hNoButton = GetDlgItem(hWndDlg, IDNO);
 
         // Hide the warning message controls
         ShowWindow(hWarningText, SW_HIDE);
@@ -3033,7 +3045,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             si.nPos = scrollPos;
             SetScrollInfo(hScrollBar, SB_CTL, &si, TRUE);
             SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOREDRAW);
-            RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            if (hAppList)
+                RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
         }
         return TRUE;
     }
@@ -3077,7 +3090,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             si.nPos = scrollPos;
             SetScrollInfo(hScrollBar, SB_CTL, &si, TRUE);
             SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOREDRAW);
-            RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            if (hAppList)
+                RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
         }
         return TRUE;
     }
@@ -3097,7 +3111,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         HWND hDlgLocal = nullptr;
         if (!g_isUsingHardcodedRes && g_hResDll) {
             hDlgLocal = CreateDialogParamW(g_hResDll, MAKEINTRESOURCEW(IDD_BSDR_DLG), hWnd, DlgProc, lParam);
-            if (!hDlgLocal) {
+            if (!hDlgLocal || !IsWindow(hDlgLocal)) {
                 Wh_Log(L"CreateDialogParamW failed: %d", GetLastError());
                 // Retry with hardcoded one
                 hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
@@ -3169,9 +3183,11 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
         SetWindowPos(hWnd, nullptr, x, y, cx, cy, SWP_NOSENDCHANGING);
-        CenterWindow(hDlg);
-        UpdateAppListLayout();
-        RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW);
+        if (hDlg) {
+            CenterWindow(hDlg);
+            UpdateAppListLayout();
+            RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW);
+        }
         // Retaking screenshot requires temporarily hiding the window
         // Windows 7 doesn't do that either so skip that
         return 0;
@@ -3180,6 +3196,12 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         if (lParam != BSDR_CLOSE) {
             // Deny Alt+F4 or other external window closes (like Windows 7)
             return 0;
+        }
+
+        // Drain the add app queue
+        MSG msg;
+        while (PeekMessageW(&msg, hDlg, WM_ADD_APP, WM_ADD_APP, PM_REMOVE)) {
+            reinterpret_cast<IShutdownBlockingApp*>(msg.lParam)->Release();
         }
 
         for (auto& tile : appTiles) {
@@ -3268,6 +3290,12 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+    HRESULT hrIf = CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICFactory));
+    if (FAILED(hrIf)) {
+        Wh_Log(L"CoCreateInstance(CLSID_WICImagingFactory2) failed, HR=%d", hrIf);
+        // Continue without icons
+    }
+
     WNDCLASSEXW wndClass = {};
 
     wndClass.cbSize = sizeof(WNDCLASSEXW);
@@ -3320,7 +3348,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                             bQuit = TRUE;
                             break;
                         }
-                        if (msg.message == WM_SYSKEYDOWN && msg.wParam == VK_MENU) {
+                        if (hDlg && msg.message == WM_SYSKEYDOWN && msg.wParam == VK_MENU) {
                             SetPropW(hForceButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             SetPropW(hCancelButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
@@ -3366,6 +3394,8 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         ret = GetLastError();
         Wh_Log(L"RegisterClassExW failed, GLE=%d", ret);
     }
+
+    spWICFactory.Reset();
 
     if (SUCCEEDED(hrCo)) {
         CoUninitialize();
@@ -3428,7 +3458,17 @@ void CustomBSDR::RemoveApplication(UINT appid) {
     }
 }
 
+int CustomBSDR::GetScaleFactor() {
+    std::lock_guard lock(pendingAppsMutex);
+    if (hDlg) {
+        return GetDpiForWindow(hDlg);
+    } else {
+        return GetDpiForSystem();
+    }
+}
+
 void CustomBSDR::Hide() {
+    std::lock_guard lock(pendingAppsMutex);
     if (hBgWnd) {
         ShowWindow(hBgWnd, SW_HIDE);
     }
@@ -3454,17 +3494,7 @@ long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettin
 
 long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsigned int* scaleFactor) {
     Wh_Log(L"BlockedShutdownUXImpl::get_ScaleFactor");
-
-    using namespace CustomBSDR;
-
-    int dpi = 96;
-    if (hDlg) {
-        dpi = GetDpiForWindow(hDlg);
-    } else {
-        dpi = GetDpiForSystem();
-    }
-    *scaleFactor = MulDiv(dpi, 100, 96);
-
+    *scaleFactor = CustomBSDR::GetScaleFactor();
     return S_OK;
 }
 
@@ -3692,10 +3722,12 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
 #pragma region Winlogon hooks (disable async logoff)
 bool g_isWinlogon = false;
 bool g_noSafetyChecks = false;
+// It's thread local to allow probing on further setting change
 thread_local bool g_isInitialThread = false;
 int* p_g_fShutdownResolverDisabled = nullptr;
 int g_origResolverDisabledState = 0;
 
+// Check if non-default BSDR (e.g. AuthUX BSDR) is installed
 bool IsAuthUxInstalled() {
     wchar_t dllPath[MAX_PATH];
     DWORD size = sizeof(dllPath);
@@ -3819,7 +3851,7 @@ bool IsLogonUiInjectionEnabled() {
     if (result != WAIT_OBJECT_0) {
         // Should exit immediately but just to be safe
         Wh_Log(L"LogonUI wait timed out or failed");
-        // Let it exit automatically
+        TerminateProcess(pi.hProcess, 0);
     }
 
     CloseHandle(pi.hThread);
@@ -3843,6 +3875,7 @@ WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
 };
 #pragma endregion Winlogon hooks (disable async logoff)
 
+// https://github.com/ramensoftware/windhawk/wiki/Development-tips
 static constexpr size_t OFFSET_SAME_TEB_FLAGS = 0x17EE; // Win64 only
 
 // The mod is being initialized, load settings, hook functions, and do other
