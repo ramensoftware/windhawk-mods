@@ -8806,6 +8806,28 @@ static void EqRemoveXamlButtonOnUiThread() {
                 }
             }
         }
+
+        // Last-resort cleanup: find any button with our unique name in the
+        // current taskbar XAML tree, even if cached parent/button state is stale.
+        if (g_eqTaskbarHwnd && IsWindow(g_eqTaskbarHwnd)) {
+            auto root = EqGetTaskbarXamlRoot(g_eqTaskbarHwnd);
+            if (root) {
+                if (auto rootElement = root.Content().try_as<FrameworkElement>()) {
+                    if (auto button = EqFindChildByName(rootElement, kEqXamlButtonName)) {
+                        auto parent = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(button)
+                            .try_as<Panel>();
+                        if (parent) {
+                            for (uint32_t i = 0; i < parent.Children().Size(); ++i) {
+                                if (parent.Children().GetAt(i).try_as<FrameworkElement>() == button) {
+                                    parent.Children().RemoveAt(i);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     } catch (...) {
     }
 
@@ -9021,6 +9043,7 @@ static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
         }
 
         Button button;
+        g_eqXamlButton = button;
         EqSetupButtonCommon(button, &g_eqXamlClickToken);
 
         bool inserted = false;
@@ -9223,9 +9246,17 @@ static bool EqHookTaskbarSymbols() {
 static void EqCleanupIntegration() {
     HWND taskbar = g_eqTaskbarHwnd;
     if (taskbar && IsWindow(taskbar)) {
-        EqRunFromWindowThread(taskbar, [](void*) {
-            EqRemoveXamlButtonOnUiThread();
-        }, nullptr);
+        bool cleanupSuccess = false;
+        for (int attempt = 0; attempt < 3 && !cleanupSuccess; ++attempt) {
+            cleanupSuccess = EqRunFromWindowThread(taskbar, [](void*) {
+                EqRemoveXamlButtonOnUiThread();
+            }, nullptr);
+            if (!cleanupSuccess && attempt < 2)
+                Sleep(10);
+        }
+
+        if (!cleanupSuccess)
+            Wh_Log(L"EqCleanupIntegration: failed to marshal XAML cleanup to taskbar UI thread");
     } else {
         g_eqXamlInjectionReady.store(false, std::memory_order_release);
         g_eqTaskbarHwnd = nullptr;
