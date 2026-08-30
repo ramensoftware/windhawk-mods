@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.0.8
+// @version         1.0.9
 // @author          Tony Thompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -27,11 +27,15 @@ few cases the hook cannot see.
 | Hold Shift + press Num Lock | Normal toggle is allowed. |
 | Release Shift | Num Lock is forced back ON if it is off. |
 | Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, or on the safety check. |
-| Mod disabled | Normal Windows Num Lock behavior is restored. |
+| Mod disabled | The Num Lock *key* behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |
 
 Hold **Left Shift** or **Right Shift** to temporarily turn Num Lock off (for
 example when you need the numpad as arrow keys). As soon as you release Shift,
 Num Lock is turned back on.
+
+**Block** (the default) swallows Num Lock for every process, so a game or app
+that uses Num Lock as a hotkey will not see the key. Use **Allow** if you need
+those binds; the mod still forces Num Lock back ON on key-up.
 
 ## Why a tool mod?
 
@@ -47,6 +51,9 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   Lock off is corrected within a few seconds.
 - The hook also cannot see some Remote Desktop / KVM paths. The safety check
   and session-unlock / resume handlers cover those.
+- If the hook misses a modifier key-up (elevated window or secure desktop),
+  the worker re-reads the real key state before trusting a cached "held", so
+  the safety timer cannot stay inert.
 - Synthetic Num Lock presses this mod sends are tagged and ignored by the
   hook, so the force-on path cannot fight itself.
 - In "allow" mode, holding Num Lock without the modifier can leave it off
@@ -75,6 +82,7 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   $name: Num Lock key without modifier
   $description: >-
     What happens when Num Lock is pressed without the override modifier.
+    Block swallows the key for every process, including games that bind it.
   $options:
     - block: Block the key (does nothing)
     - allow: Allow the press, then force Num Lock back ON on key-up. Holding the key can leave it off until release.
@@ -88,12 +96,12 @@ keeps overhead low and avoids tying Num Lock to the shell process.
 // ==/WindhawkModSettings==
 
 #include <atomic>
-#include <wchar.h>
 
 #include <windows.h>
 #include <wtsapi32.h>
 
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -106,6 +114,10 @@ constexpr UINT WM_APP_FORCE_ON = WM_APP + 1;
 constexpr UINT WM_APP_UPDATE_TIMER = WM_APP + 2;
 constexpr UINT WM_APP_QUIT = WM_APP + 3;
 
+// Posted to the hook thread to retry SetWindowsHookEx if the first attempt
+// failed. The hook thread stays in its message loop either way.
+constexpr UINT WM_APP_ENSURE_HOOK = WM_APP + 4;
+
 constexpr UINT_PTR kSafetyTimerId = 1;
 constexpr UINT_PTR kDeferredForceTimerId = 2;
 
@@ -113,7 +125,7 @@ constexpr UINT_PTR kDeferredForceTimerId = 2;
 // let our own keystrokes through without treating them as user input.
 constexpr ULONG_PTR kInjectedNumLockExtraInfo = 0x4E4C4F4B;  // 'NLOK'
 
-constexpr wchar_t kWorkerClass[] = L"Windhawk.ForceNumLock.Worker";
+constexpr wchar_t kWorkerClass[] = L"Windhawk.NumLockLockdown.Worker";
 
 // ---------------------------------------------------------------------------
 // Settings (written on the Windhawk / worker thread, read from the hook)
@@ -155,17 +167,14 @@ std::atomic<bool> g_swallowedNumLockDown{false};
 // Hook thread publishes these; other threads only load. Uninit may unhook
 // via exchange so a wedged hook thread cannot leave the hook installed.
 std::atomic<HHOOK> g_keyboardHook{nullptr};
-std::atomic<HMODULE> g_hookModule{nullptr};
 std::atomic<HWND> g_workerHwnd{nullptr};
 HANDLE g_workerThread = nullptr;
 HANDLE g_hookThread = nullptr;
 std::atomic<DWORD> g_workerThreadId{0};
 std::atomic<DWORD> g_hookThreadId{0};
-std::atomic<bool> g_hookInstalled{false};
 std::atomic<bool> g_hookQuit{false};
 HANDLE g_workerReadyEvent = nullptr;
 HANDLE g_hookReadyEvent = nullptr;
-HANDLE g_hookStopEvent = nullptr;
 HPOWERNOTIFY g_suspendResumeNotify = nullptr;
 bool g_sessionNotifyRegistered = false;
 
@@ -216,24 +225,20 @@ bool ParseModifier(PCWSTR value, OverrideModifier* out) {
 
 void LoadSettings() {
     OverrideModifier modifier = OverrideModifier::Shift;
-    PCWSTR modifierSetting = Wh_GetStringSetting(L"overrideModifier");
-    if (modifierSetting) {
-        OverrideModifier parsed = OverrideModifier::Shift;
-        if (ParseModifier(modifierSetting, &parsed)) {
-            modifier = parsed;
-        }
-        Wh_FreeStringSetting(modifierSetting);
+    WindhawkUtils::StringSetting modifierSetting =
+        WindhawkUtils::StringSetting::make(L"overrideModifier");
+    OverrideModifier parsed = OverrideModifier::Shift;
+    if (ParseModifier(modifierSetting.get(), &parsed)) {
+        modifier = parsed;
     }
     g_overrideModifier.store(static_cast<int>(modifier),
                              std::memory_order_relaxed);
 
     bool blockKey = true;
-    PCWSTR keyMode = Wh_GetStringSetting(L"numLockKeyMode");
-    if (keyMode) {
-        if (_wcsicmp(keyMode, L"allow") == 0) {
-            blockKey = false;
-        }
-        Wh_FreeStringSetting(keyMode);
+    WindhawkUtils::StringSetting keyMode =
+        WindhawkUtils::StringSetting::make(L"numLockKeyMode");
+    if (keyMode.get() && _wcsicmp(keyMode.get(), L"allow") == 0) {
+        blockKey = false;
     }
     g_blockNumLockKey.store(blockKey, std::memory_order_relaxed);
 
@@ -258,8 +263,12 @@ bool IsOverrideVk(DWORD vk) {
             return vk == VK_LWIN || vk == VK_RWIN;
         case OverrideModifier::None:
             return false;
+        default: {
+            const OverrideModifier unmatched = CurrentModifier();
+            static_cast<void>(unmatched);
+            return false;
+        }
     }
-    return false;
 }
 
 void SetModifierDown(DWORD vk, bool down) {
@@ -319,7 +328,34 @@ void SeedModifierState() {
             break;
         case OverrideModifier::None:
             break;
+        default: {
+            const OverrideModifier unmatched = CurrentModifier();
+            static_cast<void>(unmatched);
+            break;
+        }
     }
+}
+
+void ClearStaleKeyFlags() {
+    g_allowedNumLockDown.store(false, std::memory_order_relaxed);
+    g_swallowedNumLockDown.store(false, std::memory_order_relaxed);
+}
+
+// Worker thread only: a cached "held" can be stale if the hook missed a
+// key-up (elevated window / secure desktop), so confirm against the OS.
+bool IsOverrideHeldVerified() {
+    if (IsOverrideHeld()) {
+        SeedModifierState();
+    }
+    if (IsOverrideHeld()) {
+        return true;
+    }
+    // Modifier is not held. If Num Lock is also up, a missed key-up can
+    // leave the swallow / allow flags stuck; clear them.
+    if (GetAsyncKeyState(VK_NUMLOCK) >= 0) {
+        ClearStaleKeyFlags();
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +366,13 @@ void RequestForceOn() {
     HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
     if (hwnd) {
         PostMessageW(hwnd, WM_APP_FORCE_ON, 0, 0);
+    }
+}
+
+void RequestEnsureHook() {
+    DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
+    if (threadId) {
+        PostThreadMessageW(threadId, WM_APP_ENSURE_HOOK, 0, 0);
     }
 }
 
@@ -356,25 +399,17 @@ void SendNumLockPulse() {
     }
 }
 
-enum class ForceReason {
-    Startup,
-    Event,
-    Timer,
-    Settings,
-};
-
 // Must run on the worker thread, never inside the LL hook.
-void ForceNumLockOn(ForceReason reason) {
-    if (IsOverrideHeld()) {
-        return;
+// Returns true if a pulse was sent.
+bool ForceNumLockOn(bool logSafety) {
+    if (IsOverrideHeldVerified() || IsNumLockOn()) {
+        return false;
     }
-    if (IsNumLockOn()) {
-        return;
-    }
-    if (reason == ForceReason::Timer) {
+    if (logSafety) {
         Wh_Log(L"Safety check: Num Lock was off, forcing ON");
     }
     SendNumLockPulse();
+    return true;
 }
 
 void ArmDeferredForceOn(HWND hwnd) {
@@ -386,7 +421,6 @@ void UninstallKeyboardHook() {
     if (hook) {
         UnhookWindowsHookEx(hook);
     }
-    g_hookInstalled.store(false, std::memory_order_release);
 }
 
 void UpdateSafetyTimer() {
@@ -403,24 +437,6 @@ void UpdateSafetyTimer() {
     }
 
     const UINT intervalMs = static_cast<UINT>(seconds) * 1000;
-
-    // Prefer a coalescable timer so a 10s safety check can share a wakeup
-    // with other timers instead of forcing its own interrupt. 1000 ms
-    // tolerance is enough for a fallback check.
-    using SetCoalescableTimer_t = UINT_PTR(WINAPI*)(HWND, UINT_PTR, UINT,
-                                                    TIMERPROC, ULONG);
-    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        auto pSetCoalescableTimer =
-            reinterpret_cast<SetCoalescableTimer_t>(
-                GetProcAddress(user32, "SetCoalescableTimer"));
-        if (pSetCoalescableTimer) {
-            if (pSetCoalescableTimer(hwnd, kSafetyTimerId, intervalMs, nullptr,
-                                     1000)) {
-                return;
-            }
-        }
-    }
-
     if (!SetTimer(hwnd, kSafetyTimerId, intervalMs, nullptr)) {
         Wh_Log(L"SetTimer failed: %lu", GetLastError());
     }
@@ -464,7 +480,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     // Track the override modifier first so a Shift-down that arrives in this
     // same callback sequence is visible to a following Num Lock press.
     if (IsOverrideVk(vk)) {
-        SetModifierDown(vk, isDown && !isUp);
+        SetModifierDown(vk, isDown);
 
         // Shift released: restore Num Lock unless a user Num Lock key-up is
         // still outstanding (that up would toggle after our pulse).
@@ -512,8 +528,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             // Deliver the matching up first so any toggle settles, then
             // force ON if the override is no longer held. Posting before
             // CallNextHookEx can run the pulse, then lose to this key-up.
-            const LRESULT result =
-                Pass(nCode, wParam, lParam);
+            const LRESULT result = Pass(nCode, wParam, lParam);
             if (!IsOverrideHeld()) {
                 RequestForceOn();
             }
@@ -532,8 +547,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             return 1;
         }
 
-        const LRESULT result =
-            Pass(nCode, wParam, lParam);
+        const LRESULT result = Pass(nCode, wParam, lParam);
         RequestForceOn();
         return result;
     }
@@ -570,14 +584,18 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                LPARAM lParam) {
     switch (msg) {
         case WM_APP_FORCE_ON:
-            ForceNumLockOn(ForceReason::Event);
-            ArmDeferredForceOn(hwnd);
+            if (!ForceNumLockOn(false)) {
+                // Nothing sent: the user's toggle may not have been applied
+                // yet, so look again shortly. Do not arm after a pulse:
+                // SendInput is async and a second pulse would toggle OFF.
+                ArmDeferredForceOn(hwnd);
+            }
             return 0;
 
         case WM_APP_UPDATE_TIMER:
             SeedModifierState();
             UpdateSafetyTimer();
-            ForceNumLockOn(ForceReason::Settings);
+            ForceNumLockOn(false);
             return 0;
 
         case WM_APP_QUIT:
@@ -586,10 +604,11 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
         case WM_TIMER:
             if (wParam == kSafetyTimerId) {
-                ForceNumLockOn(ForceReason::Timer);
+                RequestEnsureHook();
+                ForceNumLockOn(true);
             } else if (wParam == kDeferredForceTimerId) {
                 KillTimer(hwnd, kDeferredForceTimerId);
-                ForceNumLockOn(ForceReason::Event);
+                ForceNumLockOn(false);
             }
             return 0;
 
@@ -598,7 +617,8 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 case WTS_SESSION_UNLOCK:
                 case WTS_CONSOLE_CONNECT:
                 case WTS_REMOTE_CONNECT:
-                    ForceNumLockOn(ForceReason::Event);
+                    RequestEnsureHook();
+                    ForceNumLockOn(false);
                     break;
                 default:
                     break;
@@ -609,10 +629,8 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             switch (wParam) {
                 case PBT_APMRESUMEAUTOMATIC:
                 case PBT_APMRESUMESUSPEND:
-#ifdef PBT_APMRESUMECRITICAL
-                case PBT_APMRESUMECRITICAL:
-#endif
-                    ForceNumLockOn(ForceReason::Event);
+                    RequestEnsureHook();
+                    ForceNumLockOn(false);
                     break;
                 default:
                     break;
@@ -675,7 +693,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     wc.lpfnWndProc = WorkerWndProc;
     wc.hInstance = module;
     wc.lpszClassName = kWorkerClass;
-    if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&wc)) {
         Wh_Log(L"RegisterClassExW failed: %lu", GetLastError());
         if (g_workerReadyEvent) {
             SetEvent(g_workerReadyEvent);
@@ -690,6 +708,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     g_workerHwnd.store(hwnd, std::memory_order_release);
     if (!hwnd) {
         Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
+        UnregisterClassW(kWorkerClass, module);
         if (g_workerReadyEvent) {
             SetEvent(g_workerReadyEvent);
         }
@@ -700,7 +719,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     RegisterPowerAndSession(hwnd);
 
     SeedModifierState();
-    ForceNumLockOn(ForceReason::Startup);
+    ForceNumLockOn(false);
     UpdateSafetyTimer();
 
     if (g_workerReadyEvent) {
@@ -725,6 +744,30 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     return 0;
 }
 
+void TryInstallKeyboardHook() {
+    if (g_hookQuit.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (g_keyboardHook.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                   GetCurrentModuleHandle(), 0);
+    if (g_hookQuit.load(std::memory_order_acquire)) {
+        if (hook) {
+            UnhookWindowsHookEx(hook);
+        }
+        return;
+    }
+
+    g_keyboardHook.store(hook, std::memory_order_release);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookExW(WH_KEYBOARD_LL) failed: %lu",
+               GetLastError());
+    }
+}
+
 // Dedicated hook thread: owns WH_KEYBOARD_LL and nothing else. SendInput
 // stays on the worker so the hook never has to come down for a pulse.
 DWORD WINAPI HookThreadProc(LPVOID) {
@@ -733,73 +776,22 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    g_hookModule.store(GetCurrentModuleHandle(), std::memory_order_release);
+    TryInstallKeyboardHook();
 
-    DWORD delayMs = 50;
-    bool signaledReady = false;
-    bool loggedPersistentFailure = false;
-    unsigned attempts = 0;
-
-    while (!g_hookQuit.load(std::memory_order_relaxed) &&
-           !g_keyboardHook.load(std::memory_order_acquire)) {
-        ++attempts;
-        HHOOK hook = SetWindowsHookExW(
-            WH_KEYBOARD_LL, LowLevelKeyboardProc,
-            g_hookModule.load(std::memory_order_acquire), 0);
-        if (g_hookQuit.load(std::memory_order_acquire)) {
-            if (hook) {
-                UnhookWindowsHookEx(hook);
-            }
-            break;
-        }
-        g_keyboardHook.store(hook, std::memory_order_release);
-        if (hook) {
-            g_hookInstalled.store(true, std::memory_order_release);
-            if (attempts > 1) {
-                Wh_Log(L"Keyboard hook installed on retry %u", attempts);
-            }
-            break;
-        }
-
-        Wh_Log(L"SetWindowsHookExW(WH_KEYBOARD_LL) failed: %lu (retry in %u ms)",
-               GetLastError(), delayMs);
-        if (delayMs >= 2000 && !loggedPersistentFailure) {
-            Wh_Log(L"Keyboard hook still not installed after %u attempts; "
-                   L"retrying every 2s. Safety timer covers Num Lock until then.",
-                   attempts);
-            loggedPersistentFailure = true;
-        }
-
-        if (!signaledReady && g_hookReadyEvent) {
-            SetEvent(g_hookReadyEvent);
-            signaledReady = true;
-        }
-
-        if (g_hookStopEvent) {
-            WaitForSingleObject(g_hookStopEvent, delayMs);
-        }
-        if (delayMs < 2000) {
-            delayMs *= 2;
-        }
-    }
-
-    if (!signaledReady && g_hookReadyEvent) {
+    if (g_hookReadyEvent) {
         SetEvent(g_hookReadyEvent);
     }
 
-    if (!g_keyboardHook.load(std::memory_order_acquire)) {
-        g_hookInstalled.store(false, std::memory_order_release);
-        g_hookThreadId.store(0, std::memory_order_release);
-        return 1;
-    }
-
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_APP_ENSURE_HOOK) {
+            TryInstallKeyboardHook();
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
     UninstallKeyboardHook();
-    g_hookModule.store(nullptr, std::memory_order_release);
     g_hookThreadId.store(0, std::memory_order_release);
     return 0;
 }
@@ -816,8 +808,7 @@ BOOL WhTool_ModInit() {
 
     g_workerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hookStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_workerReadyEvent || !g_hookReadyEvent || !g_hookStopEvent) {
+    if (!g_workerReadyEvent || !g_hookReadyEvent) {
         Wh_Log(L"CreateEventW failed: %lu", GetLastError());
         WhTool_ModUninit();
         return FALSE;
@@ -847,23 +838,14 @@ BOOL WhTool_ModInit() {
         Wh_Log(L"Hook thread did not become ready in time");
     }
 
-    if (g_workerReadyEvent) {
-        CloseHandle(g_workerReadyEvent);
-        g_workerReadyEvent = nullptr;
-    }
-    if (g_hookReadyEvent) {
-        CloseHandle(g_hookReadyEvent);
-        g_hookReadyEvent = nullptr;
-    }
-
     if (!g_workerHwnd.load(std::memory_order_acquire)) {
         Wh_Log(L"Worker window was not created");
         WhTool_ModUninit();
         return FALSE;
     }
 
-    if (!g_hookInstalled.load(std::memory_order_acquire)) {
-        Wh_Log(L"Keyboard hook not installed yet; retrying in the background");
+    if (!g_keyboardHook.load(std::memory_order_acquire)) {
+        Wh_Log(L"Keyboard hook not installed yet; safety timer will retry");
     }
 
     return TRUE;
@@ -878,11 +860,15 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
+void CloseEventHandle(HANDLE* event) {
+    if (*event) {
+        CloseHandle(*event);
+        *event = nullptr;
+    }
+}
+
 void WhTool_ModUninit() {
     g_hookQuit.store(true, std::memory_order_release);
-    if (g_hookStopEvent) {
-        SetEvent(g_hookStopEvent);
-    }
 
     // Unhook from this thread so a stuck hook callback cannot keep the
     // filter installed after disable. The hook thread's own unhook is then
@@ -894,12 +880,19 @@ void WhTool_ModUninit() {
         PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
     }
     if (g_hookThread) {
-        if (WaitForSingleObject(g_hookThread, 2000) != WAIT_OBJECT_0) {
+        const bool joined =
+            WaitForSingleObject(g_hookThread, 2000) == WAIT_OBJECT_0;
+        if (!joined) {
             Wh_Log(L"Hook thread did not exit in time; process exit will "
                    L"tear it down");
         }
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
+        if (joined) {
+            CloseEventHandle(&g_hookReadyEvent);
+        }
+    } else {
+        CloseEventHandle(&g_hookReadyEvent);
     }
 
     HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
@@ -913,25 +906,19 @@ void WhTool_ModUninit() {
     }
 
     if (g_workerThread) {
-        if (WaitForSingleObject(g_workerThread, 2000) != WAIT_OBJECT_0) {
+        const bool joined =
+            WaitForSingleObject(g_workerThread, 2000) == WAIT_OBJECT_0;
+        if (!joined) {
             Wh_Log(L"Worker thread did not exit in time; process exit will "
                    L"tear it down");
         }
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
-    }
-
-    if (g_workerReadyEvent) {
-        CloseHandle(g_workerReadyEvent);
-        g_workerReadyEvent = nullptr;
-    }
-    if (g_hookReadyEvent) {
-        CloseHandle(g_hookReadyEvent);
-        g_hookReadyEvent = nullptr;
-    }
-    if (g_hookStopEvent) {
-        CloseHandle(g_hookStopEvent);
-        g_hookStopEvent = nullptr;
+        if (joined) {
+            CloseEventHandle(&g_workerReadyEvent);
+        }
+    } else {
+        CloseEventHandle(&g_workerReadyEvent);
     }
 }
 
@@ -1053,8 +1040,8 @@ void Wh_ModAfterInit() {
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"",
-             currentProcessPath, WH_MOD_ID);
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
