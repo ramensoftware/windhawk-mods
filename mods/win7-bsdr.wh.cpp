@@ -93,6 +93,7 @@ settings. If you do not do this, it will silently fail to inject.
 #define WM_REMOVE_APP (WM_APP + 2)
 
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
+#define BSDR_CLOSE 1337
 
 #define RETURN_IF_FAILED(x) do { \
     HRESULT hr = (x); \
@@ -2025,8 +2026,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
             pHeader->biHeight == LONG_MIN ||
             pHeader->biPlanes != 1 ||
             pHeader->biBitCount != 32 ||
-            (pHeader->biCompression != BI_RGB &&
-            pHeader->biCompression != BI_BITFIELDS)) {
+            (pHeader->biCompression != BI_RGB && pHeader->biCompression != BI_BITFIELDS)) {
             Wh_Log(L"Image load error: invalid bitmap header");
             return LoadAlphaBitmap(resourceId, true);
         }
@@ -2034,9 +2034,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
 
     uint32_t width = static_cast<uint32_t>(pHeader->biWidth);
     uint32_t height = static_cast<uint32_t>(
-        pHeader->biHeight < 0
-            ? -static_cast<int64_t>(pHeader->biHeight)
-            : pHeader->biHeight
+        pHeader->biHeight < 0 ? -static_cast<int64_t>(pHeader->biHeight) : pHeader->biHeight
     );
 
     uint64_t bitsOffset = pHeader->biSize;
@@ -2046,8 +2044,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
         bitsOffset += 3 * sizeof(DWORD);
     }
 
-    uint64_t requiredSize =
-        static_cast<uint64_t>(width) * height * 4;
+    uint64_t requiredSize = static_cast<uint64_t>(width) * height * 4;
 
     if (hResource &&
         (bitsOffset > dwSize ||
@@ -2070,18 +2067,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
     HBITMAP hBitmap = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
 
     if (hBitmap && pBits) {
-        DWORD dwBitsOffset = pHeader->biSize;
-        if (pHeader->biCompression == BI_BITFIELDS) {
-            dwBitsOffset += 12;
-        }
-
-        if (hResource && (dwSize < dwBitsOffset || (DWORD)width * height * 4 > dwSize - dwBitsOffset)) {
-            Wh_Log(L"Image load error: invalid size");
-            DeleteObject(hBitmap);
-            return LoadAlphaBitmap(resourceId, true);
-        }
-
-        const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + dwBitsOffset;
+        const unsigned char* pSrc = static_cast<const unsigned char*>(pResourceData) + bitsOffset;
 
         if (isTopDown) {
             memcpy(pBits, pSrc, width * height * 4);
@@ -2961,7 +2947,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                     ExitProcess(0);
                 }
             }
-            PostMessageW(hBgWnd, WM_CLOSE, 0, 1337);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -2973,7 +2959,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return TRUE;
         case IDYES:
             Resolve(BlockedShutdownResolution_Force);
-            PostMessageW(hBgWnd, WM_CLOSE, 0, 1377);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
             return TRUE;
         case IDNO:
             ShowWindow(hWarningText, SW_HIDE);
@@ -3012,7 +2998,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
         int oldPos = scrollPos;
         int lineHeight = MulDiv(20, dpi, 96);
-        scrollPos -= MulDiv(delta * lineHeight, scrollLines, WHEEL_DELTA);
+        if (scrollLines == WHEEL_PAGESCROLL) {
+            scrollPos -= visibleHeight * (delta > 0 ? 1 : -1);
+        } else {
+            scrollPos -= MulDiv(delta * lineHeight, scrollLines, WHEEL_DELTA);
+        }
         if (scrollPos < 0) scrollPos = 0;
 
         int maxScroll = totalContentHeight - visibleHeight;
@@ -3047,7 +3037,15 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         case SB_PAGEUP: scrollPos -= MulDiv(100, dpi, 96); break;
         case SB_PAGEDOWN: scrollPos += MulDiv(100, dpi, 96); break;
         case SB_THUMBTRACK:
-        case SB_THUMBPOSITION: scrollPos = HIWORD(wParam); break;
+        case SB_THUMBPOSITION: {
+            SCROLLINFO si = {0};
+            si.cbSize = sizeof(si);
+            si.fMask = SIF_TRACKPOS;
+            if (GetScrollInfo(hScrollBar, SB_CTL, &si)) {
+                scrollPos = si.nTrackPos;
+            }
+            break;
+        }
         }
 
         if (scrollPos < 0) scrollPos = 0;
@@ -3060,7 +3058,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             si.cbSize = sizeof(SCROLLINFO);
             si.fMask = SIF_POS;
             si.nPos = scrollPos;
-            SetScrollInfo(hScrollBar, SB_CTL, &si, FALSE);
+            SetScrollInfo(hScrollBar, SB_CTL, &si, TRUE);
             SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOREDRAW);
             RedrawWindow(hAppList, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
         }
@@ -3162,7 +3160,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_CLOSE: {
-        if (lParam != 1337) {
+        if (lParam != BSDR_CLOSE) {
             // Deny Alt+F4 or other external window closes (like Windows 7)
             return 0;
         }
@@ -3294,7 +3292,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
                 if (result == WAIT_OBJECT_0) { // hStopEvent
                     if (hBgWnd && IsWindow(hBgWnd)) {
-                        SendMessageW(hBgWnd, WM_CLOSE, 0, 1337);
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
                     } else {
                         break;
                     }
@@ -3334,7 +3332,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                     }
 
                     if (hBgWnd && IsWindow(hBgWnd)) {
-                        SendMessageW(hBgWnd, WM_CLOSE, 0, 1337);
+                        SendMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
                     }
                     break;
                 }
