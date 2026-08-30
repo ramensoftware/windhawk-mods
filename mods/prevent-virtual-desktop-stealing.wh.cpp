@@ -24,7 +24,7 @@ window to you instead.
 
 ![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif)
 
-If you haven't seen the problem before, try this: 
+If you haven't seen the problem before, try this:
 
 - Open Windhawk on one virtual desktop.
 - Switch to another desktop.
@@ -47,8 +47,7 @@ Animation**.
   creating the window that was actually requested on the current desktop. The
   mod uses a short settling period, and only waits longer when the process
   exposes a stable package/app identity that makes that extra latency
-worthwhile. A newly-added same-process view is still independently verified to
-belong to the current desktop before it can cancel a pending move.
+  worthwhile. 
 */
 // ==/WindhawkModReadme==
 
@@ -1263,6 +1262,12 @@ struct RescueRequest {
 
     IApplicationView* viewIdentity = nullptr;  // opaque, never dereferenced
     HWND hwnd = nullptr;
+
+    // Win32 foreground state observed while the FVP-owned switch is still on
+    // the hook stack. The generic foreground-settling guard is only allowed to
+    // cancel if a *different* source-desktop window becomes foreground later.
+    HWND foregroundAtQueue = nullptr;
+
     DWORD pid = 0;
     DWORD tid = 0;
 
@@ -1564,8 +1569,7 @@ static bool WaitForRescueSettling(WorkerComState* state,
                                                : 0;
 
             const bool insideSupersessionWindow =
-                request.extendedSupersessionEligible && observedAt != 0 &&
-                observedElapsed <= kRescueViewSupersessionMs;
+                observedAt != 0 && observedElapsed <= waitWindow;
 
             if (insideSupersessionWindow &&
                 ValidateObservedSuperseder(state, request, observedViewIdentity,
@@ -1584,8 +1588,7 @@ static bool WaitForRescueSettling(WorkerComState* state,
                 L"hwnd=%p observedElapsed=%llu ms "
                 L"window=%lu ms",
                 static_cast<unsigned long long>(request.sequence), observedHwnd,
-                static_cast<unsigned long long>(observedElapsed),
-                kRescueViewSupersessionMs);
+                static_cast<unsigned long long>(observedElapsed), waitWindow);
         }
 
         const ULONGLONG now = GetTickCount64();
@@ -1630,9 +1633,19 @@ static bool WaitForRescueSettling(WorkerComState* state,
 static bool IsForegroundReplacementOnSourceDesktop(WorkerComState* state,
                                                    const RescueRequest& request,
                                                    HWND* replacementHwnd) {
+    // If the queue-time Win32 foreground couldn't be distinguished from the
+    // remote activation target, there is no positive baseline from which to
+    // infer that a later foreground window is a replacement. Abstain rather
+    // than cancelling a rescue on ambiguous state.
+    if (!request.foregroundAtQueue ||
+        request.foregroundAtQueue == request.hwnd) {
+        return false;
+    }
+
     HWND foreground = GetForegroundWindow();
 
     if (!foreground || foreground == request.hwnd ||
+        foreground == request.foregroundAtQueue ||
         !IsRescueCandidate(foreground)) {
         return false;
     }
@@ -1747,8 +1760,9 @@ static void ProcessRescueRequest(WorkerComState* state,
 
     // Keep a short generic foreground-settling period for every app. Processes
     // for which the worker established a stable package/AUMID identity get the
-    // longer event-driven supersession window. Identity controls latency only;
-    // same-PID/new-view/current-desktop checks decide whether to cancel.
+    // longer event-driven supersession window. Identity chooses only how long
+    // this request listens; same-PID/new-view/current-desktop checks decide
+    // whether an observation inside that deadline can cancel.
     if (!WaitForRescueSettling(state, request)) {
         return;
     }
@@ -1899,7 +1913,7 @@ static void ProcessRescueRequest(WorkerComState* state,
     if (IsForegroundReplacementOnSourceDesktop(state, request,
                                                &replacementHwnd)) {
         Wh_Log(
-            L"[#%llu] Abort: local replacement appeared "
+            L"[#%llu] Abort: new local foreground appeared "
             L"before rescue commit hwnd=%p",
             static_cast<unsigned long long>(request.sequence), replacementHwnd);
 
@@ -2099,6 +2113,7 @@ static bool QueueRescue(IApplicationView* viewIdentity,
     request.queuedAt = GetTickCount64();
     request.viewIdentity = viewIdentity;
     request.hwnd = hwnd;
+    request.foregroundAtQueue = GetForegroundWindow();
     request.pid = pid;
     request.tid = tid;
     request.sourceDesktopId = sourceDesktopId;
@@ -3046,8 +3061,8 @@ BOOL Wh_ModInit() {
         L"primary-taskbar observer");
 
     // @include explorer.exe can match separate folder processes. Keep those
-    // inert: don't load taskbar.dll or twinui.pcshell.dll until this PID proves
-    // it owns the shell's primary taskbar.
+    // inert: don't load twinui.pcshell.dll until this PID proves it owns the
+    // shell's primary taskbar.
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                         &g_createWindowExWOriginal)) {
         Wh_Log(L"Failed to hook CreateWindowExW");
