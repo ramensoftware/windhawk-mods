@@ -4,6 +4,7 @@
 // @description     Compact Mode; Hide Gallery, Home, OneDrive, This PC, Network.
 // @version         1.0.2
 // @author          Padl0
+// @github          https://github.com/sukapadl0
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lgdi32 -lshlwapi -lshell32
@@ -18,6 +19,9 @@
 
 # Preview
 ![Preview](https://raw.githubusercontent.com/sukapadl0/Hlam/76bd7fc0dcd76366d7e2218450873df8863b5a51/hlam1.gif)
+
+## Mod authorship
+The submitter, with AI assistance
 */
 // ==/WindhawkModReadme==
 
