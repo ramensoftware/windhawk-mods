@@ -547,3 +547,4 @@ void Wh_ModBeforeUninit() {
     g_attachedParentWindows.clear();
     g_seenTreeWindows.clear();
 }
+
