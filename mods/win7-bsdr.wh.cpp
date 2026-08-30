@@ -1730,7 +1730,7 @@ void Resolve(BlockedShutdownResolution resolution) {
     {
         std::lock_guard lock(g_resolvedMutex);
         if (g_resolvedValue != BlockedShutdownResolution_None) {
-            return;  // already resolved
+            return; // already resolved
         }
         g_wasClicked = true;
         g_resolvedValue = resolution;
@@ -1819,7 +1819,7 @@ namespace CustomBSDR {
     static std::vector<AppTile> appTiles;
     [[clang::no_destroy]] static std::optional<std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>>> pendingApps{std::in_place};
     std::mutex pendingAppsMutex;
-};
+}
 #pragma endregion logoncontroller.h and CustomBSDR.h
 
 #pragma region wicutil.cpp
@@ -2905,7 +2905,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             GetClientRect(hWndDlg, &rcDlg);
             HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
             FillRect(hdc, &rcDlg, hBrush);
-            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         }
         break;
@@ -2913,11 +2913,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
         if (pDIS->CtlID == IDC_BSDR_SEPARATOR_TOP || pDIS->CtlID == IDC_BSDR_SEPARATOR_BOTTOM) {
             DrawSeparator(pDIS);
-            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         } else if (pDIS->CtlType == ODT_BUTTON) {
             DrawButton(pDIS->hDC, pDIS);
-            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE); 
+            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         }
         break;
@@ -3117,7 +3117,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             ReleaseDC(nullptr, hDC);
 
             separatorBitmap = LoadAlphaBitmap(IDB_BSDR_SEPARATOR);
-            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL); 
+            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL);
             btnHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_HOVER);
             btnPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_PRESSED);
             btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
