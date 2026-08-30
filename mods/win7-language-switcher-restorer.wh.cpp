@@ -2615,6 +2615,26 @@ static bool IsExplorerProcess() {
     return _wcsicmp(name, L"explorer.exe") == 0;
 }
 
+static DWORD GetTrayOwnerPid() {
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!tray) tray = FindWindowW(L"Progman", nullptr);
+    DWORD pid = 0;
+    if (tray) GetWindowThreadProcessId(tray, &pid);
+    return pid;
+}
+
+// Only the explorer that owns the taskbar can run this mod: the input
+// indicator, its flyout and the tray toolbars all live in that process,
+// and a second explorer instance in the same session (e.g. a stale one
+// still running after a taskbar restart) must not install its own
+// low-level keyboard/mouse hooks — they would double-handle every
+// Win+Space / Alt+Shift / click.
+static bool IsMainExplorerShell() {
+    DWORD owner = GetTrayOwnerPid();
+    if (!owner) return true;
+    return owner == GetCurrentProcessId();
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"=== Win78LangSwitcher: Wh_ModInit v1.0.1 ===");
 
@@ -2625,6 +2645,15 @@ BOOL Wh_ModInit() {
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     if (!IsExplorerProcess()) {
+        g_Initialized = TRUE;
+        return TRUE;
+    }
+
+    const DWORD dwTrayOwner = GetTrayOwnerPid();
+    const bool mainShell = IsMainExplorerShell();
+    Wh_Log(L"Win78LangSwitcher: pid=%lu trayOwner=%lu mainShell=%d", GetCurrentProcessId(), dwTrayOwner, mainShell ? 1 : 0);
+    if (!mainShell) {
+        Wh_Log(L"Win78LangSwitcher: secondary explorer, hooks not installed");
         g_Initialized = TRUE;
         return TRUE;
     }
@@ -2663,7 +2692,13 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    InstallTrayInterceptionInternal();
+    // Guard against a stale/secondary explorer: InstallTrayInterceptionInternal
+    // would otherwise subclass the taskbar tree owned by another explorer
+    // process, with a WNDPROC pointing into this image — fatal for the other
+    // process when this mod is unloaded.
+    if (IsExplorerProcess() && IsMainExplorerShell()) {
+        InstallTrayInterceptionInternal();
+    }
 }
 
 void Wh_ModBeforeUninit() {
