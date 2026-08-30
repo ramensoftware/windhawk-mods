@@ -1,20 +1,40 @@
 // ==WindhawkMod==
 // @id              ultra-smooth-cursor-motion-blur
 // @name            Ultra Smooth Cursor Motion Blur
-// @description     Buttery directional motion blur of the real mouse pointer
-// @version         4.0.0
-// @author          Grok
+// @description     Buttery directional motion blur trail for the mouse pointer using stamp layering
+// @version         1.0.0
+// @author          TejaojasHub
 // @license         MIT
-// @include         windhawk.exe
-// @compilerOptions -std=c++17 -ld2d1 -lole32 -lgdi32 -lshell32
+// @include         *
+// @compilerOptions -std=c++17 -ld2d1 -lole32 -lgdi32 -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Ultra Smooth Cursor Motion Blur
+
+This mod renders a smooth, high-refresh directional motion blur trail behind your mouse pointer. It tracks mouse movement precision metrics to stamp semi-transparent pointer paths across your display screen.
+
+### Credits
+Derived from architectural components originally built by TheatriChris in the base cursor-motion-blur repository. Optimized and cleaned up with help from AI assistance.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+// @setting         shutter_ms
+// @type            integer
+// @default         58
+// @description     Shutter time in milliseconds for the blur trail length (16-160).
+//
+// @setting         opacity
+// @type            integer
+// @default         78
+// @description     Opacity percentage of the blur trail stamps (1-100).
+//
+// @setting         smoothness
+// @type            integer
+// @default         3
+// @description     Path smoothing sub-steps calculation (0-4).
 // ==/WindhawkModSettings==
 
 #include <windows.h>
