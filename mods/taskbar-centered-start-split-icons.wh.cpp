@@ -75,7 +75,19 @@ then classified the same way as a pinned-but-not-running one instead.
   Arrange call wins for that pass. This mod's `systemButtonsPlacement:
   far-left` setting covers the same "keep everything else out of Start's
   way" goal that mod's `otherSystemButtonsOnTheLeft` option does, so
-  there's no reason to run both together.
+  there's no reason to run both together. This mod is intentionally scoped
+  to true screen-center plus position-based icon splitting specifically -
+  not a general Start-position picker - so this conflict is a documented
+  incompatibility to avoid rather than something planned to be resolved by
+  merging the two mods or their positioning logic.
+- **The Start menu itself doesn't follow the repositioned Start button.**
+  This mod only moves the Start *button* - nothing decides where the Start
+  *menu* opens. With the taskbar's own "Taskbar alignment" set to
+  "Center", the menu happens to open near screen-center anyway since
+  that's where Windows expects it by default, but with alignment set to
+  "Left", the button sits at true center while the menu still opens at the
+  left edge. There's no exposed way to move the menu's own anchor point
+  the way this mod moves the button.
 - **A very crowded side compresses instead of overflowing cleanly.** If
   enough app icons pile up on one side that they'd run into the system
   tray/clock on the right (or, in "far left" placement, into Search/Task
@@ -113,19 +125,26 @@ then classified the same way as a pinned-but-not-running one instead.
 - The "resolve which HWND a taskbar button represents" step reuses a
   technique from other taskbar-reordering mods (synchronously reporting a
   sentinel "click" to the taskbar's internal click handler, which is
-  intercepted before it does anything, to read back the window handle). It
-  runs on a periodic timer rather than inline during layout, and Arrange
-  only ever reads whatever the timer has already cached - running it
-  synchronously from inside the taskbar's own layout pass was the
+  intercepted before it does anything, to read back the window handle) -
+  but unlike those mods, which only ever dispatch it from an actual user
+  gesture on one specific button, this mod dispatches it unattended, on
+  its own background timer, against every button it hasn't resolved yet.
+  It runs on a periodic timer rather than inline during layout, and
+  Arrange only ever reads whatever the timer has already cached - running
+  it synchronously from inside the taskbar's own layout pass was the
   confirmed cause of an explorer.exe crash (specifically when Windows'
   "show taskbar apps on" setting is anything other than "All taskbars",
   since that's when a window moving across monitors structurally adds/
   removes taskbar buttons rather than just repositioning them). As a
   further safeguard, the very first such probe of a session is held back
   until a real (non-sentinel) click has been seen passing through the same
-  interception point - so a running app's icon may briefly show on its
-  default side, rather than by window position, until you click any
-  taskbar button once.
+  interception point, and any single miss after that latches this mod's
+  probing off entirely on that path (see `Wh_Log` for which) - so a
+  running app's icon may briefly show on its default side, rather than by
+  window position, until you click any taskbar button once, and if a
+  future Windows update ever changes how that interception works, the
+  worst case is icons freezing on their default side rather than the mod
+  silently clicking things on its own.
 - **Taskbar buttons can disappear when a display is deactivated** (via
   Settings, unplugging, or a third-party display on/off tool) - if
   "Taskbar behaviors > When using multiple displays, show my taskbar apps
@@ -449,8 +468,11 @@ thread_local bool g_inTaskbarArrangeOverride;
 // RecomputeLayoutPlan does its entire XAML-tree traversal once per
 // ArrangeOverride pass, up front, writing every element's target X into
 // g_lastArrangedX - IUIElement_Arrange_Hook is then a pure map lookup.
-// Never traverse the tree from inside a nested Arrange call instead (see
-// RATIONALE.md).
+// Never traverse the tree from inside a nested Arrange call instead -
+// STATUS_STOWED_EXCEPTION was observed doing that when a window moves
+// across monitors while Windows' "show taskbar apps on" setting isn't
+// "All taskbars," since that structurally adds/removes taskbar buttons
+// mid-traversal. See RATIONALE.md.
 
 // Taskbar window handle, resolved by EnsureTaskbarWnd. atomic: written on
 // the taskbar thread (or Wh_ModAfterInit's thread at startup), read from
@@ -468,7 +490,6 @@ std::atomic<HWND> g_hTaskbarWnd;
 std::atomic<bool> g_taskbarWndSubclassed;
 
 HWINEVENTHOOK g_locationChangeHook;
-HWINEVENTHOOK g_showEventHook;
 std::atomic<int> g_winEventRawCount;
 std::atomic<int> g_winEventInvalidateCount;
 std::atomic<int> g_invalidateSkippedReentrant;
@@ -487,9 +508,11 @@ UINT_PTR g_buttonHwndResolveTimerId;
 // invalidate for WinEventProc's own throttle to see.
 ULONGLONG g_lastDragFollowInvalidate;
 
-// Leading-edge throttle for EVENT_OBJECT_SHOW, mirroring the
-// LOCATIONCHANGE throttle above.
-ULONGLONG g_lastShowEventArm;
+// Leading-edge throttle for TaskListButton::UpdateVisualStates - see its
+// hook. Touched exclusively from the taskbar/XAML UI thread that hook runs
+// on, unlike every other throttle variable above (which lives on the
+// dedicated WinEventHook thread instead).
+ULONGLONG g_lastUpdateVisualStatesArm;
 
 // ============================================================================
 // Generic taskbar/XAML helpers
@@ -716,6 +739,29 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 // and per-app-volume-control mods, purely to find where a window is.
 // ============================================================================
 
+using TaskListButton_get_IsRunning_t = HRESULT(WINAPI*)(void* pThis,
+                                                         bool* running);
+TaskListButton_get_IsRunning_t TaskListButton_get_IsRunning_Original;
+
+// Cheap, direct read of the XAML button's own running-state - lets
+// ResolveHwndFromTaskListButton skip the whole click-sentinel chain
+// (TryGetItemFromContainer/IsMultiWindow/ITaskGroup::IsRunning and friends)
+// for a pinned-but-not-running button, rather than paying that chain's
+// full cost every retry only to reach the same answer. Optional (see
+// HookTaskbarViewDllSymbols); defaults to "assume running" - i.e. don't
+// skip anything - when the symbol hasn't resolved, which is exactly this
+// mod's behavior before this optimization existed. See RATIONALE.md.
+bool TaskListButtonIsRunning(FrameworkElement element) {
+    if (!TaskListButton_get_IsRunning_Original) {
+        return true;
+    }
+    bool isRunning = false;
+    TaskListButton_get_IsRunning_Original(
+        winrt::get_abi(element.as<winrt::Windows::Foundation::IUnknown>()),
+        &isRunning);
+    return isRunning;
+}
+
 void* CImmersiveTaskItem_vftable;
 
 using CWindowTaskItem_GetWindow_t = HWND(WINAPI*)(void* pThis);
@@ -743,18 +789,20 @@ thread_local void* g_clickSentinel_TaskGroup;
 //
 // Latched per path (item vs. group), not one shared flag, since the two
 // paths reach CTaskListWnd::HandleClick through different internal call
-// chains and a Windows update could break just one. Requires
-// kClickSentinelMissesBeforeBroken cumulative misses (the counter is never
-// reset) before latching "broken" (not just one - see
-// NoteUnconfirmedClickSentinelMiss for why), and that bound only holds
-// pre-confirmation - see RATIONALE.md.
+// chains and a Windows update could break just one. This latch only ever
+// applies pre-confirmation (see NoteUnconfirmedClickSentinelMiss) - with
+// zero evidence yet that interception works, a single miss is reason
+// enough to stop risking real clicks; the asymmetry (a false latch costs
+// position tracking, a false negative activates/minimizes windows the
+// user didn't touch) favors failing closed immediately rather than
+// tolerating more misses. See RATIONALE.md.
 std::atomic<bool> g_clickSentinelItemConfirmed;
 std::atomic<bool> g_clickSentinelItemBroken;
 std::atomic<int> g_clickSentinelItemMisses;
 std::atomic<bool> g_clickSentinelGroupConfirmed;
 std::atomic<bool> g_clickSentinelGroupBroken;
 std::atomic<int> g_clickSentinelGroupMisses;
-constexpr int kClickSentinelMissesBeforeBroken = 3;
+constexpr int kClickSentinelMissesBeforeBroken = 1;
 
 // Which path's probe is in flight on this thread - lets
 // CTaskListWnd_HandleClick_Hook below credit the right path's *Confirmed
@@ -795,9 +843,12 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
 }
 
 // Called right after a real ReportClicked probe comes back with no
-// capture - not proof the interception is broken by itself (the window
-// could have closed mid-probe, etc.), hence requiring a few misses rather
-// than latching on the first one.
+// capture. Latches "broken" on the first pre-confirmation miss (see
+// kClickSentinelMissesBeforeBroken's own comment for why); a no-longer-
+// pre-confirmation miss (the confirmed check below) is a no-op instead of
+// ever latching, since a miss after interception has already proven
+// itself once is far more likely innocent (window closed mid-probe, etc.)
+// than evidence of a break.
 void NoteUnconfirmedClickSentinelMiss(bool isGroupPath) {
     std::atomic<bool>& confirmed =
         isGroupPath ? g_clickSentinelGroupConfirmed : g_clickSentinelItemConfirmed;
@@ -1019,8 +1070,14 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element,
     }
 
     // Validated up front (memoized, side-effect-free) rather than only
-    // after dispatching a click - see RATIONALE.md for why that ordering
-    // matters.
+    // after dispatching a click: without this, a build where
+    // CTaskGroup::GetNumItems stopped being the trivial form this offset
+    // probe relies on would still dispatch a click on every single group
+    // resolution attempt (the sentinel latch never trips, since
+    // interception itself is unaffected - it's GetTaskItemsArray's own
+    // bounds check further down that always fails instead), turning every
+    // attempt into a pure-waste ReportClicked with nothing to bound it.
+    // See RATIONALE.md.
     size_t taskItemsOffset = GetTaskItemsArrayOffset();
     if (taskItemsOffset == 0 || taskItemsOffset >= kTaskItemsArrayProbeSize) {
         g_resolveStats.failure++;
@@ -1096,7 +1153,20 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element,
 }
 
 HWND ResolveHwndFromTaskListButton(FrameworkElement element,
-                                   bool& outClickDispatched) {
+                                   bool& outClickDispatched,
+                                   bool& outNotRunning) {
+    outNotRunning = false;
+
+    // Cheapest possible check first: skips the entire click-sentinel chain
+    // below (both paths) for a button that isn't running right now, rather
+    // than discovering that only after running it. See
+    // TaskListButtonIsRunning.
+    if (!TaskListButtonIsRunning(element)) {
+        outClickDispatched = false;
+        outNotRunning = true;
+        return nullptr;
+    }
+
     // Each path bails out once its own sentinel is known broken, rather
     // than dispatching more genuine clicks - see g_clickSentinelItemBroken/
     // g_clickSentinelGroupBroken.
@@ -1132,10 +1202,17 @@ struct ButtonHwndCacheEntry {
     std::wstring identity;
     ULONGLONG lastAttempt = 0;
     int consecutiveFailures = 0;
+    // Set when the last resolve attempt bailed via TaskListButtonIsRunning's
+    // cheap pre-check specifically, rather than any other bail-out reason.
+    // NextResolveDelayMs treats this the same as a resolved or terminal
+    // entry (idle cadence, not the fast backoff-0 schedule), since a
+    // confirmed-not-running button won't change state until
+    // TaskListButton::UpdateVisualStates says otherwise. See RATIONALE.md.
+    bool notRunning = false;
 };
 std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 
-// Set by WinEventProc's EVENT_OBJECT_SHOW branch and the ArrangeOverride
+// Set by TaskListButton::UpdateVisualStates' hook and the ArrangeOverride
 // hook's count-change check to make the next resolve pass ignore a
 // negatively-cached entry's backoff - but only up to
 // kMaxForcedRetryFailures consecutive failures each (see RATIONALE.md for
@@ -1187,21 +1264,25 @@ bool ResolveAndCacheButtonHwnd(FrameworkElement element,
     }
 
     bool clickDispatched = false;
-    HWND hwnd = ResolveHwndFromTaskListButton(element, clickDispatched);
+    bool notRunning = false;
+    HWND hwnd =
+        ResolveHwndFromTaskListButton(element, clickDispatched, notRunning);
     // Only a genuinely dispatched-and-missed click counts toward
     // kMaxResolveFailures' terminal cap - a bail-out before ever
     // dispatching one (not yet confirmed reachable, a view-model lookup
     // miss, a not-currently-running group) isn't a click-safety risk and
     // must not count against a button that may resolve fine later. See
     // RATIONALE.md. lastAttempt still advances either way, so a
-    // persistently-bailing-out entry keeps retrying at ResolveBackoffMs(0)
-    // - a cheap, indefinite cadence - rather than escalating toward the cap.
+    // persistently-bailing-out entry keeps retrying at ResolveBackoffMs(0) -
+    // a cheap, indefinite cadence - except a confirmed-not-running one,
+    // which NextResolveDelayMs instead idles (see ButtonHwndCacheEntry).
     if (hwnd) {
         failures = 0;
     } else if (clickDispatched) {
         failures = failures + 1;
     }
-    g_buttonHwndCache[key] = {hwnd, identity, GetTickCount64(), failures};
+    g_buttonHwndCache[key] = {hwnd, identity, GetTickCount64(), failures,
+                              notRunning};
     return hwnd != previous;
 }
 
@@ -1290,6 +1371,11 @@ WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
 // Taskbar buttons expose their app's display name as an accessibility
 // property (used by screen readers); reused here as a stable identifier
 // that works even for pinned-but-not-running apps, which have no HWND.
+// Blind spot: with "Combine taskbar buttons" set to "Never", two windows
+// of the same app produce two TaskListButtons with this same name, so an
+// ItemsRepeater rebind between those two specifically wouldn't be caught
+// by an identity mismatch - this only catches a rebind onto a
+// differently-named button. See RATIONALE.md.
 std::wstring GetButtonAccessibleName(FrameworkElement element) {
     auto name = Automation::AutomationProperties::GetName(element);
     if (!name.empty()) {
@@ -1416,15 +1502,44 @@ double FullFootprintWidth(FrameworkElement element) {
 // hidden/shown, and DesiredSize() understates its true width) or task list
 // buttons (this file's hottest path, no evidence of the same bug) - see
 // RATIONALE.md.
+//
+// Persists across calls (never rebuilt/pruned) rather than being folded
+// into one of the per-pass plan maps elsewhere in this file - at most 3
+// real elements ever populate it (Search/Task View/Widgets), so a stale
+// entry surviving a recreate costs nothing, and it specifically needs to
+// outlive a single pass to answer the question below.
+std::unordered_map<void*, double> g_lastSystemButtonContentWidth;
 double SystemButtonContentWidth(FrameworkElement element) {
+    double contentWidth = element.ActualWidth();
     if (Media::VisualTreeHelper::GetChildrenCount(element) > 0) {
         auto child = Media::VisualTreeHelper::GetChild(element, 0)
                          .try_as<FrameworkElement>();
         if (child) {
-            return child.DesiredSize().Width;
+            contentWidth = child.DesiredSize().Width;
         }
     }
-    return element.ActualWidth();
+
+    // element.ActualWidth() (the OUTER element, not the content child
+    // above) reflects the previous Arrange pass and is 0 for one pass
+    // right after the element first appears - the same race Start and
+    // task list buttons already guard against elsewhere in this file. In
+    // that same window the content child usually hasn't been measured
+    // yet either, so its DesiredSize reads 0 even though the button will
+    // end up with real content - without this, the reserved gap next to
+    // Start would collapse to 0 for that one frame. Once the outer
+    // element has gone through a real Arrange pass (ActualWidth() > 0), a
+    // content width of 0 is trustworthy - that's this function's only
+    // signal for a genuine show/hide toggle (see this function's own
+    // comment above), which has to keep working live, so it must NOT be
+    // masked by a "last known good width" fallback the way this one is
+    // for the unmeasured case. See RATIONALE.md.
+    void* key = winrt::get_abi(element);
+    if (contentWidth == 0 && element.ActualWidth() == 0) {
+        auto it = g_lastSystemButtonContentWidth.find(key);
+        return it != g_lastSystemButtonContentWidth.end() ? it->second : 0;
+    }
+    g_lastSystemButtonContentWidth[key] = contentWidth;
+    return contentWidth;
 }
 
 // Same margin-inclusive shape as FullFootprintWidth, for Search/Task
@@ -1511,8 +1626,12 @@ double ComputeSystemButtonX(const std::vector<ChildInfo>& childInfos,
     // Sums every other system button's footprint that appears earlier than
     // targetElement in taskbar order - tracks whatever order the taskbar
     // itself presents these in, rather than a fixed Search/TaskView/Widgets
-    // table, so this stays correct even if a build ever surfaces more than
-    // one of a given button type. See RATIONALE.md.
+    // rank table (this replaced one): a fixed table assumes at most one
+    // instance of each SystemButton value ever exists, so two elements
+    // Windows both classifies the same way (e.g. two
+    // Taskbar.TaskbarExtensionElements) would get the same rank, compute
+    // the same X, and render on top of each other. This degrades
+    // gracefully instead if that assumption ever breaks. See RATIONALE.md.
     double widthBefore = 0;
     for (auto& info : childInfos) {
         if (info.element == targetElement) {
@@ -1590,7 +1709,8 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
                          double startCenterX,
                          double leftBoundLocal,
                          double rightBoundLocal,
-                         std::unordered_map<void*, double>& outPlan) {
+                         std::unordered_map<void*, double>& outPlan,
+                         std::unordered_map<void*, double>& outWidths) {
     std::vector<TaskListPlanEntry> entries;
     for (int i = 0; i < (int)children.size(); i++) {
         if (IsTaskListButton(children[i])) {
@@ -1698,20 +1818,28 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
     // icon's edge lands exactly at leftInnerX/rightInnerX regardless of
     // scale - only `x` itself advances by the scaled amount. A
     // just-realized button's ActualWidth() is 0 for one pass (Margin
-    // isn't, so entry->width alone isn't a reliable zero-width signal -
-    // see RATIONALE.md); skipping its outPlan entry then avoids
-    // stacking it on its neighbor for that one frame.
+    // isn't, so entry->width alone isn't a reliable zero-width signal);
+    // skipping its outPlan entry then avoids stacking it on its neighbor
+    // for that one frame, falling through to native positioning instead -
+    // safe since it's then also missing from g_lastArrangedX's coverage,
+    // so RecomputeLayoutPlan's own staleness check forces a real recompute
+    // the very next pass once its real width is available. See
+    // RATIONALE.md.
     double x = leftInnerX;
     for (auto* entry : left) {
         if (entry->element.ActualWidth() > 0) {
-            outPlan[winrt::get_abi(entry->element)] = x - entry->width;
+            void* key = winrt::get_abi(entry->element);
+            outPlan[key] = x - entry->width;
+            outWidths[key] = entry->width;
         }
         x -= entry->width * leftScale;
     }
     x = rightInnerX;
     for (auto* entry : right) {
         if (entry->element.ActualWidth() > 0) {
-            outPlan[winrt::get_abi(entry->element)] = x;
+            void* key = winrt::get_abi(entry->element);
+            outPlan[key] = x;
+            outWidths[key] = entry->width;
         }
         x += entry->width * rightScale;
     }
@@ -1722,8 +1850,9 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
 // ============================================================================
 
 // Defined later (Live drag-follow section). Only ever marks the taskbar's
-// layout dirty - never forces a synchronous UpdateLayout() (see
-// RATIONALE.md).
+// layout dirty - never forces a synchronous UpdateLayout() (a forced call
+// from a nested callback reenters WinUI layout and raises
+// STATUS_STOWED_EXCEPTION; see its own definition and RATIONALE.md).
 void InvalidateTaskbarLayout();
 
 // Idle re-check cadence once every cached button is resolved - keeps
@@ -1741,7 +1870,12 @@ constexpr DWORD kEnumerationFailedRetryMs = 1000;
 void StartWinEventHook();
 
 // Defined later (Mod lifecycle section); lets a live trackWindowPositions
-// toggle stop the WinEventHook thread reversibly - see RATIONALE.md.
+// toggle stop the WinEventHook thread reversibly. A separate function from
+// StopWinEventHook specifically because that one also sets a permanent,
+// one-way latch meant only for mod teardown - reusing it here would have
+// silently bricked the setting after the first toggle-off, since turning
+// it back on would then refuse to start (caught during the user's own live
+// testing). See RATIONALE.md.
 void StopWinEventHookForToggle();
 
 // Defined later (Mod lifecycle section); lets the ArrangeOverride hook
@@ -1764,12 +1898,27 @@ void ApplyPendingSettingsIfAny();
 
 // Resolves g_hTaskbarWnd and installs the taskbar-window subclass,
 // self-healing on every ArrangeOverride pass rather than a one-shot
-// Wh_ModAfterInit lookup - see RATIONALE.md for why both parts need to
-// keep retrying rather than running once.
+// Wh_ModAfterInit lookup. Two independent reasons both parts need to keep
+// retrying rather than running once: a fresh-boot race where Windhawk
+// injects before Shell_TrayWnd exists yet would otherwise leave
+// g_hTaskbarWnd permanently null, and a rare SetWindowSubclassFromAnyThread
+// failure would otherwise permanently disable drag-follow/HWND-resolution/
+// live-settings for the rest of the process (core centering/splitting
+// keeps working either way, since that's computed synchronously). See
+// RATIONALE.md.
 HWND EnsureTaskbarWnd() {
+    // Snapshot once, per g_hTaskbarWnd's own comment - every read below,
+    // including the final return, agrees with whichever writes this same
+    // call already made, rather than each re-reading the atomic
+    // independently (this function is g_hTaskbarWnd's sole writer, so
+    // that's benign today, but the snapshot keeps the code matching the
+    // contract the variable's own comment states).
+    HWND hTaskbarWnd = g_hTaskbarWnd;
+
     // Shell_TrayWnd can in principle be recreated without explorer.exe
     // restarting. Cheap enough to check unconditionally every pass.
-    if (g_hTaskbarWnd && !IsWindow(g_hTaskbarWnd)) {
+    if (hTaskbarWnd && !IsWindow(hTaskbarWnd)) {
+        hTaskbarWnd = nullptr;
         g_hTaskbarWnd = nullptr;
         // comctl32 tears the old subclass down on WM_NCDESTROY already -
         // this just keeps the flag in step so a fresh install is attempted
@@ -1777,18 +1926,19 @@ HWND EnsureTaskbarWnd() {
         g_taskbarWndSubclassed = false;
     }
 
-    if (!g_hTaskbarWnd) {
+    if (!hTaskbarWnd) {
         if (g_unloading) {
             // Guards against a pass landing here after Wh_ModBeforeUninit
             // already ran, with no teardown left to stop a newly-created
             // WinEventHook thread.
             return nullptr;
         }
-        g_hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-        if (!g_hTaskbarWnd) {
+        hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+        if (!hTaskbarWnd) {
             return nullptr;
         }
-        Wh_Log(L"Resolved taskbar window: %p", (HWND)g_hTaskbarWnd);
+        g_hTaskbarWnd = hTaskbarWnd;
+        Wh_Log(L"Resolved taskbar window: %p", hTaskbarWnd);
         // Starting this thread is what turns on window-position tracking
         // at all - see trackWindowPositions' own settings description.
         // Only checked here at initial resolve, not on every call; a live
@@ -1804,23 +1954,29 @@ HWND EnsureTaskbarWnd() {
     }
 
     // Retried on every call until it succeeds, not just the pass that
-    // first resolves g_hTaskbarWnd above - see RATIONALE.md for why that
-    // matters. Cheap on the common ArrangeOverride call path, since that
+    // first resolves g_hTaskbarWnd above (see this function's own comment
+    // for why). Cheap on the common ArrangeOverride call path, since that
     // already runs on the taskbar's own thread and
     // SetWindowSubclassFromAnyThread takes its same-thread fast path there
     // (the Wh_ModAfterInit call site runs on Windhawk's own thread instead,
     // so it takes the real cross-thread marshal, but only once at startup).
     if (!g_taskbarWndSubclassed && !g_unloading &&
         WindhawkUtils::SetWindowSubclassFromAnyThread(
-            g_hTaskbarWnd, TaskbarWndSubclassProc, 0)) {
+            hTaskbarWnd, TaskbarWndSubclassProc, 0)) {
         g_taskbarWndSubclassed = true;
 
         // Undo immediately if Wh_ModBeforeUninit's removal pass already
-        // ran with the subclass not yet installed - see RATIONALE.md for
-        // the crash this closes.
+        // ran with the subclass not yet installed (reachable right after a
+        // Shell_TrayWnd recreate, or a fresh-boot race, catches
+        // EnsureTaskbarWnd still resolving as unload begins) - that
+        // removal pass only ever runs once, so a subclass installed here
+        // afterward would stay wired into Shell_TrayWnd with no later
+        // removal call, and Windhawk unmaps this module's code shortly
+        // after Wh_ModUninit returns - a use-after-free the next time that
+        // window procedure runs. See RATIONALE.md.
         if (g_unloading && g_taskbarWndSubclassed.exchange(false)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                g_hTaskbarWnd, TaskbarWndSubclassProc);
+                hTaskbarWnd, TaskbarWndSubclassProc);
         } else {
             // Kicks the resolve timer and a relayout awake - needed since
             // nothing else restarts them once a subclass install has
@@ -1833,7 +1989,7 @@ HWND EnsureTaskbarWnd() {
         }
     }
 
-    return g_hTaskbarWnd;
+    return hTaskbarWnd;
 }
 
 FrameworkElement FindTaskbarFrameRepeater(FrameworkElement anyDescendant) {
@@ -1884,7 +2040,7 @@ FrameworkElement GetCachedTaskbarRepeater() {
 //
 // g_unloading gates this first - once the mod's hooks are gone, a click-
 // sentinel probe here reaches the taskbar's real HandleClick with a
-// garbage pointer instead of being intercepted (see RATIONALE.md).
+// garbage pointer instead of being intercepted.
 //
 // Reentrancy guard (RAII, since this has several early returns): calling
 // into taskbar.dll/WinRT here can pump messages, letting a second posted
@@ -2048,6 +2204,13 @@ IUIElement_Arrange_t IUIElement_Arrange_Original;
 // in this pass's plan) falls through to native positioning.
 std::unordered_map<void*, double> g_lastArrangedX;
 
+// Each task list button's own FullFootprintWidth() as of the same pass
+// that computed g_lastArrangedX, keyed the same way. RecomputeLayoutPlan's
+// cheap staleness check uses this to catch a button whose width changed
+// without its count changing (e.g. a label populating shortly after a
+// freshly-launched button first appears icon-only) - see RATIONALE.md.
+std::unordered_map<void*, double> g_lastArrangedTaskListWidth;
+
 // Set whenever something might have changed that g_lastArrangedX doesn't
 // reflect yet, at the point that change becomes visible on the taskbar
 // thread. Starts true so the first pass always computes a real plan.
@@ -2138,22 +2301,46 @@ void RecomputeLayoutPlan() {
     if (!g_planDirty &&
         GetTickCount64() - g_lastPlanRecomputeTick < kMaxPlanStalenessMs) {
         // Cheap staleness check: if any live task list button isn't in
-        // g_lastArrangedX, or the live child count doesn't match the last
+        // g_lastArrangedX, an already-covered one's own width has since
+        // changed, or the live child count doesn't match the last
         // recompute's, the plan is stale regardless of the dirty flag.
-        // Hash lookup first, IsTaskListButton (a real class-name lookup)
-        // second and short-circuited, so the common "nothing changed"
-        // case never pays for it.
+        // Hash lookups first, IsTaskListButton/FullFootprintWidth (real
+        // class-name/property reads) second and short-circuited, so the
+        // common "nothing changed" case never pays for them.
         bool planIsCurrent = true;
         try {
             if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
                 int liveChildCount = 0;
                 for (auto& child : GetRepeaterChildElements(repeater)) {
                     liveChildCount++;
-                    if (!g_lastArrangedX.count(winrt::get_abi(child)) &&
-                        IsTaskListButton(child)) {
-                        // A live task list button the plan doesn't cover
-                        // yet. Scoped to task list buttons since a
-                        // brand-new system button can't reach this branch.
+                    void* key = winrt::get_abi(child);
+                    if (!g_lastArrangedX.count(key)) {
+                        if (IsTaskListButton(child)) {
+                            // A live task list button the plan doesn't
+                            // cover yet. Scoped to task list buttons since
+                            // a brand-new system button can't reach this
+                            // branch.
+                            planIsCurrent = false;
+                            break;
+                        }
+                        continue;
+                    }
+                    // Already covered - but for a task list button
+                    // specifically, its own width can still have changed
+                    // since the plan was computed without the button
+                    // count changing at all (e.g. a freshly-launched
+                    // button first renders icon-only, then grows once its
+                    // label populates a moment later) - that wouldn't
+                    // otherwise mark the plan dirty, leaving a stale,
+                    // too-narrow X in effect until something unrelated
+                    // (a drag, a count change) forces a real recompute.
+                    // g_lastArrangedTaskListWidth only has entries for
+                    // task list buttons, so this naturally no-ops for
+                    // Start/Search/TaskView/Widgets. See RATIONALE.md.
+                    auto widthIt = g_lastArrangedTaskListWidth.find(key);
+                    if (widthIt != g_lastArrangedTaskListWidth.end() &&
+                        std::abs(FullFootprintWidth(child) - widthIt->second) >
+                            0.5) {
                         planIsCurrent = false;
                         break;
                     }
@@ -2192,6 +2379,7 @@ void RecomputeLayoutPlan() {
         auto children = GetRepeaterChildElements(repeater);
         double startCenterX = GetMonitorCenterXLocal();
         std::unordered_map<void*, double> newPlan;
+        std::unordered_map<void*, double> newTaskListWidths;
 
         // Classify each child's SystemButton status exactly once - see
         // ChildInfo's comment for why.
@@ -2205,9 +2393,15 @@ void RecomputeLayoutPlan() {
         // both read g_lastStartWidth, so it must reflect this pass.
         for (auto& info : childInfos) {
             if (info.systemButton == SystemButton::Start) {
-                // Bare ActualWidth(), NOT SystemButtonContentWidth - see
-                // RATIONALE.md for why that fix doesn't apply to Start.
-                // Only updates g_lastStartWidth when positive, so a
+                // Bare ActualWidth(), NOT SystemButtonContentWidth: Start
+                // is never hidden/shown the way Search/Task View/Widgets
+                // are, so it was never exposed to the collapse-margin
+                // problem that fix exists for, and swapping to the content
+                // child's DesiredSize() instead would understate Start's
+                // true width - its own visual-tree shape doesn't match
+                // what that technique was validated against. See
+                // RATIONALE.md. Only updates g_lastStartWidth when
+                // positive, so a
                 // freshly (re)created Start keeps the last known-good
                 // width instead of collapsing around a zero-width Start.
                 double w = info.element.ActualWidth();
@@ -2277,9 +2471,10 @@ void RecomputeLayoutPlan() {
         // Task list buttons last - see PlanTaskListButtons for the
         // single-O(n)-pass reasoning.
         PlanTaskListButtons(children, startCenterX, leftBoundLocal,
-                            rightBoundLocal, newPlan);
+                            rightBoundLocal, newPlan, newTaskListWidths);
 
         g_lastArrangedX = std::move(newPlan);
+        g_lastArrangedTaskListWidth = std::move(newTaskListWidths);
         g_planChildCount = (int)children.size();
         g_planDirty = false;
     } catch (...) {
@@ -2435,7 +2630,8 @@ UINT InvalidateTaskbarLayoutMsg() {
 }
 
 // Same idea as InvalidateTaskbarLayoutMsg, for ButtonHwndResolveTimerProc
-// (up to ~7/sec while EVENT_OBJECT_SHOW events are bursting).
+// (can arrive in a burst while TaskListButton::UpdateVisualStates fires
+// repeatedly, e.g. several buttons changing state at once).
 UINT ResolveButtonHwndsMsg() {
     static const UINT msg =
         RegisterWindowMessage(L"Windhawk_ResolveButtonHwnds_" WH_MOD_ID);
@@ -2462,11 +2658,17 @@ UINT DrainSettingsMsg() {
     return msg;
 }
 
-// Installed on g_hTaskbarWnd by EnsureTaskbarWnd. Handles the four private
-// messages above and forwards everything else to DefSubclassProc (which
-// also lets comctl32 clean this subclass up via WM_NCDESTROY if the window
-// is destroyed before Wh_ModBeforeUninit removes it). See RATIONALE.md for
-// why this is the sole path onto the taskbar thread, with no fallback.
+// Installed on g_hTaskbarWnd by EnsureTaskbarWnd. A subclass proc only
+// ever runs on the thread that owns the window, which is what lets
+// InvalidateTaskbarLayout/ResolvePendingButtonHwnds/ApplyLoadedSettings
+// use a plain, non-blocking PostMessage - no per-call SetWindowsHookEx/
+// SendMessage/UnhookWindowsHookEx dance needed, unlike an earlier design
+// this replaced (see RATIONALE.md). This is the SOLE way any of the four
+// private messages below reach the taskbar thread, with no fallback if
+// the subclass never installs. Everything else is forwarded to
+// DefSubclassProc, which also lets comctl32 clean this subclass up via
+// WM_NCDESTROY if the window is destroyed before Wh_ModBeforeUninit
+// removes it.
 LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
                                         UINT uMsg,
                                         WPARAM wParam,
@@ -2497,10 +2699,15 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
         bool wasTracking = g_settings.trackWindowPositions;
         g_settings = std::move(*heapSettings);
         // Marks the previous plan stale now that the settings it was built
-        // from just changed. See RATIONALE.md.
+        // from just changed - has to happen exactly here, not by the
+        // separate InvalidateTaskbarLayout() call Wh_ModSettingsChanged
+        // also makes, since that one can't see the settings swap above.
+        // See RATIONALE.md.
         g_planDirty = true;
         // Starts/stops the WinEventHook thread live on a trackWindowPositions
-        // change, rather than only at the next mod reload - see RATIONALE.md.
+        // change, rather than only at the next mod reload - StopWinEventHookForToggle,
+        // not StopWinEventHook, since the latter's own comment explains why
+        // that one would permanently brick this toggle. See RATIONALE.md.
         if (g_settings.trackWindowPositions != wasTracking) {
             if (g_settings.trackWindowPositions) {
                 StartWinEventHook();
@@ -2524,8 +2731,14 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
 // than forcing a synchronous UpdateLayout() call. MUST stay async: a forced
 // UpdateLayout() from a nested callback (e.g. WinEventProc) reenters WinUI
 // layout and raises STATUS_STOWED_EXCEPTION, a raw SEH exception no
-// try/catch in this file can contain. Does not set g_planDirty itself -
-// see RATIONALE.md; each real caller marks dirty at its own point instead.
+// try/catch in this file can contain. Does not set g_planDirty itself,
+// since this marshal is asynchronous - a natural ArrangeOverride pass
+// could land on the taskbar thread between this call setting the flag and
+// the posted message being processed, see it already true, recompute with
+// stale state, and clear the flag, leaving the posted invalidate with
+// nothing left to do. Each real caller marks dirty at its own point
+// instead, at the moment its own state change becomes visible on the
+// taskbar thread. See RATIONALE.md.
 void InvalidateTaskbarLayout() {
     // Snapshot so a concurrent EnsureTaskbarWnd write can't change this
     // mid-function.
@@ -2580,19 +2793,16 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     }
 
     // Only a window this mod has resolved to a taskbar button can affect
-    // the layout on a move, so filter LOCATIONCHANGE against that set
-    // before the cross-process USER32 calls below. Not applied to SHOW: a
-    // newly-shown window can't be resolved yet by definition - instead,
-    // its own leading-edge throttle is checked here too, before those same
-    // USER32 calls, since SHOW is otherwise unthrottled and can arrive in
-    // bursts.
-    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+    // the layout on a move, so filter against that set before the
+    // cross-process USER32 calls below. This hook only ever registers for
+    // EVENT_OBJECT_LOCATIONCHANGE now - the newly-visible-window nudge a
+    // desktop-wide EVENT_OBJECT_SHOW hook used to provide is instead
+    // TaskListButton::UpdateVisualStates' job (see its hook), scoped to
+    // this taskbar's own buttons rather than every top-level window
+    // process-wide. See RATIONALE.md.
+    {
         std::lock_guard<std::mutex> guard(g_resolvedHwndsMutex);
         if (!g_resolvedHwnds.count(hwnd)) {
-            return;
-        }
-    } else if (event == EVENT_OBJECT_SHOW) {
-        if (GetTickCount64() - g_lastShowEventArm < 150) {
             return;
         }
     }
@@ -2602,24 +2812,19 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
         return;
     }
 
-    if (event == EVENT_OBJECT_SHOW) {
-        // A newly-visible top-level window is what a pinned-but-not-running
-        // app launching looks like - nudge the resolve timer to run now,
-        // bypassing each entry's own backoff. No trailing timer needed
-        // since a single arm(0) picks up every pending button regardless
-        // of which SHOW event triggered it. See RATIONALE.md.
-        g_lastShowEventArm = GetTickCount64();
-        g_forceResolveUnresolved = true;
-        ArmButtonHwndResolveTimer(0);
-        return;
-    }
-
-    // event == EVENT_OBJECT_LOCATIONCHANGE from here on - drag-follow.
+    // Drag-follow.
     ULONGLONG now = GetTickCount64();
     if (now - g_lastDragFollowInvalidate < 150) {
-        // Leading-edge throttle, so re-arm a trailing one-shot timer on
-        // every throttled event to catch the drag/move's final position
-        // once the burst goes quiet. See RATIONALE.md.
+        // Leading-edge throttle, so the final location-change event of a
+        // drag/move - the one carrying its actual release position - is
+        // routinely the one that lands inside the throttle window and
+        // gets dropped, since a drag generates a continuous event stream
+        // right up to release. Without a trailing timer, the icon would
+        // stay classified by a stale mid-drag position until some
+        // unrelated window happened to move. Re-arming this short
+        // one-shot timer on every throttled event makes it always fire
+        // once the burst actually goes quiet, applying the final
+        // position. See RATIONALE.md.
         if (g_dragFollowTrailingTimerId) {
             KillTimer(nullptr, g_dragFollowTrailingTimerId);
         }
@@ -2731,6 +2936,31 @@ bool HookTaskbarDllSymbols() {
     return ok;
 }
 
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+
+// Fires on every visual-state transition of a taskbar button, including a
+// pinned app's running/not-running change - replaces the old, desktop-wide
+// EVENT_OBJECT_SHOW WinEventHook (removed; see RATIONALE.md) as the fast
+// nudge for "something just changed, go re-check", scoped to this
+// taskbar's own buttons instead of every top-level window process-wide.
+// Optional (see the hooks table below) - if a future Windows build renames
+// this, resolution falls back to ResolveBackoffMs' own capped-backoff
+// schedule with no fast path, the same fallback already relied on for a
+// launch that reaches this hook through a path it doesn't expect.
+// Leading-edge throttled the same way EVENT_OBJECT_SHOW was, since this
+// can fire far more often (hover/press states too, not just running).
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    TaskListButton_UpdateVisualStates_Original(pThis);
+
+    if (GetTickCount64() - g_lastUpdateVisualStatesArm < 150) {
+        return;
+    }
+    g_lastUpdateVisualStatesArm = GetTickCount64();
+    g_forceResolveUnresolved = true;
+    ArmButtonHwndResolveTimer(0);
+}
+
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Which of these two is actually loaded depends on the Windows build -
     // see GetTaskbarViewModuleHandle. Most entries are optional so a single
@@ -2775,6 +3005,18 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             ITaskGroup_IsRunning_Hook,
             true,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
+            &TaskListButton_get_IsRunning_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+            true,
+        },
     };
 
     bool ok = HookSymbols(module, hooks, ARRAYSIZE(hooks));
@@ -2787,7 +3029,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                                                                         : L"MISSING");
     if (!ok) {
         Wh_Log(L"  Missing (optional, HWND-resolution chain only): "
-               L"%s%s%s%s%s",
+               L"%s%s%s%s%s%s%s",
                TryGetItemFromContainer_TaskListWindowViewModel_Original
                    ? L""
                    : L"TryGetItemFromContainer<TaskListWindowViewModel> ",
@@ -2800,7 +3042,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                TaskListGroupViewModel_IsMultiWindow_Original
                    ? L""
                    : L"TaskListGroupViewModel::IsMultiWindow ",
-               ITaskGroup_IsRunning_Original ? L"" : L"ITaskGroup::IsRunning ");
+               ITaskGroup_IsRunning_Original ? L"" : L"ITaskGroup::IsRunning ",
+               TaskListButton_get_IsRunning_Original
+                   ? L""
+                   : L"TaskListButton::get_IsRunning ",
+               TaskListButton_UpdateVisualStates_Original
+                   ? L""
+                   : L"TaskListButton::UpdateVisualStates ");
     }
     return ok;
 }
@@ -2820,8 +3068,12 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
         // Applied unconditionally, not gated on HookTaskbarViewDllSymbols'
-        // return value - see RATIONALE.md for why a missing optional
-        // symbol shouldn't discard hooks that did resolve.
+        // return value - that value reflects whether EVERY symbol in its
+        // table resolved, optional ones included, so a single missing
+        // optional HWND-resolution symbol (exactly what optional=true
+        // exists to tolerate) would otherwise skip applying hooks for
+        // every symbol that DID resolve, ArrangeOverride included. See
+        // RATIONALE.md.
         HookTaskbarViewDllSymbols(module);
         Wh_ApplyHookOperations();
     }
@@ -2846,7 +3098,12 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 // WinEvent hooks run on a dedicated mod-owned thread rather than the
 // taskbar's own, to keep the high raw event volume off the shell's layout
-// thread. See RATIONALE.md.
+// thread - EVENT_OBJECT_LOCATIONCHANGE alone has been observed producing
+// thousands of raw events within seconds. WINEVENT_OUTOFCONTEXT delivers
+// callbacks on whichever thread called SetWinEventHook, so registering on
+// the taskbar's own thread would put all of that, plus this file's own
+// filtering on each one, in direct contention with the shell's own layout
+// work. See RATIONALE.md.
 //
 // Private message this thread's own queue uses to let ArmButtonHwndResolveTimer
 // (called from the taskbar thread) re-arm the resolve timer, which lives
@@ -2881,18 +3138,6 @@ DWORD WINAPI WinEventHookThreadProc(LPVOID) {
                L"will");
     }
 
-    // Separate hook since the two event IDs aren't adjacent - a single
-    // range spanning both would also pick up unrelated event types.
-    g_showEventHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
-                                      nullptr, WinEventProc, 0, 0,
-                                      WINEVENT_OUTOFCONTEXT);
-    if (!g_showEventHook) {
-        Wh_Log(L"Failed to register show-event hook - a newly launched "
-               L"pinned app's icon will only start following it once the "
-               L"resolve timer's own backoff schedule catches up, rather "
-               L"than immediately");
-    }
-
     // Kicks off the first HWND-resolve attempt so buttons already present
     // at mod startup get picked up; NextResolveDelayMs/
     // ArmButtonHwndResolveTimer keep it armed afterward only as needed.
@@ -2918,10 +3163,6 @@ DWORD WINAPI WinEventHookThreadProc(LPVOID) {
         UnhookWinEvent(g_locationChangeHook);
         g_locationChangeHook = nullptr;
     }
-    if (g_showEventHook) {
-        UnhookWinEvent(g_showEventHook);
-        g_showEventHook = nullptr;
-    }
     if (g_buttonHwndResolveTimerId) {
         KillTimer(nullptr, g_buttonHwndResolveTimerId);
         g_buttonHwndResolveTimerId = 0;
@@ -2939,8 +3180,13 @@ HANDLE g_winEventThread;
 // thread) in ArmButtonHwndResolveTimer - atomic makes that well-defined.
 std::atomic<DWORD> g_winEventThreadId;
 
-// Serializes StartWinEventHook/StopWinEventHook against each other - see
-// RATIONALE.md for the race this prevents.
+// Serializes StartWinEventHook/StopWinEventHook against each other: a
+// start call can still be inside CreateThread, before g_winEventThread is
+// written, when a concurrent stop call checks it - without this mutex
+// making "is there a thread, and should one ever be created again" one
+// atomic question both functions agree on, the stop call could miss the
+// very thread it was meant to tear down, leaving it to crash the process
+// when Windhawk unmaps the module later. See RATIONALE.md.
 std::mutex g_winEventThreadMutex;
 bool g_winEventThreadStopped;
 
@@ -3018,7 +3264,9 @@ void StopWinEventHookForToggle() {
 
 // Capped exponential backoff for the click-sentinel probe, shared by
 // ResolvePendingButtonHwnds and NextResolveDelayMs. Fallback safety net for
-// launches that don't produce EVENT_OBJECT_SHOW; see RATIONALE.md.
+// a launch that reaches TaskListButton::UpdateVisualStates through a path
+// this mod doesn't expect, or on a build where that hook didn't resolve at
+// all; see RATIONALE.md.
 constexpr ULONGLONG kResolveBackoffCeilingMs = 30ULL * 60 * 1000;
 ULONGLONG ResolveBackoffMs(int consecutiveFailures) {
     int shift = std::min(consecutiveFailures, 16);  // keep the shift itself from overflowing
@@ -3031,20 +3279,22 @@ ULONGLONG ResolveBackoffMs(int consecutiveFailures) {
 DWORD NextResolveDelayMs() {
     ULONGLONG now = GetTickCount64();
     bool anyPending = false;
-    // True for a resolved entry OR a terminal one (consecutiveFailures at
-    // kMaxResolveFailures) - either way, only the slow idle-rebind cadence
-    // below still applies to it, never the backoff schedule. Must exactly
-    // match ResolvePendingButtonHwnds' own backoffElapsed check, which
-    // never retries a terminal entry - see RATIONALE.md for the busy-loop
-    // this closes: without this, a terminal entry's fixed, no-longer-
-    // advancing dueAt falls further into the past every tick, pinning
-    // pendingDelay at 0 (SetTimer's 10ms floor) forever.
+    // True for a resolved entry, a terminal one (consecutiveFailures at
+    // kMaxResolveFailures), or a confirmed-not-running one (see
+    // ButtonHwndCacheEntry::notRunning) - in every case, only the slow
+    // idle-rebind cadence below still applies to it, never the backoff
+    // schedule. Must exactly match ResolvePendingButtonHwnds' own
+    // backoffElapsed check, which never retries a terminal entry - see
+    // RATIONALE.md for the busy-loop this closes: without this, a terminal
+    // entry's fixed, no-longer-advancing dueAt falls further into the past
+    // every tick, pinning pendingDelay at 0 (SetTimer's 10ms floor) forever.
     bool anyIdleWorthy = false;
     ULONGLONG earliestDue = 0;
 
     for (auto& kv : g_buttonHwndCache) {
         const ButtonHwndCacheEntry& entry = kv.second;
-        if (entry.hwnd || entry.consecutiveFailures >= kMaxResolveFailures) {
+        if (entry.hwnd || entry.notRunning ||
+            entry.consecutiveFailures >= kMaxResolveFailures) {
             anyIdleWorthy = true;
             continue;
         }
@@ -3141,10 +3391,12 @@ BOOL Wh_ModInit() {
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         Wh_Log(L"Taskbar view module already loaded at init time");
         g_taskbarViewDllLoaded = true;
-        // Not gated on HookTaskbarViewDllSymbols' own return value (which
-        // reflects optional symbols too) - see RATIONALE.md. The one
-        // symbol that must load, ArrangeOverride, is checked directly
-        // below instead.
+        // Not gated on HookTaskbarViewDllSymbols' own return value - it
+        // reflects optional symbols too, so a single missing optional
+        // HWND-resolution symbol would otherwise fail this ENTIRE mod's
+        // load, exactly the outcome optional=true exists to prevent. The
+        // one symbol that must load, ArrangeOverride, is checked directly
+        // below instead. See RATIONALE.md.
         HookTaskbarViewDllSymbols(taskbarViewModule);
         if (!TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original) {
             return FALSE;
@@ -3202,12 +3454,15 @@ void Wh_ModBeforeUninit() {
     // the click-sentinel probe and makes IUIElement_Arrange_Hook fall
     // through to native positioning immediately.
 
-    // Forces an immediate snap-back to native positions before removing
-    // the subclass below - hooks are still live and g_unloading is already
-    // set, so IUIElement_Arrange_Hook falls through to native positioning
-    // for this pass. Must be SendMessage, not PostMessage:
-    // RemoveWindowSubclassFromAnyThread below is itself a SendMessage, and
-    // a merely posted invalidate would arrive after the subclass is gone.
+    // Requests a relayout before removing the subclass below - not itself
+    // an immediate snap-back (InvalidateArrange/InvalidateMeasure only
+    // mark the tree dirty; the actual re-Arrange runs whenever XAML gets
+    // around to its next layout pass), but by the time that pass runs,
+    // IUIElement_Arrange_Hook already falls through to native positioning
+    // since g_unloading is set, so the end result is the same. Must be
+    // SendMessage, not PostMessage: RemoveWindowSubclassFromAnyThread
+    // below is itself a SendMessage, and a merely posted invalidate would
+    // arrive after the subclass is gone, with nothing left to dispatch it.
     HWND hTaskbarWnd = g_hTaskbarWnd;
     if (hTaskbarWnd && g_taskbarWndSubclassed) {
         SendMessage(hTaskbarWnd, InvalidateTaskbarLayoutMsg(), 0, 0);
