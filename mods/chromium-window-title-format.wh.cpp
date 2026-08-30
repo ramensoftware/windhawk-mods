@@ -653,29 +653,31 @@ bool EndsWith(std::wstring_view s, std::wstring_view t) {
     return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0;
 }
 
-// Whether a character can be part of the punctuation run that a browser puts
-// between two parts of a title. Only used behind an exact profile-name match.
+// The characters a browser may put between two parts of a title, as a SHORT
+// EXPLICIT list. "Anything that is not a letter or a digit" is the tempting
+// version and it is wrong here, because this scan CONSUMES what it walks over:
+// by exclusion it also eats the page's own punctuation, and
+// "Is this a bug? - Personal" comes back as "Is this a bug".
 //
-// ASCII is by exclusion, everything else by an explicit list, and that asymmetry
-// is deliberate: `iswalnum` answers for the C locale, where Cyrillic and CJK are
-// not letters, so excluding non-alphanumerics would treat a Russian profile name
-// as separator punctuation and walk straight through it. An unlisted non-ASCII
-// character is therefore text, never a separator.
-bool IsSepChar(wchar_t c) {
-    if (c < 0x80) {
-        return !((c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'Z') ||
-                 (c >= L'a' && c <= L'z'));
-    }
+// Spaces and dashes only. A colon, slash, pipe, comma or full stop is ordinary
+// title text - the browsers that really join with one are handled by matching
+// their discovered separator exactly, not by this shape.
+bool IsJoinerSpace(wchar_t c) {
+    return c == L' ' || c == L'\t' || c == 0x00A0 || c == kZwsp ||
+           c == 0x200E || c == 0x200F || c == 0x3000;
+}
+
+bool IsJoinerDash(wchar_t c) {
     switch (c) {
-        case 0x00A0:  // no-break space
-        case 0x00B7:  // middle dot
-        case 0x200B:  // zero-width space
-        case 0x200E:  // left-to-right mark
-        case 0x200F:  // right-to-left mark
+        case L'-':    // hyphen-minus
+        case 0x2010:  // hyphen
+        case 0x2011:  // non-breaking hyphen
+        case 0x2012:  // figure dash
         case 0x2013:  // en dash
         case 0x2014:  // em dash
-        case 0x3000:  // ideographic space
-        case 0xFF1A:  // fullwidth colon
+        case 0x2015:  // horizontal bar
+        case 0x2212:  // minus sign
+        case 0xFF0D:  // fullwidth hyphen-minus
             return true;
         default:
             return false;
@@ -1039,8 +1041,14 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
         // the all-or-nothing bail that upholds it reads like over-caution; this
         // conjunct is what keeps a gate that DELETES text from a title closed if
         // someone ever relaxes it to return what it found so far.
+        // slot2Seps NON-EMPTY is what says "this browser puts a profile in its
+        // titles at all". Chrome discovers no marker resource and so no
+        // separator, and a Chrome title never carries a profile - so every match
+        // this loop could make there would be a false positive with no true
+        // positive to trade against. The old separator-driven loop got that for
+        // free by iterating an empty list; anchoring on the name has to say it.
         if (out->profile.empty() && g.profileCount >= 1 &&
-            !g.profileNames.empty()) {
+            !g.profileNames.empty() && !g.slot2Seps.empty()) {
             // ANCHOR ON THE NAME, not on a discovered separator. Measured on
             // Finnish Edge: the privacy-marker resource yields an en dash, so
             // slot2Seps is {" - "} with an EN dash, while the browser joins the
@@ -1048,10 +1056,6 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
             // same title - 13 of 84 shipped locale packs disagree this way.
             // Looking for the separator first loses the profile on all of them,
             // and the count sitting behind it with the profile.
-            //
-            // The exact name match was always the evidence; the punctuation in
-            // front of it never was. So find the name and accept whatever short
-            // run of punctuation precedes it.
             const std::wstring t = TrimCopy(r2);
             for (const std::wstring& name : g.profileNames) {
                 // EXACTLY equal, not case-insensitively. The browser renders the
@@ -1062,22 +1066,39 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
                 if (name.empty() || name.size() >= t.size()) continue;
                 if (!EndsWith(t, name)) continue;
                 const size_t at = t.size() - name.size();
-                size_t s = at;
-                while (s > 0 && IsSepChar(t[s - 1])) --s;
-                // Something must separate them, it must be short enough to be
-                // punctuation rather than text, and it must leave a title.
-                if (s == at || at - s > 4 || s == 0) continue;
-                // AND IT MUST NOT BE ONLY SPACES. A single space is how ordinary
-                // prose ends: "My Personal" is a page title, not "My" in the
-                // profile "Personal".
-                bool solid = false;
-                for (size_t k = s; k < at; ++k) {
-                    if (t[k] != L' ') {
-                        solid = true;
+                const std::wstring_view head(t.data(), at);
+
+                // 1. A separator the browser itself declared. Matched whole, so
+                //    it can never consume a character the title owns.
+                size_t s = std::wstring::npos;
+                for (const std::wstring& sep : g.slot2Seps) {
+                    if (sep.size() < at && EndsWith(head, sep)) {
+                        s = at - sep.size();
                         break;
                     }
                 }
-                if (!solid) continue;
+
+                // 2. Failing that, a space then exactly one dash then optional
+                //    space - the shape the marker resource cannot describe,
+                //    because it is the one those 13 packs join with instead.
+                //
+                //    The LEADING space carries the whole distinction: without it
+                //    "Remote-Work" is a profile named "Work", and "Non-Personal"
+                //    a profile named "Personal".
+                if (s == std::wstring::npos) {
+                    size_t k = at, dashes = 0, spaces = 0;
+                    while (k > 0 && at - k < 4) {
+                        const wchar_t c = t[k - 1];
+                        if (IsJoinerSpace(c))     ++spaces;
+                        else if (IsJoinerDash(c)) ++dashes;
+                        else break;
+                        --k;
+                    }
+                    if (dashes != 1 || spaces == 0 || k == 0) continue;
+                    if (!IsJoinerSpace(t[k])) continue;
+                    s = k;
+                }
+                if (s == 0) continue;  // nothing would be left as a title
                 out->profile = name;
                 r3 = t.substr(0, s);
                 break;
