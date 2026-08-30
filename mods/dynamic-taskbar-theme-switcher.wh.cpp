@@ -42,9 +42,13 @@ three projects listed in Credits are not installation requirements.
 - Customize Minecraft Hotbar slot size, icon size, taskbar height, padding,
   running indicators, and distance from the bottom of the screen.
 - Keep the raised Minecraft taskbar below normal application windows.
+- Revalidate raised taskbar geometry with bounded per-monitor retries after
+  theme changes and a low-frequency fallback check.
 - Customize native Windows taskbar icon and running-indicator sizes and colors.
 - Use a neutral adaptive background instead of the Windows accent color for the
   native taskbar theme.
+- Load custom taskbar icons from a persistent per-user folder and fall back to
+  native icons when an image is unavailable.
 - Optionally make the empty area around a shaped taskbar click-through and
   apply rounded clipping to the native taskbar window.
 
@@ -81,6 +85,9 @@ if a Windows update or another taskbar tool left stale XAML state behind.
   the desktop theme.
 - **Native Windows taskbar:** Can preserve the original Windows appearance or
   customize native icons and running indicators.
+- **Custom taskbar icons:** PNG files are loaded from
+  `%LOCALAPPDATA%\Windhawk\DynamicTaskbarIcons`; existing files from older
+  mod-storage folders are migrated automatically.
 - **Click through empty taskbar space:** Useful for floating, dock-like themes.
   Disable it if clicks around the visible taskbar behave unexpectedly.
 - **Other XAML diagnostics tools:** `Block` is the safest default because only
@@ -126,9 +133,8 @@ state tracking, so the helper isn't required.
   the desktop theme.
 - While raised, Minecraft Hotbar is intentionally made non-topmost and placed
   below normal application windows on the same monitor.
-- Keeping a raised taskbar stable adjusts the position reported through
-  `WM_WINDOWPOSCHANGED`; other taskbar-positioning mods can observe it and may
-  conflict.
+- Position correction only touches a top-level taskbar whose measured position
+  is wrong; it doesn't hook Explorer's general window-positioning APIs.
 - Some image-based themes download assets from `raw.githubusercontent.com` and
   can render without their textures while offline or before the first download.
 
@@ -318,7 +324,7 @@ listed above. Original authors retain copyright in their contributions.
       $description: Positive moves it down. Negative moves it up.
     - iconGap: 0
       $name: Extra spacing from icons
-      $description: Adds layout spacing below the indicator without changing its transform.
+      $description: Adds extra vertical separation between the icon and indicator.
     - cornerRadius: 2
       $name: Indicator corner radius
     $name: Minecraft indicators
@@ -345,7 +351,7 @@ listed above. Original authors retain copyright in their contributions.
     $description: Positive moves it down. Negative moves it up.
   - iconGap: 5
     $name: Extra spacing from icons
-    $description: Adds layout spacing below the indicator without changing its transform.
+    $description: Adds extra vertical separation between the icon and indicator.
   - cornerRadius: 2
     $name: Indicator corner radius
   $name: Native Windows taskbar indicators
@@ -11348,7 +11354,7 @@ struct ModSettings {
 ModSettings g_settings;
 std::mutex g_settingsMutex;
 
-// Values read by process-wide hooks and background threads. Keep these
+// Values read by background and taskbar UI threads. Keep these
 // independent from g_settings so settings reloads never expose partially
 // written strings or structs to another Explorer thread.
 std::atomic<bool> g_raiseTaskbarFromBottomEnabled{true};
@@ -12245,9 +12251,6 @@ thread_local std::unordered_set<HWND> g_clickThroughSubclassedWindows;
 thread_local bool g_applyingClickThroughRegion = false;
 
 void ReapplyCustomizationsForSubtree(FrameworkElement element, bool applying);
-void AdjustTaskbarWindowPos(HWND hWnd, WINDOWPOS* windowPos);
-void CorrectTaskbarPositionBeforePaint(HWND hWnd);
-void ReportRaisedTaskbarPosition(HWND hWnd, WINDOWPOS* windowPos);
 
 void QueueThemeRefreshForXamlRoot(XamlRoot const& xamlRoot) {
     if (!xamlRoot) {
@@ -17856,13 +17859,6 @@ LRESULT CALLBACK ClickThroughTaskbarSubclassProc(HWND hWnd,
                                                  LPARAM lParam,
                                                  DWORD_PTR) {
     switch (uMsg) {
-        case WM_WINDOWPOSCHANGING:
-            // Correct Explorer's requested position before Windows applies it.
-            // Doing this in WM_WINDOWPOSCHANGED caused a visible down/up jump.
-            AdjustTaskbarWindowPos(
-                hWnd, reinterpret_cast<WINDOWPOS*>(lParam));
-            break;
-
         case WM_WINDOWPOSCHANGED: {
             // The taskbar moved or was shown - e.g. an auto-hidden taskbar
             // sliding into view, or auto-hide being toggled. Explorer resets
@@ -17870,12 +17866,6 @@ LRESULT CALLBACK ClickThroughTaskbarSubclassProc(HWND hWnd,
             // now rather than waiting for the next XAML layout pass. Ignore the
             // notification our own SetWindowRgn raises, to avoid reentering the
             // region update.
-            if (!g_applyingClickThroughRegion) {
-                CorrectTaskbarPositionBeforePaint(hWnd);
-                ReportRaisedTaskbarPosition(
-                    hWnd, reinterpret_cast<WINDOWPOS*>(lParam));
-            }
-
             LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             if (!g_applyingClickThroughRegion) {
                 ReapplyClickThroughForTopLevel(hWnd);
@@ -18246,8 +18236,7 @@ void ApplyCustomizations(ElementId elementId,
     // Handle click-through before the no-customizations early return below,
     // since it must run for the taskbar elements even with no styles
     // configured.
-    if (g_clickThroughTaskbarEnabled.load() ||
-        g_raiseTaskbarFromBottomEnabled.load()) {
+    if (g_clickThroughTaskbarEnabled.load()) {
         HandleClickThroughElement(element);
     }
 
@@ -19454,8 +19443,8 @@ void AddIndicatorCustomizationRules(const IndicatorSettings& indicator,
         L"RadiusX=" + std::to_wstring(indicator.cornerRadius),
         L"RadiusY=" + std::to_wstring(indicator.cornerRadius),
         L"RenderTransform:=<TranslateTransform Y=\"" +
-            std::to_wstring(indicator.verticalOffset) + L"\" />",
-        L"Margin=0,0,0,-" + std::to_wstring(indicator.iconGap),
+            std::to_wstring(indicator.verticalOffset + indicator.iconGap) +
+            L"\" />",
     };
 
     AddElementCustomizationRules(kIndicatorTarget, styles, themeScope);
@@ -19472,6 +19461,241 @@ void AddTaskIconSizeRules(int iconSize, RuleThemeScope themeScope) {
         L"Height=" + std::to_wstring(iconSize),
     };
     AddElementCustomizationRules(kTaskIconTarget, styles, themeScope);
+}
+
+const std::filesystem::path& GetPersistentPixelIconDirectory() {
+    static const std::filesystem::path directory = [] {
+        std::wstring localAppData(32768, L'\0');
+        DWORD length = GetEnvironmentVariableW(
+            L"LOCALAPPDATA", localAppData.data(),
+            static_cast<DWORD>(localAppData.size()));
+        if (!length || length >= localAppData.size()) {
+            return std::filesystem::path{};
+        }
+
+        localAppData.resize(length);
+        return std::filesystem::path(localAppData) / L"Windhawk" /
+               L"DynamicTaskbarIcons";
+    }();
+
+    return directory;
+}
+
+const std::vector<std::filesystem::path>& GetLegacyPixelIconDirectories() {
+    static const std::vector<std::filesystem::path> directories{
+        LR"(C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\local@dynamic-taskbar-theme-switcher\custom-icons)",
+        LR"(C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\local@windows-11-taskbar-styler\custom-icons)",
+        LR"(C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\windows-11-taskbar-styler\custom-icons)",
+    };
+    return directories;
+}
+
+std::wstring FilePathToUri(const std::filesystem::path& path) {
+    std::wstring uri(32768, L'\0');
+    DWORD uriLength = static_cast<DWORD>(uri.size());
+    HRESULT hr = UrlCreateFromPathW(path.c_str(), uri.data(), &uriLength, 0);
+    if (FAILED(hr)) {
+        Wh_Log(L"UrlCreateFromPathW failed for %s: %08X", path.c_str(), hr);
+        return {};
+    }
+
+    uri.resize(wcslen(uri.c_str()));
+    return uri;
+}
+
+std::optional<std::filesystem::path> ResolvePixelIconPath(PCWSTR fileName) {
+    if (!fileName || !*fileName) {
+        return std::nullopt;
+    }
+
+    const auto& persistentDirectory = GetPersistentPixelIconDirectory();
+    if (!persistentDirectory.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(persistentDirectory, ec);
+        if (!ec) {
+            auto persistentPath = persistentDirectory / fileName;
+            if (std::filesystem::is_regular_file(persistentPath, ec)) {
+                return persistentPath;
+            }
+
+            for (const auto& legacyDirectory :
+                 GetLegacyPixelIconDirectories()) {
+                ec.clear();
+                auto legacyPath = legacyDirectory / fileName;
+                if (!std::filesystem::is_regular_file(legacyPath, ec)) {
+                    continue;
+                }
+
+                ec.clear();
+                std::filesystem::copy_file(
+                    legacyPath, persistentPath,
+                    std::filesystem::copy_options::skip_existing, ec);
+                ec.clear();
+                if (std::filesystem::is_regular_file(persistentPath, ec)) {
+                    Wh_Log(L"Migrated custom taskbar icon: %s", fileName);
+                    return persistentPath;
+                }
+            }
+        }
+    }
+
+    // Keep compatibility even if the persistent directory can't be created.
+    for (const auto& legacyDirectory : GetLegacyPixelIconDirectories()) {
+        std::error_code ec;
+        auto legacyPath = legacyDirectory / fileName;
+        if (std::filesystem::is_regular_file(legacyPath, ec)) {
+            return legacyPath;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::wstring ResolvePixelIconUri(PCWSTR fileName) {
+    auto path = ResolvePixelIconPath(fileName);
+    return path ? FilePathToUri(*path) : std::wstring{};
+}
+
+void AddPixelTaskbarIconRules(RuleThemeScope themeScope) {
+    struct PixelIconRule {
+        PCWSTR automationId;
+        PCWSTR fileName;
+    };
+
+    constexpr PixelIconRule kPixelIconRules[] = {
+        {L"Appid: Microsoft.Windows.Explorer", L"File_Explorer_v2.png"},
+        {L"Appid: Chrome", L"Google_Chrome_hybrid.png"},
+        {L"Appid: OpenAI.Codex_2p2nqsd0c76g0!App", L"ChatGPT_crisp_v2.png"},
+        {L"Appid: com.tinyspeck.slackdesktop_8yrtsj140pw4g!Slack",
+         L"Slack_v2.png"},
+        {L"Appid: 5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
+         L"WhatsApp_hybrid.png"},
+        {L"Appid: Telegram.TelegramDesktop", L"Telegram_enlarged.png"},
+        {L"Appid: Chrome._crx_gpknkljhoknolnhihfmmkefdip",
+         L"Agencify_Ops_v2.png"},
+        {L"Appid: com.getupnote.desktop", L"UpNote_paper.png"},
+        {L"Appid: Valve.Steam.Client", L"Steam_inventory_v1.png"},
+        {L"Appid: com.squirrel.Discord.Discord",
+         L"Discord_inventory_v1.png"},
+        {L"Appid: RamenSoftware.Windhawk", L"Windhawk_inventory_v1.png"},
+        {L"Appid: Comet", L"Comet_inventory_v1.png"},
+        {L"Appid: com.Aula_hub.app", L"Aula_Hub_inventory_v1.png"},
+        {L"Appid: GoogleDriveFS", L"Google_Drive_inventory_v1.png"},
+        {L"Appid: GoogleDriveFS.exe", L"Google_Drive_inventory_v1.png"},
+        {L"Appid: {6D809377-6AF0-444B-8957-A3773F02200E}\\Google\\Drive File Stream\\130.0.2.0\\GoogleDriveFS.exe",
+         L"Google_Drive_inventory_v1.png"},
+        {L"Appid: DriverBooster.exe", L"Driver_Booster_inventory_v1.png"},
+        {L"Appid: {7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\\IObit\\Driver Booster\\13.6.0\\DriverBooster.exe",
+         L"Driver_Booster_inventory_v1.png"},
+        {L"Appid: steam_app_105600", L"Terraria_inventory_v1.png"},
+        {L"Appid: steam_app_252950", L"Rocket_League_inventory_v1.png"},
+        {L"Appid: steam_app_489830", L"Skyrim_inventory_v1.png"},
+        {L"Appid: steam_app_2358720",
+         L"Black_Myth_Wukong_inventory_v1.png"},
+        {L"Appid: Microsoft.4297127D64EC6_8wekyb3d8bbwe!Minecraft",
+         L"Minecraft_inventory_v1.png"},
+        {L"Appid: Microsoft.4297127D64EC6_8wekyb3d8bbwe!MinecraftLauncher",
+         L"Minecraft_inventory_v1.png"},
+    };
+
+    for (const auto& iconRule : kPixelIconRules) {
+        std::wstring iconUri = ResolvePixelIconUri(iconRule.fileName);
+        if (iconUri.empty()) {
+            Wh_Log(L"Custom taskbar icon not found, keeping native icon: %s",
+                   iconRule.fileName);
+            continue;
+        }
+
+        std::wstring target =
+            L"Taskbar.TaskListButton[AutomationProperties.AutomationId=";
+        target += iconRule.automationId;
+        target += L"] > Grid#IconPanel > Image#Icon, ";
+        target +=
+            L"Taskbar.TaskListButton[AutomationProperties.AutomationId=";
+        target += iconRule.automationId;
+        target +=
+            L"] > Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon";
+
+        std::vector<std::wstring> styles{L"Source=" + iconUri};
+        AddElementCustomizationRules(target.c_str(), styles, themeScope);
+    }
+}
+
+void AddPixelStartButtonRules(PCWSTR themeName,
+                              RuleThemeScope themeScope) {
+    constexpr PCWSTR kStartIconTarget =
+        L"Taskbar.ExperienceToggleButton#LaunchListButton"
+        L"[AutomationProperties.AutomationId=StartButton] > "
+        L"Taskbar.TaskListButtonPanel > Grid > "
+        L"Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer#Icon, "
+        L"Taskbar.ExperienceToggleButton#LaunchListButton"
+        L"[AutomationProperties.AutomationId=StartButton] > "
+        L"Taskbar.TaskListButtonPanel > "
+        L"Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer#Icon";
+
+    if (wcscmp(themeName, L"Minecraft_Hotbar") == 0) {
+        constexpr PCWSTR kMinecraftStartBackgroundTarget =
+            L"Taskbar.ExperienceToggleButton#LaunchListButton"
+            L"[AutomationProperties.AutomationId=StartButton] > "
+            L"Taskbar.TaskListButtonPanel@CommonStates > Grid > "
+            L"Border#BackgroundElement, "
+            L"Taskbar.ExperienceToggleButton#LaunchListButton"
+            L"[AutomationProperties.AutomationId=StartButton] > "
+            L"Taskbar.TaskListButtonPanel@CommonStates > "
+            L"Border#BackgroundElement";
+        std::wstring normalSlotUri =
+            ResolvePixelIconUri(L"Windows_Start_slot_v2.png");
+        std::wstring activeSlotUri =
+            ResolvePixelIconUri(L"Windows_Start_slot_active_v2.png");
+        if (normalSlotUri.empty() || activeSlotUri.empty()) {
+            // Minecraft hides the native animated icon. Restore it when the
+            // custom slot files aren't available instead of showing a blank
+            // Start button.
+            AddElementCustomizationRules(kStartIconTarget,
+                                          {L"Visibility=Visible"},
+                                          themeScope);
+            return;
+        }
+
+        std::wstring normalSlot =
+            L"<ImageBrush Stretch=\"UniformToFill\" ImageSource=\"" +
+            normalSlotUri + L"\" />";
+        std::wstring activeSlot =
+            L"<ImageBrush Stretch=\"UniformToFill\" ImageSource=\"" +
+            activeSlotUri + L"\" />";
+
+        std::vector<std::wstring> styles{
+            L"Background:=" + normalSlot,
+            L"Background@InactiveNormal:=" + normalSlot,
+            L"Background@InactivePointerOver:=" + activeSlot,
+            L"Background@InactivePressed:=" + activeSlot,
+            L"Background@ActiveNormal:=" + activeSlot,
+            L"Background@ActivePointerOver:=" + activeSlot,
+            L"Background@ActivePressed:=" + activeSlot,
+        };
+        AddElementCustomizationRules(kMinecraftStartBackgroundTarget, styles,
+                                     themeScope);
+        AddElementCustomizationRules(kStartIconTarget,
+                                     {L"Visibility=Collapsed"}, themeScope);
+    } else if (wcscmp(themeName, L"Native") == 0) {
+        constexpr PCWSTR kNativeStartPanelTarget =
+            L"Taskbar.ExperienceToggleButton#LaunchListButton"
+            L"[AutomationProperties.AutomationId=StartButton] > "
+            L"Taskbar.TaskListButtonPanel";
+        std::wstring startIconUri =
+            ResolvePixelIconUri(L"Windows_Start_v2.png");
+        if (startIconUri.empty()) {
+            return;
+        }
+
+        AddElementCustomizationRules(
+            kNativeStartPanelTarget,
+            {L"Background:=<ImageBrush Stretch=\"None\" ImageSource=\"" +
+             startIconUri + L"\" />"},
+            themeScope);
+        AddElementCustomizationRules(kStartIconTarget,
+                                     {L"Visibility=Collapsed"}, themeScope);
+    }
 }
 
 void ProcessThemeStyles(PCWSTR themeName,
@@ -19651,6 +19875,9 @@ void ProcessThemeStyles(PCWSTR themeName,
         AddIndicatorCustomizationRules(g_settings.nativeIndicator,
                                        themeScope);
     }
+
+    AddPixelTaskbarIconRules(themeScope);
+    AddPixelStartButtonRules(themeName, themeScope);
 
     if (processUserStyles) {
         for (int i = 0;; i++) {
@@ -20477,10 +20704,9 @@ MonitorSet GetConnectedMonitors() {
 
 struct TaskbarPositionContext {
     bool forceBottom;
+    const MonitorSet* targetMonitors;
+    bool allPositionsCorrect;
 };
-
-using SetWindowPos_t = decltype(&SetWindowPos);
-SetWindowPos_t SetWindowPos_Original;
 
 struct RaisedTaskbarState {
     int originalBottomOffset;
@@ -20536,15 +20762,13 @@ bool RestoreRaisedTaskbar(HWND hWnd) {
         return true;
     }
 
-    auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
-                                              : SetWindowPos;
     HWND insertAfter = state.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST;
     constexpr UINT commonFlags =
         SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING;
 
     // Restore z-order separately so a transient geometry failure can't leave
     // the taskbar non-topmost after the mod is disabled.
-    setWindowPos(hWnd, insertAfter, 0, 0, 0, 0,
+    SetWindowPos(hWnd, insertAfter, 0, 0, 0, 0,
                  commonFlags | SWP_NOMOVE);
     bool isTopmost =
         (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
@@ -20561,7 +20785,7 @@ bool RestoreRaisedTaskbar(HWND hWnd) {
             int targetTop = monitorInfo.rcMonitor.bottom - taskbarHeight -
                             state.originalBottomOffset;
             if (std::abs(taskbarRect.top - targetTop) <= 1 ||
-                setWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
+                SetWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
                              commonFlags | SWP_NOZORDER)) {
                 RECT restoredRect{};
                 positionRestored = GetWindowRect(hWnd, &restoredRect) &&
@@ -20662,177 +20886,19 @@ void EnsureTaskbarWindowZOrder(HWND hWnd) {
 
     RememberRaisedTaskbarState(hWnd);
 
-    auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
-                                              : SetWindowPos;
     constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                            SWP_NOOWNERZORDER | SWP_NOSENDCHANGING;
     bool isTopmost =
         (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
 
     if (isTopmost) {
-        setWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+        SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
     }
 
     HWND lowestWindow = FindLowestDynamicWindowForTaskbar(hWnd);
     if (lowestWindow && !IsWindowAboveInZOrder(lowestWindow, hWnd)) {
-        setWindowPos(hWnd, lowestWindow, 0, 0, 0, 0, flags);
+        SetWindowPos(hWnd, lowestWindow, 0, 0, 0, 0, flags);
     }
-}
-
-void AdjustTaskbarWindowZOrder(HWND hWnd, WINDOWPOS* windowPos) {
-    if (!windowPos || !g_taskbarProcessActive.load() ||
-        !g_raiseTaskbarFromBottomEnabled.load() ||
-        g_forceTaskbarBottom.load() ||
-        !IsTaskbarTopLevelWindow(hWnd) || !ShouldRaiseTaskbarFromBottom(hWnd) ||
-        (windowPos->flags & SWP_NOZORDER)) {
-        return;
-    }
-
-    RememberRaisedTaskbarState(hWnd);
-
-    if (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
-        // Let the outer SetWindowPos/DeferWindowPos call remove topmost status.
-        // Reordering behind normal app windows is completed by the regular
-        // z-order refresh, without a nested SetWindowPos inside the hook.
-        windowPos->hwndInsertAfter = HWND_NOTOPMOST;
-        return;
-    }
-
-    HWND lowestWindow = FindLowestDynamicWindowForTaskbar(hWnd);
-    windowPos->hwndInsertAfter = lowestWindow ? lowestWindow : HWND_TOP;
-}
-
-void AdjustTaskbarWindowPos(HWND hWnd, WINDOWPOS* windowPos) {
-    if (!windowPos || !g_taskbarProcessActive.load() ||
-        !g_raiseTaskbarFromBottomEnabled.load() ||
-        g_forceTaskbarBottom.load() || (windowPos->flags & SWP_NOMOVE) ||
-        !IsTaskbarTopLevelWindow(hWnd) ||
-        !ShouldRaiseTaskbarFromBottom(hWnd)) {
-        return;
-    }
-
-    int taskbarHeight = windowPos->cy;
-    if (windowPos->flags & SWP_NOSIZE) {
-        RECT taskbarRect{};
-        if (!GetWindowRect(hWnd, &taskbarRect)) {
-            return;
-        }
-        taskbarHeight = taskbarRect.bottom - taskbarRect.top;
-    }
-
-    int targetTop = GetRaisedTaskbarTop(hWnd, taskbarHeight);
-    if (taskbarHeight <= 0 || targetTop == INT_MIN) {
-        return;
-    }
-
-    RememberRaisedTaskbarState(hWnd);
-    windowPos->y = targetTop;
-    windowPos->flags |= SWP_NOSENDCHANGING;
-}
-
-thread_local bool g_correctingTaskbarPositionBeforePaint = false;
-
-void CorrectTaskbarPositionBeforePaint(HWND hWnd) {
-    if (g_correctingTaskbarPositionBeforePaint ||
-        !g_taskbarProcessActive.load() ||
-        !g_raiseTaskbarFromBottomEnabled.load() ||
-        g_forceTaskbarBottom.load() ||
-        !IsTaskbarTopLevelWindow(hWnd) ||
-        !ShouldRaiseTaskbarFromBottom(hWnd)) {
-        return;
-    }
-
-    RECT taskbarRect{};
-    if (!GetWindowRect(hWnd, &taskbarRect)) {
-        return;
-    }
-
-    int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
-    int targetTop = GetRaisedTaskbarTop(hWnd, taskbarHeight);
-    if (taskbarHeight <= 0 || targetTop == INT_MIN ||
-        std::abs(taskbarRect.top - targetTop) <= 1) {
-        return;
-    }
-
-    g_correctingTaskbarPositionBeforePaint = true;
-    RememberRaisedTaskbarState(hWnd);
-    auto setWindowPos =
-        SetWindowPos_Original ? SetWindowPos_Original : SetWindowPos;
-    setWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER | SWP_NOSENDCHANGING |
-                     SWP_NOCOPYBITS);
-    g_correctingTaskbarPositionBeforePaint = false;
-}
-
-void ReportRaisedTaskbarPosition(HWND hWnd, WINDOWPOS* windowPos) {
-    if (!windowPos || !g_taskbarProcessActive.load() ||
-        !g_raiseTaskbarFromBottomEnabled.load() ||
-        g_forceTaskbarBottom.load() || !ShouldRaiseTaskbarFromBottom(hWnd)) {
-        return;
-    }
-
-    RECT taskbarRect{};
-    if (!GetWindowRect(hWnd, &taskbarRect)) {
-        return;
-    }
-
-    // WM_WINDOWPOSCHANGED originally described Explorer's rejected bottom
-    // position. Pass the actual raised position to Explorer's handler so its
-    // cached layout agrees with the window and it doesn't push it down again.
-    windowPos->x = taskbarRect.left;
-    windowPos->y = taskbarRect.top;
-    windowPos->flags &= ~SWP_NOMOVE;
-    windowPos->flags |= SWP_NOSENDCHANGING;
-}
-
-BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
-                              HWND hWndInsertAfter,
-                              int X,
-                              int Y,
-                              int cx,
-                              int cy,
-                              UINT uFlags) {
-    WINDOWPOS windowPos{hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags};
-    AdjustTaskbarWindowPos(hWnd, &windowPos);
-    AdjustTaskbarWindowZOrder(hWnd, &windowPos);
-    return SetWindowPos_Original(
-        hWnd, windowPos.hwndInsertAfter, windowPos.x, windowPos.y,
-        windowPos.cx, windowPos.cy, windowPos.flags);
-}
-
-using DeferWindowPos_t = decltype(&DeferWindowPos);
-DeferWindowPos_t DeferWindowPos_Original;
-
-HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo,
-                                HWND hWnd,
-                                HWND hWndInsertAfter,
-                                int x,
-                                int y,
-                                int cx,
-                                int cy,
-                                UINT uFlags) {
-    WINDOWPOS windowPos{hWnd, hWndInsertAfter, x, y, cx, cy, uFlags};
-    AdjustTaskbarWindowPos(hWnd, &windowPos);
-    AdjustTaskbarWindowZOrder(hWnd, &windowPos);
-    return DeferWindowPos_Original(
-        hWinPosInfo, hWnd, windowPos.hwndInsertAfter, windowPos.x,
-        windowPos.y, windowPos.cx, windowPos.cy, windowPos.flags);
-}
-
-using MoveWindow_t = decltype(&MoveWindow);
-MoveWindow_t MoveWindow_Original;
-
-BOOL WINAPI MoveWindow_Hook(HWND hWnd,
-                            int X,
-                            int Y,
-                            int nWidth,
-                            int nHeight,
-                            BOOL bRepaint) {
-    WINDOWPOS windowPos{hWnd, nullptr, X, Y, nWidth, nHeight, 0};
-    AdjustTaskbarWindowPos(hWnd, &windowPos);
-    return MoveWindow_Original(hWnd, windowPos.x, windowPos.y,
-                               windowPos.cx, windowPos.cy, bRepaint);
 }
 
 BOOL CALLBACK PositionTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
@@ -20842,15 +20908,22 @@ BOOL CALLBACK PositionTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
 
     auto* context = reinterpret_cast<TaskbarPositionContext*>(lParam);
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (context->targetMonitors &&
+        !context->targetMonitors->contains(monitor)) {
+        return TRUE;
+    }
+
     MONITORINFO monitorInfo{.cbSize = sizeof(monitorInfo)};
     RECT taskbarRect{};
     if (!GetMonitorInfoW(monitor, &monitorInfo) ||
         !GetWindowRect(hWnd, &taskbarRect)) {
+        context->allPositionsCorrect = false;
         return TRUE;
     }
 
     int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
     if (taskbarHeight <= 0) {
+        context->allPositionsCorrect = false;
         return TRUE;
     }
 
@@ -20864,23 +20937,30 @@ BOOL CALLBACK PositionTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
     RememberRaisedTaskbarState(hWnd);
     int targetTop = GetRaisedTaskbarTop(hWnd, taskbarHeight);
     if (targetTop == INT_MIN) {
+        context->allPositionsCorrect = false;
         return TRUE;
     }
     if (std::abs(taskbarRect.top - targetTop) > 1) {
-        auto setWindowPos = SetWindowPos_Original ? SetWindowPos_Original
-                                                  : SetWindowPos;
-        setWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
+        SetWindowPos(hWnd, nullptr, taskbarRect.left, targetTop, 0, 0,
                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                          SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
+    }
+
+    RECT finalRect{};
+    if (!GetWindowRect(hWnd, &finalRect) ||
+        std::abs(finalRect.top - targetTop) > 1) {
+        context->allPositionsCorrect = false;
     }
 
     return TRUE;
 }
 
-void UpdateTaskbarPositions(bool forceBottom = false) {
-    TaskbarPositionContext context{forceBottom};
+bool UpdateTaskbarPositions(bool forceBottom = false,
+                            const MonitorSet* targetMonitors = nullptr) {
+    TaskbarPositionContext context{forceBottom, targetMonitors, true};
     EnumWindows(PositionTaskbarWindowProc,
                 reinterpret_cast<LPARAM>(&context));
+    return context.allPositionsCorrect;
 }
 
 void RestoreRaisedTaskbarsWithRetries() {
@@ -21055,6 +21135,12 @@ void CALLBACK DynamicWindowWinEventProc(HWINEVENTHOOK,
 
 DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
     std::unordered_map<HMONITOR, ULONGLONG> desktopCandidateStart;
+    struct DesktopPositionRetryState {
+        ULONGLONG transitionTick;
+        size_t nextAttempt;
+    };
+    std::unordered_map<HMONITOR, DesktopPositionRetryState>
+        desktopPositionRetries;
 
     MSG message{};
     PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
@@ -21084,6 +21170,10 @@ DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
 
     constexpr DWORD kEventDebounceMilliseconds = 150;
     constexpr DWORD kSafetyRefreshMilliseconds = 60000;
+    constexpr DWORD kTaskbarPositionRetryDelaysMilliseconds[] = {
+        100, 300, 750, 1500, 3000, 5000, 8000,
+    };
+    ULONGLONG lastPeriodicPositionValidationTick = GetTickCount64();
     DWORD nextRefreshMilliseconds = 0;
 
     auto pumpMessages = [&]() {
@@ -21188,13 +21278,106 @@ DWORD WINAPI DynamicThemeThreadProc(LPVOID) {
             }
         }
 
+        // Revalidate on every debounced shell refresh. This is normally a
+        // read-only check; SetWindowPos runs only if a desktop taskbar is
+        // actually outside its configured raised position.
+        UpdateTaskbarPositions();
         UpdateTaskbarZOrders();
 
         if (desiredMonitors != activeMonitors) {
+            MonitorSet returnedToDesktopMonitors;
+            for (HMONITOR monitor : activeMonitors) {
+                if (connectedMonitors.contains(monitor) &&
+                    !desiredMonitors.contains(monitor)) {
+                    returnedToDesktopMonitors.insert(monitor);
+                }
+            }
+
             SetWindowThemeMonitors(desiredMonitors);
+            ReinitializeDynamicTheme();
             UpdateTaskbarPositions();
             UpdateTaskbarZOrders();
-            ReinitializeDynamicTheme();
+
+            // Explorer can recalculate the taskbar geometry shortly after the
+            // XAML theme changes. Keep checking only the monitors which just
+            // returned to the desktop theme, for a short bounded period.
+            if (g_raiseTaskbarFromBottomEnabled.load()) {
+                ULONGLONG transitionTick = GetTickCount64();
+                for (HMONITOR monitor : returnedToDesktopMonitors) {
+                    desktopPositionRetries[monitor] = {transitionTick, 0};
+                }
+            }
+        }
+
+        now = GetTickCount64();
+        MonitorSet retryMonitors;
+        bool finalRetryAttempt = false;
+        for (auto it = desktopPositionRetries.begin();
+             it != desktopPositionRetries.end();) {
+            HMONITOR monitor = it->first;
+            auto& retry = it->second;
+            if (!connectedMonitors.contains(monitor) ||
+                desiredMonitors.contains(monitor)) {
+                it = desktopPositionRetries.erase(it);
+                continue;
+            }
+
+            DWORD retryDelay =
+                kTaskbarPositionRetryDelaysMilliseconds[retry.nextAttempt];
+            ULONGLONG retryTick = retry.transitionTick + retryDelay;
+            if (now >= retryTick) {
+                retryMonitors.insert(monitor);
+                retry.nextAttempt++;
+                if (retry.nextAttempt >=
+                    ARRAYSIZE(kTaskbarPositionRetryDelaysMilliseconds)) {
+                    finalRetryAttempt = true;
+                    it = desktopPositionRetries.erase(it);
+                    continue;
+                }
+            }
+
+            ++it;
+        }
+
+        if (!retryMonitors.empty()) {
+            bool positionsCorrect =
+                UpdateTaskbarPositions(false, &retryMonitors);
+            UpdateTaskbarZOrders();
+            if (!positionsCorrect && finalRetryAttempt) {
+                Wh_Log(L"Warning: a desktop taskbar position was still "
+                       L"incorrect after the final short retry");
+            }
+        }
+
+        // A low-frequency geometry check is a fallback for shell changes that
+        // don't produce a usable WinEvent. Unlike polling, it runs once per
+        // minute and SetWindowPos is only called when the bar is misplaced.
+        now = GetTickCount64();
+        ULONGLONG sincePeriodicValidation =
+            now - lastPeriodicPositionValidationTick;
+        if (sincePeriodicValidation >= kSafetyRefreshMilliseconds) {
+            UpdateTaskbarPositions();
+            UpdateTaskbarZOrders();
+            lastPeriodicPositionValidationTick = now;
+            sincePeriodicValidation = 0;
+        }
+
+        DWORD periodicValidationRemaining = static_cast<DWORD>(
+            kSafetyRefreshMilliseconds - sincePeriodicValidation);
+        nextRefreshMilliseconds =
+            std::min(nextRefreshMilliseconds, periodicValidationRemaining);
+
+        for (const auto& [monitor, retry] : desktopPositionRetries) {
+            DWORD retryDelay =
+                kTaskbarPositionRetryDelaysMilliseconds[retry.nextAttempt];
+            ULONGLONG retryTick = retry.transitionTick + retryDelay;
+            DWORD retryRemaining =
+                retryTick <= now
+                    ? 0
+                    : static_cast<DWORD>(std::min<ULONGLONG>(
+                          retryTick - now, kSafetyRefreshMilliseconds));
+            nextRefreshMilliseconds =
+                std::min(nextRefreshMilliseconds, retryRemaining);
         }
 
         bool refreshDue = false;
@@ -21429,13 +21612,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
-
-    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
-                                   &SetWindowPos_Original);
-    WindhawkUtils::SetFunctionHook(DeferWindowPos, DeferWindowPos_Hook,
-                                   &DeferWindowPos_Original);
-    WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook,
-                                   &MoveWindow_Original);
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
