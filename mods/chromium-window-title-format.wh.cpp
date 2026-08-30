@@ -1070,8 +1070,7 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out,
         // titles at all". Chrome discovers no marker resource and so no
         // separator, and a Chrome title never carries a profile - so every match
         // this loop could make there would be a false positive with no true
-        // positive to trade against. The old separator-driven loop got that for
-        // free by iterating an empty list; anchoring on the name has to say it.
+        // positive to trade against.
         if (out->profile.empty() && g.profileCount >= 1 &&
             !g.profileNames.empty() && !g.slot2Seps.empty()) {
             // ANCHOR ON THE NAME, not on a discovered separator. Measured on
@@ -2301,6 +2300,16 @@ void SweepAllWindows() {
             Wh_Log(L"sweep aborted: shutting down");
             return;
         }
+        // RE-CHECKED, not trusted from collection time. CollectBrowserFrames
+        // filtered by process when it enumerated, but this loop can run for
+        // several hundred milliseconds of blocking sends, and an HWND is unique
+        // only while its window lives. A frame closed mid-sweep can have its
+        // handle recycled by any process on the desktop, and the one kind of
+        // stranger whose title would survive ComposeFor unchanged is another
+        // browser's frame - a second --user-data-dir instance. The restore loop
+        // has always guarded this; the sweep only checked at collection.
+        if (!IsBrowserFrame(h)) continue;
+
         const DWORD owner = GetWindowThreadProcessId(h, nullptr);
         if (std::find(mute.begin(), mute.end(), owner) != mute.end()) {
             ++muted;
@@ -2355,8 +2364,26 @@ void SweepAllWindows() {
             st.tid        = owner;
             ReleaseSRWLockExclusive(&g_lock);
         }
-        if (out != cur && WriteTitleFromOtherThread(h, out)) {
-            ++changed;
+        if (out != cur) {
+            if (WriteTitleFromOtherThread(h, out)) {
+                ++changed;
+            } else {
+                // THE MAP MUST RECORD WHAT THE WINDOW SHOWS, not what we meant
+                // it to show. `applied` was committed above, before the send;
+                // when the send does not land, the window still shows `cur`, and
+                // leaving the map claiming otherwise makes the restore loop read
+                // `cur != st.applied` and classify the window as "moved on" -
+                // so a title we did write elsewhere would never be restored.
+                //
+                // Guarded by the generation this pass installed: if a real title
+                // write has landed since, its state is newer and stays.
+                AcquireSRWLockExclusive(&g_lock);
+                const auto it2 = g_states.find(h);
+                if (it2 != g_states.end() && it2->second.generation == gen + 1) {
+                    it2->second.applied = cur;
+                }
+                ReleaseSRWLockExclusive(&g_lock);
+            }
         }
     }
     // `muted` is the one that answers "did the one-strike rule cost anything
@@ -2450,9 +2477,9 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                 }
             }
             if (g.profileNames.empty()) {
-                // BOTH STATES, because this line is read on exactly the installs
-                // the setting exists for, and a line that describes only one of
-                // them is the third such lie this review has turned up.
+                // BOTH STATES. This line is read on exactly the installs the
+                // setting exists for, so one that describes only the default
+                // tells half of them something untrue about their own titles.
                 bool guess;
                 {
                     AcquireSRWLockShared(&g_settingsLock);
