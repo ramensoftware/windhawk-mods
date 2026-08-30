@@ -722,15 +722,15 @@ static HRESULT DesktopChanged_Hook(void* pThis, IVirtualDesktop* desktop) {
 
     uint64_t generation = previousGeneration;
 
-    GUID desktopId = {};
-    const bool desktopIdValid =
-        desktop && SUCCEEDED(desktop->GetId(&desktopId));
-
     if (outermost) {
         generation =
             g_navigationGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
 
         g_activeNavigationGeneration = generation;
+
+        GUID desktopId = {};
+        const bool desktopIdValid =
+            desktop && SUCCEEDED(desktop->GetId(&desktopId));
 
         Wh_Log(
             L"DesktopChanged navigation generation #%llu begin "
@@ -1265,7 +1265,8 @@ struct RescueRequest {
 
     // Win32 foreground state observed while the FVP-owned switch is still on
     // the hook stack. The generic foreground-settling guard is only allowed to
-    // cancel if a *different* source-desktop window becomes foreground later.
+    // cancel if a different source-desktop window from the activated process
+    // becomes foreground later.
     HWND foregroundAtQueue = nullptr;
 
     DWORD pid = 0;
@@ -1653,9 +1654,10 @@ static bool IsForegroundReplacementOnSourceDesktop(WorkerComState* state,
     DWORD foregroundPid = 0;
     GetWindowThreadProcessId(foreground, &foregroundPid);
 
-    // Explorer/taskbar can transiently retain foreground after tray input.
-    // Don't let shell-owned UI cancel an otherwise valid rescue.
-    if (!foregroundPid || foregroundPid == GetCurrentProcessId()) {
+    // This raw foreground check is weaker evidence than OnViewAddedInternal,
+    // so only trust a replacement owned by the process whose remote view was
+    // activated. Foreground restoration to shell/launcher UI must not cancel.
+    if (!foregroundPid || foregroundPid != request.pid) {
         return false;
     }
 
@@ -2066,6 +2068,8 @@ static DWORD WINAPI WorkerThreadProc(void*) {
 
             while (TakePendingRequest(&request)) {
                 request.extendedSupersessionEligible =
+                    g_viewSupersessionAvailable.load(
+                        std::memory_order_acquire) &&
                     HasExtendedSupersessionIdentity(request.pid);
 
                 if (WorkerStopRequested()) {
