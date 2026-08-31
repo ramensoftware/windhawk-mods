@@ -139,6 +139,7 @@ Windows continues to handle the actual copy, move, delete, conflicts, and errors
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cwchar>
 #include <limits>
 #include <mutex>
@@ -153,6 +154,7 @@ namespace DirectUI
 {
     struct DUIXmlParser;
     struct Element;
+    struct IClassInfo;
     struct PropertyInfo;
     struct Value;
 } // namespace DirectUI
@@ -174,7 +176,9 @@ namespace
 
     thread_local SkinState g_skinState{};
     std::atomic<bool> g_unloading{};
-    std::atomic<unsigned int> g_presentationActivations{};
+    std::mutex g_presentationActivationMutex;
+    std::condition_variable g_presentationActivationCondition;
+    unsigned int g_presentationActivations{};
     std::atomic<unsigned long long> g_skinEventSequence{};
     std::atomic<unsigned long long> g_displayTransitionSequence{};
 
@@ -183,20 +187,35 @@ namespace
     public:
         ScopedPresentationActivation()
         {
-            g_presentationActivations.fetch_add(
-                1, std::memory_order_acq_rel);
+            std::lock_guard<std::mutex> lock(g_presentationActivationMutex);
+            if (!g_unloading.load(std::memory_order_acquire))
+            {
+                ++g_presentationActivations;
+                active_ = true;
+            }
         }
 
         ~ScopedPresentationActivation()
         {
-            g_presentationActivations.fetch_sub(
-                1, std::memory_order_acq_rel);
+            if (!active_)
+            {
+                return;
+            }
+
+            std::lock_guard<std::mutex> lock(g_presentationActivationMutex);
+            if (--g_presentationActivations == 0)
+            {
+                g_presentationActivationCondition.notify_all();
+            }
         }
 
         ScopedPresentationActivation(
             ScopedPresentationActivation const &) = delete;
         ScopedPresentationActivation &operator=(
             ScopedPresentationActivation const &) = delete;
+
+    private:
+        bool active_ = false;
     };
 
     void ClearSkinState()
@@ -589,7 +608,8 @@ namespace
 
     bool IsWindowsAppsDarkMode()
     {
-        HIGHCONTRASTW highContrast{sizeof(highContrast)};
+        HIGHCONTRASTW highContrast{};
+        highContrast.cbSize = sizeof(highContrast);
         if (SystemParametersInfoW(
                 SPI_GETHIGHCONTRAST, sizeof(highContrast),
                 &highContrast, 0) &&
@@ -616,7 +636,8 @@ namespace
     ThemePalette MakeSystemTheme()
     {
         ThemePalette theme{};
-        HIGHCONTRASTW highContrast{sizeof(highContrast)};
+        HIGHCONTRASTW highContrast{};
+        highContrast.cbSize = sizeof(highContrast);
         bool highContrastEnabled =
             SystemParametersInfoW(
                 SPI_GETHIGHCONTRAST, sizeof(highContrast),
@@ -1159,11 +1180,11 @@ namespace
 #define kDisplayModeFooterReserveHeight (ActiveLayout().footerReserveHeight)
 
     constexpr wchar_t kCircleWindowClass[] =
-        L"Windhawk.FileOperationStyler.ProgressCircle.0.12.11";
+        L"Windhawk.FileOperationStyler.ProgressCircle.1.0.0";
     constexpr wchar_t kInfoPanelWindowClass[] =
-        L"Windhawk.FileOperationStyler.OperationPresentation.0.12.11";
+        L"Windhawk.FileOperationStyler.OperationPresentation.1.0.0";
     constexpr wchar_t kFooterOverlayWindowClass[] =
-        L"Windhawk.FileOperationStyler.FooterPresentation.0.12.11";
+        L"Windhawk.FileOperationStyler.FooterPresentation.1.0.0";
 
 #define kInfoPanelTop (ActiveLayout().infoTop)
 #define kInfoPanelCommonHeight (ActiveLayout().compactPanelHeight)
@@ -1875,10 +1896,8 @@ namespace
                               InfoPanelSnapshot *snapshot)
     {
         OperationTileElement *tile = nullptr;
-        HWND hostWindow = nullptr;
         bool storedPaused = false;
         bool storedPausedKnown = false;
-        size_t hostTileCount = 0;
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto it = std::find_if(
@@ -1890,58 +1909,15 @@ namespace
                 return false;
             }
             tile = it->tile;
-            hostWindow = it->hostWindow;
             snapshot->percent = std::clamp(it->progressPercent, 0, 100);
             storedPaused = it->paused;
             storedPausedKnown = it->pausedStateKnown;
-
-            for (CircleState const &state : g_circles)
-            {
-                if (state.hostWindow == hostWindow && state.tile)
-                {
-                    ++hostTileCount;
-                }
-            }
         }
 
-        if (storedPausedKnown)
-        {
-            // Per-tile state is authoritative after this operation's custom
-            // Pause/Resume control has been used.
-            snapshot->paused = storedPaused;
-        }
-        else if (hostTileCount == 1)
-        {
-            // For a single operation Explorer's title accurately describes
-            // that one tile, so it is a safe initialization source.
-            wchar_t caption[160]{};
-            if (hostWindow && IsWindow(hostWindow) &&
-                GetWindowTextW(hostWindow, caption, ARRAYSIZE(caption)) > 0)
-            {
-                snapshot->paused = wcsstr(caption, L"Paused") != nullptr;
-
-                // Preserve the known single-tile state so it remains correct
-                // if a second operation is added later and the host caption
-                // becomes aggregate ("2 Actions", "2 Paused Actions", etc.).
-                std::lock_guard<std::mutex> lock(g_circleMutex);
-                auto stateIt = std::find_if(
-                    g_circles.begin(), g_circles.end(),
-                    [tile](CircleState const &state)
-                    { return state.tile == tile; });
-                if (stateIt != g_circles.end())
-                {
-                    stateIt->paused = snapshot->paused;
-                    stateIt->pausedStateKnown = true;
-                }
-            }
-        }
-        else
-        {
-            // A multi-operation caption describes the whole host, not this
-            // specific tile. New tiles start running, so never infer a tile's
-            // icon from captions such as "2 Paused Actions".
-            snapshot->paused = false;
-        }
+        // The per-tile state is authoritative after this operation's custom
+        // Pause/Resume action succeeds. New tiles start running; never infer a
+        // tile state from Explorer's localized or aggregate host caption.
+        snapshot->paused = storedPausedKnown && storedPaused;
 
         std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
         auto it = std::find_if(
@@ -3151,6 +3127,93 @@ namespace
         return lookup.window;
     }
 
+    bool InvokeDirectUiButtonDefaultAction(DirectUI::Element *element,
+                                           PCWSTR actionName)
+    {
+        if (!element)
+        {
+            return false;
+        }
+
+        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+        if (!dui70)
+        {
+            Wh_Log(L"custom action=%s dui70.dll not loaded", actionName);
+            return false;
+        }
+
+        FARPROC buttonGetClassInfoExport = GetProcAddress(
+            dui70, "?GetClassInfoW@Button@DirectUI@@UEAAPEAUIClassInfo@2@XZ");
+        auto buttonVtable = reinterpret_cast<void **>(GetProcAddress(
+            dui70, "??_7Button@DirectUI@@6B@"));
+
+        constexpr size_t kMaxButtonVtableSlots = 64;
+        size_t getClassInfoSlot = kMaxButtonVtableSlots;
+        for (size_t i = 0;
+             buttonGetClassInfoExport && buttonVtable &&
+             i < kMaxButtonVtableSlots;
+             ++i)
+        {
+            if (buttonVtable[i] ==
+                reinterpret_cast<void *>(buttonGetClassInfoExport))
+            {
+                getClassInfoSlot = i;
+                break;
+            }
+        }
+
+        using ButtonGetClassInfoPtr_t = DirectUI::IClassInfo *(*)();
+        using ElementGetClassInfo_t =
+            DirectUI::IClassInfo *(*)(DirectUI::Element *);
+        using ClassInfoIsSubclassOf_t =
+            bool (*)(DirectUI::IClassInfo const *, DirectUI::IClassInfo *);
+        using ButtonDefaultAction_t = long (*)(DirectUI::Element *);
+
+        auto buttonGetClassInfoPtr =
+            reinterpret_cast<ButtonGetClassInfoPtr_t>(GetProcAddress(
+                dui70,
+                "?GetClassInfoPtr@Button@DirectUI@@SAPEAUIClassInfo@2@XZ"));
+        auto classInfoIsSubclassOf =
+            reinterpret_cast<ClassInfoIsSubclassOf_t>(GetProcAddress(
+                dui70,
+                "?IsSubclassOf@ClassInfoBase@DirectUI@@UEBA_NPEAUIClassInfo@2@@Z"));
+        auto buttonDefaultAction =
+            reinterpret_cast<ButtonDefaultAction_t>(GetProcAddress(
+                dui70, "?DefaultAction@Button@DirectUI@@UEAAJXZ"));
+
+        if (getClassInfoSlot == kMaxButtonVtableSlots ||
+            !buttonGetClassInfoPtr || !classInfoIsSubclassOf ||
+            !buttonDefaultAction)
+        {
+            Wh_Log(L"custom action=%s DirectUI Button validation exports "
+                   L"unavailable",
+                   actionName);
+            return false;
+        }
+
+        auto elementVtable = *reinterpret_cast<void ***>(element);
+        auto elementGetClassInfo =
+            elementVtable
+                ? reinterpret_cast<ElementGetClassInfo_t>(
+                      elementVtable[getClassInfoSlot])
+                : nullptr;
+        DirectUI::IClassInfo *elementClassInfo =
+            elementGetClassInfo ? elementGetClassInfo(element) : nullptr;
+        DirectUI::IClassInfo *buttonClassInfo = buttonGetClassInfoPtr();
+        if (!elementClassInfo || !buttonClassInfo ||
+            !classInfoIsSubclassOf(elementClassInfo, buttonClassInfo))
+        {
+            Wh_Log(L"custom action=%s rejected: native element is not a "
+                   L"DirectUI::Button",
+                   actionName);
+            return false;
+        }
+
+        // Preserve Explorer's semantic action mechanism after fail-closed
+        // runtime class validation. Never synthesize mouse input here.
+        return buttonDefaultAction(element) >= 0;
+    }
+
     bool InvokeNativeActionForTile(OperationTileElement *tile,
                                    PCWSTR elementName,
                                    PCWSTR actionName)
@@ -3180,35 +3243,7 @@ namespace
             return false;
         }
 
-        // Do not synthesize mouse input into OperationTileHost.
-        // DirectUI::Button exposes DefaultAction(), which performs the
-        // button's semantic default action directly.
-        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
-        if (!dui70)
-        {
-            Wh_Log(L"custom action=%s dui70.dll not loaded tile=%p",
-                   actionName, reinterpret_cast<void *>(tile));
-            return false;
-        }
-
-        using ButtonDefaultAction_t =
-            long (*)(DirectUI::Element *);
-
-        auto buttonDefaultAction =
-            reinterpret_cast<ButtonDefaultAction_t>(
-                GetProcAddress(
-                    dui70,
-                    "?DefaultAction@Button@DirectUI@@UEAAJXZ"));
-        if (!buttonDefaultAction)
-        {
-            Wh_Log(L"custom action=%s DirectUI::Button::DefaultAction "
-                   L"export not found tile=%p",
-                   actionName, reinterpret_cast<void *>(tile));
-            return false;
-        }
-
-        long result = buttonDefaultAction(actionElement);
-        return result >= 0;
+        return InvokeDirectUiButtonDefaultAction(actionElement, actionName);
     }
 
     void SetTilePausedPresentationState(
@@ -3583,25 +3618,8 @@ namespace
             return false;
         }
 
-        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
-        if (!dui70)
-        {
-            return false;
-        }
-
-        using ButtonDefaultAction_t = long (*)(DirectUI::Element *);
-        auto buttonDefaultAction =
-            reinterpret_cast<ButtonDefaultAction_t>(
-                GetProcAddress(
-                    dui70,
-                    "?DefaultAction@Button@DirectUI@@UEAAJXZ"));
-        if (!buttonDefaultAction)
-        {
-            return false;
-        }
-
-        long result = buttonDefaultAction(displayModeButton);
-        return result >= 0;
+        return InvokeDirectUiButtonDefaultAction(
+            displayModeButton, L"more-fewer-details");
     }
 
     LRESULT CALLBACK FooterOverlayWindowProc(HWND window,
@@ -4173,27 +4191,6 @@ namespace
             g_deferredDisplaySnapshots.end());
     }
 
-    int GetSingleCirclePercentForHost(HWND hostWindow)
-    {
-        std::lock_guard<std::mutex> lock(g_circleMutex);
-        int percent = -1;
-        int matches = 0;
-        for (auto const &state : g_circles)
-        {
-            if (state.hostWindow != hostWindow)
-            {
-                continue;
-            }
-            percent = std::clamp(state.progressPercent, 0, 100);
-            ++matches;
-            if (matches > 1)
-            {
-                return -1;
-            }
-        }
-        return matches == 1 ? percent : -1;
-    }
-
     bool LooksLikeNativeProgressCaption(PCWSTR text)
     {
         return text && *text && wcsstr(text, L"%") != nullptr &&
@@ -4207,10 +4204,9 @@ namespace
             return false;
         }
 
-        // The custom body summary is a transferred/total pair. Explorer can
-        // mirror either the full "x / y (p%)" form or a transient "x / y"
-        // form into the top-level caption. Suppress both so the title remains
-        // Explorer's native progress caption instead of flashing byte counts.
+        // Explorer can use either the full "x / y (p%)" form or a transient
+        // "x / y" form while returning from a native special state. This is
+        // classification only; Explorer remains the owner of the caption.
         return wcsstr(text, L" / ") != nullptr;
     }
 
@@ -4221,9 +4217,9 @@ namespace
             return false;
         }
 
-        // These three were observed directly while testing this build.
-        // The generic transition rule below does not depend on these English
-        // strings once the host has shown a normal percentage caption.
+        // Non-authoritative English heuristics observed on this shell build.
+        // The generic transition fallback below remains authoritative once
+        // the host has shown a normal percentage caption.
         return lstrcmpW(caption, L"Replace or Skip Files") == 0 ||
                lstrcmpW(caption, L"File In Use") == 0 ||
                lstrcmpW(caption, L"Folder In Use") == 0 ||
@@ -4581,39 +4577,6 @@ namespace
         }
     }
 
-    void SyncHostCaptionFromCircle(OperationTileElement *tile, int percent)
-    {
-        HWND hostWindow = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(g_circleMutex);
-            auto it = std::find_if(
-                g_circles.begin(), g_circles.end(),
-                [tile](CircleState const &state)
-                { return state.tile == tile; });
-            if (it != g_circles.end())
-            {
-                hostWindow = it->hostWindow;
-            }
-        }
-
-        if (!hostWindow || !IsWindow(hostWindow) ||
-            GetSingleCirclePercentForHost(hostWindow) < 0 ||
-            IsHostInSpecialOperationState(hostWindow))
-        {
-            return;
-        }
-
-        wchar_t currentCaption[160]{};
-        GetWindowTextW(hostWindow, currentCaption, ARRAYSIZE(currentCaption));
-
-        wchar_t synchronizedCaption[80]{};
-        bool paused = wcsstr(currentCaption, L"Paused") != nullptr;
-        wsprintfW(synchronizedCaption,
-                  paused ? L"Paused - %d%% complete" : L"%d%% complete",
-                  std::clamp(percent, 0, 100));
-        SetWindowTextW(hostWindow, synchronizedCaption);
-    }
-
     LRESULT CALLBACK OperationStatusWindowSubclassProc(
         HWND window,
         UINT message,
@@ -4653,50 +4616,8 @@ namespace
                 ScheduleCustomReapplyForHost(window);
             }
 
-            // Never rewrite Explorer's error/conflict caption.
-            if (IsHostInSpecialOperationState(window))
-            {
-                return DefSubclassProc(window, message, wParam, lParam);
-            }
-
-            if (LooksLikeTransferSummaryCaption(caption))
-            {
-                // Explorer can publish a transient byte-summary caption before
-                // the progress caption. Replace it with the same normalized
-                // percentage used by the circle instead of merely suppressing
-                // the update and leaving an older byte caption frozen.
-                int percent = GetSingleCirclePercentForHost(window);
-                if (percent >= 0)
-                {
-                    wchar_t synchronizedCaption[80]{};
-                    bool paused = wcsstr(caption, L"Paused") != nullptr;
-                    wsprintfW(synchronizedCaption,
-                              paused ? L"Paused - %d%% complete"
-                                     : L"%d%% complete",
-                              percent);
-                    return DefSubclassProc(
-                        window, message, wParam,
-                        reinterpret_cast<LPARAM>(synchronizedCaption));
-                }
-                return TRUE;
-            }
-
-            // With one operation tile, keep the title percentage synchronized
-            // to the same normalized progress used by the circle/body. Explorer
-            // can otherwise publish a visibly different percentage. For
-            // multi-tile hosts, leave Explorer's aggregate caption untouched.
-            int percent = GetSingleCirclePercentForHost(window);
-            if (percent >= 0 && LooksLikeNativeProgressCaption(caption))
-            {
-                wchar_t synchronizedCaption[80]{};
-                bool paused = wcsstr(caption, L"Paused") != nullptr;
-                wsprintfW(synchronizedCaption,
-                          paused ? L"Paused - %d%% complete"
-                                 : L"%d%% complete",
-                          percent);
-                return DefSubclassProc(window, message, wParam,
-                                       reinterpret_cast<LPARAM>(synchronizedCaption));
-            }
+            // Caption inspection is limited to native special-state fallback.
+            // Explorer always owns and localizes the actual window title.
         }
 
         if (message == g_removeHostSubclassMessage)
@@ -5107,6 +5028,7 @@ namespace
 
     void PositionProgressCircle(OperationTileElement *tile, PCWSTR reason)
     {
+        (void)reason;
         HWND circleWindow = nullptr;
 
         HWND registeredHost = GetRegisteredCircleHost(tile);
@@ -5801,9 +5723,12 @@ namespace
                 { return state.owner == owner; });
             if (it == g_transferSummaries.end())
             {
-                g_transferSummaries.push_back(
-                    {owner, tile, operationTileRoot, tileHeaderRoot,
-                     0, 0, false, false, false});
+                TransferSummaryState state{};
+                state.owner = owner;
+                state.tile = tile;
+                state.operationTileRoot = operationTileRoot;
+                state.tileHeaderRoot = tileHeaderRoot;
+                g_transferSummaries.push_back(state);
             }
             else
             {
@@ -7030,7 +6955,6 @@ namespace
         EnsureProgressCircle(tile, 0, progress);
         RefreshTransferSummaryForTile(tile);
         InvalidateInfoPanelForTile(tile);
-        SyncHostCaptionFromCircle(tile, progress.percent);
     }
 
     void DestroyProgressCircle(OperationTileElement *tile)
@@ -7909,7 +7833,8 @@ namespace
         options.noUndecoratedSymbols = TRUE;
 
         if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
-                                        ARRAYSIZE(shell32DllHooks), &options) ||
+                                        ARRAYSIZE(shell32DllHooks),
+                                        &options) ||
             !targets->createTileElement || !targets->progressPositionProp ||
             !targets->getProgressHWND || !targets->onPropertyChanged ||
             !targets->operationTileDestructor ||
@@ -8026,7 +7951,7 @@ namespace
 BOOL Wh_ModInit()
 {
     g_unloading.store(false, std::memory_order_release);
-    Wh_Log(L"File Operation Styler 0.12.11 initialization started");
+    Wh_Log(L"File Operation Styler 1.0.0 initialization started");
 
     LoadSettings();
 
@@ -8042,7 +7967,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    Wh_Log(L"File Operation Styler 0.12.11 initialization complete");
+    Wh_Log(L"File Operation Styler 1.0.0 initialization complete");
     return TRUE;
 }
 
@@ -8053,13 +7978,14 @@ void Wh_ModBeforeUninit()
         return;
     }
 
-    Wh_Log(L"File Operation Styler 0.12.11 presentation teardown started");
-    while (g_presentationActivations.load(std::memory_order_acquire) != 0)
+    Wh_Log(L"File Operation Styler 1.0.0 presentation teardown started");
     {
-        Sleep(1);
+        std::unique_lock<std::mutex> lock(g_presentationActivationMutex);
+        g_presentationActivationCondition.wait(
+            lock, [] { return g_presentationActivations == 0; });
     }
     DestroyAllProgressCircles();
-    Wh_Log(L"File Operation Styler 0.12.11 presentation teardown complete");
+    Wh_Log(L"File Operation Styler 1.0.0 presentation teardown complete");
 }
 
 void Wh_ModUninit()
@@ -8071,7 +7997,7 @@ void Wh_ModUninit()
     }
     ClearSkinState();
     ShutdownDwmApi();
-    Wh_Log(L"File Operation Styler 0.12.11 uninitialization complete");
+    Wh_Log(L"File Operation Styler 1.0.0 uninitialization complete");
 }
 
 
