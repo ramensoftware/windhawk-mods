@@ -3196,10 +3196,6 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
             btnSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED_HOVER);
         }
-
-        if (!isOnSecureDesktop) {
-            ActivateWindow();
-        }
         return 0;
     }
     case WM_PAINT: {
@@ -3408,6 +3404,10 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             {
                 std::lock_guard lock(hBgWndMutex);
                 CustomBSDR::hBgWnd = hBgWndLocal;
+            }
+
+            if (!isOnSecureDesktop) {
+                ActivateWindow();
             }
 
             HANDLE waitHandles[1] = { hStopEvent };
