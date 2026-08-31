@@ -1512,11 +1512,21 @@ std::wstring ComposeFor(const std::wstring& source) {
     if (!InterlockedCompareExchange(&g_ready, 0, 0)) {
         return source;
     }
-    // Read before Decompose, under the same lock the template is copied with.
-    bool guessProfile;
+    // ONE acquisition for both: they are two halves of the same settings
+    // generation, and a Save landing between separate reads pairs the parse of
+    // the OLD settings with the template of the NEW - a pair that can cut text
+    // out of a title neither generation on its own would have touched.
+    //
+    // A COPY, not a reference: carrying a reference into Render is the
+    // use-after-free described at g_settingsLock.
+    bool         guessProfile;
+    std::wstring tpl;
     {
         AcquireSRWLockShared(&g_settingsLock);
         guessProfile = g_settings.guessProfile;
+        tpl          = (g_isChrome && !g_settings.chromeOverride.empty())
+                           ? g_settings.chromeOverride
+                           : g_settings.normal;
         ReleaseSRWLockShared(&g_settingsLock);
     }
 
@@ -1534,17 +1544,6 @@ std::wstring ComposeFor(const std::wstring& source) {
         return source;
     }
 
-    // A COPY, not a reference. Binding a reference here and carrying it into
-    // Render is the use-after-free described at g_settingsLock: the settings
-    // thread can reassign the very string being rendered.
-    std::wstring tpl;
-    {
-        AcquireSRWLockShared(&g_settingsLock);
-        tpl = (g_isChrome && !g_settings.chromeOverride.empty())
-                  ? g_settings.chromeOverride
-                  : g_settings.normal;
-        ReleaseSRWLockShared(&g_settingsLock);
-    }
     if (tpl.empty()) {
         return source;
     }
@@ -1591,15 +1590,22 @@ bool WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text,
 // teardown joins with INFINITE.
 //
 // Two sends rather than one fixed buffer: a truncated read loses the browser
-// suffix, so Decompose refuses it and the window is never retitled. Returns
-// false only for a window that did not answer.
-bool ReadTitleFromOtherThread(HWND hWnd, std::wstring* out) {
+// suffix, so Decompose refuses it and the window is never retitled.
+//
+// False means the TITLE is unusable - a length too large to be one, or a
+// handler that overran its buffer, both fail here having ANSWERED. `answered`
+// is the separate fact about the thread, as WriteTitleFromOtherThread reports
+// it, and only it may mute a thread's remaining windows.
+bool ReadTitleFromOtherThread(HWND hWnd, std::wstring* out,
+                              bool* answered = nullptr) {
     out->clear();
+    if (answered) *answered = false;
     DWORD_PTR len = 0;
     if (!SendMessageTimeoutW(hWnd, WM_GETTEXTLENGTH, 0, 0,
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &len)) {
         return false;
     }
+    if (answered) *answered = true;
     if (len == 0) return true;
     if (len > 0x10000) return false;  // too large to be a real title
 
@@ -1609,6 +1615,9 @@ bool ReadTitleFromOtherThread(HWND hWnd, std::wstring* out) {
     if (!SendMessageTimeoutW(hWnd, WM_GETTEXT, static_cast<WPARAM>(buf.size()),
                              reinterpret_cast<LPARAM>(buf.data()),
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &copied)) {
+        // It answered the first send and not the second, so the thread stopped
+        // answering DURING this read - which is evidence about the thread.
+        if (answered) *answered = false;
         return false;
     }
     // WM_GETTEXTLENGTH is allowed to overestimate, so the copied count is the
@@ -1792,14 +1801,6 @@ std::wstring DirOfModule(const wchar_t* name) {
     return (at == std::wstring::npos) ? std::wstring() : s.substr(0, at);
 }
 
-// The user-data directory this browser is most likely running with:
-// --user-data-dir first, then the per-channel default derived below.
-//
-// NOT authoritative - a `UserDataDir` group policy outranks even the switch, and
-// this does not read it (that needs HKLM-over-HKCU precedence and
-// ${local_app_data} expansion). On a policy-managed machine this answers about
-// the default location instead; both callers treat a miss as "unknown", so the
-// failure is a missing {profile} rather than a wrong one.
 // The UserDataDir group policy. Chromium gives it precedence over
 // --user-data-dir, so this is read first, and HKLM before HKCU exactly as the
 // browser resolves it. Read-only: the mod never writes a policy key.
@@ -2318,9 +2319,20 @@ void SweepAllWindows() {
         // Bounded, and shared with the restore path - see the helper for why
         // these reads cannot be the plain GetWindowTextW form.
         std::wstring cur;
-        if (!ReadTitleFromOtherThread(h, &cur)) {
-            mute.push_back(owner);
-            ++muted;
+        bool         answered = false;
+        if (!ReadTitleFromOtherThread(h, &cur, &answered)) {
+            // Only silence mutes, and only from a window still ours to have
+            // been silent - the restore loop's rule, for its reasons. The
+            // IsBrowserFrame check above does NOT survive the send: a frame
+            // closing during WM_GETTEXTLENGTH fails it for want of a window,
+            // not because its thread went quiet. Not counted either - `muted`
+            // is the log line's "skipped after a thread stopped answering".
+            DWORD       pid2 = 0;
+            const DWORD tid2 = GetWindowThreadProcessId(h, &pid2);
+            if (!answered && pid2 == GetCurrentProcessId() && tid2 == owner) {
+                mute.push_back(owner);
+                ++muted;
+            }
             continue;
         }
         if (cur.empty()) continue;
@@ -2779,7 +2791,19 @@ void Wh_ModUninit() {
             continue;
         }
         std::wstring cur;
-        if (!ReadTitleFromOtherThread(hWnd, &cur)) { mute.push_back(tid); ++failed; continue; }
+        bool         readAnswered = false;
+        if (!ReadTitleFromOtherThread(hWnd, &cur, &readAnswered)) {
+            // Same rule as the write below, reached sooner: a title too large
+            // to be real, and a window destroyed since the check above, both
+            // fail this read without the thread having gone quiet.
+            DWORD       pid2 = 0;
+            const DWORD tid2 = GetWindowThreadProcessId(hWnd, &pid2);
+            if (!readAnswered && pid2 == GetCurrentProcessId() && tid2 == tid) {
+                mute.push_back(tid);
+            }
+            ++failed;
+            continue;
+        }
         if (cur != st.applied) { ++skipped; continue; }
 
         bool answered = false;
@@ -2809,12 +2833,15 @@ void Wh_ModUninit() {
     }
     // All four, because the ones that are not "restored" are the interesting
     // ones: a window whose thread did not answer keeps our title after the mod
-    // is gone, and this log line is the only place that says so. The last count
-    // is kept apart from `skipped` deliberately - a skip is benign (the window
-    // moved on, or is not ours), while a mute means the one-strike rule gave up
-    // on every remaining window of that thread, and lumping the two together is
-    // what made the rule's cost unmeasurable.
-    Wh_Log(L"restored %d title(s), %d not acknowledged, %d skipped, %d skipped "
+    // is gone, and this log line is the only place that says so. `failed` says
+    // "not restored" and not "not acknowledged" because it also holds a window
+    // that answered and refused, and one whose title read back unusable - both
+    // acknowledged, neither restored. The last count is kept apart from
+    // `skipped` deliberately - a skip is benign (the window moved on, or is not
+    // ours), while a mute means the one-strike rule gave up on every remaining
+    // window of that thread, and lumping the two together is what made the
+    // rule's cost unmeasurable.
+    Wh_Log(L"restored %d title(s), %d not restored, %d skipped, %d skipped "
            L"after a thread stopped answering",
            restored, failed, skipped, muted);
 
