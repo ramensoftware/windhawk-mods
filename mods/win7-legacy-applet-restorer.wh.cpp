@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
-// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11
+// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11 including optional additions
 // @version         3.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -24,6 +24,7 @@ This mod restores a selection of classic Control Panel applets and task links in
 * BitLocker Drive Encryption
 * Tablet PC Settings
 * Text to Speech
+* iSCSI Initiator
 
 This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
 
@@ -107,6 +108,10 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
   $description: This setting adds the "Printers and Faxes" icon to Control Panel
+
+- enableIscsiInitiator: true
+  $name: iSCSI Initiator
+  $description: This setting adds the "iSCSI Initiator" icon to Control Panel (under System and Security). Unlike Printers and Faxes or Network Connections, Windows 11 no longer keeps this CLSID registered at all on many builds, so this is a self-built virtual entry (name/icon from iscsicpl.exe) that launches iscsicpl.exe directly. Only added if iscsicpl.exe is actually present (e.g. not on ARM builds).
 
 - enableHomeGroup: false
   $name: HomeGroup
@@ -228,6 +233,7 @@ struct Settings {
     std::atomic<bool> enableNotificationIcons;
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
+    std::atomic<bool> enableIscsiInitiator;
     std::atomic<bool> enableHomeGroup;
     // Tri-state (AppletMode): the user can override the automatic detection in
     // both directions, because "does Control Panel already show this applet?"
@@ -348,6 +354,13 @@ static std::atomic<bool> g_speechClsidRegistered{ false };
 static std::atomic<bool> g_speechAutoDetected{ false };
 static std::atomic<bool> g_injectSpeechApplet{ false };
 static std::atomic<int> g_prevSpeechMode{ -1 };
+// True when iscsicpl.exe was found in System32 at init - the iSCSI Initiator
+// virtual entry is only built when this holds, so ARM builds (or any edition
+// missing the binary) never get a dead icon. Unlike BitLocker/TabletPC/
+// Speech there is no CLSID-based Auto/Always/Never detection here: the real
+// CLSID isn't reliably registered at all (see kIscsiInitiatorGuid), so file
+// presence is the only signal available.
+static std::atomic<bool> g_iscsiInitiatorExeExists{ false };
 // Index into kLegacyUnhideMonikers / g_monikerPatched (declared here so
 // VirtualTwinSuppressed can use it; kLegacyUnhideMonikers itself is
 // declared later, near the rest of the unhide feature, but a static_assert
@@ -674,6 +687,20 @@ static const std::wstring kPersonalizationGuid     = L"{580722ff-16a7-44c1-bf74-
 static const std::wstring kNotificationIconsGuid   = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
 static const std::wstring kNetworkConnectionsGuid  = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
 static const std::wstring kPrintersAndFaxesGuid    = L"{2227a280-3aea-1069-a2de-08002b30309d}";
+// Real canonical CLSID (module: iscsicpl.dll,-5001, canonical name
+// Microsoft.iSCSIInitiator). Confirmed still absent from HKCR\CLSID on
+// current Windows 11 24H2 (unlike Network Connections/Printers/HomeGroup,
+// which really are still registered, just hidden from Category View) - so
+// this GUID is used only as an opportunistic registry lookup (in case some
+// edition/build still has it) and is never injected directly; see
+// kIscsiInitiatorVirtualGuid below for the entry that's actually shown.
+static const std::wstring kIscsiInitiatorGuid      = L"{a304259d-52b8-4526-8b1a-a1d6cecc8243}";
+// Own, made-up CLSID for the *virtual* iSCSI Initiator entry (same technique
+// as kBitLockerVirtualGuid/kSpeechVirtualGuid): name/icon come from
+// iscsicpl.exe directly (registry fallback almost never applies here) and
+// the command launches iscsicpl.exe directly, since there is no real,
+// registered CLSID to re-launch through "explorer shell:::{realGuid}".
+static const std::wstring kIscsiInitiatorVirtualGuid = L"{7d3f5a92-8c1b-4e6a-9f2d-3b8a6c7e1d54}";
 static const std::wstring kHomeGroupGuid           = L"{67ca7650-96e6-4fdd-bb43-a8e774f73a57}";
 static const std::wstring kDisplayGuid             = L"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}"; // Also used as RealDisplayGuid
 static const std::wstring kRealPersonalizationGuid = L"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}";
@@ -1297,7 +1324,8 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
                       const std::wstring& fallbackIcon = L"",
                       const std::wstring& fallbackInfoTip = L"",
                       std::atomic<bool>* realPresent = nullptr,
-                      size_t monikerIndex = kLegacyUnhideMonikerCount) {
+                      size_t monikerIndex = kLegacyUnhideMonikerCount,
+                      const std::wstring& openCommandOverride = L"") {
     std::wstring name, icon;
     bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
     if (!gotFromRegistry || name.empty()) {
@@ -1349,7 +1377,9 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
     applet.displayName = name;
     applet.iconValue = icon;
     applet.infoTip = infoTipResolved.empty() ? fallbackInfoTip : infoTipResolved;
-    applet.openCommand = L"explorer.exe shell:::" + realGuid;
+    applet.openCommand = openCommandOverride.empty()
+        ? (L"explorer.exe shell:::" + realGuid)
+        : openCommandOverride;
     applet.category = category;
     applet.enabledSetting = enabledSetting;
     applet.realPresent = realPresent;
@@ -1919,6 +1949,7 @@ void LoadSettings() {
     g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
+    g_settings.enableIscsiInitiator.store(Wh_GetIntSetting(L"enableIscsiInitiator"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
@@ -2051,6 +2082,24 @@ void InitDisplayNames() {
                               &g_speechClsidRegistered, kLegacyUnhideMonikerSpeech))
             Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
                    L"(no resource fallback); virtual entry not created");
+    }
+    if (g_iscsiInitiatorExeExists.load()) {
+        // No real, registered CLSID to copy from or re-launch through on
+        // current Windows 11 builds (confirmed absent from HKCR\CLSID), so
+        // this always falls to the resource fallback: name/icon come
+        // straight from iscsicpl.exe itself (icon index 0, whatever
+        // Explorer already shows for that binary - safer than guessing an
+        // internal string-table resource id we haven't verified), and the
+        // open command launches iscsicpl.exe directly instead of the usual
+        // "explorer shell:::{realGuid}".
+        if (!AddVirtualApplet(kIscsiInitiatorVirtualGuid, kIscsiInitiatorGuid, kCategorySystemSecurity,
+                              &g_settings.enableIscsiInitiator,
+                              L"@%SystemRoot%\\System32\\iscsicpl.dll,-5001",
+                              L"%SystemRoot%\\System32\\iscsicpl.exe,0",
+                              L"",
+                              nullptr, kLegacyUnhideMonikerCount,
+                              L"iscsicpl.exe"))
+            Wh_Log(L"Could not read iSCSI Initiator's name/icon; virtual entry not created");
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -2496,6 +2545,8 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kTabletPcVirtualGuid);
     if (g_injectSpeechApplet.load() && VirtualAppletPresent(kSpeechVirtualGuid))
         result.push_back(kSpeechVirtualGuid);
+    if (VirtualAppletPresent(kIscsiInitiatorVirtualGuid))
+        result.push_back(kIscsiInitiatorVirtualGuid);
     return result;
 }
 
@@ -3626,16 +3677,36 @@ static const ThemeCplMarkupReplacement kThemeCplMarkupReplacements[] = {
       L"navigationtargetrelative=\"pageWallpaper\"" },
     { L"shellexecute=\"ms-settings:personalization-colors\"",
       L"navigationtargetrelative=\"pageColorization\"" },
+    { L"shellexecute=\"shell:settings\\pagepersonalization-colors\"",
+      L"navigationtargetrelative=\"pageColorization\"" },
 };
 
 using DUIXmlParser_SetXML_t = HRESULT(WINAPI*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
 static DUIXmlParser_SetXML_t DUIXmlParser_SetXML_Original = nullptr;
 
+// Requires the document to actually be the Personalization hub before any
+// rewrite is applied. A document merely containing one of the Settings URIs
+// is not enough proof: another shell surface could link to the same
+// ms-settings: URI, now or in a future build, and rewriting it would delete
+// its only action (there is no shellexecute/navigationtargetrelative
+// fallback - see the comment above kThemeCplMarkupReplacements). The hub
+// markup is expected to also define both target pages elsewhere in the same
+// document (as the targets of its own internal navigation), or carry the
+// PersonalizationHubStyle marker.
+static bool PersonalizationMarkupIsHubDocument(const WCHAR* xml) {
+    if (!xml) return false;
+    if (wcsstr(xml, L"PersonalizationHubStyle")) return true;
+    return wcsstr(xml, L"pageWallpaper") && wcsstr(xml, L"pageColorization");
+}
+
 static bool PersonalizationMarkupLooksRelevant(const WCHAR* xml) {
     if (!xml) return false;
-    return wcsstr(xml, L"ms-settings:personalization-background") ||
-           wcsstr(xml, L"ms-settings:personalization-colors") ||
-           wcsstr(xml, L"pagepersonalization-background");
+    bool hasSettingsUri = wcsstr(xml, L"ms-settings:personalization-background") ||
+                          wcsstr(xml, L"ms-settings:personalization-colors") ||
+                          wcsstr(xml, L"pagepersonalization-background") ||
+                          wcsstr(xml, L"pagepersonalization-colors");
+    if (!hasSettingsUri) return false;
+    return PersonalizationMarkupIsHubDocument(xml);
 }
 
 static size_t FindInsensitive(const std::wstring& hay, const wchar_t* needle, size_t from) {
@@ -3687,6 +3758,74 @@ HRESULT WINAPI DUIXmlParser_SetXML_Hook(void* pThis, const WCHAR* pszXML,
     }
 }
 
+// Shell Control Panel pages (e.g. Personalization's themecpl.dll.mun) don't
+// hand DirectUI a markup string directly - their UIFILE/XMLFILE lives in a
+// resource, and DirectUI loads it through _SetXMLFromResource, which does
+// not route through the public SetXML above. That's why SetXML alone is not
+// enough: we hook _SetXMLFromResource too, load + rewrite the resource
+// ourselves, and feed the patched string through the raw SetXML pointer
+// (never through the resource loader we just bypassed).
+using DUIXmlParser_SetXMLFromResource_t =
+    HRESULT(WINAPI*)(void*, const WCHAR*, const WCHAR*, HINSTANCE, HINSTANCE, HINSTANCE);
+static DUIXmlParser_SetXMLFromResource_t DUIXmlParser_SetXMLFromResource_Original = nullptr;
+
+// Loads the raw resource bytes as a UTF-16 XML string, the same content
+// DirectUI's own resource loader would hand to the parser. Returns false
+// (leaving 'out' untouched) on any failure so the caller transparently falls
+// back to the original, unpatched resource load.
+static bool LoadXmlResourceString(HINSTANCE hInstance, const WCHAR* pszResourceName,
+                                   const WCHAR* pszResourceType, std::wstring& out) {
+    if (!hInstance || !pszResourceName || !pszResourceType) return false;
+    HRSRC hRsrc = FindResourceExW(hInstance, pszResourceType, pszResourceName,
+                                   MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
+    if (!hRsrc) {
+        hRsrc = FindResourceW(hInstance, pszResourceName, pszResourceType);
+    }
+    if (!hRsrc) return false;
+    HGLOBAL hGlobal = LoadResource(hInstance, hRsrc);
+    if (!hGlobal) return false;
+    DWORD size = SizeofResource(hInstance, hRsrc);
+    const void* pData = LockResource(hGlobal);
+    if (!pData || size < sizeof(WCHAR) || (size % sizeof(WCHAR)) != 0) return false;
+    out.assign(static_cast<const WCHAR*>(pData), size / sizeof(WCHAR));
+    // Trim a trailing embedded NUL, if any, so wcsstr-based checks behave.
+    while (!out.empty() && out.back() == L'\0') out.pop_back();
+    return !out.empty();
+}
+
+HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* pszResourceName,
+                                                     const WCHAR* pszResourceType,
+                                                     HINSTANCE hInstance, HINSTANCE hInstance2,
+                                                     HINSTANCE hInstance3) {
+    if (!DUIXmlParser_SetXMLFromResource_Original) return E_FAIL;
+    auto callOriginal = [&]() {
+        return DUIXmlParser_SetXMLFromResource_Original(pThis, pszResourceName, pszResourceType,
+                                                          hInstance, hInstance2, hInstance3);
+    };
+
+    if (!g_settings.inlinePersonalizationNavigation.load() || !DUIXmlParser_SetXML_Original) {
+        return callOriginal();
+    }
+
+    try {
+        std::wstring xml;
+        if (!LoadXmlResourceString(hInstance, pszResourceName, pszResourceType, xml) ||
+            !PersonalizationMarkupLooksRelevant(xml.c_str())) {
+            return callOriginal();
+        }
+        if (!RewritePersonalizationMarkup(xml)) {
+            return callOriginal();
+        }
+        Wh_Log(L"in-place Personalization navigation: replaced Settings "
+               L"shellexecute with navigationtargetrelative (resource path)");
+        return DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+    } catch (...) {
+        Wh_Log(L"Exception while rewriting Personalization markup from resource; "
+               L"using the original resource");
+        return callOriginal();
+    }
+}
+
 // Installed once in Wh_ModInit regardless of the setting, so a later live
 // toggle needs no hooking. The rewrite itself is gated on the setting.
 static void InstallPersonalizationMarkupHook() {
@@ -3694,8 +3833,8 @@ static void InstallPersonalizationMarkupHook() {
 
     HMODULE hDui70 = GetModuleHandleW(L"dui70.dll");
     if (!hDui70) {
-        // Extra reference is left until process exit: the SetXML hook still
-        // points into this image until Windhawk removes it after Uninit.
+        // Extra reference is left until process exit: the hooks still
+        // point into this image until Windhawk removes them after Uninit.
         hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!hDui70) {
@@ -3717,6 +3856,26 @@ static void InstallPersonalizationMarkupHook() {
         return;
     }
     Wh_Log(L"in-place Personalization navigation: hooked DirectUI::DUIXmlParser::SetXML");
+
+    // protected: long __cdecl DirectUI::DUIXmlParser::_SetXMLFromResource(...)
+    // Resource-backed pages (Personalization included) take this path
+    // instead of the public SetXML above, so it must be hooked too.
+    void* pSetXMLFromResource = (void*)GetProcAddress(
+        hDui70,
+        "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z");
+    if (!pSetXMLFromResource) {
+        Wh_Log(L"in-place Personalization navigation: "
+               L"DirectUI::DUIXmlParser::_SetXMLFromResource not found");
+        return;
+    }
+    if (!WindhawkUtils::SetFunctionHook((DUIXmlParser_SetXMLFromResource_t)pSetXMLFromResource,
+                                        DUIXmlParser_SetXMLFromResource_Hook,
+                                        &DUIXmlParser_SetXMLFromResource_Original)) {
+        Wh_Log(L"in-place Personalization navigation: failed to hook _SetXMLFromResource");
+        return;
+    }
+    Wh_Log(L"in-place Personalization navigation: hooked "
+           L"DirectUI::DUIXmlParser::_SetXMLFromResource");
 }
 
 static void ReleasePersonalizationMarkupModule() {
@@ -4010,9 +4169,10 @@ void Wh_ModSettingsChanged() {
     if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
+        g_settings.enableIscsiInitiator.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
@@ -4058,6 +4218,19 @@ BOOL Wh_ModInit() {
     g_speechClsidRegistered.store(IsRegisteredClsid(kSpeechGuid));
     Wh_Log(L"Text to Speech CLSID %s", g_speechClsidRegistered.load()
         ? L"is registered" : L"is absent on this edition; applet will not be injected");
+    {
+        wchar_t system32[MAX_PATH] = {};
+        bool iscsiExeExists = false;
+        if (GetSystemDirectoryW(system32, MAX_PATH)) {
+            const std::wstring iscsicplPath = std::wstring(system32) + L"\\iscsicpl.exe";
+            DWORD attributes = GetFileAttributesW(iscsicplPath.c_str());
+            iscsiExeExists = (attributes != INVALID_FILE_ATTRIBUTES &&
+                              !(attributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"iSCSI Initiator executable: %s %s", iscsicplPath.c_str(),
+                   iscsiExeExists ? L"exists" : L"does not exist");
+        }
+        g_iscsiInitiatorExeExists.store(iscsiExeExists);
+    }
     g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
     g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
     g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
@@ -4118,9 +4291,10 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
+        g_settings.enableIscsiInitiator.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
