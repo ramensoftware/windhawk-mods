@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
-// @description A clean, lightweight tool that displays your live internet download and upload speeds right on the Windows taskbar.
-// @version     1.0
+// @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
+// @version     1.1
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
 // @include     explorer.exe
-// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -luser32 -DWIN32_LEAN_AND_MEAN
+// @compilerOptions -lgdiplus -liphlpapi
 // @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
@@ -16,8 +16,7 @@
 /*
 # Taskbar Network Speed Indicator
 
-Draws a small floating widget docked to the taskbar that shows your current
-download and upload internet speed, refreshed every second.
+Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating widget that can be placed anywhere along the taskbar, featuring a real-time sparkline chart and multiple distinct visual layouts. It shows your current download and upload internet speed, refreshed every second.
 
 ![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-speed-indicator.gif)
 
@@ -58,6 +57,10 @@ download and upload internet speed, refreshed every second.
 */
 // ==/WindhawkModSettings==
 
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+
 #include <winsock2.h>
 #include <ws2ipdef.h>
 #include <windows.h>
@@ -71,6 +74,8 @@ download and upload internet speed, refreshed every second.
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <cstdio>
+#include <windhawk_utils.h>
 
 using namespace Gdiplus;
 
@@ -92,19 +97,25 @@ Settings g_settings;
 std::mutex g_settingsMutex;
 
 std::atomic<HWND> g_hWnd{nullptr};
+std::mutex g_wndLifecycleMutex; // Guards creation, publication, and teardown of g_hWnd
+
 std::atomic<bool> g_posUpdatePending{false};
+std::atomic<bool> g_exiting{false};
 ULONG_PTR g_gdiplusToken = 0;
 constexpr UINT_PTR kTimerId = 1001;
 
 HANDLE g_hThread = nullptr;
 DWORD g_threadId = 0;
 HANDLE g_hQueueReady = nullptr;
-HANDLE g_hMutex = nullptr;
+HANDLE g_hExitEvent = nullptr;
 
 HWINEVENTHOOK g_hLocationHook = nullptr;
 HWINEVENTHOOK g_hDestroyHook = nullptr;
 DWORD g_taskbarPid = 0;
 DWORD g_taskbarTid = 0;
+HWND g_hCachedTaskbar = nullptr;
+
+RECT g_lastWidgetRect = {0, 0, 0, 0};
 
 ULONGLONG g_lastTick = 0;
 ULONG64 g_lastIn = 0;
@@ -114,8 +125,6 @@ double g_upBps = 0.0;
 
 DWORD g_bestIfIndex = 0;
 ULONGLONG g_lastRouteCheck = 0;
-
-const wchar_t* kClassName = L"WindhawkNetSpeedWidgetWnd";
 
 const size_t kHistorySize = 20;
 std::vector<double> g_downHistory(kHistorySize, 0.0);
@@ -133,8 +142,14 @@ struct GdiObjects {
     std::unique_ptr<Gdiplus::Pen> dividerPen;
     std::unique_ptr<Gdiplus::Pen> downChartPen;
     std::unique_ptr<Gdiplus::Pen> upChartPen;
+
+    bool IsValid() const {
+        return font && largeFont && bgBrush && downBrush && upBrush && 
+               shadowBrush && borderPen && dividerPen && downChartPen && upChartPen;
+    }
 };
-std::unique_ptr<GdiObjects> g_gdi;
+
+[[clang::no_destroy]] std::unique_ptr<GdiObjects> g_gdi;
 UINT g_currentDpi = 96;
 
 HINSTANCE GetCurrentModuleHandle() {
@@ -152,11 +167,7 @@ Settings GetSafeSettings() {
 
 void LoadSettingsLocked() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    
-    PCWSTR pTheme = Wh_GetStringSetting(L"theme");
-    g_settings.theme = pTheme ? pTheme : L"Minimal";
-    if (pTheme) Wh_FreeStringSetting(pTheme);
-    
+    g_settings.theme = WindhawkUtils::StringSetting::make(L"theme").get();
     g_settings.horizontalPosition = std::clamp((int)Wh_GetIntSetting(L"horizontalPosition"), 0, 100);
     g_settings.verticalNudge = std::clamp((int)Wh_GetIntSetting(L"verticalNudge"), -1000, 1000);
     g_settings.updateIntervalMs = std::max((int)Wh_GetIntSetting(L"updateIntervalMs"), 200);
@@ -165,13 +176,13 @@ void LoadSettingsLocked() {
 }
 
 void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
-    g_gdi = std::make_unique<GdiObjects>();
+    auto newGdi = std::make_unique<GdiObjects>();
 
     Gdiplus::FontFamily fontFamily(L"Segoe UI");
     float scaledFontSize = (float)MulDiv(fontSize, dpi, 96);
 
-    g_gdi->font = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize, FontStyleRegular, UnitPixel);
-    g_gdi->largeFont = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize * 1.3f, FontStyleBold, UnitPixel);
+    newGdi->font = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize, FontStyleRegular, UnitPixel);
+    newGdi->largeFont = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize * 1.3f, FontStyleBold, UnitPixel);
     
     Color bgColor = Color(240, 18, 20, 22);
     Color downColor = Color(255, 64, 169, 255); 
@@ -183,17 +194,21 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
         upColor = Color(255, 200, 200, 200);
     }
 
-    g_gdi->bgBrush = std::make_unique<Gdiplus::SolidBrush>(bgColor);
-    g_gdi->downBrush = std::make_unique<Gdiplus::SolidBrush>(downColor);
-    g_gdi->upBrush = std::make_unique<Gdiplus::SolidBrush>(upColor);
-    g_gdi->shadowBrush = std::make_unique<Gdiplus::SolidBrush>(Color(200, 0, 0, 0));
-    g_gdi->borderPen = std::make_unique<Gdiplus::Pen>(Color(60, 255, 255, 255), 1.0f);
-    g_gdi->dividerPen = std::make_unique<Gdiplus::Pen>(Color(40, 255, 255, 255), 1.0f);
-    g_gdi->downChartPen = std::make_unique<Gdiplus::Pen>(downColor, 1.5f);
-    g_gdi->upChartPen = std::make_unique<Gdiplus::Pen>(upColor, 1.5f);
+    newGdi->bgBrush = std::make_unique<Gdiplus::SolidBrush>(bgColor);
+    newGdi->downBrush = std::make_unique<Gdiplus::SolidBrush>(downColor);
+    newGdi->upBrush = std::make_unique<Gdiplus::SolidBrush>(upColor);
+    newGdi->shadowBrush = std::make_unique<Gdiplus::SolidBrush>(Color(200, 0, 0, 0));
+    newGdi->borderPen = std::make_unique<Gdiplus::Pen>(Color(60, 255, 255, 255), 1.0f);
+    newGdi->dividerPen = std::make_unique<Gdiplus::Pen>(Color(40, 255, 255, 255), 1.0f);
+    newGdi->downChartPen = std::make_unique<Gdiplus::Pen>(downColor, 1.5f);
+    newGdi->upChartPen = std::make_unique<Gdiplus::Pen>(upColor, 1.5f);
     
-    g_gdi->downChartPen->SetLineJoin(LineJoinRound);
-    g_gdi->upChartPen->SetLineJoin(LineJoinRound);
+    newGdi->downChartPen->SetLineJoin(LineJoinRound);
+    newGdi->upChartPen->SetLineJoin(LineJoinRound);
+
+    if (newGdi->IsValid()) {
+        g_gdi = std::move(newGdi);
+    }
 }
 
 void GetThemeDimensions(const std::wstring& theme, int& width, int& height) {
@@ -223,24 +238,16 @@ bool GetTotalOctets(ULONG64* inOctets, ULONG64* outOctets) {
 
     if (g_bestIfIndex == 0) return false;
 
-    PMIB_IF_TABLE2 table = nullptr;
-    if (GetIfTable2(&table) != NO_ERROR) {
+    MIB_IF_ROW2 row{};
+    row.InterfaceIndex = g_bestIfIndex;
+    if (GetIfEntry2(&row) != NO_ERROR) {
         return false;
     }
 
-    ULONG64 in = 0, out = 0;
-    for (ULONG i = 0; i < table->NumEntries; i++) {
-        const MIB_IF_ROW2& row = table->Table[i];
-        if (row.InterfaceIndex != g_bestIfIndex) continue;
-        if (row.Type == IF_TYPE_SOFTWARE_LOOPBACK || row.Type == IF_TYPE_TUNNEL) continue;
-        if (row.OperStatus != IfOperStatusUp) continue;
-        in += row.InOctets;
-        out += row.OutOctets;
-    }
+    if (row.OperStatus != IfOperStatusUp) return false;
 
-    FreeMibTable(table);
-    *inOctets = in;
-    *outOctets = out;
+    *inOctets = row.InOctets;
+    *outOctets = row.OutOctets;
     return true;
 }
 
@@ -258,78 +265,42 @@ std::wstring FormatSpeed(double bytesPerSec) {
 
 void UpdateSpeedSample() {
     ULONG64 in = 0, out = 0;
-    if (!GetTotalOctets(&in, &out)) return;
-
-    ULONGLONG now = GetTickCount64();
-    if (g_lastTick != 0) {
-        double elapsedSec = (now - g_lastTick) / 1000.0;
-        if (elapsedSec > 0.05) {
-            g_downBps = (in >= g_lastIn) ? (in - g_lastIn) / elapsedSec : 0.0;
-            g_upBps = (out >= g_lastOut) ? (out - g_lastOut) / elapsedSec : 0.0;
+    if (!GetTotalOctets(&in, &out)) {
+        g_downBps = 0.0;
+        g_upBps = 0.0;
+        g_lastTick = 0; // Reset baseline so reconnect doesn't understate next rate
+    } else {
+        ULONGLONG now = GetTickCount64();
+        if (g_lastTick != 0) {
+            double elapsedSec = (now - g_lastTick) / 1000.0;
+            if (elapsedSec > 0.05) {
+                g_downBps = (in >= g_lastIn) ? (in - g_lastIn) / elapsedSec : 0.0;
+                g_upBps = (out >= g_lastOut) ? (out - g_lastOut) / elapsedSec : 0.0;
+            }
         }
+        g_lastIn = in;
+        g_lastOut = out;
+        g_lastTick = now;
     }
-
-    g_lastIn = in;
-    g_lastOut = out;
-    g_lastTick = now;
 
     g_downHistory[g_historyIdx] = g_downBps;
     g_upHistory[g_historyIdx] = g_upBps;
     g_historyIdx = (g_historyIdx + 1) % kHistorySize;
 }
 
-void CheckTaskbarHooks() {
-    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbar) return;
-    
-    DWORD pid = 0;
-    DWORD tid = GetWindowThreadProcessId(hTaskbar, &pid);
-    
-    if (pid != g_taskbarPid || tid != g_taskbarTid) {
-        if (g_hLocationHook) UnhookWinEvent(g_hLocationHook);
-        if (g_hDestroyHook) UnhookWinEvent(g_hDestroyHook);
-        
-        g_taskbarPid = pid;
-        g_taskbarTid = tid;
-        
-        g_hDestroyHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr, 
-            [](HWINEVENTHOOK, DWORD e, HWND hwnd, LONG idObj, LONG, DWORD, DWORD) {
-                if (idObj == OBJID_WINDOW && hwnd == FindWindowW(L"Shell_TrayWnd", nullptr)) {
-                    HWND widget = g_hWnd.load();
-                    if (widget) ShowWindow(widget, SW_HIDE);
-                }
-            }, pid, tid, WINEVENT_OUTOFCONTEXT);
-
-        g_hLocationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, 
-            [](HWINEVENTHOOK, DWORD e, HWND hwnd, LONG idObj, LONG, DWORD, DWORD) {
-                if (idObj == OBJID_WINDOW && hwnd == FindWindowW(L"Shell_TrayWnd", nullptr)) {
-                    HWND widget = g_hWnd.load();
-                    if (widget && !g_posUpdatePending.exchange(true)) {
-                        PostMessageW(widget, WM_UPDATE_POSITION, 0, 0);
-                    }
-                }
-            }, pid, tid, WINEVENT_OUTOFCONTEXT);
-    }
-}
-
 void RepositionWidget(HWND hWnd, const Settings& s) {
-    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbar || !IsWindowVisible(hTaskbar)) {
+    if (!IsWindow(g_hCachedTaskbar) || !IsWindowVisible(g_hCachedTaskbar)) {
         if (IsWindowVisible(hWnd)) ShowWindow(hWnd, SW_HIDE);
         return;
     }
 
-    if (GetWindow(hWnd, GW_OWNER) != hTaskbar) {
-        SetWindowLongPtr(hWnd, GWLP_HWNDPARENT, (LONG_PTR)hTaskbar);
-    }
-
     RECT tbRect{};
-    GetWindowRect(hTaskbar, &tbRect);
+    if (!GetWindowRect(g_hCachedTaskbar, &tbRect)) return;
 
-    UINT dpi = GetDpiForWindow(hTaskbar);
+    UINT dpi = GetDpiForWindow(g_hCachedTaskbar);
     if (dpi == 0) dpi = 96;
     
-    if (dpi != g_currentDpi || !g_gdi) {
+    if (dpi != g_currentDpi || !g_gdi || !g_gdi->IsValid()) {
         g_currentDpi = dpi;
         RebuildGdiObjects(s.fontSize, s.theme, dpi);
     }
@@ -350,7 +321,11 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
     UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
     if (!IsWindowVisible(hWnd)) flags |= SWP_SHOWWINDOW;
 
-    SetWindowPos(hWnd, nullptr, x, y, scaledWidth, scaledHeight, flags);
+    RECT newRect = {x, y, x + scaledWidth, y + scaledHeight};
+    if (memcmp(&g_lastWidgetRect, &newRect, sizeof(RECT)) != 0 || (flags & SWP_SHOWWINDOW)) {
+        SetWindowPos(hWnd, nullptr, x, y, scaledWidth, scaledHeight, flags);
+        g_lastWidgetRect = newRect;
+    }
 }
 
 void AddRoundRect(GraphicsPath& path, const RectF& r, float d) {
@@ -365,17 +340,16 @@ void DrawSparkline(Graphics& g, Pen* pen, const std::vector<double>& hist, size_
     double maxVal = 1024.0; 
     for (double v : hist) maxVal = std::max(maxVal, v);
     
-    std::vector<PointF> pts;
-    pts.reserve(hist.size());
-    float step = bounds.Width / (float)(hist.size() - 1);
+    PointF pts[kHistorySize];
+    float step = bounds.Width / (float)(kHistorySize - 1);
     
-    for (size_t i = 0; i < hist.size(); ++i) {
-        size_t idx = (head + i) % hist.size();
+    for (size_t i = 0; i < kHistorySize; ++i) {
+        size_t idx = (head + i) % kHistorySize;
         float x = bounds.X + (float)i * step;
         float y = bounds.Y + bounds.Height - (float)((hist[idx] / maxVal) * bounds.Height);
-        pts.push_back(PointF(x, y));
+        pts[i] = PointF(x, y);
     }
-    g.DrawLines(pen, pts.data(), pts.size());
+    g.DrawLines(pen, pts, kHistorySize);
 }
 
 void PaintWidget(HWND hWnd) {
@@ -389,7 +363,7 @@ void PaintWidget(HWND hWnd) {
     graphics.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     graphics.Clear(Color(0, 0, 0, 0));
 
-    if (!g_gdi || !g_gdi->font || !g_gdi->largeFont || !g_gdi->bgBrush) {
+    if (!g_gdi || !g_gdi->IsValid()) {
         EndPaint(hWnd, &ps);
         return;
     }
@@ -477,6 +451,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_UPDATE_POSITION: {
             g_posUpdatePending.store(false);
             RepositionWidget(hWnd, GetSafeSettings());
+            InvalidateRect(hWnd, nullptr, TRUE);
             return 0;
         }
         case WM_PAINT:
@@ -485,9 +460,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == kTimerId) {
                 UpdateSpeedSample();
-                CheckTaskbarHooks();
-                RepositionWidget(hWnd, GetSafeSettings());
-                InvalidateRect(hWnd, nullptr, FALSE);
+                if (g_hCachedTaskbar && IsWindow(g_hCachedTaskbar)) {
+                    RepositionWidget(hWnd, GetSafeSettings());
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
             }
             return 0;
         case WM_ERASEBKGND:
@@ -496,6 +472,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             KillTimer(hWnd, kTimerId);
             DestroyWindow(hWnd);
             return 0;
+        case WM_NCDESTROY: {
+            std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
+            g_hWnd.store(nullptr);
+            PostQuitMessage(0);
+            return 0;
+        }
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
@@ -508,72 +490,126 @@ DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
     WNDCLASSW wc{};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetCurrentModuleHandle();
-    wc.lpszClassName = kClassName;
     wc.hbrBackground = nullptr;
     
+    wchar_t szClassName[64];
+    swprintf_s(szClassName, L"WindhawkNetSpeed_%lu", GetCurrentThreadId());
+    wc.lpszClassName = szClassName;
+    
     if (!RegisterClassW(&wc)) {
-        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return 0;
+        return 0; 
     }
 
-    DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
-    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    
-    HWND hwnd = CreateWindowExW(exStyle, kClassName, L"", WS_POPUP, 0, 0,
-                               1, 1, hTaskbar, nullptr, wc.hInstance, nullptr);
+    while (!g_exiting.load()) {
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (!hTaskbar) {
+            if (WaitForSingleObject(g_hExitEvent, 1000) == WAIT_OBJECT_0) break;
+            continue;
+        }
 
-    if (!hwnd) {
-        UnregisterClassW(kClassName, wc.hInstance);
-        return 0;
+        DWORD pid = 0;
+        DWORD tid = GetWindowThreadProcessId(hTaskbar, &pid);
+        
+        if (pid != GetCurrentProcessId()) {
+            if (WaitForSingleObject(g_hExitEvent, 2000) == WAIT_OBJECT_0) break;
+            continue;
+        }
+
+        g_hCachedTaskbar = hTaskbar;
+        g_taskbarPid = pid;
+        g_taskbarTid = tid;
+        memset(&g_lastWidgetRect, 0, sizeof(RECT));
+
+        DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
+        
+        HWND hwnd = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
+            if (g_exiting.load()) break;
+
+            hwnd = CreateWindowExW(exStyle, szClassName, L"", WS_POPUP, 0, 0,
+                                   1, 1, hTaskbar, nullptr, wc.hInstance, nullptr);
+            if (!hwnd) {
+                if (WaitForSingleObject(g_hExitEvent, 1000) == WAIT_OBJECT_0) break;
+                continue;
+            }
+            g_hWnd.store(hwnd);
+        }
+        
+        PostMessageW(hwnd, WM_UPDATE_SETTINGS, 0, 0);
+
+        g_hDestroyHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr, 
+            [](HWINEVENTHOOK, DWORD, HWND hwndHook, LONG idObj, LONG, DWORD, DWORD) {
+                if (idObj == OBJID_WINDOW && hwndHook == g_hCachedTaskbar) {
+                    g_hCachedTaskbar = nullptr;
+                    HWND widget = g_hWnd.load();
+                    if (widget) {
+                        PostMessageW(widget, WM_CLOSE, 0, 0); 
+                    }
+                }
+            }, pid, tid, WINEVENT_OUTOFCONTEXT);
+
+        g_hLocationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, 
+            [](HWINEVENTHOOK, DWORD, HWND hwndHook, LONG idObj, LONG, DWORD, DWORD) {
+                if (idObj == OBJID_WINDOW && hwndHook == g_hCachedTaskbar) {
+                    HWND widget = g_hWnd.load();
+                    if (widget && !g_posUpdatePending.exchange(true)) {
+                        PostMessageW(widget, WM_UPDATE_POSITION, 0, 0);
+                    }
+                }
+            }, pid, tid, WINEVENT_OUTOFCONTEXT);
+
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        
+        if (g_hLocationHook) { UnhookWinEvent(g_hLocationHook); g_hLocationHook = nullptr; }
+        if (g_hDestroyHook) { UnhookWinEvent(g_hDestroyHook); g_hDestroyHook = nullptr; }
+        
+        g_hCachedTaskbar = nullptr;
     }
-    
-    g_hWnd.store(hwnd);
-    PostMessageW(hwnd, WM_UPDATE_SETTINGS, 0, 0);
-    CheckTaskbarHooks();
 
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    
-    if (g_hLocationHook) UnhookWinEvent(g_hLocationHook);
-    if (g_hDestroyHook) UnhookWinEvent(g_hDestroyHook);
-    
-    HWND h = g_hWnd.exchange(nullptr);
-    if (h) DestroyWindow(h);
-
-    UnregisterClassW(kClassName, wc.hInstance);
+    UnregisterClassW(szClassName, wc.hInstance);
     return 0;
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
-    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    DWORD pid = 0;
-    if (!hTaskbar || !GetWindowThreadProcessId(hTaskbar, &pid) || pid != GetCurrentProcessId()) {
-        return FALSE; // Guarantee we only inject into the primary Explorer.exe process
-    }
-
-    g_hMutex = CreateMutexW(nullptr, FALSE, L"Windhawk_NetSpeedTaskbar_Mutex");
-    if (g_hMutex == nullptr || GetLastError() == ERROR_ALREADY_EXISTS) {
-        return FALSE; 
-    }
-
     LoadSettingsLocked();
 
     GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok) {
+        return FALSE;
+    }
 
+    g_exiting.store(false);
+    g_hExitEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hQueueReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(nullptr, 0, WidgetMessageLoop, nullptr, 0, &g_threadId);
 
-    return TRUE;
+    return g_hThread != nullptr;
 }
 
 void Wh_ModUninit() {
+    g_exiting.store(true);
+    if (g_hExitEvent) {
+        SetEvent(g_hExitEvent);
+    }
+
     if (g_hThread) {
         WaitForSingleObject(g_hQueueReady, INFINITE); 
+        
+        {
+            std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
+            HWND hwnd = g_hWnd.load();
+            if (hwnd) {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+        }
         PostThreadMessageW(g_threadId, WM_QUIT, 0, 0); 
+        
         WaitForSingleObject(g_hThread, INFINITE);      
         CloseHandle(g_hThread);
         g_hThread = nullptr;
@@ -585,16 +621,16 @@ void Wh_ModUninit() {
         g_hQueueReady = nullptr;
     }
 
-    if (g_gdiplusToken) {
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
+    if (g_hExitEvent) {
+        CloseHandle(g_hExitEvent);
+        g_hExitEvent = nullptr;
     }
 
     g_gdi.reset();
 
-    if (g_hMutex) {
-        CloseHandle(g_hMutex);
-        g_hMutex = nullptr;
+    if (g_gdiplusToken) {
+        GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
     }
 }
 
