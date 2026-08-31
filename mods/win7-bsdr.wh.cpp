@@ -2973,29 +2973,9 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         case IDCANCEL:
             Resolve(BlockedShutdownResolution_Cancel);
             ShowWindow(hBgWnd, SW_HIDE);
-            if (!isOnSecureDesktop) {
-                // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
-                // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
-                // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
-                // and makes the thread stuck in WaitForSingleObject
-                // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
-                // (I still haven't found neither the culprint nor which code signals that event)
-                HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
-                if (hDoModalExitEvent) {
-                    if (!SetEvent(hDoModalExitEvent)) {
-                        Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
-                    }
-                } else {
-                    // Event capture failed, oh noes!
-                    // Here comes the old terrible workaround
-                    Sleep(1000); // Make sure the resolve request reaches winlogon
-                    // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
-                    // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
-                    Wh_Log(L"Force exiting LogonUI!");
-                    ExitProcess(0);
-                }
-            }
-            PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
+            // Make sure the resolve request reaches winlogon
+            // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
+            SetTimer(hWndDlg, 1, 500, nullptr);
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -3019,6 +2999,32 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return TRUE;
         }
         break;
+    }
+    case WM_TIMER: {
+        KillTimer(hWndDlg, 1);
+        if (!isOnSecureDesktop) {
+            // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
+            // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
+            // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
+            // and makes the thread stuck in WaitForSingleObject
+            // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
+            // (I still haven't found neither the culprint nor which code signals that event)
+            HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
+            if (hDoModalExitEvent) {
+                if (!SetEvent(hDoModalExitEvent)) {
+                    Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
+                }
+            } else {
+                // Event capture failed, oh noes!
+                // Here comes the old terrible workaround
+                // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
+                // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
+                Wh_Log(L"Force exiting LogonUI!");
+                ExitProcess(0);
+            }
+        }
+        PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
+        return TRUE;
     }
     case WM_ADD_APP: {
         Microsoft::WRL::ComPtr<IShutdownBlockingApp> app;
@@ -3397,7 +3403,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         bgHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
         HWND hBgWndLocal = CreateWindowExW(
-            WS_EX_TOPMOST,
+            0,//WS_EX_TOPMOST,
             BSDR_CLASSNAME,
             nullptr,
             WS_POPUP,
