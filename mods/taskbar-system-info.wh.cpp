@@ -410,6 +410,7 @@ Released under GPL-3.0.
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -419,6 +420,7 @@ Released under GPL-3.0.
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::UI;
+using namespace winrt::Windows::UI::Core;
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
@@ -532,6 +534,12 @@ event_token g_timerToken{};
 event_token g_actualThemeChangedToken{};
 std::chrono::steady_clock::time_point g_nextSystemColorCheck{};
 std::chrono::steady_clock::time_point g_nextTaskbarPlacementCheck{};
+[[clang::no_destroy]] IAsyncAction g_placementApplyAction{nullptr};
+bool g_placementApplyQueued = false;
+HWND g_lastFailedPlacementTarget = nullptr;
+std::chrono::steady_clock::time_point g_nextPlacementRetry{};
+uint32_t g_placementFailures = 0;
+int g_lastMonitorCount = -1;
 [[clang::no_destroy]]
 std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
     std::in_place};
@@ -566,7 +574,7 @@ bool g_themeBrushesInitialized = false;
 bool g_cachedHighContrast = false;
 COLORREF g_cachedHighlightColor = CLR_INVALID;
 COLORREF g_cachedHotlightColor = CLR_INVALID;
-COLORREF g_cachedGrayTextColor = CLR_INVALID;
+COLORREF g_cachedWindowTextColor = CLR_INVALID;
 
 std::deque<double> g_cpuHistory;
 std::deque<double> g_gpuHistory;
@@ -2847,7 +2855,7 @@ bool SystemColorsChanged() {
            (highContrastEnabled &&
              (GetSysColor(COLOR_HIGHLIGHT) != g_cachedHighlightColor ||
               GetSysColor(COLOR_HOTLIGHT) != g_cachedHotlightColor ||
-              GetSysColor(COLOR_GRAYTEXT) != g_cachedGrayTextColor));
+              GetSysColor(COLOR_WINDOWTEXT) != g_cachedWindowTextColor));
 }
 
 Color ColorFromColorRef(COLORREF value) {
@@ -2885,13 +2893,13 @@ void RefreshThemeBrushes(const ModSettings& settings) {
         (highContrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
     g_cachedHighlightColor = GetSysColor(COLOR_HIGHLIGHT);
     g_cachedHotlightColor = GetSysColor(COLOR_HOTLIGHT);
-    g_cachedGrayTextColor = GetSysColor(COLOR_GRAYTEXT);
+    g_cachedWindowTextColor = GetSysColor(COLOR_WINDOWTEXT);
     if (settings.adaptiveColors) {
         bool light = theme == ElementTheme::Light;
         g_textBrush = nullptr;
         if (g_cachedHighContrast) {
             g_graphBrush =
-                SolidColorBrush(ColorFromColorRef(g_cachedGrayTextColor));
+                SolidColorBrush(ColorFromColorRef(g_cachedWindowTextColor));
             g_warningBrush =
                 SolidColorBrush(ColorFromColorRef(g_cachedHotlightColor));
             g_criticalBrush =
@@ -3322,7 +3330,7 @@ void EnsureTimer() {
         try {
             bool force = false;
             auto now = std::chrono::steady_clock::now();
-            if (now >= g_nextSystemColorCheck) {
+            if (g_widget && now >= g_nextSystemColorCheck) {
                 g_nextSystemColorCheck = now + std::chrono::seconds(1);
                 if (SystemColorsChanged()) {
                     RefreshThemeBrushes(*CurrentSettings());
@@ -3476,7 +3484,24 @@ Grid CreateMemoryRow(PCWSTR label,
     return row;
 }
 
+void CancelPendingPlacementApply() {
+    g_placementApplyQueued = false;
+    if (!g_placementApplyAction) {
+        return;
+    }
+
+    try {
+        g_placementApplyAction.Cancel();
+    } catch (...) {
+        HRESULT error = winrt::to_hresult();
+        Wh_Log(L"Cancelling deferred taskbar placement failed: %08X",
+               static_cast<unsigned>(error));
+    }
+    g_placementApplyAction = nullptr;
+}
+
 void RemoveWidget() {
+    CancelPendingPlacementApply();
     if (g_timer) {
         g_timer.Stop();
         g_timer.Tick(g_timerToken);
@@ -3551,7 +3576,7 @@ void RemoveWidget() {
     g_cachedHighContrast = false;
     g_cachedHighlightColor = CLR_INVALID;
     g_cachedHotlightColor = CLR_INVALID;
-    g_cachedGrayTextColor = CLR_INVALID;
+    g_cachedWindowTextColor = CLR_INVALID;
     g_cpuHistory.clear();
     g_gpuHistory.clear();
     g_lastRenderedMetricsSequence = 0;
@@ -3596,7 +3621,12 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
         children.RemoveAt(index);
     }
 
-    RemoveWidget();
+    // A retry-only timer can exist before the first successful injection. Keep
+    // it alive so an injection started by its Tick callback doesn't tear down
+    // and recreate the very timer that's currently dispatching the callback.
+    if (g_widget || g_rootGrid || g_taskItemsRepeater) {
+        RemoveWidget();
+    }
 
     Grid widget;
     widget.Name(kWidgetName);
@@ -4204,74 +4234,304 @@ void RemoveFromCurrentTaskbar(void*) {
     }
     g_taskbarWindow = nullptr;
     g_taskbarThreadId = 0;
+    g_lastFailedPlacementTarget = nullptr;
+    g_nextPlacementRetry = {};
+    g_placementFailures = 0;
+    g_lastMonitorCount = -1;
 }
 
-void ApplyOnTaskbarThread() {
-    HWND targetWindow = FindConfiguredTaskbarWindow();
-    if (!targetWindow) {
+void ResetPlacementRetryState() {
+    g_lastFailedPlacementTarget = nullptr;
+    g_nextPlacementRetry = {};
+    g_placementFailures = 0;
+}
+
+void RecordPlacementFailure(HWND targetWindow) {
+    if (targetWindow != g_lastFailedPlacementTarget) {
+        g_lastFailedPlacementTarget = targetWindow;
+        g_placementFailures = 0;
+    }
+
+    if (g_placementFailures < 7) {
+        g_placementFailures++;
+    }
+    uint32_t exponent = std::min(g_placementFailures - 1, 6u);
+    uint32_t retrySeconds = std::min(1u << exponent, 60u);
+    g_nextPlacementRetry =
+        std::chrono::steady_clock::now() + std::chrono::seconds(retrySeconds);
+    Wh_Log(L"Taskbar placement failed; retrying in %u seconds", retrySeconds);
+}
+
+bool ApplyExistingWidgetSettings(HWND logicalWindow,
+                                 bool placementSucceeded = true) {
+    if (!g_widget) {
+        return false;
+    }
+
+    ApplyWidgetSettings();
+    if (!StartMetricsWorker()) {
+        Wh_Log(L"Metrics worker unavailable");
+    }
+    EnsureTimer();
+    UpdateWidgetText(true);
+    if (placementSucceeded) {
+        if (IsCurrentProcessTaskbarWindow(logicalWindow)) {
+            RememberTaskbarWindow(logicalWindow);
+        }
+        ResetPlacementRetryState();
+    }
+    return true;
+}
+
+bool ApplyLoadedFrameFallback(FrameworkElement fallbackFrame,
+                              HWND logicalWindow) {
+    if (!fallbackFrame) {
+        return false;
+    }
+
+    Wh_Log(L"Taskbar XAML lookup unavailable; using the loaded frame directly");
+    if (!InjectWidget(fallbackFrame)) {
+        return false;
+    }
+
+    // The loaded frame is authoritative even when the private symbol path
+    // can't map it back to a specific HWND. Remember the requested/fallback
+    // window as the logical placement so the 1 Hz watchdog doesn't remove a
+    // working degraded injection on its next pass.
+    if (IsCurrentProcessTaskbarWindow(logicalWindow)) {
+        RememberTaskbarWindow(logicalWindow);
+    } else {
+        g_taskbarWindow = nullptr;
+        g_taskbarThreadId = GetCurrentThreadId();
+    }
+    ResetPlacementRetryState();
+    return true;
+}
+
+struct ApplyOnTaskbarThreadContext {
+    FrameworkElement fallbackFrame{nullptr};
+    bool succeeded = false;
+};
+
+void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
+    auto* context =
+        reinterpret_cast<ApplyOnTaskbarThreadContext*>(contextValue);
+    if (g_unloading) {
+        return;
+    }
+
+    CancelPendingPlacementApply();
+
+    // Keep a retry timer even before the first successful injection. All state
+    // below is intentionally owned by Explorer's taskbar/XAML UI thread.
+    EnsureTimer();
+
+    HWND requestedWindow = FindConfiguredTaskbarWindow();
+    if (!requestedWindow) {
         Wh_Log(L"Taskbar window not found");
+        RecordPlacementFailure(nullptr);
         return;
     }
 
     HWND currentWindow = FindRememberedTaskbarWindow();
-    if (currentWindow != targetWindow && !IsTaskbarReady(targetWindow)) {
+    if (currentWindow == requestedWindow &&
+        ApplyExistingWidgetSettings(requestedWindow)) {
+        context->succeeded = true;
+        return;
+    }
+
+    HWND targetWindow = requestedWindow;
+    bool targetReady = IsTaskbarReady(targetWindow);
+    if (!targetReady) {
         HWND primaryWindow = FindPrimaryTaskbarWindow();
-        if (!primaryWindow) {
-            Wh_Log(L"Selected taskbar is not ready and no fallback exists");
+        if (primaryWindow && primaryWindow != targetWindow &&
+            IsTaskbarReady(primaryWindow)) {
+            Wh_Log(L"Selected taskbar is not ready; using the primary taskbar");
+            targetWindow = primaryWindow;
+            targetReady = true;
+        }
+    }
+
+    if (!targetReady) {
+        Wh_Log(L"No taskbar exposes a ready XAML root");
+        if (ApplyLoadedFrameFallback(context->fallbackFrame, targetWindow)) {
+            context->succeeded = true;
             return;
         }
-        if (targetWindow != primaryWindow) {
-            Wh_Log(L"Selected taskbar is not ready; using the primary taskbar");
+        if (ApplyExistingWidgetSettings(currentWindow, false)) {
+            Wh_Log(L"Keeping the existing widget until taskbar placement recovers");
         }
-        targetWindow = primaryWindow;
+        RecordPlacementFailure(requestedWindow);
+        return;
+    }
+
+    if (currentWindow == targetWindow &&
+        ApplyExistingWidgetSettings(targetWindow)) {
+        context->succeeded = true;
+        return;
     }
 
     HWND removalWindow = currentWindow;
-    if (!removalWindow && g_taskbarThreadId.load()) {
-        removalWindow = FindAnyWindowOnTaskbarThread(nullptr);
+    if (!removalWindow && g_widget && g_taskbarThreadId.load()) {
+        removalWindow = FindAnyWindowOnTaskbarThread(targetWindow);
     }
     bool widgetRemovedForMove = false;
-    if (removalWindow && currentWindow != targetWindow) {
+    if (removalWindow && g_widget && currentWindow != targetWindow) {
         RemoveWidgetForMoveContext removeContext;
         if (!RunFromWindowThread(removalWindow, RemoveWidgetForMove,
                                  &removeContext) ||
             !removeContext.succeeded) {
             Wh_Log(L"Removing widget from the previous monitor failed");
+            RecordPlacementFailure(requestedWindow);
             return;
         }
         widgetRemovedForMove = true;
     }
 
-    if (!ApplyWidgetToTaskbarWindow(targetWindow)) {
-        Wh_Log(L"Applying widget on taskbar thread failed");
-        if (widgetRemovedForMove &&
-            IsCurrentProcessTaskbarWindow(currentWindow)) {
-            Wh_Log(L"Restoring widget on the previous taskbar");
-            if (!ApplyWidgetToTaskbarWindow(currentWindow)) {
-                Wh_Log(L"Restoring widget on the previous taskbar failed");
-            }
+    if (ApplyWidgetToTaskbarWindow(targetWindow)) {
+        ResetPlacementRetryState();
+        context->succeeded = true;
+        return;
+    }
+
+    Wh_Log(L"Applying widget on taskbar thread failed");
+    if (ApplyLoadedFrameFallback(context->fallbackFrame, targetWindow)) {
+        context->succeeded = true;
+        return;
+    }
+
+    if (widgetRemovedForMove &&
+        IsCurrentProcessTaskbarWindow(currentWindow)) {
+        Wh_Log(L"Restoring widget on the previous taskbar");
+        if (!ApplyWidgetToTaskbarWindow(currentWindow)) {
+            Wh_Log(L"Restoring widget on the previous taskbar failed");
         }
+    }
+    RecordPlacementFailure(requestedWindow);
+}
+
+void ApplyOnTaskbarUiThread(void* contextValue) {
+    try {
+        ApplyOnTaskbarUiThreadImpl(contextValue);
+    } catch (...) {
+        HRESULT error = winrt::to_hresult();
+        Wh_Log(L"Taskbar placement update failed: %08X",
+               static_cast<unsigned>(error));
+        RecordPlacementFailure(nullptr);
+    }
+}
+
+void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr) {
+    if (g_unloading) {
+        return;
+    }
+
+    // Choose only a marshaling vehicle here. Monitor selection, widget state
+    // inspection and every mutation are serialized in ApplyOnTaskbarUiThread.
+    HWND dispatchWindow = FindPrimaryTaskbarWindow();
+    if (!dispatchWindow) {
+        HWND rememberedWindow = g_taskbarWindow.load();
+        if (IsCurrentProcessTaskbarWindow(rememberedWindow)) {
+            dispatchWindow = rememberedWindow;
+        } else {
+            dispatchWindow = FindAnyWindowOnTaskbarThread(nullptr);
+        }
+    }
+    if (!dispatchWindow) {
+        Wh_Log(L"Taskbar UI thread is unavailable");
+        return;
+    }
+
+    ApplyOnTaskbarThreadContext context{fallbackFrame, false};
+    if (!RunFromWindowThread(dispatchWindow, ApplyOnTaskbarUiThread, &context)) {
+        Wh_Log(L"Dispatching taskbar placement failed");
+    }
+}
+
+void QueueConfiguredTaskbarPlacement() {
+    if (g_unloading || g_placementApplyQueued) {
+        return;
+    }
+
+    if (!g_widget) {
+        // The retry-only timer survives InjectWidget, so this path doesn't
+        // destroy the DispatcherTimer from inside its own Tick callback.
+        ApplyOnTaskbarThread();
+        return;
+    }
+
+    try {
+        CoreDispatcher dispatcher = g_widget.Dispatcher();
+        if (!dispatcher) {
+            RecordPlacementFailure(FindConfiguredTaskbarWindow(false));
+            return;
+        }
+
+        g_placementApplyQueued = true;
+        g_placementApplyAction = dispatcher.RunAsync(
+            CoreDispatcherPriority::Low, [] {
+                bool shouldApply = g_placementApplyQueued;
+                g_placementApplyQueued = false;
+                g_placementApplyAction = nullptr;
+                if (shouldApply && !g_unloading) {
+                    ApplyOnTaskbarThread();
+                }
+            });
+    } catch (...) {
+        HRESULT error = winrt::to_hresult();
+        g_placementApplyQueued = false;
+        g_placementApplyAction = nullptr;
+        Wh_Log(L"Deferring taskbar placement failed: %08X",
+               static_cast<unsigned>(error));
+        RecordPlacementFailure(FindConfiguredTaskbarWindow(false));
     }
 }
 
 void EnsureConfiguredTaskbarPlacement() {
-    if (!g_widget || g_unloading) {
+    if (g_unloading) {
         return;
     }
-    HWND targetWindow = FindConfiguredTaskbarWindow(false);
+
+    int monitorCount = GetSystemMetrics(SM_CMONITORS);
+    bool topologyChanged = monitorCount != g_lastMonitorCount;
+    if (topologyChanged) {
+        g_lastMonitorCount = monitorCount;
+        ResetPlacementRetryState();
+    }
+
     HWND rememberedWindow = g_taskbarWindow.load();
-    if (!targetWindow ||
-        (IsCurrentProcessTaskbarWindow(rememberedWindow) &&
-         rememberedWindow == targetWindow)) {
+    if (!topologyChanged && g_placementFailures == 0 && g_widget &&
+        IsCurrentProcessTaskbarWindow(rememberedWindow)) {
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (!topologyChanged && g_placementFailures != 0 &&
+        now < g_nextPlacementRetry) {
+        return;
+    }
+
+    HWND targetWindow = FindConfiguredTaskbarWindow(false);
+    if (!targetWindow) {
+        RecordPlacementFailure(nullptr);
+        return;
+    }
+    if (g_widget && IsCurrentProcessTaskbarWindow(rememberedWindow) &&
+        rememberedWindow == targetWindow) {
+        ResetPlacementRetryState();
         return;
     }
 
     Wh_Log(L"Taskbar topology changed; moving the widget");
-    ApplyOnTaskbarThread();
+    QueueConfiguredTaskbarPlacement();
 }
 
 void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
-    if (!taskbarFrame || g_unloading) {
+    if (g_unloading) {
+        return;
+    }
+    if (!taskbarFrame) {
+        ApplyOnTaskbarThread();
         return;
     }
 
@@ -4292,9 +4552,10 @@ void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
 
     if (directWindow && InjectWidget(taskbarFrame)) {
         RememberTaskbarWindow(directWindow);
+        ResetPlacementRetryState();
         return;
     }
-    ApplyOnTaskbarThread();
+    ApplyOnTaskbarThread(taskbarFrame);
 }
 
 using TaskbarFrame_Constructor_t = void*(WINAPI*)(void* pThis);
