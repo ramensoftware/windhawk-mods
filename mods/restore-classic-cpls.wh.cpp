@@ -16,7 +16,7 @@ Brings back the classic Control Panel applets:
 * Notification area icons (for Win10 taskbar)
 * Network Connections
 * Printers and Faxes
-* View installed updates
+* View installed updates (requires the `Control Panel Revival` mod to open in Control Panel rather than Settings app)
 * Suppresses the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1}, originally called "Company Settings Sync", a non-functional icon that may appear if you are using the Classic view of Control Panel
 
 ![screenshot](https://i.imgur.com/mM2JDGp.png)
