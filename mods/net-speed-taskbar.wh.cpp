@@ -7,7 +7,7 @@
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
 // @include     explorer.exe
-// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -luser32 -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00
+// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -luser32 -DWIN32_LEAN_AND_MEAN
 // @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
