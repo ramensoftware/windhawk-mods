@@ -93,6 +93,7 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 
 #define WM_ADD_APP (WM_APP + 1)
 #define WM_REMOVE_APP (WM_APP + 2)
+#define WM_BSDR_SETFOCUS (WM_APP + 3)
 
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
 #define BSDR_CLOSE 1337
@@ -1783,7 +1784,6 @@ namespace CustomBSDR {
     std::mutex pendingAppsMutex;
 
     // functions
-    void ActivateWindow();
     void CenterWindow(HWND hWnd);
     bool IsHighContrast();
     HBITMAP LoadAlphaBitmap(UINT resourceId, bool forceHardcoded = false);
@@ -3124,26 +3124,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
     return FALSE;
 }
 
-void CustomBSDR::ActivateWindow()
-{
-    HWND fgWnd = GetForegroundWindow();
-    DWORD myTid = GetCurrentThreadId();
-    DWORD fgTid = fgWnd ? GetWindowThreadProcessId(fgWnd, nullptr) : 0;
-
-    BOOL attached = FALSE;
-
-    if (fgTid && fgTid != myTid) {
-        attached = AttachThreadInput(myTid, fgTid, TRUE);
-    }
-
-    SetForegroundWindow(hBgWnd);
-    SetActiveWindow(hBgWnd);
-
-    if (attached) {
-        AttachThreadInput(myTid, fgTid, FALSE);
-    }
-}
-
 LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE: {
@@ -3232,6 +3212,34 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         }
         // Retaking screenshot requires temporarily hiding the window
         // Windows 7 doesn't do that either so skip that
+        return 0;
+    }
+    case WM_BSDR_SETFOCUS: {
+        HWND fgWnd = GetForegroundWindow();
+        DWORD myTid = GetCurrentThreadId();
+        DWORD fgTid = fgWnd ? GetWindowThreadProcessId(fgWnd, nullptr) : 0;
+        bool attached = false;
+
+        // Creating window on the default desktop doesn't allow it to get focus
+        // So do this workaround
+        if (!isOnSecureDesktop) {
+            if (fgTid && fgTid != myTid) {
+                attached = AttachThreadInput(myTid, fgTid, TRUE);
+                if (!attached) {
+                    Wh_Log(L"AttachThreadInput failed, GLE=%u", GetLastError());
+                }
+            }
+        }
+
+        ShowWindow(hWnd, SW_SHOW);
+        SetForegroundWindow(hWnd);
+        SetActiveWindow(hWnd);
+
+        if (attached) {
+            if (!AttachThreadInput(myTid, fgTid, FALSE)) {
+                Wh_Log(L"AttachThreadInput restore failed, GLE=%u", GetLastError());
+            }
+        }
         return 0;
     }
     case WM_CLOSE: {
@@ -3392,7 +3400,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             WS_EX_TOPMOST,
             BSDR_CLASSNAME,
             nullptr,
-            WS_POPUP | WS_VISIBLE,
+            WS_POPUP,
             bgOffsetX, bgOffsetY, bgWidth, bgHeight,
             nullptr,
             nullptr,
@@ -3406,8 +3414,9 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 CustomBSDR::hBgWnd = hBgWndLocal;
             }
 
-            if (!isOnSecureDesktop) {
-                ActivateWindow();
+            if (!PostMessageW(hBgWndLocal, WM_BSDR_SETFOCUS, 0, 0)) {
+                Wh_Log(L"PostMessageW(WM_BSDR_SETFOCUS) failed, GLE=%u", GetLastError());
+                ShowWindow(hBgWndLocal, SW_SHOW);
             }
 
             HANDLE waitHandles[1] = { hStopEvent };
