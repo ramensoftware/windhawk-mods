@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.5
+// @version         1.1.6
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -136,10 +136,9 @@ constexpr UINT WM_APP_QUIT = WM_APP + 3;
 constexpr UINT WM_APP_REHOOK = WM_APP + 4;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
-// Independent of safetyCheckSeconds (including 0). Recovers a WH_KEYBOARD_LL
-// hook Windows silently removed after a timeout.
-constexpr UINT_PTR kHookRetryTimerId = 2;
-constexpr UINT kHookRetryIntervalMs = 60 * 1000;
+// Worker-thread only. Caps evidence-driven rehooks so an elevated window
+// that keeps Num Lock off (UIPI) does not swap the hook every safety tick.
+constexpr ULONGLONG kRehookMinIntervalMs = 60 * 1000;
 
 // dwExtraInfo stamped on every synthetic Num Lock we send, so the hook can
 // let our own keystrokes through without treating them as user input.
@@ -203,6 +202,8 @@ HANDLE g_hookReadyEvent = nullptr;
 HPOWERNOTIFY g_suspendResumeNotify = nullptr;
 HWINEVENTHOOK g_foregroundHook = nullptr;
 bool g_sessionNotifyRegistered = false;
+// Worker thread only. Last time we posted WM_APP_REHOOK.
+ULONGLONG g_lastRehookMs = 0;
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -399,6 +400,32 @@ void SendNumLockPulse() {
     }
 }
 
+void UninstallKeyboardHook() {
+    HHOOK hook = g_keyboardHook.exchange(nullptr, std::memory_order_acq_rel);
+    if (hook) {
+        UnhookWindowsHookEx(hook);
+    }
+}
+
+// Worker thread only. Unconditional: unlock/resume.
+void RequestRehook() {
+    g_lastRehookMs = GetTickCount64();
+    DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
+    if (threadId) {
+        PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0);
+    }
+}
+
+// Worker thread only. Num Lock found off is the signal the hook may have
+// been dropped. Do not swap a healthy hook on a timer.
+void RequestEvidenceRehook() {
+    const ULONGLONG now = GetTickCount64();
+    if (g_lastRehookMs != 0 && now - g_lastRehookMs < kRehookMinIntervalMs) {
+        return;
+    }
+    RequestRehook();
+}
+
 // Must run on the worker thread, never inside the LL hook.
 void ForceNumLockOn(bool logSafety) {
     if (IsOverrideHeldVerified() || IsNumLockOn()) {
@@ -407,21 +434,8 @@ void ForceNumLockOn(bool logSafety) {
     if (logSafety) {
         Wh_Log(L"Safety check: Num Lock was off, forcing ON");
     }
+    RequestEvidenceRehook();
     SendNumLockPulse();
-}
-
-void UninstallKeyboardHook() {
-    HHOOK hook = g_keyboardHook.exchange(nullptr, std::memory_order_acq_rel);
-    if (hook) {
-        UnhookWindowsHookEx(hook);
-    }
-}
-
-void RequestRehook() {
-    DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
-    if (threadId) {
-        PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0);
-    }
 }
 
 void UpdateSafetyTimer() {
@@ -440,17 +454,6 @@ void UpdateSafetyTimer() {
     const UINT intervalMs = static_cast<UINT>(seconds) * 1000;
     if (!SetTimer(hwnd, kSafetyTimerId, intervalMs, nullptr)) {
         Wh_Log(L"SetTimer failed: %lu", GetLastError());
-    }
-}
-
-void StartHookRetryTimer() {
-    HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
-    if (!hwnd) {
-        return;
-    }
-
-    if (!SetTimer(hwnd, kHookRetryTimerId, kHookRetryIntervalMs, nullptr)) {
-        Wh_Log(L"SetTimer (hook retry) failed: %lu", GetLastError());
     }
 }
 
@@ -616,8 +619,6 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_TIMER:
             if (wParam == kSafetyTimerId) {
                 ForceNumLockOn(true);
-            } else if (wParam == kHookRetryTimerId) {
-                RequestRehook();
             }
             return 0;
 
@@ -739,7 +740,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     SeedModifierState();
     ForceNumLockOn(false);
     UpdateSafetyTimer();
-    StartHookRetryTimer();
 
     if (g_workerReadyEvent) {
         SetEvent(g_workerReadyEvent);
@@ -753,7 +753,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     hwnd = g_workerHwnd.exchange(nullptr, std::memory_order_acq_rel);
     if (hwnd) {
         KillTimer(hwnd, kSafetyTimerId);
-        KillTimer(hwnd, kHookRetryTimerId);
         UnregisterPowerAndSession(hwnd);
         DestroyWindow(hwnd);
     }
