@@ -78,7 +78,6 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 #include <atomic>
 #include <vector>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <climits>
 #include <wrl/client.h>
@@ -86,7 +85,6 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 #include <windows.storage.streams.h>
 #include <wincodec.h>
 #include <shcore.h>
-#include <shellapi.h>
 #include <shlwapi.h>
 #include <eventtoken.h>
 #include <Uxtheme.h>
@@ -1730,6 +1728,7 @@ using ResolvedHandler = ABI::Windows::Foundation::ITypedEventHandler<IBlockedShu
 std::mutex g_resolvedMutex;
 BlockedShutdownResolution g_resolvedValue = BlockedShutdownResolution_None;
 bool g_wasClicked = false;
+bool g_rejectNextResolved = false;
 
 void Resolve(BlockedShutdownResolution resolution, bool noInvoke = false) {
     Microsoft::WRL::ComPtr<ResolvedHandler> resolvedLocal;
@@ -1845,13 +1844,12 @@ HRESULT LoadImageWithWIC(IWICImagingFactory* pWICImagingFactory, IStream* pStrea
 
     HRESULT hr = S_OK;
 
-    Microsoft::WRL::ComPtr<IWICImagingFactory> spWICImagingFactory(pWICImagingFactory);
-    if (!spWICImagingFactory.Get()) {
-        hr = E_ABORT;
+    if (!pWICImagingFactory) {
+        hr = E_POINTER;
     }
     if (SUCCEEDED(hr)) {
         Microsoft::WRL::ComPtr<IWICBitmapDecoder> spDecoder;
-        hr = spWICImagingFactory->CreateDecoderFromStream(
+        hr = pWICImagingFactory->CreateDecoderFromStream(
             pStream, &GUID_VendorMicrosoftBuiltIn, WICDecodeMetadataCacheOnDemand, &spDecoder);
         if (SUCCEEDED(hr)) {
             Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> spBitmapFrameDecode;
@@ -1918,14 +1916,13 @@ HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBi
     *phbmImage = nullptr;
     HRESULT hr = S_OK;
 
-    Microsoft::WRL::ComPtr<IWICImagingFactory> spWICImagingFactory = pWICImagingFactory;
-    if (!spWICImagingFactory.Get()) {
-        hr = E_ABORT;
+    if (!pWICImagingFactory) {
+        hr = E_POINTER;
     }
     if (SUCCEEDED(hr)) {
         Microsoft::WRL::ComPtr<IWICBitmapSource> spBitmapSourceConverted;
         hr = ConvertWICBitmapPixelFormat(
-            spWICImagingFactory.Get(), pWICBitmapSource, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, &spBitmapSourceConverted);
+            pWICImagingFactory, pWICBitmapSource, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, &spBitmapSourceConverted);
         if (SUCCEEDED(hr)) {
             hr = Convert32bppWICBitmapSourceToHBITMAP(spBitmapSourceConverted.Get(), phbmImage);
         }
@@ -1934,13 +1931,13 @@ HRESULT ConvertWICBitmapToHBITMAP(IWICImagingFactory* pWICImagingFactory, IWICBi
     return hr;
 }
 
-HRESULT GetBitmapFromRandomStream(IWICImagingFactory* pWICImagingFactory, Microsoft::WRL::ComPtr<ABI::Windows::Storage::Streams::IRandomAccessStream> stream, HBITMAP* outBitmap) {
+HRESULT GetBitmapFromRandomStream(IWICImagingFactory* pWICImagingFactory, ABI::Windows::Storage::Streams::IRandomAccessStream* stream, HBITMAP* outBitmap) {
     if (!pWICImagingFactory) {
-        return E_ABORT;
+        return E_POINTER;
     }
 
     Microsoft::WRL::ComPtr<IStream> spStream;
-    RETURN_IF_FAILED(CreateStreamOverRandomAccessStream(stream.Get(), IID_PPV_ARGS(&spStream)));
+    RETURN_IF_FAILED(CreateStreamOverRandomAccessStream(stream, IID_PPV_ARGS(&spStream)));
 
     Microsoft::WRL::ComPtr<IWICBitmapSource> spWICBitmapSource;
     RETURN_IF_FAILED(LoadImageWithWIC(pWICImagingFactory, spStream.Get(), &spWICBitmapSource));
@@ -3016,10 +3013,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             ShowWindow(hBgWnd, SW_HIDE);
             // Make sure the resolve request reaches winlogon
             // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
-            if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 500, nullptr)) {
+            if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 700, nullptr)) {
                 Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
                 // Fallback to sleep
-                Sleep(500);
+                Sleep(700);
                 Cancel();
             }
             return TRUE;
@@ -3163,27 +3160,25 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
     case WM_CREATE: {
         HWND hDlgLocal = nullptr;
         if (!g_isUsingHardcodedRes && g_hResDll) {
-            hDlgLocal = CreateDialogParamW(g_hResDll, MAKEINTRESOURCEW(IDD_BSDR_DLG), hWnd, DlgProc, lParam);
+            hDlgLocal = CreateDialogParamW(g_hResDll, MAKEINTRESOURCEW(IDD_BSDR_DLG), hWnd, DlgProc, 0);
             if (!hDlgLocal || !IsWindow(hDlgLocal) || dlgInitFailed) {
                 Wh_Log(L"CreateDialogParamW failed: %d", GetLastError());
                 if (hDlgLocal && IsWindow(hDlgLocal)) {
                     DestroyWindow(hDlgLocal);
                 }
                 // Retry with hardcoded one
-                hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
+                hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, 0);
             }
         } else {
-            hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, lParam);
+            hDlgLocal = CreateDialogIndirectParamW(nullptr, reinterpret_cast<LPCDLGTEMPLATEW>(&RES_DIALOG), hWnd, DlgProc, 0);
         }
         if (hDlgLocal && IsWindow(hDlgLocal) && !dlgInitFailed) {
             ShowWindow(hDlgLocal, SW_SHOW);
         } else {
             // Bail out
             Wh_Log(L"Dialog creation failed!!");
-            // Note: Windows also does force logoff when the BSDR is not available, e.g. the BSDR DLL is missing, on Server Core, etc.
-            // Probably this is better than leaving a system that never shuts down (if the mod is repeatedly failing)
-            Resolve(BlockedShutdownResolution_Force);
-            return 0;
+            // Make CreateWindowExW fail
+            return -1;
         }
 
         if (!IsHighContrast()) {
@@ -3282,11 +3277,6 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             return 0;
         }
 
-        for (auto& tile : appTiles) {
-            if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
-        }
-        appTiles.clear();
-
         HWND hDlgLocal = nullptr;
         {
             std::lock_guard lock(pendingAppsMutex);
@@ -3299,7 +3289,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             MSG msg;
             while (PeekMessageW(&msg, hDlgLocal, WM_ADD_APP, WM_ADD_APP, PM_REMOVE)) {
                 if (msg.lParam) {
-                    reinterpret_cast<IShutdownBlockingApp*>(msg.lParam)->Release();                
+                    reinterpret_cast<IShutdownBlockingApp*>(msg.lParam)->Release();
                 }
             }
 
@@ -3315,6 +3305,16 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         if (hBgWndLocal) {
             DestroyWindow(hBgWndLocal);
+        }
+
+        for (auto& tile : appTiles) {
+            if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
+        }
+        appTiles.clear();
+
+        {
+            std::lock_guard lock(pendingAppsMutex);
+            pendingApps->clear();
         }
 
         if (bgBitmap) {
@@ -3365,8 +3365,6 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         hYesButton = nullptr;
         hNoButton = nullptr;
         hHoverButton = nullptr;
-        hTitleFont = nullptr;
-        hDescFont = nullptr;
 
         dlgInitFailed = false;
         bgOffsetX = 0;
@@ -3411,7 +3409,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
     HRESULT hrIf = CoCreateInstance(CLSID_WICImagingFactory2, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&spWICFactory));
     if (FAILED(hrIf)) {
-        Wh_Log(L"CoCreateInstance(CLSID_WICImagingFactory2) failed, HR=%d", hrIf);
+        Wh_Log(L"CoCreateInstance(CLSID_WICImagingFactory2) failed, HR=%08X", hrIf);
         // Continue without icons
     }
 
@@ -3532,6 +3530,8 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
     if (ret != 0) {
         Wh_Log(L"CustomBSDR thread init failed");
+        // Note: Windows also does force logoff when the BSDR is not available, e.g. the BSDR DLL is missing, on Server Core, etc.
+        // Probably this is better than leaving a system that never shuts down (if the mod is repeatedly failing)
         Resolve(BlockedShutdownResolution_Force);
     }
 
@@ -3542,7 +3542,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 // (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
 // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
 void CustomBSDR::Start(LogonUIState state) {
-    std::unique_lock lock(workerMutex);
+    std::lock_guard lock(workerMutex);
     if (g_isExiting.load()) {
         Wh_Log(L"Mod is unloading!");
         return;
@@ -3557,8 +3557,11 @@ void CustomBSDR::Start(LogonUIState state) {
                 Wh_Log(L"CustomBSDR thread is still running");
             }
 
-            lock.unlock();
-            Resolve(BlockedShutdownResolution_Force);
+            {
+                std::lock_guard resolvedLock(g_resolvedMutex);
+                // Don't touch the existing session's g_Resolve, and just reject (force resolve) the add_Resolved call that comes after this call
+                g_rejectNextResolved = true;
+            }
             return;
         }
 
@@ -3666,33 +3669,26 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
     Wh_Log(L"BlockedShutdownUXImpl::get_WasClicked");
     {
         std::lock_guard lock(g_resolvedMutex);
+        // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
+        // which is not wanted in any cases (no version of stock BSDR locks the screen!)
         *wasClicked = g_wasClicked;
     }
     return S_OK;
 }
 
 long __fastcall BlockedShutdownUXImpl_AddApplication_hook(void* thisPtr, IShutdownBlockingApp* blockingApp) {
-    std::wstring logMessage = L"BlockedShutdownUXImpl::AddApplication, AppId=";
     UINT appId = 0;
-    if (SUCCEEDED(blockingApp->get_Id(&appId))) {
-        logMessage += std::to_wstring(appId);
-    }
     BOOLEAN isBlocking = FALSE;
-    if (SUCCEEDED(blockingApp->get_IsBlocking(&isBlocking))) {
-        logMessage += L", IsBlocking=" + std::wstring(isBlocking ? L"true" : L"false");
-    }
     HSTRING caption, blockReason;
-    if (SUCCEEDED(blockingApp->get_Caption(&caption))) {
-        // Log the caption of the blocking app
-        logMessage += L", Caption=" + std::wstring(WindowsGetStringRawBuffer(caption, NULL));
-        WindowsDeleteString(caption);
-    }
-    if (SUCCEEDED(blockingApp->get_BlockReason(&blockReason))) {
-        // Log the block reason of the blocking app
-        logMessage += L", BlockReason=" + std::wstring(WindowsGetStringRawBuffer(blockReason, NULL));
-        WindowsDeleteString(blockReason);
-    }
-    Wh_Log(L"%s", logMessage.c_str());
+    blockingApp->get_Id(&appId);
+    blockingApp->get_IsBlocking(&isBlocking);
+    blockingApp->get_Caption(&caption);
+    blockingApp->get_BlockReason(&blockReason);
+    const wchar_t* captionStr = WindowsGetStringRawBuffer(caption, NULL);
+    const wchar_t* blockReasonStr = WindowsGetStringRawBuffer(blockReason, NULL);
+    Wh_Log(L"BlockedShutdownUXImpl::AddApplication, AppId=%u, IsBlocking=%d, Caption=%s, BlockReason=%s", appId, isBlocking, captionStr, blockReasonStr);
+    WindowsDeleteString(blockReason);
+    WindowsDeleteString(caption);
 
     CustomBSDR::AddApplication(blockingApp);
     return S_OK;
@@ -3709,15 +3705,20 @@ long __fastcall BlockedShutdownUXImpl_add_Resolved_hook(void* thisPtr, ABI::Wind
     if (!eventHandler || !eventToken)
         return E_POINTER;
 
-    eventToken->value = 0;
-
     BlockedShutdownResolution resolvedValueLocal;
     {
         std::lock_guard lock(g_resolvedMutex);
-        resolvedValueLocal = g_resolvedValue;
+        if (g_rejectNextResolved) {
+            g_rejectNextResolved = false;
+            resolvedValueLocal = BlockedShutdownResolution_Force;
+            eventToken->value = 1;
+        } else {
+            resolvedValueLocal = g_resolvedValue;
+            eventToken->value = 0;
 
-        if (resolvedValueLocal == BlockedShutdownResolution_None) {
-            g_Resolved = eventHandler;
+            if (resolvedValueLocal == BlockedShutdownResolution_None) {
+                g_Resolved = eventHandler;
+            }
         }
     }
 
@@ -3758,7 +3759,7 @@ WindhawkUtils::SYMBOL_HOOK blockedShutdownHooks[] = {
         {
             L"public: virtual long __cdecl BlockedShutdownUXImpl::Start(struct Windows::Internal::UI::Logon::Controller::IUserSettingManager *,struct Windows::Internal::UI::Logon::Controller::ILogonUIStateInfo *)",
         },
-        (void**)nullptr, // Cast is not needed on WH 1.7+; only needed for WH 1.6.1 and below
+        (void**)nullptr, // Cast is not needed on WH 1.7+; only needed for WH 1.6.1 (which the CI still checks at the time of submitting this) and below
         (void*)BlockedShutdownUXImpl_Start_hook,
         FALSE
     },
@@ -3886,8 +3887,6 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
 #pragma region Winlogon hooks (disable async logoff)
 bool g_isWinlogon = false;
 bool g_noSafetyChecks = false;
-// It's thread local to allow probing on further setting change
-thread_local bool g_isInitialThread = false;
 int* p_g_fShutdownResolverDisabled = nullptr;
 int g_origResolverDisabledState = 0;
 
@@ -3920,7 +3919,8 @@ bool IsAuthUxInstalled() {
 // ShutdownWindowsWorkerThread (which uses g_fShutdownResolverDisabled) runs before LogonUI exec so checking live LUI injection status is tricky
 // and will be always one step behind (e.g. will detect as LUI not injected on first logoff after mod install)
 // I know the global inclusion key is not everything that affects that injection but this is minimal safeguard anyway
-// Let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
+// Note: the global include key is honored over the global exclusions. Mod specific exclusions have more priority but checking it overcomplicates stuff
+// So let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
 bool IsLogonUiInjectionEnabled() {
     // Skip by user choice
     if (g_noSafetyChecks) {
@@ -4055,9 +4055,13 @@ BOOL Wh_ModInit() {
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (kernelBase) {
         CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
-        if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
-            Wh_Log(L"CreateEventW hook failed");
-            // not critical, well, there still is a terrrible workaround path
+        if (pCreateEventW) {
+            if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
+                Wh_Log(L"CreateEventW hook failed");
+                // not critical, well, there still is a terrrible workaround path
+            }
+        } else {
+            Wh_Log(L"GetProcAddress CreateEventW failed??");
         }
     } else {
         Wh_Log(L"GetModuleHandle kernelbase failed??");
@@ -4118,7 +4122,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void ApplyResolverDisabledState() {
     if (g_isWinlogon && p_g_fShutdownResolverDisabled) {
         g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
         if (g_origResolverDisabledState) { // Maybe the allowblockingappsatshutdown registry is set
@@ -4131,6 +4135,10 @@ void Wh_ModAfterInit() {
             Wh_Log(L"Not setting g_fShutdownResolverDisabled as LogonUI hooks are not ready");
         }
     }
+}
+
+void Wh_ModAfterInit() {
+    ApplyResolverDisabledState();
 }
 
 void Wh_ModUninit() {
@@ -4199,6 +4207,7 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = FALSE;
     if (g_isWinlogon) {
         if (!Wh_GetIntSetting(L"disableAsyncLogoff")) {
             // The global injection is enabled or disabled, need to unload the mod
@@ -4212,7 +4221,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
                     *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
                 }
                 g_noSafetyChecks = newNoSafetyChecks;
-                Wh_ModAfterInit();
+                ApplyResolverDisabledState();
             }
         }
     }
