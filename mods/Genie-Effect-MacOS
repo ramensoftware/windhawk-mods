@@ -1,0 +1,806 @@
+// ==WindhawkMod==
+// @id              genie-effect-macos
+// @name            Genie Effect MacOS - True Genie (Bend + Slide)
+// @description     Vrai effet Genie macOS en 2 phases (courbure du tunnel puis glissement), rendu bilineaire multi-thread par scanline, AA sous-pixel, mipmaps. Zero carre, zero escalier, zero freeze.
+// @version         2.1.0
+// @author          derrunk
+// @include         *
+// @compilerOptions -ldwmapi -lgdi32 -lwinmm
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Genie Effect macOS — v2.0 (True Genie)
+
+L'effet Genie authentique se joue en deux phases qui se chevauchent legerement :
+
+1. **Bend** — la fenetre s'etire vers la barre des taches et ses bords se
+   courbent (smootherstep C2) pour former le tunnel. Le haut ne bouge pas,
+   la pointe descend jusqu'au dock.
+2. **Slide** — la fenetre glisse a travers le tunnel fige et se fait absorber.
+
+La restauration est exactement la meme geometrie en temps inverse.
+
+Rendu 100% logiciel par scanline :
+- bords gauche/droit calcules analytiquement pour CHAQUE ligne (aucune tranche)
+- echantillonnage bilineaire a virgule fixe + mipmaps (aucun scintillement
+  en forte reduction)
+- couverture sous-pixel sur les bords (alpha premultiplie) -> anti-aliasing reel
+- restitution pixel-perfect au premier/dernier frame (convention texel-center)
+- dirty-rects 2D : seule la zone reellement touchee est effacee, redessinee
+  et renvoyee au compositeur (UpdateLayeredWindowIndirect + prcDirty)
+- rendu reparti sur les coeurs CPU (pool de threads persistant, bandes de
+  scanlines, virgule fixe 16.16) : plus de frames rates sur fenetre maximisee
+- timer systeme a 1 ms pendant l'animation (timeBeginPeriod)
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- duration_ms: 600
+  $name: Duree (ms)
+  $description: Duree totale de l'animation (50 - 10000).
+- bend_pct: 40
+  $name: Phase de courbure (%)
+  $description: Portion de l'animation passee a former le tunnel (15 - 70). Le glissement demarre a ~70% de cette phase (chevauchement naturel).
+- icon_width: 44
+  $name: Largeur d'arrivee (px)
+  $description: Largeur de la fenetre au moment ou elle touche la barre des taches.
+*/
+// ==/WindhawkModSettings==
+
+#define NOMINMAX
+#include <windows.h>
+#include <dwmapi.h>
+#include <math.h>
+#include <unordered_map>
+#include <vector>
+#include <mutex>
+#include <atomic>
+
+#ifndef DWMWA_CLOAK
+#define DWMWA_CLOAK 13
+#endif
+
+typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND, UINT, WPARAM, LPARAM);
+DefWindowProcW_t DefWindowProcW_Original;
+typedef BOOL (WINAPI *ShowWindow_t)(HWND, int);
+ShowWindow_t ShowWindow_Original;
+
+// ------------------------------------------------------------------ helpers
+
+static inline int    imin(int a, int b)       { return a < b ? a : b; }
+static inline int    imax(int a, int b)       { return a > b ? a : b; }
+static inline double dmin(double a, double b) { return a < b ? a : b; }
+static inline double dmax(double a, double b) { return a > b ? a : b; }
+static inline double Clamp01(double x)        { return x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x); }
+
+// smootherstep de Perlin (C2) : la courbe canonique du tunnel Genie
+static inline double Smoother(double x) {
+    if (x <= 0.0) return 0.0;
+    if (x >= 1.0) return 1.0;
+    return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
+}
+
+// lerp 32bpp a poids 8 bits (w dans 0..255), canaux R/B et G en parallele
+static inline DWORD Lerp8(DWORD a, DWORD b, int w) {
+    DWORD rb = ((a & 0x00FF00FF) * (DWORD)(256 - w) + (b & 0x00FF00FF) * (DWORD)w) >> 8;
+    DWORD g  = ((a & 0x0000FF00) * (DWORD)(256 - w) + (b & 0x0000FF00) * (DWORD)w) >> 8;
+    return (rb & 0x00FF00FF) | (g & 0x0000FF00);
+}
+
+// premultiplication alpha pour UpdateLayeredWindow (AC_SRC_ALPHA)
+static inline DWORD Premul(DWORD c, unsigned a) {
+    unsigned r = (((c >> 16) & 0xFF) * a + 127) / 255;
+    unsigned g = (((c >>  8) & 0xFF) * a + 127) / 255;
+    unsigned b = (( c        & 0xFF) * a + 127) / 255;
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+// ------------------------------------------------------------------ mipmaps
+
+struct MipLevel {
+    int w, h;
+    const DWORD*       p;
+    std::vector<DWORD> store;
+};
+
+// chaine de mips par moyenne 2x2 : evite le scintillement quand la fenetre
+// est fortement reduite pres du dock (le bilineaire seul sous-echantillonne)
+static void BuildMips(const DWORD* src, int W, int H, std::vector<MipLevel>& mips) {
+    mips.clear();
+    MipLevel m0;
+    m0.w = W; m0.h = H; m0.p = src;
+    mips.push_back(std::move(m0));
+
+    while ((int)mips.size() < 5) {
+        const MipLevel& s = mips.back();
+        int nw = s.w / 2, nh = s.h / 2;
+        if (nw < 24 || nh < 24) break;
+
+        MipLevel d;
+        d.w = nw; d.h = nh;
+        d.store.resize((size_t)nw * nh);
+        for (int y = 0; y < nh; y++) {
+            const DWORD* r0 = s.p + (size_t)(2 * y)     * s.w;
+            const DWORD* r1 = s.p + (size_t)(2 * y + 1) * s.w;
+            DWORD* o = d.store.data() + (size_t)y * nw;
+            for (int x = 0; x < nw; x++) {
+                DWORD a = r0[2 * x], b = r0[2 * x + 1];
+                DWORD c = r1[2 * x], e = r1[2 * x + 1];
+                DWORD rb = (((a & 0xFF00FF) + (b & 0xFF00FF) + (c & 0xFF00FF) + (e & 0xFF00FF)) >> 2) & 0xFF00FF;
+                DWORD g  = (((a & 0x00FF00) + (b & 0x00FF00) + (c & 0x00FF00) + (e & 0x00FF00)) >> 2) & 0x00FF00;
+                o[x] = rb | g;
+            }
+        }
+        d.p = d.store.data();
+        mips.push_back(std::move(d));
+    }
+}
+
+// ------------------------------------------------- rendu multi-thread
+
+// contexte d'un frame, partage en lecture seule par les threads de rendu
+struct FrameCtx {
+    DWORD* base;
+    int    totalW, minX, maxX, minY;
+    const std::vector<MipLevel>* mips;
+    int    W, H;
+    double T, G, L, R, dockL, dockR;
+    double b, bandTop, bandH, bandBot, scaleY;
+    double fade; // fondu d'absorption, applique dans la couverture
+};
+
+// echantillon bilineaire, coordonnee horizontale en virgule fixe 16.16
+static inline DWORD SampleBilin(const DWORD* r0, const DWORD* r1, int mw,
+                                int fx16, int fxMax, int wy) {
+    int f = fx16;
+    if (f < 0) f = 0; else if (f > fxMax) f = fxMax;
+    int x0 = f >> 16;
+    int wx = (f >> 8) & 0xFF;
+    int x1 = (x0 + 1 < mw) ? x0 + 1 : x0;
+    DWORD top = wx ? Lerp8(r0[x0], r0[x1], wx) : r0[x0];
+    if (!wy) return top;
+    DWORD bot = wx ? Lerp8(r1[x0], r1[x1], wx) : r1[x0];
+    return Lerp8(top, bot, wy);
+}
+
+// rend les scanlines [y0, y1) — chaque ligne est independante, donc
+// parallelisable par bandes sans aucune synchronisation interne
+static void RenderBand(const FrameCtx* c, int y0, int y1) {
+    const std::vector<MipLevel>& mips = *c->mips;
+    const int W = c->W;
+
+    for (int yi = y0; yi < y1; yi++) {
+        double yc = yi + 0.5;
+
+        // couverture verticale sous-pixel (AA des bords haut/bas)
+        double covY = dmin((double)yi + 1.0, c->bandBot) - dmax((double)yi, c->bandTop);
+        if (covY <= 0.0) continue;
+        if (covY > 1.0)  covY = 1.0;
+        double covRow = covY * c->fade;
+
+        // bords du tunnel a cette hauteur : analytiques, donc continus
+        double s  = Clamp01((yc - c->T) / c->G);
+        double e  = c->b * Smoother(s);
+        double xL = c->L + (c->dockL - c->L) * e;
+        double xR = c->R + (c->dockR - c->R) * e;
+        double width = xR - xL;
+        if (width < 1.0) width = 1.0;
+
+        // niveau de mip : garde l'echelle effective >= 0.5
+        double sMin = dmin(width / (double)W, c->scaleY);
+        int lvl = 0;
+        while (lvl + 1 < (int)mips.size() && sMin < 0.5) { sMin *= 2.0; lvl++; }
+        const MipLevel& M = mips[lvl];
+        const int mw = M.w, mh = M.h;
+
+        // coordonnee source verticale (texel-center : identite exacte a 1:1)
+        double v  = Clamp01((yc - c->bandTop) / c->bandH);
+        double fy = v * mh - 0.5;
+        if (fy < 0.0) fy = 0.0; else if (fy > mh - 1) fy = (double)(mh - 1);
+        int y0i = (int)fy;
+        int wy  = (int)((fy - y0i) * 256.0 + 0.5);
+        if (wy >= 256)    { y0i++; wy = 0; }
+        if (y0i > mh - 1) { y0i = mh - 1; wy = 0; }
+        int y1i = (y0i + 1 < mh) ? y0i + 1 : y0i;
+        const DWORD* r0 = M.p + (size_t)y0i * mw;
+        const DWORD* r1 = M.p + (size_t)y1i * mw;
+
+        int xs = imax((int)floor(xL), c->minX);
+        int xe = imin((int)ceil(xR),  c->maxX);
+        if (xe <= xs) continue;
+
+        // pas source horizontal en virgule fixe 16.16 (texel-center)
+        int    fxMax = (mw - 1) << 16;
+        double dfx   = (double)mw / width;
+        int    dfx16 = (int)(dfx * 65536.0 + 0.5);
+        int    fx16  = (int)((((xs + 0.5 - xL) / width) * (double)mw - 0.5) * 65536.0);
+        DWORD* out   = c->base + (size_t)(yi - c->minY) * c->totalW;
+
+        // pixel de gauche : couverture partielle possible
+        {
+            DWORD  pix = SampleBilin(r0, r1, mw, fx16, fxMax, wy);
+            double cx  = dmin((double)xs + 1.0, xR) - dmax((double)xs, xL);
+            double cov = covRow * Clamp01(cx);
+            out[xs - c->minX] = (cov >= 0.999)
+                ? (0xFF000000 | pix)
+                : Premul(pix, (unsigned)(cov * 255.0 + 0.5));
+        }
+
+        // interieur : couverture constante, aucun test de bord dans la boucle
+        int    fxc = fx16 + dfx16;
+        DWORD* op  = out + (xs + 1 - c->minX);
+        if (covRow >= 0.999) {
+            for (int xi = xs + 1; xi < xe - 1; xi++, fxc += dfx16)
+                *op++ = 0xFF000000 | SampleBilin(r0, r1, mw, fxc, fxMax, wy);
+        } else {
+            unsigned a = (unsigned)(covRow * 255.0 + 0.5);
+            for (int xi = xs + 1; xi < xe - 1; xi++, fxc += dfx16)
+                *op++ = Premul(SampleBilin(r0, r1, mw, fxc, fxMax, wy), a);
+        }
+
+        // pixel de droite
+        if (xe - 1 > xs) {
+            DWORD  pix = SampleBilin(r0, r1, mw, fxc, fxMax, wy);
+            double cx  = dmin((double)xe, xR) - dmax((double)(xe - 1), xL);
+            double cov = covRow * Clamp01(cx);
+            out[xe - 1 - c->minX] = (cov >= 0.999)
+                ? (0xFF000000 | pix)
+                : Premul(pix, (unsigned)(cov * 255.0 + 0.5));
+        }
+    }
+}
+
+struct RenderPool;
+
+struct WorkerSlot {
+    RenderPool* pool;
+    HANDLE      hGo;      // auto-reset : "ta bande est prete"
+    HANDLE      hThread;
+    int         y0, y1;   // bande du frame courant
+};
+
+struct RenderPool {
+    FrameCtx      ctx;
+    WorkerSlot    slots[6];
+    int           nWorkers;
+    volatile LONG pending;
+    HANDLE        hDone;  // auto-reset : "toutes les bandes sont finies"
+    volatile BOOL quit;
+};
+
+static DWORD WINAPI RenderWorkerProc(LPVOID lp) {
+    WorkerSlot* ws = (WorkerSlot*)lp;
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    for (;;) {
+        WaitForSingleObject(ws->hGo, INFINITE);
+        RenderPool* p = ws->pool;
+        if (p->quit) return 0;
+        if (ws->y1 > ws->y0) RenderBand(&p->ctx, ws->y0, ws->y1);
+        if (InterlockedDecrement(&p->pending) == 0) SetEvent(p->hDone);
+    }
+}
+
+// ------------------------------------------------------------------ etat
+
+struct GhostAnimData {
+    HWND         hRealWnd;
+    HBITMAP      hBitmap;      // snapshot 32bpp (DIB section)
+    const DWORD* srcBits;      // bits du snapshot
+    RECT         targetRect;
+    int          width, height;
+    int          targetDockX, targetDockY;
+    BOOL         isRising;
+    LONG_PTR     originalExStyle;
+    int          durationMs;
+    double       bendPct;      // 0.15 .. 0.70
+    int          iconWidth;
+};
+
+std::unordered_map<HWND, HBITMAP> g_SnapshotCache;
+std::unordered_map<HWND, int>     g_IconPositions;
+std::mutex g_CacheMutex;
+
+std::atomic<int> g_durationMs{600};
+std::atomic<int> g_bendPct{40};
+std::atomic<int> g_iconWidth{44};
+
+void LoadSettings() {
+    int ms = Wh_GetIntSetting(L"duration_ms");
+    if (ms < 50 || ms > 10000) ms = 600;
+    g_durationMs.store(ms, std::memory_order_relaxed);
+
+    int bp = Wh_GetIntSetting(L"bend_pct");
+    if (bp < 15 || bp > 70) bp = 40;
+    g_bendPct.store(bp, std::memory_order_relaxed);
+
+    int iw = Wh_GetIntSetting(L"icon_width");
+    if (iw < 8 || iw > 240) iw = 44;
+    g_iconWidth.store(iw, std::memory_order_relaxed);
+}
+
+void SetDwmTransitions(HWND hWnd, BOOL enable) {
+    BOOL disable = !enable;
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
+}
+
+static void CloakWindow(HWND hWnd, BOOL cloak) {
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
+}
+
+// -------------------------------------------------------------------------
+// Moteur : rasterizer Genie deux phases, scanline par scanline
+// -------------------------------------------------------------------------
+DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
+    GhostAnimData* d = (GhostAnimData*)lpParam;
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    const int    W  = d->width;
+    const int    H  = d->height;
+    const double L  = (double)d->targetRect.left;
+    const double R  = (double)d->targetRect.right;
+    const double T  = (double)d->targetRect.top;
+    const double B  = (double)d->targetRect.bottom;
+    const double Dy = (double)d->targetDockY;
+    const double dockL = d->targetDockX - d->iconWidth * 0.5;
+    const double dockR = d->targetDockX + d->iconWidth * 0.5;
+    const double totalMs = (double)d->durationMs;
+
+    double G = Dy - T;                        // hauteur totale du tunnel
+    if (G < 48.0) G = 48.0;
+
+    const double bendEnd    = d->bendPct;     // fin de la phase de courbure
+    const double slideStart = bendEnd * 0.70; // le glissement demarre avant la fin du bend
+
+    // ---- boite englobante de l'animation
+    const int PAD = 8;
+    int minX = (int)floor(dmin(L, dockL)) - PAD;
+    int maxX = (int)ceil (dmax(R, dockR)) + PAD;
+    int minY = (int)floor(T) - PAD;
+    int maxY = (int)ceil (dmax(T + G, B)) + PAD;
+    int totalW = maxX - minX; if (totalW < 1) totalW = 1;
+    int totalH = maxY - minY; if (totalH < 1) totalH = 1;
+
+    HWND hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+        L"STATIC", NULL, WS_POPUP,
+        minX, minY, totalW, totalH, NULL, NULL, NULL, NULL);
+
+    HDC hScreenDC = GetDC(NULL);
+    HDC hSurfDC   = CreateCompatibleDC(hScreenDC);
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = totalW;
+    bmi.bmiHeader.biHeight      = -totalH;
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void*   pBits = NULL;
+    HBITMAP hSurf = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+
+    if (!hGhost || !hSurf || !pBits) {
+        if (hSurf)  DeleteObject(hSurf);
+        if (hGhost) DestroyWindow(hGhost);
+        DeleteDC(hSurfDC);
+        ReleaseDC(NULL, hScreenDC);
+        if (d->isRising) {
+            SetLayeredWindowAttributes(d->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(d->originalExStyle & WS_EX_LAYERED))
+                SetWindowLongPtrW(d->hRealWnd, GWL_EXSTYLE, d->originalExStyle);
+        }
+        SetDwmTransitions(d->hRealWnd, TRUE);
+        DeleteObject(d->hBitmap);
+        delete d;
+        return 0;
+    }
+
+    HBITMAP hOldSurf = (HBITMAP)SelectObject(hSurfDC, hSurf);
+    DWORD* base = (DWORD*)pBits;
+    memset(pBits, 0, (size_t)totalW * totalH * 4);
+
+    GdiFlush(); // le snapshot GDI doit etre ecrit avant lecture CPU
+    std::vector<MipLevel> mips;
+    BuildMips(d->srcBits, W, H, mips);
+
+    timeBeginPeriod(1); // granularite scheduler/Sleep a 1 ms pendant l'anim
+
+    // ---- pool de rendu : bandes de scanlines reparties sur les coeurs
+    RenderPool pool;
+    pool.nWorkers = 0;
+    pool.pending  = 0;
+    pool.quit     = FALSE;
+    pool.hDone    = CreateEventW(NULL, FALSE, FALSE, NULL);
+
+    SYSTEM_INFO sysinf; GetSystemInfo(&sysinf);
+    int wantedWorkers = (int)sysinf.dwNumberOfProcessors / 2 - 1; // laisse de l'air au systeme
+    if (wantedWorkers > 6) wantedWorkers = 6;
+    if (wantedWorkers < 0) wantedWorkers = 0;
+    if (pool.hDone) {
+        for (int i = 0; i < wantedWorkers; i++) {
+            WorkerSlot& sl = pool.slots[i];
+            sl.pool = &pool; sl.y0 = sl.y1 = 0;
+            sl.hGo = CreateEventW(NULL, FALSE, FALSE, NULL);
+            if (!sl.hGo) break;
+            sl.hThread = CreateThread(NULL, 0, RenderWorkerProc, &sl, 0, NULL);
+            if (!sl.hThread) { CloseHandle(sl.hGo); break; }
+            pool.nWorkers = i + 1;
+        }
+    }
+
+    // parametres constants du contexte de rendu
+    pool.ctx.base  = base;   pool.ctx.totalW = totalW;
+    pool.ctx.minX  = minX;   pool.ctx.maxX   = maxX;   pool.ctx.minY = minY;
+    pool.ctx.mips  = &mips;  pool.ctx.W      = W;      pool.ctx.H    = H;
+    pool.ctx.T     = T;      pool.ctx.G      = G;
+    pool.ctx.L     = L;      pool.ctx.R      = R;
+    pool.ctx.dockL = dockL;  pool.ctx.dockR  = dockR;
+
+    LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
+    QueryPerformanceFrequency(&qpcFreq);
+    QueryPerformanceCounter(&qpcStart);
+
+    BOOL firstFrame = TRUE;
+    int prevY0 = 0, prevY1 = 0; // zone sale du frame precedent (coord. boite)
+    int prevX0 = 0, prevX1 = 0;
+
+    for (;;) {
+        QueryPerformanceCounter(&qpcNow);
+        double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+        if (elapsedMs >= totalMs) elapsedMs = totalMs;
+
+        double p = elapsedMs / totalMs;
+        double t = d->isRising ? (1.0 - p) : p;
+
+        // ---- les deux phases du Genie (chevauchement leger)
+        double b = Smoother(Clamp01(t / bendEnd));                           // courbure
+        double m = Smoother(Clamp01((t - slideStart) / (1.0 - slideStart))); // glissement
+
+        // ---- bande verticale occupee par la fenetre
+        // bend : le haut reste en place, la pointe s'etire jusqu'au dock (H -> G)
+        // slide : toute la bande plonge et se comprime dans le dock
+        double stretched = H + (G - H) * b;
+        double bandTop   = T + m * G;
+        double bandH     = stretched * (1.0 - m);
+        if (bandH < 1.0) bandH = 1.0;
+        double bandBot   = bandTop + bandH;
+
+        // ---- zone sale du frame courant : bornes verticales...
+        int iy0 = imax((int)floor(bandTop), minY);
+        int iy1 = imin((int)ceil(bandBot),  maxY);
+
+        // ...et horizontales (e est monotone le long du tunnel -> extremites)
+        int cx0 = minX, cx1 = minX;
+        if (iy1 > iy0) {
+            double sA = Clamp01(((double)iy0 + 0.5 - T) / G);
+            double sB = Clamp01(((double)iy1 - 0.5 - T) / G);
+            double eA = b * Smoother(sA), eB = b * Smoother(sB);
+            double xlA = L + (dockL - L) * eA, xlB = L + (dockL - L) * eB;
+            double xrA = R + (dockR - R) * eA, xrB = R + (dockR - R) * eB;
+            cx0 = imax((int)floor(dmin(xlA, xlB)), minX);
+            cx1 = imin((int)ceil (dmax(xrA, xrB)), maxX);
+            if (cx1 < cx0) cx1 = cx0;
+        }
+
+        // coordonnees boite
+        int curY0 = iy0 - minY, curY1 = imax(iy1 - minY, iy0 - minY);
+        int curX0 = cx0 - minX, curX1 = cx1 - minX;
+
+        // ---- effacement : union (frame precedent, frame courant), 2D
+        int uy0 = imin(prevY0, curY0), uy1 = imax(prevY1, curY1);
+        int ux0 = imin(prevX0, curX0), ux1 = imax(prevX1, curX1);
+        for (int r = uy0; r < uy1; r++)
+            memset(base + (size_t)r * totalW + ux0, 0, (size_t)(ux1 - ux0) * 4);
+        prevY0 = curY0; prevY1 = curY1;
+        prevX0 = curX0; prevX1 = curX1;
+
+        // ---- contexte du frame, puis rendu par bandes sur tous les coeurs
+        pool.ctx.b       = b;
+        pool.ctx.bandTop = bandTop;
+        pool.ctx.bandH   = bandH;
+        pool.ctx.bandBot = bandBot;
+        pool.ctx.scaleY  = bandH / (double)H;
+        pool.ctx.fade    = (t > 0.92) ? (1.0 - (t - 0.92) / 0.08) : 1.0;
+
+        int rows = iy1 - iy0;
+        if (rows > 0) {
+            if (pool.nWorkers > 0 && rows >= 128) {
+                int bands = pool.nWorkers + 1;
+                int step  = (rows + bands - 1) / bands;
+                pool.pending = pool.nWorkers;
+                int yb = iy0;
+                for (int i = 0; i < pool.nWorkers; i++) {
+                    pool.slots[i].y0 = yb;
+                    pool.slots[i].y1 = imin(yb + step, iy1);
+                    yb = pool.slots[i].y1;
+                    SetEvent(pool.slots[i].hGo);
+                }
+                RenderBand(&pool.ctx, yb, iy1); // derniere bande sur ce thread
+                WaitForSingleObject(pool.hDone, INFINITE);
+            } else {
+                RenderBand(&pool.ctx, iy0, iy1); // petite bande : mono suffit
+            }
+        }
+
+        POINT ptDst = { minX, minY };
+        SIZE  sz    = { totalW, totalH };
+        POINT ptSrc = { 0, 0 };
+
+        BLENDFUNCTION bf;
+        bf.BlendOp             = AC_SRC_OVER;
+        bf.BlendFlags          = 0;
+        bf.SourceConstantAlpha = 255; // le fondu d'absorption est deja dans la couverture
+        bf.AlphaFormat         = AC_SRC_ALPHA;
+
+        // seul le rectangle sale est renvoye au compositeur
+        RECT rcDirty = { ux0, uy0, imax(ux1, ux0 + 1), imax(uy1, uy0 + 1) };
+
+        UPDATELAYEREDWINDOWINFO ulw = {};
+        ulw.cbSize   = sizeof(ulw);
+        ulw.pptDst   = &ptDst;
+        ulw.psize    = &sz;
+        ulw.hdcSrc   = hSurfDC;
+        ulw.pptSrc   = &ptSrc;
+        ulw.pblend   = &bf;
+        ulw.dwFlags  = ULW_ALPHA;
+        ulw.prcDirty = firstFrame ? NULL : &rcDirty;
+        UpdateLayeredWindowIndirect(hGhost, &ulw);
+
+        if (firstFrame) {
+            ShowWindow(hGhost, SW_SHOWNOACTIVATE);
+            firstFrame = FALSE;
+        }
+
+        if (elapsedMs >= totalMs) break;
+        if (FAILED(DwmFlush())) Sleep(4); // pacing vsync (fallback 4 ms, timer 1 ms actif)
+    }
+
+    if (d->isRising) {
+        CloakWindow(d->hRealWnd, FALSE);
+        SetLayeredWindowAttributes(d->hRealWnd, 0, 255, LWA_ALPHA);
+        if (!(d->originalExStyle & WS_EX_LAYERED))
+            SetWindowLongPtrW(d->hRealWnd, GWL_EXSTYLE, d->originalExStyle);
+    }
+
+    SetDwmTransitions(d->hRealWnd, TRUE);
+
+    // ---- arret du pool de rendu
+    pool.quit = TRUE;
+    for (int i = 0; i < pool.nWorkers; i++) SetEvent(pool.slots[i].hGo);
+    for (int i = 0; i < pool.nWorkers; i++) {
+        WaitForSingleObject(pool.slots[i].hThread, 2000);
+        CloseHandle(pool.slots[i].hThread);
+        CloseHandle(pool.slots[i].hGo);
+    }
+    if (pool.hDone) CloseHandle(pool.hDone);
+    timeEndPeriod(1);
+
+    SelectObject(hSurfDC, hOldSurf);
+    DeleteObject(hSurf);
+    DeleteDC(hSurfDC);
+    ReleaseDC(NULL, hScreenDC);
+    DestroyWindow(hGhost);
+    DeleteObject(d->hBitmap);
+    delete d;
+    return 0;
+}
+
+// -------------------------------------------------------------------------
+// Tracker d'icone & initialisation (retourne FALSE si l'anim ne demarre pas)
+// -------------------------------------------------------------------------
+BOOL StartGenieAnim(HWND hWnd, BOOL rising) {
+    RECT rect;
+    GetWindowRect(hWnd, &rect);
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0 || h <= 0) return FALSE;
+
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMon, &mi);
+    RECT mon  = mi.rcMonitor;
+    RECT work = mi.rcWork;
+
+    int targetDockY = mon.bottom - 4;
+    if (rect.top >= targetDockY - 60) return FALSE; // geometrie degeneree
+
+    int learnedTargetX = (mon.left + mon.right) / 2;
+
+    POINT pt; GetCursorPos(&pt);
+    if (!PtInRect(&work, pt) && PtInRect(&mon, pt)) {
+        learnedTargetX = pt.x;
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_IconPositions[hWnd] = learnedTargetX;
+    } else {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_IconPositions.count(hWnd)) learnedTargetX = g_IconPositions[hWnd];
+    }
+    if (learnedTargetX < mon.left  + 12) learnedTargetX = mon.left  + 12;
+    if (learnedTargetX > mon.right - 12) learnedTargetX = mon.right - 12;
+
+    GhostAnimData* data   = new GhostAnimData();
+    data->hRealWnd        = hWnd;
+    data->targetRect      = rect;
+    data->width           = w;
+    data->height          = h;
+    data->isRising        = rising;
+    data->targetDockX     = learnedTargetX;
+    data->targetDockY     = targetDockY;
+    data->originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    data->durationMs      = g_durationMs.load(std::memory_order_relaxed);
+    data->iconWidth       = g_iconWidth.load(std::memory_order_relaxed);
+    data->bendPct         = g_bendPct.load(std::memory_order_relaxed) / 100.0;
+    if (data->bendPct < 0.15) data->bendPct = 0.15;
+    if (data->bendPct > 0.70) data->bendPct = 0.70;
+    if (data->durationMs < 50)    data->durationMs = 600;
+    if (data->durationMs > 10000) data->durationMs = 10000;
+
+    HDC hScreenDC = GetDC(NULL);
+    HDC hMemDC    = CreateCompatibleDC(hScreenDC);
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = w;
+    bmi.bmiHeader.biHeight      = -h;
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBits = NULL;
+    data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+    if (!data->hBitmap || !pBits) {
+        if (data->hBitmap) DeleteObject(data->hBitmap);
+        DeleteDC(hMemDC);
+        ReleaseDC(NULL, hScreenDC);
+        delete data;
+        return FALSE;
+    }
+    data->srcBits = (const DWORD*)pBits;
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, data->hBitmap);
+
+    if (rising) {
+        BOOL fromCache = FALSE;
+        {
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            if (g_SnapshotCache.count(hWnd)) {
+                HDC hCacheDC = CreateCompatibleDC(hScreenDC);
+                HBITMAP hOldCache = (HBITMAP)SelectObject(hCacheDC, g_SnapshotCache[hWnd]);
+                BitBlt(hMemDC, 0, 0, w, h, hCacheDC, 0, 0, SRCCOPY);
+                SelectObject(hCacheDC, hOldCache);
+                DeleteDC(hCacheDC);
+                DeleteObject(g_SnapshotCache[hWnd]);
+                g_SnapshotCache.erase(hWnd);
+                fromCache = TRUE;
+            }
+        }
+        if (!fromCache)
+            PrintWindow(hWnd, hMemDC, PW_CLIENTONLY | 0x00000002);
+    } else {
+        BitBlt(hMemDC, 0, 0, w, h, hScreenDC, rect.left, rect.top, SRCCOPY);
+
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_SnapshotCache.count(hWnd)) DeleteObject(g_SnapshotCache[hWnd]);
+
+        void* pCacheBits = NULL;
+        g_SnapshotCache[hWnd] = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pCacheBits, NULL, 0);
+        if (g_SnapshotCache[hWnd] && pCacheBits) {
+            HDC hCacheDC = CreateCompatibleDC(hScreenDC);
+            HBITMAP hOldCache = (HBITMAP)SelectObject(hCacheDC, g_SnapshotCache[hWnd]);
+            BitBlt(hCacheDC, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
+            GdiFlush();
+            DWORD* cp = (DWORD*)pCacheBits;
+            for (int i = 0; i < w * h; i++) cp[i] |= 0xFF000000; // fix alpha StretchBlt/BitBlt
+            SelectObject(hCacheDC, hOldCache);
+            DeleteDC(hCacheDC);
+        } else {
+            g_SnapshotCache.erase(hWnd);
+        }
+    }
+
+    GdiFlush();
+    DWORD* pixels = (DWORD*)pBits;
+    for (int i = 0; i < w * h; i++) pixels[i] |= 0xFF000000; // alpha opaque garanti
+
+    SelectObject(hMemDC, hOldBmp);
+    DeleteDC(hMemDC);
+    ReleaseDC(NULL, hScreenDC);
+
+    HANDLE hThread = CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+    if (!hThread) {
+        DeleteObject(data->hBitmap);
+        delete data;
+        return FALSE;
+    }
+    CloseHandle(hThread); // pas de fuite de handle
+    return TRUE;
+}
+
+// --- HOOKS ---
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
+        SetDwmTransitions(hWnd, FALSE);
+        BOOL started = StartGenieAnim(hWnd, FALSE);
+        CloakWindow(hWnd, TRUE);
+        BOOL res = ShowWindow_Original(hWnd, nCmdShow);
+        CloakWindow(hWnd, FALSE);
+        if (!started) SetDwmTransitions(hWnd, TRUE);
+        return res;
+    }
+    else if (nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) {
+        if (IsIconic(hWnd)) {
+            SetDwmTransitions(hWnd, FALSE);
+            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            BOOL res = ShowWindow_Original(hWnd, nCmdShow);
+            if (!StartGenieAnim(hWnd, TRUE)) {
+                // fallback : ne jamais laisser la fenetre invisible
+                SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+                if (!(exStyle & WS_EX_LAYERED))
+                    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+                SetDwmTransitions(hWnd, TRUE);
+            }
+            return res;
+        }
+    }
+    return ShowWindow_Original(hWnd, nCmdShow);
+}
+
+LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_DESTROY) {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_SnapshotCache.count(hWnd)) {
+            DeleteObject(g_SnapshotCache[hWnd]);
+            g_SnapshotCache.erase(hWnd);
+        }
+        g_IconPositions.erase(hWnd);
+    }
+
+    if (Msg == WM_SYSCOMMAND) {
+        UINT cmd = wParam & 0xFFF0;
+        if (cmd == SC_MINIMIZE) {
+            SetDwmTransitions(hWnd, FALSE);
+            BOOL started = StartGenieAnim(hWnd, FALSE);
+            CloakWindow(hWnd, TRUE);
+            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            CloakWindow(hWnd, FALSE);
+            if (!started) SetDwmTransitions(hWnd, TRUE);
+            return res;
+        }
+        else if (cmd == SC_RESTORE && IsIconic(hWnd)) {
+            SetDwmTransitions(hWnd, FALSE);
+            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            if (!StartGenieAnim(hWnd, TRUE)) {
+                SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+                if (!(exStyle & WS_EX_LAYERED))
+                    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+                SetDwmTransitions(hWnd, TRUE);
+            }
+            return res;
+        }
+    }
+    return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+}
+
+BOOL Wh_ModInit() {
+    LoadSettings();
+    Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
+    Wh_SetFunctionHook((void*)ShowWindow,     (void*)ShowWindow_Hook,     (void**)&ShowWindow_Original);
+    return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
+
+void Wh_ModUninit() {
+    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    for (auto& p : g_SnapshotCache) DeleteObject(p.second);
+    g_SnapshotCache.clear();
+    g_IconPositions.clear();
+}
