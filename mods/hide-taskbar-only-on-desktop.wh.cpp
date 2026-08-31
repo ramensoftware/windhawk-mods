@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         2.1.0
+// @version         2.2.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -185,8 +185,10 @@ struct WindowScanResult {
     bool applicationOnMonitor[kMaxMonitorNumbers];
 };
 
+HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
+HWINEVENTHOOK g_taskbarShowHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -939,19 +941,15 @@ void SetTaskbarState(
         return;
     }
 
-    const bool visible =
+    bool visible =
         IsWindowVisible(state.hwnd) != FALSE;
 
-    if (visible == show) {
-        return;
+    if (visible != show) {
+        ShowWindow(
+            state.hwnd,
+            show ? SW_SHOW : SW_HIDE
+        );
     }
-
-    // Only this taskbar HWND is changed. Other displays are handled by their
-    // own TaskbarMonitorState entries.
-    ShowWindow(
-        state.hwnd,
-        show ? SW_SHOW : SW_HIDE
-    );
 }
 
 void ApplyBaseTaskbarState() {
@@ -1497,15 +1495,142 @@ void UpdateTaskbarState() {
     ApplyBaseTaskbarState();
 }
 
+bool IsTaskbarWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return false;
+    }
+
+    WCHAR className[128] = {};
+
+    if (
+        GetClassNameW(
+            hwnd,
+            className,
+            ARRAYSIZE(className)
+        ) == 0
+    ) {
+        return false;
+    }
+
+    return
+        wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+bool IsCursorInConfiguredHoverZone() {
+    POINT pt = {};
+
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    HMONITOR cursorMonitor =
+        MonitorFromPoint(
+            pt,
+            MONITOR_DEFAULTTONEAREST
+        );
+
+    if (!cursorMonitor) {
+        return false;
+    }
+
+    MonitorList monitors =
+        GetCurrentMonitors();
+
+    const int monitorNumber =
+        GetMonitorNumber(
+            monitors,
+            cursorMonitor
+        );
+
+    if (
+        monitorNumber == 0 ||
+        !ShouldRevealOnHover(
+            monitorNumber
+        )
+    ) {
+        return false;
+    }
+
+    HWND taskbar = nullptr;
+
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (
+            g_taskbarStates[i].monitor ==
+            cursorMonitor
+        ) {
+            taskbar =
+                g_taskbarStates[i].hwnd;
+            break;
+        }
+    }
+
+    return
+        taskbar &&
+        IsCursorNearBottomEdge(
+            taskbar,
+            cursorMonitor
+        );
+}
+
+
 void CALLBACK WinEventProc(
     HWINEVENTHOOK,
     DWORD event,
-    HWND,
-    LONG,
+    HWND hwnd,
+    LONG idObject,
     LONG,
     DWORD,
     DWORD
 ) {
+    /*
+     * Explorer can re-show a secondary taskbar while the user interacts with
+     * the primary taskbar or other shell UI. Handle only SHOW for the exact
+     * taskbar window classes. The callback never changes Explorer windows
+     * directly; it only schedules the serialized worker update. We intentionally
+     * do not watch HIDE.
+     */
+    if (
+        event == EVENT_OBJECT_SHOW &&
+        idObject == OBJID_WINDOW &&
+        IsTaskbarWindow(hwnd)
+    ) {
+        /*
+         * While the cursor is already inside the configured hover zone,
+         * Explorer may emit SHOW for more than one taskbar during the same
+         * shell transition. The worker's hover calculation is authoritative,
+         * so don't enqueue an additional refresh that can immediately undo
+         * and repeat the hover visibility transition.
+         *
+         * Outside the hover zone the narrow SHOW hook is retained so an
+         * Explorer re-show is reconciled promptly.
+         */
+        if (IsCursorInConfiguredHoverZone()) {
+            return;
+        }
+
+        if (
+            InterlockedExchange(
+                &g_refreshPosted,
+                1
+            ) == 0
+        ) {
+            if (!PostThreadMessageW(
+                    g_workerThreadId,
+                    WM_APP_REFRESH,
+                    0,
+                    0
+                )) {
+                InterlockedExchange(
+                    &g_refreshPosted,
+                    0
+                );
+            }
+        }
+
+        return;
+    }
+
     if (
         event != EVENT_SYSTEM_MINIMIZESTART &&
         event != EVENT_SYSTEM_MINIMIZEEND &&
@@ -1534,6 +1659,7 @@ void CALLBACK WinEventProc(
     }
 }
 
+
 DWORD WINAPI WorkerThread(
     LPVOID
 ) {
@@ -1553,6 +1679,17 @@ DWORD WINAPI WorkerThread(
         );
     }
 
+    g_foregroundHook =
+        SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            nullptr,
+            WinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
     g_minimizeHook =
         SetWinEventHook(
             EVENT_SYSTEM_MINIMIZESTART,
@@ -1568,6 +1705,17 @@ DWORD WINAPI WorkerThread(
         SetWinEventHook(
             EVENT_SYSTEM_MOVESIZEEND,
             EVENT_SYSTEM_MOVESIZEEND,
+            nullptr,
+            WinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
+    g_taskbarShowHook =
+        SetWinEventHook(
+            EVENT_OBJECT_SHOW,
+            EVENT_OBJECT_SHOW,
             nullptr,
             WinEventProc,
             0,
@@ -1637,6 +1785,13 @@ DWORD WINAPI WorkerThread(
         );
     }
 
+    if (g_foregroundHook) {
+        UnhookWinEvent(
+            g_foregroundHook
+        );
+        g_foregroundHook = nullptr;
+    }
+
     if (g_minimizeHook) {
         UnhookWinEvent(
             g_minimizeHook
@@ -1649,6 +1804,13 @@ DWORD WINAPI WorkerThread(
             g_moveHook
         );
         g_moveHook = nullptr;
+    }
+
+    if (g_taskbarShowHook) {
+        UnhookWinEvent(
+            g_taskbarShowHook
+        );
+        g_taskbarShowHook = nullptr;
     }
 
     return 0;
