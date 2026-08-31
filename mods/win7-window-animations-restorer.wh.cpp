@@ -14,8 +14,6 @@
 // @include         SnippingTool.exe
 // @include         iexplore.exe
 // @include         regedit.exe
-// @include         diskmgmt.msc
-// @include         cleanmgr.exe
 // @include         rundll32.exe
 // @include         calc.exe
 // @include         charmap.exe
@@ -45,6 +43,56 @@
 // @include         7zFM.exe
 // @include         powershell.exe
 // @include         pwsh.exe
+// @include         WinRAR.exe
+// @include         TOTALCMD.exe
+// @include         TOTALCMD64.exe
+// @include         dopus.exe
+// @include         FileZilla.exe
+// @include         putty.exe
+// @include         vlc.exe
+// @include         foobar2000.exe
+// @include         i_view64.exe
+// @include         i_view32.exe
+// @include         PaintDotNet.exe
+// @include         gimp-2.10.exe
+// @include         blender.exe
+// @include         Audacity.exe
+// @include         SumatraPDF.exe
+// @include         AcroRd32.exe
+// @include         Acrobat.exe
+// @include         Notepad2.exe
+// @include         Notepad3.exe
+// @include         ProcessHacker.exe
+// @include         procexp.exe
+// @include         procexp64.exe
+// @include         CCleaner.exe
+// @include         CCleaner64.exe
+// @include         Everything.exe
+// @include         Greenshot.exe
+// @include         ShareX.exe
+// @include         qbittorrent.exe
+// @include         utorrent.exe
+// @include         steam.exe
+// @include         Discord.exe
+// @include         Skype.exe
+// @include         Telegram.exe
+// @include         WinSCP.exe
+// @include         KeePass.exe
+// @include         KeePass2.exe
+// @include         sublime_text.exe
+// @include         TeamViewer.exe
+// @include         vmware.exe
+// @include         VirtualBoxVM.exe
+// @include         HxD.exe
+// @include         Wireshark.exe
+// @include         mintty.exe
+// @include         cmd.exe
+// @include         mpc-hc64.exe
+// @include         mpc-hc.exe
+// @include         winamp.exe
+// @include         Photoshop.exe
+// @include         acad.exe
+// @include         idea64.exe
 // @compilerOptions -lgdi32 -lmsimg32 -lshcore -ldwmapi
 // ==/WindhawkMod==
 
@@ -79,10 +127,11 @@ The mod is injected only into a predefined list. To add a program, add its `.exe
 ## Notes
 
 - The mod has been tested on Windows 10 21H2.
+- The mod works with OpenGlass and DWMBlurGlass.
 - The mod does not modify system files.
 - The mod does not replace parts of Windows.
 - The mod tries to replicate the exact timing and motion from Windows 7 (`uDWM.dll` 6.1.7600.16385).
-- The mod is injected only into a curated list of applications to limit potential issues.
+- The mod is injected only into a curated list of applications to limit overhead and potential issues.
 
 ## Credits
 
@@ -230,12 +279,20 @@ constexpr double kOpenDurationSec = 0.25;
 // Nessuno sleep "a caso": il loop e' cadenzato da DwmFlush(), che blocca fino a
 // che il DWM non ha completato un giro di composizione, quindi ogni iterazione
 // vale (al piu') un frame. Il timeout e' solo un tetto di sicurezza.
-constexpr UINT  kOpenSettleTimeoutMs   = 220;   // attesa massima del primo frame composto
+// FIX (apertura): 220 ms era troppo stretto per il primo paint reale di molte app
+// comuni (Explorer, Office, browser, finestre con inizializzazione pesante), quindi
+// ProbeComposedWindow falliva per timeout nella maggioranza dei casi reali e
+// l'animazione di apertura veniva annullata in silenzio (fallback: Windows mostra
+// la finestra senza animarla — da qui il sintomo "l'apertura non funziona").
+// Il valore piu' alto non introduce un ritardo fisso: il loop resta cadenzato da
+// DwmFlush() ed esce non appena il frame e' pronto, quindi le app veloci non
+// pagano nulla in piu'; solo le app lente hanno ora margine sufficiente.
+constexpr UINT  kOpenSettleTimeoutMs   = 450;   // attesa massima del primo frame composto
 constexpr UINT  kOpenMinStableFrames   = 2;     // geometria invariata per N composizioni
-constexpr UINT  kOpenStableNoPaint     = 4;     // dopo N composizioni rinuncia ad aspettare la pittura
-constexpr UINT  kOpenMaxProbes         = 3;     // tentativi di lettura del frame composto
-constexpr UINT  kOpenHandoffWaitMs     = 60;    // attesa della ri-pittura al handoff (overlay ancora su)
-constexpr UINT  kOpenWatchdogMs        = 900;   // dead-man switch: settle+animazione+handoff < 900 ms
+constexpr UINT  kOpenStableNoPaint     = 6;     // dopo N composizioni rinuncia ad aspettare la pittura
+constexpr UINT  kOpenMaxProbes         = 4;     // tentativi di lettura del frame composto
+constexpr UINT  kOpenHandoffWaitMs     = 80;    // attesa della ri-pittura al handoff (overlay ancora su)
+constexpr UINT  kOpenWatchdogMs        = 1400;  // dead-man switch: settle+animazione+handoff deve starci con margine
 constexpr UINT_PTR kOpenWatchdogTimer  = 0x57A0;
 constexpr BYTE  kOpenHiddenAlpha       = 0;     // finestra "coperta" = opaca 0, non nascosta
 constexpr int   kOpenMaxCaptureSide    = 16384;
@@ -344,11 +401,6 @@ static bool GetWindowRectPhysical(HWND hwnd, RECT* rc){
     if(GetWindowRect(hwnd, rc)) return IsRectUsable(*rc);
     return false;
 }
-static bool GetVisibleWindowRectForMinimize(HWND hwnd, RECT* rc){
-    if(hwnd&&rc){
-        RECT wr{}; if(GetWindowRect(hwnd,&wr)&&IsRectUsable(wr)){ *rc=wr; return true; }
-    } return false;
-}
 static bool RectEquals(const RECT& a,const RECT& b){
     return a.left==b.left&&a.top==b.top&&a.right==b.right&&a.bottom==b.bottom;
 }
@@ -364,6 +416,21 @@ static bool GetFrameBoundsPhysical(HWND hwnd, RECT* rc){
     if(SUCCEEDED(hr)&&IsRectUsable(ext)&&RECTW(ext)>=8&&RECTH(ext)>=8
         &&RECTW(ext)<=kOpenMaxCaptureSide&&RECTH(ext)<=kOpenMaxCaptureSide){ *rc=ext; return true; }
     return GetWindowRectPhysical(hwnd,rc);
+}
+// FIX (bordi neri su minimize/restore di finestre massimizzate): GetWindowRect
+// include i margini invisibili di ridimensionamento. Per una finestra "normale"
+// (ridimensionata a mano) quel margine ricade comunque dentro l'area del monitor,
+// quindi lo screen-scrape prende sfondo desktop reale e il bordo passa inosservato.
+// Per una finestra MASSIMIZZATA invece Windows allarga il rect oltre i limiti del
+// monitor (es. left=-8, right=larghezzaSchermo+8) apposta per far ricadere quei
+// margini fuori dallo schermo: il BitBlt legge quindi pixel che non appartengono a
+// nessuna superficie composta (fuori dall'area desktop), che restano neri. Da qui
+// il difetto "bordo nero solo su schermata intera, mai su finestra ridimensionata".
+// La soluzione e' la stessa gia' adottata per l'apertura: usare il frame REALMENTE
+// composto dal DWM (DWMWA_EXTENDED_FRAME_BOUNDS), che non include mai quei margini
+// e quindi non esce mai dai limiti del monitor.
+static bool GetVisibleWindowRectForMinimize(HWND hwnd, RECT* rc){
+    return GetFrameBoundsPhysical(hwnd,rc);
 }
 // ---------------------------------------------------------------------------
 // Tendina di opacita'.
@@ -477,7 +544,11 @@ static void ForceAeroForCapture(HWND hwnd){
 // Chiusura: screenshot preciso preserva Aero di OpenGlass/DwmBlurGlass
 static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out){
     if(!hwnd||!IsWindow(hwnd)) return false;
-    RECT rc{}; if(!GetWindowRectPhysical(hwnd,&rc)) return false;
+    // FIX bordi neri: qui prima si usava GetWindowRectPhysical, che include i
+    // margini invisibili di ridimensionamento. Su una finestra massimizzata quei
+    // margini ricadono fuori dai limiti del monitor e lo screen-scrape li legge
+    // come nero. GetFrameBoundsPhysical da' il rettangolo davvero composto dal DWM.
+    RECT rc{}; if(!GetFrameBoundsPhysical(hwnd,&rc)) return false;
     int w=RECTW(rc), h=RECTH(rc); if(w<1||h<1||w>16384||h>16384) return false;
     ForceAeroForCapture(hwnd);
     BOOL dis=TRUE; DwmSetWindowAttribute(hwnd,DWMWA_TRANSITIONS_FORCEDISABLED,&dis,sizeof(dis));
@@ -763,7 +834,40 @@ static uint32_t SampleBilinear(const uint32_t* src,int sw,int sh,float u,float v
     BYTE b=BYTE(b0+(b1-b0)*fy+0.5f), g=BYTE(g0+(g1-g0)*fy+0.5f), r=BYTE(r0+(r1-r0)*fy+0.5f);
     return uint32_t(b)|(uint32_t(g)<<8)|(uint32_t(r)<<16);
 }
-static void RasterTriangle(uint32_t* dst,int stride,int dw,int dh,const uint32_t* src,int sw,int sh,Vertex v0,Vertex v1,Vertex v2,BYTE alpha){
+// Interpolazione bicubica (Catmull-Rom, a=-0.5) - usata SOLO sull'ultimo frame
+// (t=1) dell'animazione, mai durante il movimento: il costo e' ~4x rispetto alla
+// bilineare (16 sample contro 4, piu' i pesi cubici), ma li' l'immagine e' in
+// movimento e la persistenza visiva rende la differenza impercettibile, mentre
+// costerebbe fluidita' vera per un guadagno che non si vede. Sull'ultimo frame
+// invece l'occhio ha il tempo di fissare il fotogramma fermo, quindi il costo si
+// paga una volta sola e la qualita' si vede davvero.
+static inline float CubicWeight(float x){
+    x=std::fabs(x); const float a=-0.5f;
+    if(x<=1.f) return (a+2.f)*x*x*x-(a+3.f)*x*x+1.f;
+    if(x<2.f)  return a*x*x*x-5.f*a*x*x+8.f*a*x-4.f*a;
+    return 0.f;
+}
+static uint32_t SampleBicubic(const uint32_t* src,int sw,int sh,float u,float v){
+    if(sw<=2||sh<=2) return SampleBilinear(src,sw,sh,u,v);   // troppo piccola per una griglia 4x4: ripiega
+    float fx=std::clamp(u,0.f,1.f)*float(sw-1), fy=std::clamp(v,0.f,1.f)*float(sh-1);
+    int ix=int(std::floor(fx)), iy=int(std::floor(fy));
+    float tx=fx-float(ix), ty=fy-float(iy);
+    float wx[4],wy[4]; for(int i=0;i<4;++i){ wx[i]=CubicWeight(float(i-1)-tx); wy[i]=CubicWeight(float(i-1)-ty); }
+    float b=0,g=0,r=0;
+    for(int j=0;j<4;++j){
+        int sy=std::clamp(iy+j-1,0,sh-1);
+        float rb=0,rg=0,rr=0;
+        for(int i=0;i<4;++i){
+            int sx=std::clamp(ix+i-1,0,sw-1);
+            uint32_t p=src[sy*sw+sx];
+            rb+=wx[i]*float(p&0xFF); rg+=wx[i]*float((p>>8)&0xFF); rr+=wx[i]*float((p>>16)&0xFF);
+        }
+        b+=wy[j]*rb; g+=wy[j]*rg; r+=wy[j]*rr;
+    }
+    auto clampByte=[](float v){ return BYTE(std::clamp(v,0.f,255.f)+0.5f); };
+    return uint32_t(clampByte(b))|(uint32_t(clampByte(g))<<8)|(uint32_t(clampByte(r))<<16);
+}
+static void RasterTriangle(uint32_t* dst,int stride,int dw,int dh,const uint32_t* src,int sw,int sh,Vertex v0,Vertex v1,Vertex v2,BYTE alpha,bool hq){
     float area=Edge(v0,v1,v2); if(std::fabs(area)<0.5f) return; float inv=1.f/area;
     int minX=int(std::floor(std::min({v0.x,v1.x,v2.x}))), maxX=int(std::ceil(std::max({v0.x,v1.x,v2.x})));
     int minY=int(std::floor(std::min({v0.y,v1.y,v2.y}))), maxY=int(std::ceil(std::max({v0.y,v1.y,v2.y})));
@@ -771,16 +875,16 @@ static void RasterTriangle(uint32_t* dst,int stride,int dw,int dh,const uint32_t
     float af=float(alpha)/255.f;
     for(int y=minY;y<=maxY;++y){ uint32_t* row=dst+size_t(y)*size_t(stride);
         for(int x=minX;x<=maxX;++x){ Vertex p{float(x)+0.5f,float(y)+0.5f,0,0}; float w0=Edge(v1,v2,p)*inv,w1=Edge(v2,v0,p)*inv,w2=Edge(v0,v1,p)*inv; if(w0<0||w1<0||w2<0) continue;
-            float u=w0*v0.u+w1*v1.u+w2*v2.u, v=w0*v0.v+w1*v1.v+w2*v2.v; uint32_t s=SampleBilinear(src,sw,sh,u,v);
+            float u=w0*v0.u+w1*v1.u+w2*v2.u, v=w0*v0.v+w1*v1.v+w2*v2.v; uint32_t s=hq?SampleBicubic(src,sw,sh,u,v):SampleBilinear(src,sw,sh,u,v);
             float sb=float(s&0xFF), sg=float((s>>8)&0xFF), sr=float((s>>16)&0xFF);
             BYTE b=BYTE(sb*af+0.5f), g=BYTE(sg*af+0.5f), r=BYTE(sr*af+0.5f);
             row[x]=uint32_t(b)|(uint32_t(g)<<8)|(uint32_t(r)<<16)|(uint32_t(alpha)<<24);
         }
     }
 }
-static void RasterQuad(uint32_t* dst,int stride,int dw,int dh,const uint32_t* src,int sw,int sh,const Vertex c[4],BYTE alpha){
+static void RasterQuad(uint32_t* dst,int stride,int dw,int dh,const uint32_t* src,int sw,int sh,const Vertex c[4],BYTE alpha,bool hq){
     if(dw<=0||dh<=0||sw<=0||sh<=0||!dst||!src||alpha==0) return;
-    RasterTriangle(dst,stride,dw,dh,src,sw,sh,c[0],c[1],c[2],alpha); RasterTriangle(dst,stride,dw,dh,src,sw,sh,c[0],c[2],c[3],alpha);
+    RasterTriangle(dst,stride,dw,dh,src,sw,sh,c[0],c[1],c[2],alpha,hq); RasterTriangle(dst,stride,dw,dh,src,sw,sh,c[0],c[2],c[3],alpha,hq);
 }
 class PresentGdi{
    public:
@@ -807,7 +911,7 @@ class PresentGdi{
 };
 struct AnimRequest{ HWND hwnd=nullptr; AnimationType type=AnimationType::None; RECT rcWindow{}; RECT rcDest{}; CaptureBits capture; UINT durationMs=250; bool deferOrig=false; int origShowCmd=0; bool needsCapture=false; std::unique_ptr<PresentGdi> gdi; };
 
-static bool PresentOverlay(HWND hwndOverlay, PresentGdi& gdi, const AnimRequest& req, const RECT& rcCurrent, const Win7TransformParams& params) {
+static bool PresentOverlay(HWND hwndOverlay, PresentGdi& gdi, const AnimRequest& req, const RECT& rcCurrent, const Win7TransformParams& params, bool hqFinal=false) {
     BYTE alpha = BYTE(std::clamp(params.opacity, 0.f, 1.f) * 255.f + 0.5f);
     if (alpha == 0 || !IsRectUsable(rcCurrent)) {
         POINT pt{rcCurrent.left, rcCurrent.top}; SIZE sz{1,1}; BLENDFUNCTION bf{AC_SRC_OVER,0,0,AC_SRC_ALPHA};
@@ -827,13 +931,27 @@ static bool PresentOverlay(HWND hwndOverlay, PresentGdi& gdi, const AnimRequest&
     }
     if(!IsRectUsable(bbox)) return false; int dw=RECTW(bbox), dh=RECTH(bbox); if(dw>16384||dh>16384) return false;
     if(!gdi.EnsureSource(cap)) return false; if(!gdi.EnsureDest(dw,dh)) return false;
-    void* bits=gdi.dstBits(); int stride=gdi.dstStride(); std::memset(bits,0,size_t(stride)*size_t(dh)*4);
+    void* bits=gdi.dstBits(); int stride=gdi.dstStride();
     if(tiny3d){
+        // FIX fluidita' (minimize/restore, che quasi sempre restano sotto la soglia
+        // "tiny3d" con il tilt Win7 di 5/8 gradi): prima si azzerava l'intero buffer
+        // con un memset a piena canvas e poi lo si sovrascriveva per intero con
+        // StretchBlt - lavoro sprecato ad ogni singolo frame (fino a 8 MB su una
+        // finestra 1080p). StretchBlt copre gia' tutta la bbox: il memset qui non
+        // serve. Inoltre il blend per-pixel usava una divisione intera per canale
+        // (3 divisioni x pixel): sostituita con una tabella a 256 voci calcolata
+        // una sola volta per frame, poi solo letture - stesso risultato, molto
+        // meno lavoro sulla CPU per frame, soprattutto su finestre grandi.
         StretchBlt(gdi.hdcDst(),0,0,dw,dh,gdi.hdcSrc(),0,0,cap.width,cap.height,SRCCOPY); GdiFlush();
+        BYTE lut[256]; for(int i=0;i<256;++i) lut[i]=BYTE((i*alpha)/255);
         auto* px=static_cast<uint32_t*>(bits);
-        for(int y=0;y<dh;++y){ uint32_t* row=px+size_t(y)*size_t(stride); for(int x=0;x<dw;++x){ uint32_t p=row[x]; BYTE b=BYTE(((p&0xFF)*alpha)/255), g=BYTE((((p>>8)&0xFF)*alpha)/255), r=BYTE((((p>>16)&0xFF)*alpha)/255); row[x]=uint32_t(b)|(uint32_t(g)<<8)|(uint32_t(r)<<16)|(uint32_t(alpha)<<24); } }
+        for(int y=0;y<dh;++y){ uint32_t* row=px+size_t(y)*size_t(stride); for(int x=0;x<dw;++x){ uint32_t p=row[x]; BYTE b=lut[p&0xFF], g=lut[(p>>8)&0xFF], r=lut[(p>>16)&0xFF]; row[x]=uint32_t(b)|(uint32_t(g)<<8)|(uint32_t(r)<<16)|(uint32_t(alpha)<<24); } }
     } else {
-        RasterQuad(static_cast<uint32_t*>(bits),stride,dw,dh,cap.pixels.data(),cap.width,cap.height,corners,alpha);
+        std::memset(bits,0,size_t(stride)*size_t(dh)*4);
+        // La bicubica (hqFinal) si applica SOLO qui: nel ramo con vera trasformazione
+        // 3D (che l'ultimo frame di minimize/restore puo' comunque attraversare se
+        // il tilt non e' ancora tornato a zero) e mai negli altri frame in movimento.
+        RasterQuad(static_cast<uint32_t*>(bits),stride,dw,dh,cap.pixels.data(),cap.width,cap.height,corners,alpha,hqFinal);
     }
     POINT pt{bbox.left,bbox.top}; SIZE sz{dw,dh}; POINT srcPt{0,0}; BLENDFUNCTION bf{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
     if(!UpdateLayeredWindow(hwndOverlay,gdi.hdcScreen(),&pt,&sz,gdi.hdcDst(),&srcPt,0,&bf,ULW_ALPHA)) return false; return true;
@@ -855,14 +973,29 @@ static LONG g_isUninitializing = 0; // non-atomic for InterlockedExchange
 static std::atomic<HWND> g_hwndOpenArmed{nullptr}; static std::atomic<ULONGLONG> g_ulOpenArmedTick{0};
 static HINSTANCE g_hinst=nullptr; static std::mutex g_animThreadMutex; static HANDLE g_hAnimWndThread=nullptr; static DWORD g_dwAnimThreadId=0;
 static std::mutex g_queueMutex; static std::deque<AnimRequest*> g_queue;
-static void PresentTime(HWND hwndOverlay,AnimRequest& req,float t){ auto p=ParamsFor(req.type,t,float(RECTH(req.rcWindow))); auto rc=RectFor(req.type,t,req.rcWindow,req.rcDest); PresentOverlay(hwndOverlay,*req.gdi,req,rc,p); }
+static void PresentTime(HWND hwndOverlay,AnimRequest& req,float t){ auto p=ParamsFor(req.type,t,float(RECTH(req.rcWindow))); auto rc=RectFor(req.type,t,req.rcWindow,req.rcDest); PresentOverlay(hwndOverlay,*req.gdi,req,rc,p,t>=1.f); }
 static void PresentFirstFrame(HWND hwndOverlay,AnimRequest& req){ if(req.capture.empty()||!IsRectUsable(req.rcWindow)) return; ShowOverlayWindow(hwndOverlay); PresentTime(hwndOverlay,req,0.f); }
+// FIX (lag minimize/restore): l'approccio resta identico (stessa interpolazione,
+// stessa durata, stesso overlay/rasterizzatore) — cambia solo la cadenza dei frame.
+// Prima la scansione era basata solo su GetTickCount64() (risoluzione ~15 ms,
+// soggetta a coalescenza del timer di sistema) + Sleep(), senza alcuna
+// sincronizzazione col compositor: i frame venivano presentati "alla cieca"
+// rispetto al reale ciclo di composizione del DWM, causando il lag/jitter
+// percepito. DwmFlush() blocca fino al completamento di una composizione, quindi
+// ogni iterazione del loop corrisponde (al piu') a un frame effettivamente
+// mostrato: e' lo stesso meccanismo di pacing gia' usato con successo nel
+// percorso di apertura (ProbeComposedWindow/HandoffOpen), qui applicato anche a
+// minimize/restore. Il tempo trascorso resta calcolato da GetTickCount64() (la
+// timeline dell'animazione non cambia), ma non si dorme piu' "alla cieca": si
+// aspetta il prossimo giro di composizione, che e' anche il modo per non
+// ripresentare piu' volte lo stesso frame quando il sistema e' scarico.
 static void RunAnimation(HWND hwndOverlay,AnimRequest& req){
     if(req.capture.empty()||!IsRectUsable(req.rcWindow)) return; if(g_stopping.load()) return;
-    UINT dur=req.durationMs?req.durationMs:250; ShowOverlayWindow(hwndOverlay); const DWORD kFrame=16; ULONGLONG start=GetTickCount64(), elapsed=0; float lastT=-1;
+    UINT dur=req.durationMs?req.durationMs:250; ShowOverlayWindow(hwndOverlay); ULONGLONG start=GetTickCount64(), elapsed=0; float lastT=-1;
     while(!g_stopping.load()&&g_hwndCurrent.load()==req.hwnd&&(elapsed=GetTickCount64()-start)<=dur){
-        float t=dur==0?1.f:std::clamp(float(elapsed)/float(dur),0.f,1.f); if(t-lastT<0.001f){ ULONGLONG nf=start+ULONGLONG((lastT+0.001f)*dur); ULONGLONG now=GetTickCount64(); if(now<nf) Sleep(DWORD(nf-now)); continue; } lastT=t; PresentTime(hwndOverlay,req,t);
-        ULONGLONG fe=GetTickCount64(); ULONGLONG tt=start+ULONGLONG(t*dur)+kFrame; if(fe<tt) Sleep(DWORD(tt-fe));
+        float t=dur==0?1.f:std::clamp(float(elapsed)/float(dur),0.f,1.f);
+        if(t-lastT>=0.001f){ lastT=t; PresentTime(hwndOverlay,req,t); }
+        DwmFlush();                 // cadenzato dal compositor: niente sleep "alla cieca"
     }
     if(!g_stopping.load()) PresentTime(hwndOverlay,req,1.f);
 }
@@ -999,7 +1132,10 @@ static void HandoffOpen(AnimRequest* req){
 static void FinishQueued(AnimRequest* req){
     if(!req) return; if(req->deferOrig&&req->hwnd&&IsWindow(req->hwnd)&&ShowWindowAsync_orig){ int cmd=req->origShowCmd?req->origShowCmd:SW_RESTORE; ShowWindowAsync_orig(req->hwnd,cmd);
         if(!g_stopping.load()){ ULONGLONG ws=GetTickCount64(); const ULONGLONG kMax=120; while(!g_stopping.load()&&IsWindow(req->hwnd)&&IsIconic(req->hwnd)&&(GetTickCount64()-ws)<kMax) Sleep(1);
-            HWND ha=g_hwndAnim.load(); RECT rcNow{}; if(ha&&IsWindow(ha)&&GetWindowRectPhysical(req->hwnd,&rcNow)&&IsRectUsable(rcNow)&&req->gdi){ Win7TransformParams p; p.opacity=1; PresentOverlay(ha,*req->gdi,*req,rcNow,p);} if(!g_stopping.load()) Sleep(1); } }
+            // FIX bordi neri: stesso motivo del rcWin di cattura - se il restore va
+            // verso una finestra massimizzata, il rect grezzo esce dai limiti del
+            // monitor. Frame bounds reali anche qui, per l'ultimo frame di handoff.
+            HWND ha=g_hwndAnim.load(); RECT rcNow{}; if(ha&&IsWindow(ha)&&GetFrameBoundsPhysical(req->hwnd,&rcNow)&&IsRectUsable(rcNow)&&req->gdi){ Win7TransformParams p; p.opacity=1; PresentOverlay(ha,*req->gdi,*req,rcNow,p);} if(!g_stopping.load()) Sleep(1); } }
     if(req->type==AnimationType::Open) HandoffOpen(req);
     HWND ha=g_hwndAnim.load(); if(ha&&IsWindow(ha)) HideOverlayWindow(ha); if(req->hwnd&&IsWindow(req->hwnd)) DisableTransitions(req->hwnd,FALSE);
     HWND cur=g_hwndCurrent.load(); if(cur==req->hwnd){ g_hwndCurrent.store(nullptr); g_typeCurrent.store(0); g_fAnimating.store(false);} delete req;
@@ -1153,7 +1289,10 @@ static bool PlayRestore(HWND hwnd){
 static bool PlayClose_Authentic(HWND hwnd){
     if(!WaitForAnimWndThread()||g_stopping.load()) return false;
     RECT rcWin{}; CaptureBits cap;
-    { ScopedDpiAware dpi; if(!GetWindowRectPhysical(hwnd,&rcWin)||!CaptureWindowForClose(hwnd,cap)) return false; }
+    // FIX bordi neri: rcWin deve combaciare col frame realmente composto (stessa
+    // geometria usata ora da CaptureWindowForClose), non col window rect grezzo che
+    // su una finestra massimizzata esce dai limiti del monitor.
+    { ScopedDpiAware dpi; if(!GetFrameBoundsPhysical(hwnd,&rcWin)||!CaptureWindowForClose(hwnd,cap)) return false; }
     AnimRequest req; req.hwnd=hwnd; req.type=AnimationType::Close; req.rcWindow=rcWin; req.rcDest=rcWin; req.capture=std::move(cap); req.durationMs=DurationMsFor(AnimationType::Close);
     try{ req.gdi=std::make_unique<PresentGdi>(); }catch(...){ return false; }
     HWND ha=g_hwndAnim.load(); if(!ha||!IsWindow(ha)) return false;
@@ -1164,18 +1303,21 @@ static bool PlayClose_Authentic(HWND hwnd){
         ShowOverlayWindow(ha);
         PresentOverlay(ha,*req.gdi,req,rcWin,ParamsFor(req.type,0.f,float(RECTH(rcWin))));
         if(ShowWindow_orig) ShowWindow_orig(hwnd,SW_HIDE); else ::ShowWindow(hwnd,SW_HIDE);
+        // FIX (lag chiusura): stessa cosa fatta in RunAnimation - stessa animazione,
+        // stessa durata, ma il pacing ora segue DwmFlush() invece di Sleep() calcolato
+        // "a mano" su GetTickCount64(): i frame restano allineati alla composizione
+        // reale invece di rincorrerla con arrotondamenti al millisecondo.
         ULONGLONG start=GetTickCount64(), elapsed=0; float lastT=-1;
         while((elapsed=GetTickCount64()-start)<=req.durationMs){
             float t=req.durationMs==0?1.f:std::clamp(float(elapsed)/float(req.durationMs),0.f,1.f);
-            if(t-lastT>=0.001f||elapsed+8>=req.durationMs){
+            if(t-lastT>=0.001f){
                 lastT=t; auto params=ParamsFor(req.type,t,float(RECTH(rcWin)));
                 PresentOverlay(ha,*req.gdi,req,rcWin,params);
             }
-            ULONGLONG fe=GetTickCount64(); ULONGLONG tt=start+ULONGLONG(t*req.durationMs)+16;
-            if(fe<tt) Sleep(DWORD(tt-fe)); else Sleep(1);
+            DwmFlush();
         }
         Win7TransformParams pe=ParamsFor(req.type,1.f,float(RECTH(rcWin))); pe.opacity=0.f;
-        PresentOverlay(ha,*req.gdi,req,rcWin,pe); Sleep(8); HideOverlayWindow(ha);
+        PresentOverlay(ha,*req.gdi,req,rcWin,pe); DwmFlush(); HideOverlayWindow(ha);
     }
     transOverlay.Restore();
     transWnd.Dismiss(); // non ripristinare su hwnd che sta per morire
@@ -1491,3 +1633,1350 @@ void Wh_ModUninit(){
         UnregisterClassW(L"Windhawk_Win7_ShellHook",g_hinst);
     }
 }
+
+
+/* 
+// ============================================================================
+// ============================================================================
+// OPEN ANIMATION - KEPT FOR A FUTURE IMPLEMENTATION
+// ============================================================================
+// NOTE: THIS FEATURE HAS NOT BEEN IMPLEMENTED YET, BUT IT IS INCLUDED IN THE
+// CODE TO ENABLE FUTURE INTEGRATION. KEEPING THE COMPLETE OPEN ANIMATION
+// INFRASTRUCTURE IN THIS LOCATION AVOIDS HAVING TO SEARCH THROUGH 50 PAGES OF
+// GITHUB HISTORY OR REVERSE-ENGINEER THE LOGIC AT A LATER DATE, WHEN THE
+// FEATURE WILL BE READY TO BE ENABLED AND ALIGNED WITH EXISTING PATHS.
+// ============================================================================
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: CORE DATA STRUCTURES
+// ---------------------------------------------------------------------------
+
+// Open transition state for DWM
+struct OpenTransitionState { 
+    BOOL previous = FALSE; 
+    bool known = false; 
+};
+
+static std::mutex g_openTransitionMutex;
+static std::unordered_map<HWND, OpenTransitionState> g_openTransitions;
+
+// Open mask state (desktop snapshot)
+static std::mutex g_openMaskMutex;
+static HWND g_openMaskHwnd = nullptr;
+static RECT g_openMaskRect{};
+static CaptureBits g_openMaskBackground;
+
+// Open armed state (dead-man switch)
+static std::atomic<HWND> g_hwndOpenArmed{nullptr};
+static std::atomic<ULONGLONG> g_ulOpenArmedTick{0};
+
+// Open diagnostics
+static std::atomic<ULONGLONG> g_openDiagSequence{0};
+static std::atomic<ULONGLONG> g_openDiagActiveId{0};
+static std::atomic<HWND> g_openDiagActiveHwnd{nullptr};
+
+// Watchdog timer constant
+constexpr UINT_PTR kOpenWatchdogTimer = 0x57A0;
+constexpr UINT kOpenWatchdogMs = 900;
+
+// Open capture constants
+constexpr UINT  kOpenSettleTimeoutMs   = 220;
+constexpr UINT  kOpenRenderTimeoutMs   = 48;
+constexpr UINT  kOpenMaxProbes         = 3;
+constexpr UINT  kOpenHandoffWaitMs     = 60;
+constexpr UINT  kOpenMicroHideMs       = 8;
+constexpr BYTE  kOpenHiddenAlpha       = 0;
+constexpr int   kOpenMaxCaptureSide    = 16384;
+constexpr size_t kOpenMaxCapturePixels = size_t(64) * 1024u * 1024u;
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: DIAGNOSTICS
+// ---------------------------------------------------------------------------
+
+static bool g_openLog = false;
+
+static void OpenLogLine(bool important, LPCWSTR fmt, va_list ap) {
+    static std::atomic<bool> firstWhy{false};
+    if (!g_openLog) {
+        if (!important) return;
+        if (firstWhy.exchange(true)) return;
+    }
+    wchar_t buf[224];
+    _vsnwprintf_s(buf, _countof(buf), _TRUNCATE, fmt, ap);
+    Wh_Log(L"[win7-anim/open] %s [%s]", buf, g_exeName);
+}
+
+static void OpenLog(LPCWSTR fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    OpenLogLine(false, fmt, ap);
+    va_end(ap);
+}
+
+static void OpenLogWhy(LPCWSTR fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    OpenLogLine(true, fmt, ap);
+    va_end(ap);
+}
+
+static ULONGLONG NewOpenDiagId() noexcept {
+    return g_openDiagSequence.fetch_add(1) + 1;
+}
+
+static void SetActiveOpenDiag(HWND hwnd, ULONGLONG id) noexcept {
+    g_openDiagActiveHwnd.store(hwnd);
+    g_openDiagActiveId.store(id);
+}
+
+static ULONGLONG ActiveOpenDiagId(HWND hwnd) noexcept {
+    if (hwnd && g_openDiagActiveHwnd.load() == hwnd) 
+        return g_openDiagActiveId.load();
+    return 0;
+}
+
+static void ClearActiveOpenDiag(HWND hwnd, ULONGLONG id = 0) noexcept {
+    if (!hwnd || g_openDiagActiveHwnd.load() != hwnd) return;
+    if (id && g_openDiagActiveId.load() != id) return;
+    g_openDiagActiveHwnd.store(nullptr);
+    g_openDiagActiveId.store(0);
+}
+
+static void OpenDiag(ULONGLONG id, HWND hwnd, LPCWSTR stage, LPCWSTR fmt, ...) {
+    if (!g_openLog) return;
+    wchar_t detail[512]{};
+    va_list ap; va_start(ap, fmt);
+    _vsnwprintf_s(detail, _countof(detail), _TRUNCATE, fmt, ap);
+    va_end(ap);
+    Wh_Log(L"[win7-anim/open #%llu hwnd=%p] %s: %s [%s]",
+           static_cast<unsigned long long>(id), hwnd, stage, detail, g_exeName);
+}
+
+static void OpenDiagReq(const AnimRequest& req, LPCWSTR stage, LPCWSTR fmt, ...) {
+    if (!g_openLog || req.type != AnimationType::Open) return;
+    wchar_t detail[512]{};
+    va_list ap; va_start(ap, fmt);
+    _vsnwprintf_s(detail, _countof(detail), _TRUNCATE, fmt, ap);
+    va_end(ap);
+    Wh_Log(L"[win7-anim/open #%llu hwnd=%p] %s: %s [%s]",
+           static_cast<unsigned long long>(req.openId), req.hwnd, stage, detail, g_exeName);
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: MASK STORAGE
+// ---------------------------------------------------------------------------
+
+static bool StoreOpenMask(HWND hwnd, const RECT& rc, const CaptureBits& background) {
+    if (!hwnd || !IsRectUsable(rc) || background.empty()) return false;
+    try {
+        std::lock_guard<std::mutex> lock(g_openMaskMutex);
+        if (g_openMaskHwnd) return false;
+        g_openMaskHwnd = hwnd;
+        g_openMaskRect = rc;
+        g_openMaskBackground = background;
+        return true;
+    } catch (...) { return false; }
+}
+
+static bool TakeOpenMask(HWND hwnd, CaptureBits& background, RECT& rc) {
+    if (!hwnd) return false;
+    try {
+        std::lock_guard<std::mutex> lock(g_openMaskMutex);
+        if (g_openMaskHwnd != hwnd || g_openMaskBackground.empty()) return false;
+        background = std::move(g_openMaskBackground);
+        rc = g_openMaskRect;
+        g_openMaskHwnd = nullptr;
+        g_openMaskRect = {};
+        g_openMaskBackground = {};
+        return true;
+    } catch (...) { return false; }
+}
+
+static void ClearOpenMask(HWND hwnd) {
+    try {
+        std::lock_guard<std::mutex> lock(g_openMaskMutex);
+        if (!hwnd || g_openMaskHwnd == hwnd) {
+            g_openMaskHwnd = nullptr;
+            g_openMaskRect = {};
+            g_openMaskBackground = {};
+        }
+    } catch (...) { }
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: DWM TRANSITION MANAGEMENT
+// ---------------------------------------------------------------------------
+
+static bool DisableOpenTransitions(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    BOOL previous = FALSE;
+    bool known = SUCCEEDED(DwmGetWindowAttribute(
+        hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &previous, sizeof(previous)));
+    BOOL disabled = TRUE;
+    if (FAILED(DwmSetWindowAttribute(
+            hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(disabled)))) {
+        return false;
+    }
+    try {
+        std::lock_guard<std::mutex> lock(g_openTransitionMutex);
+        g_openTransitions[hwnd] = OpenTransitionState{previous, known};
+        return true;
+    } catch (...) {
+        BOOL restore = known ? previous : FALSE;
+        DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                              &restore, sizeof(restore));
+        return false;
+    }
+}
+
+static void RestoreOpenTransitions(HWND hwnd) {
+    if (!hwnd) return;
+    OpenTransitionState state{};
+    bool found = false;
+    try {
+        std::lock_guard<std::mutex> lock(g_openTransitionMutex);
+        auto it = g_openTransitions.find(hwnd);
+        if (it != g_openTransitions.end()) {
+            state = it->second;
+            g_openTransitions.erase(it);
+            found = true;
+        }
+    } catch (...) { return; }
+    if (found && IsWindow(hwnd)) {
+        BOOL value = state.known ? state.previous : FALSE;
+        DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                              &value, sizeof(value));
+    }
+}
+
+static void RestoreAllOpenTransitions() {
+    std::vector<HWND> windows;
+    try {
+        std::lock_guard<std::mutex> lock(g_openTransitionMutex);
+        windows.reserve(g_openTransitions.size());
+        for (const auto& item : g_openTransitions) windows.push_back(item.first);
+    } catch (...) { return; }
+    for (HWND hwnd : windows) RestoreOpenTransitions(hwnd);
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: CAPTURE HELPERS
+// ---------------------------------------------------------------------------
+
+static bool CaptureDesktopRegion(const RECT& rc, CaptureBits& out) {
+    out = {};
+    const int w = RECTW(rc), h = RECTH(rc);
+    if (w < 8 || h < 8 || w > kOpenMaxCaptureSide || h > kOpenMaxCaptureSide ||
+        size_t(w) * size_t(h) > kOpenMaxCapturePixels) return false;
+    
+    ScopedWindowDc screenDc(nullptr, GetDC(nullptr));
+    if (!screenDc) return false;
+    
+    bool ok = false;
+    {
+        ScopedDc mem(CreateCompatibleDC(screenDc.get()));
+        ScopedGdiObj bitmap(CreateCompatibleBitmap(screenDc.get(), w, h));
+        if (mem && bitmap) {
+            ScopedSelect selected(mem.get(), bitmap.get());
+            if (BitBlt(mem.get(), 0, 0, w, h, screenDc.get(), rc.left, rc.top,
+                       SRCCOPY | CAPTUREBLT)) {
+                BITMAPINFO bmi{};
+                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth = w;
+                bmi.bmiHeader.biHeight = -h;
+                bmi.bmiHeader.biPlanes = 1;
+                bmi.bmiHeader.biBitCount = 32;
+                bmi.bmiHeader.biCompression = BI_RGB;
+                try {
+                    out.width = w;
+                    out.height = h;
+                    out.resize(size_t(w) * size_t(h));
+                    if (GetDIBits(mem.get(), static_cast<HBITMAP>(bitmap.get()), 0,
+                                  h, out.data(), &bmi, DIB_RGB_COLORS)) {
+                        ForceOpaqueAlpha(out.data(), out.size());
+                        ok = true;
+                    } else out = {};
+                } catch (...) { out = {}; }
+            }
+        }
+    }
+    return ok;
+}
+
+static bool RenderOpenWindowOffscreen(HWND hwnd, HDC target, ULONGLONG openId) {
+    if (!hwnd || !target) {
+        OpenDiag(openId, hwnd, L"RenderOpenWindowOffscreen", L"FAIL invalid args");
+        return false;
+    }
+    DWORD_PTR ignored = 0;
+    if (!SendMessageTimeoutW(hwnd, WM_NULL, 0, 0,
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                            kOpenRenderTimeoutMs, &ignored)) {
+        OpenDiag(openId, hwnd, L"RenderOpenWindowOffscreen",
+                 L"FAIL probe WM_NULL timeout/error=%lu", GetLastError());
+        return false;
+    }
+    const BOOL painted = PrintWindow(hwnd, target, PW_RENDERFULLCONTENT);
+    const DWORD error = painted ? ERROR_SUCCESS : GetLastError();
+    OpenDiag(openId, hwnd, L"RenderOpenWindowOffscreen",
+             painted ? L"OK PrintWindow(PW_RENDERFULLCONTENT)" :
+                     L"FAIL PrintWindow(PW_RENDERFULLCONTENT) error=%lu", error);
+    return painted != FALSE;
+}
+
+static bool CaptureOpenFrameOffscreen(HWND hwnd, const RECT& frame, CaptureBits& out, ULONGLONG openId) {
+    out = {};
+    auto reject = [&](LPCWSTR reason) {
+        OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen", L"FAIL %s", reason);
+        return false;
+    };
+    
+    if (!hwnd || !IsWindow(hwnd) || !IsRectUsable(frame))
+        return reject(L"Invalid HWND/frame");
+    
+    RECT window{};
+    if (!GetWindowRectPhysical(hwnd, &window))
+        return reject(L"GetWindowRectPhysical failed");
+    
+    // Frame must match window rect exactly
+    if (!RectEquals(frame, window)) {
+        OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                 L"REJECT bounds mismatch: frame=[%ld,%ld,%ld,%ld] native=[%ld,%ld,%ld,%ld]",
+                 frame.left, frame.top, frame.right, frame.bottom,
+                 window.left, window.top, window.right, window.bottom);
+        return false;
+    }
+    
+    const int sourceW = RECTW(window), sourceH = RECTH(window);
+    const int frameW = RECTW(frame), frameH = RECTH(frame);
+    
+    if (sourceW < 8 || sourceH < 8 || frameW < 8 || frameH < 8 ||
+        sourceW > kOpenMaxCaptureSide || sourceH > kOpenMaxCaptureSide ||
+        frameW > kOpenMaxCaptureSide || frameH > kOpenMaxCaptureSide ||
+        size_t(sourceW) * size_t(sourceH) > kOpenMaxCapturePixels ||
+        size_t(frameW) * size_t(frameH) > kOpenMaxCapturePixels) {
+        OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                 L"REJECT dimensions/budget source=%dx%d frame=%dx%d", sourceW, sourceH, frameW, frameH);
+        return false;
+    }
+
+    ScopedWindowDc screenDc(nullptr, GetDC(nullptr));
+    if (!screenDc) return reject(L"GetDC desktop failed");
+    
+    bool ok = false;
+    {
+        BITMAPINFO bmi{};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = sourceW;
+        bmi.bmiHeader.biHeight = -sourceH;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        ScopedGdiObj dib(CreateDIBSection(screenDc.get(), &bmi, DIB_RGB_COLORS,
+                                          &bits, nullptr, 0));
+        ScopedDc mem(CreateCompatibleDC(screenDc.get()));
+        if (!dib || !bits || !mem) {
+            OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                     L"FAIL allocation DIB/DC dib=%d bits=%d dc=%d",
+                     dib.get() != nullptr, bits != nullptr, mem.get() != nullptr);
+        } else {
+            ScopedSelect selected(mem.get(), dib.get());
+            const LONG offX = frame.left - window.left;
+            const LONG offY = frame.top - window.top;
+            const LONG copyLeft = std::max<LONG>(0, -offX);
+            const LONG copyTop = std::max<LONG>(0, -offY);
+            const LONG copyRight = std::min<LONG>(frameW, sourceW - offX);
+            const LONG copyBottom = std::min<LONG>(frameH, sourceH - offY);
+            
+            std::memset(bits, 0, size_t(sourceW) * size_t(sourceH) * sizeof(uint32_t));
+            if (RenderOpenWindowOffscreen(hwnd, mem.get(), openId)) {
+                GdiFlush();
+                try {
+                    out.width = frameW;
+                    out.height = frameH;
+                    out.resize(size_t(frameW) * size_t(frameH));
+                    std::fill(out.storage->pixels.begin(), out.storage->pixels.end(), 0u);
+                    if (copyRight > copyLeft && copyBottom > copyTop) {
+                        const auto* src = static_cast<const uint32_t*>(bits);
+                        for (LONG y = copyTop; y < copyBottom; ++y) {
+                            const LONG sy = y + offY;
+                            uint32_t* dst = out.data() + size_t(y) * size_t(frameW) + size_t(copyLeft);
+                            const uint32_t* row = src + size_t(sy) * size_t(sourceW) +
+                                                  size_t(copyLeft + offX);
+                            const size_t pixels = size_t(copyRight - copyLeft);
+                            std::memcpy(dst, row, pixels * sizeof(uint32_t));
+                            ForceOpaqueAlpha(dst, pixels);
+                        }
+                    }
+                    size_t nonBlack = 0;
+                    for (size_t i = 0; i < out.size() && nonBlack < 10; ++i)
+                        if ((out.data()[i] & 0x00FFFFFFu) != 0) ++nonBlack;
+                    const bool structured = CaptureHasStructure(out);
+                    ok = nonBlack >= 10 || structured;
+                    OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                             ok ? L"OK output=%dx%d nonBlack=%zu structured=%d" :
+                                L"REJECT output empty/invalid=%dx%d nonBlack=%zu structured=%d",
+                             frameW, frameH, nonBlack, structured);
+                    if (!ok) out = {};
+                } catch (...) {
+                    OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                             L"FAIL exception during copy/validation");
+                    out = {}; ok = false;
+                }
+            } else {
+                OpenDiag(openId, hwnd, L"CaptureOpenFrameOffscreen",
+                         L"REJECT off-screen renderer unavailable; no flags=0 fallback");
+            }
+        }
+    }
+    return ok;
+}
+
+static bool CaptureWindowForOpen(HWND hwnd, CaptureBits& out, RECT* rcOut, ULONGLONG openId) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        OpenDiag(openId, hwnd, L"CaptureWindowForOpen", L"FAIL invalid HWND");
+        return false;
+    }
+    RECT rc{};
+    if (!GetFrameBoundsPhysical(hwnd, &rc)) {
+        OpenDiag(openId, hwnd, L"CaptureWindowForOpen", L"FAIL GetFrameBoundsPhysical");
+        return false;
+    }
+    OpenDiag(openId, hwnd, L"CaptureWindowForOpen",
+             L"attempt bounds=[%ld,%ld,%ld,%ld]", rc.left, rc.top, rc.right, rc.bottom);
+    if (!CaptureOpenFrameOffscreen(hwnd, rc, out, openId)) {
+        OpenDiag(openId, hwnd, L"CaptureWindowForOpen", L"FAIL validation/off-screen capture");
+        return false;
+    }
+    if (rcOut) *rcOut = rc;
+    OpenDiag(openId, hwnd, L"CaptureWindowForOpen", L"OK frame acquired");
+    return true;
+}
+
+static bool CaptureHasStructure(const CaptureBits& c) {
+    if (c.empty()) return false;
+    const int w = c.width, h = c.height;
+    const uint32_t* p = c.data();
+    const int stepX = std::max(1, w / 32), stepY = std::max(1, h / 32);
+    const uint32_t first = p[0] & 0x00FFFFFFu;
+    size_t samples = 0, different = 0;
+    for (int y = 0; y < h; y += stepY) {
+        const uint32_t* row = p + size_t(y) * size_t(w);
+        for (int x = 0; x < w; x += stepX) {
+            if ((row[x] & 0x00FFFFFFu) != first) ++different;
+            ++samples;
+        }
+    }
+    return samples >= 8 && different >= 2;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: PROBE COMPOSED WINDOW
+// ---------------------------------------------------------------------------
+
+static bool OpenRegionIsOnTop(HWND hwnd, const RECT& rc) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    const HWND overlay = g_hwndAnim.load();
+    for (HWND cur = GetWindow(hwnd, GW_HWNDPREV); cur && cur != overlay; cur = GetWindow(cur, GW_HWNDPREV)) {
+        if (cur == overlay) continue;
+        if (!IsWindowVisible(cur)) continue;
+        if (GetAncestor(cur, GA_ROOT) == hwnd) continue;
+        LONG ex = LONG(GetWindowLongPtrW(cur, GWL_EXSTYLE));
+        if (ex & WS_EX_LAYERED) {
+            COLORREF key = 0; BYTE al = 255; DWORD fl = 0;
+            if (GetLayeredWindowAttributes(cur, &key, &al, &fl) && al == 0) continue;
+        }
+        RECT r{}; if (!GetWindowRectPhysical(cur, &r) || !IsRectUsable(r)) continue;
+        if (r.left >= rc.right || r.right <= rc.left || r.top >= rc.bottom || r.bottom <= rc.top) continue;
+        const LONG ix = std::min(r.right, rc.right) - std::max(r.left, rc.left);
+        const LONG iy = std::min(r.bottom, rc.bottom) - std::max(r.top, rc.top);
+        if (ix <= 8 || iy <= 8) continue;
+        return false;
+    }
+    return true;
+}
+
+static bool SampledOpenPixelContentChanged(const CaptureBits& a, const CaptureBits& b) {
+    if (a.width != b.width || a.height != b.height || a.size() != b.size()) return true;
+    if (a.empty() || b.empty()) return a.empty() != b.empty();
+    const size_t total = a.size();
+    const size_t sampleCount = std::min<size_t>(256, total);
+    const size_t step = std::max<size_t>(1, total / sampleCount);
+    for (size_t i = 0; i < sampleCount; ++i) {
+        const size_t index = std::min(i * step, total - 1);
+        const uint32_t pa = a.data()[index] & 0x00FFFFFFu;
+        const uint32_t pb = b.data()[index] & 0x00FFFFFFu;
+        const int dr = std::abs(int((pa >> 16) & 0xFFu) - int((pb >> 16) & 0xFFu));
+        const int dg = std::abs(int((pa >> 8) & 0xFFu) - int((pb >> 8) & 0xFFu));
+        const int db = std::abs(int(pa & 0xFFu) - int(pb & 0xFFu));
+        if (dr + dg + db > 6) return true;
+    }
+    return false;
+}
+
+static bool ProbeComposedWindow(HWND hwnd, CaptureBits& cap, RECT& rcOut, ULONGLONG openId) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL invalid HWND at entry");
+        return false;
+    }
+    
+    const ULONGLONG start = GetTickCount64();
+    RECT last{}; bool haveRect = false; UINT stable = 0, probes = 0;
+    bool maxProbeLogged = false;
+    CaptureBits previousFrame; RECT previousFrameRect{}; bool havePrevious = false;
+    
+    OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+             L"START timeout=%u maxProbes=%u", kOpenSettleTimeoutMs, kOpenMaxProbes);
+    DwmFlush();
+    
+    while (!g_stopping.load() && g_hwndCurrent.load() == hwnd &&
+           GetTickCount64() - start < kOpenSettleTimeoutMs) {
+        if (!IsWindow(hwnd)) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL window destroyed during probe");
+            break;
+        }
+        if (!IsWindowVisible(hwnd)) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL window not visible after ShowWindow");
+            break;
+        }
+        if (IsIconic(hwnd)) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL window minimized");
+            break;
+        }
+        
+        RECT rc{};
+        if (!GetFrameBoundsPhysical(hwnd, &rc)) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL GetFrameBoundsPhysical");
+            break;
+        }
+        
+        if (haveRect && RectEquals(rc, last)) {
+            if (stable < 0xFFFF) ++stable;
+        } else {
+            if (haveRect)
+                OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                         L"bounds changed: previous=[%ld,%ld,%ld,%ld] new=[%ld,%ld,%ld,%ld]",
+                         last.left, last.top, last.right, last.bottom,
+                         rc.left, rc.top, rc.right, rc.bottom);
+            stable = 0;
+        }
+        haveRect = true; last = rc;
+
+        if (probes < kOpenMaxProbes) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                     L"CAPTURE attempt=%u stable=%u bounds=[%ld,%ld,%ld,%ld]",
+                     probes + 1, stable, rc.left, rc.top, rc.right, rc.bottom);
+            
+            if (!OpenRegionIsOnTop(hwnd, rc)) {
+                OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                         L"FAIL z-order: other window above target");
+                break;
+            }
+            ++probes;
+            CaptureBits candidate; RECT got{};
+            const bool captureOK = CaptureWindowForOpen(hwnd, candidate, &got, openId) &&
+                                   IsRectUsable(got);
+            if (captureOK) {
+                const bool boundsChanged = havePrevious &&
+                    !RectEquals(got, previousFrameRect);
+                const bool sizeChanged = havePrevious &&
+                    (candidate.width != previousFrame.width ||
+                     candidate.height != previousFrame.height ||
+                     candidate.size() != previousFrame.size());
+                const int pixelContentChanged = (!havePrevious || boundsChanged || sizeChanged)
+                    ? -1
+                    : (SampledOpenPixelContentChanged(previousFrame, candidate) ? 1 : 0);
+                const bool stableFrame = havePrevious && !boundsChanged && !sizeChanged;
+                
+                OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                         L"CAPTURE result=OK got=[%ld,%ld,%ld,%ld] pixels=%zu "
+                         L"previous=%d boundsChanged=%d sizeChanged=%d "
+                         L"pixelContentChanged=%d contentCheck=%s stable=%d",
+                         got.left, got.top, got.right, got.bottom, candidate.size(),
+                         havePrevious, boundsChanged, sizeChanged, pixelContentChanged,
+                         havePrevious && !boundsChanged && !sizeChanged ? L"sampled" : L"not-compared",
+                         stableFrame);
+                
+                if (stableFrame) {
+                    cap = std::move(candidate);
+                    rcOut = got;
+                    OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                             L"OK stable frame after %u attempts; pixel identity not required",
+                             probes);
+                    return true;
+                }
+                
+                if (havePrevious) {
+                    OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                             L"REJECT frame: boundsChanged=%d sizeChanged=%d pixelContentChanged=%d; retry for geometric stability",
+                             boundsChanged, sizeChanged, pixelContentChanged);
+                } else {
+                    OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                             L"valid candidate stored; need second frame with stable bounds/dimensions");
+                }
+                previousFrame = std::move(candidate);
+                previousFrameRect = got;
+                havePrevious = true;
+            } else {
+                OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                         L"REJECT capture attempt failed: invalid frame; keeping last valid frame");
+            }
+            
+            const BOOL redraw = RedrawWindow(hwnd, nullptr, nullptr,
+                                           RDW_INVALIDATE | RDW_FRAME | RDW_ERASE | RDW_ALLCHILDREN);
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                     L"RedrawWindow after attempt=%s", redraw ? L"OK" : L"FAIL");
+        } else if (!maxProbeLogged) {
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                     L"WAIT no more captures: reached maxProbes=%u", kOpenMaxProbes);
+            maxProbeLogged = true;
+        }
+        DwmFlush();
+        Sleep(1);
+    }
+
+    // Fallback: use last geometrically stable frame
+    const bool lastFrameGeometryStable = havePrevious && haveRect &&
+        RectEquals(last, previousFrameRect) && IsRectUsable(previousFrameRect) &&
+        previousFrame.width == RECTW(previousFrameRect) &&
+        previousFrame.height == RECTH(previousFrameRect) &&
+        previousFrame.size() == size_t(previousFrame.width) * size_t(previousFrame.height);
+    
+    if (!g_stopping.load() && g_hwndCurrent.load() == hwnd && IsWindow(hwnd) &&
+        IsWindowVisible(hwnd) && !IsIconic(hwnd) && lastFrameGeometryStable) {
+        if (OpenRegionIsOnTop(hwnd, previousFrameRect)) {
+            cap = std::move(previousFrame);
+            rcOut = previousFrameRect;
+            OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                     L"OK reused valid frame after timeout/maxProbes: bounds/dimensions stable; pixel identity not required");
+            return true;
+        }
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                 L"valid frame fallback not used: z-order not stable");
+    }
+    
+    cap = {};
+    const ULONGLONG elapsed = GetTickCount64() - start;
+    if (g_stopping.load())
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL mod stopping after %llu ms",
+                 static_cast<unsigned long long>(elapsed));
+    else if (g_hwndCurrent.load() != hwnd)
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow", L"FAIL request no longer current after %llu ms",
+                 static_cast<unsigned long long>(elapsed));
+    else if (elapsed >= kOpenSettleTimeoutMs)
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                 L"FAIL open timeout: elapsed=%llu stable=%u probes=%u",
+                 static_cast<unsigned long long>(elapsed), stable, probes);
+    else
+        OpenDiag(openId, hwnd, L"ProbeComposedWindow",
+                 L"FAIL premature exit: stable=%u probes=%u elapsed=%llu",
+                 stable, probes, static_cast<unsigned long long>(elapsed));
+    
+    OpenLogWhy(L"canceled: no stable final frame (stable=%u probe=%u)",
+               stable, probes);
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: PRESENTATION HELPERS
+// ---------------------------------------------------------------------------
+
+static bool PresentOpenMask(HWND hwndOverlay, HWND targetHwnd, const RECT& rc,
+                            const CaptureBits& background, ULONGLONG openId) {
+    if (!hwndOverlay || !IsWindow(hwndOverlay) || background.empty()) {
+        OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"FAIL overlay/background invalid");
+        return false;
+    }
+    
+    AnimRequest mask;
+    mask.hwnd = targetHwnd;
+    mask.type = AnimationType::Open;
+    mask.rcWindow = rc;
+    mask.rcDest = rc;
+    mask.capture = background;
+    mask.maskOnly = true;
+    mask.openId = openId;
+    try { mask.gdi = std::make_unique<PresentGdi>(); } catch (...) {
+        OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"FAIL PresentGdi allocation");
+        return false;
+    }
+    
+    UINT msg = g_msgAnim.load();
+    if (!msg) {
+        OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"FAIL overlay message not registered");
+        return false;
+    }
+    
+    OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"START bounds=[%ld,%ld,%ld,%ld] pixels=%zu",
+             rc.left, rc.top, rc.right, rc.bottom, background.size());
+    SendMessageW(hwndOverlay, msg, WPARAM(AnimMsg::FirstFrame), LPARAM(&mask));
+    if (!mask.firstFramePresented) {
+        OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"FAIL PresentFirstFrame mask");
+        return false;
+    }
+    OpenDiag(openId, targetHwnd, L"PresentOpenMask", L"OK mask presented");
+    return true;
+}
+
+static bool MicroHideOpenWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd) || !SetWindowPos_orig)
+        return false;
+    
+    constexpr UINT asyncFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                                 SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+    constexpr UINT syncFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                                SWP_NOOWNERZORDER | SWP_NOACTIVATE;
+    
+    const BOOL hidden = SetWindowPos_orig(hwnd, nullptr, 0, 0, 0, 0,
+                                          asyncFlags | SWP_HIDEWINDOW);
+    if (!hidden) {
+        if (IsWindow(hwnd) && !IsWindowVisible(hwnd) && ShowWindow_orig)
+            ShowWindow_orig(hwnd, SW_SHOWNOACTIVATE);
+        return false;
+    }
+    DwmFlush();
+    Sleep(kOpenMicroHideMs);
+    if (!IsWindow(hwnd)) return false;
+
+    BOOL shown = SetWindowPos_orig(hwnd, nullptr, 0, 0, 0, 0,
+                                   asyncFlags | SWP_SHOWWINDOW);
+    if (!IsWindowVisible(hwnd) && IsWindow(hwnd)) {
+        if (ShowWindow_orig) ShowWindow_orig(hwnd, SW_SHOWNOACTIVATE);
+        if (!IsWindowVisible(hwnd))
+            SetWindowPos_orig(hwnd, nullptr, 0, 0, 0, 0, syncFlags | SWP_SHOWWINDOW);
+    }
+    DwmFlush();
+    return shown != FALSE || IsWindowVisible(hwnd) != FALSE;
+}
+
+static bool HandoffOpen(AnimRequest* req) {
+    if (!req) return false;
+    OpenDiagReq(*req, L"HandoffOpen", L"START");
+    
+    if (!req->hwnd || !IsWindow(req->hwnd)) {
+        OpenDiagReq(*req, L"HandoffOpen", L"FAIL window destroyed/invalid");
+        OpenCancelCleanup(req->hwnd);
+        return false;
+    }
+    
+    { 
+        ScopedDpiAware dpi;
+        if (!req->capture.empty() && req->gdi) {
+            HWND ha = g_hwndAnim.load(); RECT now{};
+            if (ha && IsWindow(ha)) {
+                const bool haveNow = GetFrameBoundsPhysical(req->hwnd, &now);
+                if (!haveNow)
+                    OpenDiagReq(*req, L"HandoffOpen", L"current bounds not readable; using last frame");
+                else if (!RectEquals(now, req->rcWindow)) {
+                    OpenDiagReq(*req, L"HandoffOpen",
+                                L"bounds changed: realigning to [%ld,%ld,%ld,%ld]",
+                                now.left, now.top, now.right, now.bottom);
+                    Win7TransformParams p; p.opacity = 1.f; p.ease = 1.f; p.rotX = 0.f; p.rotY = 0.f;
+                    if (!PresentOverlay(ha, *req->gdi, *req, now, p)) {
+                        OpenDiagReq(*req, L"HandoffOpen", L"FAIL PresentOverlay realignment");
+                        OpenCancelCleanup(req->hwnd);
+                        return false;
+                    }
+                    req->rcWindow = now; req->rcDest = now;
+                }
+            } else {
+                OpenDiagReq(*req, L"HandoffOpen", L"overlay not available for realignment");
+            }
+        }
+        
+        const bool micro = MicroHideOpenWindow(req->hwnd);
+        OpenDiagReq(*req, L"HandoffOpen", L"MicroHide result=%d", micro);
+        const bool iconic = IsIconic(req->hwnd) != FALSE;
+        const BOOL redraw = iconic ? TRUE : RedrawWindow(req->hwnd, nullptr, nullptr,
+                                                    RDW_INVALIDATE | RDW_FRAME | RDW_ERASE | RDW_ALLCHILDREN);
+        OpenDiagReq(*req, L"HandoffOpen", L"RedrawWindow=%d iconic=%d", redraw, iconic);
+        
+        const ULONGLONG hstart = GetTickCount64();
+        for (;;) {
+            RECT upd{}; const bool pending = !iconic && GetUpdateRect(req->hwnd, &upd, FALSE) != FALSE;
+            DwmFlush();
+            if (!pending) break;
+            if (GetTickCount64() - hstart > kOpenHandoffWaitMs) break;
+            Sleep(1);
+        }
+        OpenDiagReq(*req, L"HandoffOpen", L"paint wait completed");
+    }
+    OpenDiagReq(*req, L"HandoffOpen", L"OK");
+    return true;
+}
+
+static bool PrepareOpenAnimation(HWND hwndOverlay, AnimRequest& req) {
+    OpenDiagReq(req, L"PrepareOpenAnimation", L"START");
+    
+    if (!req.hwnd || !IsWindow(req.hwnd)) {
+        OpenDiagReq(req, L"PrepareOpenAnimation", L"FAIL invalid HWND");
+        return false;
+    }
+    
+    CaptureBits cap; RECT rc{};
+    const bool got = ProbeComposedWindow(req.hwnd, cap, rc, req.openId);
+    if (!got || cap.empty() || !IsRectUsable(rc)) {
+        OpenDiagReq(req, L"PrepareOpenAnimation",
+                    L"FAIL ProbeComposedWindow got=%d capture=%d bounds=%d",
+                    got, !cap.empty(), IsRectUsable(rc));
+        return false;
+    }
+    
+    CaptureBits background; RECT maskRect{};
+    if (!TakeOpenMask(req.hwnd, background, maskRect)) {
+        OpenDiagReq(req, L"PrepareOpenAnimation", L"FAIL mask not available for HWND");
+        return false;
+    }
+    
+    if (!RectEquals(maskRect, rc)) {
+        OpenDiagReq(req, L"PrepareOpenAnimation",
+                    L"FAIL mask/frame bounds mismatch mask=[%ld,%ld,%ld,%ld] frame=[%ld,%ld,%ld,%ld]",
+                    maskRect.left, maskRect.top, maskRect.right, maskRect.bottom,
+                    rc.left, rc.top, rc.right, rc.bottom);
+        return false;
+    }
+    
+    req.capture = std::move(cap); 
+    req.rcWindow = rc; 
+    req.rcDest = rc;
+    req.background = std::move(background); 
+    req.backgroundRect = maskRect;
+    
+    OpenDiagReq(req, L"PrepareOpenAnimation", L"final capture validated %dx%d at [%ld,%ld]",
+                RECTW(rc), RECTH(rc), rc.left, rc.top);
+    OpenLog(L"off-screen frame captured in final state: %dx%d at [%d,%d]",
+            RECTW(rc), RECTH(rc), rc.left, rc.top);
+    
+    const bool first = PresentFirstFrame(hwndOverlay, req);
+    OpenDiagReq(req, L"PrepareOpenAnimation", first ?
+                L"OK first frame presented" : L"FAIL first frame not presented");
+    return first;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: CLEANUP
+// ---------------------------------------------------------------------------
+
+static void OpenCancelCleanup(HWND hwnd) {
+    const ULONGLONG openId = ActiveOpenDiagId(hwnd);
+    if (openId) OpenDiag(openId, hwnd, L"OpenCancelCleanup", L"START rollback mask/transitions");
+    
+    if (!hwnd || g_hwndOpenArmed.load() == hwnd || g_hwndCurrent.load() == hwnd)
+        g_ulOpenArmedTick.store(0);
+    
+    ClearOpenMask(hwnd);
+    if (hwnd) {
+        CurtainRelease(hwnd);
+        RestoreOpenTransitions(hwnd);
+    }
+    
+    HWND ha = g_hwndAnim.load();
+    if (ha && IsWindow(ha)) HideOverlayWindow(ha);
+    
+    if (openId) {
+        OpenDiag(openId, hwnd, L"OpenCancelCleanup", L"OK rollback completed");
+        ClearActiveOpenDiag(hwnd, openId);
+    }
+}
+
+static void AbortRequest(AnimRequest* req) {
+    if (!req) return;
+    if (req->type == AnimationType::Open)
+        OpenDiagReq(*req, L"AbortRequest", L"START request canceled");
+    OpenCancelCleanup(req->hwnd);
+    ReleaseAnimationSlot(req->hwnd);
+    if (req->type == AnimationType::Open)
+        OpenDiag(req->openId, req->hwnd, L"AbortRequest", L"OK request released");
+    delete req;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: WATCHDOG
+// ---------------------------------------------------------------------------
+
+static void WatchdogOpenMask() {
+    HWND hwnd = g_hwndOpenArmed.load();
+    if (!hwnd) {
+        if (g_typeCurrent.load() != int(AnimationType::Open)) return;
+        hwnd = g_hwndCurrent.load();
+        if (!hwnd) return;
+    }
+    
+    const ULONGLONG openId = ActiveOpenDiagId(hwnd);
+    const ULONGLONG tick = g_ulOpenArmedTick.load();
+    const ULONGLONG age = tick ? GetTickCount64() - tick : 0;
+    
+    OpenDiag(openId, hwnd, L"WatchdogOpenMask",
+             L"TICK armed=%d active=%d tick=%llu age=%llu",
+             g_hwndOpenArmed.load() == hwnd,
+             g_typeCurrent.load() == int(AnimationType::Open) && g_hwndCurrent.load() == hwnd,
+             static_cast<unsigned long long>(tick),
+             static_cast<unsigned long long>(age));
+    
+    if (!tick || age < kOpenWatchdogMs) {
+        OpenDiag(openId, hwnd, L"WatchdogOpenMask", L"OK not activated");
+        return;
+    }
+    
+    if (g_hwndOpenArmed.load()) {
+        HWND expected = hwnd;
+        if (!g_hwndOpenArmed.compare_exchange_strong(expected, HWND(nullptr))) {
+            OpenDiag(openId, hwnd, L"WatchdogOpenMask", L"not activated: CAS arm lost");
+            return;
+        }
+    } else if (g_hwndCurrent.load() != hwnd ||
+               g_typeCurrent.load() != int(AnimationType::Open)) {
+        OpenDiag(openId, hwnd, L"WatchdogOpenMask", L"not activated: request no longer Open");
+        return;
+    }
+    
+    OpenDiag(openId, hwnd, L"WatchdogOpenMask", L"ACTIVATED timeout=%u ms; rollback", kOpenWatchdogMs);
+    g_ulOpenArmedTick.store(0);
+    OpenCancelCleanup(hwnd);
+    ReleaseAnimationSlot(hwnd);
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: CANDIDATE CHECKS
+// ---------------------------------------------------------------------------
+
+struct OpenWindowRegionInfo {
+    bool windowValid = false;
+    bool windowRectOK = false;
+    RECT windowRect{};
+    DWORD windowRectError = ERROR_SUCCESS;
+    bool regionHandleOK = false;
+    DWORD regionCreateError = ERROR_SUCCESS;
+    bool getWindowRgnCalled = false;
+    int getWindowRgnResult = 0;
+    DWORD getWindowRgnError = ERROR_SUCCESS;
+    bool getRgnBoxCalled = false;
+    int getRgnBoxResult = 0;
+    DWORD getRgnBoxError = ERROR_SUCCESS;
+    RECT regionBox{};
+    bool hasRegion = false;
+    bool nonRectangular = false;
+    bool controlFailed = false;
+    bool ambiguous = true;
+};
+
+static LPCWSTR OpenRegionTypeName(int type) noexcept {
+    switch (type) {
+        case NULLREGION: return L"NULLREGION";
+        case SIMPLEREGION: return L"SIMPLEREGION";
+        case COMPLEXREGION: return L"COMPLEXREGION";
+        case ERROR: return L"ERROR";
+        default: return L"UNKNOWN";
+    }
+}
+
+static bool IsKnownOpenRegionType(int type) noexcept {
+    return type == NULLREGION || type == SIMPLEREGION || type == COMPLEXREGION || type == ERROR;
+}
+
+static OpenWindowRegionInfo InspectOpenWindowRegion(HWND hwnd) {
+    OpenWindowRegionInfo info;
+    info.windowValid = hwnd && IsWindow(hwnd);
+    if (!info.windowValid) {
+        info.controlFailed = true;
+        info.ambiguous = true;
+        return info;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    const BOOL gotWindowRect = GetWindowRect(hwnd, &info.windowRect);
+    info.windowRectOK = gotWindowRect != FALSE && IsRectUsable(info.windowRect);
+    info.windowRectError = info.windowRectOK ? ERROR_SUCCESS : GetLastError();
+    if (!info.windowRectOK) {
+        info.controlFailed = true;
+        info.ambiguous = true;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    ScopedHrgn region(CreateRectRgn(0, 0, 0, 0));
+    info.regionHandleOK = region.get() != nullptr;
+    info.regionCreateError = info.regionHandleOK ? ERROR_SUCCESS : GetLastError();
+    if (!info.regionHandleOK) {
+        info.controlFailed = true;
+        info.ambiguous = true;
+        return info;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    info.getWindowRgnCalled = true;
+    info.getWindowRgnResult = GetWindowRgn(hwnd, region.get());
+    info.getWindowRgnError = info.getWindowRgnResult == ERROR ? GetLastError() : ERROR_SUCCESS;
+
+    SetLastError(ERROR_SUCCESS);
+    info.getRgnBoxCalled = true;
+    info.getRgnBoxResult = GetRgnBox(region.get(), &info.regionBox);
+    info.getRgnBoxError = info.getRgnBoxResult == ERROR ? GetLastError() : ERROR_SUCCESS;
+
+    info.hasRegion = info.getWindowRgnResult == SIMPLEREGION ||
+                     info.getWindowRgnResult == COMPLEXREGION;
+    info.nonRectangular = info.getWindowRgnResult == COMPLEXREGION ||
+                          info.getRgnBoxResult == COMPLEXREGION;
+    info.controlFailed = !IsKnownOpenRegionType(info.getWindowRgnResult) ||
+                         !IsKnownOpenRegionType(info.getRgnBoxResult) ||
+                         info.getWindowRgnResult == ERROR ||
+                         info.getRgnBoxResult == ERROR ||
+                         !info.windowRectOK;
+    info.ambiguous = info.controlFailed ||
+                     (!info.hasRegion && info.getWindowRgnResult != NULLREGION);
+    return info;
+}
+
+static void LogOpenWindowRegion(ULONGLONG openId, HWND hwnd,
+                                const OpenWindowRegionInfo& info) {
+    const LPCWSTR technical =
+        !info.windowValid ? L"invalid HWND; check not determinable" :
+        !info.windowRectOK ? L"GetWindowRect failed; base geometry not determinable" :
+        !info.regionHandleOK ? L"CreateRectRgn failed; region type not determinable" :
+        info.getWindowRgnResult == ERROR ? L"GetWindowRgn returned ERROR; region type not determinable" :
+        !IsKnownOpenRegionType(info.getWindowRgnResult) ? L"GetWindowRgn returned unknown type" :
+        info.getRgnBoxResult == ERROR ? L"GetRgnBox returned ERROR; bounding box not determinable" :
+        !IsKnownOpenRegionType(info.getRgnBoxResult) ? L"GetRgnBox returned unknown type" :
+        info.nonRectangular ? L"complex/non-rectangular region detected; compatibility delegated to actual capture" :
+        info.hasRegion ? L"rectangular region detected; no certain incompatibility" :
+        L"no window region detected";
+    
+    const LPCWSTR disposition =
+        info.ambiguous ? L"AMBIGUOUS_ACCEPTED" :
+        info.nonRectangular ? L"NON_RECTANGULAR_ACCEPTED" :
+        info.hasRegion ? L"RECTANGULAR_ACCEPTED" : L"NO_REGION_ACCEPTED";
+    
+    OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+             L"region API CreateRectRgn handleOK=%d error=%lu "
+             L"GetWindowRect OK=%d error=%lu "
+             L"GetWindowRgn called=%d result=%d type=%s error=%lu "
+             L"GetRgnBox called=%d result=%d type=%s error=%lu",
+             info.regionHandleOK, static_cast<unsigned long>(info.regionCreateError),
+             info.windowRectOK, static_cast<unsigned long>(info.windowRectError),
+             info.getWindowRgnCalled, info.getWindowRgnResult,
+             OpenRegionTypeName(info.getWindowRgnResult),
+             static_cast<unsigned long>(info.getWindowRgnError),
+             info.getRgnBoxCalled, info.getRgnBoxResult,
+             OpenRegionTypeName(info.getRgnBoxResult),
+             static_cast<unsigned long>(info.getRgnBoxError));
+    
+    OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+             L"region geometry regionBox=[%ld,%ld,%ld,%ld] "
+             L"windowRect=[%ld,%ld,%ld,%ld] size=%ldx%ld "
+             L"controlFailed=%d ambiguous=%d nonRectangular=%d disposition=%s "
+             L"captureVeto=0 technical=%s",
+             info.regionBox.left, info.regionBox.top, info.regionBox.right, info.regionBox.bottom,
+             info.windowRect.left, info.windowRect.top,
+             info.windowRect.right, info.windowRect.bottom,
+             RECTW(info.windowRect), RECTH(info.windowRect),
+             info.controlFailed, info.ambiguous, info.nonRectangular, disposition, technical);
+}
+
+static bool IsOpenCandidate(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    const LONG style = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE));
+    const LONG ex = LONG(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    if (style & WS_CHILD) return false;
+    if (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return false;
+    if (hwnd == g_hwndAnim.load()) return false;
+    if (GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) return false;
+    return (style & WS_CAPTION) != 0 || (style & WS_POPUP) != 0;
+}
+
+static bool OpenAnimationAllowed(HWND hwnd, ULONGLONG* openIdOut) {
+    const ULONGLONG openId = NewOpenDiagId();
+    if (openIdOut) *openIdOut = openId;
+    
+    OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+             L"START animateOpen=%d disabled=%d animating=%d stopping=%d",
+             g_animateOpen, g_fDisabled.load(), g_fAnimating.load(), g_stopping.load());
+    
+    auto fail = [&](LPCWSTR reason) {
+        OpenDiag(openId, hwnd, L"OpenAnimationAllowed", L"FAIL %s", reason);
+        return false;
+    };
+    
+    if (!g_animateOpen) return fail(L"animateOpen setting disabled");
+    if (g_fDisabled.load()) return fail(L"mod disabled");
+    if (g_fAnimating.load()) return fail(L"another animation already in progress");
+    if (g_stopping.load()) return fail(L"mod stopping");
+    if (IsSnippingTool()) return fail(L"Snipping Tool: native open");
+    if (!IsOpenCandidate(hwnd)) {
+        if (!hwnd || !IsWindow(hwnd)) return fail(L"invalid HWND");
+        const LONG style = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE));
+        const LONG ex = LONG(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+        const bool sameThread = GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId();
+        const LPCWSTR candidateReason =
+            (style & WS_CHILD) ? L"WS_CHILD" :
+            (ex & WS_EX_TOOLWINDOW) ? L"WS_EX_TOOLWINDOW" :
+            (ex & WS_EX_NOACTIVATE) ? L"WS_EX_NOACTIVATE" :
+            (hwnd == g_hwndAnim.load()) ? L"internal overlay" :
+            !sameThread ? L"different thread" :
+            (!(style & WS_CAPTION) && !(style & WS_POPUP)) ? L"missing WS_CAPTION/WS_POPUP" :
+            L"criteria not met";
+        OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+                 L"FAIL IsOpenCandidate reason=%s style=0x%08lX exstyle=0x%08lX threadSame=%d",
+                 candidateReason, style, ex, sameThread);
+        return false;
+    }
+    
+    const OpenWindowRegionInfo region = InspectOpenWindowRegion(hwnd);
+    LogOpenWindowRegion(openId, hwnd, region);
+    
+    const LONG ex = LONG(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    if (ex & WS_EX_LAYERED) {
+        COLORREF key = 0; BYTE alpha = 255; DWORD flags = 0;
+        if (!GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags) ||
+            flags != LWA_ALPHA || alpha != 255) {
+            OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+                     L"FAIL WS_EX_LAYERED not representable alpha=%u flags=0x%08lX",
+                     alpha, flags);
+            return false;
+        }
+        OpenDiag(openId, hwnd, L"OpenAnimationAllowed",
+                 L"WS_EX_LAYERED accepted alpha=%u flags=0x%08lX", alpha, flags);
+    }
+    
+    if (IsWindowVisible(hwnd)) return fail(L"window already visible at arm time");
+    if (IsIconic(hwnd)) return fail(L"window minimized at arm time");
+    if (CurtainIsApplied(hwnd)) return fail(L"legacy cover state already present");
+    if (HasCachedCapture(hwnd)) return fail(L"minimize capture already in progress");
+    
+    OpenDiag(openId, hwnd, L"OpenAnimationAllowed", L"OK candidate accepted");
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: MAIN ENTRY POINTS
+// ---------------------------------------------------------------------------
+
+static bool ArmOpen(HWND hwnd, ULONGLONG* openIdOut = nullptr) {
+    ULONGLONG openId = 0;
+    if (!OpenAnimationAllowed(hwnd, &openId)) return false;
+    if (openIdOut) *openIdOut = openId;
+    
+    OpenDiag(openId, hwnd, L"ArmOpen", L"START");
+    
+    HWND expected = nullptr;
+    if (!g_hwndOpenArmed.compare_exchange_strong(expected, hwnd)) {
+        OpenDiag(openId, hwnd, L"ArmOpen", L"FAIL another HWND already armed=%p", expected);
+        OpenLogWhy(L"canceled: another open already armed");
+        return false;
+    }
+    
+    auto disarm = [hwnd]() {
+        HWND cur = hwnd;
+        if (g_hwndOpenArmed.compare_exchange_strong(cur, HWND(nullptr)))
+            g_ulOpenArmedTick.store(0);
+    };
+    
+    bool ownsActive = false;
+    auto giveUp = [&](LPCWSTR why) {
+        OpenDiag(openId, hwnd, L"ArmOpen", L"FAIL %s", why);
+        OpenLogWhy(L"%s", why);
+        if (ownsActive) ClearActiveOpenDiag(hwnd, openId);
+        disarm();
+        ReleaseAnimationSlot(hwnd);
+        return false;
+    };
+    
+    if (g_stopping.load()) return giveUp(L"mod shutting down");
+    HWND host = g_hwndAnim.load();
+    if (!host || !IsWindow(host)) return giveUp(L"overlay not available");
+    
+    bool exp = false;
+    if (!g_fAnimating.compare_exchange_strong(exp, true))
+        return giveUp(L"animation already in progress");
+    ownsActive = true;
+    SetActiveOpenDiag(hwnd, openId);
+    OpenDiag(openId, hwnd, L"ArmOpen", L"animation slot acquired");
+    
+    DwmFlush();
+    RECT rc{}; CaptureBits background;
+    {
+        ScopedDpiAware dpi;
+        if (!GetWindowRectPhysical(hwnd, &rc))
+            return giveUp(L"GetWindowRectPhysical mask failed");
+        if (!IsRectUsable(rc)) return giveUp(L"mask bounds not usable");
+        OpenDiag(openId, hwnd, L"ArmOpen", L"mask bounds acquired [%ld,%ld,%ld,%ld]",
+                 rc.left, rc.top, rc.right, rc.bottom);
+        if (!CaptureDesktopRegion(rc, background))
+            return giveUp(L"desktop mask not capturable");
+        OpenDiag(openId, hwnd, L"ArmOpen", L"desktop mask captured pixels=%zu", background.size());
+    }
+    
+    OpenDiag(openId, hwnd, L"ArmOpen", L"presenting mask");
+    if (!PresentOpenMask(host, hwnd, rc, background, openId)) {
+        OpenCancelCleanup(hwnd);
+        return giveUp(L"mask presentation not available");
+    }
+    OpenDiag(openId, hwnd, L"ArmOpen", L"mask presented");
+    
+    if (!StoreOpenMask(hwnd, rc, background)) {
+        OpenCancelCleanup(hwnd);
+        return giveUp(L"mask state not storable");
+    }
+    OpenDiag(openId, hwnd, L"ArmOpen", L"mask state transferred to request");
+    
+    g_ulOpenArmedTick.store(GetTickCount64());
+    const UINT_PTR timer = IsWindow(host) ? SetTimer(host, kOpenWatchdogTimer, kOpenWatchdogMs, nullptr) : 0;
+    if (!timer) {
+        g_ulOpenArmedTick.store(0);
+        OpenCancelCleanup(hwnd);
+        return giveUp(L"open watchdog not available");
+    }
+    OpenDiag(openId, hwnd, L"ArmOpen", L"OK watchdog ARMED id=0x%p timeout=%u ms",
+             reinterpret_cast<void*>(timer), kOpenWatchdogMs);
+    return true;
+}
+
+static bool PlayOpen(HWND hwnd) {
+    const ULONGLONG openId = ActiveOpenDiagId(hwnd);
+    OpenDiag(openId, hwnd, L"PlayOpen", L"START armed=%d id=%llu",
+             g_hwndOpenArmed.load() == hwnd,
+             static_cast<unsigned long long>(openId));
+    
+    HWND expected = hwnd;
+    if (!g_hwndOpenArmed.compare_exchange_strong(expected, HWND(nullptr))) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL CAS arm: armed=%p", expected);
+        OpenLogWhy(L"canceled: open arm no longer valid");
+        return false;
+    }
+    OpenDiag(openId, hwnd, L"PlayOpen", L"arm consumed after ShowWindow");
+    
+    auto undo = [hwnd, openId]() {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"rollback requested");
+        OpenCancelCleanup(hwnd);
+        ReleaseAnimationSlot(hwnd);
+    };
+    
+    if (g_stopping.load()) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL mod stopping"); 
+        undo(); 
+        return false;
+    }
+    if (!IsWindow(hwnd)) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL window destroyed after ShowWindow"); 
+        undo(); 
+        return false;
+    }
+    if (!IsWindowVisible(hwnd)) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL window not visible after ShowWindow"); 
+        undo(); 
+        return false;
+    }
+    if (IsIconic(hwnd)) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL window minimized after ShowWindow"); 
+        undo(); 
+        return false;
+    }
+    
+    HWND host = g_hwndAnim.load();
+    if (!host || !IsWindow(host)) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL overlay not available after ShowWindow");
+        undo(); 
+        return false;
+    }
+    OpenDiag(openId, hwnd, L"PlayOpen", L"overlay available host=%p", host);
+    
+    ShowOverlayWindow(host);
+    OpenDiag(openId, hwnd, L"PlayOpen", L"overlay mask reasserted");
+    
+    const bool transitionsOK = DisableOpenTransitions(hwnd);
+    OpenDiag(openId, hwnd, L"PlayOpen", transitionsOK ?
+             L"OK DisableOpenTransitions" : L"FAIL DisableOpenTransitions");
+    if (!transitionsOK) {
+        undo();
+        OpenLogWhy(L"canceled: unable to disable DWM transitions");
+        return false;
+    }
+    
+    RECT rc{};
+    {
+        ScopedDpiAware dpi;
+        if (!GetFrameBoundsPhysical(hwnd, &rc) || !IsRectUsable(rc)) {
+            OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL final bounds not usable");
+            undo();
+            OpenLogWhy(L"canceled: bound not usable");
+            return false;
+        }
+    }
+    OpenDiag(openId, hwnd, L"PlayOpen", L"final bounds=[%ld,%ld,%ld,%ld]",
+             rc.left, rc.top, rc.right, rc.bottom);
+    
+    if (!StartQueuedAnimation(hwnd, AnimationType::Open, rc, rc, CaptureBits{}, false, 0, true, openId)) {
+        OpenDiag(openId, hwnd, L"PlayOpen", L"FAIL StartQueuedAnimation");
+        undo();
+        OpenLogWhy(L"canceled: animation queue refused");
+        return false;
+    }
+    OpenDiag(openId, hwnd, L"PlayOpen", L"OK preparation queued");
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// OPEN ANIMATION: CREATEWINDOW HOOKS (for windows created with WS_VISIBLE)
+// ---------------------------------------------------------------------------
+
+static bool CreateStyleIsOpenCandidate(DWORD dwStyle, DWORD dwExStyle, HWND hWndParent) {
+    if (!(dwStyle & WS_VISIBLE) || (dwStyle & WS_CHILD)) return false;
+    if (dwExStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return false;
+    if (!(dwStyle & WS_CAPTION) && !(dwStyle & WS_POPUP)) return false;
+    UNREFERENCED_PARAMETER(hWndParent);
+    return true;
+}
+
+static void LogCreateCandidate(LPCWSTR cls, DWORD dwStyle, DWORD dwExStyle, HWND hWndParent) {
+    (void)hWndParent;
+    if (!g_openLog || !g_animateOpen) return;
+    if (!(dwStyle & WS_VISIBLE) || (dwStyle & WS_CHILD)) return;
+    OpenLogWhy(L"create: class='%s' style=0x%08X exstyle=0x%08X (CAPTION=%d SYSMENU=%d MINBOX=%d)",
+        cls ? cls : L"?", dwStyle, dwExStyle,
+        (dwStyle & WS_CAPTION) != 0, (dwStyle & WS_SYSMENU) != 0, (dwStyle & WS_MINIMIZEBOX) != 0);
+}
+
+static void FinishDeferredCreate(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    ULONGLONG openId = 0;
+    const bool armed = ArmOpen(hwnd, &openId);
+    const BOOL shown = ShowWindow_orig ? ShowWindow_orig(hwnd, SW_SHOW) : ::ShowWindow(hwnd, SW_SHOW);
+    OpenDiag(openId, hwnd, L"ShowWindow original",
+             L"completed cmd=SW_SHOW result=%d visible=%d iconic=%d armed=%d",
+             shown, IsWindowVisible(hwnd), IsIconic(hwnd), armed);
+    if (armed) {
+        const bool played = PlayOpen(hwnd);
+        OpenDiag(openId, hwnd, L"FinishDeferredCreate", played ?
+                 L"PlayOpen OK" : L"PlayOpen FAIL");
+    }
+}
+
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                 DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    LogCreateCandidate(lpClassName, dwStyle, dwExStyle, hWndParent);
+    bool tryDefer = !g_fDisabled.load() && !g_fAnimating.load() && g_animateOpen && 
+                    !g_stopping.load() && !IsSnippingTool() &&
+                    CreateStyleIsOpenCandidate(dwStyle, dwExStyle, hWndParent);
+    HWND h = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName,
+                                  tryDefer ? (dwStyle & ~DWORD(WS_VISIBLE)) : dwStyle,
+                                  X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (tryDefer && h) FinishDeferredCreate(h);
+    return h;
+}
+
+HWND WINAPI CreateWindowExA_hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
+                                 DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    if ((dwStyle & WS_VISIBLE) && !(dwStyle & WS_CHILD)) {
+        wchar_t wcls[128] = L"?";
+        if (lpClassName && !IS_INTRESOURCE(lpClassName))
+            MultiByteToWideChar(CP_ACP, 0, lpClassName, -1, wcls, _countof(wcls));
+        LogCreateCandidate(wcls, dwStyle, dwExStyle, hWndParent);
+    }
+    bool tryDefer = !g_fDisabled.load() && !g_fAnimating.load() && g_animateOpen &&
+                    !g_stopping.load() && !IsSnippingTool() &&
+                    CreateStyleIsOpenCandidate(dwStyle, dwExStyle, hWndParent);
+    HWND h = CreateWindowExA_orig(dwExStyle, lpClassName, lpWindowName,
+                                  tryDefer ? (dwStyle & ~DWORD(WS_VISIBLE)) : dwStyle,
+                                  X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (tryDefer && h) FinishDeferredCreate(h);
+    return h;
+}
+*/
