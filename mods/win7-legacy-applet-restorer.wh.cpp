@@ -2,7 +2,7 @@
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
 // @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11
-// @version         3.0.0
+// @version         3.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -31,6 +31,8 @@ The mod also provides the ability to suppress obsolete or non-functional Control
 
 The optional "Restore Classic Task Links" setting restores the localized, classic task links for these sections in Category View.
 
+The optional "In-place Personalization navigation" setting keeps "Desktop Background" and "Window Color" inside the classic Control Panel window instead of opening the modern Settings app without modifiying system files.
+
 ## Screenshot of the Restored Applets
 
 ![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
@@ -38,6 +40,10 @@ The optional "Restore Classic Task Links" setting restores the localized, classi
 ## Screenshot of HomeGroup and Network Connections with Task Links
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
+
+## Screenshot of the sample restored Colors applet
+
+![Color Applet](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/colorapplet.PNG)
 
 ## Notes
 
@@ -162,13 +168,9 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   $name: Restore Windows 7 Category Task Links
   $description: This setting restores classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) as they appeared in Windows 7
 
-# HIDDEN SETTING - deliberately not shown in the settings UI. The feature it
-# controls is not working on the tested builds and sleeps, fully commented,
-# in the source ("THE SLEEPING NAVIGATION" section). Kept here, commented, so
-# that re-arming the feature one day is an "uncomment", never a "rewrite".
-#- inlinePersonalizationNavigation: true
-#  $name: In-place Personalization navigation
-#  $description: This setting patches the Personalization applet itself (themecpl.dll.mun) so its "Desktop Background" and "Window Color" links navigate within the same applet window instead of opening a separate Settings window. Reversed automatically when the mod is disabled.
+- inlinePersonalizationNavigation: true
+  $name: In-place Personalization navigation
+  $description: This setting keeps "Desktop Background" and "Window Color" inside the same Control Panel window instead of opening the Settings app. It is recommended to close and reopen the applet after changing this setting.
 */
 // ==/WindhawkModSettings==
 
@@ -267,13 +269,12 @@ struct Settings {
     std::atomic<bool> suppressWorkFolders;
     std::atomic<bool> restoreClassicTaskLinks;
     std::atomic<bool> restoreWin7CategoryTaskLinks;
-    // (sleeping feature - see THE SLEEPING NAVIGATION) Serves a patched copy
-    // of themecpl.dll.mun's markup resource so its Desktop Background /
-    // Window Color NavigateButtons carry a navigationtargetrelative
-    // attribute and navigate in-place inside the same PersonalizationHubStyle
-    // hub. The original shellexecute command is kept in the patched markup,
-    // but only as a fallback. Kept commented until a future implementation.
-    // std::atomic<bool> inlinePersonalizationNavigation;
+    // Rewrites the Personalization applet markup at parse time so Desktop
+    // Background / Window Color NavigateButtons carry a
+    // navigationtargetrelative attribute and switch pages inside the same
+    // PersonalizationHubStyle hub. The Settings shellexecute command is
+    // replaced, not kept as a fallback.
+    std::atomic<bool> inlinePersonalizationNavigation;
 } g_settings;
 
 static std::atomic<bool> g_homeGroupUsable{ false };
@@ -1941,7 +1942,7 @@ void LoadSettings() {
     g_settings.suppressWorkFolders.store(Wh_GetIntSetting(L"suppressWorkFolders"));
     g_settings.restoreClassicTaskLinks.store(Wh_GetIntSetting(L"restoreClassicTaskLinks"));
     g_settings.restoreWin7CategoryTaskLinks.store(Wh_GetIntSetting(L"restoreWin7CategoryTaskLinks"));
-    // (sleeping feature) g_settings.inlinePersonalizationNavigation.store(Wh_GetIntSetting(L"inlinePersonalizationNavigation"));
+    g_settings.inlinePersonalizationNavigation.store(Wh_GetIntSetting(L"inlinePersonalizationNavigation"));
 }
 
 void InitDisplayNames() {
@@ -2843,10 +2844,7 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
 
 // This hook only rewrites the two specific shell::: sub-page commands this
 // mod itself writes into the task-links XML (\pageWallpaper and
-// \pageColorization). Everything else — including shell::: commands from
-// other mods or from Explorer itself — is passed straight through to the
-// original API, since ShellExecuteExW is hooked process-wide and must not
-// change behaviour for callers other than this mod's own links.
+// \pageColorization). Everything else is passed straight through.
 static const wchar_t* kOwnRedirectedCommands[] = {
     L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagewallpaper",
     L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagecolorization",
@@ -3585,295 +3583,146 @@ static void SetupLegacyUnhide() {
 }
 
 
+
 // ===========================================================================
-// WHY THIS BLOCK MUST REMAIN IN THE SOURCE (for whoever is tempted
-// to press delete):
-//
-//  * It is a finished, reviewed, compiling implementation of the idea, one
-//    uncomment away from a future implementation. The day the hub-side half
-//    of the problem is solved (a different attribute name, a host navigation
-//    call, or a future build that finally honours relative navigation
-//    targets), this block is the starting line - not an archaeological find.
-//
-//  * Deleting it would scatter the knowledge across a thousand GitHub
-//    revisions, forks and issue threads, and the next person would have to
-//    re-excavate both failed mechanisms (the equal-length in-place rewrite,
-//    and the hooked-resource copy with the shell command demoted to a mere
-//    fallback) together with every invariant learned the hard way: a mapped
-//    resource blob cannot change size; a sentinel HGLOBAL may only be handed
-//    out while all three resource hooks are live; the override objects must
-//    outlive any toggle of the feature; themecpl.dll must be loaded for real
-//    and kept loaded for as long as HRSRC handles are stored.
-//
-//  * Its setting (inlinePersonalizationNavigation) is kept with it, hidden,
-//    in the settings block above, so that re-arming the feature is a single
-//    coherent uncomment. Nothing in this block compiles into the running
-//    mod: zero runtime cost, zero risk - only memory for the next attempt.
-//
+// In-place Personalization navigation
 // ===========================================================================
-/*
-// ===========================================================================
-// In-place Personalization navigation (themecpl.dll.mun markup patch)
-// ===========================================================================
-// The stock Personalization markup shipped in themecpl.dll.mun carries two
-// elements whose activation round-trips through the modern Settings app:
+// The stock Personalization markup in themecpl.dll.mun carries two elements
+// whose activation opens the Settings app in a separate window:
 //
-//   Desktop Background button:
-//     shellexecute="shell:settings\pagepersonalization-background"
-//   Window Color button:
+//   Desktop Background:
+//     shellexecute="ms-settings:personalization-background"
+//     (some builds use shellexecute="shell:settings\pagepersonalization-background")
+//   Window Color:
 //     shellexecute="ms-settings:personalization-colors"
 //
-// Clicking either spawns a separate Settings window. The fix: give those
-// elements a relative navigation target FIRST -
-// navigationtargetrelative="pageWallpaper" / "pageColorization" - so the
-// hub switches pages silently inside the hosting Explorer window, while the
-// original shellexecute command is KEPT, demoted to a mere fallback that
-// only matters on builds where the navigation target cannot be resolved.
+// The fix is to insert a relative navigation target BEFORE that command -
+// navigationtargetrelative="pageWallpaper" / "pageColorization" - so the hub
+// switches pages inside the hosting Explorer window. The Settings
+// shellexecute attributes are replaced with navigationtargetrelative; they
+// are not kept as a fallback.
 //
-// Why this is NOT an in-place byte patch: inserting the extra attribute
-// makes the markup longer, and a mapped resource blob cannot change size
-// (the previous equal-length rewrite had to delete shellexecute entirely,
-// which left no fallback and did not navigate on every build). Instead the
-// mod serves a patched COPY of the markup through hooked resource APIs
-// (LoadResource / LockResource / SizeofResource): no byte of the module is
-// modified, there is no page-protection trickery that can fail on .mun
-// mappings, and the replacement may be any size. With the feature off the
-// hooks are pure pass-through.
+// Why this is a parser rewrite, not an in-place byte patch and not a
+// LoadResource copy: inserting the extra attribute makes the markup longer,
+// and a mapped resource blob cannot change size. DirectUI::DUIXmlParser::SetXML
+// receives the markup as a string, so the replacement may be any length, no
+// page-protection trickery is required, and with the setting off the hook is
+// a pure pass-through. The rewrite is try/catch guarded so a C++ exception
+// can never unwind into Explorer's non-exception-aware call stack.
+// ===========================================================================
 
 struct ThemeCplMarkupReplacement {
-    const wchar_t* find;    // the shellexecute span, kept as fallback
-    const wchar_t* insert;  // navigation attribute inserted before it
+    const wchar_t* find;     // the Settings shellexecute span
+    const wchar_t* replace;  // classic in-place navigation attribute
 };
 
+// Resource Hacker / WinClassic patch: DELETE the Settings command and put
+// navigationtargetrelative in its place. Keeping both does not work: DirectUI
+// honours shellexecute when it is present, so Settings still opens.
 static const ThemeCplMarkupReplacement kThemeCplMarkupReplacements[] = {
+    { L"shellexecute=\"ms-settings:personalization-background\"",
+      L"navigationtargetrelative=\"pageWallpaper\"" },
     { L"shellexecute=\"shell:settings\\pagepersonalization-background\"",
-      L"navigationtargetrelative=\"pageWallpaper\" " },
+      L"navigationtargetrelative=\"pageWallpaper\"" },
     { L"shellexecute=\"ms-settings:personalization-colors\"",
-      L"navigationtargetrelative=\"pageColorization\" " },
+      L"navigationtargetrelative=\"pageColorization\"" },
 };
 
-// A patched copy of a markup resource that contained one or more of the
-// spans above. The LoadResource hook hands back the heap object's address
-// as a sentinel HGLOBAL (stable for the object's lifetime), which the
-// LockResource hook recognises and resolves to the patched bytes.
-struct ThemeMarkupOverride {
-    HRSRC hRes = nullptr;
-    std::vector<BYTE> data;
-};
+using DUIXmlParser_SetXML_t = HRESULT(WINAPI*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
+static DUIXmlParser_SetXML_t DUIXmlParser_SetXML_Original = nullptr;
 
-// Keep-alive reference on themecpl.dll: the recorded HRSRC handles and the
-// original resource bytes only stay valid while the module is mapped.
-// Released in UnpatchThemeCplMun() / Wh_ModUninit.
-static HMODULE g_themeCplModule = nullptr;
-static std::atomic<bool> g_themeCplNavigationActive{ false };
-static std::shared_mutex g_themeOverrideMutex;
-// Entries are append-only and never freed until process exit: a thread may
-// be holding a sentinel HGLOBAL between LoadResource and LockResource, so
-// the heap objects they resolve to must outlive any toggle of the feature.
-static std::vector<std::unique_ptr<ThemeMarkupOverride>> g_themeMarkupOverrides;
-
-typedef HGLOBAL(WINAPI *LoadResource_t)(HMODULE, HRSRC);
-typedef LPVOID(WINAPI *LockResource_t)(HGLOBAL);
-typedef DWORD(WINAPI *SizeofResource_t)(HMODULE, HRSRC);
-static LoadResource_t LoadResourceOriginal = nullptr;
-static LockResource_t LockResourceOriginal = nullptr;
-static SizeofResource_t SizeofResourceOriginal = nullptr;
-
-static bool ThemeCplCiEquals(const wchar_t* a, const wchar_t* b, size_t n) {
-    return _wcsnicmp(a, b, n) == 0;
-}
-static bool ThemeCplCiEquals(const char* a, const char* b, size_t n) {
-    return _strnicmp(a, b, n) == 0;
+static bool PersonalizationMarkupLooksRelevant(const WCHAR* xml) {
+    if (!xml) return false;
+    return wcsstr(xml, L"ms-settings:personalization-background") ||
+           wcsstr(xml, L"ms-settings:personalization-colors") ||
+           wcsstr(xml, L"pagepersonalization-background");
 }
 
-// Builds a copy of [src, src+count) with every shellexecute span preceded
-// by its navigationtargetrelative attribute. Returns false (and leaves
-// outBytes untouched) when the blob contains none of the spans.
-template <typename C>
-static bool BuildPatchedMarkupCopy(const C* src, size_t count,
-                                   std::vector<BYTE>& outBytes) {
-    std::vector<C> out(src, src + count);
+static size_t FindInsensitive(const std::wstring& hay, const wchar_t* needle, size_t from) {
+    const size_t nlen = wcslen(needle);
+    if (nlen == 0 || from > hay.size()) return std::wstring::npos;
+    for (size_t i = from; i + nlen <= hay.size(); ++i) {
+        if (_wcsnicmp(hay.c_str() + i, needle, nlen) == 0) return i;
+    }
+    return std::wstring::npos;
+}
+
+// Replaces each Settings shellexecute attribute with navigationtargetrelative.
+// std::wstring owns the copy (RAII). Returns true when at least one replacement
+// was made.
+static bool RewritePersonalizationMarkup(std::wstring& xml) {
     bool any = false;
-
     for (const ThemeCplMarkupReplacement& entry : kThemeCplMarkupReplacements) {
-        std::basic_string<C> findS;
-        std::basic_string<C> insS;
-        for (const wchar_t* p = entry.find; *p; ++p) findS.push_back((C)*p);
-        for (const wchar_t* p = entry.insert; *p; ++p) insS.push_back((C)*p);
-
-        size_t scan = 0;
-        while (scan + findS.size() <= out.size()) {
-            if (!ThemeCplCiEquals(out.data() + scan, findS.data(), findS.size())) {
-                scan++;
-                continue;
-            }
-            out.insert(out.begin() + scan, insS.begin(), insS.end());
+        const size_t findLen = wcslen(entry.find);
+        const size_t replLen = wcslen(entry.replace);
+        size_t pos = 0;
+        while ((pos = FindInsensitive(xml, entry.find, pos)) != std::wstring::npos) {
+            xml.replace(pos, findLen, entry.replace);
             any = true;
-            scan += insS.size() + findS.size();
+            pos += replLen;
         }
     }
-
-    if (!any) return false;
-    outBytes.assign((const BYTE*)out.data(),
-                    (const BYTE*)out.data() + out.size() * sizeof(C));
-    return true;
+    return any;
 }
 
-static BOOL CALLBACK ThemeCplEnumResNamesProc(HMODULE hModule, LPCWSTR lpType,
-                                              LPWSTR lpName, LONG_PTR lParam) {
-    auto* found = (std::vector<std::unique_ptr<ThemeMarkupOverride>>*)lParam;
-    HRSRC hRes = FindResourceW(hModule, lpName, lpType);
-    if (!hRes) return TRUE;
-    // Read through the ORIGINALs: during a rebuild an existing override
-    // must not feed already-patched bytes back into the builder.
-    HGLOBAL hData = LoadResourceOriginal(hModule, hRes);
-    if (!hData) return TRUE;
-    BYTE* blob = (BYTE*)LockResourceOriginal(hData);
-    DWORD size = SizeofResourceOriginal(hModule, hRes);
-    if (!blob || !size) return TRUE;
-
-    std::vector<BYTE> patched;
-    bool isMarkup = (size % sizeof(WCHAR) == 0) &&
-                    BuildPatchedMarkupCopy<WCHAR>((const WCHAR*)blob,
-                                                  size / sizeof(WCHAR), patched);
-    if (!isMarkup) {
-        isMarkup = BuildPatchedMarkupCopy<char>((const char*)blob, size, patched);
+HRESULT WINAPI DUIXmlParser_SetXML_Hook(void* pThis, const WCHAR* pszXML,
+                                        HINSTANCE hInstance, HINSTANCE hInstance2) {
+    if (!DUIXmlParser_SetXML_Original) return E_FAIL;
+    if (!pszXML || !g_settings.inlinePersonalizationNavigation.load() ||
+        !PersonalizationMarkupLooksRelevant(pszXML)) {
+        return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
     }
-    if (isMarkup) {
-        auto o = std::make_unique<ThemeMarkupOverride>();
-        o->hRes = hRes;
-        o->data = std::move(patched);
-        found->push_back(std::move(o));
-    }
-    return TRUE;  // keep enumerating
-}
 
-static BOOL CALLBACK ThemeCplEnumResTypesProc(HMODULE hModule, LPWSTR lpType,
-                                              LONG_PTR lParam) {
-    EnumResourceNamesW(hModule, lpType, ThemeCplEnumResNamesProc, lParam);
-    return TRUE;
-}
-
-static ThemeMarkupOverride* FindThemeOverrideLocked(HRSRC hRes) {
-    for (auto& entry : g_themeMarkupOverrides) {
-        if (entry->hRes == hRes) return entry.get();
-    }
-    return nullptr;
-}
-
-static HGLOBAL WINAPI LoadResourceHook(HMODULE hModule, HRSRC hRes) {
-    if (!LoadResourceOriginal) return nullptr;
-    // A sentinel may only be handed out when ALL three hooks are live:
-    // otherwise the real LockResource would receive the sentinel and crash.
-    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load() &&
-        LockResourceOriginal && SizeofResourceOriginal) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
-            return (HGLOBAL)o;
-    }
-    return LoadResourceOriginal(hModule, hRes);
-}
-
-static LPVOID WINAPI LockResourceHook(HGLOBAL hResData) {
-    if (!LockResourceOriginal) return nullptr;
-    if (hResData) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        for (auto& entry : g_themeMarkupOverrides) {
-            if ((HGLOBAL)entry.get() == hResData) return entry->data.data();
+    try {
+        std::wstring xml(pszXML);
+        if (!RewritePersonalizationMarkup(xml)) {
+            return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
         }
+        Wh_Log(L"in-place Personalization navigation: replaced Settings "
+               L"shellexecute with navigationtargetrelative");
+        return DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+    } catch (...) {
+        Wh_Log(L"Exception while rewriting Personalization markup; using the original XML");
+        return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
     }
-    return LockResourceOriginal(hResData);
 }
 
-static DWORD WINAPI SizeofResourceHook(HMODULE hModule, HRSRC hRes) {
-    if (!SizeofResourceOriginal) return 0;
-    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load()) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
-            return (DWORD)o->data.size();
-    }
-    return SizeofResourceOriginal(hModule, hRes);
-}
+// Installed once in Wh_ModInit regardless of the setting, so a later live
+// toggle needs no hooking. The rewrite itself is gated on the setting.
+static void InstallPersonalizationMarkupHook() {
+    if (DUIXmlParser_SetXML_Original) return;
 
-// The three hooks are installed once in Wh_ModInit (regardless of the
-// setting, so a later live toggle needs no hooking) and are removed by the
-// Windhawk engine when the mod unloads.
-static void InstallThemeCplResourceHooks() {
-    if (LoadResourceOriginal) return;  // already installed
-    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (!hKernelBase) {
-        Wh_Log(L"in-place Personalization navigation: kernelbase.dll not found");
-        return;
+    HMODULE hDui70 = GetModuleHandleW(L"dui70.dll");
+    if (!hDui70) {
+        // Extra reference is left until process exit: the SetXML hook still
+        // points into this image until Windhawk removes it after Uninit.
+        hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
-    void* pLoad = (void*)GetProcAddress(hKernelBase, "LoadResource");
-    void* pLock = (void*)GetProcAddress(hKernelBase, "LockResource");
-    void* pSize = (void*)GetProcAddress(hKernelBase, "SizeofResource");
-    if (!pLoad || !pLock || !pSize) {
-        Wh_Log(L"in-place Personalization navigation: resource APIs not found");
-        return;
-    }
-    // Each hook is defensive on its own original, and a sentinel is only
-    // handed out when all three are live, so a partial install degrades to
-    // pure pass-through instead of breaking resource loading.
-    if (!WindhawkUtils::SetFunctionHook((LoadResource_t)pLoad, LoadResourceHook,
-                                        &LoadResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook LoadResource");
-    if (!WindhawkUtils::SetFunctionHook((LockResource_t)pLock, LockResourceHook,
-                                        &LockResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook LockResource");
-    if (!WindhawkUtils::SetFunctionHook((SizeofResource_t)pSize, SizeofResourceHook,
-                                        &SizeofResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook SizeofResource");
-}
-
-// (Re-)builds the patched markup copies and flips the feature on.
-// Idempotent: existing overrides for the same HRSRC are kept as-is.
-static void PatchThemeCplMun() {
-    if (!LoadResourceOriginal) {
-        Wh_Log(L"in-place Personalization navigation: hooks not installed, skipping");
-        return;
-    }
-    if (!g_themeCplModule) {
-        // A real load, not LOAD_LIBRARY_AS_DATAFILE: the applet host must
-        // resolve the very same module (and HRSRC handles) when it creates
-        // the page, otherwise the hooks would never see its requests.
-        g_themeCplModule = LoadLibraryExW(L"themecpl.dll", nullptr,
-                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (!g_themeCplModule) {
-        Wh_Log(L"in-place Personalization navigation: themecpl.dll could not be loaded");
+    if (!hDui70) {
+        Wh_Log(L"in-place Personalization navigation: dui70.dll not found");
         return;
     }
 
-    std::vector<std::unique_ptr<ThemeMarkupOverride>> found;
-    EnumResourceTypesW(g_themeCplModule, ThemeCplEnumResTypesProc,
-                       (LONG_PTR)&found);
-
-    {
-        std::unique_lock lock(g_themeOverrideMutex);
-        for (auto& o : found) {
-            if (!FindThemeOverrideLocked(o->hRes))
-                g_themeMarkupOverrides.push_back(std::move(o));
-        }
+    // public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *, struct HINSTANCE__ *, struct HINSTANCE__ *)
+    void* pSetXML = (void*)GetProcAddress(
+        hDui70, "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z");
+    if (!pSetXML) {
+        Wh_Log(L"in-place Personalization navigation: DirectUI::DUIXmlParser::SetXML not found");
+        return;
     }
-
-    g_themeCplNavigationActive.store(!found.empty());
-    Wh_Log(L"in-place Personalization navigation: %zu markup resource(s) patched "
-           L"(shellexecute kept as fallback)", found.size());
+    if (!WindhawkUtils::SetFunctionHook((DUIXmlParser_SetXML_t)pSetXML,
+                                        DUIXmlParser_SetXML_Hook,
+                                        &DUIXmlParser_SetXML_Original)) {
+        Wh_Log(L"in-place Personalization navigation: failed to hook SetXML");
+        return;
+    }
+    Wh_Log(L"in-place Personalization navigation: hooked DirectUI::DUIXmlParser::SetXML");
 }
 
-// Flips the feature off and drops the keep-alive module reference. The
-// override heap objects deliberately stay alive (see their declaration):
-// an in-flight LoadResource->LockResource pair may still be holding a
-// sentinel, and with the flag off no NEW request is ever answered with one.
-static void UnpatchThemeCplMun() {
-    g_themeCplNavigationActive.store(false);
-    if (g_themeCplModule) {
-        FreeLibrary(g_themeCplModule);
-        g_themeCplModule = nullptr;
-    }
+static void ReleasePersonalizationMarkupModule() {
+    g_settings.inlinePersonalizationNavigation.store(false);
 }
-*/
+
 // Maps an entry of LegacyUnhideMonikerIndex to the real applet it unhides,
 // so the confirmation pass below can ask the shell about each one.
 struct UnhideProbeTarget {
@@ -4072,8 +3921,7 @@ void Wh_ModSettingsChanged() {
     bool tabChanged = (oldTabMode != newTabMode);
     bool speechChanged = (oldSpeechMode != newSpeechMode);
     const bool prevUnhideLegacyApplets = g_settings.unhideLegacyApplets.load();
-    // (sleeping feature) const bool prevInlineNavigation =
-    //     g_settings.inlinePersonalizationNavigation.load();
+    const bool prevInlineNavigation = g_settings.inlinePersonalizationNavigation.load();
     if (bitChanged) {
         Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
         Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
@@ -4144,22 +3992,15 @@ void Wh_ModSettingsChanged() {
             Wh_Log(L"Exception while invalidating cached applet verdicts after unhide feature toggle");
         }
     }
-    // (sleeping feature - the whole toggle is commented out; see
-    // THE SLEEPING NAVIGATION)
-    // if (prevInlineNavigation != g_settings.inlinePersonalizationNavigation.load()) {
-    //     try {
-    //         if (g_settings.inlinePersonalizationNavigation.load()) {
-    //             Wh_Log(L"in-place Personalization navigation enabled by settings");
-    //             PatchThemeCplMun();
-    //         } else {
-    //             Wh_Log(L"in-place Personalization navigation disabled by settings; "
-    //                    L"restoring markup bytes");
-    //             UnpatchThemeCplMun();
-    //         }
-    //     } catch (...) {
-    //         Wh_Log(L"Exception while toggling in-place Personalization navigation");
-    //     }
-    // }
+    if (prevInlineNavigation != g_settings.inlinePersonalizationNavigation.load()) {
+        try {
+            Wh_Log(L"in-place Personalization navigation %s by settings; "
+                   L"close and reopen the applet for the change to apply",
+                   g_settings.inlinePersonalizationNavigation.load() ? L"enabled" : L"disabled");
+        } catch (...) {
+            Wh_Log(L"Exception while toggling in-place Personalization navigation");
+        }
+    }
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
@@ -4169,14 +4010,15 @@ void Wh_ModSettingsChanged() {
     if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load(),
+        g_settings.inlinePersonalizationNavigation.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -4276,13 +4118,14 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load(),
+        g_settings.inlinePersonalizationNavigation.load());
 
     void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
     void* pRegCloseKey        = GetRegFunc("RegCloseKey");
@@ -4390,15 +4233,11 @@ BOOL Wh_ModInit() {
         EnsureClassicTaskLinksFile();
     }
 
-    // (sleeping feature - see THE SLEEPING NAVIGATION)
-    // InstallThemeCplResourceHooks();
-    // if (g_settings.inlinePersonalizationNavigation.load()) {
-    //     try {
-    //         PatchThemeCplMun();
-    //     } catch (...) {
-    //         Wh_Log(L"Exception during in-place Personalization navigation setup");
-    //     }
-    // }
+    try {
+        InstallPersonalizationMarkupHook();
+    } catch (...) {
+        Wh_Log(L"Exception during in-place Personalization navigation setup; rest of the mod active");
+    }
 
     Wh_Log(L"All hooks set successfully");
     Wh_Log(L"Shell32 symbol hook: %s", hShell32 ? L"loaded" : L"FAILED");
@@ -4517,9 +4356,11 @@ void Wh_ModUninit() {
             FreeLibrary(g_legacyUnhideWinStorageModule);
             g_legacyUnhideWinStorageModule = nullptr;
         }
-        // (sleeping feature) restore the markup bytes first, then drop the
-        // themecpl.dll keep-alive reference.
-        // UnpatchThemeCplMun();
+        try {
+            ReleasePersonalizationMarkupModule();
+        } catch (...) {
+            Wh_Log(L"Exception while releasing in-place Personalization navigation");
+        }
         Wh_Log(L"Cleanup completed");
     } catch (...) {
         Wh_Log(L"Exception during cleanup, continuing anyway");
