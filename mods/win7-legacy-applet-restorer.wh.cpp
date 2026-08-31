@@ -25,6 +25,7 @@ This mod restores a selection of classic Control Panel applets and task links in
 * Tablet PC Settings
 * Text to Speech
 * iSCSI Initiator
+* Game Controllers (joy.cpl)
 
 This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
 
@@ -112,6 +113,10 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
 - enableIscsiInitiator: true
   $name: iSCSI Initiator
   $description: This setting adds the "iSCSI Initiator" icon to Control Panel (under System and Security). Unlike Printers and Faxes or Network Connections, Windows 11 no longer keeps this CLSID registered at all on many builds, so this is a self-built virtual entry (name/icon from iscsicpl.exe) that launches iscsicpl.exe directly. Only added if iscsicpl.exe is actually present (e.g. not on ARM builds).
+
+- enableGameControllers: true
+  $name: Game Controllers
+  $description: This setting adds the "Game Controllers" icon to Control Panel (under Hardware and Sound). Windows still ships the classic joy.cpl applet (joystick/gamepad test and calibration) but no longer lists it in Control Panel, so this is a self-built virtual entry whose name and description come from joy.cpl, whose classic gamepad icon is embedded in the mod (joy.cpl no longer exposes a usable icon resource on Windows 10/11), and which launches joy.cpl. Only added if joy.cpl is actually present.
 
 - enableHomeGroup: false
   $name: HomeGroup
@@ -234,6 +239,7 @@ struct Settings {
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
     std::atomic<bool> enableIscsiInitiator;
+    std::atomic<bool> enableGameControllers;
     std::atomic<bool> enableHomeGroup;
     // Tri-state (AppletMode): the user can override the automatic detection in
     // both directions, because "does Control Panel already show this applet?"
@@ -361,6 +367,16 @@ static std::atomic<int> g_prevSpeechMode{ -1 };
 // CLSID isn't reliably registered at all (see kIscsiInitiatorGuid), so file
 // presence is the only signal available.
 static std::atomic<bool> g_iscsiInitiatorExeExists{ false };
+// True when joy.cpl (the classic Game Controllers applet) was found in
+// System32 at init. Same "file presence is the only signal" approach as the
+// iSCSI entry above: its legacy Control Panel CLSID ({259EF4B1-...}) is not
+// kept registered/activatable on current Windows 11 builds (launching
+// shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships and
+// opens normally, so the virtual entry launches joy.cpl directly.
+static std::atomic<bool> g_joyCplExists{ false };
+// Path to the decoded embedded gamepad .ico lives next to its decoder
+// (EnsureJoyControllerIconFile, defined before InitDisplayNames) as
+// g_joyIconFilePath; it is filled in Wh_ModInit before InitDisplayNames runs.
 // Index into kLegacyUnhideMonikers / g_monikerPatched (declared here so
 // VirtualTwinSuppressed can use it; kLegacyUnhideMonikers itself is
 // declared later, near the rest of the unhide feature, but a static_assert
@@ -517,10 +533,16 @@ bool EnsureClassicTaskLinksFile();
 void RunLazyVirtualAppletDetection();
 void ConfirmUnhiddenAppletsVisible();
 void RequestLazyVirtualAppletDetection();
+// Defined further below (near GetNamespaceClsids), but used inside
+// EnsureClassicTaskLinksFile()'s task-block assembly above its definition.
+static bool VirtualAppletPresent(const std::wstring& guid);
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
 std::wstring g_classicTaskLinksFilePath;
+// Embedded Game Controllers icon -> temp .ico file: the decoder function
+// EnsureJoyControllerIconFile() and g_joyIconFilePath are defined near the
+// task-links section (before InitDisplayNames). Warmed up in Wh_ModInit.
 
 // Forward declarations (defined further below; KeyTracker::Track needs them)
 std::wstring ToLower(const std::wstring& str);
@@ -701,6 +723,17 @@ static const std::wstring kIscsiInitiatorGuid      = L"{a304259d-52b8-4526-8b1a-
 // the command launches iscsicpl.exe directly, since there is no real,
 // registered CLSID to re-launch through "explorer shell:::{realGuid}".
 static const std::wstring kIscsiInitiatorVirtualGuid = L"{7d3f5a92-8c1b-4e6a-9f2d-3b8a6c7e1d54}";
+// Legacy, canonical Game Controllers CLSID. On current Windows 11 builds it
+// is no longer registered in HKCR\CLSID and shell:::{259EF4B1-...} does not
+// launch anything, so it is used only as an opportunistic registry lookup (in
+// case some build still has it) and never injected directly; the entry that
+// is actually shown is kGameControllersVirtualGuid below.
+static const std::wstring kGameControllersGuid  = L"{259ef4b1-e6c9-4176-b574-481532c9bce8}";
+// Own, made-up CLSID for the *virtual* Game Controllers entry (same technique
+// as the iSCSI virtual entry): name/icon/description come straight from
+// joy.cpl's own resources (localized by Windows for every UI language) and the
+// open command launches joy.cpl directly.
+static const std::wstring kGameControllersVirtualGuid = L"{b1e6c4a9-3d27-4f58-a9c6-2d71f4a8e063}";
 static const std::wstring kHomeGroupGuid           = L"{67ca7650-96e6-4fdd-bb43-a8e774f73a57}";
 static const std::wstring kDisplayGuid             = L"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}"; // Also used as RealDisplayGuid
 static const std::wstring kRealPersonalizationGuid = L"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}";
@@ -1422,12 +1455,296 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
 // (re)generating the file.
 static std::mutex g_taskLinksMutex;
 
+// ===========================================================================
+// Embedded Game Controllers icon
+// ===========================================================================
+// joy.cpl does not expose a usable DefaultIcon resource for a synthetic CLSID
+// on Windows 10/11 (the resource id is absent/wrong), so the classic gamepad
+// icon ships inside the mod as a base64-encoded, multi-size .ico (48/32/16).
+// It is decoded once to a temp file; the virtual Game Controllers entry's
+// DefaultIcon points at that file. Name and InfoTip still come from joy.cpl's
+// own (correct) string resources; only the icon is custom.
+static const char* kJoyControllerIconBase64[] = {
+    "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"
+    "/6X4L659CNMn/fGQAAAAAElFTkSuQmCC"
+};
+
+static std::wstring g_joyIconFilePath;
+
+// Minimal standard-alphabet base64 decoder. The embedded data is produced at
+// build time and never takes user input; any non-alphabet character is
+// skipped, so the newlines between the string chunks are harmless.
+static std::vector<unsigned char> Base64Decode(const std::string& input) {
+    auto valueOf = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::vector<unsigned char> out;
+    int acc = 0, bits = 0;
+    for (char c : input) {
+        if (c == '=') break;
+        const int v = valueOf(c);
+        if (v < 0) continue;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<unsigned char>((acc >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
+// Decodes the embedded icon to a stable temp .ico file (created once) and
+// returns its path, or an empty string on failure. Reuses the task-links
+// mutex; re-creates the file if a previous temp cleanup removed it.
+std::wstring EnsureJoyControllerIconFile() {
+    std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+    if (!g_joyIconFilePath.empty() &&
+        GetFileAttributesW(g_joyIconFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return g_joyIconFilePath;
+    }
+    g_joyIconFilePath.clear();
+
+    std::string b64;
+    for (const char* part : kJoyControllerIconBase64) b64 += part;
+    std::vector<unsigned char> bytes = Base64Decode(b64);
+    if (bytes.empty()) {
+        Wh_Log(L"Game Controllers icon: base64 decode produced no bytes");
+        return L"";
+    }
+
+    wchar_t tempPath[MAX_PATH] = {};
+    if (!GetTempPathW(MAX_PATH, tempPath)) return L"";
+    const std::wstring path = std::wstring(tempPath) + L"WindhawkGameControllers.ico";
+    const std::wstring tmp  = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+    {
+        std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
+        if (!f) return L"";
+        f.write(reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+    }
+    if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(tmp.c_str());
+        Wh_Log(L"Game Controllers icon: failed to write the temp .ico file");
+        return L"";
+    }
+    g_joyIconFilePath = path;
+    Wh_Log(L"Game Controllers icon written (bytes: %llu)", (unsigned long long)bytes.size());
+    return g_joyIconFilePath;
+}
+
 // Thread-safe accessor for readers (TryProvideValue and friends) that just
 // want the current path without regenerating anything.
 std::wstring GetClassicTaskLinksFilePath() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     return g_classicTaskLinksFilePath;
 }
+
+// UTF-16 -> UTF-8 conversion (the task-links XML is written as UTF-8). Used by
+// the hardcoded, recreated task-link labels below.
+static std::string WideToUtf8(const std::wstring& w) {
+    if (w.empty()) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return {};
+    std::string s((size_t)len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), s.data(), len, nullptr, nullptr);
+    return s;
+}
+
+// Hardcoded, localized labels for the recreated iSCSI Initiator / Game
+// Controllers classic task links. Unlike the other task links (whose label is
+// pulled from the real applet's resources), these two entries are fully
+// self-built virtual applets, so there is no Windows resource to take the
+// label from - it is recreated here in each UI language. English is the
+// fallback for any locale without a dedicated row.
+struct RecreatedLinkLabels {
+    const wchar_t* locale;
+    const wchar_t* iscsiConfigure;
+    const wchar_t* gameConfigure;
+};
+static const RecreatedLinkLabels kRecreatedLinkLabels[] = {
+    { L"en",     L"Configure iSCSI initiator",            L"Configure game controllers" },
+    { L"it",     L"Configura inizializzatore iSCSI",      L"Configura controller di gioco" },
+    { L"es",     L"Configurar iniciador iSCSI",           L"Configurar controladores de juego" },
+    { L"fr",     L"Configurer l'initiateur iSCSI",        L"Configurer les manettes de jeu" },
+    { L"de",     L"iSCSI-Initiator konfigurieren",        L"Gamecontroller konfigurieren" },
+    { L"pt-BR",  L"Configurar iniciador iSCSI",           L"Configurar controles de jogo" },
+    { L"pt-PT",  L"Configurar iniciador iSCSI",           L"Configurar comandos de jogo" },
+    { L"nl",     L"iSCSI-initiator configureren",         L"Gamecontrollers configureren" },
+    { L"pl",     L"Konfiguruj inicjator iSCSI",           L"Skonfiguruj kontrolery gier" },
+    { L"ru",     L"Настроить инициатор iSCSI",            L"Настроить игровые контроллеры" },
+    { L"uk",     L"Налаштувати ініціатор iSCSI",          L"Налаштувати ігрові контролери" },
+    { L"tr",     L"iSCSI başlatıcısını yapılandırın",     L"Oyun kumandalarını yapılandırın" },
+    { L"cs",     L"Konfigurovat iniciátor iSCSI",         L"Konfigurovat herní ovladače" },
+    { L"da",     L"Konfigurer iSCSI-initiator",           L"Konfigurer spilcontrollere" },
+    { L"fi",     L"Määritä iSCSI-aloittaja",              L"Määritä peliohjaimet" },
+    { L"el",     L"Ρύθμιση εκκινητή iSCSI",               L"Ρύθμιση χειριστηρίων παιχνιδιών" },
+    { L"hu",     L"iSCSI-kezdeményező konfigurálása",     L"Játékvezérlők konfigurálása" },
+    { L"nb",     L"Konfigurer iSCSI-initiator",           L"Konfigurer spillkontrollere" },
+    { L"ro",     L"Configurare inițiator iSCSI",          L"Configurare controlere de joc" },
+    { L"sv",     L"Konfigurera iSCSI-initierare",         L"Konfigurera spelkontroller" },
+    { L"ja",     L"iSCSI イニシエーターを構成する",        L"ゲーム コントローラーを構成する" },
+    { L"ko",     L"iSCSI 초기자 구성",                    L"게임 컨트롤러 구성" },
+    { L"zh-CN",  L"配置 iSCSI 发起程序",                   L"配置游戏控制器" },
+    { L"zh-TW",  L"設定 iSCSI 啟動器",                    L"設定遊戲控制器" },
+};
+
+// Returns the localized, hardcoded label for the iSCSI (iscsi == true) or Game
+// Controllers (iscsi == false) task link, falling back to English.
+std::string RecreatedLinkLabel(bool iscsi) {
+    wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+    if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                          localeName, LOCALE_NAME_MAX_LENGTH, 0)) {
+        wcscpy_s(localeName, L"en-US");
+    }
+    const RecreatedLinkLabels* chosen = &kRecreatedLinkLabels[0]; // English fallback
+    for (const auto& candidate : kRecreatedLinkLabels) {
+        const size_t prefixLength = wcslen(candidate.locale);
+        if (_wcsnicmp(localeName, candidate.locale, prefixLength) == 0 &&
+            (localeName[prefixLength] == L'\0' || localeName[prefixLength] == L'-')) {
+            chosen = &candidate;
+            break;
+        }
+    }
+    return WideToUtf8(iscsi ? chosen->iscsiConfigure : chosen->gameConfigure);
+}
+
 
 // Creates a self-contained task list used by Control Panel to display the
 // classic task links below the Personalization item.
@@ -1772,6 +2089,35 @@ bool EnsureClassicTaskLinksFile() {
                 "<sh:task idref=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"/></category>\n"
                 "  </application>\n";
         }
+        // iSCSI Initiator (self-built virtual entry): a single classic link
+        // that simply opens the same screen. The label is a hardcoded,
+        // localized recreation (RecreatedLinkLabel); English is the fallback.
+        if (VirtualAppletPresent(kIscsiInitiatorVirtualGuid)) {
+            const std::string iscsiLabel = RecreatedLinkLabel(true);
+            virtualTaskBlock +=
+                "  <!-- iSCSI Initiator (System and Security, Category 5) -->\n"
+                "  <application id=\"{7d3f5a92-8c1b-4e6a-9f2d-3b8a6c7e1d54}\">\n"
+                "    <sh:task id=\"{D4F4A040-0D35-4CB6-A21F-BC1661200040}\">"
+                "<sh:name>" + iscsiLabel + "</sh:name>"
+                "<sh:keywords>iscsi;initiator;storage;target</sh:keywords>"
+                "<sh:command>iscsicpl.exe</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A040-0D35-4CB6-A21F-BC1661200040}\"/></category>\n"
+                "  </application>\n";
+        }
+        // Game Controllers (self-built virtual entry): a single classic
+        // link that simply opens joy.cpl. Label is the hardcoded recreation.
+        if (VirtualAppletPresent(kGameControllersVirtualGuid)) {
+            const std::string gameLabel = RecreatedLinkLabel(false);
+            virtualTaskBlock +=
+                "  <!-- Game Controllers (Hardware and Sound, Category 2) -->\n"
+                "  <application id=\"{b1e6c4a9-3d27-4f58-a9c6-2d71f4a8e063}\">\n"
+                "    <sh:task id=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\">"
+                "<sh:name>" + gameLabel + "</sh:name>"
+                "<sh:keywords>game;controller;joystick;gamepad</sh:keywords>"
+                "<sh:command>control.exe joy.cpl</sh:command></sh:task>\n"
+                "    <category id=\"2\"><sh:task idref=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\"/></category>\n"
+                "  </application>\n";
+        }
     }
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
@@ -1950,6 +2296,7 @@ void LoadSettings() {
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
     g_settings.enableIscsiInitiator.store(Wh_GetIntSetting(L"enableIscsiInitiator"));
+    g_settings.enableGameControllers.store(Wh_GetIntSetting(L"enableGameControllers"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
@@ -2096,10 +2443,38 @@ void InitDisplayNames() {
                               &g_settings.enableIscsiInitiator,
                               L"@%SystemRoot%\\System32\\iscsicpl.dll,-5001",
                               L"%SystemRoot%\\System32\\iscsicpl.exe,0",
-                              L"",
+                              // InfoTip (string resource 5002): "Connect to remote
+                              // iSCSI targets and configure connection settings."
+                              // Resolved straight from iscsicpl.dll, so Windows
+                              // localizes it for every installed UI language.
+                              L"@%SystemRoot%\\System32\\iscsicpl.dll,-5002",
                               nullptr, kLegacyUnhideMonikerCount,
                               L"iscsicpl.exe"))
             Wh_Log(L"Could not read iSCSI Initiator's name/icon; virtual entry not created");
+    }
+    if (g_joyCplExists.load()) {
+        // Game Controllers: its legacy Control Panel CLSID ({259EF4B1-...}) is
+        // no longer registered/activatable on current Windows 11 builds
+        // (shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships
+        // and opens. Name (string 1076) and description/InfoTip (string 1099)
+        // are taken straight from joy.cpl, so Windows localizes them for every
+        // UI language - no hardcoded translation table for those. joy.cpl does
+        // NOT expose a usable DefaultIcon resource on Windows 10/11 (the
+        // resource id is absent/wrong), so the classic gamepad icon is embedded
+        // in the mod (base64 .ico) and used as the icon; g_joyIconFilePath is
+        // decoded in Wh_ModInit. The open command launches joy.cpl through
+        // control.exe (same direct-binary pattern as the iSCSI entry).
+        const std::wstring joyIcon = g_joyIconFilePath.empty()
+            ? std::wstring(L"%SystemRoot%\\System32\\joy.cpl,1")
+            : g_joyIconFilePath;
+        if (!AddVirtualApplet(kGameControllersVirtualGuid, kGameControllersGuid, kCategoryHardware,
+                              &g_settings.enableGameControllers,
+                              L"@%SystemRoot%\\System32\\joy.cpl,-1076",
+                              joyIcon,
+                              L"@%SystemRoot%\\System32\\joy.cpl,-1099",
+                              nullptr, kLegacyUnhideMonikerCount,
+                              L"control.exe joy.cpl"))
+            Wh_Log(L"Could not read Game Controllers' name/icon; virtual entry not created");
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -2521,7 +2896,8 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 // namespace item whose CLSID lookup falls through to the real registry and
 // fails - a nameless/iconless Control Panel entry. Check that the applet was
 // actually built before advertising it.
-static bool VirtualAppletPresent(const std::wstring& guidLower) {
+static bool VirtualAppletPresent(const std::wstring& guid) {
+    const std::wstring guidLower = ToLower(guid);
     for (const auto& a : g_virtualApplets)
         if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load() &&
             !(a.realPresent && VirtualTwinSuppressed(*a.realPresent, a.monikerIndex))) return true;
@@ -2547,6 +2923,8 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kSpeechVirtualGuid);
     if (VirtualAppletPresent(kIscsiInitiatorVirtualGuid))
         result.push_back(kIscsiInitiatorVirtualGuid);
+    if (VirtualAppletPresent(kGameControllersVirtualGuid))
+        result.push_back(kGameControllersVirtualGuid);
     return result;
 }
 
@@ -3684,6 +4062,16 @@ static const ThemeCplMarkupReplacement kThemeCplMarkupReplacements[] = {
 using DUIXmlParser_SetXML_t = HRESULT(WINAPI*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
 static DUIXmlParser_SetXML_t DUIXmlParser_SetXML_Original = nullptr;
 
+// The Personalization hub markup is hosted by themecpl.dll. These hooks are
+// process-wide in explorer.exe, so checking the content alone would both
+// scan/copy every foreign DirectUI document (on the shell UI path) and risk
+// rewriting some unrelated page that merely shares the ms-settings: URIs.
+// Gate on the resource/host module first; everything else is passed straight
+// through before any scanning or resource load.
+static bool IsThemecplInstance(HINSTANCE h) {
+    return h != nullptr && h == GetModuleHandleW(L"themecpl.dll");
+}
+
 // Requires the document to actually be the Personalization hub before any
 // rewrite is applied. A document merely containing one of the Settings URIs
 // is not enough proof: another shell surface could link to the same
@@ -3739,8 +4127,11 @@ static bool RewritePersonalizationMarkup(std::wstring& xml) {
 HRESULT WINAPI DUIXmlParser_SetXML_Hook(void* pThis, const WCHAR* pszXML,
                                         HINSTANCE hInstance, HINSTANCE hInstance2) {
     if (!DUIXmlParser_SetXML_Original) return E_FAIL;
-    if (!pszXML || !g_settings.inlinePersonalizationNavigation.load() ||
-        !PersonalizationMarkupLooksRelevant(pszXML)) {
+    // Cheap module identity check up front (see IsThemecplInstance): skip every
+    // foreign DirectUI document before scanning its markup.
+    if (!g_settings.inlinePersonalizationNavigation.load() ||
+        !(IsThemecplInstance(hInstance) || IsThemecplInstance(hInstance2)) ||
+        !pszXML || !PersonalizationMarkupLooksRelevant(pszXML)) {
         return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
     }
 
@@ -3751,7 +4142,16 @@ HRESULT WINAPI DUIXmlParser_SetXML_Hook(void* pThis, const WCHAR* pszXML,
         }
         Wh_Log(L"in-place Personalization navigation: replaced Settings "
                L"shellexecute with navigationtargetrelative");
-        return DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        // The rewrite deletes the shellexecute command, so if the build's
+        // parser rejects navigationtargetrelative the document must not be
+        // left broken: retry with the untouched original markup.
+        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        if (FAILED(hr)) {
+            Wh_Log(L"patched Personalization XML rejected (hr=0x%08lX); retrying the original",
+                   (unsigned long)hr);
+            hr = DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
+        }
+        return hr;
     } catch (...) {
         Wh_Log(L"Exception while rewriting Personalization markup; using the original XML");
         return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
@@ -3769,10 +4169,11 @@ using DUIXmlParser_SetXMLFromResource_t =
     HRESULT(WINAPI*)(void*, const WCHAR*, const WCHAR*, HINSTANCE, HINSTANCE, HINSTANCE);
 static DUIXmlParser_SetXMLFromResource_t DUIXmlParser_SetXMLFromResource_Original = nullptr;
 
-// Loads the raw resource bytes as a UTF-16 XML string, the same content
-// DirectUI's own resource loader would hand to the parser. Returns false
-// (leaving 'out' untouched) on any failure so the caller transparently falls
-// back to the original, unpatched resource load.
+// Loads a UIFILE/XMLFILE DirectUI resource and returns it as a wide string.
+// DirectUI markup resources are stored as 8-bit text (UTF-8 on modern
+// Windows, ANSI on older ones), NOT UTF-16 - a UTF-16LE BOM'd blob is still
+// honoured for safety. Returns false (leaving 'out' untouched) on any failure
+// so the caller transparently falls back to the original, unpatched load.
 static bool LoadXmlResourceString(HINSTANCE hInstance, const WCHAR* pszResourceName,
                                    const WCHAR* pszResourceType, std::wstring& out) {
     if (!hInstance || !pszResourceName || !pszResourceType) return false;
@@ -3785,11 +4186,35 @@ static bool LoadXmlResourceString(HINSTANCE hInstance, const WCHAR* pszResourceN
     HGLOBAL hGlobal = LoadResource(hInstance, hRsrc);
     if (!hGlobal) return false;
     DWORD size = SizeofResource(hInstance, hRsrc);
-    const void* pData = LockResource(hGlobal);
-    if (!pData || size < sizeof(WCHAR) || (size % sizeof(WCHAR)) != 0) return false;
-    out.assign(static_cast<const WCHAR*>(pData), size / sizeof(WCHAR));
-    // Trim a trailing embedded NUL, if any, so wcsstr-based checks behave.
+    const BYTE* pData = static_cast<const BYTE*>(LockResource(hGlobal));
+    if (!pData || size == 0) return false;
+
+    if (size >= 2 && pData[0] == 0xFF && pData[1] == 0xFE) {
+        // Real UTF-16LE resource with a BOM (kept strict so 8-bit markup never
+        // lands here).
+        out.assign(reinterpret_cast<const WCHAR*>(pData), size / sizeof(WCHAR));
+    } else {
+        // Common case: 8-bit markup. Decode as UTF-8 first, fall back to the
+        // system ANSI code page if that yields nothing.
+        const char* text = reinterpret_cast<const char*>(pData);
+        int len = MultiByteToWideChar(CP_UTF8, 0, text, (int)size, nullptr, 0);
+        if (len > 0) {
+            out.resize(len);
+            if (MultiByteToWideChar(CP_UTF8, 0, text, (int)size, out.data(), len) <= 0)
+                out.clear();
+        }
+        if (out.empty()) {
+            int acpLen = MultiByteToWideChar(CP_ACP, 0, text, (int)size, nullptr, 0);
+            if (acpLen <= 0) return false;
+            out.resize(acpLen);
+            MultiByteToWideChar(CP_ACP, 0, text, (int)size, out.data(), acpLen);
+        }
+    }
+
+    // Drop a surviving BOM and trim embedded/trailing NULs so wcsstr checks
+    // behave regardless of which decode path was taken.
     while (!out.empty() && out.back() == L'\0') out.pop_back();
+    if (!out.empty() && out.front() == 0xFEFF) out.erase(out.begin());
     return !out.empty();
 }
 
@@ -3803,7 +4228,12 @@ HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* ps
                                                           hInstance, hInstance2, hInstance3);
     };
 
-    if (!g_settings.inlinePersonalizationNavigation.load() || !DUIXmlParser_SetXML_Original) {
+    // Module gate before any FindResource/LoadResource/copy: the Personalization
+    // markup lives in themecpl.dll; everything else is let through untouched
+    // (and foreign UIFILEs are never loaded off the shell's UI-construction path).
+    if (!g_settings.inlinePersonalizationNavigation.load() || !DUIXmlParser_SetXML_Original ||
+        !(IsThemecplInstance(hInstance) || IsThemecplInstance(hInstance2) ||
+          IsThemecplInstance(hInstance3))) {
         return callOriginal();
     }
 
@@ -3818,7 +4248,16 @@ HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* ps
         }
         Wh_Log(L"in-place Personalization navigation: replaced Settings "
                L"shellexecute with navigationtargetrelative (resource path)");
-        return DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        // Same fallback as the SetXML hook: if the patched document is
+        // rejected, reload the original resource instead of leaving the page
+        // without any working action.
+        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        if (FAILED(hr)) {
+            Wh_Log(L"patched Personalization resource XML rejected (hr=0x%08lX); "
+                   L"reloading the original resource", (unsigned long)hr);
+            return callOriginal();
+        }
+        return hr;
     } catch (...) {
         Wh_Log(L"Exception while rewriting Personalization markup from resource; "
                L"using the original resource");
@@ -3826,16 +4265,40 @@ HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* ps
     }
 }
 
+// Track the dui70.dll reference so it can be released in Wh_ModUninit when, and
+// only when, this mod loaded it itself (a handle already returned by
+// GetModuleHandleW must not be freed). SetFunctionHook keeps the patched
+// trampoline in place until Windhawk removes the hooks at unload, at which
+// point the reference is dropped - mirroring g_legacyUnhideWinStorageModule.
+static HMODULE g_dui70LoadedByMod = nullptr;
+
+// The Personalization DirectUI page is never rendered by control.exe, so
+// force-loading dui70.dll there (which @include control.exe would otherwise do
+// on every control.exe launch) is pure waste.
+static bool CurrentProcessRendersPersonalizationUi() {
+    wchar_t exePath[MAX_PATH] = {};
+    if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH)) return true; // don't block on failure
+    wchar_t* fileName = wcsrchr(exePath, L'\\');
+    fileName = fileName ? fileName + 1 : exePath;
+    return _wcsicmp(fileName, L"control.exe") != 0;
+}
+
 // Installed once in Wh_ModInit regardless of the setting, so a later live
 // toggle needs no hooking. The rewrite itself is gated on the setting.
 static void InstallPersonalizationMarkupHook() {
     if (DUIXmlParser_SetXML_Original) return;
 
+    if (!CurrentProcessRendersPersonalizationUi()) {
+        Wh_Log(L"in-place Personalization navigation: skipped in control.exe (no Personalization UI)");
+        return;
+    }
+
     HMODULE hDui70 = GetModuleHandleW(L"dui70.dll");
     if (!hDui70) {
-        // Extra reference is left until process exit: the hooks still
-        // point into this image until Windhawk removes them after Uninit.
+        // We own this reference: it is released again in Wh_ModUninit
+        // (ReleasePersonalizationMarkupModule), not leaked per enable cycle.
         hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (hDui70) g_dui70LoadedByMod = hDui70;
     }
     if (!hDui70) {
         Wh_Log(L"in-place Personalization navigation: dui70.dll not found");
@@ -3878,8 +4341,14 @@ static void InstallPersonalizationMarkupHook() {
            L"DirectUI::DUIXmlParser::_SetXMLFromResource");
 }
 
+// Releases the dui70.dll reference this mod itself loaded (none is freed
+// when the module was already loaded). Called from Wh_ModUninit, after
+// Windhawk has removed the hooks that point into this image.
 static void ReleasePersonalizationMarkupModule() {
-    g_settings.inlinePersonalizationNavigation.store(false);
+    if (g_dui70LoadedByMod) {
+        FreeLibrary(g_dui70LoadedByMod);
+        g_dui70LoadedByMod = nullptr;
+    }
 }
 
 // Maps an entry of LegacyUnhideMonikerIndex to the real applet it unhides,
@@ -4169,10 +4638,10 @@ void Wh_ModSettingsChanged() {
     if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Game=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableIscsiInitiator.load(),
+        g_settings.enableIscsiInitiator.load(), g_settings.enableGameControllers.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
@@ -4221,6 +4690,7 @@ BOOL Wh_ModInit() {
     {
         wchar_t system32[MAX_PATH] = {};
         bool iscsiExeExists = false;
+        bool joyCplExists = false;
         if (GetSystemDirectoryW(system32, MAX_PATH)) {
             const std::wstring iscsicplPath = std::wstring(system32) + L"\\iscsicpl.exe";
             DWORD attributes = GetFileAttributesW(iscsicplPath.c_str());
@@ -4228,8 +4698,22 @@ BOOL Wh_ModInit() {
                               !(attributes & FILE_ATTRIBUTE_DIRECTORY));
             Wh_Log(L"iSCSI Initiator executable: %s %s", iscsicplPath.c_str(),
                    iscsiExeExists ? L"exists" : L"does not exist");
+
+            const std::wstring joyCplPath = std::wstring(system32) + L"\\joy.cpl";
+            DWORD joyAttributes = GetFileAttributesW(joyCplPath.c_str());
+            joyCplExists = (joyAttributes != INVALID_FILE_ATTRIBUTES &&
+                            !(joyAttributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"Game Controllers (joy.cpl): %s %s", joyCplPath.c_str(),
+                   joyCplExists ? L"exists" : L"does not exist");
         }
         g_iscsiInitiatorExeExists.store(iscsiExeExists);
+        g_joyCplExists.store(joyCplExists);
+    }
+    // Decode the embedded gamepad icon to a temp .ico up front (before
+    // InitDisplayNames builds the virtual entry that references it).
+    if (g_joyCplExists.load()) {
+        if (EnsureJoyControllerIconFile().empty())
+            Wh_Log(L"Game Controllers: embedded icon unavailable; entry will fall back to the default icon");
     }
     g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
     g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
@@ -4291,10 +4775,10 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Game=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableIscsiInitiator.load(),
+        g_settings.enableIscsiInitiator.load(), g_settings.enableGameControllers.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
@@ -4473,11 +4957,17 @@ void Wh_ModAfterInit() {
 }
 
 static void CleanupTempFiles() {
-    // Delete the temp task-links file
+    // Delete the temp task-links file (and the embedded Game Controllers icon
+    // written alongside it).
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     if (!g_classicTaskLinksFilePath.empty()) {
         DeleteFileW(g_classicTaskLinksFilePath.c_str());
         Wh_Log(L"Deleted task links file: %s", g_classicTaskLinksFilePath.c_str());
+    }
+    if (!g_joyIconFilePath.empty()) {
+        DeleteFileW(g_joyIconFilePath.c_str());
+        Wh_Log(L"Deleted Game Controllers icon file: %s", g_joyIconFilePath.c_str());
+        g_joyIconFilePath.clear();
     }
 }
 
