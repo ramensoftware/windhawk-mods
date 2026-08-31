@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.3
+// @version         1.1.4
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -29,9 +29,11 @@ covers the few cases the hook cannot see.
 | Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, on unlock/resume/focus change, or on the safety check. |
 | Mod disabled | The Num Lock *key* behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |
 
-Hold **Left Shift** or **Right Shift** to temporarily turn Num Lock off (for
-example when you need the numpad as arrow keys). As soon as you release Shift,
-Num Lock is turned back on.
+Hold **Left Shift** or **Right Shift** and press Num Lock to toggle it
+normally for as long as you keep Shift down. While Shift is held, numpad
+arrows are Shift+Arrow in most apps (extend selection), not plain arrows.
+Ctrl, Alt, and Win have the same kind of extra meaning. Release the
+override and Num Lock is turned back on.
 
 **Block** (the default) swallows Num Lock for every process, so a game or app
 that uses Num Lock as a hotkey will not see the key. Use **Allow** if you need
@@ -79,8 +81,10 @@ keeps overhead low and avoids tying Num Lock to the shell process.
 - overrideModifier: shift
   $name: Temporary override modifier
   $description: >-
-    Hold this key to toggle Num Lock normally. When you release it, Num Lock
-    is forced back ON. Left and right keys both count.
+    Hold this key and press Num Lock to toggle it. While the key is down,
+    numpad arrows keep that modifier (Shift+Arrow extends selection in most
+    apps). When you release it, Num Lock is turned back on. Left and right
+    keys both count.
   $options:
     - shift: Shift (left or right)
     - ctrl: Ctrl (left or right)
@@ -123,6 +127,9 @@ keeps overhead low and avoids tying Num Lock to the shell process.
 constexpr UINT WM_APP_FORCE_ON = WM_APP + 1;
 constexpr UINT WM_APP_UPDATE_TIMER = WM_APP + 2;
 constexpr UINT WM_APP_QUIT = WM_APP + 3;
+// Posted to the hook thread (hwnd is null). Unhook + SetWindowsHookEx so a
+// hook Windows silently dropped after a timeout can be put back.
+constexpr UINT WM_APP_REHOOK = WM_APP + 4;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
 
@@ -400,6 +407,13 @@ void UninstallKeyboardHook() {
     }
 }
 
+void RequestRehook() {
+    DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
+    if (threadId) {
+        PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0);
+    }
+}
+
 void UpdateSafetyTimer() {
     HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
     if (!hwnd) {
@@ -598,6 +612,7 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 case WTS_SESSION_UNLOCK:
                 case WTS_CONSOLE_CONNECT:
                 case WTS_REMOTE_CONNECT:
+                    RequestRehook();
                     ForceNumLockOn(false);
                     break;
                 default:
@@ -609,6 +624,7 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             switch (wParam) {
                 case PBT_APMRESUMEAUTOMATIC:
                 case PBT_APMRESUMESUSPEND:
+                    RequestRehook();
                     ForceNumLockOn(false);
                     break;
                 default:
@@ -634,7 +650,8 @@ HMODULE GetCurrentModuleHandle() {
 
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD,
                                   DWORD) {
-    RequestForceOn();
+    // Same thread that called SetWinEventHook (the worker).
+    ForceNumLockOn(false);
 }
 
 void RegisterForegroundHook() {
@@ -786,6 +803,11 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     }
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (!msg.hwnd && msg.message == WM_APP_REHOOK) {
+            UninstallKeyboardHook();
+            TryInstallKeyboardHook();
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
