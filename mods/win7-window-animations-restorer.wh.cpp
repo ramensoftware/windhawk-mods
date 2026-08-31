@@ -93,6 +93,203 @@
 // @include         Photoshop.exe
 // @include         acad.exe
 // @include         idea64.exe
+// @include         discord.exe
+// @include         Discord.exe
+// @include         DiscordCanary.exe
+// @include         DiscordPTB.exe
+// @include         Slack.exe
+// @include         Teams.exe
+// @include         Zoom.exe
+// @include         WebEx.exe
+// @include         CiscoJabber.exe
+// @include         Signal.exe
+// @include         WhatsApp.exe
+// @include         WeChat.exe
+// @include         LINE.exe
+// @include         Viber.exe
+// @include         Messenger.exe
+// @include         Element.exe
+// @include         Mattermost.exe
+// @include         RocketChat.exe
+// @include         Keybase.exe
+// @include         Tox.exe
+// @include         Ricochet.exe
+// @include         Spotify.exe
+// @include         AppleMusic.exe
+// @include         Tidal.exe
+// @include         AmazonMusic.exe
+// @include         Deezer.exe
+// @include         iTunes.exe
+// @include         MusicBee.exe
+// @include         AIMP.exe
+// @include         MediaMonkey.exe
+// @include         ResilioSync.exe
+// @include         Syncthing.exe
+// @include         Nextcloud.exe
+// @include         OneDrive.exe
+// @include         Dropbox.exe
+// @include         GoogleDriveFS.exe
+// @include         MEGA.exe
+// @include         pCloud.exe
+// @include         Box.exe
+// @include         AirDC.exe
+// @include         StrongDC.exe
+// @include         eMule.exe
+// @include         FrostWire.exe
+// @include         JDownloader.exe
+// @include         InternetDownloadManager.exe
+// @include         EagleGet.exe
+// @include         FreeDownloadManager.exe
+// @include         GitGUI.exe
+// @include         GitHubDesktop.exe
+// @include         SourceTree.exe
+// @include         TortoiseGitProc.exe
+// @include         TortoiseSVN.exe
+// @include         SmartGit.exe
+// @include         GitKraken.exe
+// @include         Fork.exe
+// @include         Cursor.exe
+// @include         windbg.exe
+// @include         x64dbg.exe
+// @include         IDA.exe
+// @include         Ghidra.exe
+// @include         CheatEngine.exe
+// @include         DBeaver.exe
+// @include         HeidiSQL.exe
+// @include         pgAdmin.exe
+// @include         MongoDBCompass.exe
+// @include         Robo3T.exe
+// @include         TablePlus.exe
+// @include         AzureDataStudio.exe
+// @include         Postman.exe
+// @include         Insomnia.exe
+// @include         Bruno.exe
+// @include         Fiddler.exe
+// @include         Charles.exe
+// @include         BurpSuite.exe
+// @include         OBS.exe
+// @include         Streamlabs.exe
+// @include         XSplit.exe
+// @include         Voicemeeter.exe
+// @include         VBAN.exe
+// @include         Rekordbox.exe
+// @include         Serato.exe
+// @include         Ableton.exe
+// @include         FLStudio.exe
+// @include         Cubase.exe
+// @include         Reaper.exe
+// @include         ProTools.exe
+// @include         DaVinciResolve.exe
+// @include         Premiere.exe
+// @include         AfterEffects.exe
+// @include         MediaEncoder.exe
+// @include         Lightroom.exe
+// @include         CaptureOne.exe
+// @include         AffinityPhoto.exe
+// @include         AffinityDesigner.exe
+// @include         AffinityPublisher.exe
+// @include         Inkscape.exe
+// @include         CorelDraw.exe
+// @include         SketchUp.exe
+// @include         Revit.exe
+// @include         Navisworks.exe
+// @include         Inventor.exe
+// @include         Fusion360.exe
+// @include         SolidWorks.exe
+// @include         CATIA.exe
+// @include         NX.exe
+// @include         Creo.exe
+// @include         Rhino.exe
+// @include         ArchiCAD.exe
+// @include         Allplan.exe
+// @include         Vectorworks.exe
+// @include         ChiefArchitect.exe
+// @include         MicroStation.exe
+// @include         Civil3D.exe
+// @include         Map3D.exe
+// @include         QGIS.exe
+// @include         ArcGIS.exe
+// @include         GlobalMapper.exe
+// @include         Surfer.exe
+// @include         AutoCADLT.exe
+// @include         DraftSight.exe
+// @include         FreeCAD.exe
+// @include         Librecad.exe
+// @include         OpenSCAD.exe
+// @include         Meshmixer.exe
+// @include         Cura.exe
+// @include         PrusaSlicer.exe
+// @include         Simplify3D.exe
+// @include         LÖVE.exe
+// @include         Godot.exe
+// @include         Unity.exe
+// @include         UnityHub.exe
+// @include         UnrealEngine.exe
+// @include         GameMaker.exe
+// @include         Construct.exe
+// @include         RPGMaker.exe
+// @include         RenPy.exe
+// @include         Twine.exe
+// @include         Notion.exe
+// @include         Obsidian.exe
+// @include         RoamResearch.exe
+// @include         Logseq.exe
+// @include         Anytype.exe
+// @include         Workflowy.exe
+// @include         Dynalist.exe
+// @include         Amplenote.exe
+// @include         Bear.exe
+// @include         Typora.exe
+// @include         MarkText.exe
+// @include         Zettlr.exe
+// @include         Joplin.exe
+// @include         StandardNotes.exe
+// @include         Simplenote.exe
+// @include         QOwnNotes.exe
+// @include         CherryTree.exe
+// @include         RedNotebook.exe
+// @include         KeepNote.exe
+// @include         Tomboy.exe
+// @include         Gnote.exe
+// @include         Xournal++.exe
+// @include         Drawboard.exe
+// @include         Inkodo.exe
+// @include         LiquidText.exe
+// @include         MarginNote.exe
+// @include         PDFAnnotator.exe
+// @include         FoxitReader.exe
+// @include         PDF-XChange.exe
+// @include         NitroPDF.exe
+// @include         PhantomPDF.exe
+// @include         PDFelement.exe
+// @include         SmartPDF.exe
+// @include         SodaPDF.exe
+// @include         PDFSam.exe
+// @include         PDFChain.exe
+// @include         PDFtk.exe
+// @include         PDFCreator.exe
+// @include         PDFArchitect.exe
+// @include         PDFStudio.exe
+// @include         MasterPDF.exe
+// @include         Sejda.exe
+// @include         SmallPDF.exe
+// @include         ILOVEPDF.exe
+// @include         PDFCandy.exe
+// @include         EasyPDF.exe
+// @include         PDFCompressor.exe
+// @include         PDFOptimizer.exe
+// @include         PDFMerger.exe
+// @include         PDFSplitter.exe
+// @include         PDFExtractor.exe
+// @include         PDFConverter.exe
+// @include         PDFEditor.exe
+// @include         PDFViewer.exe
+// @include         PDFReader.exe
+// @include         PDFBrowser.exe
+// @include         PDFNavigator.exe
+// @include         PDFExplorer.exe
+// @include         PDFManager.exe
+// @include         PDFOrganizer.exe
 // @compilerOptions -lgdi32 -lmsimg32 -lshcore -ldwmapi
 // ==/WindhawkMod==
 
@@ -125,13 +322,8 @@ This mod tries to restore Windows 7 window animations on Windows 10 and 11 for c
 The mod is injected only into a predefined list. To add a program, add its `.exe` name to the `@include` lines or use Windhawk's advanced settings.
 
 ## Notes
-
-- The mod has been tested on Windows 10 21H2.
-- The mod works with OpenGlass and DWMBlurGlass.
-- The mod does not modify system files.
-- The mod does not replace parts of Windows.
-- The mod tries to replicate the exact timing and motion from Windows 7 (`uDWM.dll` 6.1.7600.16385).
-- The mod is injected only into a curated list of applications to limit overhead and potential issues.
+The mod has been tested on Windows 10 21H2 and Windows 11 25H2. It does not modify system files or replace any Windows components; instead, it replicates the exact timing and motion from Windows 7.
+The mod is injected only into a specific list of applications to limit overhead and potential issues.
 
 ## Credits
 
@@ -149,16 +341,10 @@ The mod is injected only into a predefined list. To add a program, add its `.exe
 /*
 - animateMinimize: true
   $name: Animate minimizing and restoring windows
-  $description: This setting enables the 250 ms shrink/grow toward the taskbar button with the Win7 3D tilt when a window minimizes or restores. Turn it off to let Windows animate (or not) on its own.
-- animateOpen: false
-  $name: Animate opening windows (EXPERIMENTAL)
-  $description: This setting plays the Windows 7 open animation when a window is shown for the first time. The mod waits for the desktop window manager to composite the real window, captures that exact image (Aero border and OpenGlass / DWMBlurGlass glass included) and animates it, so no border appears at the end. Turn it off to let Windows show the window instantly.
-- openDiagnostics: false
-  $name: This setting writes open-animation diagnostics to the Windhawk log
-  $description: Logs every open-animation decision (why an animation was skipped, or that the composed frame was captured), instead of only the first one per process. Useful to understand why a specific program is not animated.
+  $description: This setting enables the Windows 7-like minimizing and restoring animations. Turn this setting off to let Windows animate (or not) on its own.
 - animateClose: true
   $name: Animate closing windows 
-  $description: This setting fades the window out over a short scale-down animation before it is actually closed, instead of the normal Windows close. It briefly blocks the closing thread for the duration of the fade, which is a bit riskier than minimize/restore, so it stays off by default. Enable it if you want the closer-to-Win7 look and are fine with that tradeoff.
+  $description: This setting enables the Windows 7-like closing animation. Turn it on for a more authentic look.
 */
 // ==/WindhawkModSettings==
 
@@ -1649,7 +1835,13 @@ void Wh_ModUninit(){
 // ---------------------------------------------------------------------------
 // OPEN ANIMATION: CORE DATA STRUCTURES
 // ---------------------------------------------------------------------------
-
+// Settings
+- openDiagnostics: false
+  $name: Log Animation
+  $description: This setting logs every open-animation decision (why an animation was skipped, or that the composed frame was captured), instead of only the first one per process. Useful to understand why a specific program is not animated.
+- animateOpen: false
+  $name: Animate opening windows (EXPERIMENTAL)
+  $description: This setting plays the Windows 7 open animation when a window is shown for the first time. The mod waits for the desktop window manager to composite the real window, captures that exact image (Aero border and OpenGlass / DWMBlurGlass glass included) and animates it, so no border appears at the end. Turn it off to let Windows show the window instantly.
 // Open transition state for DWM
 struct OpenTransitionState { 
     BOOL previous = FALSE; 
