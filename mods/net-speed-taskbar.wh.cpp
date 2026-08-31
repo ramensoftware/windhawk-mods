@@ -7,7 +7,7 @@
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
 // @include     explorer.exe
-// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -luser32 -lws2_32
+// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -luser32 -lws2_32 -DWIN32_LEAN_AND_MEAN
 // @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
@@ -21,12 +21,11 @@ download and upload internet speed, refreshed every second.
 
 ![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-speed-indicator.gif)
 
+- Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
 - You can click right through it, so it won't get in the way of your taskbar buttons.
-- Smoothly follows your taskbar if you have auto-hide enabled.
-- Always stays visible on top of the taskbar.
 - Shows your actual internet speed, ignoring background virtual networks or VPN clutter.
-- Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
+
 */
 // ==/WindhawkModReadme==
 
@@ -67,6 +66,7 @@ download and upload internet speed, refreshed every second.
 #include <winsock2.h>
 #include <ws2ipdef.h>
 #include <windows.h>
+#include <objbase.h>
 #include <gdiplus.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
@@ -174,7 +174,7 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme) {
     Color upColor = Color(255, 100, 230, 90);   
     
     if (theme == L"Minimal") {
-        bgColor = Color(0, 0, 0, 0);
+        bgColor = Color(0, 0, 0, 0); 
         downColor = Color(255, 255, 255, 255);
         upColor = Color(255, 200, 200, 200);
     }
@@ -432,10 +432,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             InvalidateRect(hWnd, nullptr, TRUE);
             return 0;
         }
-        case WM_UPDATE_POSITION:
+        case WM_UPDATE_POSITION: {
             g_posUpdatePending.store(false);
             RepositionWidget(hWnd, GetSafeSettings());
             return 0;
+        }
         case WM_PAINT:
             PaintWidget(hWnd);
             return 0;
@@ -533,7 +534,6 @@ BOOL Wh_ModInit() {
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
 
-    UpdateSpeedSample();
     g_hThread = CreateThread(nullptr, 0, WidgetMessageLoop, nullptr, 0, &g_threadId);
 
     return TRUE;
