@@ -24,7 +24,6 @@
 // @exclude         sihost.exe
 // @exclude         ctfmon.exe
 // @exclude         RuntimeBroker.exe
-// @exclude         ApplicationFrameHost.exe
 // @exclude         ShellExperienceHost.exe
 // @exclude         StartMenuExperienceHost.exe
 // @exclude         SearchHost.exe
@@ -36,7 +35,7 @@
 // ==WindhawkModReadme==
 /*
 
-## Windows 7 Window Animations Restorer
+# Windows 7 Window Animations Restorer
 
 ## About
 
@@ -46,23 +45,29 @@ This mod tries to restore the Windows 7 Aero window animations on Windows 10 and
 
 ![Demo GIF](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/bandicam2026-08-3014-19-03-266-ezgif.com-video-to-gif-converter.gif)
 
-## Which applications are affected
+## What it does
 
-The mod is injected into every process (`@include *`) excluding a short list of shell and UWP hosts that cannot be animated anyway. Only real top-level application windows are ever touched. To restrict it to a few programs, use the "Custom process inclusion/exclusion list" in Windhawk's advanced mod settings.
+- **Minimize / restore**: the window shrinks toward its taskbar button with the Windows 7 Aero perspective tilt (5 degrees pitch, 8 degrees yaw, depth and fade, 250 ms), and grows back the same way.
+- **Close**: the composed window frame is captured and tilted away over 200 ms. The animation is played from the application's own `DestroyWindow` call, so `WM_CLOSE` / `SC_CLOSE` keep their normal meaning and a "save your changes?" prompt can still cancel the close.
+- **Open**: left to Windows, which animates it natively (this could change in future updates).
 
-**Known Limitations**
+## Known Limitations
 
-- The opening animation is handled to Windows to avoid instability (this could change in future updates).
+- The opening animation is left to Windows, to avoid instability.
 - If a window refuses to minimize, the animation is canceled.
 - Dialogs without a minimize button are not animated.
-- In some Windows builds, minor graphical inaccuracies may occur in specific cases
+- Some UWP apps might not support the closing animation.
+- The Snipping tool does not support the closing animation for stability reasons.
 
+## Which applications are affected
+
+The mod is injected into every process (`@include *`) excluding a short list of system, shell and UWP hosts that cannot be animated anyway. Only real top-level windows of the host process itself are ever touched. To restrict it to a few programs, use the "Custom process inclusion/exclusion list" in Windhawk's advanced mod settings.
 
 ## Notes
 
 This mod is a **best-effort recreation**: if there are suggestions or problems with the mod, please contact the author of the modification.
-The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2. It does not modify system files or replace any Windows components; it replicates the timing and motion of Windows 7.
-This mod differs from other animation mods because it focuses solely on trying to restore Windows 7's animation.
+The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2. It does not modify system files and does not replace any Windows component; it replicates the timing and the motion of Windows 7. Enable logging in the mod's advanced settings to get the reason why a given window was not animated.
+This modification specifically recreates, within its capabilities, the Windows 7 Aero perspective animation for minimize, restore, and close. It is recommended to not run it together with other window animation mods.
 
 ## Credits
 
@@ -254,25 +259,36 @@ static IsHungAppWindow_t pIsHungAppWindow=nullptr;
 ShowWindow_t ShowWindow_orig=nullptr; ShowWindowAsync_t ShowWindowAsync_orig=nullptr; DestroyWindow_t DestroyWindow_orig=nullptr;
 
 struct CaptureBits{ std::vector<uint32_t> pixels; int width=0,height=0; bool empty() const {return pixels.empty()||width<=0||height<=0;} };
-static const size_t kMaxCachedCaptures=4; static std::mutex g_cacheMutex;
+static const size_t kMaxCachedCaptures=2; static const size_t kMaxCachedBytes=24u*1024u*1024u;
+static std::mutex g_cacheMutex;
 struct CacheEntry{ CaptureBits bits; std::list<HWND>::iterator lruIt; };
-static std::unordered_map<HWND,CacheEntry> g_captureCache; static std::list<HWND> g_captureLru;
-static void CacheCapture(HWND hwnd,const CaptureBits& bits){
-    if(!hwnd||bits.empty()) return; try{ std::lock_guard<std::mutex> lock(g_cacheMutex); auto it=g_captureCache.find(hwnd);
-        if(it!=g_captureCache.end()){ it->second.bits=bits; g_captureLru.splice(g_captureLru.begin(),g_captureLru,it->second.lruIt); return; }
-        g_captureLru.push_front(hwnd); g_captureCache.emplace(hwnd,CacheEntry{bits,g_captureLru.begin()});
-        while(g_captureCache.size()>kMaxCachedCaptures){ HWND v=g_captureLru.back(); g_captureLru.pop_back(); g_captureCache.erase(v); }
+static std::unordered_map<HWND,CacheEntry> g_captureCache; static std::list<HWND> g_captureLru; static size_t g_cacheBytes=0;
+static size_t CaptureBytes(const CaptureBits& b){ return b.pixels.size()*sizeof(uint32_t); }
+static void EvictLocked(){
+    while(!g_captureLru.empty()&&(g_captureCache.size()>kMaxCachedCaptures||g_cacheBytes>kMaxCachedBytes)){
+        HWND v=g_captureLru.back(); g_captureLru.pop_back();
+        auto it=g_captureCache.find(v);
+        if(it!=g_captureCache.end()){ g_cacheBytes-=std::min(g_cacheBytes,CaptureBytes(it->second.bits)); g_captureCache.erase(it); }
+    }
+}
+static void CacheCapture(HWND hwnd,CaptureBits&& bits){
+    if(!hwnd||bits.empty()) return;
+    if(CaptureBytes(bits)>kMaxCachedBytes) return;
+    try{ std::lock_guard<std::mutex> lock(g_cacheMutex); auto it=g_captureCache.find(hwnd);
+        if(it!=g_captureCache.end()){ g_cacheBytes-=std::min(g_cacheBytes,CaptureBytes(it->second.bits)); it->second.bits=std::move(bits); g_cacheBytes+=CaptureBytes(it->second.bits); g_captureLru.splice(g_captureLru.begin(),g_captureLru,it->second.lruIt); EvictLocked(); return; }
+        g_captureLru.push_front(hwnd); g_cacheBytes+=CaptureBytes(bits); g_captureCache.emplace(hwnd,CacheEntry{std::move(bits),g_captureLru.begin()});
+        EvictLocked();
     }catch(...){}
 }
 static bool HasCachedCapture(HWND hwnd){ if(!hwnd) return false; try{ std::lock_guard<std::mutex> lock(g_cacheMutex); return g_captureCache.find(hwnd)!=g_captureCache.end(); }catch(...){return false;} }
 static bool TakeCachedCapture(HWND hwnd,int ew,int eh,CaptureBits& out){
     try{ std::lock_guard<std::mutex> lock(g_cacheMutex); auto it=g_captureCache.find(hwnd); if(it==g_captureCache.end()) return false;
-        CaptureBits bits=std::move(it->second.bits); g_captureLru.erase(it->second.lruIt); g_captureCache.erase(it); if(bits.empty()) return false;
+        CaptureBits bits=std::move(it->second.bits); g_cacheBytes-=std::min(g_cacheBytes,CaptureBytes(bits)); g_captureLru.erase(it->second.lruIt); g_captureCache.erase(it); if(bits.empty()) return false;
         if(ew>0&&eh>0&&(std::abs(bits.width-ew)>128||std::abs(bits.height-eh)>128)) return false;
         out=std::move(bits); return true;
     }catch(...){return false;}
 }
-static void ForgetCapture(HWND hwnd){ try{ std::lock_guard<std::mutex> lock(g_cacheMutex); auto it=g_captureCache.find(hwnd); if(it!=g_captureCache.end()){ g_captureLru.erase(it->second.lruIt); g_captureCache.erase(it);} }catch(...){} }
+static void ForgetCapture(HWND hwnd){ try{ std::lock_guard<std::mutex> lock(g_cacheMutex); auto it=g_captureCache.find(hwnd); if(it!=g_captureCache.end()){ g_cacheBytes-=std::min(g_cacheBytes,CaptureBytes(it->second.bits)); g_captureLru.erase(it->second.lruIt); g_captureCache.erase(it);} }catch(...){} }
 static void ForceOpaqueAlpha(uint32_t* p,size_t c){ for(size_t i=0;i<c;++i) p[i]|=0xFF000000u; }
 
 static bool GetWindowRectPhysical(HWND hwnd, RECT* rc){
@@ -299,7 +315,6 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out, bool composedOnly
     if(!hwnd||!IsWindow(hwnd)) return false;
     RECT rc{}; if(!GetFrameBoundsPhysical(hwnd,&rc)) return false;
     int w=RECTW(rc), h=RECTH(rc); if(w<1||h<1||w>16384||h>16384) return false;
-    BOOL dis=TRUE; DwmSetWindowAttribute(hwnd,DWMWA_TRANSITIONS_FORCEDISABLED,&dis,sizeof(dis));
     {
         ScopedScreenDc screenDc(rc);
         if(screenDc){
@@ -342,8 +357,36 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out, bool composedOnly
         }catch(...){ out={}; return false; }
     }
 }
+// Fallback target when GetWindowMinimizeRect is unavailable: the task list of the
+// taskbar on the window's own monitor. A fixed bottom-left corner would send the
+// window to an empty spot on a centered Windows 11 taskbar.
+static bool GetTaskbarTargetPhysical(HWND hwnd,RECT* rc){
+    if(!rc) return false;
+    const HMONITOR target=MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST);
+    HWND best=nullptr; RECT bestRc{};
+    for(const wchar_t* cls : {L"Shell_TrayWnd",L"Shell_SecondaryTrayWnd"}){
+        for(HWND tb=FindWindowExW(nullptr,nullptr,cls,nullptr); tb; tb=FindWindowExW(nullptr,tb,cls,nullptr)){
+            RECT r{}; if(!GetWindowRect(tb,&r)||!IsRectUsable(r)) continue;
+            if(!best){ best=tb; bestRc=r; }
+            if(MonitorFromWindow(tb,MONITOR_DEFAULTTONEAREST)==target){ best=tb; bestRc=r; break; }
+        }
+    }
+    if(!best) return false;
+    HWND list=FindWindowExW(best,nullptr,L"MSTaskListWClass",nullptr);
+    if(!list){
+        HWND rebar=FindWindowExW(best,nullptr,L"ReBarWindow32",nullptr);
+        HWND sw=rebar?FindWindowExW(rebar,nullptr,L"MSTaskSwWClass",nullptr):nullptr;
+        if(sw) list=FindWindowExW(sw,nullptr,L"MSTaskListWClass",nullptr);
+    }
+    RECT area=bestRc;
+    if(list){ RECT lr{}; if(GetWindowRect(list,&lr)&&IsRectUsable(lr)) area=lr; }
+    const LONG cx=(area.left+area.right)/2, cy=(area.top+area.bottom)/2;
+    rc->left=cx-12; rc->top=cy-12; rc->right=cx+12; rc->bottom=cy+12;
+    return IsRectUsable(*rc);
+}
 static bool GetMinimizeRectPhysical(HWND hwnd,RECT* rc){
     if(pGetWindowMinimizeRect&&pGetWindowMinimizeRect(hwnd,rc)&&IsRectUsable(*rc)) return true;
+    if(GetTaskbarTargetPhysical(hwnd,rc)) return true;
     HMONITOR hmon=MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{sizeof(mi)};
     if(!GetMonitorInfoW(hmon,&mi)) return false;
@@ -593,6 +636,7 @@ static void FinishQueued(AnimRequest* req){
         if(!g_stopping.load()){ ULONGLONG ws=GetTickCount64(); const ULONGLONG kMax=64; while(!g_stopping.load()&&IsWindow(req->hwnd)&&IsIconic(req->hwnd)&&(GetTickCount64()-ws)<kMax) Sleep(1);
             HWND ha=g_hwndAnim.load(); RECT rcNow{}; if(ha&&IsWindow(ha)&&GetFrameBoundsPhysical(req->hwnd,&rcNow)&&IsRectUsable(rcNow)&&req->gdi&&!EqualRect(&rcNow,&req->rcWindow)){ Win7TransformParams p; p.opacity=1; PresentOverlay(ha,*req->gdi,*req,rcNow,p);} } }
     HWND ha=g_hwndAnim.load(); if(ha&&IsWindow(ha)) HideOverlayWindow(ha); if(req->hwnd&&IsWindow(req->hwnd)) DisableTransitions(req->hwnd,FALSE);
+    if(req->type==AnimationType::Minimize&&req->hwnd&&IsWindow(req->hwnd)&&IsIconic(req->hwnd)) CacheCapture(req->hwnd,std::move(req->capture));
     HWND cur=g_hwndCurrent.load(); if(cur==req->hwnd){ g_hwndCurrent.store(nullptr); g_typeCurrent.store(0); g_fAnimating.store(false);} delete req;
 }
 static void DrainQueue(HWND hwndOverlay){ for(;;){ if(g_stopping.load()) break; AnimRequest* req=nullptr; { std::lock_guard<std::mutex> lock(g_queueMutex); if(g_queue.empty()) break; req=g_queue.front(); g_queue.pop_front(); } if(!req) continue;
@@ -618,7 +662,8 @@ static DWORD CALLBACK AnimWndThreadProc(HANDLE hEvent){
 static bool WaitForAnimWndThread(){
     if(g_stopping.load()) return false; std::lock_guard<std::mutex> lock(g_animThreadMutex); if(g_stopping.load()) return false;
     if(g_hAnimWndThread){ HWND ha=g_hwndAnim.load(); if(ha&&IsWindow(ha)) return true; if(g_dwAnimThreadId) PostThreadMessageW(g_dwAnimThreadId,WM_QUIT,0,0);
-        DWORD r=WaitForSingleObject(g_hAnimWndThread,2000); if(r==WAIT_TIMEOUT){ g_fDisabled.store(true); CloseHandle(g_hAnimWndThread); g_hAnimWndThread=nullptr; g_dwAnimThreadId=0; return false; }
+        // the handle is kept so StopAnimThread() can still join it at uninit
+        if(WaitForSingleObject(g_hAnimWndThread,2000)!=WAIT_OBJECT_0){ g_fDisabled.store(true); Wh_Log(L"overlay thread did not exit in time"); return false; }
         CloseHandle(g_hAnimWndThread); g_hAnimWndThread=nullptr; g_dwAnimThreadId=0;
     }
     ScopedHandle hEvent(CreateEventW(nullptr,TRUE,FALSE,nullptr)); if(!hEvent) return false;
@@ -641,6 +686,8 @@ static bool QueueRun(AnimRequest&& req){
 }
 static bool IsAnimateCandidate(HWND hwnd){
     if(!hwnd||!IsWindow(hwnd)) return false;
+    DWORD pid=0; GetWindowThreadProcessId(hwnd,&pid);
+    if(pid!=GetCurrentProcessId()){ Wh_Log(L"skipped: window of another process"); return false; }
     if(GetAncestor(hwnd,GA_ROOT)!=hwnd){ LONG s=LONG(GetWindowLongPtrW(hwnd,GWL_STYLE)); if(!(s&WS_CHILD)||!(s&WS_CAPTION)) return false; }
     LONG style=LONG(GetWindowLongPtrW(hwnd,GWL_STYLE)), ex=LONG(GetWindowLongPtrW(hwnd,GWL_EXSTYLE));
     if(!(style&WS_CAPTION)) return false; if(ex&WS_EX_TOOLWINDOW) return false; if(ex&WS_EX_NOACTIVATE) return false;
@@ -675,6 +722,7 @@ static bool StartQueuedAnimation(HWND hwnd,AnimationType type,const RECT& rcWin,
     g_hwndCurrent.store(hwnd); g_typeCurrent.store(int(type));
     if(!defer) SendMessageW(g_hwndAnim.load(),g_msgAnim.load(),WPARAM(AnimMsg::FirstFrame),LPARAM(&req));
     DisableTransitions(hwnd,TRUE);
+    Wh_Log(L"animation queued: type=%d %dx%d",int(type),RECTW(rcWin),RECTH(rcWin));
     if(!QueueRun(std::move(req))){ DisableTransitions(hwnd,FALSE); HWND ha=g_hwndAnim.load(); if(ha&&IsWindow(ha)) HideOverlayWindow(ha); cleanup(); return false; } return true;
 }
 static bool BeginAnimation(HWND hwnd,AnimationType type,const RECT& rcWin,const RECT& rcDest,CaptureBits&& cap,bool defer,int cmd){
@@ -693,8 +741,8 @@ static void AfterOrigMinimize(HWND hwnd,bool async){
 }
 static bool PlayMinimize(HWND hwnd){
     if(!g_animateMinimize||!ShouldAnimateWindow(hwnd)) return false; LONG s=LONG(GetWindowLongPtrW(hwnd,GWL_STYLE)); if(s&WS_MINIMIZE) return false;
-    RECT rcWin{},rcMin{}; CaptureBits cap; { ScopedDpiAware dpi; if(!GetVisibleWindowRectForMinimize(hwnd,&rcWin)) return false; if(!GetMinimizeRectPhysical(hwnd,&rcMin)) return false; rcMin=AspectCorrectedMinimizeTarget(rcMin); if(!CaptureWindowForClose(hwnd,cap,false)) return false; }
-    CacheCapture(hwnd,cap); return BeginAnimation(hwnd,AnimationType::Minimize,rcWin,rcMin,std::move(cap),false,0);
+    RECT rcWin{},rcMin{}; CaptureBits cap; { ScopedDpiAware dpi; if(!GetVisibleWindowRectForMinimize(hwnd,&rcWin)){ Wh_Log(L"minimize: no usable window rect"); return false; } if(!GetMinimizeRectPhysical(hwnd,&rcMin)){ Wh_Log(L"minimize: no taskbar target"); return false; } rcMin=AspectCorrectedMinimizeTarget(rcMin); if(!CaptureWindowForClose(hwnd,cap,false)){ Wh_Log(L"minimize: capture failed"); return false; } }
+    return BeginAnimation(hwnd,AnimationType::Minimize,rcWin,rcMin,std::move(cap),false,0);
 }
 static bool PlayRestore(HWND hwnd){
     if(!g_animateMinimize) return false; LONG s=LONG(GetWindowLongPtrW(hwnd,GWL_STYLE)); if(s&WS_MINIMIZE){
@@ -708,21 +756,21 @@ static bool PlayRestore(HWND hwnd){
 
 static bool PlayCloseAnimation(HWND hwnd,CaptureBits&& preCap,const RECT& preRect){
     if(!WaitForAnimWndThread()||g_stopping.load()) return false;
+    ScopedDwmTransitions transWnd(hwnd); transWnd.Disable();
     RECT rcWin=preRect; CaptureBits cap=std::move(preCap);
-    if(cap.empty()){ ScopedDpiAware dpi; if(!GetFrameBoundsPhysical(hwnd,&rcWin)||!CaptureWindowForClose(hwnd,cap,false)) return false; }
+    if(cap.empty()){ ScopedDpiAware dpi; if(!GetFrameBoundsPhysical(hwnd,&rcWin)||!CaptureWindowForClose(hwnd,cap,false)){ Wh_Log(L"close: capture failed"); return false; } }
     if(cap.empty()||!IsRectUsable(rcWin)) return false;
     AnimRequest req; req.hwnd=hwnd; req.type=AnimationType::Close; req.rcWindow=rcWin; req.rcDest=rcWin; req.capture=std::move(cap); req.durationMs=DurationMsFor(AnimationType::Close);
     try{ req.gdi=std::make_unique<PresentGdi>(); }catch(...){ return false; }
     HWND ha=g_hwndAnim.load(); if(!ha||!IsWindow(ha)) return false;
     ScopedDwmTransitions transOverlay(ha); transOverlay.Disable();
-    ScopedDwmTransitions transWnd(hwnd); transWnd.Disable();
     {
         ScopedDpiAware dpi;
         ShowOverlayWindow(ha);
         PresentOverlay(ha,*req.gdi,req,rcWin,ParamsFor(req.type,0.f,float(RECTH(rcWin))));
         if(IsWindowVisible(hwnd)){ if(ShowWindow_orig) ShowWindow_orig(hwnd,SW_HIDE); else ::ShowWindow(hwnd,SW_HIDE); }
         ULONGLONG start=GetTickCount64(), elapsed=0; float lastT=-1;
-        while((elapsed=GetTickCount64()-start)<=req.durationMs){
+        while(!g_stopping.load()&&(elapsed=GetTickCount64()-start)<=req.durationMs){
             float t=req.durationMs==0?1.f:std::clamp(float(elapsed)/float(req.durationMs),0.f,1.f);
             if(t-lastT>=0.001f){
                 lastT=t; auto params=ParamsFor(req.type,t,float(RECTH(rcWin)));
@@ -823,7 +871,7 @@ static void ShellPreCaptureForClose(HWND hwnd){
     { ScopedDpiAware dpi; if(!GetShellFrameBounds(hwnd,&rc)) return; if(!CaptureWindowForClose(hwnd,cap,true)) return; }
     if(cap.empty()||!IsRectUsable(rc)) return;
     if(cap.width!=RECTW(rc)||cap.height!=RECTH(rc)) return;
-    if(!CaptureLooksComposed(cap)) return;
+    if(!CaptureLooksComposed(cap)){ Wh_Log(L"shell: capture does not look composed, skipping"); return; }
     // The overlay puts the very same pixels on screen before the window disappears,
     // so the hide-then-destroy sequence never shows a hole where the window was.
     bool ghost=false;
@@ -869,39 +917,21 @@ static bool TakeShellPreCapture(HWND hwnd,CaptureBits& cap,RECT& rc){
 static bool PlayClose(HWND hwnd){
     if(!g_animateClose) return false;
     if(IsSnippingTool()) return false;
-    if(!CloseIsProgressSafe(hwnd)) return false;
+    if(!CloseIsProgressSafe(hwnd)){ Wh_Log(L"close: skipped, animating could cost the user work"); return false; }
     CaptureBits pre; RECT preRc{}; bool usePre=false;
     if(!ShouldAnimateClose(hwnd)){
         if(g_fDisabled.load()||g_fAnimating.load()) return false;
         if(IsWindowVisible(hwnd)||IsIconic(hwnd)) return false;
         if(!IsTopLevelCloseCandidate(hwnd)) return false;
         usePre=TakeShellPreCapture(hwnd,pre,preRc);
-        if(!usePre) return false;
+        if(!usePre){ Wh_Log(L"close: hidden window without a fresh shell capture"); return false; }
     } else ForgetShellPreCapture(hwnd);
     ScopedAnimSlot slot(hwnd,AnimationType::Close);
     if(!slot.owned()){ if(usePre) HideGhostOverlay(); return false; }
     return PlayCloseAnimation(hwnd,std::move(pre),preRc);
 }
 
-static std::mutex g_minRectMutex; static std::unordered_map<HWND, RECT> g_pendingMinRect;
-struct REALRECT{ SHORT left,top,right,bottom; }; struct SHELLHOOK_MINRECT{ HWND hWnd; REALRECT rc; };
-static HWND g_hShellHookWnd=nullptr; static HINSTANCE g_hShellHookInst=nullptr; static DWORD g_dwShellHookThreadId=0; static HANDLE g_hShellHookThread=nullptr; static std::atomic<bool> g_shellHookStop{false};
-static void SetPendingMinRect(HWND hwnd, const RECT& rc){ std::lock_guard<std::mutex> lock(g_minRectMutex); g_pendingMinRect[hwnd]=rc; }
-static void ClearPendingMinRect(HWND hwnd){ std::lock_guard<std::mutex> lock(g_minRectMutex); g_pendingMinRect.erase(hwnd); }
-static LRESULT CALLBACK ShellHookWndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam){
-    if(msg==RegisterWindowMessageW(L"SHELLHOOK")){
-        if(wParam==20){ SHELLHOOK_MINRECT* p=(SHELLHOOK_MINRECT*)lParam; if(p&&p->hWnd){ std::lock_guard<std::mutex> lock(g_minRectMutex); auto it=g_pendingMinRect.find(p->hWnd); if(it!=g_pendingMinRect.end()){ p->rc.left=(SHORT)it->second.left; p->rc.top=(SHORT)it->second.top; p->rc.right=(SHORT)it->second.right; p->rc.bottom=(SHORT)it->second.bottom; return TRUE; } } }
-    } return DefWindowProcW(hwnd,msg,wParam,lParam);
-}
-static DWORD CALLBACK ShellHookThreadProc(LPVOID){
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    const wchar_t cls[]=L"Windhawk_Win7_ShellHook"; WNDCLASSW wc{}; wc.lpfnWndProc=ShellHookWndProc; wc.hInstance=g_hShellHookInst; wc.lpszClassName=cls; RegisterClassW(&wc);
-    HWND w=CreateWindowExW(0,cls,nullptr,0,0,0,0,0,nullptr,nullptr,g_hShellHookInst,nullptr);
-    if(w){ g_hShellHookWnd=w; RegisterShellHookWindow(w); MSG msg; while(!g_shellHookStop.load()&&GetMessageW(&msg,nullptr,0,0)){ TranslateMessage(&msg); DispatchMessageW(&msg);} DeregisterShellHookWindow(w); DestroyWindow(w); }
-    UnregisterClassW(cls,g_hShellHookInst); return 0;
-}
-
-#define DWP_HOOK_(name,defArgs,callArgs) LRESULT(CALLBACK* name##_orig) defArgs; LRESULT CALLBACK name##_hook defArgs { if(uMsg==WM_SHOWWINDOW&&wParam==FALSE&&lParam==0) ShellPreCaptureForClose(hWnd); if(uMsg==WM_SYSCOMMAND){ UINT cmd=UINT(wParam)&0xFFF0; if(cmd==SC_MINIMIZE&&PlayMinimize(hWnd)){ LRESULT lr=name##_orig callArgs; AfterOrigMinimize(hWnd,false); return lr; } if(cmd==SC_RESTORE&&PlayRestore(hWnd)) return 0; } return name##_orig callArgs; }
+#define DWP_HOOK_(name,defArgs,callArgs) LRESULT(CALLBACK* name##_orig) defArgs; LRESULT CALLBACK name##_hook defArgs { if(uMsg==WM_SHOWWINDOW&&wParam==FALSE&&lParam==0) ShellPreCaptureForClose(hWnd); if(uMsg==WM_SYSCOMMAND){ UINT cmd=UINT(wParam)&0xFFF0; if(cmd==SC_MINIMIZE&&PlayMinimize(hWnd)){ LRESULT lr=name##_orig callArgs; AfterOrigMinimize(hWnd,false); return lr; } if(cmd==SC_RESTORE){ if(PlayRestore(hWnd)) return 0; ForgetCapture(hWnd); } } return name##_orig callArgs; }
 #define DWP_HOOK(name,defArgs,callArgs) DWP_HOOK_(name##A,defArgs,callArgs) DWP_HOOK_(name##W,defArgs,callArgs)
 DWP_HOOK(DefWindowProc,(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam),(hWnd,uMsg,wParam,lParam))
 DWP_HOOK(DefFrameProc,(HWND hWnd,HWND hWndMDIClient,UINT uMsg,WPARAM wParam,LPARAM lParam),(hWnd,hWndMDIClient,uMsg,wParam,lParam))
@@ -916,10 +946,11 @@ BOOL WINAPI ShowWindow_hook(HWND hWnd,int nCmdShow){
     UINT cmd=CmdFromShow(nCmdShow);
     if(cmd==SC_RESTORE&&PlayRestore(hWnd)) return TRUE;
     bool playedMin=false;
-    if(cmd==SC_MINIMIZE){ RECT rcMin{}; if(GetMinimizeRectPhysical(hWnd,&rcMin)){ SetPendingMinRect(hWnd, AspectCorrectedMinimizeTarget(rcMin)); } playedMin=PlayMinimize(hWnd); }
+    if(cmd==SC_MINIMIZE) playedMin=PlayMinimize(hWnd);
+    else if(cmd==SC_RESTORE) ForgetCapture(hWnd);
     if(nCmdShow==SW_HIDE) ShellPreCaptureForClose(hWnd);
     BOOL r=ShowWindow_orig(hWnd,nCmdShow);
-    if(playedMin){ AfterOrigMinimize(hWnd,false); ClearPendingMinRect(hWnd); }
+    if(playedMin) AfterOrigMinimize(hWnd,false);
     return r;
 }
 BOOL WINAPI ShowWindowAsync_hook(HWND hWnd,int nCmdShow){
@@ -927,10 +958,11 @@ BOOL WINAPI ShowWindowAsync_hook(HWND hWnd,int nCmdShow){
     UINT cmd=CmdFromShow(nCmdShow);
     if(cmd==SC_RESTORE&&PlayRestore(hWnd)) return TRUE;
     bool playedMin=false;
-    if(cmd==SC_MINIMIZE){ RECT rcMin{}; if(GetMinimizeRectPhysical(hWnd,&rcMin)){ SetPendingMinRect(hWnd, AspectCorrectedMinimizeTarget(rcMin)); } playedMin=PlayMinimize(hWnd); }
+    if(cmd==SC_MINIMIZE) playedMin=PlayMinimize(hWnd);
+    else if(cmd==SC_RESTORE) ForgetCapture(hWnd);
     if(nCmdShow==SW_HIDE) ShellPreCaptureForClose(hWnd);
     BOOL r=ShowWindowAsync_orig(hWnd,nCmdShow);
-    if(playedMin){ AfterOrigMinimize(hWnd,true); ClearPendingMinRect(hWnd); }
+    if(playedMin) AfterOrigMinimize(hWnd,true);
     return r;
 }
 // Window prop guards against re-entry; the original DestroyWindow is always called.
@@ -941,7 +973,7 @@ BOOL WINAPI DestroyWindow_hook(HWND hWnd){
         // nothing thrown by the animation may ever reach the application's close path
         try{ if(closing.ok()) animated=PlayClose(hWnd); }catch(...){ animated=false; }
     }
-    ForgetCapture(hWnd); ClearPendingMinRect(hWnd); ForgetShellPreCapture(hWnd);
+    ForgetCapture(hWnd); ForgetShellPreCapture(hWnd);
     BOOL r=DestroyWindow_orig(hWnd);
     if(!r&&animated&&IsWindow(hWnd)){
         DisableTransitions(hWnd,FALSE);
@@ -952,25 +984,9 @@ BOOL WINAPI DestroyWindow_hook(HWND hWnd){
 
 static HMODULE GetCurrentModule(){ HMODULE m=nullptr; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,LPCWSTR(&GetCurrentModule),&m); return m; }
 
-static BOOL CALLBACK ExtraordinaryCleanupEnumProc(HWND hwnd, LPARAM lParam) {
-    if(IsWindowVisible(hwnd) || IsIconic(hwnd)){
-        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, 
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | 
-                    SWP_FRAMECHANGED | SWP_NOACTIVATE);
-    }
-    return TRUE;
-}
-
-static void ExtraordinaryCleanup(){
-    EnumWindows(ExtraordinaryCleanupEnumProc, 0);
-    
-    HWND hDwm = FindWindowW(L"Dwm", nullptr);
-    if(hDwm) PostMessageW(hDwm, WM_THEMECHANGED, 0, 0);
-}
-
 static void SafeCleanup(){
     if(InterlockedExchange(&g_isUninitializing,1)) return;
-    g_fDisabled.store(true); g_stopping.store(true); g_shellHookStop.store(true);
+    g_fDisabled.store(true); g_stopping.store(true);
     HWND ha=g_hwndAnim.load();
     if(ha&&IsWindow(ha)){
         SendMessageW(ha,WM_CLOSE,0,0);
@@ -980,36 +996,31 @@ static void SafeCleanup(){
         }
         if(IsWindow(ha)) DestroyWindow(ha);
     }
-    if(g_dwShellHookThreadId) PostThreadMessageW(g_dwShellHookThreadId,WM_QUIT,0,0);
-    if(g_hShellHookWnd&&IsWindow(g_hShellHookWnd)) PostMessageW(g_hShellHookWnd,WM_CLOSE,0,0);
     { std::lock_guard<std::mutex> lock(g_queueMutex); while(!g_queue.empty()){ auto* req=g_queue.front(); g_queue.pop_front(); if(!req) continue; if(req->deferOrig&&!req->origIssued&&req->hwnd&&IsWindow(req->hwnd)&&ShowWindowAsync_orig) ShowWindowAsync_orig(req->hwnd,req->origShowCmd?req->origShowCmd:SW_RESTORE); if(req->hwnd&&IsWindow(req->hwnd)) DisableTransitions(req->hwnd,FALSE); delete req; } }
     HWND cur=g_hwndCurrent.load(); if(cur&&IsWindow(cur)) DisableTransitions(cur,FALSE);
     StopAnimThread();
-    if(g_hShellHookThread){ WaitForSingleObject(g_hShellHookThread,1000); CloseHandle(g_hShellHookThread); g_hShellHookThread=nullptr; }
-    { std::lock_guard<std::mutex> lock(g_cacheMutex); g_captureCache.clear(); g_captureLru.clear(); }
+    { std::lock_guard<std::mutex> lock(g_cacheMutex); g_captureCache.clear(); g_captureLru.clear(); g_cacheBytes=0; }
     { std::lock_guard<std::mutex> lock(g_pendingCloseMutex); g_pendingClose=PendingClose{}; g_pendingCloseHwnd.store(nullptr); }
-    ExtraordinaryCleanup();
 }
 
 BOOL Wh_ModInit(){
-    InitExeName(); g_hinst=GetCurrentModule(); g_hShellHookInst=g_hinst; LoadSettings();
+    InitExeName(); g_hinst=GetCurrentModule(); LoadSettings();
     HMODULE user32=GetModuleHandleW(L"user32.dll"); if(!user32) return FALSE;
     pGetWindowMinimizeRect=GetWindowMinimizeRect_t(GetProcAddress(user32,"GetWindowMinimizeRect"));
     pIsHungAppWindow=IsHungAppWindow_t(GetProcAddress(user32,"IsHungAppWindow"));
     InterlockedExchange(&g_isUninitializing, 0);
-    g_shellHookStop.store(false);
-    g_hShellHookThread=CreateThread(nullptr,0,ShellHookThreadProc,nullptr,0,&g_dwShellHookThreadId);
-#define HOOK(f) if(!Wh_SetFunctionHook((void*)f,(void*)f##_hook,(void**)&f##_orig)){ return FALSE; }
+#define HOOK_WIDE2(s) L##s
+#define HOOK_WIDE(s) HOOK_WIDE2(s)
+#define HOOK(f) if(!WindhawkUtils::SetFunctionHook(f,f##_hook,&f##_orig)){ Wh_Log(L"hook failed: %s", HOOK_WIDE(#f)); return FALSE; }
     HOOK(DefWindowProcA) HOOK(DefWindowProcW) HOOK(DefFrameProcA) HOOK(DefFrameProcW) HOOK(DefMDIChildProcA) HOOK(DefMDIChildProcW) HOOK(DefDlgProcA) HOOK(DefDlgProcW) HOOK(ShowWindow) HOOK(ShowWindowAsync) HOOK(DestroyWindow)
 #undef HOOK
+#undef HOOK_WIDE
+#undef HOOK_WIDE2
     return TRUE;
 }
 void Wh_ModSettingsChanged(){ LoadSettings(); }
 void Wh_ModBeforeUninit(){ SafeCleanup(); }
 void Wh_ModUninit(){
     SafeCleanup();
-    if(g_hinst){
-        UnregisterClassW(kAnimClassName,g_hinst);
-        UnregisterClassW(L"Windhawk_Win7_ShellHook",g_hinst);
-    }
+    if(g_hinst) UnregisterClassW(kAnimClassName,g_hinst);
 }
