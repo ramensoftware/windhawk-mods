@@ -3329,7 +3329,8 @@ namespace
                                          WPARAM wParam,
                                          LPARAM lParam)
     {
-        if (message == g_removeHostSubclassMessage)
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage)
         {
             return DestroyWindow(window) ? TRUE : FALSE;
         }
@@ -3627,7 +3628,8 @@ namespace
                                               WPARAM wParam,
                                               LPARAM lParam)
     {
-        if (message == g_removeHostSubclassMessage)
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage)
         {
             return DestroyWindow(window) ? TRUE : FALSE;
         }
@@ -3809,7 +3811,8 @@ namespace
                                               WPARAM wParam,
                                               LPARAM lParam)
     {
-        if (message == g_removeHostSubclassMessage)
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage)
         {
             return DestroyWindow(window) ? TRUE : FALSE;
         }
@@ -4620,7 +4623,8 @@ namespace
             // Explorer always owns and localizes the actual window title.
         }
 
-        if (message == g_removeHostSubclassMessage)
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage)
         {
             RestoreNativePresentationForHost(window);
             if (ShouldApplyNativeColorOverrides())
@@ -4793,7 +4797,8 @@ namespace
         UINT_PTR subclassId,
         DWORD_PTR)
     {
-        if (message == g_removeHostSubclassMessage)
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage)
         {
             if (!RemoveWindowSubclass(
                     window, NativeProgressWindowSubclassProc, subclassId))
@@ -5026,6 +5031,45 @@ namespace
         }
     }
 
+    bool InstallAndTrackProgressWindowSubclass(
+        OperationTileElement *tile,
+        HWND progressWindow)
+    {
+        if (!tile || !progressWindow ||
+            !SetWindowSubclass(
+                progressWindow, NativeProgressWindowSubclassProc,
+                kProgressWindowSubclassId, 0))
+        {
+            return false;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_circleMutex);
+            auto it = std::find_if(
+                g_circles.begin(), g_circles.end(),
+                [tile](CircleState const &state)
+                { return state.tile == tile; });
+            if (it != g_circles.end() &&
+                (!it->progressWindow ||
+                 it->progressWindow == progressWindow))
+            {
+                it->progressWindow = progressWindow;
+                it->positionValid = false;
+                return true;
+            }
+        }
+
+        CircleState cleanupState{};
+        cleanupState.progressWindow = progressWindow;
+        cleanupState.hostWindow = GetAncestor(progressWindow, GA_ROOT);
+        if (!CleanupCircleStateResources(&cleanupState, false))
+        {
+            RetainCleanupOnlyCircleState(
+                cleanupState, L"unpublished-progress-subclass");
+        }
+        return false;
+    }
+
     void PositionProgressCircle(OperationTileElement *tile, PCWSTR reason)
     {
         if (!tile)
@@ -5065,6 +5109,7 @@ namespace
         // without reconstructing native visibility.
 
         HWND previousProgressWindow = nullptr;
+        bool progressWindowChanged = false;
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto bindingIt = std::find_if(
@@ -5075,6 +5120,7 @@ namespace
                 bindingIt->progressWindow != latestProgressWindow)
             {
                 previousProgressWindow = bindingIt->progressWindow;
+                progressWindowChanged = true;
             }
         }
 
@@ -5097,31 +5143,32 @@ namespace
             }
         }
 
-        HWND progressWindowToSubclass = nullptr;
+        if (previousProgressWindow)
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto bindingIt = std::find_if(
                 g_circles.begin(), g_circles.end(),
                 [tile](CircleState const &state)
                 { return state.tile == tile; });
-            if (bindingIt != g_circles.end() && latestProgressWindow &&
-                bindingIt->progressWindow != latestProgressWindow)
+            if (bindingIt != g_circles.end() &&
+                bindingIt->progressWindow == previousProgressWindow)
             {
-                bindingIt->progressWindow = latestProgressWindow;
+                bindingIt->progressWindow = nullptr;
                 bindingIt->positionValid = false;
-                progressWindowToSubclass = latestProgressWindow;
             }
         }
 
-        if (progressWindowToSubclass &&
-            !SetWindowSubclass(progressWindowToSubclass,
-                               NativeProgressWindowSubclassProc,
-                               kProgressWindowSubclassId, 0))
+        if (progressWindowChanged)
         {
-            Wh_Log(L"Progress HWND rebind failed to install new subclass "
-                   L"hwnd=%p error=%lu",
-                   reinterpret_cast<void *>(progressWindowToSubclass),
-                   GetLastError());
+            if (!InstallAndTrackProgressWindowSubclass(
+                    tile, latestProgressWindow))
+            {
+                Wh_Log(
+                    L"Progress HWND rebind failed to install/track subclass "
+                    L"hwnd=%p error=%lu",
+                    reinterpret_cast<void *>(latestProgressWindow),
+                    GetLastError());
+            }
         }
 
         CircleState placementState{};
@@ -5462,13 +5509,13 @@ namespace
         return *slotBottom > *slotTop;
     }
 
-    void RefreshDeleteLikeOperationKind(
-        COperationStatusTile *owner,
-        TransferSummaryState const &state)
+    bool TryGetDeleteLikeOperationKind(
+        TransferSummaryState const &state,
+        bool *deleteLike)
     {
-        if (!owner || !state.operationTileRoot)
+        if (!state.operationTileRoot || !deleteLike)
         {
-            return;
+            return false;
         }
 
         DirectUI::Element *firstLocation = FindSkinElement(
@@ -5484,13 +5531,25 @@ namespace
         bool secondPresent = !ReadDirectUiText(secondLocation).empty();
         if (!firstPresent && !secondPresent)
         {
-            return;
+            return false;
         }
 
         // Copy/move expose a non-empty source and destination location. Delete
         // has only the source location; an empty second-location placeholder can
         // still exist, so content rather than element existence is decisive.
-        bool deleteLike = firstPresent && !secondPresent;
+        *deleteLike = firstPresent && !secondPresent;
+        return true;
+    }
+
+    void RefreshDeleteLikeOperationKind(
+        COperationStatusTile *owner,
+        TransferSummaryState const &state)
+    {
+        bool deleteLike = false;
+        if (!owner || !TryGetDeleteLikeOperationKind(state, &deleteLike))
+        {
+            return;
+        }
 
         std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
         auto it = std::find_if(
@@ -6798,7 +6857,6 @@ namespace
                 it->progressRangeValid = progress.rangeValid;
                 if (!it->progressWindow && progressWindow)
                 {
-                    it->progressWindow = progressWindow;
                     progressSubclassNeeded = true;
                 }
                 if (!it->eventId)
@@ -6810,15 +6868,16 @@ namespace
         }
         if (circleExists)
         {
-            if (progressSubclassNeeded &&
-                !SetWindowSubclass(
-                    progressWindow, NativeProgressWindowSubclassProc,
-                    kProgressWindowSubclassId, 0) &&
-                eventId)
+            if (progressSubclassNeeded)
             {
-                Wh_Log(L"eventId=%llu circle SetWindowSubclass progress failed "
-                       L"error=%lu",
-                       eventId, GetLastError());
+                if (!InstallAndTrackProgressWindowSubclass(
+                        tile, progressWindow) && eventId)
+                {
+                    Wh_Log(
+                        L"eventId=%llu circle progress subclass install/track "
+                        L"failed error=%lu",
+                        eventId, GetLastError());
+                }
             }
             if (repaintNeeded)
             {
@@ -6864,7 +6923,7 @@ namespace
         }
 
         CircleState newState{
-            tile, circleWindow, infoWindow, progressWindow, hostWindow,
+            tile, circleWindow, infoWindow, nullptr, hostWindow,
             progress.percent, progress.rangeLow, progress.rangeHigh,
             true, progress.rangeValid,
             false, false,
@@ -6883,13 +6942,15 @@ namespace
             return false;
         }
 
-        bool progressSubclassed = true;
         if (progressWindow)
         {
-            progressSubclassed = SetWindowSubclass(
-                progressWindow, NativeProgressWindowSubclassProc,
-                kProgressWindowSubclassId, 0);
-            if (!progressSubclassed)
+            if (SetWindowSubclass(
+                    progressWindow, NativeProgressWindowSubclassProc,
+                    kProgressWindowSubclassId, 0))
+            {
+                newState.progressWindow = progressWindow;
+            }
+            else
             {
                 Wh_Log(L"eventId=%llu circle SetWindowSubclass progress failed "
                        L"error=%lu",
@@ -6909,10 +6970,6 @@ namespace
 
         if (shuttingDown)
         {
-            if (!progressSubclassed)
-            {
-                newState.progressWindow = nullptr;
-            }
             if (!CleanupCircleStateResources(&newState, true))
             {
                 RetainCleanupOnlyCircleState(
@@ -7010,7 +7067,8 @@ namespace
                     GetFooterOverlayWindow(state.hostWindow);
                 if (footerWindow && IsWindow(footerWindow))
                 {
-                    DestroyWindow(footerWindow);
+                    DestroyWindowOnOwningThread(footerWindow,
+                                                L"footer-overlay");
                 }
             }
             else
@@ -7660,6 +7718,35 @@ namespace
 
         auto *operationTile =
             reinterpret_cast<OperationTileElement *>(operationTileRoot);
+
+        TransferSummaryState candidateState{};
+        candidateState.owner = thisPtr;
+        candidateState.tile = operationTile;
+        candidateState.operationTileRoot = operationTileRoot;
+        candidateState.tileHeaderRoot = state.tileHeaderRoot;
+
+        NormalProgressLayoutElements layoutElements{};
+        bool completeNormalLayout =
+            DiscoverNormalProgressLayout(candidateState, &layoutElements);
+        bool deleteLike = false;
+        bool deleteLikeKnown =
+            TryGetDeleteLikeOperationKind(candidateState, &deleteLike);
+        bool hierarchyValid =
+            deleteLikeKnown && deleteLike
+                ? ValidateDeleteLikeProgressHierarchy(
+                      layoutElements, eventId, false)
+                : (completeNormalLayout &&
+                   ValidateNormalProgressHierarchy(
+                       layoutElements, eventId, false));
+        if (!hierarchyValid)
+        {
+            Wh_Log(L"eventId=%llu presentation skipped "
+                   L"reason=unsupported-layout deleteLike=%s",
+                   eventId,
+                   deleteLikeKnown && deleteLike ? L"yes" : L"no");
+            return result;
+        }
+
         HWND nativeProgressWindow =
             OperationTileElement_GetProgressHWND_Original(operationTile);
         NativeProgressSnapshot initialProgress =
