@@ -245,6 +245,7 @@ struct RollbackAppPolicy {
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static RollbackAppPolicy g_rollbackApps[kMaxRollbackApps] = {};
 static size_t g_rollbackAppCount = 0;
+static std::atomic<uint64_t> g_settingsGeneration{0};
 
 static DWORD ClampNonNegativeSetting(int configured, DWORD maximum) {
     if (configured <= 0) {
@@ -295,6 +296,8 @@ static void LoadSettings() {
         g_rollbackApps[i] =
             i < rollbackAppCount ? rollbackApps[i] : RollbackAppPolicy{};
     }
+
+    g_settingsGeneration.fetch_add(1, std::memory_order_release);
 
     ReleaseSRWLockExclusive(&g_settingsLock);
 
@@ -1010,14 +1013,16 @@ static HRESULT ForegroundViewChanged_Hook(
     g_foregroundPolicyHwnd = GetForegroundPolicyViewHwnd(view);
     g_foregroundPolicyViewIdentity = view;
 
-    ObserveForegroundViewForRollbackWatches(view, g_foregroundPolicyHwnd);
-
     g_foregroundPolicyNavigationFocus = {};
     ConsumeNavigationSelectedFocus(view, g_foregroundPolicyHwnd,
                                    &g_foregroundPolicyNavigationFocus);
 
     HRESULT hr =
         g_foregroundViewChangedOriginal(pThis, manager, animator, view);
+
+    if (SUCCEEDED(hr)) {
+        ObserveForegroundViewForRollbackWatches(view, g_foregroundPolicyHwnd);
+    }
 
     const uint64_t completedRescueSequence = g_foregroundPolicyRescueSequence;
     if (completedRescueSequence) {
@@ -1431,6 +1436,7 @@ struct RescueRequest {
     bool replacementHandlingEnabled = false;
     DWORD preMoveDelayMs = 0;
     DWORD rollbackWatchMs = 0;
+    uint64_t settingsGeneration = 0;
 
     IApplicationView* viewIdentity = nullptr;  // opaque, never dereferenced
     HWND hwnd = nullptr;
@@ -1965,6 +1971,8 @@ static bool ArmRollbackWatch(const RescueRequest& request) {
     AcquireSRWLockExclusive(&g_requestLock);
 
     if (g_unloading.load(std::memory_order_acquire) ||
+        request.settingsGeneration !=
+            g_settingsGeneration.load(std::memory_order_acquire) ||
         request.navigationGeneration !=
             g_navigationGeneration.load(std::memory_order_acquire)) {
         ReleaseSRWLockExclusive(&g_requestLock);
@@ -2254,6 +2262,8 @@ static void ProcessRescueRequest(WorkerComState* state, RescueRequest request) {
         return;
     }
 
+    request.settingsGeneration =
+        g_settingsGeneration.load(std::memory_order_acquire);
     request.replacementHandlingEnabled = GetRollbackAppPolicy(
         request.pid, &request.preMoveDelayMs, &request.rollbackWatchMs);
 
