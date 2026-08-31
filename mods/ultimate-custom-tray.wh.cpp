@@ -315,7 +315,7 @@ static bool IsSystemDarkMode() {
     DWORD size  = sizeof(value);
     RegGetValueW(HKEY_CURRENT_USER,
                  L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                 L"AppsUseLightTheme",
+                 L"SystemUsesLightTheme",
                  RRF_RT_DWORD, nullptr, &value, &size);
     return value == 0;
 }
