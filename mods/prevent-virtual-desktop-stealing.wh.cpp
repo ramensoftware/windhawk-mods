@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              prevent-virtual-desktop-stealing
-// @name            Don’t Pull Me to Another Desktop
+// @name            Don't Pull Me to Another Desktop
 // @description     Summon existing windows to the current virtual desktop instead of pulling you away.
 // @version         0.4.0
 // @author          meteoni
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Don’t Pull Me to Another Desktop
+# Don't Pull Me to Another Desktop
 
 Windows can switch you to another virtual desktop simply because a window on
 that desktop was activated. This can happen after clicking a flashing taskbar
@@ -43,15 +43,36 @@ Animation**.
 
 - Designed for Windows 11 24H2 and newer; future Windows updates may require
   adjustments.
-- Some applications can briefly activate an old window before asynchronously
-  creating the window that was actually requested on the current desktop. The
-  mod uses a short settling period, and only waits longer when the process
-  exposes a stable package/app identity that makes that extra latency
-  worthwhile. 
+- Some applications briefly activate an old window before creating the window
+  that was actually requested on the current desktop. Those apps can be enabled
+  for replacement handling in Settings. Windows Terminal is enabled by default. 
 */
 // ==/WindhawkModReadme==
 
-#include <appmodel.h>
+// ==WindhawkModSettings==
+/*
+- rollbackApps:
+  - - executable: "WindowsTerminal.exe"
+      $name: Executable name
+      $description: >-
+        Executable name that opts in. 
+    - preMoveDelayMs: 500
+      $name: Debounce delay (ms)
+      $description: >-
+        Optional delay before summoning an existing window. Set to 0 for
+        immediate summoning.
+    - rollbackWatchMs: 2000
+      $name: Rollback validity window (ms)
+      $description: >-
+        Replacement windows within this period are valid. Set to 0 to disable. 
+  $name: Apps for replacement handling
+  $description: >-
+    Restores the original location of the old window once a replacement window is
+    confirmed.     
+*/
+// ==/WindhawkModSettings==
+
+#include <ObjectArray.h>
 #include <objbase.h>
 #include <servprov.h>
 #include <shobjidl.h>
@@ -100,6 +121,7 @@ static const IID kIidVirtualDesktopNotificationService = {
 // IVirtualDesktopManagerInternal slots for the 24H2 IID above.
 static constexpr int kVtableMoveViewToDesktop = 4;
 static constexpr int kVtableGetCurrentDesktop = 6;
+static constexpr int kVtableGetDesktops = 7;
 
 // Windows 11 24H2+ IVirtualDesktopManagerInternal / Internal2 IID.
 static const IID kIidVirtualDesktopManagerInternal24H2 = {
@@ -107,6 +129,12 @@ static const IID kIidVirtualDesktopManagerInternal24H2 = {
     0x158F,
     0x4124,
     {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}};
+
+static const IID kIidVirtualDesktop24H2 = {
+    0x3F07F4BE,
+    0xB107,
+    0x441A,
+    {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
 
 static const IID kIidApplicationViewCollection = {
     0x1841C6D7,
@@ -196,15 +224,148 @@ struct IVirtualDesktopNotificationService : IUnknown {
 };
 
 // -----------------------------------------------------------------------------
-// Rescue timing policy.
+// Per-app asynchronous replacement policy.
 // -----------------------------------------------------------------------------
 
-// These are implementation parameters, not user-facing preferences. The short
-// delay gives ordinary foreground state a chance to settle. The longer bound is
-// used only when the worker can positively establish a stable package/AUMID
-// identity for the process; it does not participate in same-view correlation.
-static constexpr DWORD kRescueStabilizationMs = 50;
-static constexpr DWORD kRescueViewSupersessionMs = 200;
+// There is no global rescue debounce. Unlisted apps are released to the worker
+// as soon as the exact CVirtualDesktopForegroundPolicy::ForegroundViewChanged
+// invocation that caused the rescue returns. Opted-in apps may add a bounded
+// pre-move grace period purely to avoid visual churn. Late rollback has its own
+// independent passive validity window.
+static constexpr DWORD kMaxPreMoveDelayMs = 2000;
+static constexpr DWORD kMaxRollbackWatchMs = 10000;
+static constexpr size_t kMaxRollbackApps = 16;
+
+struct RollbackAppPolicy {
+    wchar_t executable[MAX_PATH] = {};
+    DWORD preMoveDelayMs = 0;
+    DWORD rollbackWatchMs = 0;
+};
+
+static SRWLOCK g_settingsLock = SRWLOCK_INIT;
+static RollbackAppPolicy g_rollbackApps[kMaxRollbackApps] = {};
+static size_t g_rollbackAppCount = 0;
+
+static DWORD ClampNonNegativeSetting(int configured, DWORD maximum) {
+    if (configured <= 0) {
+        return 0;
+    }
+
+    DWORD value = static_cast<DWORD>(configured);
+    return value > maximum ? maximum : value;
+}
+
+static void LoadSettings() {
+    RollbackAppPolicy rollbackApps[kMaxRollbackApps] = {};
+    size_t rollbackAppCount = 0;
+
+    for (int i = 0; i < static_cast<int>(kMaxRollbackApps); ++i) {
+        PCWSTR raw = Wh_GetStringSetting(L"rollbackApps[%d].executable", i);
+
+        if (!raw || !*raw) {
+            if (raw) {
+                Wh_FreeStringSetting(raw);
+            }
+            break;
+        }
+
+        RollbackAppPolicy& policy = rollbackApps[rollbackAppCount];
+        wcsncpy_s(policy.executable, raw, _TRUNCATE);
+        Wh_FreeStringSetting(raw);
+
+        if (!policy.executable[0]) {
+            continue;
+        }
+
+        policy.preMoveDelayMs = ClampNonNegativeSetting(
+            Wh_GetIntSetting(L"rollbackApps[%d].preMoveDelayMs", i),
+            kMaxPreMoveDelayMs);
+
+        policy.rollbackWatchMs = ClampNonNegativeSetting(
+            Wh_GetIntSetting(L"rollbackApps[%d].rollbackWatchMs", i),
+            kMaxRollbackWatchMs);
+
+        ++rollbackAppCount;
+    }
+
+    AcquireSRWLockExclusive(&g_settingsLock);
+
+    g_rollbackAppCount = rollbackAppCount;
+    for (size_t i = 0; i < kMaxRollbackApps; ++i) {
+        g_rollbackApps[i] =
+            i < rollbackAppCount ? rollbackApps[i] : RollbackAppPolicy{};
+    }
+
+    ReleaseSRWLockExclusive(&g_settingsLock);
+
+    Wh_Log(L"Settings: asynchronous replacement apps=%llu",
+           static_cast<unsigned long long>(rollbackAppCount));
+}
+
+static bool GetRollbackAppPolicy(DWORD pid,
+                                 DWORD* preMoveDelayMs,
+                                 DWORD* rollbackWatchMs) {
+    if (preMoveDelayMs) {
+        *preMoveDelayMs = 0;
+    }
+    if (rollbackWatchMs) {
+        *rollbackWatchMs = 0;
+    }
+
+    if (!pid) {
+        return false;
+    }
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
+    }
+
+    wchar_t imagePath[32768] = {};
+    DWORD imagePathLength = ARRAYSIZE(imagePath);
+
+    const bool queried = QueryFullProcessImageNameW(process, 0, imagePath,
+                                                    &imagePathLength) != FALSE;
+
+    CloseHandle(process);
+
+    if (!queried || !imagePath[0]) {
+        return false;
+    }
+
+    const wchar_t* executable = wcsrchr(imagePath, L'\\');
+    executable = executable ? executable + 1 : imagePath;
+
+    bool found = false;
+    DWORD resolvedPreMoveDelayMs = 0;
+    DWORD resolvedRollbackWatchMs = 0;
+
+    AcquireSRWLockShared(&g_settingsLock);
+
+    for (size_t i = 0; i < g_rollbackAppCount; ++i) {
+        if (_wcsicmp(executable, g_rollbackApps[i].executable) == 0) {
+            resolvedPreMoveDelayMs = g_rollbackApps[i].preMoveDelayMs;
+            resolvedRollbackWatchMs = g_rollbackApps[i].rollbackWatchMs;
+            found = true;
+            break;
+        }
+    }
+
+    ReleaseSRWLockShared(&g_settingsLock);
+
+    if (!found) {
+        return false;
+    }
+
+    if (preMoveDelayMs) {
+        *preMoveDelayMs = resolvedPreMoveDelayMs;
+    }
+    if (rollbackWatchMs) {
+        *rollbackWatchMs = resolvedRollbackWatchMs;
+    }
+
+    return true;
+}
 
 // Process-lifetime cancellation used to keep late shell-host initialization,
 // COM startup, and worker waits from racing Windhawk unload.
@@ -428,9 +589,9 @@ struct NavigationFocusRecord {
 };
 
 static constexpr size_t kNavigationFocusHistoryCapacity = 32;
-// Safety lifetime for a navigation-selected focus token that never receives
-// its expected FVP callback. Normal delayed deliveries observed in testing are
-// well below this; the bound prevents an orphan token from surviving forever.
+// Garbage-collection lifetime only. Causal freshness for an older-generation
+// token is checked separately: an old token may classify an FVP only while the
+// immediately following DesktopChanged is actively executing on this thread.
 static constexpr ULONGLONG kNavigationFocusRecordMaxAgeMs = 2000;
 static SRWLOCK g_navigationFocusLock = SRWLOCK_INIT;
 static NavigationFocusRecord
@@ -444,6 +605,11 @@ static std::atomic<uint64_t> g_nextNavigationFocusSequence{1};
 static thread_local uint64_t g_foregroundPolicyNavigationGeneration = 0;
 static thread_local NavigationFocusRecord g_foregroundPolicyNavigationFocus =
     {};
+
+// QueueRescue reserves work while nested under ForegroundViewChanged, but the
+// worker isn't released until that exact outer shell call returns. Nested FVP
+// calls save/restore this sequence like the other attribution TLS.
+static thread_local uint64_t g_foregroundPolicyRescueSequence = 0;
 
 static void DiscardNavigationFocusGeneration(uint64_t generation) {
     if (!generation) {
@@ -561,6 +727,28 @@ static bool ConsumeNavigationSelectedFocus(
             continue;
         }
 
+        const uint64_t currentGeneration =
+            g_navigationGeneration.load(std::memory_order_acquire);
+
+        if (record.generation > currentGeneration) {
+            record = {};
+            continue;
+        }
+
+        if (record.generation < currentGeneration) {
+            const bool delayedFromImmediatelyPreviousNavigation =
+                g_activeNavigationGeneration == currentGeneration &&
+                record.generation + 1 == currentGeneration;
+
+            if (!delayedFromImmediatelyPreviousNavigation) {
+                // The same shell view can be activated again later. Once the
+                // newer navigation has completed, an orphaned old token must
+                // not classify that fresh activation as stale navigation.
+                record = {};
+                continue;
+            }
+        }
+
         if (!matched.valid || record.generation < matched.generation ||
             (record.generation == matched.generation &&
              record.sequence < matched.sequence)) {
@@ -672,7 +860,12 @@ using OnViewAddedInternal_t = HRESULT (*)(void* pThis, IApplicationView* view);
 
 static OnViewAddedInternal_t g_onViewAddedInternalOriginal = nullptr;
 
-static std::atomic<bool> g_viewSupersessionAvailable{false};
+static std::atomic<bool> g_viewAddedObservationAvailable{false};
+
+static void InvalidateRollbackWatches(const wchar_t* reason);
+static void ObserveForegroundViewForRollbackWatches(IApplicationView* view,
+                                                    HWND hwnd);
+static void PublishForegroundPolicyRescueCompletion(uint64_t sequence);
 
 static HWND GetForegroundPolicyViewHwnd(IApplicationView* view) {
     if (!view) {
@@ -727,6 +920,7 @@ static HRESULT DesktopChanged_Hook(void* pThis, IVirtualDesktop* desktop) {
             g_navigationGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
 
         g_activeNavigationGeneration = generation;
+        InvalidateRollbackWatches(L"desktop navigation");
 
         GUID desktopId = {};
         const bool desktopIdValid =
@@ -802,8 +996,10 @@ static HRESULT ForegroundViewChanged_Hook(
         g_foregroundPolicyNavigationGeneration;
     NavigationFocusRecord previousNavigationFocus =
         g_foregroundPolicyNavigationFocus;
+    uint64_t previousRescueSequence = g_foregroundPolicyRescueSequence;
 
     ++g_foregroundPolicyDepth;
+    g_foregroundPolicyRescueSequence = 0;
 
     g_foregroundPolicyNavigationGeneration =
         g_navigationGeneration.load(std::memory_order_acquire);
@@ -814,6 +1010,8 @@ static HRESULT ForegroundViewChanged_Hook(
     g_foregroundPolicyHwnd = GetForegroundPolicyViewHwnd(view);
     g_foregroundPolicyViewIdentity = view;
 
+    ObserveForegroundViewForRollbackWatches(view, g_foregroundPolicyHwnd);
+
     g_foregroundPolicyNavigationFocus = {};
     ConsumeNavigationSelectedFocus(view, g_foregroundPolicyHwnd,
                                    &g_foregroundPolicyNavigationFocus);
@@ -821,10 +1019,16 @@ static HRESULT ForegroundViewChanged_Hook(
     HRESULT hr =
         g_foregroundViewChangedOriginal(pThis, manager, animator, view);
 
+    const uint64_t completedRescueSequence = g_foregroundPolicyRescueSequence;
+    if (completedRescueSequence) {
+        PublishForegroundPolicyRescueCompletion(completedRescueSequence);
+    }
+
     g_foregroundPolicyHwnd = previousHwnd;
     g_foregroundPolicyViewIdentity = previousViewIdentity;
     g_foregroundPolicyNavigationGeneration = previousNavigationGeneration;
     g_foregroundPolicyNavigationFocus = previousNavigationFocus;
+    g_foregroundPolicyRescueSequence = previousRescueSequence;
 
     --g_foregroundPolicyDepth;
     return hr;
@@ -1218,74 +1422,54 @@ static void StopNotificationCache() {
 // Rescue worker.
 // -----------------------------------------------------------------------------
 
-// Stable package/AUMID identity is used only to decide whether paying the
-// longer supersession grace period is worthwhile. Same-process identity, a
-// genuinely different shell view, and current-desktop ownership are the actual
-// correlation criteria.
-static bool HasExtendedSupersessionIdentity(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-
-    if (!process) {
-        return false;
-    }
-
-    bool hasIdentity = false;
-
-    wchar_t packageFamily[256] = {};
-    UINT32 packageFamilyLength = ARRAYSIZE(packageFamily);
-
-    if (GetPackageFamilyName(process, &packageFamilyLength, packageFamily) ==
-            ERROR_SUCCESS &&
-        packageFamily[0]) {
-        hasIdentity = true;
-    }
-
-    if (!hasIdentity) {
-        wchar_t appUserModelId[512] = {};
-        UINT32 appUserModelIdLength = ARRAYSIZE(appUserModelId);
-
-        if (GetApplicationUserModelId(process, &appUserModelIdLength,
-                                      appUserModelId) == ERROR_SUCCESS &&
-            appUserModelId[0]) {
-            hasIdentity = true;
-        }
-    }
-
-    CloseHandle(process);
-    return hasIdentity;
-}
-
 struct RescueRequest {
     uint64_t sequence = 0;
     uint64_t navigationGeneration = 0;
-    ULONGLONG queuedAt = 0;
+    bool foregroundPolicyReturned = false;
+    ULONGLONG foregroundPolicyReturnedAt = 0;
+
+    bool replacementHandlingEnabled = false;
+    DWORD preMoveDelayMs = 0;
+    DWORD rollbackWatchMs = 0;
 
     IApplicationView* viewIdentity = nullptr;  // opaque, never dereferenced
     HWND hwnd = nullptr;
-
-    // Win32 foreground state observed while the FVP-owned switch is still on
-    // the hook stack. The generic foreground-settling guard is only allowed to
-    // cancel if a different source-desktop window from the activated process
-    // becomes foreground later.
-    HWND foregroundAtQueue = nullptr;
-
     DWORD pid = 0;
     DWORD tid = 0;
 
     GUID sourceDesktopId = {};
     GUID requestedDesktopId = {};
 
-    // Filled once on the worker. This controls only whether the longer grace
-    // period is used; it is not a correlation key.
-    bool extendedSupersessionEligible = false;
-
-    // Written only under g_requestLock by OnViewAddedInternal after a
-    // same-process, different-view match inside the configured observation
-    // window. The worker validates same-PID identity and desktop/view state
-    // before treating this as a real superseder.
+    // Written only under g_requestLock after OnViewAddedInternal observes a
+    // newly-added same-process/different-view candidate. If its exact view also
+    // reaches ForegroundViewChanged before the causative policy call returns,
+    // an opted-in app can avoid the premature move entirely. Otherwise the
+    // evidence can be inherited by the post-rescue rollback watch.
     IApplicationView* supersedingViewIdentity = nullptr;
     HWND supersedingHwnd = nullptr;
     ULONGLONG supersedingObservedAt = 0;
+    bool supersedingForegroundConfirmed = false;
+};
+
+struct RollbackWatch {
+    bool valid = false;
+    uint64_t sequence = 0;
+    uint64_t navigationGeneration = 0;
+    ULONGLONG armedAt = 0;
+    DWORD lifetimeMs = 0;
+
+    IApplicationView* rescuedViewIdentity = nullptr;  // opaque
+    HWND rescuedHwnd = nullptr;
+    DWORD pid = 0;
+    DWORD tid = 0;
+
+    GUID sourceDesktopId = {};
+    GUID originalDesktopId = {};
+
+    IApplicationView* candidateViewIdentity = nullptr;  // opaque
+    HWND candidateHwnd = nullptr;
+    ULONGLONG candidateObservedAt = 0;
+    bool candidateForegroundConfirmed = false;
 };
 
 static constexpr size_t kRescueQueueCapacity = 16;
@@ -1297,9 +1481,13 @@ static RescueRequest g_activeRescueWatch = {};
 static bool g_activeRescueWatchValid = false;
 static std::atomic<uint64_t> g_nextSequence = 1;
 
-static HANDLE g_requestEvent = nullptr;       // auto-reset
-static HANDLE g_supersessionEvent = nullptr;  // auto-reset
-static HANDLE g_stopEvent = nullptr;          // manual-reset
+static constexpr size_t kRollbackWatchCapacity = 8;
+static RollbackWatch g_rollbackWatches[kRollbackWatchCapacity] = {};
+
+static HANDLE g_requestEvent = nullptr;          // auto-reset
+static HANDLE g_preMoveEvidenceEvent = nullptr;  // auto-reset
+static HANDLE g_rollbackEvent = nullptr;  // auto-reset, confirmed rollback
+static HANDLE g_stopEvent = nullptr;      // manual-reset
 static HANDLE g_workerThread = nullptr;
 static HANDLE g_workerReadyEvent = nullptr;
 static std::atomic<bool> g_workerReady = false;
@@ -1450,51 +1638,69 @@ static HRESULT WorkerMoveViewToDesktop(WorkerComState* state,
     return fn(state->managerInternal, view, desktop);
 }
 
+static HRESULT WorkerGetDesktops(WorkerComState* state,
+                                 IObjectArray** desktops) {
+    if (!state || !state->managerInternal || !desktops) {
+        return E_POINTER;
+    }
+
+    *desktops = nullptr;
+
+    auto fn =
+        GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IObjectArray**)>(
+            state->managerInternal, kVtableGetDesktops);
+
+    return fn(state->managerInternal, desktops);
+}
+
+static IVirtualDesktop* WorkerFindDesktopById(WorkerComState* state,
+                                              const GUID& desktopId) {
+    IObjectArray* desktops = nullptr;
+    HRESULT hr = WorkerGetDesktops(state, &desktops);
+
+    if (FAILED(hr) || !desktops) {
+        return nullptr;
+    }
+
+    UINT count = 0;
+    hr = desktops->GetCount(&count);
+
+    if (FAILED(hr)) {
+        desktops->Release();
+        return nullptr;
+    }
+
+    IVirtualDesktop* found = nullptr;
+
+    for (UINT i = 0; i < count; ++i) {
+        IVirtualDesktop* desktop = nullptr;
+
+        hr = desktops->GetAt(i, kIidVirtualDesktop24H2,
+                             reinterpret_cast<void**>(&desktop));
+
+        if (FAILED(hr) || !desktop) {
+            continue;
+        }
+
+        GUID id = {};
+        const bool matches =
+            SUCCEEDED(desktop->GetId(&id)) && GuidEqual(id, desktopId);
+
+        if (matches) {
+            found = desktop;
+            break;
+        }
+
+        desktop->Release();
+    }
+
+    desktops->Release();
+    return found;
+}
+
 static bool IsRescueGenerationCurrent(const RescueRequest& request) {
     return request.navigationGeneration ==
            g_navigationGeneration.load(std::memory_order_acquire);
-}
-
-static bool TryGetObservedSuperseder(uint64_t sequence,
-                                     IApplicationView** viewIdentity,
-                                     HWND* hwnd,
-                                     ULONGLONG* observedAt) {
-    if (viewIdentity) {
-        *viewIdentity = nullptr;
-    }
-    if (hwnd) {
-        *hwnd = nullptr;
-    }
-    if (observedAt) {
-        *observedAt = 0;
-    }
-
-    bool found = false;
-
-    AcquireSRWLockExclusive(&g_requestLock);
-
-    if (g_activeRescueWatchValid && g_activeRescueWatch.sequence == sequence &&
-        g_activeRescueWatch.supersedingHwnd) {
-        if (viewIdentity) {
-            *viewIdentity = g_activeRescueWatch.supersedingViewIdentity;
-        }
-        if (hwnd) {
-            *hwnd = g_activeRescueWatch.supersedingHwnd;
-        }
-        if (observedAt) {
-            *observedAt = g_activeRescueWatch.supersedingObservedAt;
-        }
-
-        // Consume this observation. If validation fails, a later VIEWADD can
-        // supply another candidate and wake the worker again.
-        g_activeRescueWatch.supersedingViewIdentity = nullptr;
-        g_activeRescueWatch.supersedingHwnd = nullptr;
-        g_activeRescueWatch.supersedingObservedAt = 0;
-        found = true;
-    }
-
-    ReleaseSRWLockExclusive(&g_requestLock);
-    return found;
 }
 
 static bool ValidateObservedSuperseder(WorkerComState* state,
@@ -1536,80 +1742,100 @@ static bool ValidateObservedSuperseder(WorkerComState* state,
     return true;
 }
 
-static bool WaitForRescueSettling(WorkerComState* state,
-                                  const RescueRequest& request) {
-    DWORD waitWindow = kRescueStabilizationMs;
-
-    if (g_viewSupersessionAvailable.load(std::memory_order_acquire) &&
-        request.extendedSupersessionEligible &&
-        kRescueViewSupersessionMs > waitWindow) {
-        waitWindow = kRescueViewSupersessionMs;
+static bool GetConfirmedActiveSuperseder(uint64_t sequence,
+                                         IApplicationView** viewIdentity,
+                                         HWND* hwnd) {
+    if (viewIdentity) {
+        *viewIdentity = nullptr;
+    }
+    if (hwnd) {
+        *hwnd = nullptr;
     }
 
-    if (!waitWindow) {
+    bool found = false;
+
+    AcquireSRWLockShared(&g_requestLock);
+
+    if (g_activeRescueWatchValid && g_activeRescueWatch.sequence == sequence &&
+        g_activeRescueWatch.supersedingViewIdentity &&
+        g_activeRescueWatch.supersedingHwnd &&
+        g_activeRescueWatch.supersedingForegroundConfirmed) {
+        if (viewIdentity) {
+            *viewIdentity = g_activeRescueWatch.supersedingViewIdentity;
+        }
+        if (hwnd) {
+            *hwnd = g_activeRescueWatch.supersedingHwnd;
+        }
+        found = true;
+    }
+
+    ReleaseSRWLockShared(&g_requestLock);
+    return found;
+}
+
+static bool WaitForPreMoveGrace(WorkerComState* state,
+                                const RescueRequest& request) {
+    if (!request.replacementHandlingEnabled || !request.preMoveDelayMs ||
+        !g_viewAddedObservationAvailable.load(std::memory_order_acquire)) {
         return true;
     }
+
+    const ULONGLONG startedAt = request.foregroundPolicyReturnedAt
+                                    ? request.foregroundPolicyReturnedAt
+                                    : GetTickCount64();
 
     while (true) {
         if (!IsRescueGenerationCurrent(request)) {
             Wh_Log(
-                L"[#%llu] Abort: navigation generation changed "
-                L"during rescue settling",
+                L"[#%llu] Abort: navigation generation changed during "
+                L"pre-move grace",
                 static_cast<unsigned long long>(request.sequence));
             return false;
         }
 
-        IApplicationView* observedViewIdentity = nullptr;
-        HWND observedHwnd = nullptr;
-        ULONGLONG observedAt = 0;
+        IApplicationView* candidateView = nullptr;
+        HWND candidateHwnd = nullptr;
 
-        if (TryGetObservedSuperseder(request.sequence, &observedViewIdentity,
-                                     &observedHwnd, &observedAt)) {
-            const ULONGLONG observedElapsed =
-                observedAt >= request.queuedAt ? observedAt - request.queuedAt
-                                               : 0;
+        bool hasConfirmedCandidate = request.supersedingViewIdentity &&
+                                     request.supersedingHwnd &&
+                                     request.supersedingForegroundConfirmed;
 
-            const bool insideSupersessionWindow =
-                observedAt != 0 && observedElapsed <= waitWindow;
+        if (hasConfirmedCandidate) {
+            candidateView = request.supersedingViewIdentity;
+            candidateHwnd = request.supersedingHwnd;
+        } else {
+            hasConfirmedCandidate = GetConfirmedActiveSuperseder(
+                request.sequence, &candidateView, &candidateHwnd);
+        }
 
-            if (insideSupersessionWindow &&
-                ValidateObservedSuperseder(state, request, observedViewIdentity,
-                                           observedHwnd)) {
-                Wh_Log(
-                    L"[#%llu] Abort: newly-added same-process view "
-                    L"superseded rescue hwnd=%p",
-                    static_cast<unsigned long long>(request.sequence),
-                    observedHwnd);
-
-                return false;
-            }
-
+        if (hasConfirmedCandidate &&
+            ValidateObservedSuperseder(state, request, candidateView,
+                                       candidateHwnd)) {
             Wh_Log(
-                L"[#%llu] Ignored VIEWADD supersession candidate "
-                L"hwnd=%p observedElapsed=%llu ms "
-                L"window=%lu ms",
-                static_cast<unsigned long long>(request.sequence), observedHwnd,
-                static_cast<unsigned long long>(observedElapsed), waitWindow);
+                L"[#%llu] Pre-move grace avoided summon: replacement "
+                L"confirmed hwnd=%p",
+                static_cast<unsigned long long>(request.sequence),
+                candidateHwnd);
+            return false;
         }
 
         const ULONGLONG now = GetTickCount64();
+        const ULONGLONG elapsed = now >= startedAt ? now - startedAt : 0;
 
-        const ULONGLONG elapsed =
-            now >= request.queuedAt ? now - request.queuedAt : 0;
-
-        if (elapsed >= waitWindow) {
+        if (elapsed >= request.preMoveDelayMs) {
             return true;
         }
 
-        const DWORD remaining = waitWindow - static_cast<DWORD>(elapsed);
+        const DWORD remaining =
+            request.preMoveDelayMs - static_cast<DWORD>(elapsed);
 
         HANDLE waits[] = {
             g_runtimeCancelEvent,
             g_stopEvent,
-            g_supersessionEvent,
+            g_preMoveEvidenceEvent,
         };
 
-        DWORD waitResult =
+        const DWORD waitResult =
             WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, remaining);
 
         if (waitResult == WAIT_TIMEOUT) {
@@ -1617,64 +1843,15 @@ static bool WaitForRescueSettling(WorkerComState* state,
         }
 
         if (waitResult == WAIT_OBJECT_0 + 2) {
-            // A VIEWADD matching either the active or a queued rescue arrived.
-            // Re-read our own active observation at the top of the loop.
             continue;
         }
 
         Wh_Log(
-            L"[#%llu] Abort: rescue settling interrupted "
+            L"[#%llu] Abort: pre-move grace interrupted "
             L"(waitResult=%lu)",
             static_cast<unsigned long long>(request.sequence), waitResult);
-
         return false;
     }
-}
-
-static bool IsForegroundReplacementOnSourceDesktop(WorkerComState* state,
-                                                   const RescueRequest& request,
-                                                   HWND* replacementHwnd) {
-    // If the queue-time Win32 foreground couldn't be distinguished from the
-    // remote activation target, there is no positive baseline from which to
-    // infer that a later foreground window is a replacement. Abstain rather
-    // than cancelling a rescue on ambiguous state.
-    if (!request.foregroundAtQueue ||
-        request.foregroundAtQueue == request.hwnd) {
-        return false;
-    }
-
-    HWND foreground = GetForegroundWindow();
-
-    if (!foreground || foreground == request.hwnd ||
-        foreground == request.foregroundAtQueue ||
-        !IsRescueCandidate(foreground)) {
-        return false;
-    }
-
-    DWORD foregroundPid = 0;
-    GetWindowThreadProcessId(foreground, &foregroundPid);
-
-    // This raw foreground check is weaker evidence than OnViewAddedInternal,
-    // so only trust a replacement owned by the process whose remote view was
-    // activated. Foreground restoration to shell/launcher UI must not cancel.
-    if (!foregroundPid || foregroundPid != request.pid) {
-        return false;
-    }
-
-    GUID foregroundDesktopId = {};
-    HRESULT hr = state->publicManager->GetWindowDesktopId(foreground,
-                                                          &foregroundDesktopId);
-
-    if (FAILED(hr) ||
-        !GuidEqual(foregroundDesktopId, request.sourceDesktopId)) {
-        return false;
-    }
-
-    if (replacementHwnd) {
-        *replacementHwnd = foreground;
-    }
-
-    return true;
 }
 
 static bool TakePendingRequest(RescueRequest* request) {
@@ -1684,7 +1861,8 @@ static bool TakePendingRequest(RescueRequest* request) {
 
     AcquireSRWLockExclusive(&g_requestLock);
 
-    if (!g_rescueQueueCount) {
+    if (!g_rescueQueueCount ||
+        !g_rescueQueue[g_rescueQueueHead].foregroundPolicyReturned) {
         ReleaseSRWLockExclusive(&g_requestLock);
         return false;
     }
@@ -1714,22 +1892,338 @@ static void ClearActiveRescueWatch(uint64_t sequence) {
     ReleaseSRWLockExclusive(&g_requestLock);
 }
 
-static void ProcessRescueRequest(WorkerComState* state,
-                                 const RescueRequest& request) {
+static void PublishForegroundPolicyRescueCompletion(uint64_t sequence) {
+    if (!sequence) {
+        return;
+    }
+
+    bool published = false;
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    for (size_t i = 0; i < g_rescueQueueCount; ++i) {
+        size_t index = (g_rescueQueueHead + i) % kRescueQueueCapacity;
+
+        RescueRequest& request = g_rescueQueue[index];
+
+        if (request.sequence == sequence) {
+            request.foregroundPolicyReturned = true;
+            request.foregroundPolicyReturnedAt = GetTickCount64();
+            published = true;
+            break;
+        }
+    }
+
+    if (published && g_requestEvent) {
+        SetEvent(g_requestEvent);
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+
+    if (published) {
+        Wh_Log(L"[#%llu] Foreground policy returned; rescue released",
+               static_cast<unsigned long long>(sequence));
+    }
+}
+
+static bool RollbackWatchExpired(const RollbackWatch& watch, ULONGLONG now) {
+    return !watch.valid || !watch.lifetimeMs || !watch.armedAt ||
+           now < watch.armedAt || now - watch.armedAt > watch.lifetimeMs;
+}
+
+static void InvalidateRollbackWatches(const wchar_t* reason) {
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    bool hadWatch = false;
+    for (auto& watch : g_rollbackWatches) {
+        if (watch.valid) {
+            hadWatch = true;
+            watch = {};
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+
+    if (hadWatch) {
+        Wh_Log(L"Rollback watches invalidated reason=%s",
+               reason ? reason : L"<unknown>");
+    }
+}
+
+static bool ArmRollbackWatch(const RescueRequest& request) {
+    const DWORD lifetimeMs = request.rollbackWatchMs;
+
+    if (!request.replacementHandlingEnabled || !lifetimeMs ||
+        !g_viewAddedObservationAvailable.load(std::memory_order_acquire) ||
+        g_unloading.load(std::memory_order_acquire) ||
+        !IsRescueGenerationCurrent(request)) {
+        return false;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    if (g_unloading.load(std::memory_order_acquire) ||
+        request.navigationGeneration !=
+            g_navigationGeneration.load(std::memory_order_acquire)) {
+        ReleaseSRWLockExclusive(&g_requestLock);
+        return false;
+    }
+
+    size_t slot = kRollbackWatchCapacity;
+
+    // Keep at most one late-replacement transaction per process. A new rescue
+    // from the same process supersedes an older ambiguous watch.
+    for (size_t i = 0; i < kRollbackWatchCapacity; ++i) {
+        if (g_rollbackWatches[i].valid &&
+            g_rollbackWatches[i].pid == request.pid) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot == kRollbackWatchCapacity) {
+        for (size_t i = 0; i < kRollbackWatchCapacity; ++i) {
+            if (!g_rollbackWatches[i].valid ||
+                RollbackWatchExpired(g_rollbackWatches[i], now)) {
+                slot = i;
+                break;
+            }
+        }
+    }
+
+    if (slot == kRollbackWatchCapacity) {
+        // Bounded state: replace the oldest watch rather than growing or
+        // blocking the rescue.
+        ULONGLONG oldest = ~static_cast<ULONGLONG>(0);
+        for (size_t i = 0; i < kRollbackWatchCapacity; ++i) {
+            if (g_rollbackWatches[i].armedAt < oldest) {
+                oldest = g_rollbackWatches[i].armedAt;
+                slot = i;
+            }
+        }
+    }
+
+    RollbackWatch watch;
+    watch.valid = true;
+    watch.sequence = request.sequence;
+    watch.navigationGeneration = request.navigationGeneration;
+    watch.armedAt = now;
+    watch.lifetimeMs = lifetimeMs;
+    watch.rescuedViewIdentity = request.viewIdentity;
+    watch.rescuedHwnd = request.hwnd;
+    watch.pid = request.pid;
+    watch.tid = request.tid;
+    watch.sourceDesktopId = request.sourceDesktopId;
+    watch.originalDesktopId = request.requestedDesktopId;
+
+    // Close the narrow handoff race: VIEWADD/FVP can occur after the causative
+    // foreground-policy call returns but before the move finishes. If the
+    // active request already captured such evidence, inherit it into the
+    // post-rescue watch.
+    if (g_activeRescueWatchValid &&
+        g_activeRescueWatch.sequence == request.sequence) {
+        watch.candidateViewIdentity =
+            g_activeRescueWatch.supersedingViewIdentity;
+        watch.candidateHwnd = g_activeRescueWatch.supersedingHwnd;
+        watch.candidateObservedAt = g_activeRescueWatch.supersedingObservedAt;
+        watch.candidateForegroundConfirmed =
+            g_activeRescueWatch.supersedingForegroundConfirmed;
+    }
+
+    g_rollbackWatches[slot] = watch;
+
+    const bool alreadyConfirmed =
+        watch.candidateHwnd && watch.candidateForegroundConfirmed;
+
+    if (alreadyConfirmed && g_rollbackEvent) {
+        SetEvent(g_rollbackEvent);
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+
+    Wh_Log(L"[#%llu] Rollback watch armed for %lu ms rescued=%p original=%s",
+           static_cast<unsigned long long>(request.sequence), lifetimeMs,
+           request.hwnd, GuidToStringForLog(request.requestedDesktopId));
+
+    return true;
+}
+
+static bool TakeConfirmedRollbackWatch(RollbackWatch* result) {
+    if (!result) {
+        return false;
+    }
+
+    *result = {};
+
+    const ULONGLONG now = GetTickCount64();
+    const uint64_t generation =
+        g_navigationGeneration.load(std::memory_order_acquire);
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    for (auto& watch : g_rollbackWatches) {
+        if (!watch.valid) {
+            continue;
+        }
+
+        if (RollbackWatchExpired(watch, now) ||
+            watch.navigationGeneration != generation) {
+            watch = {};
+            continue;
+        }
+
+        if (!watch.candidateHwnd || !watch.candidateForegroundConfirmed) {
+            continue;
+        }
+
+        *result = watch;
+        watch = {};
+        ReleaseSRWLockExclusive(&g_requestLock);
+        return true;
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+    return false;
+}
+
+static bool ValidateRollbackCandidate(WorkerComState* state,
+                                      const RollbackWatch& watch) {
+    if (!state || !watch.valid || !watch.rescuedHwnd || !watch.candidateHwnd ||
+        watch.rescuedHwnd == watch.candidateHwnd ||
+        !IsRescueCandidate(watch.rescuedHwnd) ||
+        !IsRescueCandidate(watch.candidateHwnd)) {
+        return false;
+    }
+
+    if (watch.navigationGeneration !=
+        g_navigationGeneration.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    DWORD rescuedPid = 0;
+    DWORD rescuedTid = GetWindowThreadProcessId(watch.rescuedHwnd, &rescuedPid);
+
+    DWORD candidatePid = 0;
+    GetWindowThreadProcessId(watch.candidateHwnd, &candidatePid);
+
+    if (rescuedPid != watch.pid || rescuedTid != watch.tid ||
+        candidatePid != watch.pid) {
+        return false;
+    }
+
+    IVirtualDesktop* currentDesktop = nullptr;
+    HRESULT currentHr = WorkerGetCurrentDesktop(state, &currentDesktop);
+
+    GUID currentDesktopId = {};
+    const bool sourceStillCurrent =
+        SUCCEEDED(currentHr) && currentDesktop &&
+        SUCCEEDED(currentDesktop->GetId(&currentDesktopId)) &&
+        GuidEqual(currentDesktopId, watch.sourceDesktopId);
+
+    if (currentDesktop) {
+        currentDesktop->Release();
+    }
+
+    if (!sourceStillCurrent) {
+        return false;
+    }
+
+    GUID rescuedDesktopId = {};
+    GUID candidateDesktopId = {};
+
+    HRESULT rescuedHr = state->publicManager->GetWindowDesktopId(
+        watch.rescuedHwnd, &rescuedDesktopId);
+    HRESULT candidateHr = state->publicManager->GetWindowDesktopId(
+        watch.candidateHwnd, &candidateDesktopId);
+
+    if (FAILED(rescuedHr) || FAILED(candidateHr) ||
+        !GuidEqual(rescuedDesktopId, watch.sourceDesktopId) ||
+        !GuidEqual(candidateDesktopId, watch.sourceDesktopId)) {
+        return false;
+    }
+
+    IApplicationView* candidateView = nullptr;
+    HRESULT hr = state->viewCollection->GetViewForHwnd(watch.candidateHwnd,
+                                                       &candidateView);
+
+    if (FAILED(hr) || !candidateView) {
+        return false;
+    }
+
+    candidateView->Release();
+    return true;
+}
+
+static void ProcessRollbackWatch(WorkerComState* state,
+                                 const RollbackWatch& watch) {
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!ValidateRollbackCandidate(state, watch)) {
+        Wh_Log(L"[#%llu] Rollback evidence no longer valid",
+               static_cast<unsigned long long>(watch.sequence));
+        return;
+    }
+
+    IApplicationView* rescuedView = nullptr;
+    HRESULT hr =
+        state->viewCollection->GetViewForHwnd(watch.rescuedHwnd, &rescuedView);
+
+    if (FAILED(hr) || !rescuedView) {
+        Wh_Log(L"[#%llu] Rollback aborted: rescued view unavailable",
+               static_cast<unsigned long long>(watch.sequence));
+        return;
+    }
+
+    IVirtualDesktop* originalDesktop =
+        WorkerFindDesktopById(state, watch.originalDesktopId);
+
+    if (!originalDesktop) {
+        Wh_Log(L"[#%llu] Rollback aborted: original desktop unavailable",
+               static_cast<unsigned long long>(watch.sequence));
+        rescuedView->Release();
+        return;
+    }
+
+    if (watch.navigationGeneration !=
+        g_navigationGeneration.load(std::memory_order_acquire)) {
+        originalDesktop->Release();
+        rescuedView->Release();
+        return;
+    }
+
+    hr = WorkerMoveViewToDesktop(state, rescuedView, originalDesktop);
+
+    originalDesktop->Release();
+    rescuedView->Release();
+
+    if (FAILED(hr)) {
+        Wh_Log(L"[#%llu] Rollback MoveViewToDesktop failed hr=0x%08X",
+               static_cast<unsigned long long>(watch.sequence),
+               static_cast<unsigned int>(hr));
+        return;
+    }
+
+    Wh_Log(
+        L"[#%llu] Rolled rescued hwnd=%p back to original desktop after "
+        L"replacement hwnd=%p became foreground",
+        static_cast<unsigned long long>(watch.sequence), watch.rescuedHwnd,
+        watch.candidateHwnd);
+}
+
+static void ProcessRescueRequest(WorkerComState* state, RescueRequest request) {
     // Abort paths below intentionally don't replay the suppressed switch.
     // By the time this worker runs, a newer user navigation or a locally
     // resolved app launch may have superseded the request. Every delayed
     // action must still own the navigation generation captured at FVP entry.
 
-    Wh_Log(
-        L"[#%llu] Rescue begin hwnd=%p requested=%s "
-        L"generation=%llu stabilizationMs=%lu "
-        L"viewSupersessionMs=%lu extendedEligible=%d",
-        static_cast<unsigned long long>(request.sequence), request.hwnd,
-        GuidToStringForLog(request.requestedDesktopId),
-        static_cast<unsigned long long>(request.navigationGeneration),
-        kRescueStabilizationMs, kRescueViewSupersessionMs,
-        request.extendedSupersessionEligible);
+    Wh_Log(L"[#%llu] Rescue begin hwnd=%p requested=%s generation=%llu",
+           static_cast<unsigned long long>(request.sequence), request.hwnd,
+           GuidToStringForLog(request.requestedDesktopId),
+           static_cast<unsigned long long>(request.navigationGeneration));
 
     if (!IsRescueGenerationCurrent(request)) {
         Wh_Log(
@@ -1760,37 +2254,18 @@ static void ProcessRescueRequest(WorkerComState* state,
         return;
     }
 
-    // Keep a short generic foreground-settling period for every app. Processes
-    // for which the worker established a stable package/AUMID identity get the
-    // longer event-driven supersession window. Identity chooses only how long
-    // this request listens; same-PID/new-view/current-desktop checks decide
-    // whether an observation inside that deadline can cancel.
-    if (!WaitForRescueSettling(state, request)) {
-        return;
-    }
+    request.replacementHandlingEnabled = GetRollbackAppPolicy(
+        request.pid, &request.preMoveDelayMs, &request.rollbackWatchMs);
 
-    if (!IsRescueGenerationCurrent(request)) {
-        Wh_Log(L"[#%llu] Abort: user navigated during rescue stabilization",
-               static_cast<unsigned long long>(request.sequence));
-        return;
-    }
-
-    HWND replacementHwnd = nullptr;
-
-    if (IsForegroundReplacementOnSourceDesktop(state, request,
-                                               &replacementHwnd)) {
+    if (request.replacementHandlingEnabled) {
         Wh_Log(
-            L"[#%llu] Abort: activation resolved/superseded by "
-            L"local foreground hwnd=%p",
-            static_cast<unsigned long long>(request.sequence), replacementHwnd);
-        return;
+            L"[#%llu] Async replacement policy: preMoveDelayMs=%lu "
+            L"rollbackWatchMs=%lu",
+            static_cast<unsigned long long>(request.sequence),
+            request.preMoveDelayMs, request.rollbackWatchMs);
     }
 
-    if (!IsRescueGenerationCurrent(request)) {
-        Wh_Log(
-            L"[#%llu] Abort: navigation generation changed "
-            L"during local-replacement validation",
-            static_cast<unsigned long long>(request.sequence));
+    if (!WaitForPreMoveGrace(state, request)) {
         return;
     }
 
@@ -1908,22 +2383,6 @@ static void ProcessRescueRequest(WorkerComState* state,
         return;
     }
 
-    // Close the small race between the initial stabilization check and commit.
-    // This is a zero-delay recheck; it does not add latency.
-    replacementHwnd = nullptr;
-
-    if (IsForegroundReplacementOnSourceDesktop(state, request,
-                                               &replacementHwnd)) {
-        Wh_Log(
-            L"[#%llu] Abort: new local foreground appeared "
-            L"before rescue commit hwnd=%p",
-            static_cast<unsigned long long>(request.sequence), replacementHwnd);
-
-        view->Release();
-        currentDesktop->Release();
-        return;
-    }
-
     // Re-check both generation ownership and source desktop immediately before
     // committing the move. Generation catches A->B->A cases where the desktop
     // GUID alone would look unchanged after newer navigation.
@@ -1972,6 +2431,8 @@ static void ProcessRescueRequest(WorkerComState* state,
 
     Wh_Log(L"[#%llu] Teleported hwnd=%p to current desktop",
            static_cast<unsigned long long>(request.sequence), request.hwnd);
+
+    ArmRollbackWatch(request);
 
     // Don't synchronously send restore work to another process's UI thread.
     if (IsIconic(request.hwnd) && !ShowWindowAsync(request.hwnd, SW_RESTORE)) {
@@ -2053,6 +2514,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
         g_runtimeCancelEvent,
         g_stopEvent,
         g_requestEvent,
+        g_rollbackEvent,
     };
 
     while (true) {
@@ -2067,11 +2529,6 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             RescueRequest request;
 
             while (TakePendingRequest(&request)) {
-                request.extendedSupersessionEligible =
-                    g_viewSupersessionAvailable.load(
-                        std::memory_order_acquire) &&
-                    HasExtendedSupersessionIdentity(request.pid);
-
                 if (WorkerStopRequested()) {
                     ClearActiveRescueWatch(request.sequence);
                     break;
@@ -2084,6 +2541,18 @@ static DWORD WINAPI WorkerThreadProc(void*) {
                 if (WorkerStopRequested()) {
                     break;
                 }
+            }
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + 3) {
+            RollbackWatch watch;
+
+            while (TakeConfirmedRollbackWatch(&watch)) {
+                if (WorkerStopRequested()) {
+                    break;
+                }
+
+                ProcessRollbackWatch(&state, watch);
             }
         }
     }
@@ -2114,14 +2583,21 @@ static bool QueueRescue(IApplicationView* viewIdentity,
     RescueRequest request;
     request.sequence = g_nextSequence.fetch_add(1);
     request.navigationGeneration = navigationGeneration;
-    request.queuedAt = GetTickCount64();
     request.viewIdentity = viewIdentity;
     request.hwnd = hwnd;
-    request.foregroundAtQueue = GetForegroundWindow();
     request.pid = pid;
     request.tid = tid;
     request.sourceDesktopId = sourceDesktopId;
     request.requestedDesktopId = requestedDesktopId;
+    // A second reservation in the same FVP call would make completion
+    // attribution ambiguous. Fail open rather than overwrite the causal token.
+    if (g_foregroundPolicyRescueSequence) {
+        Wh_Log(
+            L"Rescue already reserved in this foreground-policy call; "
+            L"failing open");
+        return false;
+    }
+
     bool queued = false;
 
     AcquireSRWLockExclusive(&g_requestLock);
@@ -2133,16 +2609,16 @@ static bool QueueRescue(IApplicationView* viewIdentity,
             (g_rescueQueueHead + g_rescueQueueCount) % kRescueQueueCapacity;
         g_rescueQueue[index] = request;
         ++g_rescueQueueCount;
-        if (SetEvent(g_requestEvent)) {
-            queued = true;
-        } else {
-            --g_rescueQueueCount;
-        }
+        queued = true;
     }
 
     ReleaseSRWLockExclusive(&g_requestLock);
 
-    if (!queued) {
+    if (queued) {
+        g_foregroundPolicyRescueSequence = request.sequence;
+        Wh_Log(L"[#%llu] Rescue reserved until foreground policy returns",
+               static_cast<unsigned long long>(request.sequence));
+    } else {
         Wh_Log(L"Rescue queue unavailable or full; failing open");
     }
 
@@ -2151,7 +2627,7 @@ static bool QueueRescue(IApplicationView* viewIdentity,
 
 static bool RescueRequestCanObserveViewAdded(const RescueRequest& request,
                                              DWORD pid) {
-    return g_viewSupersessionAvailable.load(std::memory_order_acquire) &&
+    return g_viewAddedObservationAvailable.load(std::memory_order_acquire) &&
            request.pid == pid && request.viewIdentity != nullptr;
 }
 
@@ -2162,8 +2638,7 @@ static bool ViewAddedMatchesRescueRequest(const RescueRequest& request,
                                           ULONGLONG observedAt) {
     if (!RescueRequestCanObserveViewAdded(request, pid) || !viewIdentity ||
         !hwnd || viewIdentity == request.viewIdentity || hwnd == request.hwnd ||
-        !observedAt || observedAt < request.queuedAt ||
-        observedAt - request.queuedAt > kRescueViewSupersessionMs) {
+        !observedAt) {
         return false;
     }
 
@@ -2208,12 +2683,9 @@ static void ObserveViewAddedForPendingRescues(IApplicationView* viewIdentity,
     }
 
     // Keep this shell callback lightweight. It publishes only same-process
-    // view/HWND identity. Candidate capture is intentionally optimistic so a
-    // VIEWADD isn't missed while the worker determines whether the rescue gets
-    // the longer grace period; the worker still validates desktop ownership
-    // before an observation can cancel anything.
+    // view/HWND identity. The worker validates desktop/view ownership before
+    // an early observation can cancel a rescue or a late one can roll it back.
     const ULONGLONG observedAt = GetTickCount64();
-    bool matched = false;
 
     AcquireSRWLockExclusive(&g_requestLock);
 
@@ -2223,7 +2695,7 @@ static void ObserveViewAddedForPendingRescues(IApplicationView* viewIdentity,
         g_activeRescueWatch.supersedingViewIdentity = viewIdentity;
         g_activeRescueWatch.supersedingHwnd = hwnd;
         g_activeRescueWatch.supersedingObservedAt = observedAt;
-        matched = true;
+        g_activeRescueWatch.supersedingForegroundConfirmed = false;
 
         Wh_Log(
             L"[#%llu] VIEWADD candidate observed "
@@ -2242,7 +2714,7 @@ static void ObserveViewAddedForPendingRescues(IApplicationView* viewIdentity,
             request.supersedingViewIdentity = viewIdentity;
             request.supersedingHwnd = hwnd;
             request.supersedingObservedAt = observedAt;
-            matched = true;
+            request.supersedingForegroundConfirmed = false;
 
             Wh_Log(
                 L"[#%llu] VIEWADD candidate observed while queued "
@@ -2252,8 +2724,123 @@ static void ObserveViewAddedForPendingRescues(IApplicationView* viewIdentity,
         }
     }
 
-    if (matched && g_supersessionEvent) {
-        SetEvent(g_supersessionEvent);
+    ReleaseSRWLockExclusive(&g_requestLock);
+}
+
+static void ObserveViewAddedForRollbackWatches(IApplicationView* viewIdentity,
+                                               HWND hwnd) {
+    if (g_unloading.load(std::memory_order_acquire) || !viewIdentity || !hwnd ||
+        !IsWindow(hwnd)) {
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+
+    if (!pid) {
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const uint64_t generation =
+        g_navigationGeneration.load(std::memory_order_acquire);
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    for (auto& watch : g_rollbackWatches) {
+        if (!watch.valid) {
+            continue;
+        }
+
+        if (RollbackWatchExpired(watch, now) ||
+            watch.navigationGeneration != generation) {
+            watch = {};
+            continue;
+        }
+
+        if (watch.pid != pid || viewIdentity == watch.rescuedViewIdentity ||
+            hwnd == watch.rescuedHwnd) {
+            continue;
+        }
+
+        watch.candidateViewIdentity = viewIdentity;
+        watch.candidateHwnd = hwnd;
+        watch.candidateObservedAt = now;
+        watch.candidateForegroundConfirmed = false;
+
+        Wh_Log(L"[#%llu] Rollback candidate VIEWADD view=%p hwnd=%p",
+               static_cast<unsigned long long>(watch.sequence), viewIdentity,
+               hwnd);
+    }
+
+    ReleaseSRWLockExclusive(&g_requestLock);
+}
+
+static void ObserveForegroundViewForRollbackWatches(IApplicationView* view,
+                                                    HWND hwnd) {
+    if (g_unloading.load(std::memory_order_acquire) || !view || !hwnd) {
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const uint64_t generation =
+        g_navigationGeneration.load(std::memory_order_acquire);
+    bool signaled = false;
+
+    AcquireSRWLockExclusive(&g_requestLock);
+
+    // First capture foreground confirmation for the request that is currently
+    // being rescued. ArmRollbackWatch can inherit it if the move finishes after
+    // this FVP.
+    bool preMoveEvidenceConfirmed = false;
+
+    if (g_activeRescueWatchValid &&
+        g_activeRescueWatch.supersedingViewIdentity == view &&
+        g_activeRescueWatch.supersedingHwnd == hwnd) {
+        g_activeRescueWatch.supersedingForegroundConfirmed = true;
+        preMoveEvidenceConfirmed = true;
+    }
+
+    for (size_t i = 0; i < g_rescueQueueCount; ++i) {
+        size_t index = (g_rescueQueueHead + i) % kRescueQueueCapacity;
+
+        RescueRequest& request = g_rescueQueue[index];
+
+        if (request.supersedingViewIdentity == view &&
+            request.supersedingHwnd == hwnd) {
+            request.supersedingForegroundConfirmed = true;
+        }
+    }
+
+    for (auto& watch : g_rollbackWatches) {
+        if (!watch.valid) {
+            continue;
+        }
+
+        if (RollbackWatchExpired(watch, now) ||
+            watch.navigationGeneration != generation) {
+            watch = {};
+            continue;
+        }
+
+        if (watch.candidateViewIdentity == view &&
+            watch.candidateHwnd == hwnd) {
+            watch.candidateForegroundConfirmed = true;
+            signaled = true;
+
+            Wh_Log(
+                L"[#%llu] Rollback candidate reached ForegroundViewChanged "
+                L"view=%p hwnd=%p",
+                static_cast<unsigned long long>(watch.sequence), view, hwnd);
+        }
+    }
+
+    if (preMoveEvidenceConfirmed && g_preMoveEvidenceEvent) {
+        SetEvent(g_preMoveEvidenceEvent);
+    }
+
+    if (signaled && g_rollbackEvent) {
+        SetEvent(g_rollbackEvent);
     }
 
     ReleaseSRWLockExclusive(&g_requestLock);
@@ -2271,11 +2858,11 @@ static HRESULT OnViewAddedInternal_Hook(void* pThis, IApplicationView* view) {
 
     if (SUCCEEDED(hr) && view) {
         // Publish only symbol-resolved HWND/process identity. No
-        // virtual-desktop COM or package-identity query is performed on this
-        // internal shell callback.
+        // virtual-desktop COM is performed on this internal shell callback.
         HWND hwnd = GetForegroundPolicyViewHwnd(view);
 
         ObserveViewAddedForPendingRescues(view, hwnd);
+        ObserveViewAddedForRollbackWatches(view, hwnd);
     }
 
     if (view) {
@@ -2496,14 +3083,16 @@ static bool StartWorker() {
 
     g_requestEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
-    g_supersessionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_preMoveEvidenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+    g_rollbackEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     g_workerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    if (!g_requestEvent || !g_supersessionEvent || !g_stopEvent ||
-        !g_workerReadyEvent) {
+    if (!g_requestEvent || !g_preMoveEvidenceEvent || !g_rollbackEvent ||
+        !g_stopEvent || !g_workerReadyEvent) {
         Wh_Log(L"Failed to create worker events");
         return RecordStartFailure(E_FAIL);
     }
@@ -2556,6 +3145,9 @@ static void StopWorker() {
     g_rescueQueueCount = 0;
     g_activeRescueWatch = {};
     g_activeRescueWatchValid = false;
+    for (auto& watch : g_rollbackWatches) {
+        watch = {};
+    }
     ReleaseSRWLockExclusive(&g_requestLock);
 
     if (g_stopEvent) {
@@ -2581,9 +3173,14 @@ static void StopWorker() {
 
     AcquireSRWLockExclusive(&g_requestLock);
 
-    if (g_supersessionEvent) {
-        CloseHandle(g_supersessionEvent);
-        g_supersessionEvent = nullptr;
+    if (g_preMoveEvidenceEvent) {
+        CloseHandle(g_preMoveEvidenceEvent);
+        g_preMoveEvidenceEvent = nullptr;
+    }
+
+    if (g_rollbackEvent) {
+        CloseHandle(g_rollbackEvent);
+        g_rollbackEvent = nullptr;
     }
 
     if (g_requestEvent) {
@@ -2742,14 +3339,13 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
-    const bool viewSupersessionResolved =
+    const bool viewAddedObservationResolved =
         g_onViewAddedInternalOriginal != nullptr;
 
-    if (!viewSupersessionResolved) {
+    if (!viewAddedObservationResolved) {
         Wh_Log(
-            L"Shell host: OnViewAddedInternal "
-            L"symbol unavailable; extended view "
-            L"supersession disabled");
+            L"Shell host: OnViewAddedInternal symbol unavailable; "
+            L"early replacement detection and late rollback disabled");
     }
 
     if (RuntimeCancellationRequested()) {
@@ -2770,8 +3366,8 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
-    g_viewSupersessionAvailable.store(viewSupersessionResolved,
-                                      std::memory_order_release);
+    g_viewAddedObservationAvailable.store(viewAddedObservationResolved,
+                                          std::memory_order_release);
 
     g_virtualDesktopHooksInstalled.store(true, std::memory_order_release);
 
@@ -3014,7 +3610,7 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
 static void StopRuntimeBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
 
-    g_viewSupersessionAvailable.store(false, std::memory_order_release);
+    g_viewAddedObservationAvailable.store(false, std::memory_order_release);
     g_virtualDesktopHooksInstalled.store(false, std::memory_order_release);
 
     if (g_runtimeCancelEvent) {
@@ -3046,8 +3642,10 @@ static void StopRuntimeBeforeUninit() {
 }
 
 BOOL Wh_ModInit() {
+    LoadSettings();
+
     g_unloading.store(false, std::memory_order_release);
-    g_viewSupersessionAvailable.store(false, std::memory_order_release);
+    g_viewAddedObservationAvailable.store(false, std::memory_order_release);
     g_virtualDesktopHooksInstalled.store(false, std::memory_order_release);
 
     g_runtimeCancelEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -3120,4 +3718,9 @@ void Wh_ModUninit() {
         CloseHandle(g_runtimeCancelEvent);
         g_runtimeCancelEvent = nullptr;
     }
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    InvalidateRollbackWatches(L"asynchronous replacement settings changed");
 }
