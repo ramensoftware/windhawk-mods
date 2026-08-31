@@ -142,11 +142,12 @@ use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
 interface. Configure it under **Sensor Settings > HWiNFO Gadget** by enabling
 **Report to Gadget** for the desired CPU and GPU temperature readings. If the
 selected source is unavailable, temperatures are shown as `--°C`; all other
-metrics continue to work. The active provider is written to the Windhawk log
-only when it changes, which makes fallback behavior diagnosable without adding
-noise every second. Automatic HWiNFO GPU sensor selection is also matched to the
-selected Windows adapter, so a multi-GPU system doesn't show another card's
-temperature.
+metrics continue to work. A single transient provider timeout keeps the last
+good temperature for at most two samples, avoiding a one-tick `--°C` flicker
+without hiding a provider that has actually disappeared. The active provider is
+written to the Windhawk log only when it changes. Automatic HWiNFO GPU sensor
+selection is also matched to the selected Windows adapter; a one-time diagnostic
+explains when readings exist but no adapter name matches.
 
 ## Compatibility and placement
 
@@ -154,7 +155,8 @@ temperature.
   taskbar. x64 is hardware-tested; ARM64 is compilation-tested.
 - Monitor 1 is always the primary display. Other monitors are ordered by their
   position in the virtual desktop and can differ from the numbers in Windows
-  Display Settings. An unavailable selection falls back to the primary taskbar.
+  Display Settings. An unavailable or disconnected selection falls back to the
+  primary taskbar automatically and moves back when the selected display returns.
 - Centered taskbar icons are recommended.
 - The widget uses the far-left taskbar area. Windows Widgets/weather or another
   left-side taskbar extension can occupy the same space; adjust the offset or
@@ -438,6 +440,7 @@ constexpr double kMemoryLabelWidth = 43.0;
 constexpr double kMemoryPercentWidth = 38.0;
 constexpr double kGraphHeight = 12.0;
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
+constexpr uint32_t kMaximumTaskbarViewHookAttempts = 3;
 constexpr wchar_t kDefaultGraphColor[] = L"#78A8FF";
 constexpr wchar_t kDefaultWarningColor[] = L"#FFFFB900";
 constexpr wchar_t kDefaultCriticalColor[] = L"#FFFF6B6B";
@@ -507,7 +510,7 @@ struct ModSettings {
     int memoryCriticalPercent = 90;
 };
 
-[[clang::no_destroy]] std::shared_ptr<const ModSettings> g_settings{
+std::shared_ptr<const ModSettings> g_settings{
     std::make_shared<ModSettings>()};
 std::mutex g_settingsMutex;
 std::atomic<bool> g_unloading;
@@ -526,6 +529,9 @@ double g_graphWidth = 96.0;
 double g_memoryBarWidth = 120.0;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 event_token g_timerToken{};
+event_token g_actualThemeChangedToken{};
+std::chrono::steady_clock::time_point g_nextSystemColorCheck{};
+std::chrono::steady_clock::time_point g_nextTaskbarPlacementCheck{};
 [[clang::no_destroy]]
 std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
     std::in_place};
@@ -560,6 +566,7 @@ bool g_themeBrushesInitialized = false;
 bool g_cachedHighContrast = false;
 COLORREF g_cachedHighlightColor = CLR_INVALID;
 COLORREF g_cachedHotlightColor = CLR_INVALID;
+COLORREF g_cachedGrayTextColor = CLR_INVALID;
 
 std::deque<double> g_cpuHistory;
 std::deque<double> g_gpuHistory;
@@ -577,6 +584,7 @@ std::chrono::steady_clock::time_point g_nextPdhRecovery{};
 std::chrono::steady_clock::time_point g_nextGpuIdentityCheck{};
 uint32_t g_consecutivePdhReadFailures = 0;
 bool g_hwInfoInvalidUnitLogged = false;
+std::atomic<bool> g_hwInfoGpuAdapterMismatchLogged{false};
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -720,6 +728,7 @@ void LoadSettings() {
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::make_shared<ModSettings>(std::move(settings));
+    g_hwInfoGpuAdapterMismatchLogged = false;
 }
 
 std::shared_ptr<const ModSettings> CurrentSettings() {
@@ -987,6 +996,39 @@ int GpuTemperatureScore(const std::wstring& sensorName,
     return adapterScore + 100;
 }
 
+struct HwInfoTemperatureDiagnostics {
+    bool gpuTemperatureReadingFound = false;
+    bool gpuAdapterMatched = false;
+};
+
+bool IsGpuTemperatureReadingCandidate(const std::wstring& sensorName,
+                                      const std::wstring& label) {
+    std::wstring sensor = ToLower(sensorName);
+    std::wstring reading = ToLower(label);
+    if (!Contains(sensor, L"gpu") && !Contains(sensor, L"nvidia") &&
+        !Contains(sensor, L"radeon")) {
+        return false;
+    }
+    return !Contains(reading, L"hot spot") &&
+           !Contains(reading, L"hotspot") &&
+           !Contains(reading, L"memory") && !Contains(reading, L"vram");
+}
+
+void RecordGpuTemperatureDiagnostic(
+    HwInfoTemperatureDiagnostics& diagnostics,
+    const std::wstring& sensorName,
+    const std::wstring& label,
+    const std::optional<std::wstring>& adapterName) {
+    if (!IsGpuTemperatureReadingCandidate(sensorName, label)) {
+        return;
+    }
+    diagnostics.gpuTemperatureReadingFound = true;
+    if (adapterName &&
+        GpuAdapterIdentityScore(sensorName, *adapterName) >= 0) {
+        diagnostics.gpuAdapterMatched = true;
+    }
+}
+
 // HWiNFO's published shared-memory layout explicitly uses one-byte packing.
 #pragma pack(push, 1)
 struct HwInfoHeader {
@@ -1114,7 +1156,8 @@ std::optional<double> NormalizeHwInfoTemperature(double value,
 
 void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                             const ModSettings& settings,
-                            const std::optional<std::wstring>& gpuAdapterName) {
+                            const std::optional<std::wstring>& gpuAdapterName,
+                            HwInfoTemperatureDiagnostics& diagnostics) {
     HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE,
                                       L"Global\\HWiNFO_SENS_SM2");
     if (!mapping) {
@@ -1240,6 +1283,8 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
         std::wstring label =
             FixedAnsiToWide(reading.originalLabel,
                             std::size(reading.originalLabel));
+        RecordGpuTemperatureDiagnostic(diagnostics, sensorName, label,
+                                       gpuAdapterName);
 
         int cpuScore = CpuTemperatureScore(
             sensorName, label, settings.cpuTempSensor);
@@ -1308,7 +1353,8 @@ std::optional<double> NormalizeRegistryTemperature(
 
 void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                               const ModSettings& settings,
-                              const std::optional<std::wstring>& gpuAdapterName) {
+                              const std::optional<std::wstring>& gpuAdapterName,
+                              HwInfoTemperatureDiagnostics& diagnostics) {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\HWiNFO64\\VSB", 0,
                       KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
@@ -1339,6 +1385,8 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
         if (!value) {
             continue;
         }
+        RecordGpuTemperatureDiagnostic(diagnostics, *sensor, *label,
+                                       gpuAdapterName);
 
         int cpuScore =
             CpuTemperatureScore(*sensor, *label, settings.cpuTempSensor);
@@ -1370,27 +1418,59 @@ void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
 
 void ReadHwInfoTemperatures(MetricsSnapshot& snapshot,
                             const ModSettings& settings,
-                            const std::optional<std::wstring>& gpuAdapterName) {
-    ReadHwInfoSharedMemory(snapshot, settings, gpuAdapterName);
+                            const std::optional<std::wstring>& gpuAdapterName,
+                            HwInfoTemperatureDiagnostics& diagnostics) {
+    ReadHwInfoSharedMemory(snapshot, settings, gpuAdapterName, diagnostics);
     if (!snapshot.cpuTemp || !snapshot.gpuTemp) {
-        ReadHwInfoGadgetRegistry(snapshot, settings, gpuAdapterName);
+        ReadHwInfoGadgetRegistry(snapshot, settings, gpuAdapterName,
+                                 diagnostics);
+    }
+}
+
+void LogHwInfoGpuTemperatureMismatch(
+    const MetricsSnapshot& snapshot,
+    const ModSettings& settings,
+    const std::optional<std::wstring>& gpuAdapterName,
+    const HwInfoTemperatureDiagnostics& diagnostics) {
+    if (snapshot.gpuTemp || !settings.gpuTempSensor.empty() ||
+        !diagnostics.gpuTemperatureReadingFound ||
+        diagnostics.gpuAdapterMatched ||
+        g_hwInfoGpuAdapterMismatchLogged.exchange(true)) {
+        return;
+    }
+
+    if (gpuAdapterName) {
+        Wh_Log(L"HWiNFO GPU temperature readings found, but none matched "
+               L"adapter '%s'; set the GPU temperature sensor filter to "
+               L"select one explicitly",
+               gpuAdapterName->c_str());
+    } else {
+        Wh_Log(L"HWiNFO GPU temperature readings found, but the selected "
+               L"Windows GPU adapter could not be identified; set the GPU "
+               L"temperature sensor filter to select one explicitly");
     }
 }
 
 void ReadTemperatures(MetricsSnapshot& snapshot,
                       const ModSettings& settings) {
     std::optional<std::wstring> gpuAdapterName;
+    HwInfoTemperatureDiagnostics hwInfoDiagnostics;
+    bool usedHwInfo = false;
     if (settings.temperatureSource != TemperatureSource::WindowsNative &&
         settings.temperatureSource != TemperatureSource::Disabled) {
         gpuAdapterName = ResolveGpuTemperatureAdapterName(settings);
     }
     switch (settings.temperatureSource) {
         case TemperatureSource::SharedMemory:
-            ReadHwInfoSharedMemory(snapshot, settings, gpuAdapterName);
+            usedHwInfo = true;
+            ReadHwInfoSharedMemory(snapshot, settings, gpuAdapterName,
+                                   hwInfoDiagnostics);
             break;
 
         case TemperatureSource::GadgetRegistry:
-            ReadHwInfoGadgetRegistry(snapshot, settings, gpuAdapterName);
+            usedHwInfo = true;
+            ReadHwInfoGadgetRegistry(snapshot, settings, gpuAdapterName,
+                                     hwInfoDiagnostics);
             break;
 
         case TemperatureSource::WindowsNative:
@@ -1402,12 +1482,16 @@ void ReadTemperatures(MetricsSnapshot& snapshot,
             break;
 
         case TemperatureSource::HwInfoAuto:
-            ReadHwInfoTemperatures(snapshot, settings, gpuAdapterName);
+            usedHwInfo = true;
+            ReadHwInfoTemperatures(snapshot, settings, gpuAdapterName,
+                                   hwInfoDiagnostics);
             break;
 
         case TemperatureSource::Auto:
         default:
-            ReadHwInfoTemperatures(snapshot, settings, gpuAdapterName);
+            usedHwInfo = true;
+            ReadHwInfoTemperatures(snapshot, settings, gpuAdapterName,
+                                   hwInfoDiagnostics);
             if (!snapshot.gpuTemp) {
                 ReadWindowsGpuTemperature(snapshot, settings);
             }
@@ -1415,6 +1499,10 @@ void ReadTemperatures(MetricsSnapshot& snapshot,
                 ReadWindowsThermalZones(snapshot, settings);
             }
             break;
+    }
+    if (usedHwInfo) {
+        LogHwInfoGpuTemperatureMismatch(snapshot, settings, gpuAdapterName,
+                                        hwInfoDiagnostics);
     }
 }
 
@@ -2429,6 +2517,43 @@ PCWSTR TemperatureProviderName(TemperatureProvider provider) {
     }
 }
 
+constexpr uint32_t kTemperatureHoldoverSamples = 2;
+
+struct TemperatureHoldover {
+    std::optional<double> value;
+    TemperatureProvider provider = TemperatureProvider::None;
+    std::chrono::steady_clock::time_point capturedAt{};
+    uint32_t missedSamples = 0;
+};
+
+void ApplyTemperatureHoldover(std::optional<double>& value,
+                              TemperatureProvider& provider,
+                              TemperatureHoldover& holdover,
+                              const ModSettings& settings) {
+    auto now = std::chrono::steady_clock::now();
+    if (value) {
+        holdover.value = value;
+        holdover.provider = provider;
+        holdover.capturedAt = now;
+        holdover.missedSamples = 0;
+        return;
+    }
+
+    auto maximumAge = std::chrono::seconds(
+        settings.updateInterval * kTemperatureHoldoverSamples + 1);
+    if (settings.temperatureSource != TemperatureSource::Disabled &&
+        holdover.value &&
+        holdover.missedSamples < kTemperatureHoldoverSamples &&
+        now - holdover.capturedAt <= maximumAge) {
+        value = holdover.value;
+        provider = holdover.provider;
+        holdover.missedSamples++;
+        return;
+    }
+
+    holdover = {};
+}
+
 void PublishMetrics(MetricsSnapshot snapshot) {
     std::lock_guard lock(g_metricsMutex);
     g_latestMetricsSequence++;
@@ -2466,6 +2591,8 @@ void MetricsWorkerProc() {
     bool providersLogged = false;
     TemperatureProvider lastCpuProvider = TemperatureProvider::None;
     TemperatureProvider lastGpuProvider = TemperatureProvider::None;
+    TemperatureHoldover cpuTemperatureHoldover;
+    TemperatureHoldover gpuTemperatureHoldover;
     while (!g_stopMetricsWorker) {
         auto settings = CurrentSettings();
         DWORD waitMilliseconds =
@@ -2495,6 +2622,8 @@ void MetricsWorkerProc() {
             settings = CurrentSettings();
             ReadCpuUsage();
             EnsurePdhQuery(*settings);
+            cpuTemperatureHoldover = {};
+            gpuTemperatureHoldover = {};
             continue;
         } else {
             waitFailureLogged = false;
@@ -2505,6 +2634,12 @@ void MetricsWorkerProc() {
         if (!snapshot) {
             continue;
         }
+        ApplyTemperatureHoldover(snapshot->cpuTemp,
+                                 snapshot->cpuTempProvider,
+                                 cpuTemperatureHoldover, *settings);
+        ApplyTemperatureHoldover(snapshot->gpuTemp,
+                                 snapshot->gpuTempProvider,
+                                 gpuTemperatureHoldover, *settings);
         if (!providersLogged ||
             snapshot->cpuTempProvider != lastCpuProvider ||
             snapshot->gpuTempProvider != lastGpuProvider) {
@@ -2700,7 +2835,7 @@ ElementTheme ResolveWidgetTheme() {
                : ElementTheme::Dark;
 }
 
-bool WidgetThemeChanged() {
+bool SystemColorsChanged() {
     HIGHCONTRASTW highContrast{};
     highContrast.cbSize = sizeof(highContrast);
     bool highContrastEnabled =
@@ -2708,11 +2843,11 @@ bool WidgetThemeChanged() {
                               &highContrast, 0) &&
         (highContrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
     return !g_themeBrushesInitialized ||
-           ResolveWidgetTheme() != g_cachedWidgetTheme ||
            highContrastEnabled != g_cachedHighContrast ||
            (highContrastEnabled &&
-            (GetSysColor(COLOR_HIGHLIGHT) != g_cachedHighlightColor ||
-             GetSysColor(COLOR_HOTLIGHT) != g_cachedHotlightColor));
+             (GetSysColor(COLOR_HIGHLIGHT) != g_cachedHighlightColor ||
+              GetSysColor(COLOR_HOTLIGHT) != g_cachedHotlightColor ||
+              GetSysColor(COLOR_GRAYTEXT) != g_cachedGrayTextColor));
 }
 
 Color ColorFromColorRef(COLORREF value) {
@@ -2738,13 +2873,8 @@ void ApplyCachedBrushesToVisuals() {
     }
 }
 
-void RefreshThemeBrushes(const ModSettings& settings, bool force = false) {
+void RefreshThemeBrushes(const ModSettings& settings) {
     ElementTheme theme = ResolveWidgetTheme();
-    if (!force && g_themeBrushesInitialized &&
-        theme == g_cachedWidgetTheme) {
-        return;
-    }
-
     g_cachedWidgetTheme = theme;
     g_themeBrushesInitialized = true;
     HIGHCONTRASTW highContrast{};
@@ -2755,12 +2885,13 @@ void RefreshThemeBrushes(const ModSettings& settings, bool force = false) {
         (highContrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
     g_cachedHighlightColor = GetSysColor(COLOR_HIGHLIGHT);
     g_cachedHotlightColor = GetSysColor(COLOR_HOTLIGHT);
+    g_cachedGrayTextColor = GetSysColor(COLOR_GRAYTEXT);
     if (settings.adaptiveColors) {
         bool light = theme == ElementTheme::Light;
         g_textBrush = nullptr;
         if (g_cachedHighContrast) {
             g_graphBrush =
-                SolidColorBrush(ColorFromColorRef(g_cachedHighlightColor));
+                SolidColorBrush(ColorFromColorRef(g_cachedGrayTextColor));
             g_warningBrush =
                 SolidColorBrush(ColorFromColorRef(g_cachedHotlightColor));
             g_criticalBrush =
@@ -3009,7 +3140,7 @@ void ApplyWidgetSettings() {
     }
     auto settingsSnapshot = CurrentSettings();
     const ModSettings& settings = *settingsSnapshot;
-    RefreshThemeBrushes(settings, true);
+    RefreshThemeBrushes(settings);
     if (g_historyInterval != settings.updateInterval ||
         g_historyWindow != settings.historySeconds) {
         g_cpuHistory.clear();
@@ -3078,15 +3209,6 @@ void UpdateWidgetText(bool force = false) {
     if (!g_widget || g_unloading) {
         return;
     }
-    bool themeChanged = WidgetThemeChanged();
-    std::shared_ptr<const ModSettings> settingsSnapshot;
-    if (themeChanged) {
-        settingsSnapshot = CurrentSettings();
-        // WidgetThemeChanged also observes high-contrast and system accent
-        // changes, which can occur without ActualTheme changing.
-        RefreshThemeBrushes(*settingsSnapshot, true);
-        force = true;
-    }
     MetricsSnapshot snapshot;
     uint64_t metricsSequence = 0;
     std::vector<MetricsSnapshot> newSnapshots;
@@ -3098,9 +3220,7 @@ void UpdateWidgetText(bool force = false) {
     if (!force && !hasNewSample) {
         return;
     }
-    if (!settingsSnapshot) {
-        settingsSnapshot = CurrentSettings();
-    }
+    auto settingsSnapshot = CurrentSettings();
     const ModSettings& settings = *settingsSnapshot;
 
     g_cpuTemperatureAlert = snapshot.cpuTemp
@@ -3179,15 +3299,41 @@ void UpdateWidgetText(bool force = false) {
                     g_vramAlert);
 }
 
+void EnsureConfiguredTaskbarPlacement();
+
+void RefreshWidgetTheme() {
+    if (!g_widget || g_unloading) {
+        return;
+    }
+    RefreshThemeBrushes(*CurrentSettings());
+    UpdateWidgetText(true);
+}
+
 void EnsureTimer() {
     if (g_timer) {
         return;
     }
     g_timer = DispatcherTimer();
     g_timer.Interval(std::chrono::milliseconds(250));
+    auto now = std::chrono::steady_clock::now();
+    g_nextSystemColorCheck = now + std::chrono::seconds(1);
+    g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
     g_timerToken = g_timer.Tick([](IInspectable const&, IInspectable const&) {
         try {
-            UpdateWidgetText();
+            bool force = false;
+            auto now = std::chrono::steady_clock::now();
+            if (now >= g_nextSystemColorCheck) {
+                g_nextSystemColorCheck = now + std::chrono::seconds(1);
+                if (SystemColorsChanged()) {
+                    RefreshThemeBrushes(*CurrentSettings());
+                    force = true;
+                }
+            }
+            if (now >= g_nextTaskbarPlacementCheck) {
+                g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
+                EnsureConfiguredTaskbarPlacement();
+            }
+            UpdateWidgetText(force);
         } catch (...) {
             HRESULT error = winrt::to_hresult();
             Wh_Log(L"Metrics update failed: %08X",
@@ -3337,6 +3483,19 @@ void RemoveWidget() {
         g_timer = nullptr;
         g_timerToken = {};
     }
+    g_nextSystemColorCheck = {};
+    g_nextTaskbarPlacementCheck = {};
+
+    if (g_widget && g_actualThemeChangedToken.value) {
+        try {
+            g_widget.ActualThemeChanged(g_actualThemeChangedToken);
+        } catch (...) {
+            HRESULT error = winrt::to_hresult();
+            Wh_Log(L"Removing taskbar theme handler failed: %08X",
+                   static_cast<unsigned>(error));
+        }
+    }
+    g_actualThemeChangedToken = {};
 
     if (g_taskItemsRepeater && g_reservedMargin != 0.0) {
         Thickness margin = g_taskItemsRepeater.Margin();
@@ -3392,6 +3551,7 @@ void RemoveWidget() {
     g_cachedHighContrast = false;
     g_cachedHighlightColor = CLR_INVALID;
     g_cachedHotlightColor = CLR_INVALID;
+    g_cachedGrayTextColor = CLR_INVALID;
     g_cpuHistory.clear();
     g_gpuHistory.clear();
     g_lastRenderedMetricsSequence = 0;
@@ -3493,6 +3653,16 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
 
     g_rootGrid = root;
     g_widget = widget;
+    g_actualThemeChangedToken = g_widget.ActualThemeChanged(
+        [](auto const&, auto const&) {
+            try {
+                RefreshWidgetTheme();
+            } catch (...) {
+                HRESULT error = winrt::to_hresult();
+                Wh_Log(L"Taskbar theme update failed: %08X",
+                       static_cast<unsigned>(error));
+            }
+        });
     g_taskItemsRepeater =
         FindDirectChildByName(root, L"TaskbarFrameRepeater");
     g_reservedMargin = 0.0;
@@ -3671,7 +3841,26 @@ HWND FindPrimaryTaskbarWindow() {
     return result;
 }
 
-HWND FindConfiguredTaskbarWindow() {
+HWND FindOnlyTaskbarWindow() {
+    struct SearchContext {
+        HWND window = nullptr;
+        uint32_t count = 0;
+    } context;
+    EnumWindows(
+        [](HWND window, LPARAM contextValue) -> BOOL {
+            auto* context = reinterpret_cast<SearchContext*>(contextValue);
+            if (!IsCurrentProcessTaskbarWindow(window)) {
+                return TRUE;
+            }
+            context->window = window;
+            context->count++;
+            return context->count < 2;
+        },
+        reinterpret_cast<LPARAM>(&context));
+    return context.count == 1 ? context.window : nullptr;
+}
+
+HWND FindConfiguredTaskbarWindow(bool logFallback = true) {
     int monitorNumber = CurrentSettings()->monitor;
     auto monitors = EnumerateDisplayMonitors();
     if (monitorNumber <= static_cast<int>(monitors.size())) {
@@ -3679,11 +3868,15 @@ HWND FindConfiguredTaskbarWindow() {
                 FindTaskbarWindowForMonitor(monitors[monitorNumber - 1].handle)) {
             return window;
         }
-        Wh_Log(L"Monitor %d has no taskbar; using the primary taskbar",
-               monitorNumber);
+        if (logFallback) {
+            Wh_Log(L"Monitor %d has no taskbar; using the primary taskbar",
+                   monitorNumber);
+        }
     } else {
-        Wh_Log(L"Monitor %d is unavailable; using the primary taskbar",
-               monitorNumber);
+        if (logFallback) {
+            Wh_Log(L"Monitor %d is unavailable; using the primary taskbar",
+                   monitorNumber);
+        }
     }
     return FindPrimaryTaskbarWindow();
 }
@@ -3908,8 +4101,14 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     return result;
 }
 
-void ApplyToTaskbarWindow(void* context) {
-    HWND taskbarWindow = reinterpret_cast<HWND>(context);
+struct ApplyWidgetContext {
+    HWND taskbarWindow = nullptr;
+    bool succeeded = false;
+};
+
+void ApplyToTaskbarWindow(void* contextValue) {
+    auto* context = reinterpret_cast<ApplyWidgetContext*>(contextValue);
+    HWND taskbarWindow = context->taskbarWindow;
     if (!IsCurrentProcessTaskbarWindow(taskbarWindow)) {
         return;
     }
@@ -3926,12 +4125,19 @@ void ApplyToTaskbarWindow(void* context) {
         });
         if (taskbarFrame && InjectWidget(taskbarFrame)) {
             RememberTaskbarWindow(taskbarWindow);
+            context->succeeded = true;
         }
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         Wh_Log(L"Applying widget failed: %08X",
                static_cast<unsigned>(error));
     }
+}
+
+bool ApplyWidgetToTaskbarWindow(HWND taskbarWindow) {
+    ApplyWidgetContext context{taskbarWindow, false};
+    return RunFromWindowThread(taskbarWindow, ApplyToTaskbarWindow, &context) &&
+           context.succeeded;
 }
 
 struct TaskbarProbeContext {
@@ -3974,8 +4180,6 @@ void RemoveWidgetForMove(void* contextValue) {
     try {
         RemoveWidget();
         context->succeeded = true;
-        g_taskbarWindow = nullptr;
-        g_taskbarThreadId = 0;
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         Wh_Log(L"Removing widget before monitor switch failed: %08X",
@@ -4026,6 +4230,7 @@ void ApplyOnTaskbarThread() {
     if (!removalWindow && g_taskbarThreadId.load()) {
         removalWindow = FindAnyWindowOnTaskbarThread(nullptr);
     }
+    bool widgetRemovedForMove = false;
     if (removalWindow && currentWindow != targetWindow) {
         RemoveWidgetForMoveContext removeContext;
         if (!RunFromWindowThread(removalWindow, RemoveWidgetForMove,
@@ -4034,12 +4239,62 @@ void ApplyOnTaskbarThread() {
             Wh_Log(L"Removing widget from the previous monitor failed");
             return;
         }
+        widgetRemovedForMove = true;
     }
 
-    if (!RunFromWindowThread(targetWindow, ApplyToTaskbarWindow,
-                             targetWindow)) {
+    if (!ApplyWidgetToTaskbarWindow(targetWindow)) {
         Wh_Log(L"Applying widget on taskbar thread failed");
+        if (widgetRemovedForMove &&
+            IsCurrentProcessTaskbarWindow(currentWindow)) {
+            Wh_Log(L"Restoring widget on the previous taskbar");
+            if (!ApplyWidgetToTaskbarWindow(currentWindow)) {
+                Wh_Log(L"Restoring widget on the previous taskbar failed");
+            }
+        }
     }
+}
+
+void EnsureConfiguredTaskbarPlacement() {
+    if (!g_widget || g_unloading) {
+        return;
+    }
+    HWND targetWindow = FindConfiguredTaskbarWindow(false);
+    HWND rememberedWindow = g_taskbarWindow.load();
+    if (!targetWindow ||
+        (IsCurrentProcessTaskbarWindow(rememberedWindow) &&
+         rememberedWindow == targetWindow)) {
+        return;
+    }
+
+    Wh_Log(L"Taskbar topology changed; moving the widget");
+    ApplyOnTaskbarThread();
+}
+
+void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
+    if (!taskbarFrame || g_unloading) {
+        return;
+    }
+
+    // The constructor hook already gives us the stable XAML element. Use it
+    // directly whenever its taskbar is unambiguous, and keep the symbol-based
+    // XAML-root lookup only for choosing between multiple monitor taskbars.
+    HWND directWindow = FindOnlyTaskbarWindow();
+    if (!directWindow && g_widget) {
+        XamlRoot loadedRoot = taskbarFrame.XamlRoot();
+        XamlRoot widgetRoot = g_widget.XamlRoot();
+        HWND rememberedWindow = g_taskbarWindow.load();
+        if (loadedRoot && widgetRoot &&
+            winrt::get_abi(loadedRoot) == winrt::get_abi(widgetRoot) &&
+            IsCurrentProcessTaskbarWindow(rememberedWindow)) {
+            directWindow = rememberedWindow;
+        }
+    }
+
+    if (directWindow && InjectWidget(taskbarFrame)) {
+        RememberTaskbarWindow(directWindow);
+        return;
+    }
+    ApplyOnTaskbarThread();
 }
 
 using TaskbarFrame_Constructor_t = void*(WINAPI*)(void* pThis);
@@ -4062,16 +4317,17 @@ void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
     auto revoker = std::prev(g_loadedRevokers->end());
     *revoker = taskbarFrame.Loaded(
         winrt::auto_revoke_t{},
-        [revoker](IInspectable const&, RoutedEventArgs const&) {
+        [revoker](IInspectable const& sender, RoutedEventArgs const&) {
             if (!g_loadedRevokers) {
                 return;
             }
+            FrameworkElement loadedFrame = sender.try_as<FrameworkElement>();
             g_loadedRevokers->erase(revoker);
             if (g_unloading) {
                 return;
             }
             try {
-                ApplyOnTaskbarThread();
+                ApplyLoadedTaskbarFrame(loadedFrame);
             } catch (...) {
                 HRESULT error = winrt::to_hresult();
                 Wh_Log(L"Loaded injection failed: %08X",
@@ -4129,8 +4385,7 @@ bool TryHookTaskbarViewSymbols(HMODULE module, bool applyImmediately) {
         return static_cast<bool>(g_taskbarViewDllLoaded);
     }
 
-    constexpr uint32_t kMaximumHookAttempts = 3;
-    if (g_taskbarViewHookAttempts >= kMaximumHookAttempts ||
+    if (g_taskbarViewHookAttempts >= kMaximumTaskbarViewHookAttempts ||
         g_taskbarViewDllLoaded.exchange(true)) {
         return static_cast<bool>(g_taskbarViewDllLoaded);
     }
@@ -4138,7 +4393,7 @@ bool TryHookTaskbarViewSymbols(HMODULE module, bool applyImmediately) {
     uint32_t attempt = ++g_taskbarViewHookAttempts;
     if (!HookTaskbarViewSymbols(module)) {
         Wh_Log(L"Taskbar.View symbol hook failed (attempt %u/%u)", attempt,
-               kMaximumHookAttempts);
+               kMaximumTaskbarViewHookAttempts);
         g_taskbarViewDllLoaded = false;
         return false;
     }
@@ -4155,8 +4410,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
                                    HANDLE file,
                                    DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
-    if (HMODULE taskbarViewModule = GetTaskbarViewModule()) {
-        TryHookTaskbarViewSymbols(taskbarViewModule, true);
+    if (!g_taskbarViewDllLoaded &&
+        g_taskbarViewHookAttempts < kMaximumTaskbarViewHookAttempts) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModule()) {
+            TryHookTaskbarViewSymbols(taskbarViewModule, true);
+        }
     }
     return module;
 }
@@ -4180,9 +4438,16 @@ bool TearDownTaskbarUi() {
     // window on its UI thread is sufficient: the WH_CALLWNDPROC hook runs the
     // callback, while SendMessage only wakes that thread.
     HWND fallbackWindow = FindAnyWindowOnTaskbarThread(taskbarWindow);
-    return fallbackWindow &&
-           RunFromWindowThread(fallbackWindow, RemoveFromCurrentTaskbar,
-                               nullptr);
+    if (!fallbackWindow) {
+        // Injection can fail before g_taskbarWindow/g_taskbarThreadId are set,
+        // while TaskbarFrame Loaded revokers are already pending. Every taskbar
+        // shares Explorer's XAML UI thread, so the primary window is a safe
+        // final marshaling target for revoking them before the DLL unloads.
+        fallbackWindow = FindPrimaryTaskbarWindow();
+    }
+    return fallbackWindow && RunFromWindowThread(
+                                 fallbackWindow, RemoveFromCurrentTaskbar,
+                                 nullptr);
 }
 
 }  // namespace
