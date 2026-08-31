@@ -97,6 +97,7 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
 #define BSDR_CLOSE 1337
+#define BSDR_CANCEL_TIMER 1
 
 #define RETURN_IF_FAILED(x) do { \
     HRESULT hr = (x); \
@@ -1782,6 +1783,7 @@ namespace CustomBSDR {
     std::mutex workerMutex;
     std::mutex hBgWndMutex;
     std::mutex pendingAppsMutex;
+    std::mutex cancelMutex;
 
     // functions
     void CenterWindow(HWND hWnd);
@@ -1792,6 +1794,7 @@ namespace CustomBSDR {
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
     void UpdateAppListLayout();
+    void Cancel();
     LRESULT CALLBACK ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     LRESULT CALLBACK AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     INT_PTR CALLBACK DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -1819,6 +1822,7 @@ namespace CustomBSDR {
     int minHeight = 0;
     bool paintedFirstFrame = false;
     bool isOnSecureDesktop = true;
+    bool isCanceling = false;
 
     // app list data stuff
     struct AppTile {
@@ -2717,6 +2721,35 @@ void CustomBSDR::UpdateAppListLayout() {
     RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
 
+void CustomBSDR::Cancel() {
+    if (!isOnSecureDesktop) {
+        // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
+        // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
+        // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
+        // and makes the thread stuck in WaitForSingleObject
+        // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
+        // (I still haven't found neither the culprint nor which code signals that event)
+        HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
+        if (hDoModalExitEvent) {
+            if (!SetEvent(hDoModalExitEvent)) {
+                Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
+            }
+        } else {
+            // Event capture failed, oh noes!
+            // Here comes the old terrible workaround
+            // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
+            // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
+            Wh_Log(L"Force exiting LogonUI!");
+            ExitProcess(0);
+        }
+    }
+    {
+        std::lock_guard lock(cancelMutex);
+        isCanceling = false;
+    }
+    PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
+}
+
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
@@ -2769,6 +2802,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             // so handling per-monitor DPI is not much trouble. Screenshotting works fine
             // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
             // during logoff phase either so it's low priority
+            // Note 2: when a window exactly covers the whole virtual screen, it uses the primary monitor's DPI regardless of proportions,
+            // which is good for us because the dialog is only shown on the primary monitor
+            // Even a 1px offset disables that behavior and makes the window use DPI of the monitor the window is primarily in
+            // This behavior is the same for per-monitor V1, V2, and also MonitorFromWindow/MonitorFromRect
             int dpi = GetDpiForWindow(hWndDlg);
 
             int itemHeight = MulDiv(83, dpi, 96);
@@ -2971,11 +3008,20 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
     case WM_COMMAND: {
         switch (LOWORD(wParam)) {
         case IDCANCEL:
+            {
+                std::lock_guard lock(cancelMutex);
+                isCanceling = true;
+            }
             Resolve(BlockedShutdownResolution_Cancel);
             ShowWindow(hBgWnd, SW_HIDE);
             // Make sure the resolve request reaches winlogon
             // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
-            SetTimer(hWndDlg, 1, 500, nullptr);
+            if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 500, nullptr)) {
+                Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
+                // Fallback to sleep
+                Sleep(500);
+                Cancel();
+            }
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
             ShowWindow(hWarningText, SW_SHOW);
@@ -3001,29 +3047,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         break;
     }
     case WM_TIMER: {
-        KillTimer(hWndDlg, 1);
-        if (!isOnSecureDesktop) {
-            // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
-            // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
-            // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
-            // and makes the thread stuck in WaitForSingleObject
-            // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
-            // (I still haven't found neither the culprint nor which code signals that event)
-            HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
-            if (hDoModalExitEvent) {
-                if (!SetEvent(hDoModalExitEvent)) {
-                    Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
-                }
-            } else {
-                // Event capture failed, oh noes!
-                // Here comes the old terrible workaround
-                // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
-                // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
-                Wh_Log(L"Force exiting LogonUI!");
-                ExitProcess(0);
-            }
-        }
-        PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
+        if (wParam != BSDR_CANCEL_TIMER)
+            break;
+
+        KillTimer(hWndDlg, BSDR_CANCEL_TIMER);
+        Cancel();
         return TRUE;
     }
     case WM_ADD_APP: {
@@ -3609,7 +3637,9 @@ void CustomBSDR::Hide() {
 }
 
 void CustomBSDR::Stop() {
-    if (hStopEvent) {
+    std::lock_guard lock(cancelMutex);
+
+    if (!isCanceling && hStopEvent) {
         SetEvent(hStopEvent);
     }
 }
