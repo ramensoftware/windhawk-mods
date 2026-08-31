@@ -72,7 +72,7 @@ Windows 11 only.
   $description: 0 = transparent, 173 = default, 255 = fully opaque. Changing this reloads the mod.
 - customIcon: ""
   $name: Custom icon
-  $description: Optional full path to an .ico file; single or double surrounding quotes are accepted. Rotation, brightness, and alpha are applied to it too. Changing this reloads the mod.
+  $description: Optional full path to an .ico file; matching single or double surrounding quotes are accepted. Rotation, brightness, and alpha are applied to it too. Unsupported files fall back to the bundled icon. Changing this reloads the mod.
 */
 // ==/WindhawkModSettings==
 
@@ -863,7 +863,17 @@ static std::optional<std::wstring> ExtractStableIdFromSeparatorIdentity(
 static bool ParseWideInt(
     std::wstring_view text,
     int* valueOut) {
-    if (!valueOut || text.empty()) {
+    if (!valueOut) {
+        return false;
+    }
+
+    while (!text.empty() && std::iswspace(text.front())) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && std::iswspace(text.back())) {
+        text.remove_suffix(1);
+    }
+    if (text.empty()) {
         return false;
     }
 
@@ -986,7 +996,10 @@ static bool GenerateRandomBytes(
         HMODULE bcrypt =
             GetModuleHandleW(L"bcrypt.dll");
         if (!bcrypt) {
-            bcrypt = LoadLibraryW(L"bcrypt.dll");
+            bcrypt = LoadLibraryExW(
+                L"bcrypt.dll",
+                nullptr,
+                LOAD_LIBRARY_SEARCH_SYSTEM32);
         }
 
         return bcrypt
@@ -2596,6 +2609,9 @@ static bool BuildCustomizedSeparatorIcon(
     frames.reserve(frameCount);
     dibFrames.reserve(frameCount);
 
+    std::optional<DecodedIconFrame> customLargeFrame;
+    std::optional<std::vector<BYTE>> customLargeDib;
+
     for (UINT i = 0; i < frameCount; i++) {
         winrt::com_ptr<IWICBitmapFrameDecode> sourceFrame;
         hr = decoder->GetFrame(i, sourceFrame.put());
@@ -2616,9 +2632,9 @@ static bool BuildCustomizedSeparatorIcon(
             return false;
         }
 
-        // Taskbar pins don't need the bundled 256px frame. Re-encoding it as
-        // an uncompressed DIB would dominate the generated ICO's size. Keep a
-        // custom icon's 256px frame because it might be the only source frame.
+        // Taskbar pins don't need a 256px frame when a smaller taskbar-sized
+        // frame is available. For custom icons, defer one 256px candidate and
+        // keep it only if no smaller frame survives decoding.
         if (!usingCustomIcon && width == 256) {
             continue;
         }
@@ -2668,8 +2684,21 @@ static bool BuildCustomizedSeparatorIcon(
             return false;
         }
 
+        if (usingCustomIcon && width == 256) {
+            if (!customLargeFrame) {
+                customLargeFrame = std::move(frame);
+                customLargeDib = std::move(dib);
+            }
+            continue;
+        }
+
         frames.push_back(std::move(frame));
         dibFrames.push_back(std::move(dib));
+    }
+
+    if (frames.empty() && customLargeFrame && customLargeDib) {
+        frames.push_back(std::move(*customLargeFrame));
+        dibFrames.push_back(std::move(*customLargeDib));
     }
 
     constexpr size_t kIcoHeaderSize = 6;
@@ -2738,8 +2767,27 @@ GetConfiguredBundledSeparatorIconBytes() {
                 &iconBytes) ||
             iconBytes.empty() ||
             iconBytes.size() > MAXDWORD) {
-            Wh_Log(L"[ICON] Custom icon couldn't be decoded safely");
-            return nullptr;
+            Wh_Log(
+                L"[ICON] Custom icon couldn't be decoded safely; using bundled icon");
+
+            IconAppearanceSettings bundledAppearance = g_iconAppearance;
+            bundledAppearance.customIconBytes.clear();
+            bundledAppearance.customIconHash = 0;
+            iconBytes.clear();
+
+            if (bundledAppearance.rotation == 0 &&
+                bundledAppearance.brightness == kDefaultIconBrightness &&
+                bundledAppearance.alpha == kDefaultIconAlpha) {
+                iconBytes.assign(
+                    std::begin(kSeparatorIcon),
+                    std::end(kSeparatorIcon));
+            } else if (!BuildCustomizedSeparatorIcon(
+                           bundledAppearance,
+                           &iconBytes) ||
+                       iconBytes.empty() ||
+                       iconBytes.size() > MAXDWORD) {
+                return nullptr;
+            }
         }
     } else if (g_iconAppearance.rotation == 0 &&
                g_iconAppearance.brightness == kDefaultIconBrightness &&
