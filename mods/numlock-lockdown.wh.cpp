@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.4
+// @version         1.1.5
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -69,7 +69,8 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   a force-on fires, even in **Block** mode.
 - In "allow" mode, holding Num Lock without the modifier can leave it off
   until you release the key. Auto-repeat is swallowed so the LED does not
-  flicker; force-on runs on key-up.
+  flicker; force-on runs on key-up. If the safety check is on (10 s by
+  default), it can still force Num Lock back ON while the key is held.
 - The Win key is never blocked. Only Num Lock is filtered. If you hold Win and
   press numpad 1/3/5/9, Windows may type those digits because Win+Numpad1 is
   not the same shortcut as Win+1 on the number row. That is OS behavior.
@@ -95,17 +96,19 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   $name: Pressing Num Lock alone
   $description: >-
     What should happen when you press Num Lock without holding Shift (or
-    whichever override you picked).
+    whichever override you picked). In allow mode, holding the key can leave
+    Num Lock off until you release it; the safety check may still turn it
+    back on before then.
   $options:
     - block: Ignore it. Games and other apps will not see the key either.
-    - allow: Let it toggle, then turn Num Lock back on when you let go. If you hold the key, Num Lock can stay off until you release it.
+    - allow: Let it toggle, then turn Num Lock back on when you let go.
 - safetyCheckSeconds: 10
   $name: Safety check interval (seconds)
   $description: >-
     Optional fallback that re-checks Num Lock in case it was turned off by
     sleep, RDP, or an elevated app the hook cannot see. Focus change, unlock,
     and resume already retry without this timer. 0 disables it. 10 seconds
-    is a light default.
+    is a light default. Values above 3600 seconds are treated as 3600.
 */
 // ==/WindhawkModSettings==
 
@@ -127,11 +130,16 @@ keeps overhead low and avoids tying Num Lock to the shell process.
 constexpr UINT WM_APP_FORCE_ON = WM_APP + 1;
 constexpr UINT WM_APP_UPDATE_TIMER = WM_APP + 2;
 constexpr UINT WM_APP_QUIT = WM_APP + 3;
-// Posted to the hook thread (hwnd is null). Unhook + SetWindowsHookEx so a
-// hook Windows silently dropped after a timeout can be put back.
+// Posted to the hook thread (hwnd is null). Install a fresh hook first, then
+// drop the old one, so a timeout-dropped or failed hook can be recovered
+// without a gap if SetWindowsHookEx fails.
 constexpr UINT WM_APP_REHOOK = WM_APP + 4;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
+// Independent of safetyCheckSeconds (including 0). Recovers a WH_KEYBOARD_LL
+// hook Windows silently removed after a timeout.
+constexpr UINT_PTR kHookRetryTimerId = 2;
+constexpr UINT kHookRetryIntervalMs = 60 * 1000;
 
 // dwExtraInfo stamped on every synthetic Num Lock we send, so the hook can
 // let our own keystrokes through without treating them as user input.
@@ -267,6 +275,7 @@ void LoadSettings() {
         seconds = 3600;
     }
     g_safetyCheckSeconds.store(seconds, std::memory_order_relaxed);
+    g_overrideUsedThisHold.store(false, std::memory_order_relaxed);
 }
 
 bool IsOverrideVk(DWORD vk) {
@@ -336,6 +345,7 @@ void SeedModifierState() {
 void ClearStaleKeyFlags() {
     g_allowedNumLockDown.store(false, std::memory_order_relaxed);
     g_swallowedNumLockDown.store(false, std::memory_order_relaxed);
+    g_overrideUsedThisHold.store(false, std::memory_order_relaxed);
 }
 
 // Worker thread only: a cached "held" can be stale if the hook missed a
@@ -430,6 +440,17 @@ void UpdateSafetyTimer() {
     const UINT intervalMs = static_cast<UINT>(seconds) * 1000;
     if (!SetTimer(hwnd, kSafetyTimerId, intervalMs, nullptr)) {
         Wh_Log(L"SetTimer failed: %lu", GetLastError());
+    }
+}
+
+void StartHookRetryTimer() {
+    HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
+    if (!hwnd) {
+        return;
+    }
+
+    if (!SetTimer(hwnd, kHookRetryTimerId, kHookRetryIntervalMs, nullptr)) {
+        Wh_Log(L"SetTimer (hook retry) failed: %lu", GetLastError());
     }
 }
 
@@ -565,16 +586,7 @@ void UnregisterPowerAndSession(HWND hwnd) {
     }
 
     if (g_suspendResumeNotify) {
-        using UnregisterSuspendResumeNotification_t =
-            BOOL(WINAPI*)(HPOWERNOTIFY);
-        if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-            auto pUnregister = reinterpret_cast<
-                UnregisterSuspendResumeNotification_t>(
-                GetProcAddress(user32, "UnregisterSuspendResumeNotification"));
-            if (pUnregister) {
-                pUnregister(g_suspendResumeNotify);
-            }
-        }
+        UnregisterSuspendResumeNotification(g_suspendResumeNotify);
         g_suspendResumeNotify = nullptr;
     }
 
@@ -604,6 +616,8 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_TIMER:
             if (wParam == kSafetyTimerId) {
                 ForceNumLockOn(true);
+            } else if (wParam == kHookRetryTimerId) {
+                RequestRehook();
             }
             return 0;
 
@@ -672,20 +686,10 @@ void RegisterPowerAndSession(HWND hwnd) {
         Wh_Log(L"WTSRegisterSessionNotification failed: %lu", GetLastError());
     }
 
-    using RegisterSuspendResumeNotification_t =
-        HPOWERNOTIFY(WINAPI*)(HANDLE, DWORD);
-    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        auto pRegister =
-            reinterpret_cast<RegisterSuspendResumeNotification_t>(
-                GetProcAddress(user32, "RegisterSuspendResumeNotification"));
-        if (pRegister) {
-            g_suspendResumeNotify =
-                pRegister(hwnd, DEVICE_NOTIFY_WINDOW_HANDLE);
-            if (!g_suspendResumeNotify) {
-                Wh_Log(L"RegisterSuspendResumeNotification failed: %lu",
-                       GetLastError());
-            }
-        }
+    g_suspendResumeNotify =
+        RegisterSuspendResumeNotification(hwnd, DEVICE_NOTIFY_WINDOW_HANDLE);
+    if (!g_suspendResumeNotify) {
+        Wh_Log(L"RegisterSuspendResumeNotification failed: %lu", GetLastError());
     }
 }
 
@@ -735,6 +739,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     SeedModifierState();
     ForceNumLockOn(false);
     UpdateSafetyTimer();
+    StartHookRetryTimer();
 
     if (g_workerReadyEvent) {
         SetEvent(g_workerReadyEvent);
@@ -748,6 +753,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     hwnd = g_workerHwnd.exchange(nullptr, std::memory_order_acq_rel);
     if (hwnd) {
         KillTimer(hwnd, kSafetyTimerId);
+        KillTimer(hwnd, kHookRetryTimerId);
         UnregisterPowerAndSession(hwnd);
         DestroyWindow(hwnd);
     }
@@ -781,6 +787,34 @@ void TryInstallKeyboardHook() {
     }
 }
 
+// Install a new hook first, then drop the previous handle. If SetWindowsHookEx
+// fails, a still-working hook is left in place. If Windows already dropped the
+// old hook, the stored handle is stale and this puts a live one back.
+void ReinstallKeyboardHook() {
+    if (g_hookQuit.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    HHOOK fresh = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                    GetCurrentModuleHandle(), 0);
+    if (g_hookQuit.load(std::memory_order_acquire)) {
+        if (fresh) {
+            UnhookWindowsHookEx(fresh);
+        }
+        return;
+    }
+    if (!fresh) {
+        Wh_Log(L"SetWindowsHookExW(WH_KEYBOARD_LL) failed: %lu",
+               GetLastError());
+        return;
+    }
+
+    HHOOK old = g_keyboardHook.exchange(fresh, std::memory_order_acq_rel);
+    if (old) {
+        UnhookWindowsHookEx(old);
+    }
+}
+
 // Dedicated hook thread: owns WH_KEYBOARD_LL and nothing else. SendInput
 // stays on the worker so the hook never has to come down for a pulse.
 DWORD WINAPI HookThreadProc(LPVOID) {
@@ -804,8 +838,7 @@ DWORD WINAPI HookThreadProc(LPVOID) {
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (!msg.hwnd && msg.message == WM_APP_REHOOK) {
-            UninstallKeyboardHook();
-            TryInstallKeyboardHook();
+            ReinstallKeyboardHook();
             continue;
         }
         TranslateMessage(&msg);
