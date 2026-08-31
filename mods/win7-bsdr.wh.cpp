@@ -3403,7 +3403,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         bgHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
         HWND hBgWndLocal = CreateWindowExW(
-            0,//WS_EX_TOPMOST,
+            WS_EX_TOPMOST,
             BSDR_CLASSNAME,
             nullptr,
             WS_POPUP,
