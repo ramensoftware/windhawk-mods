@@ -23,7 +23,6 @@ Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating w
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
 - You can click right through it, so it won't get in the way of your taskbar buttons.
-
 */
 // ==/WindhawkModReadme==
 
@@ -57,17 +56,10 @@ Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating w
 */
 // ==/WindhawkModSettings==
 
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-
-#include <winsock2.h>
-#include <ws2ipdef.h>
 #include <windows.h>
 #include <objbase.h>
 #include <gdiplus.h>
 #include <iphlpapi.h>
-#include <netioapi.h>
 #include <string>
 #include <algorithm>
 #include <atomic>
@@ -97,7 +89,7 @@ Settings g_settings;
 std::mutex g_settingsMutex;
 
 std::atomic<HWND> g_hWnd{nullptr};
-std::mutex g_wndLifecycleMutex; // Guards creation, publication, and teardown of g_hWnd
+std::mutex g_wndLifecycleMutex;
 
 std::atomic<bool> g_posUpdatePending{false};
 std::atomic<bool> g_exiting{false};
@@ -238,16 +230,18 @@ bool GetTotalOctets(ULONG64* inOctets, ULONG64* outOctets) {
 
     if (g_bestIfIndex == 0) return false;
 
-    MIB_IF_ROW2 row{};
-    row.InterfaceIndex = g_bestIfIndex;
-    if (GetIfEntry2(&row) != NO_ERROR) {
+    MIB_IFROW row{};
+    row.dwIndex = g_bestIfIndex;
+    if (GetIfEntry(&row) != NO_ERROR) {
         return false;
     }
 
-    if (row.OperStatus != IfOperStatusUp) return false;
+    if (row.dwOperStatus != MIB_IF_OPER_STATUS_OPERATIONAL && row.dwOperStatus != MIB_IF_OPER_STATUS_CONNECTED) {
+        return false;
+    }
 
-    *inOctets = row.InOctets;
-    *outOctets = row.OutOctets;
+    *inOctets = row.dwInOctets;
+    *outOctets = row.dwOutOctets;
     return true;
 }
 
@@ -268,7 +262,7 @@ void UpdateSpeedSample() {
     if (!GetTotalOctets(&in, &out)) {
         g_downBps = 0.0;
         g_upBps = 0.0;
-        g_lastTick = 0; // Reset baseline so reconnect doesn't understate next rate
+        g_lastTick = 0;
     } else {
         ULONGLONG now = GetTickCount64();
         if (g_lastTick != 0) {
