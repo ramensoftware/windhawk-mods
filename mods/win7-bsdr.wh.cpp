@@ -1783,6 +1783,7 @@ namespace CustomBSDR {
     std::mutex pendingAppsMutex;
 
     // functions
+    void ActivateWindow();
     void CenterWindow(HWND hWnd);
     bool IsHighContrast();
     HBITMAP LoadAlphaBitmap(UINT resourceId, bool forceHardcoded = false);
@@ -3123,6 +3124,26 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
     return FALSE;
 }
 
+void CustomBSDR::ActivateWindow()
+{
+    HWND fgWnd = GetForegroundWindow();
+    DWORD myTid = GetCurrentThreadId();
+    DWORD fgTid = fgWnd ? GetWindowThreadProcessId(fgWnd, nullptr) : 0;
+
+    BOOL attached = FALSE;
+
+    if (fgTid && fgTid != myTid) {
+        attached = AttachThreadInput(myTid, fgTid, TRUE);
+    }
+
+    SetForegroundWindow(hBgWnd);
+    SetActiveWindow(hBgWnd);
+
+    if (attached) {
+        AttachThreadInput(myTid, fgTid, FALSE);
+    }
+}
+
 LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE: {
@@ -3174,6 +3195,10 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             btnPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_PRESSED);
             btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
             btnSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED_HOVER);
+        }
+
+        if (!isOnSecureDesktop) {
+            ActivateWindow();
         }
         return 0;
     }
