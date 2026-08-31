@@ -38,7 +38,7 @@ Laptop users who use three- or four-finger swipe gestures can especially benefit
 /*
 - maximumThumbnailSize: 1024
   $name: Maximum thumbnail size
-  $description: Requested size used for the transition wallpaper. Microsoft documents 1024 as the maximum supported value.
+  $description: Requested size used for the transition wallpaper, clamped to the range 64-1024. Microsoft documents 1024 as the maximum supported value.
 */
 // ==/WindhawkModSettings==
 
@@ -290,9 +290,8 @@ bool HookBackgroundThumbnailHelper(HMODULE module) {
             {
                 L"protected: long __cdecl VirtualDesktopGestureWindow::MakeBackgroundThumbnailFromThumbnailCache(struct IDCompThumbnail *,struct IVirtualDesktop *,struct HSTRING__ *,struct tagRECT,struct IDCompThumbnail * *)",
             },
-            reinterpret_cast<void**>(&g_makeBackgroundThumbnailOriginal),
-            reinterpret_cast<void*>(
-                MakeBackgroundThumbnailFromThumbnailCacheHook),
+            &g_makeBackgroundThumbnailOriginal,
+            MakeBackgroundThumbnailFromThumbnailCacheHook,
             false,
         },
     };
@@ -331,16 +330,16 @@ bool HookThumbnailCache(
             {
                 L"public: virtual long __cdecl CThumbnailCache::GetThumbnail(struct IShellItem *,unsigned int,enum WTS_FLAGS,struct ISharedBitmap * *,enum WTS_CACHEFLAGS *,struct WTS_THUMBNAILID *)",
             },
-            reinterpret_cast<void**>(getThumbnailOriginal),
-            reinterpret_cast<void*>(getThumbnailHook),
+            getThumbnailOriginal,
+            getThumbnailHook,
             true,
         },
         {
             {
                 L"public: virtual long __cdecl CThumbnailCacheAPI::GetThumbnail(struct IShellItem *,unsigned int,enum WTS_FLAGS,struct ISharedBitmap * *,enum WTS_CACHEFLAGS *,struct WTS_THUMBNAILID *)",
             },
-            reinterpret_cast<void**>(apiGetThumbnailOriginal),
-            reinterpret_cast<void*>(apiGetThumbnailHook),
+            apiGetThumbnailOriginal,
+            apiGetThumbnailHook,
             true,
         },
     };
@@ -367,34 +366,41 @@ bool HookThumbnailCache(
 }
 
 bool HookLoadedThumbnailCache() {
-    bool registeredHook = false;
+    if (g_thumbcacheGetThumbnailOriginal ||
+        g_thumbcacheApiGetThumbnailOriginal ||
+        g_windowsStorageGetThumbnailOriginal ||
+        g_windowsStorageApiGetThumbnailOriginal) {
+        return false;
+    }
+
     if (!g_thumbcacheHookAttempted.load()) {
         if (HMODULE thumbcache = GetModuleHandleW(L"thumbcache.dll")) {
-            registeredHook = HookThumbnailCache(
-                thumbcache,
-                &g_thumbcacheHookAttempted,
-                L"thumbcache.dll",
-                &g_thumbcacheGetThumbnailOriginal,
-                ThumbcacheGetThumbnailHook,
-                &g_thumbcacheApiGetThumbnailOriginal,
-                ThumbcacheApiGetThumbnailHook);
+            if (HookThumbnailCache(
+                    thumbcache,
+                    &g_thumbcacheHookAttempted,
+                    L"thumbcache.dll",
+                    &g_thumbcacheGetThumbnailOriginal,
+                    ThumbcacheGetThumbnailHook,
+                    &g_thumbcacheApiGetThumbnailOriginal,
+                    ThumbcacheApiGetThumbnailHook)) {
+                return true;
+            }
         }
     }
     if (!g_windowsStorageHookAttempted.load()) {
         if (HMODULE windowsStorage =
                 GetModuleHandleW(L"windows.storage.dll")) {
-            registeredHook = HookThumbnailCache(
-                                 windowsStorage,
-                                 &g_windowsStorageHookAttempted,
-                                 L"windows.storage.dll",
-                                 &g_windowsStorageGetThumbnailOriginal,
-                                 WindowsStorageGetThumbnailHook,
-                                 &g_windowsStorageApiGetThumbnailOriginal,
-                                 WindowsStorageApiGetThumbnailHook) ||
-                             registeredHook;
+            return HookThumbnailCache(
+                windowsStorage,
+                &g_windowsStorageHookAttempted,
+                L"windows.storage.dll",
+                &g_windowsStorageGetThumbnailOriginal,
+                WindowsStorageGetThumbnailHook,
+                &g_windowsStorageApiGetThumbnailOriginal,
+                WindowsStorageApiGetThumbnailHook);
         }
     }
-    return registeredHook;
+    return false;
 }
 
 bool IsHookSetupComplete() {
@@ -404,8 +410,12 @@ bool IsHookSetupComplete() {
     if (!g_makeBackgroundThumbnailOriginal) {
         return true;
     }
-    return g_thumbcacheHookAttempted.load() &&
-           g_windowsStorageHookAttempted.load();
+    return g_thumbcacheGetThumbnailOriginal ||
+           g_thumbcacheApiGetThumbnailOriginal ||
+           g_windowsStorageGetThumbnailOriginal ||
+           g_windowsStorageApiGetThumbnailOriginal ||
+           (g_thumbcacheHookAttempted.load() &&
+            g_windowsStorageHookAttempted.load());
 }
 
 void ProcessLateHookWork() {
@@ -512,6 +522,12 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_hookSetupComplete.load()) {
+        ProcessLateHookWork();
+    }
 }
 
 void Wh_ModSettingsChanged() {
