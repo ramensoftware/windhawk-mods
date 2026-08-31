@@ -5028,6 +5028,11 @@ namespace
 
     void PositionProgressCircle(OperationTileElement *tile, PCWSTR reason)
     {
+        if (!tile)
+        {
+            return;
+        }
+
         (void)reason;
         HWND circleWindow = nullptr;
 
@@ -5178,7 +5183,7 @@ namespace
             std::lock_guard<std::mutex> lock(g_circleMutex);
             for (auto const &state : g_circles)
             {
-                if (state.hostWindow == hostWindow)
+                if (state.hostWindow == hostWindow && state.tile)
                 {
                     tiles.push_back(state.tile);
                 }
@@ -6933,6 +6938,18 @@ namespace
         if (g_unloading.load(std::memory_order_acquire))
         {
             return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            auto it = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [tile](TransferSummaryState const &state)
+                { return state.tile == tile; });
+            if (it == g_transferSummaries.end())
+            {
+                return;
+            }
         }
 
         int fallbackPercent = 0;
