@@ -2,7 +2,7 @@
 // @id              restore-classic-cpls
 // @name            Restore the classic Personalization and other CPLs
 // @description     Brings back the classic Personalization applet and other CPLs.
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -16,6 +16,7 @@ Brings back the classic Control Panel applets:
 * Notification area icons (for Win10 taskbar)
 * Network Connections
 * Printers and Faxes
+* View installed updates
 * Suppresses the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1}, originally called "Company Settings Sync", a non-functional icon that may appear if you are using the Classic view of Control Panel
 
 ![screenshot](https://i.imgur.com/mM2JDGp.png)
@@ -37,6 +38,9 @@ Brings back the classic Control Panel applets:
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
   $description: Adds "Printers and Faxes" icon to the Control Panel
+- enableViewInstalledUpdates: false
+  $name: View installed updates
+  $description: Adds "View installed updates" icon to the Control Panel (requires the `Control Panel Revival` mod to open in Control Panel rather than Settings app)
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
   $description: Removes the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} non-functional icon
@@ -55,6 +59,7 @@ struct Settings {
     std::atomic<bool> enableNotificationIcons;
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
+    std::atomic<bool> enableViewInstalledUpdates;
     std::atomic<bool> suppressCompanySync;
 } g_settings;
 
@@ -68,17 +73,20 @@ std::wstring g_personalizationGuidLower;
 std::wstring g_notificationIconsGuidLower;
 std::wstring g_networkConnectionsGuidLower;
 std::wstring g_printersAndFaxesGuidLower;
+std::wstring g_viewInstalledUpdatesGuidLower;
 std::wstring g_suppressedGuidLower;
 
-static const std::wstring kPersonalizationGuid    = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
-static const std::wstring kNotificationIconsGuid  = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
-static const std::wstring kNetworkConnectionsGuid = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
-static const std::wstring kPrintersAndFaxesGuid   = L"{2227a280-3aea-1069-a2de-08002b30309d}";
-static const std::wstring kSuppressedGuid         = L"{98f2ab62-0e29-4e4c-8ee7-b542e66740b1}";
+static const std::wstring kPersonalizationGuid      = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
+static const std::wstring kNotificationIconsGuid    = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
+static const std::wstring kNetworkConnectionsGuid   = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
+static const std::wstring kPrintersAndFaxesGuid     = L"{2227a280-3aea-1069-a2de-08002b30309d}";
+static const std::wstring kViewInstalledUpdatesGuid = L"{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}";
+static const std::wstring kSuppressedGuid           = L"{98f2ab62-0e29-4e4c-8ee7-b542e66740b1}";
 
 static const DWORD kCategoryAppearance = 1;
 static const DWORD kCategoryHardware   = 2;
 static const DWORD kCategoryNetwork    = 3;
+static const DWORD kCategoryPrograms   = 8;
 
 std::wstring ToLower(const std::wstring& str) {
     std::wstring res = str;
@@ -101,6 +109,7 @@ void LoadSettings() {
     g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
+    g_settings.enableViewInstalledUpdates.store(Wh_GetIntSetting(L"enableViewInstalledUpdates"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
 }
 
@@ -119,11 +128,12 @@ void InitDisplayNames() {
     }
     
     // Pre-compute lowercase GUIDs
-    g_personalizationGuidLower    = ToLower(kPersonalizationGuid);
-    g_notificationIconsGuidLower  = ToLower(kNotificationIconsGuid);
-    g_networkConnectionsGuidLower = ToLower(kNetworkConnectionsGuid);
-    g_printersAndFaxesGuidLower   = ToLower(kPrintersAndFaxesGuid);
-    g_suppressedGuidLower         = ToLower(kSuppressedGuid);
+    g_personalizationGuidLower      = ToLower(kPersonalizationGuid);
+    g_notificationIconsGuidLower    = ToLower(kNotificationIconsGuid);
+    g_networkConnectionsGuidLower   = ToLower(kNetworkConnectionsGuid);
+    g_printersAndFaxesGuidLower     = ToLower(kPrintersAndFaxesGuid);
+    g_viewInstalledUpdatesGuidLower = ToLower(kViewInstalledUpdatesGuid);
+    g_suppressedGuidLower           = ToLower(kSuppressedGuid);
 }
 
 std::wstring GetTrackedPath(HKEY hKey) {
@@ -231,9 +241,10 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
     }
 
     struct { std::atomic<bool>* enabled; const std::wstring* guidLower; DWORD cat; } categoryItems[] = {
-        { &g_settings.enableNotificationIcons,  &g_notificationIconsGuidLower,  kCategoryAppearance },
-        { &g_settings.enableNetworkConnections, &g_networkConnectionsGuidLower, kCategoryNetwork    },
-        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesGuidLower,   kCategoryHardware   },
+        { &g_settings.enableNotificationIcons,     &g_notificationIconsGuidLower,     kCategoryAppearance },
+        { &g_settings.enableNetworkConnections,    &g_networkConnectionsGuidLower,    kCategoryNetwork    },
+        { &g_settings.enablePrintersAndFaxes,      &g_printersAndFaxesGuidLower,      kCategoryHardware   },
+        { &g_settings.enableViewInstalledUpdates,  &g_viewInstalledUpdatesGuidLower,  kCategoryPrograms   },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
@@ -343,10 +354,11 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
-    if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
-    if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
-    if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
+    if (g_settings.enablePersonalization.load())      result.push_back(kPersonalizationGuid);
+    if (g_settings.enableNotificationIcons.load())    result.push_back(kNotificationIconsGuid);
+    if (g_settings.enableNetworkConnections.load())   result.push_back(kNetworkConnectionsGuid);
+    if (g_settings.enablePrintersAndFaxes.load())     result.push_back(kPrintersAndFaxesGuid);
+    if (g_settings.enableViewInstalledUpdates.load()) result.push_back(kViewInstalledUpdatesGuid);
     return result;
 }
 
