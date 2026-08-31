@@ -53,7 +53,10 @@ struct MovedClockData {
     winrt::weak_ref<FrameworkElement> clock;
     winrt::weak_ref<Controls::Grid> originalParent;
     winrt::weak_ref<Controls::Grid> taskbarRoot;
+    winrt::weak_ref<FrameworkElement> widgets;
     Controls::Grid leftHost{nullptr};
+    std::optional<winrt::event_token> widgetsSizeChangedToken;
+    int64_t widgetsVisibilityChangedToken{};
     double layoutReservedWidth;
     uint32_t originalIndex;
     int originalColumn;
@@ -74,7 +77,6 @@ struct DeferredClockData {
 };
 
 std::atomic<bool> g_callbacksEnabled;
-std::atomic<DWORD> g_callbackGeneration;
 std::atomic<bool> g_systemTrayHooked;
 std::atomic<bool> g_taskbarViewHooked;
 std::atomic<bool> g_systemTrayHookAttempted;
@@ -108,12 +110,12 @@ using TaskbarFrame_SystemTrayExtent_t =
     void(WINAPI*)(void* pThis, double value);
 TaskbarFrame_SystemTrayExtent_t TaskbarFrame_SystemTrayExtent_Original;
 
+using TaskbarFrame_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                      int* alignment);
+TaskbarFrame_get_Alignment_t TaskbarFrame_get_Alignment_Original;
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
-
-bool CallbackAllowed(DWORD generation) {
-    return g_callbacksEnabled && g_callbackGeneration == generation;
-}
 
 std::vector<HWND> FindExplorerTaskbarWindows();
 HWND FindExplorerTaskbarWindow();
@@ -214,7 +216,7 @@ FrameworkElement FindDescendantByName(FrameworkElement element,
     return nullptr;
 }
 
-bool TaskbarUsesCenteredAlignment() {
+bool ReadTaskbarUsesCenteredAlignment() {
     DWORD value = 1;
     DWORD size = sizeof(value);
     if (RegGetValue(
@@ -226,6 +228,12 @@ bool TaskbarUsesCenteredAlignment() {
     }
 
     return value != 0;
+}
+
+bool TaskbarUsesCenteredAlignment() {
+    int alignment = g_lastTaskbarCenteredAlignment;
+    return alignment >= 0 ? alignment != 0
+                          : ReadTaskbarUsesCenteredAlignment();
 }
 
 double GetLeftHostOffset(Controls::Grid root) {
@@ -337,7 +345,91 @@ double CalculateNativeClockLayoutWidth(FrameworkElement content,
     return std::clamp(nativeTextWidth + chromeWidth, 64.0, 180.0);
 }
 
+void UpdateLeftHostOffset(MovedClockData& data) {
+    auto root = data.taskbarRoot.get();
+    if (!root || !data.leftHost) {
+        return;
+    }
+
+    double offset = GetLeftHostOffset(root);
+    Thickness margin = data.leftHost.Margin();
+    if (margin.Left != offset) {
+        margin.Left = offset;
+        data.leftHost.Margin(margin);
+    }
+}
+
+void UpdateLeftHostOffsetForClock(
+    winrt::weak_ref<FrameworkElement> weakClock) {
+    if (!g_callbacksEnabled || !g_movedClocks ||
+        g_clockThreadId != GetCurrentThreadId()) {
+        return;
+    }
+
+    auto clock = weakClock.get();
+    if (!clock) {
+        return;
+    }
+
+    for (auto& data : MovedClocks()) {
+        if (data.clock.get() == clock) {
+            UpdateLeftHostOffset(data);
+            return;
+        }
+    }
+}
+
+void RegisterLeftHostTracking(MovedClockData& data,
+                              FrameworkElement clock) {
+    auto widgets = data.widgets.get();
+    if (!widgets) {
+        return;
+    }
+
+    auto weakClock = winrt::make_weak(clock);
+    data.widgetsSizeChangedToken = widgets.SizeChanged(
+        [weakClock](winrt::Windows::Foundation::IInspectable const&,
+                    SizeChangedEventArgs const&) {
+            try {
+                UpdateLeftHostOffsetForClock(weakClock);
+            } catch (...) {
+                Wh_Log(L"Widgets size handling failed: %08X",
+                       winrt::to_hresult());
+            }
+        });
+    data.widgetsVisibilityChangedToken =
+        widgets.RegisterPropertyChangedCallback(
+            UIElement::VisibilityProperty(),
+            [weakClock](DependencyObject const&, DependencyProperty const&) {
+                try {
+                    UpdateLeftHostOffsetForClock(weakClock);
+                } catch (...) {
+                    Wh_Log(L"Widgets visibility handling failed: %08X",
+                           winrt::to_hresult());
+                }
+            });
+}
+
+void RevokeLeftHostTracking(MovedClockData& data) {
+    auto widgets = data.widgets.get();
+    if (widgets) {
+        if (data.widgetsSizeChangedToken) {
+            widgets.SizeChanged(*data.widgetsSizeChangedToken);
+        }
+        if (data.widgetsVisibilityChangedToken) {
+            widgets.UnregisterPropertyChangedCallback(
+                UIElement::VisibilityProperty(),
+                data.widgetsVisibilityChangedToken);
+        }
+    }
+
+    data.widgetsSizeChangedToken.reset();
+    data.widgetsVisibilityChangedToken = 0;
+}
+
 void RemoveLeftHost(MovedClockData& data) {
+    RevokeLeftHostTracking(data);
+
     if (!data.leftHost) {
         return;
     }
@@ -477,11 +569,13 @@ bool MoveClock(FrameworkElement content) {
 
     double layoutReservedWidth =
         CalculateNativeClockLayoutWidth(content, clock);
+    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
 
     MovedClockData data{
         .clock = clock,
         .originalParent = originalParent,
         .taskbarRoot = root,
+        .widgets = widgets,
         .layoutReservedWidth = layoutReservedWidth,
         .originalIndex = originalIndex,
         .originalColumn = Controls::Grid::GetColumn(clock),
@@ -522,6 +616,8 @@ bool MoveClock(FrameworkElement content) {
         auto& moved = MovedClocks().back();
         moved.leftHost.Children().Append(element);
         root.Children().Append(moved.leftHost.as<UIElement>());
+        RegisterLeftHostTracking(moved, clock);
+        UpdateLeftHostOffset(moved);
 
         // If a clock customization mod loaded first, TaskbarFrame has already
         // arranged app buttons using the expanded clock. Queue a fresh measure
@@ -599,29 +695,33 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     TaskbarFrame_SystemTrayExtent_Original(pThis,
                                            value + layoutReservedWidth);
 
+    if (layoutReservedWidth > 0) {
+        Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
+               value, layoutReservedWidth);
+    }
+}
+
+HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
+    HRESULT result = TaskbarFrame_get_Alignment_Original(pThis, alignment);
+
     try {
-        DWORD clockThreadId = g_clockThreadId;
-        if (g_callbacksEnabled && clockThreadId &&
-            clockThreadId == GetCurrentThreadId()) {
-            int centeredAlignment = TaskbarUsesCenteredAlignment() ? 1 : 0;
+        if (SUCCEEDED(result) && alignment) {
+            int centeredAlignment = *alignment != 0 ? 1 : 0;
             int previousAlignment =
                 g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
-            if (previousAlignment >= 0 &&
+            if (g_callbacksEnabled && previousAlignment >= 0 &&
                 previousAlignment != centeredAlignment) {
                 Wh_Log(L"Taskbar alignment changed; clock placement will be "
                        L"updated");
                 QueueKnownClockPlacementUpdate();
             }
         }
-
-        if (layoutReservedWidth > 0) {
-            Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
-                   value, layoutReservedWidth);
-        }
     } catch (...) {
-        Wh_Log(L"Taskbar extent post-processing failed: %08X",
+        Wh_Log(L"Taskbar alignment handling failed: %08X",
                winrt::to_hresult());
     }
+
+    return result;
 }
 
 DeferredClockData& GetDeferredData(FrameworkElement content) {
@@ -716,8 +816,14 @@ bool ClockLayoutIsReady(FrameworkElement content) {
                     ? Media::VisualTreeHelper::GetParent(systemTrayFrame)
                           .try_as<Controls::Grid>()
                     : nullptr;
-    return root && root.XamlRoot() && root.ActualWidth() > 0 &&
-           root.ActualHeight() > 0;
+    if (!root || !root.XamlRoot() || root.ActualWidth() <= 0 ||
+        root.ActualHeight() <= 0) {
+        return false;
+    }
+
+    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
+    return !widgets || widgets.Visibility() != Visibility::Visible ||
+           widgets.ActualWidth() > 0;
 }
 
 bool LayoutUpdatedWaitExpired(FrameworkElement content) {
@@ -754,16 +860,15 @@ void MoveClockSafely(FrameworkElement content) {
 }
 
 void RegisterLayoutUpdatedHandler(FrameworkElement content) {
-    DWORD generation = g_callbackGeneration;
     auto weakContent = winrt::make_weak(content);
 
     winrt::Windows::Foundation::EventHandler<
         winrt::Windows::Foundation::IInspectable>
         handler =
-            [weakContent, generation](
+            [weakContent](
                 winrt::Windows::Foundation::IInspectable const&,
                 winrt::Windows::Foundation::IInspectable const&) {
-                if (!CallbackAllowed(generation)) {
+                if (!g_callbacksEnabled) {
                     return;
                 }
 
@@ -788,7 +893,7 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
                 }
             };
 
-    if (!g_callbacksEnabled || generation != g_callbackGeneration) {
+    if (!g_callbacksEnabled) {
         return;
     }
 
@@ -802,14 +907,13 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
 }
 
 void RegisterLoadedHandler(FrameworkElement content) {
-    DWORD generation = g_callbackGeneration;
     auto weakContent = winrt::make_weak(content);
 
     RoutedEventHandler handler =
-        [weakContent, generation](
+        [weakContent](
             winrt::Windows::Foundation::IInspectable const&,
             RoutedEventArgs const&) {
-            if (!CallbackAllowed(generation)) {
+            if (!g_callbacksEnabled) {
                 return;
             }
 
@@ -824,7 +928,7 @@ void RegisterLoadedHandler(FrameworkElement content) {
             }
         };
 
-    if (!g_callbacksEnabled || generation != g_callbackGeneration) {
+    if (!g_callbacksEnabled) {
         return;
     }
 
@@ -1014,10 +1118,59 @@ void UpdateKnownClocksSynchronously() {
                        L"Clock placement update");
 }
 
-void CleanupTaskbarStateSynchronously(bool releaseContainers) {
+bool CleanupTaskbarStateSynchronously(bool releaseContainers) {
     CleanupTaskbarStateParameters parameters{releaseContainers};
-    RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
-                       L"Clock layout cleanup");
+    if (RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
+                           L"Clock layout cleanup")) {
+        return true;
+    }
+
+    // A taskbar window can disappear briefly while Explorer rebuilds it. The
+    // stored clock content still exposes its owning dispatcher, so use that as
+    // a window-independent cleanup path before allowing this DLL to unload.
+    if (!g_deferredClocks) {
+        return false;
+    }
+
+    for (auto& data : DeferredClocks()) {
+        auto content = data.content.get();
+        if (!content) {
+            continue;
+        }
+
+        try {
+            auto dispatcher = content.Dispatcher();
+            if (!dispatcher) {
+                continue;
+            }
+
+            if (dispatcher.HasThreadAccess()) {
+                CleanupTaskbarStateParameters fallbackParameters{
+                    releaseContainers};
+                CleanupTaskbarStateCallback(&fallbackParameters);
+            } else {
+                dispatcher
+                    .RunAsync(
+                        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                        [releaseContainers] {
+                            CleanupTaskbarStateParameters fallbackParameters{
+                                releaseContainers};
+                            CleanupTaskbarStateCallback(&fallbackParameters);
+                        })
+                    .get();
+            }
+
+            Wh_Log(L"Clock layout cleanup completed through the XAML "
+                   L"dispatcher fallback");
+            return true;
+        } catch (...) {
+            Wh_Log(L"Clock dispatcher cleanup failed: %08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    Wh_Log(L"Clock layout cleanup failed: no live taskbar dispatcher");
+    return false;
 }
 
 void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
@@ -1217,6 +1370,11 @@ bool HookTaskbarView(HMODULE module) {
             &TaskbarFrame_SystemTrayExtent_Original,
             TaskbarFrame_SystemTrayExtent_Hook,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
+            &TaskbarFrame_get_Alignment_Original,
+            TaskbarFrame_get_Alignment_Hook,
+        },
     };
 
     return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
@@ -1248,6 +1406,11 @@ bool HookTaskbarViewAndSystemTray(HMODULE module) {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::SystemTrayExtent(double))"},
             &TaskbarFrame_SystemTrayExtent_Original,
             TaskbarFrame_SystemTrayExtent_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
+            &TaskbarFrame_get_Alignment_Original,
+            TaskbarFrame_get_Alignment_Hook,
         },
         {
             {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
@@ -1379,9 +1542,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 BOOL Wh_ModInit() {
     g_clockThreadId = 0;
     g_lastTaskbarCenteredAlignment =
-        TaskbarUsesCenteredAlignment() ? 1 : 0;
+        ReadTaskbarUsesCenteredAlignment() ? 1 : 0;
     g_callbacksEnabled = true;
-    g_callbackGeneration.fetch_add(1);
 
     if (!TryHookAvailableModules(false)) {
         return FALSE;
@@ -1412,7 +1574,6 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     g_callbacksEnabled = false;
-    g_callbackGeneration.fetch_add(1);
     // Revoke all mod-owned XAML delegates and release their containers while
     // the mod code and hooks are still present. The synchronous taskbar-thread
     // call must finish before Windhawk can continue unloading this DLL.
@@ -1421,7 +1582,6 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     g_callbacksEnabled = false;
-    g_callbackGeneration.fetch_add(1);
     // Normally Wh_ModBeforeUninit already released both containers. Retry only
     // if taskbar discovery failed during that earlier cleanup.
     if (g_deferredClocks || g_movedClocks) {
