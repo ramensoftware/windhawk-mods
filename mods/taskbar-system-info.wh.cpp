@@ -3314,14 +3314,6 @@ void UpdateWidgetText(bool force = false) {
 
 void EnsureConfiguredTaskbarPlacement();
 
-void RefreshWidgetTheme() {
-    if (!g_widget || g_unloading) {
-        return;
-    }
-    RefreshThemeBrushes(*CurrentSettings());
-    UpdateWidgetText(true);
-}
-
 void EnsureTimer() {
     if (g_timer) {
         return;
@@ -3696,7 +3688,11 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
     g_actualThemeChangedToken = g_widget.ActualThemeChanged(
         [](auto const&, auto const&) {
             try {
-                RefreshWidgetTheme();
+                if (!g_widget || g_unloading) {
+                    return;
+                }
+                RefreshThemeBrushes(*CurrentSettings());
+                UpdateWidgetText(true);
             } catch (...) {
                 HRESULT error = winrt::to_hresult();
                 Wh_Log(L"Taskbar theme update failed: %08X",
