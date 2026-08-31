@@ -326,7 +326,7 @@ This mod tries to restore the Windows 7 window animations on Windows 10 and 11 f
 The mod is injected only into a predefined list. To add a program, add its `.exe` name to the `@include` lines or use Windhawk's advanced settings.
 
 ## Notes
-The mod has been tested on Windows 10 21H2 and Windows 11 25H2. It does not modify system files or replace any Windows components; instead, it replicates the exact timing and motion from Windows 7.
+The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2. It does not modify system files or replace any Windows components and,instead, it replicates the exact timing and motion from Windows 7.
 The mod is injected only into a specific list of applications to limit overhead and potential issues.
 
 ## Credits
