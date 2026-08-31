@@ -50,7 +50,7 @@ right next to Start on whichever side you prefer.
 The window-tracking behind position-based splitting and drag-follow can be
 turned off entirely with `trackWindowPositions`, if you'd rather keep just
 the centered Start button and system-button placement with no background
-probing of taskbar buttons and no system-wide event hooks - every app is
+probing of taskbar buttons and no system-wide event hook - every app is
 then classified the same way as a pinned-but-not-running one instead.
 
 ## Known limitations (please read before reporting issues)
@@ -244,7 +244,7 @@ community.
     When on, each running app's taskbar button is matched to its window so
     it can be classified by live position and follow it if it's dragged
     across the screen - this involves probing the taskbar's internal click
-    handler on a background timer and two system-wide window-event hooks.
+    handler on a background timer and a system-wide window-event hook.
     Turn off to disable all of that: every running app is then classified
     the same way as a pinned-but-not-running one, via leftApps/rightApps/
     "Default side for unclassified apps" above, with no drag-follow. Start
@@ -508,12 +508,6 @@ UINT_PTR g_buttonHwndResolveTimerId;
 // invalidate for WinEventProc's own throttle to see.
 ULONGLONG g_lastDragFollowInvalidate;
 
-// Leading-edge throttle for TaskListButton::UpdateVisualStates - see its
-// hook. Touched exclusively from the taskbar/XAML UI thread that hook runs
-// on, unlike every other throttle variable above (which lives on the
-// dedicated WinEventHook thread instead).
-ULONGLONG g_lastUpdateVisualStatesArm;
-
 // ============================================================================
 // Generic taskbar/XAML helpers
 // (traversal helpers adapted from the "Start button always on the left"
@@ -749,16 +743,22 @@ TaskListButton_get_IsRunning_t TaskListButton_get_IsRunning_Original;
 // for a pinned-but-not-running button, rather than paying that chain's
 // full cost every retry only to reach the same answer. Optional (see
 // HookTaskbarViewDllSymbols); defaults to "assume running" - i.e. don't
-// skip anything - when the symbol hasn't resolved, which is exactly this
-// mod's behavior before this optimization existed. See RATIONALE.md.
+// skip anything - both when the symbol hasn't resolved at all, and when a
+// resolved call still fails (round 30 review finding: the HRESULT was
+// previously ignored, so a failed call left isRunning at its initialized
+// false and got treated as confirmed-not-running instead of falling back
+// the same way an unresolved symbol does), which is exactly this mod's
+// behavior before this optimization existed. See RATIONALE.md.
 bool TaskListButtonIsRunning(FrameworkElement element) {
     if (!TaskListButton_get_IsRunning_Original) {
         return true;
     }
     bool isRunning = false;
-    TaskListButton_get_IsRunning_Original(
-        winrt::get_abi(element.as<winrt::Windows::Foundation::IUnknown>()),
-        &isRunning);
+    if (FAILED(TaskListButton_get_IsRunning_Original(
+            winrt::get_abi(element.as<winrt::Windows::Foundation::IUnknown>()),
+            &isRunning))) {
+        return true;
+    }
     return isRunning;
 }
 
@@ -817,6 +817,13 @@ thread_local bool g_clickSentinelProbingGroup;
 // becoming a real click if interception is broken. See RATIONALE.md.
 std::atomic<bool> g_realTaskbarClickObserved;
 
+// Forward declarations: both are defined later (Per-button HWND cache /
+// Mod lifecycle sections), needed here so the first-real-click branch
+// below can nudge the resolve timer the instant that click is observed,
+// rather than waiting for the next backoff tick - see RATIONALE.md.
+extern std::atomic<bool> g_forceResolveUnresolved;
+void ArmButtonHwndResolveTimer(DWORD delayMs);
+
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                               void* taskGroup,
                                               void* taskItem,
@@ -837,7 +844,15 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
         return S_OK;
     }
 
-    g_realTaskbarClickObserved = true;
+    // .exchange so the force-resolve nudge below only ever fires once,
+    // the first time a real click confirms the interception point is
+    // reachable - every button that was bailing out at
+    // g_realTaskbarClickObserved's own check gets an immediate recheck
+    // instead of waiting for its next 2s backoff tick. See RATIONALE.md.
+    if (!g_realTaskbarClickObserved.exchange(true)) {
+        g_forceResolveUnresolved = true;
+        ArmButtonHwndResolveTimer(0);
+    }
     return CTaskListWnd_HandleClick_Original(pThis, taskGroup, taskItem,
                                               launcherOptions);
 }
@@ -1000,13 +1015,9 @@ HWND ResolveHwndFromIndividualTaskItem(FrameworkElement element,
         return nullptr;
     }
 
-    // Bails out before dispatching a click if the interception point
-    // hasn't proven reachable this session yet - see
-    // g_realTaskbarClickObserved's own comment.
-    if (!g_realTaskbarClickObserved) {
-        g_resolveStats.failure++;
-        return nullptr;
-    }
+    // g_realTaskbarClickObserved is checked once, centrally, by the sole
+    // caller (ResolveHwndFromTaskListButton) before either path here ever
+    // runs - see its own comment.
 
     IUnknown* elementAbi = (IUnknown*)winrt::get_abi(element);
 
@@ -1061,13 +1072,9 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element,
         return nullptr;
     }
 
-    // Bails out before dispatching a click if the interception point
-    // hasn't proven reachable this session yet - see
-    // g_realTaskbarClickObserved's own comment.
-    if (!g_realTaskbarClickObserved) {
-        g_resolveStats.failure++;
-        return nullptr;
-    }
+    // g_realTaskbarClickObserved is checked once, centrally, by the sole
+    // caller (ResolveHwndFromTaskListButton) before either path here ever
+    // runs - see its own comment.
 
     // Validated up front (memoized, side-effect-free) rather than only
     // after dispatching a click: without this, a build where
@@ -1154,15 +1161,32 @@ HWND ResolveHwndFromTaskGroup(FrameworkElement element,
 
 HWND ResolveHwndFromTaskListButton(FrameworkElement element,
                                    bool& outClickDispatched,
-                                   bool& outNotRunning) {
+                                   bool& outNotRunning,
+                                   bool& outAwaitingFirstClick) {
     outNotRunning = false;
+    outAwaitingFirstClick = false;
+    outClickDispatched = false;
 
-    // Cheapest possible check first: skips the entire click-sentinel chain
+    // Checked first, above even TaskListButtonIsRunning: neither path
+    // below can do anything until the interception point has proven
+    // reachable this session (see g_realTaskbarClickObserved's own
+    // comment), so every resolve attempt for every button - running or
+    // not - would otherwise bail here anyway. Centralizing it lets the
+    // caller cache "awaiting first click" as its own idle-worthy state,
+    // instead of every such button polling at the fast backoff-0 cadence
+    // for as long as the session goes without a real taskbar click
+    // (round 30 review finding: this could be indefinite for a user who
+    // launches everything from Start/Alt+Tab). See RATIONALE.md.
+    if (!g_realTaskbarClickObserved) {
+        outAwaitingFirstClick = true;
+        return nullptr;
+    }
+
+    // Cheapest possible check next: skips the entire click-sentinel chain
     // below (both paths) for a button that isn't running right now, rather
     // than discovering that only after running it. See
     // TaskListButtonIsRunning.
     if (!TaskListButtonIsRunning(element)) {
-        outClickDispatched = false;
         outNotRunning = true;
         return nullptr;
     }
@@ -1209,6 +1233,15 @@ struct ButtonHwndCacheEntry {
     // confirmed-not-running button won't change state until
     // TaskListButton::UpdateVisualStates says otherwise. See RATIONALE.md.
     bool notRunning = false;
+    // Set when the last resolve attempt bailed specifically because
+    // g_realTaskbarClickObserved was still false - every button gets this
+    // until the session's first real taskbar click, which could otherwise
+    // mean an indefinite backoff-0 poll for a user who never happens to
+    // click one (round 30 review finding). Treated the same as notRunning
+    // by NextResolveDelayMs; cleared the instant a real click is observed,
+    // via CTaskListWnd_HandleClick_Hook's own force-resolve nudge. See
+    // RATIONALE.md.
+    bool awaitingFirstClick = false;
 };
 std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 
@@ -1219,6 +1252,18 @@ std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 // why unconditional forcing was a real bug).
 std::atomic<bool> g_forceResolveUnresolved;
 constexpr int kMaxForcedRetryFailures = 3;
+
+// Whether any live button still needs a recheck - true for anything not
+// yet resolved that also hasn't hit the terminal kMaxResolveFailures cap
+// (this includes notRunning/awaitingFirstClick entries, which are worth
+// rechecking on an event even though they idle for polling purposes -
+// see ButtonHwndCacheEntry). Recomputed at the end of every
+// ResolvePendingButtonHwnds pass; read (same thread, no marshal needed)
+// by TaskListButton_UpdateVisualStates_Hook to skip nudging the resolve
+// timer once there's nothing left it could help - starts true so the
+// very first UpdateVisualStates call, before any pass has run yet,
+// doesn't get skipped. See RATIONALE.md.
+bool g_anyButtonNeedsRecheck = true;
 
 // Caps the per-entry backoff retry itself (not just the force-bypass
 // above) - without this, a button whose interception path is genuinely,
@@ -1265,8 +1310,9 @@ bool ResolveAndCacheButtonHwnd(FrameworkElement element,
 
     bool clickDispatched = false;
     bool notRunning = false;
-    HWND hwnd =
-        ResolveHwndFromTaskListButton(element, clickDispatched, notRunning);
+    bool awaitingFirstClick = false;
+    HWND hwnd = ResolveHwndFromTaskListButton(element, clickDispatched,
+                                              notRunning, awaitingFirstClick);
     // Only a genuinely dispatched-and-missed click counts toward
     // kMaxResolveFailures' terminal cap - a bail-out before ever
     // dispatching one (not yet confirmed reachable, a view-model lookup
@@ -1274,15 +1320,16 @@ bool ResolveAndCacheButtonHwnd(FrameworkElement element,
     // must not count against a button that may resolve fine later. See
     // RATIONALE.md. lastAttempt still advances either way, so a
     // persistently-bailing-out entry keeps retrying at ResolveBackoffMs(0) -
-    // a cheap, indefinite cadence - except a confirmed-not-running one,
-    // which NextResolveDelayMs instead idles (see ButtonHwndCacheEntry).
+    // a cheap, indefinite cadence - except a confirmed-not-running or
+    // awaiting-first-click one, which NextResolveDelayMs instead idles
+    // (see ButtonHwndCacheEntry).
     if (hwnd) {
         failures = 0;
     } else if (clickDispatched) {
         failures = failures + 1;
     }
     g_buttonHwndCache[key] = {hwnd, identity, GetTickCount64(), failures,
-                              notRunning};
+                              notRunning, awaitingFirstClick};
     return hwnd != previous;
 }
 
@@ -1438,18 +1485,21 @@ ButtonClassification ClassifyTaskListButton(FrameworkElement element) {
 // X coordinate (in the taskbar repeater's local DIPs) of the primary
 // monitor's horizontal center.
 double GetMonitorCenterXLocal() {
-    HMONITOR mon = MonitorFromWindow(g_hTaskbarWnd, MONITOR_DEFAULTTOPRIMARY);
+    // Snapshot once, per g_hTaskbarWnd's own comment - three reads below
+    // otherwise each independently re-read the atomic.
+    HWND hTaskbarWnd = g_hTaskbarWnd;
+    HMONITOR mon = MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi{.cbSize = sizeof(mi)};
     if (!GetMonitorInfo(mon, &mi)) {
         return 0;
     }
 
     RECT taskbarRect;
-    if (!GetWindowRect(g_hTaskbarWnd, &taskbarRect)) {
+    if (!GetWindowRect(hTaskbarWnd, &taskbarRect)) {
         return 0;
     }
 
-    UINT dpi = GetDpiForWindow(g_hTaskbarWnd);
+    UINT dpi = GetDpiForWindow(hTaskbarWnd);
     double scale = dpi ? (96.0 / dpi) : 1.0;
 
     double centerScreenPx = (mi.rcMonitor.left + mi.rcMonitor.right) / 2.0;
@@ -1464,12 +1514,14 @@ double GetMonitorCenterXLocal() {
 // the tray's actual left edge, since the tray only occupies the last
 // portion of the taskbar's full width.
 double GetTaskbarWidthLocal() {
+    // Snapshot once, per g_hTaskbarWnd's own comment.
+    HWND hTaskbarWnd = g_hTaskbarWnd;
     RECT taskbarRect;
-    if (!GetWindowRect(g_hTaskbarWnd, &taskbarRect)) {
+    if (!GetWindowRect(hTaskbarWnd, &taskbarRect)) {
         return 0;
     }
 
-    UINT dpi = GetDpiForWindow(g_hTaskbarWnd);
+    UINT dpi = GetDpiForWindow(hTaskbarWnd);
     double scale = dpi ? (96.0 / dpi) : 1.0;
     return (taskbarRect.right - taskbarRect.left) * scale;
 }
@@ -2185,6 +2237,23 @@ void ResolvePendingButtonHwnds() {
             g_resolvedHwnds = std::move(resolvedNow);
         }
 
+        // Recomputed every pass for TaskListButton_UpdateVisualStates_Hook
+        // (same thread, no marshal needed) to skip nudging the resolve
+        // timer at all once there's nothing left it could possibly help -
+        // true for any entry that isn't resolved and hasn't given up
+        // (notRunning/awaitingFirstClick entries count as "still worth a
+        // recheck" here even though NextResolveDelayMs treats them as
+        // idle for polling-cadence purposes; those are two different
+        // questions - see RATIONALE.md).
+        g_anyButtonNeedsRecheck = false;
+        for (auto& kv : g_buttonHwndCache) {
+            if (!kv.second.hwnd &&
+                kv.second.consecutiveFailures < kMaxResolveFailures) {
+                g_anyButtonNeedsRecheck = true;
+                break;
+            }
+        }
+
         if (anyChanged) {
             InvalidateTaskbarLayout();
         }
@@ -2304,9 +2373,16 @@ void RecomputeLayoutPlan() {
         // g_lastArrangedX, an already-covered one's own width has since
         // changed, or the live child count doesn't match the last
         // recompute's, the plan is stale regardless of the dirty flag.
-        // Hash lookups first, IsTaskListButton/FullFootprintWidth (real
-        // class-name/property reads) second and short-circuited, so the
-        // common "nothing changed" case never pays for them.
+        // Hash lookup first; IsTaskListButton (a real class-name lookup)
+        // only runs on that lookup's miss, so a non-task-list child never
+        // pays for it. FullFootprintWidth is NOT similarly avoided for an
+        // already-covered task list button specifically (round 30 review
+        // finding: the && short-circuit only guards the g_lastArrangedX
+        // miss case above, not this one) - it runs unconditionally for
+        // every task list button on every cheap-path pass, two property
+        // reads each. Left as-is rather than added complexity to dodge
+        // it: both reads are cheap, and this is exactly the button this
+        // whole check exists to catch a width change on.
         bool planIsCurrent = true;
         try {
             if (FrameworkElement repeater = GetCachedTaskbarRepeater()) {
@@ -2948,17 +3024,30 @@ TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 // this, resolution falls back to ResolveBackoffMs' own capped-backoff
 // schedule with no fast path, the same fallback already relied on for a
 // launch that reaches this hook through a path it doesn't expect.
-// Leading-edge throttled the same way EVENT_OBJECT_SHOW was, since this
-// can fire far more often (hover/press states too, not just running).
+//
+// Unconditionally re-arms the resolve timer with a small delay rather
+// than gating on elapsed time (round 30 review finding) - this fires for
+// every visual-state transition of every taskbar button, not just
+// running/not-running (hover, press, focus, badges...), so a leading-edge
+// throttle can silently drop the one call that actually mattered if it
+// lands within the throttle window of an irrelevant one, with nothing
+// left to re-arm afterward. ArmButtonHwndResolveTimer's own KillTimer/
+// SetTimer re-arm makes this a lossless trailing-edge debounce for free:
+// each call resets the pending timer's countdown, so a burst of calls
+// collapses into exactly one resolve pass, 150ms after the burst actually
+// goes quiet - matching the same trailing-timer idea drag-follow already
+// uses, without needing a second timer variable. g_anyButtonNeedsRecheck
+// skips this entirely once nothing could benefit (the common steady
+// state, once every button is resolved or has given up), so hover churn
+// over an already-settled taskbar costs nothing. See RATIONALE.md.
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
 
-    if (GetTickCount64() - g_lastUpdateVisualStatesArm < 150) {
+    if (!g_anyButtonNeedsRecheck) {
         return;
     }
-    g_lastUpdateVisualStatesArm = GetTickCount64();
     g_forceResolveUnresolved = true;
-    ArmButtonHwndResolveTimer(0);
+    ArmButtonHwndResolveTimer(150);
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
@@ -3280,20 +3369,32 @@ DWORD NextResolveDelayMs() {
     ULONGLONG now = GetTickCount64();
     bool anyPending = false;
     // True for a resolved entry, a terminal one (consecutiveFailures at
-    // kMaxResolveFailures), or a confirmed-not-running one (see
-    // ButtonHwndCacheEntry::notRunning) - in every case, only the slow
-    // idle-rebind cadence below still applies to it, never the backoff
-    // schedule. Must exactly match ResolvePendingButtonHwnds' own
-    // backoffElapsed check, which never retries a terminal entry - see
-    // RATIONALE.md for the busy-loop this closes: without this, a terminal
-    // entry's fixed, no-longer-advancing dueAt falls further into the past
-    // every tick, pinning pendingDelay at 0 (SetTimer's 10ms floor) forever.
+    // kMaxResolveFailures), or a confirmed-not-running/awaiting-first-
+    // click one (ButtonHwndCacheEntry::notRunning/awaitingFirstClick) -
+    // in every case, only the slow idle-rebind cadence below still
+    // applies to it, not the fast backoff-0 cadence. This must exactly
+    // match ResolvePendingButtonHwnds' own backoffElapsed check for the
+    // TERMINAL case specifically - backoffElapsed has no branch of its
+    // own for a terminal entry, it just structurally evaluates false
+    // forever once consecutiveFailures reaches kMaxResolveFailures, so
+    // NextResolveDelayMs has to independently know to stop chasing it -
+    // see RATIONALE.md for the busy-loop this closes: without this, a
+    // terminal entry's fixed, no-longer-advancing dueAt falls further
+    // into the past every tick, pinning pendingDelay at 0 (SetTimer's
+    // 10ms floor) forever. notRunning/awaitingFirstClick entries are
+    // different: backoffElapsed has no special case for them either, but
+    // unlike a terminal entry it naturally evaluates true for them too
+    // once enough time passes (their consecutiveFailures never advances
+    // past 0), so they're never excluded from a real re-resolve - they
+    // just get one at the slower idle cadence instead of every 2s, since
+    // that's what a confirmed-not-running or still-unconfirmed button
+    // needs, not a permanent exclusion the way a terminal entry does.
     bool anyIdleWorthy = false;
     ULONGLONG earliestDue = 0;
 
     for (auto& kv : g_buttonHwndCache) {
         const ButtonHwndCacheEntry& entry = kv.second;
-        if (entry.hwnd || entry.notRunning ||
+        if (entry.hwnd || entry.notRunning || entry.awaitingFirstClick ||
             entry.consecutiveFailures >= kMaxResolveFailures) {
             anyIdleWorthy = true;
             continue;
