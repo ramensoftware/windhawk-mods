@@ -537,9 +537,14 @@ std::chrono::steady_clock::time_point g_nextTaskbarPlacementCheck{};
 [[clang::no_destroy]] IAsyncAction g_placementApplyAction{nullptr};
 bool g_placementApplyQueued = false;
 HWND g_lastFailedPlacementTarget = nullptr;
+bool g_hasFailedPlacementTarget = false;
 std::chrono::steady_clock::time_point g_nextPlacementRetry{};
 uint32_t g_placementFailures = 0;
+bool g_placementIsFallback = false;
+bool g_placementLocationUnknown = false;
 int g_lastMonitorCount = -1;
+uint64_t g_lastDisplayTopologyFingerprint = 0;
+bool g_hasDisplayTopologyFingerprint = false;
 [[clang::no_destroy]]
 std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
     std::in_place};
@@ -3321,8 +3326,13 @@ void EnsureTimer() {
     if (g_timer) {
         return;
     }
+    // The Tick delegate lives in this module, so teardown must always know
+    // which UI thread owns it even before the first injection succeeds.
+    if (!g_taskbarThreadId.load()) {
+        g_taskbarThreadId = GetCurrentThreadId();
+    }
     g_timer = DispatcherTimer();
-    g_timer.Interval(std::chrono::milliseconds(250));
+    g_timer.Interval(std::chrono::milliseconds(g_widget ? 250 : 1000));
     auto now = std::chrono::steady_clock::now();
     g_nextSystemColorCheck = now + std::chrono::seconds(1);
     g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
@@ -3831,6 +3841,47 @@ std::vector<DisplayMonitor> EnumerateDisplayMonitors() {
     return monitors;
 }
 
+uint64_t GetDisplayTopologyFingerprint() {
+    struct FingerprintContext {
+        uint64_t sum = 0;
+        uint64_t mixedXor = 0;
+        uint64_t count = 0;
+    } context;
+
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR monitor, HDC, LPRECT, LPARAM contextValue) -> BOOL {
+            MONITORINFO info{};
+            info.cbSize = sizeof(info);
+            if (!GetMonitorInfoW(monitor, &info)) {
+                return TRUE;
+            }
+
+            uint64_t entryHash = 1469598103934665603ull;
+            auto mix = [&entryHash](uint64_t value) {
+                entryHash ^= value;
+                entryHash *= 1099511628211ull;
+            };
+            mix(reinterpret_cast<uintptr_t>(monitor));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.left)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.top)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.right)));
+            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.bottom)));
+            mix((info.dwFlags & MONITORINFOF_PRIMARY) != 0);
+
+            auto* context =
+                reinterpret_cast<FingerprintContext*>(contextValue);
+            context->sum += entryHash;
+            context->mixedXor ^= entryHash * 0x9E3779B185EBCA87ull;
+            context->count++;
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    return context.sum ^ context.mixedXor ^
+           (context.count * 0xD6E8FEB86659FD93ull);
+}
+
 HWND FindTaskbarWindowForMonitor(HMONITOR monitor) {
     struct SearchContext {
         HMONITOR monitor;
@@ -3919,6 +3970,7 @@ void RememberTaskbarWindow(HWND window) {
     if (threadId) {
         g_taskbarWindow = window;
         g_taskbarThreadId = threadId;
+        g_placementLocationUnknown = false;
     }
 }
 
@@ -4235,20 +4287,28 @@ void RemoveFromCurrentTaskbar(void*) {
     g_taskbarWindow = nullptr;
     g_taskbarThreadId = 0;
     g_lastFailedPlacementTarget = nullptr;
+    g_hasFailedPlacementTarget = false;
     g_nextPlacementRetry = {};
     g_placementFailures = 0;
+    g_placementIsFallback = false;
+    g_placementLocationUnknown = false;
     g_lastMonitorCount = -1;
+    g_lastDisplayTopologyFingerprint = 0;
+    g_hasDisplayTopologyFingerprint = false;
 }
 
 void ResetPlacementRetryState() {
     g_lastFailedPlacementTarget = nullptr;
+    g_hasFailedPlacementTarget = false;
     g_nextPlacementRetry = {};
     g_placementFailures = 0;
 }
 
 void RecordPlacementFailure(HWND targetWindow) {
-    if (targetWindow != g_lastFailedPlacementTarget) {
+    if (!g_hasFailedPlacementTarget ||
+        targetWindow != g_lastFailedPlacementTarget) {
         g_lastFailedPlacementTarget = targetWindow;
+        g_hasFailedPlacementTarget = true;
         g_placementFailures = 0;
     }
 
@@ -4262,8 +4322,23 @@ void RecordPlacementFailure(HWND targetWindow) {
     Wh_Log(L"Taskbar placement failed; retrying in %u seconds", retrySeconds);
 }
 
-bool ApplyExistingWidgetSettings(HWND logicalWindow,
-                                 bool placementSucceeded = true) {
+void MarkPlacementForRetry(HWND requestedWindow) {
+    g_placementIsFallback = true;
+    RecordPlacementFailure(requestedWindow);
+}
+
+void CompletePlacement(HWND requestedWindow, HWND actualWindow) {
+    g_placementLocationUnknown = false;
+    if (requestedWindow == actualWindow) {
+        g_placementIsFallback = false;
+        ResetPlacementRetryState();
+    } else {
+        g_placementIsFallback = true;
+        RecordPlacementFailure(requestedWindow);
+    }
+}
+
+bool RefreshExistingWidget() {
     if (!g_widget) {
         return false;
     }
@@ -4274,12 +4349,6 @@ bool ApplyExistingWidgetSettings(HWND logicalWindow,
     }
     EnsureTimer();
     UpdateWidgetText(true);
-    if (placementSucceeded) {
-        if (IsCurrentProcessTaskbarWindow(logicalWindow)) {
-            RememberTaskbarWindow(logicalWindow);
-        }
-        ResetPlacementRetryState();
-    }
     return true;
 }
 
@@ -4294,22 +4363,20 @@ bool ApplyLoadedFrameFallback(FrameworkElement fallbackFrame,
         return false;
     }
 
-    // The loaded frame is authoritative even when the private symbol path
-    // can't map it back to a specific HWND. Remember the requested/fallback
-    // window as the logical placement so the 1 Hz watchdog doesn't remove a
-    // working degraded injection on its next pass.
-    if (IsCurrentProcessTaskbarWindow(logicalWindow)) {
-        RememberTaskbarWindow(logicalWindow);
-    } else {
-        g_taskbarWindow = nullptr;
-        g_taskbarThreadId = GetCurrentThreadId();
-    }
-    ResetPlacementRetryState();
+    // On a multi-taskbar system the private XAML-root lookup is the only way to
+    // map this frame to an HWND. Don't claim a monitor we couldn't identify;
+    // keep the widget visible, mark its location unknown and retry with backoff.
+    g_taskbarWindow = nullptr;
+    g_taskbarThreadId = GetCurrentThreadId();
+    g_placementLocationUnknown = true;
+    Wh_Log(L"Monitor selection is unavailable for the direct-frame fallback");
+    MarkPlacementForRetry(logicalWindow);
     return true;
 }
 
 struct ApplyOnTaskbarThreadContext {
     FrameworkElement fallbackFrame{nullptr};
+    bool refreshExistingWidget = true;
     bool succeeded = false;
 };
 
@@ -4329,13 +4396,18 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     HWND requestedWindow = FindConfiguredTaskbarWindow();
     if (!requestedWindow) {
         Wh_Log(L"Taskbar window not found");
-        RecordPlacementFailure(nullptr);
+        MarkPlacementForRetry(nullptr);
         return;
     }
 
-    HWND currentWindow = FindRememberedTaskbarWindow();
-    if (currentWindow == requestedWindow &&
-        ApplyExistingWidgetSettings(requestedWindow)) {
+    HWND currentWindow = g_placementLocationUnknown
+                             ? nullptr
+                             : FindRememberedTaskbarWindow();
+    if (currentWindow == requestedWindow && g_widget) {
+        if (context->refreshExistingWidget) {
+            RefreshExistingWidget();
+        }
+        CompletePlacement(requestedWindow, currentWindow);
         context->succeeded = true;
         return;
     }
@@ -4358,22 +4430,25 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
             context->succeeded = true;
             return;
         }
-        if (ApplyExistingWidgetSettings(currentWindow, false)) {
+        if (g_widget) {
             Wh_Log(L"Keeping the existing widget until taskbar placement recovers");
         }
-        RecordPlacementFailure(requestedWindow);
+        MarkPlacementForRetry(requestedWindow);
         return;
     }
 
-    if (currentWindow == targetWindow &&
-        ApplyExistingWidgetSettings(targetWindow)) {
+    if (currentWindow == targetWindow && g_widget) {
+        if (context->refreshExistingWidget) {
+            RefreshExistingWidget();
+        }
+        CompletePlacement(requestedWindow, targetWindow);
         context->succeeded = true;
         return;
     }
 
     HWND removalWindow = currentWindow;
     if (!removalWindow && g_widget && g_taskbarThreadId.load()) {
-        removalWindow = FindAnyWindowOnTaskbarThread(targetWindow);
+        removalWindow = FindAnyWindowOnTaskbarThread(nullptr);
     }
     bool widgetRemovedForMove = false;
     if (removalWindow && g_widget && currentWindow != targetWindow) {
@@ -4382,20 +4457,20 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
                                  &removeContext) ||
             !removeContext.succeeded) {
             Wh_Log(L"Removing widget from the previous monitor failed");
-            RecordPlacementFailure(requestedWindow);
+            MarkPlacementForRetry(requestedWindow);
             return;
         }
         widgetRemovedForMove = true;
     }
 
     if (ApplyWidgetToTaskbarWindow(targetWindow)) {
-        ResetPlacementRetryState();
+        CompletePlacement(requestedWindow, targetWindow);
         context->succeeded = true;
         return;
     }
 
     Wh_Log(L"Applying widget on taskbar thread failed");
-    if (ApplyLoadedFrameFallback(context->fallbackFrame, targetWindow)) {
+    if (ApplyLoadedFrameFallback(context->fallbackFrame, requestedWindow)) {
         context->succeeded = true;
         return;
     }
@@ -4407,7 +4482,7 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
             Wh_Log(L"Restoring widget on the previous taskbar failed");
         }
     }
-    RecordPlacementFailure(requestedWindow);
+    MarkPlacementForRetry(requestedWindow);
 }
 
 void ApplyOnTaskbarUiThread(void* contextValue) {
@@ -4417,11 +4492,25 @@ void ApplyOnTaskbarUiThread(void* contextValue) {
         HRESULT error = winrt::to_hresult();
         Wh_Log(L"Taskbar placement update failed: %08X",
                static_cast<unsigned>(error));
-        RecordPlacementFailure(nullptr);
+        MarkPlacementForRetry(nullptr);
+    }
+
+    // A failed move can destroy the old widget and its timer before both the
+    // target injection and restoration fail. Keep the retry loop alive on
+    // every non-unload exit path.
+    if (!g_unloading) {
+        try {
+            EnsureTimer();
+        } catch (...) {
+            HRESULT error = winrt::to_hresult();
+            Wh_Log(L"Restoring the taskbar placement timer failed: %08X",
+                   static_cast<unsigned>(error));
+        }
     }
 }
 
-void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr) {
+void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
+                          bool refreshExistingWidget = true) {
     if (g_unloading) {
         return;
     }
@@ -4442,7 +4531,8 @@ void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr) {
         return;
     }
 
-    ApplyOnTaskbarThreadContext context{fallbackFrame, false};
+    ApplyOnTaskbarThreadContext context{fallbackFrame, refreshExistingWidget,
+                                        false};
     if (!RunFromWindowThread(dispatchWindow, ApplyOnTaskbarUiThread, &context)) {
         Wh_Log(L"Dispatching taskbar placement failed");
     }
@@ -4456,25 +4546,25 @@ void QueueConfiguredTaskbarPlacement() {
     if (!g_widget) {
         // The retry-only timer survives InjectWidget, so this path doesn't
         // destroy the DispatcherTimer from inside its own Tick callback.
-        ApplyOnTaskbarThread();
+        ApplyOnTaskbarThread(nullptr, false);
         return;
     }
 
     try {
         CoreDispatcher dispatcher = g_widget.Dispatcher();
         if (!dispatcher) {
-            RecordPlacementFailure(FindConfiguredTaskbarWindow(false));
+            MarkPlacementForRetry(FindConfiguredTaskbarWindow(false));
             return;
         }
 
         g_placementApplyQueued = true;
         g_placementApplyAction = dispatcher.RunAsync(
-            CoreDispatcherPriority::Low, [] {
+            CoreDispatcherPriority::Normal, [] {
                 bool shouldApply = g_placementApplyQueued;
                 g_placementApplyQueued = false;
                 g_placementApplyAction = nullptr;
                 if (shouldApply && !g_unloading) {
-                    ApplyOnTaskbarThread();
+                    ApplyOnTaskbarThread(nullptr, false);
                 }
             });
     } catch (...) {
@@ -4483,7 +4573,7 @@ void QueueConfiguredTaskbarPlacement() {
         g_placementApplyAction = nullptr;
         Wh_Log(L"Deferring taskbar placement failed: %08X",
                static_cast<unsigned>(error));
-        RecordPlacementFailure(FindConfiguredTaskbarWindow(false));
+        MarkPlacementForRetry(FindConfiguredTaskbarWindow(false));
     }
 }
 
@@ -4493,14 +4583,21 @@ void EnsureConfiguredTaskbarPlacement() {
     }
 
     int monitorCount = GetSystemMetrics(SM_CMONITORS);
-    bool topologyChanged = monitorCount != g_lastMonitorCount;
+    uint64_t topologyFingerprint = GetDisplayTopologyFingerprint();
+    bool topologyChanged =
+        monitorCount != g_lastMonitorCount ||
+        !g_hasDisplayTopologyFingerprint ||
+        topologyFingerprint != g_lastDisplayTopologyFingerprint;
     if (topologyChanged) {
         g_lastMonitorCount = monitorCount;
+        g_lastDisplayTopologyFingerprint = topologyFingerprint;
+        g_hasDisplayTopologyFingerprint = true;
         ResetPlacementRetryState();
     }
 
     HWND rememberedWindow = g_taskbarWindow.load();
-    if (!topologyChanged && g_placementFailures == 0 && g_widget &&
+    if (!topologyChanged && !g_placementIsFallback &&
+        g_placementFailures == 0 && g_widget &&
         IsCurrentProcessTaskbarWindow(rememberedWindow)) {
         return;
     }
@@ -4513,11 +4610,11 @@ void EnsureConfiguredTaskbarPlacement() {
 
     HWND targetWindow = FindConfiguredTaskbarWindow(false);
     if (!targetWindow) {
-        RecordPlacementFailure(nullptr);
+        MarkPlacementForRetry(nullptr);
         return;
     }
     if (g_widget && IsCurrentProcessTaskbarWindow(rememberedWindow) &&
-        rememberedWindow == targetWindow) {
+        rememberedWindow == targetWindow && !g_placementIsFallback) {
         ResetPlacementRetryState();
         return;
     }
@@ -4543,8 +4640,7 @@ void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
         XamlRoot loadedRoot = taskbarFrame.XamlRoot();
         XamlRoot widgetRoot = g_widget.XamlRoot();
         HWND rememberedWindow = g_taskbarWindow.load();
-        if (loadedRoot && widgetRoot &&
-            winrt::get_abi(loadedRoot) == winrt::get_abi(widgetRoot) &&
+        if (loadedRoot && widgetRoot && loadedRoot == widgetRoot &&
             IsCurrentProcessTaskbarWindow(rememberedWindow)) {
             directWindow = rememberedWindow;
         }
@@ -4552,7 +4648,7 @@ void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
 
     if (directWindow && InjectWidget(taskbarFrame)) {
         RememberTaskbarWindow(directWindow);
-        ResetPlacementRetryState();
+        CompletePlacement(directWindow, directWindow);
         return;
     }
     ApplyOnTaskbarThread(taskbarFrame);
