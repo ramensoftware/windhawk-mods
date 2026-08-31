@@ -48,7 +48,9 @@ Choose one of the included themes or adjust a few basic options to create your o
 ## Notes
 
 File Operation Styler changes the appearance of the normal file operation window only.  
-Windows continues to handle the actual copy, move, delete, conflicts, and errors.*/
+Windows continues to handle the actual copy, move, delete, conflicts, and errors.
+
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
@@ -7845,7 +7847,7 @@ namespace
             return false;
         }
 
-        WindhawkUtils::SYMBOL_HOOK shell32Symbols[] = {
+        WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
                 {LR"(?_CreateTileElement@COperationStatusTile@@AEAAJKKPEAVElement@DirectUI@@@Z)"},
                 &targets->createTileElement,
@@ -7906,8 +7908,8 @@ namespace
         options.optionsSize = sizeof(options);
         options.noUndecoratedSymbols = TRUE;
 
-        if (!WindhawkUtils::HookSymbols(shell32, shell32Symbols,
-                                        ARRAYSIZE(shell32Symbols), &options) ||
+        if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
+                                        ARRAYSIZE(shell32DllHooks), &options) ||
             !targets->createTileElement || !targets->progressPositionProp ||
             !targets->getProgressHWND || !targets->onPropertyChanged ||
             !targets->operationTileDestructor ||
