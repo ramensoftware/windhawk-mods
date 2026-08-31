@@ -41,27 +41,21 @@ by Alcatel.
 This version uses a substantially different and more conservative
 cleanup approach and targets only ApplicationFrameHost.exe.
 */
-// ==WindhawkModReadme==
+// ==/WindhawkModReadme==
 
 #include <Windows.h>
-
 #include <atomic>
-
 
 // ============================================================
 // CONFIGURATION
 // ============================================================
 
-// Wait this long after ApplicationFrameHost.exe starts before
-// cleanup is considered.
-//
-// 120000 ms = 2 minutes.
+// Wait two minutes after ApplicationFrameHost.exe starts
+// before cleanup is considered.
 constexpr DWORD GRACE_PERIOD_MS = 120000;
-
 
 // Check every 15 seconds after the grace period.
 constexpr DWORD CHECK_INTERVAL_MS = 15000;
-
 
 // ============================================================
 // GLOBAL VARIABLES
@@ -70,9 +64,7 @@ constexpr DWORD CHECK_INTERVAL_MS = 15000;
 std::atomic<bool> g_stopWorker{ false };
 
 HANDLE g_stopEvent = nullptr;
-
 HANDLE g_workerThread = nullptr;
-
 
 // ============================================================
 // WINDOW ENUMERATION DATA
@@ -83,7 +75,6 @@ struct WindowCheckData
     DWORD processId;
     bool hasVisibleWindow;
 };
-
 
 // ============================================================
 // ENUMERATE WINDOWS
@@ -96,18 +87,15 @@ BOOL CALLBACK EnumWindowsProc(
     WindowCheckData* data =
         reinterpret_cast<WindowCheckData*>(lParam);
 
-
     DWORD processId = 0;
 
     GetWindowThreadProcessId(
         hwnd,
         &processId);
 
-
     // Ignore windows belonging to other processes.
     if (processId != data->processId)
         return TRUE;
-
 
     // If this process owns a visible window, it is currently
     // being used and must not be terminated.
@@ -119,10 +107,8 @@ BOOL CALLBACK EnumWindowsProc(
         return FALSE;
     }
 
-
     return TRUE;
 }
-
 
 // ============================================================
 // CHECK WHETHER CURRENT PROCESS HAS A VISIBLE WINDOW
@@ -135,15 +121,12 @@ bool CurrentProcessHasVisibleWindow()
     data.processId = GetCurrentProcessId();
     data.hasVisibleWindow = false;
 
-
     EnumWindows(
         EnumWindowsProc,
         reinterpret_cast<LPARAM>(&data));
 
-
     return data.hasVisibleWindow;
 }
-
 
 // ============================================================
 // CHECK WHETHER CLEANUP IS SAFE
@@ -151,20 +134,13 @@ bool CurrentProcessHasVisibleWindow()
 
 bool IsSafeToCleanup()
 {
-    // --------------------------------------------------------
-    // Safety check:
-    //
     // If ApplicationFrameHost currently owns a visible window,
     // it is being used by an application.
-    // --------------------------------------------------------
-
     if (CurrentProcessHasVisibleWindow())
         return false;
 
-
     return true;
 }
-
 
 // ============================================================
 // WORKER THREAD
@@ -172,9 +148,9 @@ bool IsSafeToCleanup()
 
 DWORD WINAPI WorkerThread(LPVOID)
 {
-    // Record when the mod started inside this process.
+    // Record when this ApplicationFrameHost process
+    // started running the mod.
     const DWORD startTime = GetTickCount();
-
 
     // ========================================================
     // GRACE PERIOD
@@ -185,32 +161,26 @@ DWORD WINAPI WorkerThread(LPVOID)
         DWORD elapsed =
             GetTickCount() - startTime;
 
-
         if (elapsed >= GRACE_PERIOD_MS)
             break;
 
-
         DWORD remaining =
             GRACE_PERIOD_MS - elapsed;
-
 
         DWORD waitTime =
             (remaining < CHECK_INTERVAL_MS)
                 ? remaining
                 : CHECK_INTERVAL_MS;
 
-
         DWORD result =
             WaitForSingleObject(
                 g_stopEvent,
                 waitTime);
 
-
         // Mod was disabled/unloaded.
         if (result == WAIT_OBJECT_0)
             return 0;
     }
-
 
     // ========================================================
     // CLEANUP LOOP
@@ -220,19 +190,16 @@ DWORD WINAPI WorkerThread(LPVOID)
     {
         // Wait before checking again.
         //
-        // Using an event rather than a normal Sleep() allows
-        // the thread to stop immediately when the mod is
-        // disabled.
+        // Using an event instead of Sleep() allows the thread
+        // to stop immediately when the mod is disabled.
         DWORD result =
             WaitForSingleObject(
                 g_stopEvent,
                 CHECK_INTERVAL_MS);
 
-
         // Mod was disabled/unloaded.
         if (result == WAIT_OBJECT_0)
             break;
-
 
         // ----------------------------------------------------
         // First safety check.
@@ -241,9 +208,8 @@ DWORD WINAPI WorkerThread(LPVOID)
         if (!IsSafeToCleanup())
             continue;
 
-
         // ----------------------------------------------------
-        // FINAL SAFETY CHECK.
+        // Final safety check.
         //
         // This reduces the chance of terminating the process
         // just as an application is opening a window.
@@ -252,20 +218,18 @@ DWORD WINAPI WorkerThread(LPVOID)
         if (!IsSafeToCleanup())
             continue;
 
-
         // ----------------------------------------------------
         // No visible window was found.
         //
-        // Terminate ONLY this ApplicationFrameHost process.
+        // This mod is loaded only into ApplicationFrameHost.exe,
+        // so ExitProcess() terminates only this target process.
         // ----------------------------------------------------
 
         ExitProcess(0);
     }
 
-
     return 0;
 }
-
 
 // ============================================================
 // WINDHAWK INITIALIZATION
@@ -275,7 +239,6 @@ BOOL Wh_ModInit()
 {
     g_stopWorker = false;
 
-
     // Create a manual-reset event used to stop the worker.
     g_stopEvent =
         CreateEventW(
@@ -284,10 +247,8 @@ BOOL Wh_ModInit()
             FALSE,
             nullptr);
 
-
     if (!g_stopEvent)
         return FALSE;
-
 
     // Start the worker thread.
     //
@@ -302,7 +263,6 @@ BOOL Wh_ModInit()
             0,
             nullptr);
 
-
     if (!g_workerThread)
     {
         CloseHandle(g_stopEvent);
@@ -312,10 +272,8 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-
     return TRUE;
 }
-
 
 // ============================================================
 // WINDHAWK UNINITIALIZATION
@@ -326,13 +284,11 @@ void Wh_ModUninit()
     // Tell the worker to stop.
     g_stopWorker = true;
 
-
     // Wake the worker immediately.
     if (g_stopEvent)
     {
         SetEvent(g_stopEvent);
     }
-
 
     // Wait for the worker to finish.
     if (g_workerThread)
@@ -341,12 +297,10 @@ void Wh_ModUninit()
             g_workerThread,
             3000);
 
-
         CloseHandle(g_workerThread);
 
         g_workerThread = nullptr;
     }
-
 
     // Close the stop event.
     if (g_stopEvent)
