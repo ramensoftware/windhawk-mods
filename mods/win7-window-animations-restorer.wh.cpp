@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-window-animations-restorer
 // @name            Windows 7 Window Animations Restorer
-// @description     This mod restores the Windows 7 Aero minimize and restore animation on classic Win32 windows without hooking DWM. 
+// @description     This mod restores the Windows 7 Aero minimize, restore and closing animations on Windows 10 and Windows 11
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -300,7 +300,11 @@
 
 ## About
 
-This mod tries to restore Windows 7 window animations on Windows 10 and 11 for classic Win32 programs, **without modifying the DWM**.
+This mod tries to restore the Windows 7 window animations on Windows 10 and 11 for a series of programs **without modifying the DWM**.
+
+## Sample Animation
+
+![Demo GIF](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/bandicam2026-08-3014-19-03-266-ezgif.com-video-to-gif-converter.gif)
 
 ## Features
 
