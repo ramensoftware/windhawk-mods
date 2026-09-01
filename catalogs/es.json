@@ -8271,6 +8271,36 @@
         "version": "1.0.1"
       }
     },
+    "mic-mute-hotkey-overlay": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788265679000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788265679000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Farael Hanafi",
+        "compilerOptions": "-lole32 -luser32 -lgdi32 -lgdiplus -lshcore -lshell32",
+        "description": "Global hotkey to mute/unmute the default microphone, with a floating always-on-top overlay that animates while the mic is active",
+        "github": "https://github.com/Eliasilyz",
+        "homepage": "https://farelhanafi.my.id/",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Global Hotkey Mute Microphone + Floating Overlay",
+        "version": "1.0.0"
+      }
+    },
     "mic-tray-control": {
       "details": {
         "defaultSorting": 2780,

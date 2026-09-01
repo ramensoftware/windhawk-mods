@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-30T17:51:46.000Z</updated>
+    <updated>2026-09-01T12:27:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Global Hotkey Mute Microphone + Floating Overlay 1.0.0]]></title>
+        <id>https://windhawk.net/mods/mic-mute-hotkey-overlay#f7756870e7ed2e233d91b537cd96e01aefefaf11</id>
+        <link href="https://windhawk.net/mods/mic-mute-hotkey-overlay"/>
+        <updated>2026-09-01T12:27:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="globalhotkeymutemicrophonefloatingoverlay">Global Hotkey Mute Microphone + Floating Overlay</h1>
+<p>Binds a global hotkey to toggle mute on your default microphone, and shows
+a floating, always-on-top overlay indicator while it does.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Global hotkey (default <code>Ctrl+Alt+M</code>), configured as a plain string like
+<code>"Ctrl+Alt+Shift+M"</code> rather than a raw modifier bitmask + VK code.</li>
+<li>Toggles mute on the default capture device via the Core Audio API
+(<code>IAudioEndpointVolume</code>). The endpoint is resolved once and kept cached;
+it's only re-resolved when the default device actually changes (event-
+driven via <code>IMMNotificationClient</code>), not on every hotkey press.</li>
+<li>The overlay and mute state stay in sync with <strong>any</strong> source of mute
+changes (this hotkey, Windows Sound settings, another app) and with the
+<strong>default microphone changing</strong> (headset plugged in, device switched in
+Settings) — both are event-driven, not polled.</li>
+<li>Real peak-level metering (<code>IAudioMeterInformation</code>) drives a pulsing ring
+while unmuted, so the animation reflects actual mic input, not a fixed
+pattern. Falls back to a synthetic pulse only if peak metering isn't
+available on a given system.</li>
+<li>The render target (DIB section + memory DC) is cached and only rebuilt
+when the overlay's pixel size changes, instead of being recreated on
+every animation frame.</li>
+<li>Per-monitor DPI aware; auto-position respects the taskbar (work area),
+not just the raw screen size.</li>
+<li>When click-through is turned off, the overlay can be dragged to a custom
+position instead of just blocking clicks with no other purpose.</li>
+<li>Configurable size, position, hotkey, and auto-hide delay, all applied
+live without reloading the mod.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>See the settings panel for the full list and description of each option.
+The hotkey is a single string, e.g. <code>"Ctrl+Alt+M"</code>; at least one modifier
+is required — a hotkey with no modifier is rejected rather than silently
+grabbing a bare key system-wide.</p>
+<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/mic-tray-control">mic-tray-control</a> and
+<a href="https://windhawk.net/mods/mutealert">mutealert</a> both surface the default
+mic's mute state and let you toggle it, but through the tray/taskbar —
+neither has a global hotkey or a floating overlay.</li>
+<li><a href="https://windhawk.net/mods/keyboard-shortcut-actions">keyboard-shortcut-actions</a>
+is a general hotkey→action framework and already includes a "Mute system
+volume" action using the same <code>Ctrl+Alt+M</code>-style hotkey string format.
+This mod overlaps it on the hotkey side, but its actions target output
+(render) devices, not the default microphone (capture), and it has no
+overlay indicator. The floating, animated overlay is this mod's actual
+differentiator; the hotkey parsing exists mainly to drive that overlay
+reliably rather than to duplicate a general-purpose action framework.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>The animation reflects the microphone's own peak level; it does not
+distinguish your voice from other captured noise.</li>
+<li>A topmost overlay in a normal window won't render over exclusive-
+fullscreen apps/games — worth knowing since a call/game is often the
+moment the indicator matters most.</li>
+<li>No drag-to-reposition when click-through is on — by design, click-through
+means the overlay doesn't intercept the mouse at all, so dragging only
+works with click-through disabled.</li>
+</ul>
+<h3 id="preview">Preview</h3>
+<p>| Muted | Unmuted |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/Eliasilyz/global-hotkey-mute/refs/heads/main/9fnqpbp.png" alt="Muted" /> | <img src="https://raw.githubusercontent.com/Eliasilyz/global-hotkey-mute/refs/heads/main/74488pt.png" alt="Unmuted" /> |</p>]]></content>
+        <author>
+            <name>Farael Hanafi</name>
+            <uri>https://github.com/Eliasilyz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MultiWM 1.13.19]]></title>
         <id>https://windhawk.net/mods/multiwm#128aed34e3f45734daf90ba9c1ef8923c42f61e4</id>
@@ -542,80 +616,6 @@ is licensed under GPLv3 for that reason.</p>]]></content>
         <author>
             <name>Fred</name>
             <uri>https://github.com/fjdiazt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Selection Style 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-selection-style#094b5d25a17c63b8b5ce9cd7f4d527bbdd66f10d</id>
-        <link href="https://windhawk.net/mods/desktop-icon-selection-style"/>
-        <updated>2026-08-26T12:21:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconselectionstyle">Desktop Icon Selection Style</h1>
-<p>The highlight behind a selected desktop icon is a plain slab as wide as the whole
-icon cell, so selections in neighbouring columns run together into one block.
-This mod replaces it with one you can actually style.</p>
-<p><strong>Before</strong> - two selected icons, stock highlight, touching edge to edge:</p>
-<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-before.png" alt="Two selected desktop icons with the stock highlight, a pair of rectangular slabs meeting with no gap between them" /></p>
-<p><strong>After</strong> - narrowed, rounded, with a dashed border and an accent glow:</p>
-<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-after.png" alt="The same two icons with the mod enabled, each highlight narrower than its cell with rounded corners, a dashed white border and a soft accent glow" /></p>
-<p>Everything in the after shot is configurable, and all of it can be turned off.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Narrow it.</strong> Plate width is a percentage of the icon cell, so it looks right
-at any DPI. The stock plate is 100%.</li>
-<li><strong>Transparency.</strong> Any fill colour and opacity, or <code>accent</code> to follow your
-system accent colour.</li>
-<li><strong>Rounded corners.</strong> Any radius, or 0 for sharp corners.</li>
-<li><strong>Borders.</strong> Solid, dashed, dotted or dash-dot, with your own colour, opacity,
-thickness and dash spacing.</li>
-<li><strong>Glow or drop shadow</strong> around the plate, in any colour.</li>
-<li><strong>Hover styling</strong>, with its own opacity. Turn it off to leave plain hover
-looking stock, or keep <em>Border on selection only</em> on so hovered icons get the
-fill but not the border.</li>
-<li><strong>Square shape</strong>, if you would rather have a square than a rectangle.</li>
-</ul>
-<p>Only selected icons are affected. Unselected icons keep their normal look, and
-File Explorer windows are untouched - this is the desktop only.</p>
-<h2 id="notesworthknowing">Notes worth knowing</h2>
-<p><strong>The plate follows the icon height on purpose.</strong> Windows makes a selected icon
-taller so its full file name can wrap onto extra lines, so the same icon needs a
-short plate with a short name and a much taller one with a long name. The plate
-grows with it, so a long name never runs out of the bottom of the highlight.
-Width is a different matter: it is a percentage of the cell, while Windows wraps
-the label to roughly the full cell, so a long name can overhang a narrow plate at
-the sides. Raise <strong>Plate width</strong> if that bothers you. <em>Square</em> shape is
-available, but it is capped at the size of the item, so a very large square comes
-out smaller than requested.</p>
-<p><strong>The glow is a fake, deliberately.</strong> It is stacked translucent rings, not a real
-blur, because a real blur is impossible here - the wallpaper simply is not
-available at the moment the highlight is drawn. It still looks good, but do not
-expect acrylic. It is also limited to roughly 10 pixels beyond the icon, which is
-all Windows repaints around it; a larger glow gets cut off rather than smeared.</p>
-<p><strong>Colours</strong> take <code>accent</code> to follow your system accent colour, or a hex value
-like <code>#3399FF</code> (the <code>#</code> is optional). Anything else is ignored, and the setting
-keeps its default - the mod log says which value it rejected. The accent is read through the immersive colour API, so it is
-the colour you actually picked in Settings rather than the blended colorization
-value. Changing it is picked up as plates are next repainted, so selecting a
-different icon shows the new colour; nothing is forced to redraw on a timer.</p>
-<p><strong>Mixed-DPI setups</strong> are fine, though not because anything is measured
-per-monitor. The pixel settings are scaled by a single DPI, read from the
-desktop's own window - but the icon rectangles the plate is drawn against come
-from that same window, so the plate and the icon are always scaled by the same
-number and stay in proportion to each other. Tested with a second display at a
-different resolution and scale factor.</p>
-<h2 id="credit">Credit</h2>
-<p>The approach for finding the desktop list view and attaching to it - a
-<code>CreateWindowExW</code> hook alongside <code>Wh_ModAfterInit</code> - follows
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/hide-desktop-icon-text.wh.cpp">Hide Desktop Icon Text and Shortcut Arrows</a>
-by kivsak.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Built and tested on Windows 11 build 26200. The highlight is intercepted through
-<code>DrawThemeBackground</code>, which is what the desktop was measured to use. That
-function is a wrapper over <code>DrawThemeBackgroundEx</code>, which is not hooked, so a
-Windows build that called the inner function directly would leave the mod inert.
-Inert, not broken: the stock highlight simply comes back.</p>]]></content>
-        <author>
-            <name>RiteshK</name>
-            <uri>https://github.com/RiteshKhandekar</uri>
         </author>
     </entry>
 </feed>
