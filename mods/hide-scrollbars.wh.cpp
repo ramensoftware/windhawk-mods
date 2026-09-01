@@ -21,9 +21,7 @@ instead of sitting empty.
 To apply it to other programs, add them to the mod's **Custom process
 inclusion list** under the mod's Advanced settings in Windhawk.
 
-Mouse-wheel and keyboard scrolling keep working. Precision-touchpad
-two-finger scrolling keeps working at the default scrollbar size of 1px;
-setting the size to 0 breaks it (see the limitation below).
+Mouse-wheel and keyboard scrolling are unaffected.
 
 ## Screenshots
 
@@ -31,40 +29,30 @@ Windows default (slim scrollbar in its own gutter):
 
 ![Default](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png)
 
-Scrollbar size 1 px:
+With the mod (1px sliver, gutter reclaimed):
 
-![Size 1](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png)
-
-Scrollbar size 0 px (fully hidden):
-
-![Size 0](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-0px.png)
+![With the mod](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png)
 
 ## How it works
 
 The mod hooks `GetSystemMetrics`, `GetSystemMetricsForDpi` and
-`GetThemeSysSize`, and reports a reduced size for `SM_CXVSCROLL` /
+`GetThemeSysSize`, and reports a size of 1px for `SM_CXVSCROLL` /
 `SM_CYHSCROLL` (the vertical/horizontal scrollbar thickness). Code that
 lays itself out from that metric - such as Explorer's DirectUI file list
-- then shrinks the scrollbar accordingly. Plain Win32 windows that draw
-standard non-client scrollbars are mostly unaffected, because user32
-lays those out from an internal metric table rather than the exported
-function.
+- then shrinks the scrollbar to a 1px sliver. Plain Win32 windows that
+draw standard non-client scrollbars are mostly unaffected, because
+user32 lays those out from an internal metric table rather than the
+exported function.
 
-## Known limitation: precision-touchpad scrolling
+## Why 1px and not 0
 
-Reporting a size of **0** makes the scrollbar vanish completely, but a
-0-width scrollbar reads as "not scrollable" to the Windows
-precision-touchpad pan handler, so **two-finger scrolling stops working**
-in affected windows. Mouse wheel and keyboard scrolling (arrows,
-PageUp/PageDown, Home/End) are unaffected.
-
-Reporting **1** leaves a 1px sliver that is visually negligible and keeps
-two-finger scrolling working.
-
-The **Scrollbar size** setting lets you choose:
-
-- `1` (default) - touchpad-safe, 1px sliver remains.
-- `0` - fully hidden, breaks precision-touchpad two-finger scroll.
+Reporting 0 makes the scrollbar disappear entirely, but a 0-width
+scrollbar reads as "not scrollable" to the Windows precision-touchpad
+pan handler, so two-finger scrolling stops working in the affected
+windows. A 1px sliver is visually negligible and keeps precision-touchpad
+scrolling working, so the mod uses 1px and does not expose a 0 option.
+Mouse wheel and keyboard scrolling (arrows, PageUp/PageDown, Home/End)
+work either way.
 
 ## Notes
 
@@ -83,9 +71,6 @@ The **Scrollbar size** setting lets you choose:
 
 - **Hide vertical scrollbars** - toggle the vertical bar.
 - **Hide horizontal scrollbars** - toggle the horizontal bar.
-- **Scrollbar size** - reported thickness in pixels; use `0` or `1`.
-  `1` (default) keeps precision-touchpad scrolling working; `0` hides
-  the bar fully but breaks two-finger touchpad scroll.
 */
 // ==/WindhawkModReadme==
 
@@ -95,13 +80,6 @@ The **Scrollbar size** setting lets you choose:
   $name: Hide vertical scrollbars
 - hideHorizontal: true
   $name: Hide horizontal scrollbars
-- scrollbarSize: 1
-  $name: Scrollbar size
-  $description: >-
-    Reported scrollbar thickness in pixels; use 0 or 1. 1 (default)
-    keeps precision-touchpad two-finger scrolling working while leaving
-    only a 1px sliver. 0 hides the scrollbar completely but breaks
-    precision-touchpad scrolling (mouse wheel and keyboard still work).
 */
 // ==/WindhawkModSettings==
 
@@ -109,16 +87,24 @@ The **Scrollbar size** setting lets you choose:
 
 #include <atomic>
 
+#include <string.h>
 #include <uxtheme.h>
+
+// A 1px sliver rather than 0: a 0-width scrollbar reads as "not
+// scrollable" to the Windows precision-touchpad pan handler, which breaks
+// two-finger scrolling. 1px is visually negligible.
+constexpr int kScrollbarSize = 1;
 
 struct {
     std::atomic<bool> hideVertical;
     std::atomic<bool> hideHorizontal;
-    std::atomic<int> scrollbarSize;
 } g_settings;
 
 // Non-null only if this mod (rather than the process) loaded uxtheme.dll.
 HMODULE g_loadedUxtheme;
+
+// Whether the host process is explorer.exe (set in Wh_ModInit).
+bool g_isExplorer;
 
 // --- hooks ----------------------------------------------------------------
 
@@ -127,10 +113,10 @@ GetSystemMetrics_t GetSystemMetrics_Original;
 
 int WINAPI GetSystemMetrics_Hook(int nIndex) {
     if (nIndex == SM_CXVSCROLL && g_settings.hideVertical) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     if (nIndex == SM_CYHSCROLL && g_settings.hideHorizontal) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     return GetSystemMetrics_Original(nIndex);
 }
@@ -140,10 +126,10 @@ GetSystemMetricsForDpi_t GetSystemMetricsForDpi_Original;
 
 int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
     if (nIndex == SM_CXVSCROLL && g_settings.hideVertical) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     if (nIndex == SM_CYHSCROLL && g_settings.hideHorizontal) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     return GetSystemMetricsForDpi_Original(nIndex, dpi);
 }
@@ -153,10 +139,10 @@ GetThemeSysSize_t GetThemeSysSize_Original;
 
 int WINAPI GetThemeSysSize_Hook(HTHEME hTheme, int iSizeId) {
     if (iSizeId == SM_CXVSCROLL && g_settings.hideVertical) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     if (iSizeId == SM_CYHSCROLL && g_settings.hideHorizontal) {
-        return g_settings.scrollbarSize;
+        return kScrollbarSize;
     }
     return GetThemeSysSize_Original(hTheme, iSizeId);
 }
@@ -166,13 +152,12 @@ int WINAPI GetThemeSysSize_Hook(HTHEME hTheme, int iSizeId) {
 void LoadSettings() {
     g_settings.hideVertical = Wh_GetIntSetting(L"hideVertical") != 0;
     g_settings.hideHorizontal = Wh_GetIntSetting(L"hideHorizontal") != 0;
-    int size = Wh_GetIntSetting(L"scrollbarSize");
-    g_settings.scrollbarSize = size < 0 ? 0 : size;
 }
 
 BOOL CALLBACK RefreshChildProc(HWND hChild, LPARAM) {
-    SendMessageTimeoutW(hChild, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
-                        nullptr);
+    // Async: we run on the Windhawk engine thread, the target windows
+    // belong to other threads, and we don't need to wait for the relayout.
+    SendNotifyMessageW(hChild, WM_THEMECHANGED, 0, 0);
     return TRUE;
 }
 
@@ -183,18 +168,21 @@ BOOL CALLBACK RefreshTopProc(HWND hWnd, LPARAM) {
         return TRUE;
     }
 
-    // Only Explorer browser windows host the file-list scrollbar. Don't
-    // re-theme the shell (tray, desktop, flyouts) over a scrollbar metric.
-    WCHAR className[64];
-    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) == 0 ||
-        _wcsicmp(className, L"CabinetWClass") != 0) {
-        return TRUE;
+    // In Explorer only the browser windows host the affected scrollbars,
+    // so don't re-theme the shell (tray, desktop, flyouts). In a process
+    // added via the inclusion list we have no such knowledge - refresh
+    // everything the process owns.
+    if (g_isExplorer) {
+        WCHAR className[64];
+        if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) == 0 ||
+            _wcsicmp(className, L"CabinetWClass") != 0) {
+            return TRUE;
+        }
     }
 
     // WM_THEMECHANGED doesn't forward to children on its own, so walk them
-    // too. Guarded because each CabinetWClass window runs on its own thread.
-    SendMessageTimeoutW(hWnd, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
-                        nullptr);
+    // too.
+    SendNotifyMessageW(hWnd, WM_THEMECHANGED, 0, 0);
     EnumChildWindows(hWnd, RefreshChildProc, 0);
     return TRUE;
 }
@@ -211,6 +199,12 @@ BOOL Wh_ModInit() {
     if (!g_settings.hideVertical && !g_settings.hideHorizontal) {
         Wh_Log(L"Nothing to hide, staying inactive");
         return FALSE;
+    }
+
+    WCHAR exePath[MAX_PATH];
+    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
+        const WCHAR* exeName = wcsrchr(exePath, L'\\');
+        g_isExplorer = exeName && _wcsicmp(exeName + 1, L"explorer.exe") == 0;
     }
 
     WindhawkUtils::SetFunctionHook(GetSystemMetrics, GetSystemMetrics_Hook,
@@ -259,16 +253,24 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     bool prevVertical = g_settings.hideVertical;
     bool prevHorizontal = g_settings.hideHorizontal;
-    int prevSize = g_settings.scrollbarSize;
 
     LoadSettings();
 
+    // Nothing left to hide: reload so Wh_ModInit can return FALSE and the
+    // pass-through hooks go away. Wh_ModUninit's RefreshWindows() restores
+    // the layout on the way out.
+    if (!g_settings.hideVertical && !g_settings.hideHorizontal) {
+        *bReload = TRUE;
+        return TRUE;
+    }
+
     if (g_settings.hideVertical != prevVertical ||
-        g_settings.hideHorizontal != prevHorizontal ||
-        g_settings.scrollbarSize != prevSize) {
+        g_settings.hideHorizontal != prevHorizontal) {
         RefreshWindows();
     }
+
+    return TRUE;
 }
