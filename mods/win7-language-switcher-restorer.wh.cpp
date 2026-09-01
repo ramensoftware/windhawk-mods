@@ -2844,9 +2844,8 @@ static void EvaluateShellRole() {
         RemoveTrayInterception();
     }
 }
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Win78LangSwitcher: Wh_ModInit v1.0.1 ===");
+    Wh_Log(L"=== Win78LangSwitcher: Wh_ModInit v1.0.0 ===");
 
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
@@ -2855,6 +2854,15 @@ BOOL Wh_ModInit() {
 
     if (!IsExplorerProcess()) {
         g_Initialized = TRUE;
+        return TRUE;
+    }
+
+    // FIX: Unload in secondary explorer processes
+    if (!IsMainExplorerShell()) {
+        Wh_Log(L"Win78LangSwitcher: Not main explorer shell (pid=%lu, owner=%lu), unloading", 
+               GetCurrentProcessId(), GetTrayOwnerPid());
+        g_Initialized = TRUE;
+        DeleteCriticalSection(&g_Ctx.csLock);
         return TRUE;
     }
 
