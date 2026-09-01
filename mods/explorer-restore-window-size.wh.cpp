@@ -14,10 +14,11 @@
 # Explorer Restore Window Size
 
 File Explorer can sometimes return from maximized mode to a normal window that
-is still nearly full-screen. This mod remembers each Explorer window's normal
-size and position before maximizing, then restores that window's saved
-placement when it leaves maximized mode. Each Explorer window is tracked
-independently.
+is still nearly full-screen. This mod remembers the most recent normal size and
+position of each Explorer window. The Restore button restores the saved size
+and position. Dragging a maximized window by its title bar restores the saved
+size while keeping the new position chosen by Windows from the mouse movement.
+Each Explorer window is tracked independently.
 
 A reproducible case is to resize Explorer to a small normal window, maximize
 it, shut down Windows while it remains maximized, restart Windows, open
@@ -32,18 +33,19 @@ saves or recalculates the incorrect `rcNormalPosition` can't be verified from
 public source code.
 
 Within one process lifetime, the mod stores a separate normal placement for
-each Explorer window and never replaces it with the maximized rectangle. On
-restore, it repairs the window's normal placement before Windows runs its
-native restore flow. Windhawk LocalStorage also keeps the last confirmed valid
-normal placement as a fallback for an Explorer window that starts maximized
-after an Explorer or Windows restart.
+each Explorer window and never replaces it while the window is maximized or
+minimized. Windhawk LocalStorage also persists the last confirmed valid normal
+placement as a fallback for an Explorer window that starts maximized after an
+Explorer or Windows restart.
 
-This differs from the Remember Folder Positions mod, which primarily stores
-window positions per folder through Shell Bags. Explorer Restore Window Size
-doesn't restore positions by folder; it repairs the maximize-to-restore normal
-placement and provides a fallback across restarts. Cross-restart matching of
-multiple old Explorer windows isn't supported; only the most recently
-confirmed normal placement is persisted.
+The Remember Folder Positions mod saves and restores a `WINDOWPLACEMENT` per
+folder through that folder's Shell Bag. Explorer Restore Window Size doesn't
+restore placement by folder; it specifically repairs the normal placement for
+maximize-to-restore transitions and provides a fallback across Explorer or
+Windows restarts. If both mods are enabled, both can affect Explorer placement,
+so their behavior may interact. Cross-restart matching of multiple old
+Explorer windows isn't supported; only the most recently confirmed normal
+placement is persisted.
 */
 // ==/WindhawkModReadme==
 
@@ -62,7 +64,6 @@ struct ExplorerWindowState {
     bool hasValidNormalPlacement = false;
     bool hasValidNormalScreenRect = false;
     bool wasMaximized = false;
-    bool maximizePending = false;
     bool processingMaximizeCommand = false;
     bool applyingRestore = false;
     bool inSizeMove = false;
@@ -90,6 +91,7 @@ std::mutex g_persistedPlacementMutex;
 PersistedPlacementData g_persistedPlacement{};
 bool g_hasPersistedPlacement = false;
 bool g_persistedFallbackClaimed = false;
+HWND g_persistedFallbackReservation = nullptr;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
@@ -176,8 +178,10 @@ bool PersistNormalPlacementIfChanged(const ExplorerWindowState& state,
     return true;
 }
 
-bool TryInitializeFromPersistedPlacement(HWND hWnd,
-                                         ExplorerWindowState* state) {
+bool TryInitializeFromPersistedPlacement(
+    HWND hWnd,
+    ExplorerWindowState* state,
+    bool reserveUntilSubclassInstalled = false) {
     if (!state || state->hasValidNormalPlacement) {
         return false;
     }
@@ -185,12 +189,17 @@ bool TryInitializeFromPersistedPlacement(HWND hWnd,
     PersistedPlacementData data{};
     {
         std::lock_guard<std::mutex> lock(g_persistedPlacementMutex);
-        if (!g_hasPersistedPlacement || g_persistedFallbackClaimed) {
+        if (!g_hasPersistedPlacement || g_persistedFallbackClaimed ||
+            g_persistedFallbackReservation) {
             return false;
         }
 
         data = g_persistedPlacement;
-        g_persistedFallbackClaimed = true;
+        if (reserveUntilSubclassInstalled) {
+            g_persistedFallbackReservation = hWnd;
+        } else {
+            g_persistedFallbackClaimed = true;
+        }
     }
 
     state->lastNormalPlacement = {};
@@ -200,11 +209,36 @@ bool TryInitializeFromPersistedPlacement(HWND hWnd,
     state->hasValidNormalPlacement = true;
     state->hasValidNormalScreenRect = true;
 
-    Wh_Log(L"Persisted fallback applied to maximized startup window %p: "
-           L"(%ld,%ld)-(%ld,%ld)",
-           hWnd, data.normalPosition.left, data.normalPosition.top,
-           data.normalPosition.right, data.normalPosition.bottom);
+    if (reserveUntilSubclassInstalled) {
+        Wh_Log(L"Persisted fallback prepared for maximized startup window "
+               L"%p: (%ld,%ld)-(%ld,%ld)",
+               hWnd, data.normalPosition.left, data.normalPosition.top,
+               data.normalPosition.right, data.normalPosition.bottom);
+    } else {
+        Wh_Log(L"Persisted fallback applied to maximized startup window %p: "
+               L"(%ld,%ld)-(%ld,%ld)",
+               hWnd, data.normalPosition.left, data.normalPosition.top,
+               data.normalPosition.right, data.normalPosition.bottom);
+    }
     return true;
+}
+
+void CommitPersistedFallbackReservation(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_persistedPlacementMutex);
+    if (g_persistedFallbackReservation != hWnd) {
+        return;
+    }
+
+    g_persistedFallbackReservation = nullptr;
+    g_persistedFallbackClaimed = true;
+    Wh_Log(L"Persisted fallback claimed by maximized startup window %p", hWnd);
+}
+
+void ReleasePersistedFallbackReservation(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_persistedPlacementMutex);
+    if (g_persistedFallbackReservation == hWnd) {
+        g_persistedFallbackReservation = nullptr;
+    }
 }
 
 bool IsExplorerWindow(HWND hWnd) {
@@ -387,8 +421,7 @@ enum class ApplyPlacementResult {
 
 ApplyPlacementResult ApplySavedNormalPlacement(HWND hWnd,
                                                 ExplorerWindowState* state,
-                                                PCWSTR reason,
-                                                bool onlyIfDifferent) {
+                                                PCWSTR reason) {
     if (!state || !state->hasValidNormalPlacement ||
         state->applyingRestore) {
         return ApplyPlacementResult::NotNeeded;
@@ -404,12 +437,6 @@ ApplyPlacementResult ApplySavedNormalPlacement(HWND hWnd,
     RECT adjustedScreenRect{};
     const bool movedOnscreen = AdjustPlacementIfCompletelyOffscreen(
         hWnd, *state, &targetRect, &adjustedScreenRect);
-
-    if (onlyIfDifferent &&
-        !RectsMeaningfullyDifferent(currentPlacement.rcNormalPosition,
-                                     targetRect)) {
-        return ApplyPlacementResult::NotNeeded;
-    }
 
     // Preserve showCmd, flags, and the minimize/maximize positions. Only the
     // normal rectangle is replaced so Windows can run its native restore path.
@@ -436,23 +463,97 @@ ApplyPlacementResult ApplySavedNormalPlacement(HWND hWnd,
     return ApplyPlacementResult::Succeeded;
 }
 
+ApplyPlacementResult ApplySavedNormalSizeAtCurrentPosition(
+    HWND hWnd,
+    ExplorerWindowState* state,
+    PCWSTR reason) {
+    if (!state || !state->hasValidNormalPlacement ||
+        state->applyingRestore) {
+        return ApplyPlacementResult::NotNeeded;
+    }
+
+    WINDOWPLACEMENT currentPlacement{};
+    currentPlacement.length = sizeof(currentPlacement);
+    if (!GetWindowPlacement(hWnd, &currentPlacement) ||
+        !IsValidRect(currentPlacement.rcNormalPosition)) {
+        return ApplyPlacementResult::Failed;
+    }
+
+    const RECT& savedRect = state->lastNormalPlacement.rcNormalPosition;
+    const LONG savedWidth = savedRect.right - savedRect.left;
+    const LONG savedHeight = savedRect.bottom - savedRect.top;
+    const RECT& currentRect = currentPlacement.rcNormalPosition;
+    const LONG currentWidth = currentRect.right - currentRect.left;
+    const LONG currentHeight = currentRect.bottom - currentRect.top;
+
+    if (currentWidth == savedWidth && currentHeight == savedHeight) {
+        return ApplyPlacementResult::NotNeeded;
+    }
+
+    currentPlacement.rcNormalPosition.right = currentRect.left + savedWidth;
+    currentPlacement.rcNormalPosition.bottom = currentRect.top + savedHeight;
+
+    state->applyingRestore = true;
+    const BOOL succeeded = SetWindowPlacement(hWnd, &currentPlacement);
+    state->applyingRestore = false;
+
+    if (!succeeded) {
+        Wh_Log(L"Failed to apply saved size for %p (%s), error=%lu", hWnd,
+               reason, GetLastError());
+        return ApplyPlacementResult::Failed;
+    }
+
+    const RECT& targetRect = currentPlacement.rcNormalPosition;
+    Wh_Log(L"Applied saved size at native drag position for %p (%s): "
+           L"(%ld,%ld)-(%ld,%ld)",
+           hWnd, reason, targetRect.left, targetRect.top, targetRect.right,
+           targetRect.bottom);
+    return ApplyPlacementResult::Succeeded;
+}
+
 void ConfirmMaximizedState(HWND hWnd, ExplorerWindowState* state) {
-    state->maximizePending = false;
     state->wasMaximized = true;
     if (!state->hasValidNormalPlacement) {
         TryInitializeFromPersistedPlacement(hWnd, state);
     }
 }
 
-void CancelPendingMaximize(HWND hWnd,
+bool CompleteStrictRestore(HWND hWnd,
                            ExplorerWindowState* state,
                            PCWSTR reason) {
-    if (!state->maximizePending) {
-        return;
+    if (!state || !state->wasMaximized || state->applyingRestore ||
+        state->inSizeMove || IsZoomed(hWnd) || IsIconic(hWnd)) {
+        return false;
     }
 
-    state->maximizePending = false;
-    Wh_Log(L"Canceled pending maximize for %p (%s)", hWnd, reason);
+    const ApplyPlacementResult result =
+        ApplySavedNormalPlacement(hWnd, state, reason);
+    if (result == ApplyPlacementResult::Failed) {
+        return false;
+    }
+
+    state->wasMaximized = false;
+    CaptureNormalPlacement(hWnd, state, L"strict restore complete", true);
+    return true;
+}
+
+bool CompleteDragRestore(HWND hWnd,
+                         ExplorerWindowState* state,
+                         PCWSTR reason) {
+    if (!state || !state->wasMaximized || state->applyingRestore ||
+        state->inSizeMove || IsZoomed(hWnd) || IsIconic(hWnd)) {
+        return false;
+    }
+
+    const ApplyPlacementResult result =
+        ApplySavedNormalSizeAtCurrentPosition(hWnd, state, reason);
+    if (result == ApplyPlacementResult::Failed) {
+        return false;
+    }
+
+    state->wasMaximized = false;
+    CaptureNormalPlacement(hWnd, state, L"drag restore complete", true);
+    return true;
 }
 
 void HandleWindowPosChanged(HWND hWnd, ExplorerWindowState* state) {
@@ -470,26 +571,15 @@ void HandleWindowPosChanged(HWND hWnd, ExplorerWindowState* state) {
     }
 
     // Position messages can be sent reentrantly while SC_MAXIMIZE is still
-    // being processed. Do not capture a transitional near-maximized rectangle.
-    if (state->processingMaximizeCommand) {
+    // being processed or while the user is in the modal move/size loop. Do not
+    // capture a transitional rectangle or run the post-restore correction
+    // while the mouse button is still held.
+    if (state->processingMaximizeCommand || state->inSizeMove) {
         return;
     }
 
-    // If a pending attempt survives command processing but the window is now
-    // stably normal, the maximize didn't complete. Clear it so future normal
-    // placement changes continue to be captured.
-    CancelPendingMaximize(hWnd, state, L"stable normal window");
-
     if (state->wasMaximized) {
-        const ApplyPlacementResult result = ApplySavedNormalPlacement(
-            hWnd, state, L"post-restore fallback", true);
-        state->wasMaximized = false;
-
-        // Keep the pre-maximize snapshot if correction failed. Otherwise,
-        // record the final placement that Windows actually applied.
-        if (result != ApplyPlacementResult::Failed) {
-            CaptureNormalPlacement(hWnd, state, L"restore complete", false);
-        }
+        CompleteStrictRestore(hWnd, state, L"post-restore correction");
         return;
     }
 
@@ -519,7 +609,6 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND hWnd,
                 if (attemptingMaximize) {
                     CaptureNormalPlacement(hWnd, state, L"before maximize",
                                            true);
-                    state->maximizePending = true;
                     state->processingMaximizeCommand = true;
                     Wh_Log(L"Received maximize for %p", hWnd);
                 }
@@ -533,9 +622,8 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND hWnd,
 
                 if (IsZoomed(hWnd)) {
                     ConfirmMaximizedState(hWnd, state);
-                } else {
-                    CancelPendingMaximize(hWnd, state,
-                                          L"SC_MAXIMIZE didn't maximize");
+                } else if (attemptingMaximize) {
+                    Wh_Log(L"Maximize didn't complete for %p", hWnd);
                 }
 
                 return result;
@@ -548,20 +636,30 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND hWnd,
                        restoringFromMaximized);
                 if (restoringFromMaximized) {
                     ApplySavedNormalPlacement(hWnd, state,
-                                              L"before native restore", false);
+                                              L"before native restore");
                 }
+            }
+
+            if (command == SC_MOVE && IsZoomed(hWnd) && !IsIconic(hWnd)) {
+                ConfirmMaximizedState(hWnd, state);
+                ApplySavedNormalPlacement(
+                    hWnd, state, L"before title-bar drag restore");
             }
 
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
-        case WM_SIZE:
+        case WM_SIZE: {
+            const LRESULT result =
+                DefSubclassProc(hWnd, uMsg, wParam, lParam);
             if (wParam == SIZE_MAXIMIZED) {
                 ConfirmMaximizedState(hWnd, state);
             } else if (wParam == SIZE_RESTORED) {
-                CancelPendingMaximize(hWnd, state, L"SIZE_RESTORED");
+                CompleteStrictRestore(hWnd, state,
+                                      L"SIZE_RESTORED correction");
             }
-            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            return result;
+        }
 
         case WM_WINDOWPOSCHANGED: {
             const LRESULT result =
@@ -572,13 +670,28 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND hWnd,
 
         case WM_ENTERSIZEMOVE:
             state->inSizeMove = true;
+            if (IsZoomed(hWnd) && !IsIconic(hWnd)) {
+                ConfirmMaximizedState(hWnd, state);
+                ApplySavedNormalPlacement(
+                    hWnd, state, L"before maximized move loop");
+            }
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         case WM_EXITSIZEMOVE: {
             const LRESULT result =
                 DefSubclassProc(hWnd, uMsg, wParam, lParam);
             state->inSizeMove = false;
-            CaptureNormalPlacement(hWnd, state, L"manual move/resize", true);
+            if (IsZoomed(hWnd)) {
+                ConfirmMaximizedState(hWnd, state);
+            } else if (!IsIconic(hWnd)) {
+                if (state->wasMaximized) {
+                    CompleteDragRestore(hWnd, state,
+                                        L"drag restore size correction");
+                } else {
+                    CaptureNormalPlacement(hWnd, state, L"manual move/resize",
+                                           true);
+                }
+            }
             return result;
         }
 
@@ -613,39 +726,40 @@ void InstallExplorerWindowSubclass(HWND hWnd) {
     auto state = std::make_unique<ExplorerWindowState>();
     const bool initiallyMaximized = IsZoomed(hWnd) != FALSE;
     state->wasMaximized = initiallyMaximized;
-    if (initiallyMaximized) {
-        TryInitializeFromPersistedPlacement(hWnd, state.get());
-    } else {
-        CaptureNormalPlacement(hWnd, state.get(), L"initial state", true);
-    }
-
-    // Recheck the real state immediately before publishing the fully prepared
-    // object. No ordinary state members are written by this thread after the
-    // subclass becomes active.
-    const bool currentlyMaximized = IsZoomed(hWnd) != FALSE;
-    state->wasMaximized = currentlyMaximized;
-    if (currentlyMaximized && !state->hasValidNormalPlacement) {
-        TryInitializeFromPersistedPlacement(hWnd, state.get());
-    } else if (!currentlyMaximized &&
-               (initiallyMaximized || !state->hasValidNormalPlacement)) {
+    const bool hasPersistedFallbackReservation =
+        initiallyMaximized && TryInitializeFromPersistedPlacement(
+                                  hWnd, state.get(), true);
+    if (!initiallyMaximized) {
         CaptureNormalPlacement(hWnd, state.get(), L"initial state", true);
     }
 
     if (!IsExplorerWindow(hWnd)) {
+        if (hasPersistedFallbackReservation) {
+            ReleasePersistedFallbackReservation(hWnd);
+        }
         std::lock_guard<std::mutex> lock(g_windowStatesMutex);
         g_windowsBeingInitialized.erase(hWnd);
         return;
     }
 
     ExplorerWindowState* statePtr = state.get();
+    bool duplicateState = false;
 
     {
         std::lock_guard<std::mutex> lock(g_windowStatesMutex);
         g_windowsBeingInitialized.erase(hWnd);
         if (g_windowStates.find(hWnd) != g_windowStates.end()) {
-            return;
+            duplicateState = true;
+        } else {
+            g_windowStates.emplace(hWnd, std::move(state));
         }
-        g_windowStates.emplace(hWnd, std::move(state));
+    }
+
+    if (duplicateState) {
+        if (hasPersistedFallbackReservation) {
+            ReleasePersistedFallbackReservation(hWnd);
+        }
+        return;
     }
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -654,7 +768,14 @@ void InstallExplorerWindowSubclass(HWND hWnd) {
         Wh_Log(L"Failed to subclass Explorer window %p, error=%lu", hWnd,
                GetLastError());
         RemoveWindowState(hWnd, statePtr);
+        if (hasPersistedFallbackReservation) {
+            ReleasePersistedFallbackReservation(hWnd);
+        }
         return;
+    }
+
+    if (hasPersistedFallbackReservation) {
+        CommitPersistedFallbackReservation(hWnd);
     }
 
     Wh_Log(L"Subclass installed for Explorer window %p", hWnd);
@@ -692,6 +813,7 @@ BOOL Wh_ModInit() {
         g_persistedPlacement = {};
         g_hasPersistedPlacement = false;
         g_persistedFallbackClaimed = false;
+        g_persistedFallbackReservation = nullptr;
     }
     LoadPersistedPlacement();
 
