@@ -2863,7 +2863,7 @@ BOOL Wh_ModInit() {
                GetCurrentProcessId(), GetTrayOwnerPid());
         g_Initialized = TRUE;
         DeleteCriticalSection(&g_Ctx.csLock);
-        return TRUE;
+        return FALSE;
     }
 
     const DWORD dwTrayOwner = GetTrayOwnerPid();
