@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-01T19:19:48.000Z</updated>
+    <updated>2026-09-01T19:25:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
+        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
+        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
+        <updated>2026-09-01T19:25:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fastervirtualdesktopswitching">Faster Virtual Desktop Switching</h1>
+<p>Removes the long-standing pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif" alt="GIF" /></p>
+<p><em>Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10.</em></p>
+<p>Windows 11 can synchronously request a full-monitor-sized wallpaper thumbnail
+before beginning a virtual desktop transition. On a high-DPI display with specific wallpaper
+configurations, that request can take roughly 136-169 ms when warm and more than one second 
+when cold (exact figure depends).</p>
+<p>This mod caps that request to the maximum size documented for <code>IThumbnailCache</code>, which is 
+1024 pixels. In testing, that netted a latency reduction of ~150ms, effectively eliminating 
+the long-standing pre-animation stutter issue. </p>
+<p>Laptop users who use three- or four-finger swipe gestures can especially benefit from this mod.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
@@ -644,20 +666,6 @@ is licensed under GPLv3 for that reason.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.2.0]]></title>
-        <id>https://windhawk.net/mods/win7-action-center-recreation#802bccd599b938159d1bfa5cbcacac3b7ba50cc9</id>
-        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
-        <updated>2026-08-28T13:17:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the positioning of the flyout</li>
-<li>Mitigated the issue where bottom-row system tray icons became unclickable on multi-row taskbars by ensuring flyout hook checks for taskbar bounds before being closed</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

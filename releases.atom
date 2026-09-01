@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-01T19:19:48.000Z</updated>
+    <updated>2026-09-01T19:25:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
+        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
+        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
+        <updated>2026-09-01T19:25:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fastervirtualdesktopswitching">Faster Virtual Desktop Switching</h1>
+<p>Removes the long-standing pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif" alt="GIF" /></p>
+<p><em>Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10.</em></p>
+<p>Windows 11 can synchronously request a full-monitor-sized wallpaper thumbnail
+before beginning a virtual desktop transition. On a high-DPI display with specific wallpaper
+configurations, that request can take roughly 136-169 ms when warm and more than one second 
+when cold (exact figure depends).</p>
+<p>This mod caps that request to the maximum size documented for <code>IThumbnailCache</code>, which is 
+1024 pixels. In testing, that netted a latency reduction of ~150ms, effectively eliminating 
+the long-standing pre-animation stutter issue. </p>
+<p>Laptop users who use three- or four-finger swipe gestures can especially benefit from this mod.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
@@ -1371,57 +1393,6 @@ limited to:</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.1.4]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#54b0e49c4e5899cc7b3f38f3f0ccbf428857b3c5</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-08-20T18:19:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="onscreenindicatorposition">On-Screen Indicator Position</h1>
-<p>Windows 11 shows an on-screen indicator when you change the volume or
-brightness, toggle airplane mode, or when the camera or microphone privacy state
-changes. Under <strong>Settings > System > Notifications > On-screen indicators</strong>,
-Windows lets you put it in one of three places: top left, top center, or bottom
-center.</p>
-<p>This mod replaces that with a full nine-point grid, any corner, any edge center,
-or dead center, plus a pixel offset for fine-tuning.</p>
-<p>The brightness indicator moved to the middle of the right edge:</p>
-<p><img src="https://raw.githubusercontent.com/mario0318/windhawk-mods/3685cdf56c55ba8cb3398b1cf9e35b5e95e68eb1/on-screen-indicator-position/middle-right.jpg" alt="Indicator at middle right" /></p>
-<h2 id="positions">Positions</h2>
-<pre><code> Top left        Top center        Top right
- Middle left     Center            Middle right
- Bottom left     Bottom center     Bottom right
-</code></pre>
-<p>The indicator is kept inside the area Windows lays it out in, so an offset that
-would push it past an edge stops at the edge instead of moving off screen. You
-can also leave the position on <strong>Windows default</strong> and use the offsets alone to
-nudge one of the built-in positions.</p>
-<h2 id="choosingamonitor">Choosing a monitor</h2>
-<p>This mod only changes where the indicator sits on a screen, not which screen it
-appears on. For that, use <a href="https://windhawk.net/mods/volume-control-open-location">Volume control open
-location</a>, which selects
-a monitor by number or by interface name. The two work together.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The slide-in animation direction is chosen by Windows from the built-in
-setting, not by this mod. If the animation looks wrong for your new position,
-change the built-in setting to whichever of the three has the animation you
-like, then let this mod do the actual placement.</li>
-<li>Offsets are given at 100% scaling and scaled to whichever monitor the
-indicator appears on, so the same value moves the same distance on a display
-running at 150%.</li>
-<li>Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The hook onto the indicator's own placement function comes from <a href="https://windhawk.net/mods/volume-control-open-location">Volume control
-open location</a> and
-<a href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor">Taskbar primary on secondary
-monitor</a>, which
-both target the same function and work out the origin handling.</p>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
