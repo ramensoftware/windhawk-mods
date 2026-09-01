@@ -2203,6 +2203,8 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
 
     RECT rcButton = pDIS->rcItem;
 
+    bool drewAsHighContrast = isHighContrast;
+
     if (isHighContrast) {
         UINT uState = DFCS_BUTTONPUSH;
         if (isPressed)
@@ -2305,6 +2307,7 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
             if (isPressed)
                 uState |= DFCS_PUSHED;
             DrawFrameControl(hdc, &rcButton, DFC_BUTTON, uState);
+            drewAsHighContrast = true;
         }
     }
 
@@ -2312,7 +2315,7 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
     GetWindowTextW(pDIS->hwndItem, buttonText, _countof(buttonText));
 
     if (wcslen(buttonText) > 0) {
-        if (!isHighContrast) {
+        if (!drewAsHighContrast) {
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(255, 255, 255));
         } else {
@@ -2326,7 +2329,7 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
         DrawTextW(hdc, buttonText, -1, &rcButton, format);
     }
 
-    if (isHighContrast && isFocused && !GetPropW(pDIS->hwndItem, L"CustomBSDR_HideFocus")) {
+    if (drewAsHighContrast && isFocused && !GetPropW(pDIS->hwndItem, L"CustomBSDR_HideFocus")) {
         int cxEdge = 2 * GetSystemMetrics(SM_CXEDGE);
         int cxBorder = GetSystemMetrics(SM_CXBORDER) + cxEdge;
         int cyEdge = 2 * GetSystemMetrics(SM_CYEDGE);
@@ -2399,9 +2402,11 @@ LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
             } else {
                 SetTextColor((HDC)wParam, RGB(255, 255, 255));
             }
-
-            return (INT_PTR)GetStockObject(NULL_BRUSH);
+        } else {
+            SetBkMode((HDC)wParam, OPAQUE);
+            SetBkColor((HDC)wParam, GetSysColor(COLOR_BTNFACE));
         }
+        return (INT_PTR)GetStockObject(NULL_BRUSH);
         break;
     }
     case WM_NCDESTROY: {
@@ -2744,7 +2749,6 @@ void CustomBSDR::Cancel() {
         std::lock_guard lock(cancelMutex);
         isCanceling = false;
     }
-    PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
 }
 
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -2872,7 +2876,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-        isHighContrast = IsHighContrast();
 
         SetWindowSubclass(hForceButton, ButtonSubclassProc, 0, 0);
         LRESULT forceButtonUIState = SendMessageW(hForceButton, WM_QUERYUISTATE, 0, 0);
@@ -2949,11 +2952,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         CenterWindow(hWndDlg);
         return TRUE;
     }
-    case WM_CTLCOLORDLG: // make dialog transparent
-        if (!isHighContrast) {
-            return (INT_PTR)GetStockObject(NULL_BRUSH);
-        }
-        break;
     case WM_CTLCOLORSTATIC: // make (direct) children bg transparent and text white
         if (!isHighContrast) {
             SetBkMode((HDC)wParam, TRANSPARENT);
@@ -2965,7 +2963,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWndDlg, &ps);
-        if (bgBitmap) {
+        if (bgBitmap && !isHighContrast) {
             RECT rcDlg;
             GetClientRect(hWndDlg, &rcDlg);
             SIZE szDlg = { rcDlg.right, rcDlg.bottom };
@@ -2979,17 +2977,15 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         EndPaint(hWndDlg, &ps);
         return TRUE;
     }
-    case WM_ERASEBKGND:
-        if (!isHighContrast) {
-            HDC hdc = (HDC)wParam;
-            RECT rcDlg;
-            GetClientRect(hWndDlg, &rcDlg);
-            HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-            FillRect(hdc, &rcDlg, hBrush);
-            SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
-            return TRUE;
-        }
-        break;
+    case WM_ERASEBKGND: {
+        HDC hdc = (HDC)wParam;
+        RECT rcDlg;
+        GetClientRect(hWndDlg, &rcDlg);
+        HBRUSH hBrush = !isHighContrast ? (HBRUSH)GetStockObject(BLACK_BRUSH) : GetSysColorBrush(COLOR_WINDOW);
+        FillRect(hdc, &rcDlg, hBrush);
+        SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
+        return TRUE;
+    }
     case WM_DRAWITEM: {
         LPDRAWITEMSTRUCT pDIS = (LPDRAWITEMSTRUCT)lParam;
         if (pDIS->CtlID == IDC_BSDR_SEPARATOR_TOP || pDIS->CtlID == IDC_BSDR_SEPARATOR_BOTTOM) {
@@ -3017,6 +3013,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 700, nullptr)) {
                 Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
                 Cancel();
+                PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
             }
             return TRUE;
         case IDC_BSDR_FORCE_BTN:
@@ -3048,6 +3045,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
 
         KillTimer(hWndDlg, BSDR_CANCEL_TIMER);
         Cancel();
+        PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
         return TRUE;
     }
     case WM_ADD_APP: {
@@ -3149,10 +3147,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
             return TRUE;
         }
-        if (wParam == SPI_SETHIGHCONTRAST) {
-            isHighContrast = IsHighContrast();
-            return TRUE;
-        }
+        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either
+        // This event as well as WM_THEMECHANGED does not even reliably fire in mid-logoff state anyway
         break;
     }
     }
@@ -3185,6 +3181,22 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             return -1;
         }
 
+        isHighContrast = IsHighContrast();
+
+        if (!isHighContrast) {
+            separatorBitmap = LoadAlphaBitmap(IDB_BSDR_SEPARATOR);
+            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL);
+            btnHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_HOVER);
+            btnPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_PRESSED);
+            btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
+            btnSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED_HOVER);
+
+            if (!separatorBitmap || !btnNormalBitmap || !btnHoverBitmap || !btnPressedBitmap || !btnSelectedBitmap || !btnSelectedHoverBitmap) {
+                Wh_Log(L"One or more images are missing; falling back to high-contrast rendering...");
+                isHighContrast = true;
+            }
+        }
+
         if (!isHighContrast) {
             // Screenshot desktop and dim it
             // No DPI virtualization involved because LogonUI is per-monitor scaled by manifest
@@ -3201,20 +3213,13 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             SelectObject(hMemDC, oldBitmap);
             DeleteDC(hMemDC);
             ReleaseDC(nullptr, hDC);
-
-            separatorBitmap = LoadAlphaBitmap(IDB_BSDR_SEPARATOR);
-            btnNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_NORMAL);
-            btnHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_HOVER);
-            btnPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_PRESSED);
-            btnSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED);
-            btnSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_SELECTED_HOVER);
         }
         return 0;
     }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        if (bgBitmap) {
+        if (bgBitmap && !isHighContrast) {
             HDC memDC = CreateCompatibleDC(hdc);
             HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bgBitmap);
             BitBlt(hdc, 0, 0, bgWidth, bgHeight, memDC, 0, 0, SRCCOPY);
@@ -3224,6 +3229,18 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         EndPaint(hWnd, &ps);
         paintedFirstFrame = true;
         return 0;
+    }
+    case WM_ERASEBKGND: {
+        if (isHighContrast) {
+            HDC hdc = (HDC)wParam;
+            RECT rcDlg;
+            GetClientRect(hWnd, &rcDlg);
+            HBRUSH hBrush = GetSysColorBrush(COLOR_WINDOW);
+            FillRect(hdc, &rcDlg, hBrush);
+            SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE);
+            return TRUE;
+        }
+        break;
     }
     case WM_WINDOWPOSCHANGING: {
         // Deny window movement/resize from workarea resize, etc.
@@ -3505,6 +3522,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                     }
                     if (needsResolve) {
                         Resolve(BlockedShutdownResolution_Cancel);
+                        Cancel();
                     }
 
                     if (hBgWndLocal && IsWindow(hBgWndLocal)) {
@@ -4172,10 +4190,10 @@ void Wh_ModBeforeUninit() {
         }
         if (needsResolve) {
             Resolve(BlockedShutdownResolution_Cancel);
+            Sleep(700);
+            Cancel();
         }
-        if (hStopEvent) {
-            SetEvent(hStopEvent);
-        }
+        Stop();
 
         WaitForSingleObject(hThreadLocal, INFINITE);
         CloseHandle(hThreadLocal);
