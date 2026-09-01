@@ -1820,6 +1820,7 @@ namespace CustomBSDR {
     int totalContentHeight = 0;
     int minHeight = 0;
     bool paintedFirstFrame = false;
+    bool isHighContrast = false;
     bool isOnSecureDesktop = true;
     bool isCanceling = false;
 
@@ -2118,7 +2119,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
 }
 
 void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
-    if (separatorBitmap && !IsHighContrast()) {
+    if (separatorBitmap && !isHighContrast) {
         int width = pDIS->rcItem.right - pDIS->rcItem.left;
         int height = pDIS->rcItem.bottom - pDIS->rcItem.top;
 
@@ -2199,7 +2200,6 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
 void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
     bool isPressed = (pDIS->itemState & ODS_SELECTED);
     bool isFocused = (pDIS->itemState & ODS_FOCUS);
-    bool isHighContrast = IsHighContrast();
 
     RECT rcButton = pDIS->rcItem;
 
@@ -2381,7 +2381,7 @@ LRESULT CALLBACK CustomBSDR::ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPa
 LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
     case WM_CTLCOLORSTATIC: {
-        if (!IsHighContrast()) {
+        if (!isHighContrast) {
             SetBkMode((HDC)wParam, TRANSPARENT);
             SetStretchBltMode((HDC)wParam, HALFTONE);
 
@@ -2872,6 +2872,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+        isHighContrast = IsHighContrast();
 
         SetWindowSubclass(hForceButton, ButtonSubclassProc, 0, 0);
         LRESULT forceButtonUIState = SendMessageW(hForceButton, WM_QUERYUISTATE, 0, 0);
@@ -2949,12 +2950,12 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     }
     case WM_CTLCOLORDLG: // make dialog transparent
-        if (!IsHighContrast()) {
+        if (!isHighContrast) {
             return (INT_PTR)GetStockObject(NULL_BRUSH);
         }
         break;
     case WM_CTLCOLORSTATIC: // make (direct) children bg transparent and text white
-        if (!IsHighContrast()) {
+        if (!isHighContrast) {
             SetBkMode((HDC)wParam, TRANSPARENT);
             SetStretchBltMode((HDC)wParam, HALFTONE);
             SetTextColor((HDC)wParam, RGB(255, 255, 255));
@@ -2979,7 +2980,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     }
     case WM_ERASEBKGND:
-        if (!IsHighContrast()) {
+        if (!isHighContrast) {
             HDC hdc = (HDC)wParam;
             RECT rcDlg;
             GetClientRect(hWndDlg, &rcDlg);
@@ -3015,8 +3016,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
             if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 700, nullptr)) {
                 Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
-                // Fallback to sleep
-                Sleep(700);
                 Cancel();
             }
             return TRUE;
@@ -3148,8 +3147,13 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
     case WM_SETTINGCHANGE: {
         if (wParam == SPI_SETWHEELSCROLLLINES) {
             SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+            return TRUE;
         }
-        return TRUE;
+        if (wParam == SPI_SETHIGHCONTRAST) {
+            isHighContrast = IsHighContrast();
+            return TRUE;
+        }
+        break;
     }
     }
     return FALSE;
@@ -3181,7 +3185,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             return -1;
         }
 
-        if (!IsHighContrast()) {
+        if (!isHighContrast) {
             // Screenshot desktop and dim it
             // No DPI virtualization involved because LogonUI is per-monitor scaled by manifest
             HDC hDC = GetDC(nullptr);
@@ -3679,14 +3683,15 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
 long __fastcall BlockedShutdownUXImpl_AddApplication_hook(void* thisPtr, IShutdownBlockingApp* blockingApp) {
     UINT appId = 0;
     BOOLEAN isBlocking = FALSE;
-    HSTRING caption, blockReason;
+    HSTRING caption = nullptr, blockReason = nullptr;
     blockingApp->get_Id(&appId);
     blockingApp->get_IsBlocking(&isBlocking);
-    blockingApp->get_Caption(&caption);
-    blockingApp->get_BlockReason(&blockReason);
-    const wchar_t* captionStr = WindowsGetStringRawBuffer(caption, NULL);
-    const wchar_t* blockReasonStr = WindowsGetStringRawBuffer(blockReason, NULL);
-    Wh_Log(L"BlockedShutdownUXImpl::AddApplication, AppId=%u, IsBlocking=%d, Caption=%s, BlockReason=%s", appId, isBlocking, captionStr, blockReasonStr);
+    HRESULT hrCaption = blockingApp->get_Caption(&caption);
+    HRESULT hrReason = blockingApp->get_BlockReason(&blockReason);
+    Wh_Log(L"BlockedShutdownUXImpl::AddApplication, AppId=%u, IsBlocking=%d, Caption=%s, BlockReason=%s",
+        appId, isBlocking,
+        SUCCEEDED(hrCaption) ? WindowsGetStringRawBuffer(caption, nullptr) : L"<failed>",
+        SUCCEEDED(hrReason) ? WindowsGetStringRawBuffer(blockReason, nullptr) : L"<failed>");
     WindowsDeleteString(blockReason);
     WindowsDeleteString(caption);
 
@@ -3920,7 +3925,9 @@ bool IsAuthUxInstalled() {
 // and will be always one step behind (e.g. will detect as LUI not injected on first logoff after mod install)
 // I know the global inclusion key is not everything that affects that injection but this is minimal safeguard anyway
 // Note: the global include key is honored over the global exclusions. Mod specific exclusions have more priority but checking it overcomplicates stuff
+// (Checking for mod specific exclusion needs checking two keys, and asking users to add LogonUI to the mod specific inclusion is unnecessary and too much burden)
 // So let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
+// Note 2: applying the global inclusion setting fully restarts Windhawk and reloads every mods; there's no need to tell users to disable and reenable the mod
 bool IsLogonUiInjectionEnabled() {
     // Skip by user choice
     if (g_noSafetyChecks) {
@@ -4141,13 +4148,8 @@ void Wh_ModAfterInit() {
     ApplyResolverDisabledState();
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
-
+void Wh_ModBeforeUninit() {
     if (g_isWinlogon) {
-        if (p_g_fShutdownResolverDisabled) {
-            *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
-        }
         return;
     }
 
@@ -4171,16 +4173,29 @@ void Wh_ModUninit() {
         if (needsResolve) {
             Resolve(BlockedShutdownResolution_Cancel);
         }
-
         if (hStopEvent) {
             SetEvent(hStopEvent);
         }
+
         WaitForSingleObject(hThreadLocal, INFINITE);
         CloseHandle(hThreadLocal);
     }
     if (hDesktop) {
         CloseDesktop(hDesktop);
     }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
+
+    if (g_isWinlogon) {
+        if (p_g_fShutdownResolverDisabled) {
+            *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
+        }
+        return;
+    }
+
+    using namespace CustomBSDR;
 
     HANDLE hDoModalExitEventDup = g_hDoModalExitEventDup.exchange(nullptr, std::memory_order_acq_rel);
     if (hDoModalExitEventDup) {
@@ -4227,5 +4242,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     }
     // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
     // and reloading already loaded resources/dialog etc. is tedious so just ignore it
+    // Note: LogonUI just exits when idle. It isn't even running most of the time;
+    // it's more likely to be not running when the user changes the mod settings from the WH UI
     return TRUE;
 }
