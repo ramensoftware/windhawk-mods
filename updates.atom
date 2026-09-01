@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-01T18:59:40.000Z</updated>
+    <updated>2026-09-01T19:19:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
+        <link href="https://windhawk.net/mods/explorer-info-bar"/>
+        <updated>2026-09-01T19:19:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerinfobar">Explorer Info Bar+</h1>
+<p>A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.</p>
+<p>Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.</p>
+<p>Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png" alt="Explorer Info Bar+ preview" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Drive free-space information</li>
+<li>Current folder content summary</li>
+<li>Folder count</li>
+<li>File count</li>
+<li>Immediate file size total</li>
+<li>Selection information</li>
+<li>Selected folders</li>
+<li>Selected files</li>
+<li>Selected file size</li>
+<li>Single-file details when available</li>
+<li>Real file extension</li>
+<li>Image resolution</li>
+<li>Video resolution</li>
+<li>Media duration</li>
+<li>Three display styles</li>
+<li>Simple</li>
+<li>Flat panes</li>
+<li>Soft cards</li>
+<li>Configurable section order</li>
+<li>Individual section visibility controls</li>
+<li>Custom text and panel colors</li>
+<li>Automatic theme-derived colors by default</li>
+<li>Works with File Explorer's native status area rather than replacing Explorer itself</li>
+</ul>
+<h2 id="compatibilitywhythismodisseparate">Compatibility / Why this mod is separate</h2>
+<p>Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic <code>msctls_statusbar32</code>-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.</p>
+<p>Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.</p>
+<p>Explorer Info Bar+ paints over the native status-row text, including output from Explorer Status Bar Metadata. Do not enable Explorer Status Bar Metadata at the same time because its output will be covered. When Explorer Status Bar Metadata is not used, Explorer Info Bar+'s optional Single File Details can provide file extension, dimensions, and duration when available.</p>
+<h2 id="examples">Examples</h2>
+<p>Typical information shown by the mod:</p>
+<pre><code class="text language-text">Drive D: 150.7GB free
+Content: 15 folders / 25 files (77.2MB)
+Selected: 2 folders / 4 files (571KB)
+</code></pre>
+<p>When one file is selected, additional details can appear:</p>
+<pre><code class="text language-text">.jpg (4032×3024)
+.jpeg (6000×4000)
+.mp4 (1920×1080, 01:23:43)
+.mp3 (00:03:47)
+.doc
+.pdf
+</code></pre>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tray hover expand 1.7.0]]></title>
         <id>https://windhawk.net/mods/tray-hover-expand#691c1898c7f30d05c5f44e919692a0268fb815f1</id>
@@ -598,22 +658,6 @@ is licensed under GPLv3 for that reason.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.18.8]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#d2af22192847759b3de9d7df43f2364b75331c58</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-08-28T13:13:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>When a multi-page or animated image is kept instead of deleted, a notice now says so. Before, that only appeared in the log.</li>
-<li>More reliable folder watching on network or sync-backed locations that don't deliver change notifications.</li>
-<li>Copies large images using less memory.</li>
-<li>Deleting to the Recycle Bin works again for a watched folder whose path ends in a separator. The composed path was not in the form the shell accepts, so the delete failed and the file was kept.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>

@@ -5162,6 +5162,36 @@
         "version": "1.0.8"
       }
     },
+    "explorer-info-bar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788290388000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788290388000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "digART",
+        "compilerOptions": "-lole32 -lshell32 -luuid -lgdi32 -lcomctl32 -lpropsys -ladvapi32",
+        "description": "Enhances File Explorer's bottom info bar with drive, content, selection, and single-file details, with customizable styles and colors.",
+        "github": "https://github.com/digart11",
+        "homepage": "https://github.com/digart11/explorer-info-bar",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Explorer Info Bar+",
+        "version": "1.0.0"
+      }
+    },
     "explorer-name-windows": {
       "details": {
         "defaultSorting": 7460,

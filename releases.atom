@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-01T12:27:59.000Z</updated>
+    <updated>2026-09-01T19:19:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
+        <link href="https://windhawk.net/mods/explorer-info-bar"/>
+        <updated>2026-09-01T19:19:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerinfobar">Explorer Info Bar+</h1>
+<p>A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.</p>
+<p>Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.</p>
+<p>Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png" alt="Explorer Info Bar+ preview" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Drive free-space information</li>
+<li>Current folder content summary</li>
+<li>Folder count</li>
+<li>File count</li>
+<li>Immediate file size total</li>
+<li>Selection information</li>
+<li>Selected folders</li>
+<li>Selected files</li>
+<li>Selected file size</li>
+<li>Single-file details when available</li>
+<li>Real file extension</li>
+<li>Image resolution</li>
+<li>Video resolution</li>
+<li>Media duration</li>
+<li>Three display styles</li>
+<li>Simple</li>
+<li>Flat panes</li>
+<li>Soft cards</li>
+<li>Configurable section order</li>
+<li>Individual section visibility controls</li>
+<li>Custom text and panel colors</li>
+<li>Automatic theme-derived colors by default</li>
+<li>Works with File Explorer's native status area rather than replacing Explorer itself</li>
+</ul>
+<h2 id="compatibilitywhythismodisseparate">Compatibility / Why this mod is separate</h2>
+<p>Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic <code>msctls_statusbar32</code>-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.</p>
+<p>Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.</p>
+<p>Explorer Info Bar+ paints over the native status-row text, including output from Explorer Status Bar Metadata. Do not enable Explorer Status Bar Metadata at the same time because its output will be covered. When Explorer Status Bar Metadata is not used, Explorer Info Bar+'s optional Single File Details can provide file extension, dimensions, and duration when available.</p>
+<h2 id="examples">Examples</h2>
+<p>Typical information shown by the mod:</p>
+<pre><code class="text language-text">Drive D: 150.7GB free
+Content: 15 folders / 25 files (77.2MB)
+Selected: 2 folders / 4 files (571KB)
+</code></pre>
+<p>When one file is selected, additional details can appear:</p>
+<pre><code class="text language-text">.jpg (4032×3024)
+.jpeg (6000×4000)
+.mp4 (1920×1080, 01:23:43)
+.mp3 (00:03:47)
+.doc
+.pdf
+</code></pre>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Global Hotkey Mute Microphone + Floating Overlay 1.0.0]]></title>
         <id>https://windhawk.net/mods/mic-mute-hotkey-overlay#f7756870e7ed2e233d91b537cd96e01aefefaf11</id>
@@ -1362,39 +1422,6 @@ both target the same function and work out the origin handling.</p>]]></content>
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Window Activation from Stealing Virtual Desktop 0.3.14]]></title>
-        <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#bbaa6505ffc05ac4f3add9b22f0787565ec7ebfd</id>
-        <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
-        <updated>2026-08-20T17:55:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="preventwindowactivationfromstealingvirtualdesktop">Prevent Window Activation from Stealing Virtual Desktop</h1>
-<p>Take back control over your virtual desktops!</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif" alt="Screenshot" />
-<em>Effect of redirecting window activation</em></p>
-<p>Windows can switch you to another virtual desktop just because a window that was left open on that
-desktop is activated.</p>
-<p>Clicking a flashing taskbar button, following a notification, opening an app through its tray icon,
-or launching something that insists on reusing an existing window can all unexpectedly pull you away
-from your current desktop. This mod keeps you where you are and brings the activated window to you instead.</p>
-<p>If you don't know what "virtual desktop stealing" is, try this small experiment:</p>
-<ul>
-<li>Open Windhawk on your first virtual desktop.</li>
-<li>Switch to another virtual desktop.</li>
-<li>Click the Windhawk tray icon.</li>
-</ul>
-<p>Normally, Windows jumps back to the first desktop - not anymore with this mod.</p>
-<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right and
-Task View. The mod also remains compatible with <strong>Disable Virtual Desktop
-Transition Animation</strong>.</p>
-<h3 id="notes">Notes</h3>
-<p>Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
-shell interfaces, including the private IApplicationView layout, so future
-Windows updates may require adjustments.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
