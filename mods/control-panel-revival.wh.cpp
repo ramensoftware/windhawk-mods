@@ -24,7 +24,7 @@ to protect them from being redirected.
 
 **Note:** This mod does not reveal hidden Control Panel applets. It only
 restores applets that are already present in Control Panel but currently
-redirect to Settings.
+redirect to Settings(e.g troubleshooting,default programs,installed updates and more).
 
 ### Example CustomApplets configuration:
 ```yaml
@@ -40,6 +40,8 @@ redirect to Settings.
 ![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
 
 **Difference from other mods** Other mods hook this same function but within a new window, so they cannot intercept new applet redirects—such as those for troubleshooting, installed updates, default programs, and so on.
+
+**Known limitations**  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions
 
 **If there are any bugs in the mod, please report them to me**
 
