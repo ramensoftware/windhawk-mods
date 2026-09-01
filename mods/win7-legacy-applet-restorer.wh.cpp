@@ -51,7 +51,7 @@ The optional "In-place Personalization navigation" setting keeps "Desktop Backgr
 
 This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
+HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, it is recommended to use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
 BitLocker Drive Encryption, Tablet PC Settings, and Text to Speech are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attempting to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
