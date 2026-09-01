@@ -75,7 +75,7 @@ Additionally, the mod includes the **"Unhide legacy applets"** option (enabled b
 
 **The virtual entries stay as a fallback**. They are not deleted, only hidden, and they come back if the real applet is missing, not found, or not listed. This setting can never remove anything from Control Panel. In the normal case (mod enabled at logon/Explorer startup) at worst the virtual entry is used instead. If the mod is enabled or its settings are changed while Explorer is already running, shell32's Control Panel item list may have been built before the patch takes effect; the mod keeps re-asking the shell until it confirms the real applet, but until it does you may briefly see a duplicate entry (both the real applet and the virtual twin) rather than a fallback.
 
-The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
+The setting only decides **which entry Control Panel lists**. Where an item opens when clicked, it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
 
 **⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
 
@@ -196,9 +196,9 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   $name: Restore Windows 7 Category Task Links
   $description: This setting restores classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) as they appeared in Windows 7
 
-- inlinePersonalizationNavigation: true
+- inlinePersonalizationNavigation: false
   $name: In-place Personalization navigation
-  $description: This setting keeps "Desktop Background" and "Window Color" inside the same Control Panel window instead of opening the Settings app. It is recommended to close and reopen the applet after changing this setting.
+  $description: This setting keeps "Desktop Background" and "Window Color" inside the same Control Panel window instead of opening the Settings app. If you already use the "Settings to Control Panel" mod, ms-settings:personalization-background/colors are already redirected to these same classic pages there; the difference here is navigating to them in place, without closing and reopening the Control Panel window. Off by default, since it has not been confirmed to work on every tested build; it is recommended to close and reopen the applet after changing this setting.
 */
 // ==/WindhawkModSettings==
 
@@ -2010,17 +2010,11 @@ bool EnsureClassicTaskLinksFile() {
 
 
     static const char kClassicTaskLinks[] = R"xml(  <application id="{PERSONALIZATION_TASKS_APP_ID}">
-    <sh:task id="{TASK_THEME_ID}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
-    <sh:task id="{TASK_BG_ID}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
-    <sh:task id="{TASK_RES_ID}"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>
-    <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
+{APPEARANCE_TASKS_BLOCK}    <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
     <sh:task id="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"><sh:name>{SOUNDS}</sh:name><sh:keywords>sound;audio;effects</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,2</sh:command></sh:task>
     <sh:task id="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"><sh:name>{SCREENSAVER}</sh:name><sh:keywords>screen saver;screensaver</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL desk.cpl,,@screensaver</sh:command></sh:task>
     <category id="1">
-       <sh:task idref="{TASK_THEME_ID}"/>
-       <sh:task idref="{TASK_BG_ID}"/>
-       <sh:task idref="{TASK_RES_ID}"/>
-       <sh:task idref="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"/>
+{APPEARANCE_TASK_REFS_BLOCK}       <sh:task idref="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"/>
        <sh:task idref="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"/>
        <sh:task idref="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"/>
     </category>
@@ -2074,8 +2068,37 @@ bool EnsureClassicTaskLinksFile() {
         }
     };
     
+    // The three Appearance links (theme / background / resolution) are gated
+    // on enableCategoryAppearanceLinks wherever they might be emitted, not
+    // just in the standalone DISPLAY_APPLICATION_BLOCK below: kClassicTaskLinks
+    // used to include them unconditionally, which meant turning the setting
+    // off had no effect in the default configuration (restoreClassicTaskLinks
+    // on). The resolution link itself is additionally dropped whenever
+    // GetHomeResolutionCommand() comes back empty, which happens precisely
+    // when the Classic Display Control Panel Restorer is active and already
+    // contributes its own "Adjust resolution" link to the same category.
+    const std::string homeResolutionCommand = GetHomeResolutionCommand();
+    std::string appearanceTasksBlock; // <- This part has been kept as it is as removing the link would make the mod less accurate. I've tried to add a check but it's essentially useless as I have not experienced any duplicate entries (I've tested on Windows 10 21H2 and Windows 11 24H2 and a Windows 11 25H2 has confirmed this)
+    std::string appearanceTaskRefsBlock;
+    if (g_settings.enableCategoryAppearanceLinks.load()) {
+        appearanceTasksBlock =
+            "    <sh:task id=\"{TASK_THEME_ID}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
+            "    <sh:task id=\"{TASK_BG_ID}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n";
+        appearanceTaskRefsBlock =
+            "       <sh:task idref=\"{TASK_THEME_ID}\"/>\n"
+            "       <sh:task idref=\"{TASK_BG_ID}\"/>\n";
+        if (!homeResolutionCommand.empty()) {
+            appearanceTasksBlock +=
+                "    <sh:task id=\"{TASK_RES_ID}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>\n";
+            appearanceTaskRefsBlock +=
+                "       <sh:task idref=\"{TASK_RES_ID}\"/>\n";
+        }
+    }
+
     replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
                g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+    replaceAll("{APPEARANCE_TASKS_BLOCK}", appearanceTasksBlock.c_str());
+    replaceAll("{APPEARANCE_TASK_REFS_BLOCK}", appearanceTaskRefsBlock.c_str());
     // The five classic Personalization task links attach to the REAL
     // Personalization applet while the unhide feature unhides it (the virtual
     // twin is then suppressed, see VirtualTwinSuppressed), and to the
@@ -2282,15 +2305,14 @@ bool EnsureClassicTaskLinksFile() {
         // in the XML twice.
         std::string displayBlock;
         if (!ClassicPersonalizationBlockCoversHomeLinks()) {
+            // Reuses the same appearanceTasksBlock/appearanceTaskRefsBlock
+            // built above, so this standalone block and kClassicTaskLinks can
+            // never disagree about which of the three links are present.
             displayBlock =
-            "  <application id=\"{PERSONALIZATION_TASKS_APP_ID}\">\n"
-            "    <sh:task id=\"{TASK_THEME_ID}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
-            "    <sh:task id=\"{TASK_BG_ID}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
-            "    <sh:task id=\"{TASK_RES_ID}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>\n"
-            "    <category id=\"1\">\n"
-            "       <sh:task idref=\"{TASK_THEME_ID}\"/>\n"
-            "       <sh:task idref=\"{TASK_BG_ID}\"/>\n"
-            "       <sh:task idref=\"{TASK_RES_ID}\"/>\n"
+            "  <application id=\"{PERSONALIZATION_TASKS_APP_ID}\">\n" +
+            appearanceTasksBlock +
+            "    <category id=\"1\">\n" +
+            appearanceTaskRefsBlock +
             "    </category>\n"
             "  </application>";
         }
@@ -2316,7 +2338,9 @@ bool EnsureClassicTaskLinksFile() {
                originalHomeGuids ? kHomeTaskGuidBackground : kHomeTaskGuidBackgroundLegacy);
     replaceAll("{TASK_RES_ID}",
                originalHomeGuids ? kHomeTaskGuidResolution : kHomeTaskGuidResolutionLegacy);
-    const std::string homeResolutionCommand = GetHomeResolutionCommand();
+    // homeResolutionCommand was already computed above, before the
+    // appearance-links blocks were built, so both agree on whether the
+    // resolution link is present at all.
     replaceAll("{RESOLUTION_COMMAND}", homeResolutionCommand.c_str());
 
     replaceAll("{THEME}", texts->theme);
@@ -2601,7 +2625,10 @@ void InitDisplayNames() {
             Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
                    L"(no resource fallback); virtual entry not created");
     }
-    if (g_iscsiInitiatorExeExists.load()) {
+    if (g_iscsiInitiatorExeExists.load() && IsListedInControlPanelNameSpace(kIscsiInitiatorGuid)) {
+        Wh_Log(L"iSCSI Initiator: already listed in the Control Panel namespace; "
+               L"virtual entry not created to avoid a duplicate");
+    } else if (g_iscsiInitiatorExeExists.load()) {
         // No real, registered CLSID to copy from or re-launch through on
         // current Windows 11 builds (confirmed absent from HKCR\CLSID), so
         // this always falls to the resource fallback: name/icon come
@@ -2609,7 +2636,11 @@ void InitDisplayNames() {
         // Explorer already shows for that binary - safer than guessing an
         // internal string-table resource id we haven't verified), and the
         // open command launches iscsicpl.exe directly instead of the usual
-        // "explorer shell:::{realGuid}".
+        // "explorer shell:::{realGuid}". Note that ReadRealClsidNameAndIcon
+        // succeeding on kIscsiInitiatorGuid is itself a signal the real
+        // applet may be present, but the namespace check above is the
+        // authoritative "is it already listed?" guard, same as BitLocker /
+        // Tablet PC / Text to Speech use.
         if (!AddVirtualApplet(kIscsiInitiatorVirtualGuid, kIscsiInitiatorGuid, kCategorySystemSecurity,
                               &g_settings.enableIscsiInitiator,
                               L"@%SystemRoot%\\System32\\iscsicpl.dll,-5001",
@@ -2623,7 +2654,10 @@ void InitDisplayNames() {
                               L"iscsicpl.exe"))
             Wh_Log(L"Could not read iSCSI Initiator's name/icon; virtual entry not created");
     }
-    if (g_joyCplExists.load()) {
+    if (g_joyCplExists.load() && IsListedInControlPanelNameSpace(kGameControllersGuid)) {
+        Wh_Log(L"Game Controllers: already listed in the Control Panel namespace; "
+               L"virtual entry not created to avoid a duplicate");
+    } else if (g_joyCplExists.load()) {
         // Game Controllers: its legacy Control Panel CLSID ({259EF4B1-...}) is
         // no longer registered/activatable on current Windows 11 builds
         // (shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships
@@ -2634,7 +2668,9 @@ void InitDisplayNames() {
         // resource id is absent/wrong), so the classic gamepad icon is embedded
         // in the mod (base64 .ico) and used as the icon; g_joyIconFilePath is
         // decoded in Wh_ModInit. The open command launches joy.cpl through
-        // control.exe (same direct-binary pattern as the iSCSI entry).
+        // control.exe (same direct-binary pattern as the iSCSI entry). As with
+        // iSCSI above, the namespace check guards against builds where the
+        // real applet is still registered and listed.
         const std::wstring joyIcon = g_joyIconFilePath.empty()
             ? std::wstring(L"%SystemRoot%\\System32\\joy.cpl,1")
             : g_joyIconFilePath;
@@ -3037,10 +3073,26 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 }
             }
         } else if (cr.node == VNode::DefaultIcon) {
-            if (valueName.empty() && !a.iconValue.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = ProvideStringValue(lpData, lpcbData, a.iconValue);
-                return true;
+            if (valueName.empty()) {
+                // The Game Controllers icon is a temp file that can be deleted
+                // out from under a.iconValue by CleanupTempFiles() running in
+                // another process (icon path is a fixed, shared name used by
+                // both explorer.exe and control.exe; a late Wh_ModUninit from
+                // one process can delete the file another process already
+                // recreated). a.iconValue only captures the path once, at
+                // Wh_ModInit, so re-ensure the file lazily right here, the
+                // same way GetOrCreateClassicTaskLinksFilePath() already does
+                // for the task-links XML, instead of trusting a stale path.
+                std::wstring iconPath = a.iconValue;
+                if (a.guidLower == kGameControllersVirtualGuid) {
+                    std::wstring ensured = EnsureJoyControllerIconFile();
+                    if (!ensured.empty()) iconPath = ensured;
+                }
+                if (!iconPath.empty()) {
+                    if (lpType) *lpType = REG_SZ;
+                    outStatus = ProvideStringValue(lpData, lpcbData, iconPath);
+                    return true;
+                }
             }
         } else if (cr.node == VNode::OpenCommand) {
             if (valueName.empty()) {
@@ -4408,15 +4460,22 @@ HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* ps
     // Module gate before any FindResource/LoadResource/copy: the Personalization
     // markup lives in themecpl.dll; everything else is let through untouched
     // (and foreign UIFILEs are never loaded off the shell's UI-construction path).
+    // The resource is loaded from whichever of the three HINSTANCEs actually
+    // matched - LoadXmlResourceString used to always load from hInstance, so a
+    // match on hInstance2/hInstance3 alone would silently fail to load and the
+    // feature would quietly not apply.
+    HINSTANCE hThemecpl = nullptr;
+    if (IsThemecplInstance(hInstance)) hThemecpl = hInstance;
+    else if (IsThemecplInstance(hInstance2)) hThemecpl = hInstance2;
+    else if (IsThemecplInstance(hInstance3)) hThemecpl = hInstance3;
     if (!g_settings.inlinePersonalizationNavigation.load() || !DUIXmlParser_SetXML_Original ||
-        !(IsThemecplInstance(hInstance) || IsThemecplInstance(hInstance2) ||
-          IsThemecplInstance(hInstance3))) {
+        !hThemecpl) {
         return callOriginal();
     }
 
     try {
         std::wstring xml;
-        if (!LoadXmlResourceString(hInstance, pszResourceName, pszResourceType, xml) ||
+        if (!LoadXmlResourceString(hThemecpl, pszResourceName, pszResourceType, xml) ||
             !PersonalizationMarkupLooksRelevant(xml.c_str())) {
             return callOriginal();
         }
@@ -4428,7 +4487,15 @@ HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* ps
         // Same fallback as the SetXML hook: if the patched document is
         // rejected, reload the original resource instead of leaving the page
         // without any working action.
-        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        //
+        // Argument mapping: _SetXMLFromResource(pThis, lpName, lpType, hModule,
+        // param4, param5) loads the resource from hModule, while SetXML(xml,
+        // hInst, hInstParent) only takes two instances. hModule (hInstance) is
+        // the module the resource was loaded from, not one of the two SetXML
+        // wants - the (hInstance2, hInstance3) pair is the more likely
+        // correspondence to SetXML's (hInst, hInstParent), so that is what
+        // gets passed here instead of (hInstance, hInstance2).
+        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance2, hInstance3);
         if (FAILED(hr)) {
             Wh_Log(L"patched Personalization resource XML rejected (hr=0x%08lX); "
                    L"reloading the original resource", (unsigned long)hr);
