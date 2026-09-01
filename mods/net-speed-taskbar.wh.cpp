@@ -2,12 +2,12 @@
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
 // @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
-// @version     1.1
+// @version     1.3
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
 // @include     explorer.exe
-// @compilerOptions -lgdiplus -liphlpapi
+// @compilerOptions -lgdiplus -liphlpapi -lgdi32
 // @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
@@ -16,13 +16,23 @@
 /*
 # Taskbar Network Speed Indicator
 
-Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating widget that can be placed anywhere along the taskbar, featuring a real-time sparkline chart and multiple distinct visual layouts. It shows your current download and upload internet speed, refreshed every second.
+A free-floating widget docked to the taskbar, featuring a real-time sparkline
+chart and multiple visual layouts. Shows current download/upload speed,
+refreshed every second.
 
-![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-speed-indicator.gif)
+Runs as a dedicated, isolated `explorer.exe` helper process (not the real
+shell) using the "mods as tools" pattern, so a bug in it can't take down your
+actual desktop. It targets `explorer.exe` rather than `windhawk.exe` because
+the taskbar's own content lives in DWM's immersive Z-band
+(`ZBID_IMMERSIVE_NOTIFICATION`), and `CreateWindowInBand` -- the only way to
+place a window in that band -- appears to require the calling process to
+actually be an `explorer.exe` image.
+
+![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-internet-speed-mod.gif)
 
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
-- You can click right through it, so it won't get in the way of your taskbar buttons.
+- Click-through: it won't get in the way of your taskbar buttons.
 */
 // ==/WindhawkModReadme==
 
@@ -30,8 +40,6 @@ Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating w
 /*
 - theme: Minimal
   $name: Visual Theme
-  $description: >-
-    Select the widget's structural layout and style.
   $options:
     - Side-by-Side: Side-by-Side
     - Top-Down: Top-Down (Compact)
@@ -39,25 +47,18 @@ Unlike the existing "Taskbar Clock Customization" mod, this is a free-floating w
     - Minimal: Minimal (Text Only)
 - horizontalPosition: 10
   $name: Horizontal position (%)
-  $description: >-
-    Where the widget sits along the taskbar's width. 0 = left edge, 100 =
-    right edge, 50 = centered. Enter any value 0-100.
 - verticalNudge: 0
   $name: Vertical nudge (px)
-  $description: Fine-tune vertical centering within the taskbar, in pixels. Positive moves down.
 - updateIntervalMs: 1000
   $name: Update interval (ms)
-  $description: How often the speed reading refreshes.
 - fontSize: 13
   $name: Font size
 - opacity: 235
   $name: Opacity (0-255)
-  $description: Overall widget transparency. 255 = fully opaque.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <objbase.h>
 #include <gdiplus.h>
 #include <iphlpapi.h>
 #include <string>
@@ -76,6 +77,42 @@ using namespace Gdiplus;
 
 namespace {
 
+// ----------------------------------------------------------------------
+// CreateWindowInBand: undocumented user32.dll export. Places a window in
+// a specific DWM composition Z-band. ZBID_IMMERSIVE_NOTIFICATION is the
+// band Shell_TrayWnd's own content lives in on Windows 11 -- plain
+// HWND_TOPMOST windows (even from a separate process) live in a lower
+// band and cannot render over the taskbar's own surface. This API is
+// undocumented and not guaranteed stable across builds, so it's loaded
+// dynamically with a safe fallback.
+// ----------------------------------------------------------------------
+enum ZBID {
+    ZBID_DEFAULT = 0,
+    ZBID_DESKTOP = 1,
+    ZBID_UIACCESS = 2,
+    ZBID_IMMERSIVE_IHM = 3,
+    ZBID_IMMERSIVE_NOTIFICATION = 4,
+    ZBID_IMMERSIVE_APPCHROME = 5,
+    ZBID_IMMERSIVE_MOGO = 6,
+    ZBID_IMMERSIVE_EDGY = 7,
+    ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
+    ZBID_IMMERSIVE_INACTIVEDOCK = 9,
+    ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
+    ZBID_IMMERSIVE_ACTIVEDOCK = 11,
+    ZBID_IMMERSIVE_BACKGROUND = 12,
+    ZBID_IMMERSIVE_SEARCH = 13,
+    ZBID_GENUINE_WINDOWS = 14,
+    ZBID_IMMERSIVE_RESTRICTED = 15,
+    ZBID_SYSTEM_TOOLS = 16,
+    ZBID_LOCK = 17,
+    ZBID_ABOVELOCK_UX = 18,
+};
+
+typedef HWND(WINAPI* CreateWindowInBand_t)(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+    int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+    HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand);
+
 struct Settings {
     std::wstring theme;
     int horizontalPosition;
@@ -93,6 +130,7 @@ std::mutex g_wndLifecycleMutex;
 
 std::atomic<bool> g_posUpdatePending{false};
 std::atomic<bool> g_exiting{false};
+std::atomic<bool> g_usingBandedWindow{false};
 ULONG_PTR g_gdiplusToken = 0;
 constexpr UINT_PTR kTimerId = 1001;
 
@@ -103,15 +141,17 @@ HANDLE g_hExitEvent = nullptr;
 
 HWINEVENTHOOK g_hLocationHook = nullptr;
 HWINEVENTHOOK g_hDestroyHook = nullptr;
-DWORD g_taskbarPid = 0;
-DWORD g_taskbarTid = 0;
 HWND g_hCachedTaskbar = nullptr;
 
 RECT g_lastWidgetRect = {0, 0, 0, 0};
+int g_currentWidgetWidth = 0;
+int g_currentWidgetHeight = 0;
 
 ULONGLONG g_lastTick = 0;
 ULONG64 g_lastIn = 0;
 ULONG64 g_lastOut = 0;
+ULONG64 g_cumIn = 0;
+ULONG64 g_cumOut = 0;
 double g_downBps = 0.0;
 double g_upBps = 0.0;
 
@@ -136,7 +176,7 @@ struct GdiObjects {
     std::unique_ptr<Gdiplus::Pen> upChartPen;
 
     bool IsValid() const {
-        return font && largeFont && bgBrush && downBrush && upBrush && 
+        return font && largeFont && bgBrush && downBrush && upBrush &&
                shadowBrush && borderPen && dividerPen && downChartPen && upChartPen;
     }
 };
@@ -146,7 +186,7 @@ UINT g_currentDpi = 96;
 
 HINSTANCE GetCurrentModuleHandle() {
     HINSTANCE hInst = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | 
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&GetCurrentModuleHandle, &hInst);
     return hInst;
@@ -157,7 +197,7 @@ Settings GetSafeSettings() {
     return g_settings;
 }
 
-void LoadSettingsLocked() {
+void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings.theme = WindhawkUtils::StringSetting::make(L"theme").get();
     g_settings.horizontalPosition = std::clamp((int)Wh_GetIntSetting(L"horizontalPosition"), 0, 100);
@@ -175,11 +215,11 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
 
     newGdi->font = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize, FontStyleRegular, UnitPixel);
     newGdi->largeFont = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize * 1.3f, FontStyleBold, UnitPixel);
-    
+
     Color bgColor = Color(240, 18, 20, 22);
-    Color downColor = Color(255, 64, 169, 255); 
-    Color upColor = Color(255, 100, 230, 90);   
-    
+    Color downColor = Color(255, 64, 169, 255);
+    Color upColor = Color(255, 100, 230, 90);
+
     if (theme == L"Minimal") {
         bgColor = Color(0, 0, 0, 0);
         downColor = Color(255, 255, 255, 255);
@@ -194,12 +234,14 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
     newGdi->dividerPen = std::make_unique<Gdiplus::Pen>(Color(40, 255, 255, 255), 1.0f);
     newGdi->downChartPen = std::make_unique<Gdiplus::Pen>(downColor, 1.5f);
     newGdi->upChartPen = std::make_unique<Gdiplus::Pen>(upColor, 1.5f);
-    
+
     newGdi->downChartPen->SetLineJoin(LineJoinRound);
     newGdi->upChartPen->SetLineJoin(LineJoinRound);
 
     if (newGdi->IsValid()) {
         g_gdi = std::move(newGdi);
+    } else {
+        Wh_Log(L"RebuildGdiObjects: one or more GDI+ objects failed to construct");
     }
 }
 
@@ -218,18 +260,22 @@ void GetThemeDimensions(const std::wstring& theme, int& width, int& height) {
 bool GetTotalOctets(ULONG64* inOctets, ULONG64* outOctets) {
     ULONGLONG now = GetTickCount64();
     if (g_bestIfIndex == 0 || (now - g_lastRouteCheck) > 10000) {
-        IPAddr destAddr = 0x08080808; 
+        IPAddr destAddr = 0x08080808;
         DWORD oldIndex = g_bestIfIndex;
         if (GetBestInterface(destAddr, &g_bestIfIndex) != NO_ERROR) {
             g_bestIfIndex = 0;
         } else if (oldIndex != 0 && oldIndex != g_bestIfIndex) {
-            g_lastTick = 0; 
+            g_lastTick = 0;
         }
         g_lastRouteCheck = now;
     }
 
     if (g_bestIfIndex == 0) return false;
 
+    // Windhawk's bundled mingw headers only declare the older MIB_IFROW /
+    // GetIfEntry (32-bit counters), not MIB_IF_ROW2 / GetIfEntry2. The
+    // 32-bit wrap (~34s on a gigabit link) is handled explicitly in
+    // UpdateSpeedSample via a 64-bit running total.
     MIB_IFROW row{};
     row.dwIndex = g_bestIfIndex;
     if (GetIfEntry(&row) != NO_ERROR) {
@@ -258,22 +304,38 @@ std::wstring FormatSpeed(double bytesPerSec) {
 }
 
 void UpdateSpeedSample() {
-    ULONG64 in = 0, out = 0;
-    if (!GetTotalOctets(&in, &out)) {
+    ULONG64 rawIn = 0, rawOut = 0;
+    if (!GetTotalOctets(&rawIn, &rawOut)) {
         g_downBps = 0.0;
         g_upBps = 0.0;
         g_lastTick = 0;
     } else {
         ULONGLONG now = GetTickCount64();
-        if (g_lastTick != 0) {
+        bool discontinuity = (g_lastTick == 0);
+
+        if (discontinuity) {
+            g_cumIn = rawIn;
+            g_cumOut = rawOut;
+        } else {
+            auto accumulate = [](ULONG64& cumulative, ULONG64 rawSample) {
+                ULONG64 prevLow = cumulative & 0xFFFFFFFFULL;
+                ULONG64 delta = (rawSample >= prevLow)
+                                     ? (rawSample - prevLow)
+                                     : (0x100000000ULL - prevLow + rawSample);
+                cumulative += delta;
+            };
+            accumulate(g_cumIn, rawIn);
+            accumulate(g_cumOut, rawOut);
+
             double elapsedSec = (now - g_lastTick) / 1000.0;
             if (elapsedSec > 0.05) {
-                g_downBps = (in >= g_lastIn) ? (in - g_lastIn) / elapsedSec : 0.0;
-                g_upBps = (out >= g_lastOut) ? (out - g_lastOut) / elapsedSec : 0.0;
+                g_downBps = (double)(g_cumIn - g_lastIn) / elapsedSec;
+                g_upBps = (double)(g_cumOut - g_lastOut) / elapsedSec;
             }
         }
-        g_lastIn = in;
-        g_lastOut = out;
+
+        g_lastIn = g_cumIn;
+        g_lastOut = g_cumOut;
         g_lastTick = now;
     }
 
@@ -289,11 +351,14 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
     }
 
     RECT tbRect{};
-    if (!GetWindowRect(g_hCachedTaskbar, &tbRect)) return;
+    if (!GetWindowRect(g_hCachedTaskbar, &tbRect)) {
+        Wh_Log(L"RepositionWidget: GetWindowRect on taskbar failed, gle=%lu", GetLastError());
+        return;
+    }
 
     UINT dpi = GetDpiForWindow(g_hCachedTaskbar);
     if (dpi == 0) dpi = 96;
-    
+
     if (dpi != g_currentDpi || !g_gdi || !g_gdi->IsValid()) {
         g_currentDpi = dpi;
         RebuildGdiObjects(s.fontSize, s.theme, dpi);
@@ -304,6 +369,8 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
 
     int scaledWidth = MulDiv(baseW, dpi, 96);
     int scaledHeight = MulDiv(baseH, dpi, 96);
+    g_currentWidgetWidth = scaledWidth;
+    g_currentWidgetHeight = scaledHeight;
 
     int tbWidth = tbRect.right - tbRect.left;
     int tbHeight = tbRect.bottom - tbRect.top;
@@ -312,13 +379,19 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
     int x = tbRect.left + (int)((usableWidth * s.horizontalPosition) / 100.0);
     int y = tbRect.top + (tbHeight - scaledHeight) / 2 + s.verticalNudge;
 
-    UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
+    UINT flags = SWP_NOACTIVATE;
     if (!IsWindowVisible(hWnd)) flags |= SWP_SHOWWINDOW;
 
     RECT newRect = {x, y, x + scaledWidth, y + scaledHeight};
     if (memcmp(&g_lastWidgetRect, &newRect, sizeof(RECT)) != 0 || (flags & SWP_SHOWWINDOW)) {
-        SetWindowPos(hWnd, nullptr, x, y, scaledWidth, scaledHeight, flags);
+        HWND zOrderTarget = g_usingBandedWindow.load() ? HWND_TOP : HWND_TOPMOST;
+        if (!SetWindowPos(hWnd, zOrderTarget, x, y, scaledWidth, scaledHeight, flags)) {
+            Wh_Log(L"RepositionWidget: SetWindowPos failed, gle=%lu", GetLastError());
+        }
         g_lastWidgetRect = newRect;
+    } else if (!g_usingBandedWindow.load()) {
+        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
 
@@ -331,12 +404,12 @@ void AddRoundRect(GraphicsPath& path, const RectF& r, float d) {
 }
 
 void DrawSparkline(Graphics& g, Pen* pen, const std::vector<double>& hist, size_t head, RectF bounds) {
-    double maxVal = 1024.0; 
+    double maxVal = 1024.0;
     for (double v : hist) maxVal = std::max(maxVal, v);
-    
+
     PointF pts[kHistorySize];
     float step = bounds.Width / (float)(kHistorySize - 1);
-    
+
     for (size_t i = 0; i < kHistorySize; ++i) {
         size_t idx = (head + i) % kHistorySize;
         float x = bounds.X + (float)i * step;
@@ -346,24 +419,8 @@ void DrawSparkline(Graphics& g, Pen* pen, const std::vector<double>& hist, size_
     g.DrawLines(pen, pts, kHistorySize);
 }
 
-void PaintWidget(HWND hWnd) {
-    PAINTSTRUCT ps;
-    HDC hdc = BeginPaint(hWnd, &ps);
-    RECT rc;
-    GetClientRect(hWnd, &rc);
-
-    Graphics graphics(hdc);
-    graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-    graphics.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-    graphics.Clear(Color(0, 0, 0, 0));
-
-    if (!g_gdi || !g_gdi->IsValid()) {
-        EndPaint(hWnd, &ps);
-        return;
-    }
-
-    Settings s = GetSafeSettings();
-    RectF bounds(0.0f, 0.0f, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f);
+void PaintWidgetContent(Graphics& graphics, int width, int height, const Settings& s) {
+    RectF bounds(0.0f, 0.0f, (float)width - 1.0f, (float)height - 1.0f);
 
     if (s.theme != L"Minimal") {
         GraphicsPath path;
@@ -394,10 +451,10 @@ void PaintWidget(HWND hWnd) {
         format.SetAlignment(StringAlignmentNear);
         format.SetLineAlignment(StringAlignmentCenter);
         float halfH = h / 2.0f;
-        
+
         graphics.DrawString(L"\x2193", -1, g_gdi->font.get(), RectF(8, 0, 16, halfH), &format, g_gdi->downBrush.get());
         graphics.DrawString(strDown.c_str(), -1, g_gdi->font.get(), RectF(22, 0, w - 22, halfH), &format, g_gdi->downBrush.get());
-        
+
         graphics.DrawString(L"\x2191", -1, g_gdi->font.get(), RectF(8, halfH, 16, halfH), &format, g_gdi->upBrush.get());
         graphics.DrawString(strUp.c_str(), -1, g_gdi->font.get(), RectF(22, halfH, w - 22, halfH), &format, g_gdi->upBrush.get());
 
@@ -406,7 +463,7 @@ void PaintWidget(HWND hWnd) {
         format.SetLineAlignment(StringAlignmentCenter);
         float halfH = h / 2.0f;
         float chartW = w * 0.40f;
-        
+
         RectF chartDown(8.0f, 6.0f, chartW, halfH - 8.0f);
         DrawSparkline(graphics, g_gdi->downChartPen.get(), g_downHistory, g_historyIdx, chartDown);
         graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(chartW + 16, 0, w - chartW - 16, halfH), &format, g_gdi->downBrush.get());
@@ -426,8 +483,69 @@ void PaintWidget(HWND hWnd) {
         graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(halfW + 1, 1, halfW, h), &format, g_gdi->shadowBrush.get());
         graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(halfW, 0, halfW, h), &format, g_gdi->upBrush.get());
     }
+}
 
-    EndPaint(hWnd, &ps);
+void RenderWidget(HWND hWnd, int opacity) {
+    if (!IsWindowVisible(hWnd)) return;
+
+    int width = g_currentWidgetWidth;
+    int height = g_currentWidgetHeight;
+    if (width <= 0 || height <= 0 || !g_gdi || !g_gdi->IsValid()) return;
+
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBits = nullptr;
+    HBITMAP hBitmap = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+    if (hBitmap) {
+        HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
+
+        {
+            Graphics graphics(hdcMem);
+            graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+            graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
+            graphics.Clear(Color(0, 0, 0, 0));
+
+            if (g_gdi && g_gdi->IsValid()) {
+                Settings s = GetSafeSettings();
+                PaintWidgetContent(graphics, width, height, s);
+            }
+        }
+
+        RECT rc{};
+        POINT ptDst{0, 0};
+        if (GetWindowRect(hWnd, &rc)) {
+            ptDst.x = rc.left;
+            ptDst.y = rc.top;
+        }
+        SIZE sizeWnd{width, height};
+        POINT ptSrc{0, 0};
+
+        BLENDFUNCTION blend{};
+        blend.BlendOp = AC_SRC_OVER;
+        blend.SourceConstantAlpha = (BYTE)std::clamp(opacity, 0, 255);
+        blend.AlphaFormat = AC_SRC_ALPHA;
+
+        if (!UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &sizeWnd, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA)) {
+            Wh_Log(L"RenderWidget: UpdateLayeredWindow failed, gle=%lu", GetLastError());
+        }
+
+        SelectObject(hdcMem, hOldBitmap);
+        DeleteObject(hBitmap);
+    } else {
+        Wh_Log(L"RenderWidget: CreateDIBSection failed, gle=%lu", GetLastError());
+    }
+
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -437,26 +555,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RebuildGdiObjects(s.fontSize, s.theme, g_currentDpi);
             KillTimer(hWnd, kTimerId);
             SetTimer(hWnd, kTimerId, s.updateIntervalMs, nullptr);
-            SetLayeredWindowAttributes(hWnd, 0, (BYTE)s.opacity, LWA_ALPHA);
             RepositionWidget(hWnd, s);
-            InvalidateRect(hWnd, nullptr, FALSE);
+            RenderWidget(hWnd, s.opacity);
             return 0;
         }
         case WM_UPDATE_POSITION: {
             g_posUpdatePending.store(false);
-            RepositionWidget(hWnd, GetSafeSettings());
-            InvalidateRect(hWnd, nullptr, TRUE);
+            Settings s = GetSafeSettings();
+            RepositionWidget(hWnd, s);
+            RenderWidget(hWnd, s.opacity);
             return 0;
         }
         case WM_PAINT:
-            PaintWidget(hWnd);
+            ValidateRect(hWnd, nullptr);
             return 0;
         case WM_TIMER:
             if (wParam == kTimerId) {
                 UpdateSpeedSample();
                 if (g_hCachedTaskbar && IsWindow(g_hCachedTaskbar)) {
-                    RepositionWidget(hWnd, GetSafeSettings());
-                    InvalidateRect(hWnd, nullptr, FALSE);
+                    Settings s = GetSafeSettings();
+                    RepositionWidget(hWnd, s);
+                    RenderWidget(hWnd, s.opacity);
                 }
             }
             return 0;
@@ -467,13 +586,43 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DestroyWindow(hWnd);
             return 0;
         case WM_NCDESTROY: {
-            std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
-            g_hWnd.store(nullptr);
+            {
+                std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
+                g_hWnd.store(nullptr);
+                g_posUpdatePending.store(false);
+            }
             PostQuitMessage(0);
-            return 0;
+            break; // Let DefWindowProc handle cleanup
         }
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+HWND CreateBandedWidgetWindow(DWORD exStyle, LPCWSTR className, DWORD style,
+                               HINSTANCE hInstance) {
+    static CreateWindowInBand_t pCreateWindowInBand =
+        (CreateWindowInBand_t)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                              "CreateWindowInBand");
+
+    if (pCreateWindowInBand) {
+        HWND hwnd = pCreateWindowInBand(exStyle, className, L"", style, 0, 0,
+                                         1, 1, nullptr, nullptr, hInstance,
+                                         nullptr, ZBID_IMMERSIVE_NOTIFICATION);
+        if (hwnd) {
+            Wh_Log(L"CreateWindowInBand succeeded (ZBID_IMMERSIVE_NOTIFICATION)");
+            g_usingBandedWindow.store(true);
+            return hwnd;
+        }
+        Wh_Log(L"CreateWindowInBand failed, gle=%lu -- falling back to a "
+               L"plain topmost window", GetLastError());
+    } else {
+        Wh_Log(L"CreateWindowInBand not exported by user32.dll on this "
+               L"build -- falling back to a plain topmost window");
+    }
+
+    g_usingBandedWindow.store(false);
+    return CreateWindowExW(exStyle | WS_EX_TOPMOST, className, L"", style, 0,
+                            0, 1, 1, nullptr, nullptr, hInstance, nullptr);
 }
 
 DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
@@ -485,13 +634,12 @@ DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetCurrentModuleHandle();
     wc.hbrBackground = nullptr;
-    
-    wchar_t szClassName[64];
-    swprintf_s(szClassName, L"WindhawkNetSpeed_%lu", GetCurrentThreadId());
+    LPCWSTR szClassName = L"WindhawkNetSpeedWidget";
     wc.lpszClassName = szClassName;
-    
+
     if (!RegisterClassW(&wc)) {
-        return 0; 
+        Wh_Log(L"RegisterClassW failed, gle=%lu", GetLastError());
+        return 0;
     }
 
     while (!g_exiting.load()) {
@@ -503,47 +651,46 @@ DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
 
         DWORD pid = 0;
         DWORD tid = GetWindowThreadProcessId(hTaskbar, &pid);
-        
-        if (pid != GetCurrentProcessId()) {
-            if (WaitForSingleObject(g_hExitEvent, 2000) == WAIT_OBJECT_0) break;
-            continue;
-        }
 
         g_hCachedTaskbar = hTaskbar;
-        g_taskbarPid = pid;
-        g_taskbarTid = tid;
         memset(&g_lastWidgetRect, 0, sizeof(RECT));
+        g_posUpdatePending.store(false);
 
-        DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
-        
+        DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                         WS_EX_TRANSPARENT;
+
         HWND hwnd = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
             if (g_exiting.load()) break;
 
-            hwnd = CreateWindowExW(exStyle, szClassName, L"", WS_POPUP, 0, 0,
-                                   1, 1, hTaskbar, nullptr, wc.hInstance, nullptr);
-            if (!hwnd) {
-                if (WaitForSingleObject(g_hExitEvent, 1000) == WAIT_OBJECT_0) break;
-                continue;
+            hwnd = CreateBandedWidgetWindow(exStyle, szClassName, WS_POPUP, wc.hInstance);
+            if (hwnd) {
+                g_hWnd.store(hwnd);
             }
-            g_hWnd.store(hwnd);
         }
-        
+        if (!hwnd) {
+            Wh_Log(L"CreateWindowExW failed, gle=%lu", GetLastError());
+            if (WaitForSingleObject(g_hExitEvent, 1000) == WAIT_OBJECT_0) break;
+            continue;
+        }
+
+        Wh_Log(L"Widget created (banded=%d), taskbar pid=%lu tid=%lu",
+               (int)g_usingBandedWindow.load(), pid, tid);
         PostMessageW(hwnd, WM_UPDATE_SETTINGS, 0, 0);
 
-        g_hDestroyHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr, 
+        g_hDestroyHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr,
             [](HWINEVENTHOOK, DWORD, HWND hwndHook, LONG idObj, LONG, DWORD, DWORD) {
                 if (idObj == OBJID_WINDOW && hwndHook == g_hCachedTaskbar) {
                     g_hCachedTaskbar = nullptr;
                     HWND widget = g_hWnd.load();
                     if (widget) {
-                        PostMessageW(widget, WM_CLOSE, 0, 0); 
+                        PostMessageW(widget, WM_CLOSE, 0, 0);
                     }
                 }
             }, pid, tid, WINEVENT_OUTOFCONTEXT);
 
-        g_hLocationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, 
+        g_hLocationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
             [](HWINEVENTHOOK, DWORD, HWND hwndHook, LONG idObj, LONG, DWORD, DWORD) {
                 if (idObj == OBJID_WINDOW && hwndHook == g_hCachedTaskbar) {
                     HWND widget = g_hWnd.load();
@@ -557,11 +704,12 @@ DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
-        
+
         if (g_hLocationHook) { UnhookWinEvent(g_hLocationHook); g_hLocationHook = nullptr; }
         if (g_hDestroyHook) { UnhookWinEvent(g_hDestroyHook); g_hDestroyHook = nullptr; }
-        
+
         g_hCachedTaskbar = nullptr;
+        Wh_Log(L"Widget message loop exited, will retry if not shutting down");
     }
 
     UnregisterClassW(szClassName, wc.hInstance);
@@ -570,31 +718,45 @@ DWORD WINAPI WidgetMessageLoop(LPVOID lpParam) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
-    LoadSettingsLocked();
+BOOL WhTool_ModInit() {
+    LoadSettings();
 
     GdiplusStartupInput gdiplusStartupInput;
-    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok) {
+    Status gdiStatus = GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    if (gdiStatus != Ok) {
+        Wh_Log(L"GdiplusStartup failed, status=%d", (int)gdiStatus);
         return FALSE;
     }
 
     g_exiting.store(false);
     g_hExitEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hQueueReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hThread = CreateThread(nullptr, 0, WidgetMessageLoop, nullptr, 0, &g_threadId);
+    if (!g_hExitEvent || !g_hQueueReady) {
+        Wh_Log(L"CreateEventW failed, gle=%lu", GetLastError());
+        if (g_hExitEvent) { CloseHandle(g_hExitEvent); g_hExitEvent = nullptr; }
+        if (g_hQueueReady) { CloseHandle(g_hQueueReady); g_hQueueReady = nullptr; }
+        return FALSE;
+    }
 
-    return g_hThread != nullptr;
+    g_hThread = CreateThread(nullptr, 0, WidgetMessageLoop, nullptr, 0, &g_threadId);
+    if (!g_hThread) {
+        Wh_Log(L"CreateThread failed, gle=%lu", GetLastError());
+        return FALSE;
+    }
+
+    Wh_Log(L"WhTool_ModInit: worker thread started");
+    return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_exiting.store(true);
     if (g_hExitEvent) {
         SetEvent(g_hExitEvent);
     }
 
     if (g_hThread) {
-        WaitForSingleObject(g_hQueueReady, INFINITE); 
-        
+        WaitForSingleObject(g_hQueueReady, INFINITE);
+
         {
             std::lock_guard<std::mutex> lock(g_wndLifecycleMutex);
             HWND hwnd = g_hWnd.load();
@@ -602,9 +764,9 @@ void Wh_ModUninit() {
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
             }
         }
-        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0); 
-        
-        WaitForSingleObject(g_hThread, INFINITE);      
+        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = nullptr;
         g_threadId = 0;
@@ -620,6 +782,7 @@ void Wh_ModUninit() {
         g_hExitEvent = nullptr;
     }
 
+    // Released explicitly, BEFORE GdiplusShutdown.
     g_gdi.reset();
 
     if (g_gdiplusToken) {
@@ -628,8 +791,178 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
-    LoadSettingsLocked();
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
     HWND hwnd = g_hWnd.load();
     if (hwnd) PostMessageW(hwnd, WM_UPDATE_SETTINGS, 0, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to
+// other processes or hook other functions. Pasted verbatim from:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed, gle=%lu", GetLastError());
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
