@@ -4037,17 +4037,37 @@ namespace
         return true;
     }
 
+    bool CircleStateRecordsHaveSameIdentity(CircleState const &candidate,
+                                            CircleState const &state)
+    {
+        if (state.circleWindow)
+        {
+            return candidate.circleWindow == state.circleWindow;
+        }
+        if (state.progressWindow)
+        {
+            return candidate.progressWindow == state.progressWindow;
+        }
+        if (state.infoWindow)
+        {
+            return candidate.infoWindow == state.infoWindow;
+        }
+        return false;
+    }
+
     void EraseCircleStateRecord(CircleState const &state)
     {
         std::lock_guard<std::mutex> lock(g_circleMutex);
-        g_circles.erase(
-            std::remove_if(
-                g_circles.begin(), g_circles.end(),
-                [&state](CircleState const &candidate)
-                {
-                    return candidate.circleWindow == state.circleWindow;
-                }),
-            g_circles.end());
+        auto it = std::find_if(
+            g_circles.begin(), g_circles.end(),
+            [&state](CircleState const &candidate)
+            {
+                return CircleStateRecordsHaveSameIdentity(candidate, state);
+            });
+        if (it != g_circles.end())
+        {
+            g_circles.erase(it);
+        }
     }
 
     void RetainCleanupOnlyCircleState(CircleState state,
@@ -4062,7 +4082,7 @@ namespace
                 g_circles.begin(), g_circles.end(),
                 [&state](CircleState const &candidate)
                 {
-                    return candidate.circleWindow == state.circleWindow;
+                    return CircleStateRecordsHaveSameIdentity(candidate, state);
                 });
             if (it == g_circles.end())
             {
@@ -4089,6 +4109,11 @@ namespace
 
     void ForgetCircleWindow(HWND circleWindow)
     {
+        if (!circleWindow)
+        {
+            return;
+        }
+
         CircleState state{};
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
@@ -4096,7 +4121,8 @@ namespace
                 g_circles.begin(), g_circles.end(),
                 [circleWindow](CircleState const &candidate)
                 {
-                    return candidate.circleWindow == circleWindow;
+                    return candidate.circleWindow &&
+                           candidate.circleWindow == circleWindow;
                 });
             if (it == g_circles.end())
             {
@@ -4155,9 +4181,13 @@ namespace
                     return false;
                 }
             }
-            else
+            else if (state.circleWindow)
             {
                 ForgetCircleWindow(state.circleWindow);
+            }
+            else
+            {
+                EraseCircleStateRecord(state);
             }
         }
 
@@ -7182,9 +7212,10 @@ namespace
             // Provisional activation and normal tile cleanup retain their
             // CircleState until every callback-bearing resource is verified
             // gone. Retry such cleanup on each HWND's owning thread.
+            CircleState recordIdentity = state;
             if (CleanupCircleStateResources(&state, true))
             {
-                EraseCircleStateRecord(state);
+                EraseCircleStateRecord(recordIdentity);
             }
             else
             {
