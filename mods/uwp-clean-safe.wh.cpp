@@ -2,7 +2,7 @@
 // @id              uwp-clean-safe
 // @name            Safe UWP Process Cleanup
 // @description     Safely clean up idle ApplicationFrameHost processes without interfering with app launching.
-// @version         1.0
+// @version         1.1
 // @author          Abhinav Chitrey
 // @github          https://github.com/chitreyAbhinav
 // @include         ApplicationFrameHost.exe
@@ -12,13 +12,13 @@
 /*
 # Safe UWP Process Cleanup
 
-Safely cleans up idle ApplicationFrameHost.exe processes.
+Safely cleans up unused ApplicationFrameHost.exe processes.
 
 ## How it works
 
 - Only targets ApplicationFrameHost.exe.
-- Waits two minutes after the process starts.
-- Checks every 15 seconds.
+- Checks the process once when the mod loads.
+- Checks again when a window belonging to the process is closed.
 - Never terminates the process while it owns a visible window.
 - Performs a final safety check immediately before cleanup.
 
@@ -47,24 +47,22 @@ cleanup approach and targets only ApplicationFrameHost.exe.
 #include <atomic>
 
 // ============================================================
-// CONFIGURATION
-// ============================================================
-
-// Wait two minutes after ApplicationFrameHost.exe starts
-// before cleanup is considered.
-constexpr DWORD GRACE_PERIOD_MS = 120000;
-
-// Check every 15 seconds after the grace period.
-constexpr DWORD CHECK_INTERVAL_MS = 15000;
-
-// ============================================================
 // GLOBAL VARIABLES
 // ============================================================
 
 std::atomic<bool> g_stopWorker{ false };
 
 HANDLE g_stopEvent = nullptr;
+HANDLE g_checkEvent = nullptr;
 HANDLE g_workerThread = nullptr;
+
+// ============================================================
+// ORIGINAL FUNCTION
+// ============================================================
+
+using DestroyWindow_t = BOOL(WINAPI*)(HWND hWnd);
+
+DestroyWindow_t DestroyWindow_Original = nullptr;
 
 // ============================================================
 // WINDOW ENUMERATION DATA
@@ -97,8 +95,8 @@ BOOL CALLBACK EnumWindowsProc(
     if (processId != data->processId)
         return TRUE;
 
-    // If this process owns a visible window, it is currently
-    // being used and must not be terminated.
+    // If this process owns a visible window,
+    // it is currently being used.
     if (IsWindowVisible(hwnd))
     {
         data->hasVisibleWindow = true;
@@ -135,11 +133,44 @@ bool CurrentProcessHasVisibleWindow()
 bool IsSafeToCleanup()
 {
     // If ApplicationFrameHost currently owns a visible window,
-    // it is being used by an application.
+    // it is still being used by a UWP application.
     if (CurrentProcessHasVisibleWindow())
         return false;
 
     return true;
+}
+
+// ============================================================
+// REQUEST CLEANUP CHECK
+// ============================================================
+
+void RequestCleanupCheck()
+{
+    if (g_checkEvent)
+    {
+        SetEvent(g_checkEvent);
+    }
+}
+
+// ============================================================
+// DESTROYWINDOW HOOK
+// ============================================================
+
+BOOL WINAPI DestroyWindow_Hook(HWND hWnd)
+{
+    // Let Windows perform the actual window destruction first.
+    BOOL result =
+        DestroyWindow_Original(hWnd);
+
+    // Only request a check after the window has actually
+    // been destroyed.
+    //
+    // The worker performs the safety check outside of the
+    // hooked function to avoid terminating the process from
+    // inside DestroyWindow().
+    RequestCleanupCheck();
+
+    return result;
 }
 
 // ============================================================
@@ -148,84 +179,57 @@ bool IsSafeToCleanup()
 
 DWORD WINAPI WorkerThread(LPVOID)
 {
-    // Record when this ApplicationFrameHost process
-    // started running the mod.
-    const DWORD startTime = GetTickCount();
-
-    // ========================================================
-    // GRACE PERIOD
-    // ========================================================
+    HANDLE events[2] =
+    {
+        g_stopEvent,
+        g_checkEvent
+    };
 
     while (!g_stopWorker)
     {
-        DWORD elapsed =
-            GetTickCount() - startTime;
-
-        if (elapsed >= GRACE_PERIOD_MS)
-            break;
-
-        DWORD remaining =
-            GRACE_PERIOD_MS - elapsed;
-
-        DWORD waitTime =
-            (remaining < CHECK_INTERVAL_MS)
-                ? remaining
-                : CHECK_INTERVAL_MS;
-
         DWORD result =
-            WaitForSingleObject(
-                g_stopEvent,
-                waitTime);
-
-        // Mod was disabled/unloaded.
-        if (result == WAIT_OBJECT_0)
-            return 0;
-    }
-
-    // ========================================================
-    // CLEANUP LOOP
-    // ========================================================
-
-    while (!g_stopWorker)
-    {
-        // Wait before checking again.
-        //
-        // Using an event instead of Sleep() allows the thread
-        // to stop immediately when the mod is disabled.
-        DWORD result =
-            WaitForSingleObject(
-                g_stopEvent,
-                CHECK_INTERVAL_MS);
+            WaitForMultipleObjects(
+                2,
+                events,
+                FALSE,
+                INFINITE);
 
         // Mod was disabled/unloaded.
         if (result == WAIT_OBJECT_0)
             break;
 
-        // ----------------------------------------------------
-        // First safety check.
-        // ----------------------------------------------------
+        // Cleanup check requested.
+        if (result == WAIT_OBJECT_0 + 1)
+        {
+            // Reset the event before performing the check.
+            ResetEvent(g_checkEvent);
 
-        if (!IsSafeToCleanup())
-            continue;
+            // ------------------------------------------------
+            // First safety check.
+            // ------------------------------------------------
 
-        // ----------------------------------------------------
-        // Final safety check.
-        //
-        // This reduces the chance of terminating the process
-        // just as an application is opening a window.
-        // ----------------------------------------------------
+            if (!IsSafeToCleanup())
+                continue;
 
-        if (!IsSafeToCleanup())
-            continue;
+            // ------------------------------------------------
+            // Final safety check.
+            //
+            // This reduces the chance of cleaning up the
+            // process just as another window is appearing.
+            // ------------------------------------------------
 
-        // ----------------------------------------------------
-        // No visible window was found.
-        //
-        // This mod is loaded only into ApplicationFrameHost.exe,
-        // so ExitProcess() terminates only this target process.
-        // ----------------------------------------------------
+            if (!IsSafeToCleanup())
+                continue;
 
-        ExitProcess(0);
+            // ------------------------------------------------
+            // No visible window exists.
+            //
+            // This mod is loaded only into
+            // ApplicationFrameHost.exe.
+            // ------------------------------------------------
+
+            ExitProcess(0);
+        }
     }
 
     return 0;
@@ -239,7 +243,7 @@ BOOL Wh_ModInit()
 {
     g_stopWorker = false;
 
-    // Create a manual-reset event used to stop the worker.
+    // Create event used to stop the worker.
     g_stopEvent =
         CreateEventW(
             nullptr,
@@ -250,10 +254,24 @@ BOOL Wh_ModInit()
     if (!g_stopEvent)
         return FALSE;
 
+    // Create event used to request a cleanup check.
+    g_checkEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
+
+    if (!g_checkEvent)
+    {
+        CloseHandle(g_stopEvent);
+
+        g_stopEvent = nullptr;
+
+        return FALSE;
+    }
+
     // Start the worker thread.
-    //
-    // Wh_ModInit() is used instead of DllMain(), avoiding
-    // thread creation from inside DLL_PROCESS_ATTACH.
     g_workerThread =
         CreateThread(
             nullptr,
@@ -265,8 +283,45 @@ BOOL Wh_ModInit()
 
     if (!g_workerThread)
     {
+        CloseHandle(g_checkEvent);
         CloseHandle(g_stopEvent);
 
+        g_checkEvent = nullptr;
+        g_stopEvent = nullptr;
+
+        return FALSE;
+    }
+
+    // ========================================================
+    // INITIAL CHECK
+    // ========================================================
+
+    // Check the current state once when the mod loads.
+    RequestCleanupCheck();
+
+    // ========================================================
+    // INSTALL DESTROYWINDOW HOOK
+    // ========================================================
+
+    if (!Wh_SetFunctionHook(
+            (void*)DestroyWindow,
+            (void*)DestroyWindow_Hook,
+            (void**)&DestroyWindow_Original))
+    {
+        g_stopWorker = true;
+
+        SetEvent(g_stopEvent);
+
+        WaitForSingleObject(
+            g_workerThread,
+            3000);
+
+        CloseHandle(g_workerThread);
+        CloseHandle(g_checkEvent);
+        CloseHandle(g_stopEvent);
+
+        g_workerThread = nullptr;
+        g_checkEvent = nullptr;
         g_stopEvent = nullptr;
 
         return FALSE;
@@ -300,6 +355,14 @@ void Wh_ModUninit()
         CloseHandle(g_workerThread);
 
         g_workerThread = nullptr;
+    }
+
+    // Close the check event.
+    if (g_checkEvent)
+    {
+        CloseHandle(g_checkEvent);
+
+        g_checkEvent = nullptr;
     }
 
     // Close the stop event.
