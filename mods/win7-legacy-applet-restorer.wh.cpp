@@ -33,7 +33,7 @@ The mod also provides the ability to suppress obsolete or non-functional Control
 
 The optional "Restore Classic Task Links" setting restores the localized, classic task links for these sections in Category View.
 
-The optional "In-place Personalization navigation" setting keeps "Desktop Background" and "Window Color" inside the classic Control Panel window instead of opening the modern Settings app without modifiying system files.
+The optional "In-place Personalization navigation" setting keeps "Desktop Background" and "Window Color" inside the classic Control Panel window instead of opening the modern Settings app without modifying system files.
 
 ## Appearance Links on the Control Panel Home Page
 
@@ -60,6 +60,10 @@ The check is an ordinary registry read, so there is no coupling between the two 
 ## Screenshot of the sample restored Colors applet
 
 ![Color Applet](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/colorapplet.PNG)
+
+## Screenshot of the enhanced Control Panel homepage 
+
+![restoredmainpage](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredmainpage.PNG)
 
 ## Notes
 
