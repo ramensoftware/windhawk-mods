@@ -35,6 +35,20 @@ The optional "Restore Classic Task Links" setting restores the localized, classi
 
 The optional "In-place Personalization navigation" setting keeps "Desktop Background" and "Window Color" inside the classic Control Panel window instead of opening the modern Settings app without modifiying system files.
 
+## Appearance Links on the Control Panel Home Page
+
+The "Restore Category Appearance Links" setting restores the three classic links that Windows 7 showed under **Appearance and Personalization** on the Control Panel home page, and that Windows 10 and 11 leave empty:
+
+* **Change the theme** - this link opens the classic Personalization page.
+* **Change desktop background** - this link opens the Desktop Background page of that same Personalization page.
+* **Adjust screen resolution** - this link opens the classic Screen Resolution page when it is available, and the Settings display page otherwise.
+
+This mod restores three links that Microsoft removed from Windows. They show up where they should, in all the same languages, and you can search for them from the Control Panel. If they ever appear twice, just toggle the 'Use the original Microsoft identifiers' setting to fix it.
+
+"Adjust screen resolution" also picks its destination on its own, best target first: the classic **Screen Resolution** page when that applet is available (for example while the "Classic Display Control Panel Restorer" mod is active), the Display item otherwise, and the Settings app as a last resort, so the link never dead-ends.
+
+The check is an ordinary registry read, so there is no coupling between the two mods, and it is not done only once at startup: since Windhawk gives no ordering guarantee between mods, the target is re-checked right before Control Panel rebuilds its item list, and the task links are regenerated only when the answer actually changed. In practice this means enabling or disabling the Display mod is picked up on the next visit to Control Panel, without a thread, a timer or a restart.
+
 ## Screenshot of the Restored Applets
 
 ![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
@@ -51,7 +65,7 @@ The optional "In-place Personalization navigation" setting keeps "Desktop Backgr
 
 This mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.
 
-HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, it is recommended to use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
+HomeGroup is disabled by default, as the page was removed from Windows 11. To restore it, use the "Windows 11 HomeGroup Page Restorer" mod (https://windhawk.net/mods/win11-home-group-restorer).
 
 BitLocker Drive Encryption, Tablet PC Settings, and Text to Speech are configured to **Automatic** by default. Under this setting, they are added only if the applet exists on the system *and* Control Panel does not already display it, attempting to prevent duplicate entries because their visibility may vary based on the used Windows build.
 
@@ -153,6 +167,10 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
   $description: This setting restores the classic links "Change the theme", "Change desktop background", and "Adjust screen resolution" beneath the Appearance and Personalization category on the main Control Panel home page.
+
+- useOriginalHomeTaskGuids: true
+  $name: Use the original Microsoft identifiers for the home page links
+  $description: The Appearance and Personalization category of the Control Panel home page still asks shell32 for three task links that Microsoft stopped shipping, which is why that category is the only empty one. With this setting on, the three restored links reuse exactly those three identifiers and slot back into their original Windows 7 position and order. Turn it off only in the unlikely case the links appear twice.
 
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
@@ -275,6 +293,9 @@ struct Settings {
     // disappear from Control Panel: the fallback is always there.
     std::atomic<bool> unhideLegacyApplets;
     std::atomic<bool> enableCategoryAppearanceLinks;
+    // See the useOriginalHomeTaskGuids setting: chooses the identifiers used
+    // by the three Appearance links of the Control Panel home page.
+    std::atomic<bool> useOriginalHomeTaskGuids;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
     std::atomic<bool> suppressInfrared;
@@ -529,6 +550,12 @@ static HANDLE g_lazyDetectionStopEvent = nullptr;
 
 bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered, const wchar_t* logName);
 void InvalidateClassicTaskLinksFile();
+// Re-probes where the home page "Adjust screen resolution" link should go.
+void RefreshHomeResolutionTarget();
+// True when the classic 5-task Personalization block is emitted, in which
+// case it already carries the three Appearance links of the home page and the
+// separate block must not repeat the same application id.
+static bool ClassicPersonalizationBlockCoversHomeLinks();
 bool EnsureClassicTaskLinksFile();
 void RunLazyVirtualAppletDetection();
 void ConfirmUnhiddenAppletsVisible();
@@ -536,6 +563,123 @@ void RequestLazyVirtualAppletDetection();
 // Defined further below (near GetNamespaceClsids), but used inside
 // EnsureClassicTaskLinksFile()'s task-block assembly above its definition.
 static bool VirtualAppletPresent(const std::wstring& guid);
+
+// ---------------------------------------------------------------------------
+// Appearance links of the Control Panel home page
+//
+// The Category view home page does not invent its own links: it reads them
+// from the XML resource (type "XML", id 21) of shell32.dll, which on 1903 and
+// later physically lives in shell32.dll.mun. On every build from Windows 10
+// 1507 to Windows 11 24H2 that resource still contains
+//
+//     <category id="1">
+//       <sh:task idref="{B3206921-D53A-40D9-BA1A-BEA526A644A5}" />   theme
+//       <sh:task idref="{4A66B844-A291-4136-B5AC-1B48B3CAD99F}" />   background
+//       <sh:task idref="{F3321994-6E7E-4D9E-ABDC-768477BCF916}" />   resolution
+//     </category>
+//
+// but Microsoft deleted the three matching <sh:task> definitions, so those
+// references are dangling and Appearance and Personalization ends up being the
+// only category with no links. Reusing the same three identifiers for the
+// links this mod supplies puts them back into their original slot instead of
+// appending new ones somewhere else.
+// ---------------------------------------------------------------------------
+
+static const char kHomeTaskGuidTheme[]      = "{B3206921-D53A-40D9-BA1A-BEA526A644A5}";
+static const char kHomeTaskGuidBackground[] = "{4A66B844-A291-4136-B5AC-1B48B3CAD99F}";
+static const char kHomeTaskGuidResolution[] = "{F3321994-6E7E-4D9E-ABDC-768477BCF916}";
+
+// Previously used identifiers, kept as an opt-out.
+static const char kHomeTaskGuidThemeLegacy[]      = "{D4F4A001-0D35-4CB6-A21F-BC1661200001}";
+static const char kHomeTaskGuidBackgroundLegacy[] = "{D4F4A002-0D35-4CB6-A21F-BC1661200002}";
+static const char kHomeTaskGuidResolutionLegacy[] = "{D4F4A006-0D35-4CB6-A21F-BC1661200006}";
+
+static bool RegistryKeyExists(HKEY root, const wchar_t* subKey) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(root, subKey, 0, KEY_READ, &key) != ERROR_SUCCESS) return false;
+    if (key) RegCloseKey(key);
+    return true;
+}
+
+// True when the Windows 7 style Display applet {C555438B-...} is reachable,
+// which is the case while the "Classic Display Control Panel Restorer" mod is
+// active. That mod serves its registration in memory exactly like this one
+// does for its own applets, so an ordinary registry read sees it and no direct
+// coupling between the two mods is needed.
+static bool ClassicDisplayPageAvailable() {
+    static const wchar_t kNamespaceKey[] =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\"
+        L"{C555438B-3C23-4769-A71F-B6D3D9B6053A}";
+    if (RegistryKeyExists(HKEY_LOCAL_MACHINE, kNamespaceKey)) return true;
+    if (RegistryKeyExists(HKEY_CURRENT_USER, kNamespaceKey)) return true;
+    return RegistryKeyExists(
+        HKEY_CLASSES_ROOT,
+        L"CLSID\\{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Shell\\Open\\Command");
+}
+
+// Where "Adjust screen resolution" points to, best target first:
+//   1. the classic Screen Resolution page, when that applet is available;
+//   2. the Display item this mod already works with, when it is registered;
+//   3. the Settings app, so the link can never dead-end.
+static std::string ProbeHomeResolutionCommand() {
+    if (ClassicDisplayPageAvailable())
+        return "explorer.exe shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Settings";
+    if (RegistryKeyExists(HKEY_CLASSES_ROOT,
+                          L"CLSID\\{C55584F4-7C7F-44F2-9A6D-913076F34C6A}"))
+        return "explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}";
+    return "explorer.exe ms-settings:display";
+}
+
+// Anti-conflict handoff.
+//
+// The answer above can change while Explorer is already running: the classic
+// Display applet only becomes reachable once the mod that provides it has
+// initialised, and Windhawk gives no ordering guarantee between mods. Probing
+// once at startup would therefore bake a stale target into the generated task
+// file. Instead the probe is repeated, throttled, right before Control Panel
+// rebuilds its item list (the moment Explorer enumerates the Control Panel
+// namespace), and the task file is invalidated only when the answer actually
+// changed, so the regeneration cost is paid once per real change and never in
+// a loop. There is no thread, no timer and no direct call into the other mod.
+static std::mutex g_homeResolutionMutex;
+static std::string g_homeResolutionCommand;
+static std::atomic<ULONGLONG> g_homeResolutionLastTick{0};
+static const ULONGLONG kHomeResolutionThrottleMs = 2000;
+
+// Cached target used while the task-list XML is generated.
+static std::string GetHomeResolutionCommand() {
+    {
+        std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+        if (!g_homeResolutionCommand.empty()) return g_homeResolutionCommand;
+    }
+    std::string probed = ProbeHomeResolutionCommand();
+    std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+    if (g_homeResolutionCommand.empty()) g_homeResolutionCommand = probed;
+    return g_homeResolutionCommand;
+}
+
+// Re-probes and, only on a real change, drops the cached task file so the next
+// lookup regenerates it with the new target.
+void RefreshHomeResolutionTarget() {
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG last = g_homeResolutionLastTick.load(std::memory_order_relaxed);
+    if (last != 0 && now - last < kHomeResolutionThrottleMs) return;
+    g_homeResolutionLastTick.store(now, std::memory_order_relaxed);
+
+    std::string probed = ProbeHomeResolutionCommand();
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+        if (g_homeResolutionCommand != probed) {
+            g_homeResolutionCommand = probed;
+            changed = true;
+        }
+    }
+    if (!changed) return;
+
+    Wh_Log(L"Screen resolution link target changed, task links will be regenerated");
+    InvalidateClassicTaskLinksFile();
+}
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -1866,14 +2010,16 @@ bool EnsureClassicTaskLinksFile() {
 
 
     static const char kClassicTaskLinks[] = R"xml(  <application id="{PERSONALIZATION_TASKS_APP_ID}">
-    <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
-    <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
+    <sh:task id="{TASK_THEME_ID}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
+    <sh:task id="{TASK_BG_ID}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
+    <sh:task id="{TASK_RES_ID}"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
     <sh:task id="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"><sh:name>{SOUNDS}</sh:name><sh:keywords>sound;audio;effects</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,2</sh:command></sh:task>
     <sh:task id="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"><sh:name>{SCREENSAVER}</sh:name><sh:keywords>screen saver;screensaver</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL desk.cpl,,@screensaver</sh:command></sh:task>
     <category id="1">
-       <sh:task idref="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"/>
-       <sh:task idref="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"/>
+       <sh:task idref="{TASK_THEME_ID}"/>
+       <sh:task idref="{TASK_BG_ID}"/>
+       <sh:task idref="{TASK_RES_ID}"/>
        <sh:task idref="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"/>
        <sh:task idref="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"/>
        <sh:task idref="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"/>
@@ -2122,25 +2268,29 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
     if (g_settings.enableCategoryAppearanceLinks.load()) {
-        std::string displayBlock =
-            "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
-            "    <sh:task id=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}</sh:command></sh:task>\n"
+        // The three Appearance links of the Control Panel home page all hang
+        // off the Personalization applet, the same way the other classic task
+        // links do, because that is the applet Control Panel really
+        // enumerates in category 1. An <application> block bound to a CLSID
+        // the shell never enumerates is simply never read, which is why
+        // "Adjust screen resolution" used to be missing while the other two
+        // showed up.
+        //
+        // When the classic 5-task Personalization block is emitted it already
+        // carries these three links, so this block is only needed when that
+        // one is not there; emitting both would put the same application id
+        // in the XML twice.
+        std::string displayBlock;
+        if (!ClassicPersonalizationBlockCoversHomeLinks()) {
+            displayBlock =
+            "  <application id=\"{PERSONALIZATION_TASKS_APP_ID}\">\n"
+            "    <sh:task id=\"{TASK_THEME_ID}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
+            "    <sh:task id=\"{TASK_BG_ID}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
+            "    <sh:task id=\"{TASK_RES_ID}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>\n"
             "    <category id=\"1\">\n"
-            "       <sh:task idref=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"/>\n"
-            "    </category>\n"
-            "  </application>\n";
-        // The theme/background links also attach to the REAL Personalization
-        // applet. While the unhide feature unhides it, the 5-task
-        // Personalization block already covers it, so skip this second block
-        // to avoid a duplicate application id in the XML.
-        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
-            displayBlock +=
-            "  <application id=\"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\">\n"
-            "    <sh:task id=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
-            "    <sh:task id=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
-            "    <category id=\"1\">\n"
-            "       <sh:task idref=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"/>\n"
-            "       <sh:task idref=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"/>\n"
+            "       <sh:task idref=\"{TASK_THEME_ID}\"/>\n"
+            "       <sh:task idref=\"{TASK_BG_ID}\"/>\n"
+            "       <sh:task idref=\"{TASK_RES_ID}\"/>\n"
             "    </category>\n"
             "  </application>";
         }
@@ -2148,6 +2298,26 @@ bool EnsureClassicTaskLinksFile() {
     } else {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", "");
     }
+
+    // The Appearance-links block is assembled after the first
+    // {PERSONALIZATION_TASKS_APP_ID} pass, so resolve the token again here.
+    // replaceAll rescans the whole document, which makes this a no-op when
+    // that block was not emitted.
+    replaceAll("{PERSONALIZATION_TASKS_APP_ID}",
+        VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)
+            ? NarrowAscii(ToLower(kRealPersonalizationGuid)).c_str()
+            : NarrowAscii(ToLower(kPersonalizationGuid)).c_str());
+
+    // Identifiers and target of the three Appearance links of the home page.
+    const bool originalHomeGuids = g_settings.useOriginalHomeTaskGuids.load();
+    replaceAll("{TASK_THEME_ID}",
+               originalHomeGuids ? kHomeTaskGuidTheme : kHomeTaskGuidThemeLegacy);
+    replaceAll("{TASK_BG_ID}",
+               originalHomeGuids ? kHomeTaskGuidBackground : kHomeTaskGuidBackgroundLegacy);
+    replaceAll("{TASK_RES_ID}",
+               originalHomeGuids ? kHomeTaskGuidResolution : kHomeTaskGuidResolutionLegacy);
+    const std::string homeResolutionCommand = GetHomeResolutionCommand();
+    replaceAll("{RESOLUTION_COMMAND}", homeResolutionCommand.c_str());
 
     replaceAll("{THEME}", texts->theme);
     replaceAll("{BACKGROUND}", texts->desktopBackground);
@@ -2314,6 +2484,7 @@ void LoadSettings() {
         (AppletMode)g_settings.speechMode.load(), g_speechAutoDetected.load(),
         g_speechClsidRegistered.load(), L"Text to Speech"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
+    g_settings.useOriginalHomeTaskGuids.store(Wh_GetIntSetting(L"useOriginalHomeTaskGuids"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
     g_settings.suppressInfrared.store(Wh_GetIntSetting(L"suppressInfrared"));
@@ -2600,26 +2771,21 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
     // RealCplTaskUrl any more loosely than that would make TryProvideValue
     // hand Explorer XML with no matching block, leaving the real applet with
     // no task links at all instead of falling through to its stock ones.
-    if (EndsWith(lower, g_displayClsidSuffix) &&
-        g_settings.enableCategoryAppearanceLinks.load()) {
-        // The Display sub-block in DISPLAY_APPLICATION_BLOCK is emitted
-        // unconditionally whenever enableCategoryAppearanceLinks is on.
-        return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
-    }
     if (EndsWith(lower, g_realPersonalizationClsidSuffix)) {
         const bool personalizationRealShown = VirtualTwinSuppressed(
             g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization);
-        // The real Personalization CLSID gets an <application> block from
-        // one of two places, never both (see the comment above the
-        // Display block's personalization sub-block, which exists to avoid
-        // a duplicate application id): the classic 5-task Personalization
-        // block once the virtual twin is suppressed, or the Display block's
-        // theme/background sub-block while it is not.
+        // The real Personalization CLSID gets an <application> block from one
+        // of two places, never both (emitting both would repeat the same
+        // application id): the classic 5-task Personalization block, or the
+        // Appearance-links block that stands in for it when the classic task
+        // links are turned off. Either way the block only carries the real
+        // CLSID once the virtual twin is suppressed.
         const bool hasClassicBlock =
             g_settings.restoreClassicTaskLinks.load() && personalizationRealShown;
-        const bool hasDisplayBlock =
-            g_settings.enableCategoryAppearanceLinks.load() && !personalizationRealShown;
-        if (hasClassicBlock || hasDisplayBlock) {
+        const bool hasAppearanceBlock =
+            g_settings.enableCategoryAppearanceLinks.load() &&
+            !g_settings.restoreClassicTaskLinks.load() && personalizationRealShown;
+        if (hasClassicBlock || hasAppearanceBlock) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
         }
     }
@@ -3138,6 +3304,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
                                          lpClass, lpcchClass, lpftLastWriteTime);
         }
 
+        // Control Panel is about to rebuild its item list: this is the right
+        // moment to re-check where the screen resolution link should point.
+        RefreshHomeResolutionTarget();
+
         // Real entries are enumerated first; the injected virtual CLSIDs are
         // appended only once the real entries are exhausted, so callers that
         // size a loop from RegQueryInfoKeyW's real subkey count (which we do
@@ -3227,6 +3397,9 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
         const std::wstring path = g_keyTracker.GetPath(hKey);
         if (!IsNameSpaceParentKey(path))
             return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
+
+        // See RegEnumKeyExWHook: re-check the screen resolution link target.
+        RefreshHomeResolutionTarget();
 
         // See RegEnumKeyExWHook above: real entries first, virtual CLSIDs
         // appended after they're exhausted, so RegQueryInfoKeyW-based real
@@ -3634,6 +3807,10 @@ void* GetRegFunc(const char* name) {
     if (!hAdv) hAdv = LoadLibraryW(L"advapi32.dll");
     if (hAdv) { void* p = (void*)GetProcAddress(hAdv, name); if (p) return p; }
     return nullptr;
+}
+
+static bool ClassicPersonalizationBlockCoversHomeLinks() {
+    return g_settings.restoreClassicTaskLinks.load();
 }
 
 void InvalidateClassicTaskLinksFile() {
