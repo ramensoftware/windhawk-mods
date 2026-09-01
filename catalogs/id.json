@@ -10258,7 +10258,7 @@
           0
         ],
         "ratingUsers": 0,
-        "updated": 1787248518000,
+        "updated": 1788287216000,
         "users": 44
       },
       "metadata": {
@@ -10267,13 +10267,13 @@
         ],
         "author": "meteoni",
         "compilerOptions": "-lole32",
-        "description": "Redirect cross-desktop window activation to the current desktop.",
+        "description": "Summon existing windows to the current virtual desktop instead of pulling you away.",
         "github": "https://github.com/Meteony",
         "include": [
           "explorer.exe"
         ],
-        "name": "Prevent Window Activation from Stealing Virtual Desktop",
-        "version": "0.3.14"
+        "name": "Don't Pull Me to Another Desktop",
+        "version": "0.4.0"
       }
     },
     "prevista-explorer-statusbar": {
