@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-01T19:25:06.000Z</updated>
+    <updated>2026-09-01T20:53:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.0.1]]></title>
+        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#e01d0d0dbd6204804235831fd7f68821e4614028</id>
+        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
+        <updated>2026-09-01T20:53:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizerplus">Desktop Audio Visualizer Plus</h1>
+<p>Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.</p>
+<h2 id="features">Features</h2>
+<h3 id="audio">Audio</h3>
+<ul>
+<li>WASAPI loopback capture for system audio</li>
+<li>Optional per-application audio source</li>
+<li>1024-point FFT</li>
+<li>32 logarithmic frequency bands</li>
+<li>10-band custom EQ curve applied across the FFT bands ( Win 11 )</li>
+<li>Up to 256 rendered visual bars</li>
+<li>Auto-Gain normalization</li>
+<li>Attack / decay controls</li>
+<li>Optional CAVA-style smoothing</li>
+</ul>
+<h3 id="visualization">Visualization</h3>
+<ul>
+<li>Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types</li>
+<li>Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles</li>
+<li>Linear, Step, Cosine and Catmull-Rom interpolation</li>
+<li>Vertical and horizontal orientations</li>
+<li>Mirrored visualization pass</li>
+<li>Configurable bar count, width, spacing, height and corner radius</li>
+<li>Circular radius and start-angle controls</li>
+</ul>
+<h3 id="appearance">Appearance</h3>
+<ul>
+<li>Solid colors and gradients</li>
+<li>Album-derived colors and album gradients</li>
+<li>Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering</li>
+<li>Configurable opacity and dynamic opacity curves</li>
+<li>Dynamic color curves</li>
+<li>Bar borders with visualizer, album and custom hex colors</li>
+<li>Optional visualizer backgrounds: solid, gradient, album color and album gradient</li>
+</ul>
+<h3 id="lyrics">Lyrics</h3>
+<p>Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.</p>
+<p>The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.</p>
+<h2 id="lyricsdatasource">Lyrics data source</h2>
+<p>When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.</p>
+<h2 id="customeqwin11">Custom EQ ( Win 11 )</h2>
+<p>The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.</p>
+<h2 id="performance">Performance</h2>
+<p>The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.</p>
+<p>The visualizer frame rate can be configured independently. A value of <code>0</code> removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.</p>
+<p>Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.</p>
+<hr />
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/IOwofqV.png" alt="eq" /></p>
+<p><img src="https://i.imgur.com/TU0iXkc.gif" alt="1" /></p>
+<p><img src="https://i.imgur.com/8NllN1h.gif" alt="2" /></p>
+<p><img src="https://i.imgur.com/VNz6GOi.gif" alt="3" /></p>
+<p><img src="https://i.imgur.com/aqXU5Fa.gif" alt="4" /></p>
+<hr />
+<h1 id="credits">Credits</h1>
+<ul>
+<li><strong>NeiZ</strong> — Author and maintainer.</li>
+<li><strong>SuperSmile123</strong> — Contributor.</li>
+<li><strong>Salyts</strong> — Reference / upstream desktop audio visualizer implementation.</li>
+<li><strong>GR0UD</strong> — Upstream audio capture / FFT implementation reference.</li>
+</ul>
+<hr />
+<h2 id="reportabug">Report a Bug</h2>
+<p>Please report bugs and feature requests through the repository issue tracker: <a href="https://github.com/NeiZqwe/windhawk-mods/issues">Report an Issue on GitHub</a></p>]]></content>
+        <author>
+            <name>NeiZ</name>
+            <uri>https://github.com/NeiZqwe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Language Switcher Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-language-switcher-restorer#bdc548be9cea54ede4520004188e7c0db2c4017d</id>
+        <link href="https://windhawk.net/mods/win7-language-switcher-restorer"/>
+        <updated>2026-09-01T20:53:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781languageswitcherrestorer">Windows 7/8.1 Language Switcher Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic <strong>Windows 7 and 8.1 language switcher</strong> on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.</p>
+<p><strong>Important</strong>: This is a <strong>best-effort visual and functional recreation</strong>. The mod intercepts clicks on the taskbar language indicator, as well as the <strong>Win+Space</strong> and <strong>Alt+Shift / Ctrl+Shift</strong> keyboard shortcuts, replacing the modern Windows 10/11 flyout with a fast, lightweight, classic switcher.</p>
+<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h2 id="windows7theme">Windows 7 Theme</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7language.PNG" alt="win7language.PNG" /></p>
+<h2 id="windows81theme">Windows 8.1 Theme</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8language.PNG" alt="win8language.PNG" /></p>
+<h2 id="mainfeatures">Main Features</h2>
+<ul>
+<li><strong>Two classic styles</strong>: selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.</li>
+<li><strong>Light and dark theme support</strong>: automatic adaptation to system colors and theme.</li>
+<li><strong>Quick dismissal</strong>: closes upon clicking outside or pressing Escape.</li>
+<li><strong>Translated into 27 languages</strong>: fully localized interface.</li>
+<li><strong>Win+Space cycling</strong>: holding Win and pressing Space cycles through layouts without popping up the Start Menu.</li>
+<li><strong>Alt+Shift and Ctrl+Shift support</strong>: fast switching with auto-repeat suppression and clean modifier sequence tracking.</li>
+<li><strong>Robust Multi-Threaded Architecture</strong>: modeled on win7-network-flyout-recreation for rock-solid stability and clean reloading.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
         <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
@@ -632,40 +736,6 @@ is licensed under GPLv3 for that reason.</p>]]></content>
         <author>
             <name>Extremenis</name>
             <uri>https://github.com/Extremenis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#6dba9b6ab6c4c0cb8a723eb2fd06e74936a912d2</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2026-08-28T19:53:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>It's now possible to move items to different rows on the taskbar.</li>
-<li>Fixed compatibility with the latest Windows 11 update.</li>
-<li>Improved ARM64 compatibility.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.9]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#36710e43ba152f119a7adcfda85a8377507d65c8</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2026-08-28T15:33:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the following themes: OS26 Liquid Glass (Clear MacDock Compact), OS26 Liquid Glass (Dark MacDock Compact), Blob, Minecraft Hotbar, One UI 8.5 (Dock), One UI 8.5 (Taskbar).</li>
-<li>Updated most themes with compatibility fixes for the latest Windows 11 update and with other minor fixes and improvements.</li>
-<li>Several target controls can now be specified for the same styles by separating them with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt; Class#Name2</code>.</li>
-<li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
-<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
-<li>Improved the click-through taskbar option that didn't work correctly in some cases, e.g. it could stop working with auto-hide.</li>
-<li>Fixed handling for taskbar items which could appear with incorrect leftover styles.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

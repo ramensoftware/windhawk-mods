@@ -8876,6 +8876,35 @@
         "version": "1.2.1"
       }
     },
+    "neiz-supersmile-audio-visualizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788296016000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788296016000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "NeiZ",
+        "compilerOptions": "-lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp",
+        "description": "A highly customizable audio visualizer with synced lyrics, featuring optional network access to fetch lyrics from lrclib.net",
+        "github": "https://github.com/NeiZqwe",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Audio Visualizer Plus",
+        "version": "1.0.1"
+      }
+    },
     "neko-cat": {
       "details": {
         "defaultSorting": 1440,
@@ -16342,6 +16371,37 @@
         "name": "Windows 7 File Open/Save Toggle Bar Icon",
         "twitter": "https://twitter.com/Leym0naide",
         "version": "1.0"
+      }
+    },
+    "win7-language-switcher-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788295991000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788295991000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -lshlwapi -ladvapi32",
+        "description": "This mod restores the classic Windows 7 and Windows 8.1 language switcher on Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 7/8.1 Language Switcher Restorer",
+        "version": "1.0.0"
       }
     },
     "win7-legacy-applet-restorer": {

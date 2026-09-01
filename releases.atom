@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-01T19:25:06.000Z</updated>
+    <updated>2026-09-01T20:53:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.0.1]]></title>
+        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#e01d0d0dbd6204804235831fd7f68821e4614028</id>
+        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
+        <updated>2026-09-01T20:53:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizerplus">Desktop Audio Visualizer Plus</h1>
+<p>Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.</p>
+<h2 id="features">Features</h2>
+<h3 id="audio">Audio</h3>
+<ul>
+<li>WASAPI loopback capture for system audio</li>
+<li>Optional per-application audio source</li>
+<li>1024-point FFT</li>
+<li>32 logarithmic frequency bands</li>
+<li>10-band custom EQ curve applied across the FFT bands ( Win 11 )</li>
+<li>Up to 256 rendered visual bars</li>
+<li>Auto-Gain normalization</li>
+<li>Attack / decay controls</li>
+<li>Optional CAVA-style smoothing</li>
+</ul>
+<h3 id="visualization">Visualization</h3>
+<ul>
+<li>Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types</li>
+<li>Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles</li>
+<li>Linear, Step, Cosine and Catmull-Rom interpolation</li>
+<li>Vertical and horizontal orientations</li>
+<li>Mirrored visualization pass</li>
+<li>Configurable bar count, width, spacing, height and corner radius</li>
+<li>Circular radius and start-angle controls</li>
+</ul>
+<h3 id="appearance">Appearance</h3>
+<ul>
+<li>Solid colors and gradients</li>
+<li>Album-derived colors and album gradients</li>
+<li>Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering</li>
+<li>Configurable opacity and dynamic opacity curves</li>
+<li>Dynamic color curves</li>
+<li>Bar borders with visualizer, album and custom hex colors</li>
+<li>Optional visualizer backgrounds: solid, gradient, album color and album gradient</li>
+</ul>
+<h3 id="lyrics">Lyrics</h3>
+<p>Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.</p>
+<p>The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.</p>
+<h2 id="lyricsdatasource">Lyrics data source</h2>
+<p>When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.</p>
+<h2 id="customeqwin11">Custom EQ ( Win 11 )</h2>
+<p>The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.</p>
+<h2 id="performance">Performance</h2>
+<p>The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.</p>
+<p>The visualizer frame rate can be configured independently. A value of <code>0</code> removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.</p>
+<p>Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.</p>
+<hr />
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/IOwofqV.png" alt="eq" /></p>
+<p><img src="https://i.imgur.com/TU0iXkc.gif" alt="1" /></p>
+<p><img src="https://i.imgur.com/8NllN1h.gif" alt="2" /></p>
+<p><img src="https://i.imgur.com/VNz6GOi.gif" alt="3" /></p>
+<p><img src="https://i.imgur.com/aqXU5Fa.gif" alt="4" /></p>
+<hr />
+<h1 id="credits">Credits</h1>
+<ul>
+<li><strong>NeiZ</strong> — Author and maintainer.</li>
+<li><strong>SuperSmile123</strong> — Contributor.</li>
+<li><strong>Salyts</strong> — Reference / upstream desktop audio visualizer implementation.</li>
+<li><strong>GR0UD</strong> — Upstream audio capture / FFT implementation reference.</li>
+</ul>
+<hr />
+<h2 id="reportabug">Report a Bug</h2>
+<p>Please report bugs and feature requests through the repository issue tracker: <a href="https://github.com/NeiZqwe/windhawk-mods/issues">Report an Issue on GitHub</a></p>]]></content>
+        <author>
+            <name>NeiZ</name>
+            <uri>https://github.com/NeiZqwe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Language Switcher Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-language-switcher-restorer#bdc548be9cea54ede4520004188e7c0db2c4017d</id>
+        <link href="https://windhawk.net/mods/win7-language-switcher-restorer"/>
+        <updated>2026-09-01T20:53:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781languageswitcherrestorer">Windows 7/8.1 Language Switcher Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic <strong>Windows 7 and 8.1 language switcher</strong> on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.</p>
+<p><strong>Important</strong>: This is a <strong>best-effort visual and functional recreation</strong>. The mod intercepts clicks on the taskbar language indicator, as well as the <strong>Win+Space</strong> and <strong>Alt+Shift / Ctrl+Shift</strong> keyboard shortcuts, replacing the modern Windows 10/11 flyout with a fast, lightweight, classic switcher.</p>
+<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h2 id="windows7theme">Windows 7 Theme</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7language.PNG" alt="win7language.PNG" /></p>
+<h2 id="windows81theme">Windows 8.1 Theme</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8language.PNG" alt="win8language.PNG" /></p>
+<h2 id="mainfeatures">Main Features</h2>
+<ul>
+<li><strong>Two classic styles</strong>: selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.</li>
+<li><strong>Light and dark theme support</strong>: automatic adaptation to system colors and theme.</li>
+<li><strong>Quick dismissal</strong>: closes upon clicking outside or pressing Escape.</li>
+<li><strong>Translated into 27 languages</strong>: fully localized interface.</li>
+<li><strong>Win+Space cycling</strong>: holding Win and pressing Space cycles through layouts without popping up the Start Menu.</li>
+<li><strong>Alt+Shift and Ctrl+Shift support</strong>: fast switching with auto-repeat suppression and clean modifier sequence tracking.</li>
+<li><strong>Robust Multi-Threaded Architecture</strong>: modeled on win7-network-flyout-recreation for rock-solid stability and clean reloading.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
         <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
@@ -1300,99 +1404,6 @@ ordering, or application behavior.</p>]]></content>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Open With Dialog Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-open-with-dialog#5e1bd29d18f28fbb37e339b7b4ae6504a9f74ecf</id>
-        <link href="https://windhawk.net/mods/win7-open-with-dialog"/>
-        <updated>2026-08-22T15:17:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7openwithdialogrecreation">Windows 7 Open With Dialog Recreation</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic Windows Vista/7 <strong>Open with</strong> dialog on Windows 10 and
-11, replacing the modern picker with an accurate recreation of the original while
-keeping file and application paths completely untouched.</p>
-<p>The mod has been tested primarily on <strong>Windows 10 21H2</strong>, <strong>Windows 11 24H2</strong> and <strong>Windows 11 25H2</strong>. It is designed to work reliably and safely on both current and future Windows versions where possible.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/openwith.PNG" alt="openwith" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><p><strong>Accurate Vista/7-style dialog</strong>: The mod accurately recreates the classic layout with
-recommended and other-program groups, Browse button, Web search, and the Always
-use checkbox.</p></li>
-<li><p><strong>Open with context menu integration</strong>: The mod works correctly with the right-click
-"Open with" menu option.</p></li>
-<li><p><strong>Unknown-file double-click support</strong>: The mod handles double-clicks on files without
-a known association, just like the original.</p></li>
-<li><p><strong>Properties → Change handler</strong>: The mod applies a new default program when the user clicks
-"Change" from a file's Properties window, without opening the file.</p></li>
-<li><p><strong>Persistent defaults</strong>: When choosing "Always use", the selection is saved
-as the new default. If Windows protects a specific association, the mod will
-guide to the Default Apps settings.</p></li>
-<li><p><strong>Direct program launch</strong>: The mod opens the selected program immediately, avoiding
-unnecessary extra steps.</p></li>
-<li><p><strong>Extensionless file support</strong>: Works with files that have no extension, offering
-a selection of registered applications.</p></li>
-<li><p><strong>Fully localized interface</strong>: The mod is available in 120 languages (including English,
-Italian, Spanish, French, German, Portuguese, Russian, Chinese, Japanese, Korean,
-Turkish, Dutch, Polish and 107 more) with automatic system language detection.</p></li>
-<li><p><strong>Concise file display</strong>: For example, the mod shows <code>File: photo.png</code> instead of the full path for a
-cleaner look, while keeping the complete path for actual execution like in Windows Vista/7.</p></li>
-<li><p><strong>Optional description box</strong>: The description field can be hidden via settings
-(enabled by default), making the dialog more compact.</p></li>
-<li><p><strong>DPI-aware</strong>: The mod tries to support multiple DPIs where possible.</p></li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li><strong>Windows 10 or Windows 11 — x64 architecture</strong></li>
-<li><strong>Windhawk</strong> with injection enabled for <code>explorer.exe</code>, <code>OpenWith.exe</code> and
-<code>rundll32.exe</code></li>
-<li>The mod setting <strong>Enable the Windows 7-style picker</strong> must be turned on</li>
-</ul>
-<h2 id="note">Note</h2>
-<p>When explicitly selecting <strong>Always use</strong>, the mod saves the choice as the new
-default. All other selections open the file once without changing the system default.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>Single-file selection</strong>: Opening multiple files at once with "Open with" is
-not currently supported.</li>
-<li><strong>No default for extensionless files</strong>: Files without an extension can be opened,
-but there is no extension to associate permanently.</li>
-<li><strong>Composite extensions</strong>: Windows treats <code>archive.tar.gz</code> as a <code>.gz</code> file; the
-mod follows this same standard behavior.</li>
-<li><strong>Store/UWP applications</strong>: Some modern apps may not appear in the list or may
-not open correctly if their registration is incomplete.</li>
-<li><strong>Protected associations</strong>: Windows may prevent changing certain file associations.
-In these cases, please use the Windows Default Apps settings to make your changes.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>ReactOS</strong> — Inspiration</li>
-<li><strong>aubymori</strong> — Inspiration</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always Allow CTRL+SHIFT+ENTER 1.0.0]]></title>
-        <id>https://windhawk.net/mods/always-allow-ctrl-shift-enter#75b8cc7e573ac73efbc9e9df7fd768f3510a5530</id>
-        <link href="https://windhawk.net/mods/always-allow-ctrl-shift-enter"/>
-        <updated>2026-08-20T18:23:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alwaysallowctrlshiftenter">Always Allow CTRL+SHIFT+ENTER</h1>
-<p>The system run dialog (most commonly WIN+R) allows you to press CTRL+SHIFT+ENTER
-to run the command as administrator. However, this feature needs to be
-explicitly enabled by the program.</p>
-<p>This mod makes it always enabled, so that it works everywhere, including but not
-limited to:</p>
-<ul>
-<li>Explorer7</li>
-<li>Old versions of Task Manager</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
