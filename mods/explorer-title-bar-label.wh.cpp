@@ -45,7 +45,7 @@ Time can use **12-hour or 24-hour format**, with optional seconds.
 
 ## Compatibility
 
-This mod uses XAML diagnostics and may conflict with other File Explorer mods that also use XAML diagnostics.
+This mod uses XAML diagnostics, which allows only one diagnostics consumer per Explorer process. Known conflicts include **Windows 11 File Explorer Styler**, **ExplorerBlurMica**, **TranslucentTB**, and other tools/mods that attach to File Explorer XAML diagnostics. If another consumer blocks the connection, the label will not appear.
 */
 // ==/WindhawkModReadme==
 
@@ -178,12 +178,12 @@ This mod uses XAML diagnostics and may conflict with other File Explorer mods th
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.h>
+#include <winrt/Microsoft.UI.Content.h>
 
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cwctype>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -291,8 +291,9 @@ static std::atomic<uint64_t> g_settingsGeneration{1};
 static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
-static std::atomic<int> g_activeTextBlocks{0};
+static std::mutex g_connectorMutex;
 static HANDLE g_connectorThread = nullptr;
+static HANDLE g_tapReadyEvent = nullptr;
 
 // ============================================================================
 // Settings helpers
@@ -800,80 +801,23 @@ static std::wstring BuildDisplayText(const Settings& settings) {
 }
 
 // ============================================================================
-// Explorer HWND matching
+// Explorer HWND
 // ============================================================================
 
-struct ExplorerWindowMatchContext {
-    double targetWidthDip = 0.0;
-    double targetHeightDip = 0.0;
-    HWND bestHwnd = nullptr;
-    double bestScore = std::numeric_limits<double>::max();
-};
-
-static BOOL CALLBACK EnumExplorerWindowProc(HWND hwnd, LPARAM lParam) {
-    auto* context =
-        reinterpret_cast<ExplorerWindowMatchContext*>(lParam);
-    if (!context) {
-        return TRUE;
-    }
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) {
-        return TRUE;
-    }
-
-    wchar_t className[128]{};
-    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
-        wcscmp(className, L"CabinetWClass") != 0 || !IsWindowVisible(hwnd)) {
-        return TRUE;
-    }
-
-    RECT clientRect{};
-    if (!GetClientRect(hwnd, &clientRect)) {
-        return TRUE;
-    }
-
-    UINT dpi = GetDpiForWindow(hwnd);
-    if (dpi == 0) {
-        dpi = 96;
-    }
-
-    double widthPx = static_cast<double>(clientRect.right - clientRect.left);
-    double heightPx = static_cast<double>(clientRect.bottom - clientRect.top);
-    double widthDip = widthPx * 96.0 / static_cast<double>(dpi);
-    double heightDip = heightPx * 96.0 / static_cast<double>(dpi);
-
-    double widthDiff = std::abs(widthDip - context->targetWidthDip);
-    double heightDiff = std::abs(heightDip - context->targetHeightDip);
-    double score = widthDiff + heightDiff * 0.25;
-
-    if (score < context->bestScore) {
-        context->bestScore = score;
-        context->bestHwnd = hwnd;
-    }
-
-    return TRUE;
-}
-
-static HWND FindExplorerWindowForGrid(muxc::Grid const& grid) {
+static HWND GetExplorerWindowForElement(mux::FrameworkElement const& element) {
     try {
-        auto xamlRoot = grid.XamlRoot();
-        if (!xamlRoot) {
-            return nullptr;
+        if (auto xamlRoot = element.XamlRoot()) {
+            if (auto environment = xamlRoot.ContentIslandEnvironment()) {
+                return reinterpret_cast<HWND>(
+                    static_cast<uintptr_t>(environment.AppWindowId().Value));
+            }
         }
-
-        auto rootSize = xamlRoot.Size();
-        ExplorerWindowMatchContext context;
-        context.targetWidthDip = rootSize.Width;
-        context.targetHeightDip = rootSize.Height;
-
-        EnumWindows(EnumExplorerWindowProc,
-                    reinterpret_cast<LPARAM>(&context));
-        return context.bestHwnd;
     } catch (...) {
-        return nullptr;
+        Wh_Log(L"Failed to get Explorer window from XamlRoot hr=0x%08X",
+               winrt::to_hresult());
     }
+
+    return nullptr;
 }
 
 // ============================================================================
@@ -886,7 +830,7 @@ static void UpdateVerticalPosition(muxc::TextBlock const& text,
     double automaticCorrection = 0.0;
 
     try {
-        HWND hwnd = FindExplorerWindowForGrid(grid);
+        HWND hwnd = GetExplorerWindowForElement(grid);
 
         if (hwnd && IsZoomed(hwnd)) {
             auto transform = grid.TransformToVisual(nullptr);
@@ -894,11 +838,8 @@ static void UpdateVerticalPosition(muxc::TextBlock const& text,
             wf::Point position = transform.TransformPoint(origin);
 
             if (position.Y < 0.0f) {
-                // Explorer's maximized title grid sits slightly above the
-                // client origin. The extra 1.5 DIP matches the restored and
-                // maximized visual center on current Windows 11 builds.
                 automaticCorrection =
-                    -static_cast<double>(position.Y) + 1.5;
+                    -static_cast<double>(position.Y) + 0.0;
             }
         }
 
@@ -997,18 +938,214 @@ static HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
-// Keep the active-label count accurate even when an Explorer window is closed
-// before mod unload. The timer owns one shared instance of this helper, so the
-// counter is released when that timer/delegate is destroyed.
-struct ActiveLabelLifetime {
-    ActiveLabelLifetime() {
-        g_activeTextBlocks.fetch_add(1);
+// DispatcherTimer is rooted by the dispatcher queue while running, and its Tick
+// handler lives in this DLL. Keep each timer and every XAML event token in
+// thread-local state so teardown can stop and revoke them on the owning UI
+// thread before the mod is unloaded.
+struct LabelEntry {
+    winrt::weak_ref<muxc::TextBlock> text;
+    winrt::weak_ref<muxc::Grid> grid;
+    mux::DispatcherTimer timer{nullptr};
+    winrt::event_token tickToken{};
+    winrt::event_token sizeChangedToken{};
+    bool tickRegistered = false;
+    bool sizeChangedRegistered = false;
+    bool cleaned = false;
+
+    uint64_t seenGeneration = 0;
+    Settings currentSettings;
+    std::wstring lastText;
+};
+
+thread_local std::vector<std::shared_ptr<LabelEntry>> g_labelEntries;
+
+static void ReleaseLabelEntry(const std::shared_ptr<LabelEntry>& entry,
+                              bool removeElement) {
+    if (!entry || entry->cleaned) {
+        return;
     }
 
-    ~ActiveLabelLifetime() {
-        g_activeTextBlocks.fetch_sub(1);
+    entry->cleaned = true;
+
+    try {
+        if (entry->timer) {
+            entry->timer.Stop();
+            if (entry->tickRegistered) {
+                entry->timer.Tick(entry->tickToken);
+                entry->tickRegistered = false;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Failed to release title-bar timer hr=0x%08X",
+               winrt::to_hresult());
     }
-};
+
+    auto grid = entry->grid.get();
+    if (grid && entry->sizeChangedRegistered) {
+        try {
+            grid.SizeChanged(entry->sizeChangedToken);
+            entry->sizeChangedRegistered = false;
+        } catch (...) {
+            Wh_Log(L"Failed to revoke SizeChanged hr=0x%08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    if (removeElement) {
+        auto text = entry->text.get();
+        if (grid && text) {
+            try {
+                auto children = grid.Children();
+                uint32_t index{};
+                if (children.IndexOf(text, index)) {
+                    children.RemoveAt(index);
+                }
+            } catch (...) {
+                Wh_Log(L"Failed to remove title-bar label hr=0x%08X",
+                       winrt::to_hresult());
+            }
+        }
+    }
+
+}
+
+static void PruneReleasedLabelEntries() {
+    for (auto it = g_labelEntries.begin(); it != g_labelEntries.end();) {
+        auto& entry = *it;
+
+        if (!entry->cleaned && !entry->text.get()) {
+            ReleaseLabelEntry(entry, false);
+        }
+
+        if (entry->cleaned) {
+            it = g_labelEntries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+static void RemoveLabelsForCurrentThread() {
+    std::vector<std::shared_ptr<LabelEntry>> taken;
+    taken.swap(g_labelEntries);
+
+    for (auto& entry : taken) {
+        ReleaseLabelEntry(entry, true);
+    }
+}
+
+static bool IsFileExplorerWindow(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    DWORD processId = 0;
+    if (!GetWindowThreadProcessId(hwnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return false;
+    }
+
+    wchar_t className[64]{};
+    return GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+           _wcsicmp(className, L"CabinetWClass") == 0;
+}
+
+static std::vector<HWND> GetFileExplorerWindows() {
+    std::vector<HWND> windows;
+
+    EnumWindows(
+        [](HWND hwnd, LPARAM lParam) -> BOOL {
+            auto& windows =
+                *reinterpret_cast<std::vector<HWND>*>(lParam);
+            if (IsFileExplorerWindow(hwnd)) {
+                windows.push_back(hwnd);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&windows));
+
+    return windows;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+static bool RunFromWindowThread(HWND hwnd,
+                                RunFromWindowThreadProc_t proc,
+                                PVOID procParam) {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RunParam {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!threadId) {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == message) {
+                    auto* param =
+                        reinterpret_cast<RunParam*>(cwp->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RunParam param{proc, procParam};
+    SendMessageW(hwnd, message, 0, reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+static void EnsureConnectorStarted();
+
+// Connect only after a real File Explorer top-level window exists. This avoids
+// occupying the XAML diagnostics slot in shell-only explorer.exe processes and
+// means a File Explorer window opened long after login still triggers setup.
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle,
+                                        LPCWSTR className,
+                                        LPCWSTR windowName,
+                                        DWORD style,
+                                        int x,
+                                        int y,
+                                        int width,
+                                        int height,
+                                        HWND parent,
+                                        HMENU menu,
+                                        HINSTANCE instance,
+                                        PVOID param) {
+    HWND hwnd = CreateWindowExW_Original(
+        exStyle, className, windowName, style, x, y, width, height, parent,
+        menu, instance, param);
+
+    if (hwnd && !g_unloading.load() && IsFileExplorerWindow(hwnd)) {
+        EnsureConnectorStarted();
+    }
+
+    return hwnd;
+}
 
 // ============================================================================
 // Visual Tree Watcher
@@ -1106,7 +1243,8 @@ private:
         }
 
         auto frameworkElement = inspectable.try_as<mux::FrameworkElement>();
-        if (!frameworkElement || frameworkElement.Name() != L"TabContainerGrid") {
+        if (!frameworkElement ||
+            frameworkElement.Name() != L"TabContainerGrid") {
             return;
         }
 
@@ -1138,6 +1276,8 @@ private:
             return;
         }
 
+        PruneReleasedLabelEntries();
+
         int32_t targetColumn = muxc::Grid::GetColumn(rightAnchor);
         int32_t targetRow = muxc::Grid::GetRow(rightAnchor);
 
@@ -1154,16 +1294,25 @@ private:
         UpdateVerticalPosition(text, grid,
                                initialSnapshot.settings.verticalOffset);
 
-        auto weakSizeText = winrt::make_weak(text);
-        auto weakSizeGrid = winrt::make_weak(grid);
+        auto entry = std::make_shared<LabelEntry>();
+        entry->text = winrt::make_weak(text);
+        entry->grid = winrt::make_weak(grid);
+        entry->seenGeneration = initialSnapshot.generation;
+        entry->currentSettings = initialSnapshot.settings;
+        entry->lastText = BuildDisplayText(initialSnapshot.settings);
 
-        winrt::event_token sizeChangedToken = grid.SizeChanged(
-            [weakSizeText, weakSizeGrid](
-                auto const&, mux::SizeChangedEventArgs const&) {
-                auto text = weakSizeText.get();
-                auto grid = weakSizeGrid.get();
+        std::weak_ptr<LabelEntry> weakEntry = entry;
 
-                if (!text || !grid || g_unloading.load()) {
+        entry->sizeChangedToken = grid.SizeChanged(
+            [weakEntry](auto const&, mux::SizeChangedEventArgs const&) {
+                auto entry = weakEntry.lock();
+                if (!entry || entry->cleaned || g_unloading.load()) {
+                    return;
+                }
+
+                auto text = entry->text.get();
+                auto grid = entry->grid.get();
+                if (!text || !grid) {
                     return;
                 }
 
@@ -1171,115 +1320,62 @@ private:
                 UpdateVerticalPosition(text, grid,
                                        snapshot.settings.verticalOffset);
             });
-
-        auto sizeChangedTokenHolder =
-            std::make_shared<winrt::event_token>(sizeChangedToken);
+        entry->sizeChangedRegistered = true;
 
         mux::DispatcherTimer timer;
+        timer.Interval(std::chrono::seconds(1));
 
-        // Poll unload quickly so disabling the mod removes the injected label
-        // almost immediately. Normal date/time rendering is still throttled to
-        // once per second below, so the faster timer doesn't rebuild the label
-        // text ten times per second.
-        timer.Interval(std::chrono::milliseconds(100));
-
-        auto weakText = winrt::make_weak(text);
-        auto weakGrid = winrt::make_weak(grid);
-        auto weakTimer = winrt::make_weak(timer);
-        auto seenGeneration =
-            std::make_shared<uint64_t>(initialSnapshot.generation);
-        auto currentSettings =
-            std::make_shared<Settings>(initialSnapshot.settings);
-        auto lastText = std::make_shared<std::wstring>(
-            BuildDisplayText(initialSnapshot.settings));
-        auto lastClockSecond = std::make_shared<ULONGLONG>(
-            GetTickCount64() / 1000);
-        auto activeLifetime = std::make_shared<ActiveLabelLifetime>();
-
-        timer.Tick([weakText, weakGrid, weakTimer, seenGeneration,
-                    currentSettings, lastText, lastClockSecond,
-                    activeLifetime, sizeChangedTokenHolder](auto const&,
-                                                            auto const&) {
-            // The capture itself owns the active-label lifetime token.
-            (void)activeLifetime;
-
-            auto text = weakText.get();
-            auto grid = weakGrid.get();
-            auto timer = weakTimer.get();
-
-            if (!text) {
-                if (timer) {
-                    timer.Stop();
-                }
-                return;
-            }
-
-            if (g_unloading.load()) {
-                if (timer) {
-                    timer.Stop();
+        entry->timer = timer;
+        entry->tickToken = timer.Tick(
+            [weakEntry](auto const&, auto const&) {
+                auto entry = weakEntry.lock();
+                if (!entry || entry->cleaned) {
+                    return;
                 }
 
-                if (grid) {
-                    try {
-                        grid.SizeChanged(*sizeChangedTokenHolder);
-                    } catch (...) {
-                    }
+                auto text = entry->text.get();
+                if (!text) {
+                    ReleaseLabelEntry(entry, false);
+                    return;
+                }
 
-                    try {
-                        auto children = grid.Children();
-                        uint32_t index{};
-                        if (children.IndexOf(text, index)) {
-                            children.RemoveAt(index);
-                        }
-                    } catch (...) {
+                if (g_unloading.load()) {
+                    ReleaseLabelEntry(entry, true);
+                    return;
+                }
+
+                uint64_t generation =
+                    g_settingsGeneration.load(std::memory_order_acquire);
+                bool settingsChanged =
+                    generation != entry->seenGeneration;
+
+                if (settingsChanged) {
+                    SettingsSnapshot snapshot = GetSettingsSnapshot();
+                    entry->seenGeneration = snapshot.generation;
+                    entry->currentSettings = snapshot.settings;
+
+                    ApplyTextSettings(text, entry->currentSettings);
+                    entry->lastText =
+                        BuildDisplayText(entry->currentSettings);
+
+                    if (auto grid = entry->grid.get()) {
+                        UpdateVerticalPosition(
+                            text, grid,
+                            entry->currentSettings.verticalOffset);
                     }
                 }
 
-                try {
-                    text.Tag(nullptr);
-                } catch (...) {
+                std::wstring current =
+                    BuildDisplayText(entry->currentSettings);
+                if (current != entry->lastText) {
+                    text.Text(current);
+                    entry->lastText = std::move(current);
                 }
+            });
+        entry->tickRegistered = true;
 
-                return;
-            }
-
-            uint64_t generation =
-                g_settingsGeneration.load(std::memory_order_acquire);
-            bool settingsChanged = generation != *seenGeneration;
-
-            if (settingsChanged) {
-                SettingsSnapshot snapshot = GetSettingsSnapshot();
-                *seenGeneration = snapshot.generation;
-                *currentSettings = snapshot.settings;
-
-                ApplyTextSettings(text, *currentSettings);
-                *lastText = BuildDisplayText(*currentSettings);
-
-                if (grid) {
-                    UpdateVerticalPosition(
-                        text, grid, currentSettings->verticalOffset);
-                }
-            }
-
-            ULONGLONG clockSecond = GetTickCount64() / 1000;
-            if (clockSecond == *lastClockSecond && !settingsChanged) {
-                return;
-            }
-            *lastClockSecond = clockSecond;
-
-            std::wstring current = BuildDisplayText(*currentSettings);
-            if (current != *lastText) {
-                text.Text(current);
-                *lastText = std::move(current);
-            }
-        });
-
+        g_labelEntries.push_back(entry);
         timer.Start();
-
-        // Keep the DispatcherTimer alive for as long as the injected label is
-        // alive. The Tick handler only keeps weak references back to the XAML
-        // objects, avoiding a strong reference cycle.
-        text.Tag(timer);
     }
 
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
@@ -1336,7 +1432,7 @@ public:
 
             m_site.copy_from(site);
 
-            if (m_site) {
+            if (m_site && !g_unloading.load()) {
                 HMODULE module = GetCurrentModuleHandle();
                 if (module) {
                     FreeLibrary(module);
@@ -1344,6 +1440,10 @@ public:
 
                 g_visualTreeWatcher =
                     winrt::make_self<VisualTreeWatcher>(m_site);
+
+                if (g_tapReadyEvent) {
+                    SetEvent(g_tapReadyEvent);
+                }
             }
 
             return S_OK;
@@ -1496,41 +1596,103 @@ static bool SleepWhileLoaded(DWORD milliseconds) {
 }
 
 static DWORD WINAPI ConnectorThread(LPVOID) {
-    for (int attempt = 1; attempt <= 60 && !g_unloading.load(); ++attempt) {
+    // This thread is created only after a real File Explorer window exists.
+    // Wait as long as needed for WinUI to load instead of giving up a fixed
+    // number of seconds after explorer.exe starts.
+    while (!g_unloading.load()) {
         HMODULE framework =
             GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll");
 
         if (!framework) {
-            if (!SleepWhileLoaded(500)) {
-                break;
+            if (!SleepWhileLoaded(100)) {
+                return 0;
             }
             continue;
         }
 
         HRESULT hr = ConnectToExplorerXaml();
         if (SUCCEEDED(hr)) {
-            Wh_Log(L"Connected to Explorer XAML diagnostics");
+            // Some XAML-diagnostics consumers intentionally return S_OK while
+            // blocking the caller. Only report success after our TAP's SetSite
+            // actually runs.
+            DWORD waitResult =
+                g_tapReadyEvent
+                    ? WaitForSingleObject(g_tapReadyEvent, 2000)
+                    : WAIT_FAILED;
+
+            if (waitResult == WAIT_OBJECT_0) {
+                Wh_Log(L"Connected to Explorer XAML diagnostics");
+            } else if (!g_unloading.load()) {
+                Wh_Log(
+                    L"XAML diagnostics returned success, but the title-bar "
+                    L"TAP was not initialized. Another XAML diagnostics "
+                    L"consumer may have blocked the connection.");
+            }
+
             return 0;
         }
 
         if (g_unloading.load()) {
-            break;
+            return 0;
         }
 
-        if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            if (!SleepWhileLoaded(500)) {
-                break;
+        if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND) ||
+            hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND)) {
+            if (!SleepWhileLoaded(250)) {
+                return 0;
             }
             continue;
         }
 
         Wh_Log(L"Diagnostics connection failed hr=0x%08X", hr);
-        if (!SleepWhileLoaded(1000)) {
-            break;
-        }
+        return 0;
     }
 
     return 0;
+}
+
+static void EnsureConnectorStarted() {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_connectorMutex);
+    if (g_unloading.load() || g_connectorThread) {
+        return;
+    }
+
+    if (g_tapReadyEvent) {
+        ResetEvent(g_tapReadyEvent);
+    }
+
+    g_connectorThread =
+        CreateThread(nullptr, 0, ConnectorThread, nullptr, 0, nullptr);
+    if (!g_connectorThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+    }
+}
+
+static void StopConnectorThread() {
+    HANDLE thread = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(g_connectorMutex);
+        thread = g_connectorThread;
+    }
+
+    if (!thread) {
+        return;
+    }
+
+    if (GetThreadId(thread) != GetCurrentThreadId()) {
+        WaitForSingleObject(thread, INFINITE);
+    }
+
+    std::lock_guard<std::mutex> lock(g_connectorMutex);
+    if (g_connectorThread == thread) {
+        CloseHandle(g_connectorThread);
+        g_connectorThread = nullptr;
+    }
 }
 
 // ============================================================================
@@ -1541,21 +1703,44 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Explorer Title Bar Label 1.0.0 init");
 
     g_unloading.store(false);
-    g_activeTextBlocks.store(0);
     LoadSettings(false);
 
-    g_connectorThread =
-        CreateThread(nullptr, 0, ConnectorThread, nullptr, 0, nullptr);
-    if (!g_connectorThread) {
-        Wh_Log(L"CreateThread failed: %u", GetLastError());
+    g_tapReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_tapReadyEvent) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
+        return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook(
+            reinterpret_cast<void*>(CreateWindowExW),
+            reinterpret_cast<void*>(CreateWindowExW_Hook),
+            reinterpret_cast<void**>(&CreateWindowExW_Original))) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
+        CloseHandle(g_tapReadyEvent);
+        g_tapReadyEvent = nullptr;
         return FALSE;
     }
 
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    // Hooks become active after Wh_ModInit. Handle windows which were already
+    // open before that point.
+    if (!GetFileExplorerWindows().empty()) {
+        EnsureConnectorStarted();
+    }
+}
+
 void Wh_ModSettingsChanged() {
     LoadSettings(true);
+}
+
+// Function hooks are removed before Wh_ModUninit, but XAML delegates can still
+// be alive until explicit UI-thread teardown below. Stop them from doing new
+// work as early as Windhawk allows.
+void Wh_ModBeforeUninit() {
+    g_unloading.store(true);
 }
 
 void Wh_ModUninit() {
@@ -1563,25 +1748,26 @@ void Wh_ModUninit() {
 
     g_unloading.store(true);
 
-    // Do not let the connector continue executing mod code after unload.
-    if (g_connectorThread) {
-        WaitForSingleObject(g_connectorThread, INFINITE);
-        CloseHandle(g_connectorThread);
-        g_connectorThread = nullptr;
-    }
+    StopConnectorThread();
 
-    // The UI timer checks unload every 100 ms, so labels normally disappear
-    // within a fraction of a second. Keep a bounded wait as a safety margin
-    // before disconnecting XAML diagnostics.
-    for (int i = 0; i < 15; ++i) {
-        if (g_activeTextBlocks.load() <= 0) {
-            break;
+    // Every XAML delegate is revoked synchronously on the thread which owns it
+    // before this DLL can be unloaded.
+    for (HWND hwnd : GetFileExplorerWindows()) {
+        if (!RunFromWindowThread(
+                hwnd, [](PVOID) { RemoveLabelsForCurrentThread(); },
+                nullptr)) {
+            Wh_Log(L"Couldn't reach Explorer UI thread for window %08X",
+                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
         }
-        Sleep(100);
     }
 
     if (g_visualTreeWatcher) {
         g_visualTreeWatcher->Disconnect();
         g_visualTreeWatcher = nullptr;
+    }
+
+    if (g_tapReadyEvent) {
+        CloseHandle(g_tapReadyEvent);
+        g_tapReadyEvent = nullptr;
     }
 }
