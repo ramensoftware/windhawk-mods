@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          AmazingBodilyFluids
 // @github          https://github.com/AmazingBodilyFluids
-// @include         *
+// @include         explorer.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -13,22 +13,42 @@
 /*
 # Hide Scrollbars
 
-Removes the vertical and/or horizontal scrollbars from windows in the
-processes you choose. By default it targets `explorer.exe`, so the File
-Explorer file list loses its scrollbar and the freed strip is used by the
-content instead of sitting empty.
+Shrinks the vertical and/or horizontal scrollbars away in the target
+process. By default it targets `explorer.exe`, so the File Explorer file
+list loses its scrollbar and the freed strip is used by the content
+instead of sitting empty.
+
+To apply it to other programs, add them to the mod's **Custom process
+inclusion list** under the mod's Advanced settings in Windhawk.
 
 Mouse-wheel and keyboard scrolling keep working. Precision-touchpad
 two-finger scrolling keeps working at the default scrollbar size of 1px;
 setting the size to 0 breaks it (see the limitation below).
 
+## Screenshots
+
+Windows default (slim scrollbar in its own gutter):
+
+![Default](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png)
+
+Scrollbar size 1 (1px sliver, gutter reclaimed):
+
+![Size 1](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png)
+
+Scrollbar size 0 (fully hidden):
+
+![Size 0](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-0px.png)
+
 ## How it works
 
 The mod hooks `GetSystemMetrics`, `GetSystemMetricsForDpi` and
 `GetThemeSysSize`, and reports a reduced size for `SM_CXVSCROLL` /
-`SM_CYHSCROLL` (the vertical/horizontal scrollbar thickness). Controls
-that lay themselves out from the scrollbar size then shrink it
-accordingly.
+`SM_CYHSCROLL` (the vertical/horizontal scrollbar thickness). Code that
+lays itself out from that metric - such as Explorer's DirectUI file list
+- then shrinks the scrollbar accordingly. Plain Win32 windows that draw
+standard non-client scrollbars are mostly unaffected, because user32
+lays those out from an internal metric table rather than the exported
+function.
 
 ## Known limitation: precision-touchpad scrolling
 
@@ -46,17 +66,15 @@ The **Scrollbar size** setting lets you choose:
 - `1` (default) - touchpad-safe, 1px sliver remains.
 - `0` - fully hidden, breaks precision-touchpad two-finger scroll.
 
-## Notes and limitations
+## Notes
 
-- The metric override is process-wide. Every classic control in a
-  targeted process loses its scrollbar, not only Explorer's file list.
-- Apps rendered with newer UI frameworks (WinUI/XAML) that do not read
-  these metrics are unaffected.
-- With the default size of `1`, a 1px sliver remains where the scrollbar
-  was. Set **Scrollbar size** to `0` for full removal (see the touchpad
-  limitation above).
-- If a control in a targeted process misbehaves, remove that process
-  from the list.
+- The override is process-wide. Other mods running in the same process
+  that read `SM_CXVSCROLL` / `SM_CYHSCROLL` (for example to hit-test the
+  scrollbar strip) will see the reduced value too.
+- The scrollbar *arrow button* metrics (`SM_CXHSCROLL` / `SM_CYVSCROLL`)
+  and `SPI_GETNONCLIENTMETRICS` are left untouched, so a control that
+  mixes those with `SM_CXVSCROLL` may lay out slightly oddly.
+- If a targeted process misbehaves, remove it from the inclusion list.
 
 ## Settings
 
@@ -65,8 +83,6 @@ The **Scrollbar size** setting lets you choose:
 - **Scrollbar size** - reported thickness in pixels. `1` (default) keeps
   precision-touchpad scrolling working; `0` hides the bar fully but
   breaks two-finger touchpad scroll.
-- **Processes** - executable names the mod applies to, one per line. The
-  mod is loaded into every process but stays inactive outside this list.
 */
 // ==/WindhawkModReadme==
 
@@ -83,17 +99,12 @@ The **Scrollbar size** setting lets you choose:
     precision-touchpad two-finger scrolling working while leaving only a
     1px sliver. 0 hides the scrollbar completely but breaks
     precision-touchpad scrolling (mouse wheel and keyboard still work).
-- processList:
-  - explorer.exe
-  $name: Processes
-  $description: Executable names (with .exe) the mod applies to, one per line.
 */
 // ==/WindhawkModSettings==
 
-#include <uxtheme.h>
+#include <windhawk_utils.h>
 
-#include <string>
-#include <vector>
+#include <uxtheme.h>
 
 struct {
     bool hideVertical;
@@ -101,11 +112,9 @@ struct {
     int scrollbarSize;
 } g_settings;
 
-std::vector<std::wstring> g_processList;
-
 // --- hooks ----------------------------------------------------------------
 
-using GetSystemMetrics_t = int(WINAPI*)(int);
+using GetSystemMetrics_t = decltype(&GetSystemMetrics);
 GetSystemMetrics_t GetSystemMetrics_Original;
 
 int WINAPI GetSystemMetrics_Hook(int nIndex) {
@@ -118,7 +127,7 @@ int WINAPI GetSystemMetrics_Hook(int nIndex) {
     return GetSystemMetrics_Original(nIndex);
 }
 
-using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
+using GetSystemMetricsForDpi_t = decltype(&GetSystemMetricsForDpi);
 GetSystemMetricsForDpi_t GetSystemMetricsForDpi_Original;
 
 int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
@@ -131,7 +140,7 @@ int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
     return GetSystemMetricsForDpi_Original(nIndex, dpi);
 }
 
-using GetThemeSysSize_t = int(WINAPI*)(HTHEME, int);
+using GetThemeSysSize_t = decltype(&GetThemeSysSize);
 GetThemeSysSize_t GetThemeSysSize_Original;
 
 int WINAPI GetThemeSysSize_Hook(HTHEME hTheme, int iSizeId) {
@@ -153,64 +162,17 @@ void LoadSettings() {
     if (g_settings.scrollbarSize < 0) {
         g_settings.scrollbarSize = 0;
     }
-
-    g_processList.clear();
-    for (int i = 0;; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"processList[%d]", i);
-        bool done = !*value;
-        if (!done) {
-            std::wstring s = value;
-            size_t a = s.find_first_not_of(L" \t");
-            size_t b = s.find_last_not_of(L" \t");
-            if (a != std::wstring::npos) {
-                g_processList.push_back(s.substr(a, b - a + 1));
-            }
-        }
-        Wh_FreeStringSetting(value);
-        if (done) {
-            break;
-        }
-    }
-}
-
-bool IsTargetProcess() {
-    WCHAR path[MAX_PATH];
-    DWORD n = GetModuleFileName(nullptr, path, ARRAYSIZE(path));
-    if (n == 0 || n >= ARRAYSIZE(path)) {
-        return false;
-    }
-
-    PCWSTR base = wcsrchr(path, L'\\');
-    base = base ? base + 1 : path;
-
-    for (const auto& name : g_processList) {
-        if (_wcsicmp(base, name.c_str()) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-BOOL CALLBACK RefreshChildProc(HWND hChild, LPARAM) {
-    SetWindowPos(hChild, nullptr, 0, 0, 0, 0,
-                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                     SWP_NOACTIVATE);
-    return TRUE;
 }
 
 BOOL CALLBACK RefreshTopProc(HWND hWnd, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != GetCurrentProcessId()) {
-        return TRUE;
+    if (pid == GetCurrentProcessId()) {
+        // WM_THEMECHANGED makes themed controls re-read the metric. Guarded
+        // so a wedged window thread can't stall an enable/disable.
+        SendMessageTimeoutW(hWnd, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
+                            nullptr);
     }
-
-    SendMessageTimeout(hWnd, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
-                       nullptr);
-    SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
-                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                     SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-    EnumChildWindows(hWnd, RefreshChildProc, 0);
     return TRUE;
 }
 
@@ -223,25 +185,30 @@ void RefreshWindows() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    if (!IsTargetProcess()) {
-        Wh_Log(L"hide-scrollbars: process not targeted, staying inactive");
-        return FALSE;
-    }
+    WindhawkUtils::SetFunctionHook(GetSystemMetrics, GetSystemMetrics_Hook,
+                                   &GetSystemMetrics_Original);
 
-    Wh_SetFunctionHook((void*)GetSystemMetrics, (void*)GetSystemMetrics_Hook,
-                       (void**)&GetSystemMetrics_Original);
-
-    if (HMODULE user32 = GetModuleHandle(L"user32.dll")) {
-        if (void* p = (void*)GetProcAddress(user32, "GetSystemMetricsForDpi")) {
-            Wh_SetFunctionHook(p, (void*)GetSystemMetricsForDpi_Hook,
-                               (void**)&GetSystemMetricsForDpi_Original);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        auto pGetSystemMetricsForDpi = (GetSystemMetricsForDpi_t)GetProcAddress(
+            user32, "GetSystemMetricsForDpi");
+        if (pGetSystemMetricsForDpi) {
+            WindhawkUtils::SetFunctionHook(pGetSystemMetricsForDpi,
+                                          GetSystemMetricsForDpi_Hook,
+                                          &GetSystemMetricsForDpi_Original);
         }
     }
 
-    if (HMODULE uxtheme = LoadLibrary(L"uxtheme.dll")) {
-        if (void* p = (void*)GetProcAddress(uxtheme, "GetThemeSysSize")) {
-            Wh_SetFunctionHook(p, (void*)GetThemeSysSize_Hook,
-                               (void**)&GetThemeSysSize_Original);
+    HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+    if (!uxtheme) {
+        uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (uxtheme) {
+        auto pGetThemeSysSize =
+            (GetThemeSysSize_t)GetProcAddress(uxtheme, "GetThemeSysSize");
+        if (pGetThemeSysSize) {
+            WindhawkUtils::SetFunctionHook(pGetThemeSysSize, GetThemeSysSize_Hook,
+                                          &GetThemeSysSize_Original);
         }
     }
 
@@ -253,15 +220,12 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModUninit() {
-    // Neutralise the hooks before Windhawk removes them, then relayout so
-    // the scrollbars come back.
-    g_settings.hideVertical = false;
-    g_settings.hideHorizontal = false;
+    // Hooks are already removed by the time this runs, so the windows
+    // relayout against the real metrics.
     RefreshWindows();
 }
 
-void Wh_ModSettingsChanged(BOOL* bReload) {
-    // A processList change alters which processes should load the mod, so
-    // ask Windhawk for a full reload rather than a live settings swap.
-    *bReload = TRUE;
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    RefreshWindows();
 }
