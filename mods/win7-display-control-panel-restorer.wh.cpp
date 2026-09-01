@@ -2,7 +2,7 @@
 // @id              win7-display-control-panel-restorer
 // @name            Classic Display Control Panel Restorer
 // @description     This mod restores the classic Display and Screen Resolution Control Panel pages on Windows 10 and 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -8533,7 +8533,21 @@ int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
             // Last-resort hand-reconstructed string: guarantees the page
             // never renders empty labels even if the private module could
             // not be built. The pointer is stable by the leaked-copy policy.
+            //
+            // BUGFIX (crash 0xC0000005 on first Display hub load, e.g. from
+            // Personalization > Schermo): when bufferChars != 0, `buffer` is
+            // a real caller-owned fixed-size wchar_t[] (the buffered form of
+            // LoadStringW), NOT a wchar_t** out-slot. The pointer-write form
+            // below is only valid for the bufferChars == 0 pointer form.
+            // Writing a raw 8-byte pointer value into a short stack buffer
+            // corrupted adjacent stack memory (return address / locals),
+            // which is exactly the kind of bug that surfaces as an access
+            // violation shortly afterwards. Route the buffered form through
+            // CopyEmbeddedStringW, same as every other branch above.
             if (const wchar_t* pointer = GetWidePointerString(id)) {
+                if (bufferChars != 0) {
+                    return CopyEmbeddedStringW(pointer, buffer, bufferChars);
+                }
                 *reinterpret_cast<wchar_t**>(buffer) =
                     const_cast<wchar_t*>(pointer);
                 return static_cast<int>(wcslen(pointer));
