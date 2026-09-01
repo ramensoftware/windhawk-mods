@@ -31,11 +31,11 @@ Windows default (slim scrollbar in its own gutter):
 
 ![Default](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png)
 
-Scrollbar size 1 (1px sliver, gutter reclaimed):
+Scrollbar size 1 px:
 
 ![Size 1](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png)
 
-Scrollbar size 0 (fully hidden):
+Scrollbar size 0 px (fully hidden):
 
 ![Size 0](https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-0px.png)
 
@@ -71,6 +71,9 @@ The **Scrollbar size** setting lets you choose:
 - The override is process-wide. Other mods running in the same process
   that read `SM_CXVSCROLL` / `SM_CYHSCROLL` (for example to hit-test the
   scrollbar strip) will see the reduced value too.
+- `SM_CXVSCROLL` also drives the width of combo-box drop-down buttons
+  and the status-bar sizing grip. Code that reads the exported metric
+  (rather than user32's internal table) shrinks those too.
 - The scrollbar *arrow button* metrics (`SM_CXHSCROLL` / `SM_CYVSCROLL`)
   and `SPI_GETNONCLIENTMETRICS` are left untouched, so a control that
   mixes those with `SM_CXVSCROLL` may lay out slightly oddly.
@@ -80,9 +83,9 @@ The **Scrollbar size** setting lets you choose:
 
 - **Hide vertical scrollbars** - toggle the vertical bar.
 - **Hide horizontal scrollbars** - toggle the horizontal bar.
-- **Scrollbar size** - reported thickness in pixels. `1` (default) keeps
-  precision-touchpad scrolling working; `0` hides the bar fully but
-  breaks two-finger touchpad scroll.
+- **Scrollbar size** - reported thickness in pixels; use `0` or `1`.
+  `1` (default) keeps precision-touchpad scrolling working; `0` hides
+  the bar fully but breaks two-finger touchpad scroll.
 */
 // ==/WindhawkModReadme==
 
@@ -95,22 +98,27 @@ The **Scrollbar size** setting lets you choose:
 - scrollbarSize: 1
   $name: Scrollbar size
   $description: >-
-    Reported scrollbar thickness in pixels. 1 (default) keeps
-    precision-touchpad two-finger scrolling working while leaving only a
-    1px sliver. 0 hides the scrollbar completely but breaks
+    Reported scrollbar thickness in pixels; use 0 or 1. 1 (default)
+    keeps precision-touchpad two-finger scrolling working while leaving
+    only a 1px sliver. 0 hides the scrollbar completely but breaks
     precision-touchpad scrolling (mouse wheel and keyboard still work).
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#include <atomic>
+
 #include <uxtheme.h>
 
 struct {
-    bool hideVertical;
-    bool hideHorizontal;
-    int scrollbarSize;
+    std::atomic<bool> hideVertical;
+    std::atomic<bool> hideHorizontal;
+    std::atomic<int> scrollbarSize;
 } g_settings;
+
+// Non-null only if this mod (rather than the process) loaded uxtheme.dll.
+HMODULE g_loadedUxtheme;
 
 // --- hooks ----------------------------------------------------------------
 
@@ -156,23 +164,38 @@ int WINAPI GetThemeSysSize_Hook(HTHEME hTheme, int iSizeId) {
 // --- helpers ------------------------------------------------------------
 
 void LoadSettings() {
-    g_settings.hideVertical = Wh_GetIntSetting(L"hideVertical");
-    g_settings.hideHorizontal = Wh_GetIntSetting(L"hideHorizontal");
-    g_settings.scrollbarSize = Wh_GetIntSetting(L"scrollbarSize");
-    if (g_settings.scrollbarSize < 0) {
-        g_settings.scrollbarSize = 0;
-    }
+    g_settings.hideVertical = Wh_GetIntSetting(L"hideVertical") != 0;
+    g_settings.hideHorizontal = Wh_GetIntSetting(L"hideHorizontal") != 0;
+    int size = Wh_GetIntSetting(L"scrollbarSize");
+    g_settings.scrollbarSize = size < 0 ? 0 : size;
+}
+
+BOOL CALLBACK RefreshChildProc(HWND hChild, LPARAM) {
+    SendMessageTimeoutW(hChild, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
+                        nullptr);
+    return TRUE;
 }
 
 BOOL CALLBACK RefreshTopProc(HWND hWnd, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
-    if (pid == GetCurrentProcessId()) {
-        // WM_THEMECHANGED makes themed controls re-read the metric. Guarded
-        // so a wedged window thread can't stall an enable/disable.
-        SendMessageTimeoutW(hWnd, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
-                            nullptr);
+    if (pid != GetCurrentProcessId()) {
+        return TRUE;
     }
+
+    // Only Explorer browser windows host the file-list scrollbar. Don't
+    // re-theme the shell (tray, desktop, flyouts) over a scrollbar metric.
+    WCHAR className[64];
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) == 0 ||
+        _wcsicmp(className, L"CabinetWClass") != 0) {
+        return TRUE;
+    }
+
+    // WM_THEMECHANGED doesn't forward to children on its own, so walk them
+    // too. Guarded because each CabinetWClass window runs on its own thread.
+    SendMessageTimeoutW(hWnd, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG, 200,
+                        nullptr);
+    EnumChildWindows(hWnd, RefreshChildProc, 0);
     return TRUE;
 }
 
@@ -184,6 +207,11 @@ void RefreshWindows() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+
+    if (!g_settings.hideVertical && !g_settings.hideHorizontal) {
+        Wh_Log(L"Nothing to hide, staying inactive");
+        return FALSE;
+    }
 
     WindhawkUtils::SetFunctionHook(GetSystemMetrics, GetSystemMetrics_Hook,
                                    &GetSystemMetrics_Original);
@@ -202,6 +230,7 @@ BOOL Wh_ModInit() {
     if (!uxtheme) {
         uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
+        g_loadedUxtheme = uxtheme;
     }
     if (uxtheme) {
         auto pGetThemeSysSize =
@@ -223,9 +252,23 @@ void Wh_ModUninit() {
     // Hooks are already removed by the time this runs, so the windows
     // relayout against the real metrics.
     RefreshWindows();
+
+    if (g_loadedUxtheme) {
+        FreeLibrary(g_loadedUxtheme);
+        g_loadedUxtheme = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
+    bool prevVertical = g_settings.hideVertical;
+    bool prevHorizontal = g_settings.hideHorizontal;
+    int prevSize = g_settings.scrollbarSize;
+
     LoadSettings();
-    RefreshWindows();
+
+    if (g_settings.hideVertical != prevVertical ||
+        g_settings.hideHorizontal != prevHorizontal ||
+        g_settings.scrollbarSize != prevSize) {
+        RefreshWindows();
+    }
 }
