@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         2.2.0
+// @version         2.3.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -11,13 +11,13 @@
 
 // ==WindhawkModReadme==
 /*
-# Hide Taskbar Only on Desktop V4
+# Hide Taskbar Only on Desktop
 
 Hides each selected taskbar when its own display has no visible,
 non-minimized application window, and shows it again when an application or
 relevant Windows shell interaction requires it.
 
-V4 is implemented as a Windhawk tool in a dedicated `windhawk.exe` process
+The mod is implemented as a Windhawk tool in a dedicated `windhawk.exe` process
 instead of being injected into `explorer.exe`. This avoids one worker copy
 per Explorer process and keeps the state-management code outside the shell.
 
@@ -37,7 +37,7 @@ per Explorer process and keeps the state-management code outside the shell.
   and Alt+Tab are treated as transient shell interactions.
 - Clearing the "Taskbars to hide on desktop" selection means hide nothing.
 
-### Difference from Existing Taskbar Auto-Hide Mods
+### Why this is a separate mod
 
 **`taskbar-auto-hide-when-maximized`** primarily bases its behavior on
 application-window geometry and maximized state. This mod instead evaluates
@@ -54,7 +54,7 @@ for Windows' native auto-hide. This mod directly hides/shows the taskbar
 window and supplies its own hover-reveal behavior.
 
 **`taskbar-fade`** is a broader taskbar customization/fading mod with a
-Smart Idle option. V4 is specifically focused on desktop-only visibility,
+Smart Idle option. This mod is specifically focused on desktop-only visibility,
 independent per-display application state, and explicit per-display hover
 reveal.
 
@@ -97,7 +97,7 @@ enumeration. The result is reused for every taskbar.
     more individual displays.
   $options:
   - all: All displays
-  - monitor1: Display 1 (primary)
+  - monitor1: Display 1
   - monitor2: Display 2
   - monitor3: Display 3
   - monitor4: Display 4
@@ -116,12 +116,12 @@ enumeration. The result is reused for every taskbar.
 - hideOnMonitors: ["all"]
   $name: Taskbars to hide on desktop
   $description: >-
-    Select one or more displays. Display 1 is the primary display.
+    Select one or more displays using the Windows Display number.
     Choose All displays to hide every connected display. Use Add to select
     multiple displays.
   $options:
   - all: All displays
-  - monitor1: Display 1 (primary)
+  - monitor1: Display 1
   - monitor2: Display 2
   - monitor3: Display 3
   - monitor4: Display 4
@@ -144,7 +144,6 @@ enumeration. The result is reused for every taskbar.
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <wchar.h>
-#include <stdint.h>
 
 
 constexpr size_t kMaxMonitorNumbers = 16;
@@ -165,7 +164,6 @@ struct {
 struct MonitorEntry {
     HMONITOR monitor;
     RECT rect;
-    bool primary;
     wchar_t deviceName[32];
 };
 
@@ -189,6 +187,8 @@ HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
 HWINEVENTHOOK g_taskbarShowHook = nullptr;
+DWORD g_taskbarShowHookProcessId = 0;
+HHOOK g_mouseHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -278,9 +278,6 @@ BOOL CALLBACK CollectMonitorProc(
 
     entry.monitor = monitor;
     entry.rect = info.rcMonitor;
-    entry.primary =
-        (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
-
     wcsncpy_s(
         entry.deviceName,
         ARRAYSIZE(entry.deviceName),
@@ -335,96 +332,6 @@ int GetDisplayDeviceNumber(
     return static_cast<int>(number);
 }
 
-void SortDisplaysForSelection(
-    MonitorList& list
-) {
-    size_t primaryIndex = list.count;
-
-    for (size_t i = 0; i < list.count; ++i) {
-        if (list.entries[i].primary) {
-            primaryIndex = i;
-            break;
-        }
-    }
-
-    if (
-        primaryIndex < list.count &&
-        primaryIndex != 0
-    ) {
-        MonitorEntry primary =
-            list.entries[primaryIndex];
-
-        for (size_t i = primaryIndex; i > 0; --i) {
-            list.entries[i] =
-                list.entries[i - 1];
-        }
-
-        list.entries[0] = primary;
-    }
-
-    for (size_t i = 1; i < list.count; ++i) {
-        size_t best = i;
-
-        int bestNumber =
-            GetDisplayDeviceNumber(
-                list.entries[best].deviceName
-            );
-
-        for (size_t j = i + 1; j < list.count; ++j) {
-            int candidateNumber =
-                GetDisplayDeviceNumber(
-                    list.entries[j].deviceName
-                );
-
-            bool better = false;
-
-            if (
-                candidateNumber > 0 &&
-                bestNumber == 0
-            ) {
-                better = true;
-            } else if (
-                candidateNumber > 0 &&
-                bestNumber > 0 &&
-                candidateNumber < bestNumber
-            ) {
-                better = true;
-            } else if (
-                candidateNumber == 0 &&
-                bestNumber == 0
-            ) {
-                const RECT& a =
-                    list.entries[best].rect;
-                const RECT& b =
-                    list.entries[j].rect;
-
-                better =
-                    b.top < a.top ||
-                    (
-                        b.top == a.top &&
-                        b.left < a.left
-                    );
-            }
-
-            if (better) {
-                best = j;
-                bestNumber = candidateNumber;
-            }
-        }
-
-        if (best != i) {
-            MonitorEntry temp =
-                list.entries[i];
-
-            list.entries[i] =
-                list.entries[best];
-
-            list.entries[best] =
-                temp;
-        }
-    }
-}
-
 MonitorList GetCurrentMonitors() {
     MonitorList list = {};
 
@@ -435,7 +342,6 @@ MonitorList GetCurrentMonitors() {
         reinterpret_cast<LPARAM>(&list)
     );
 
-    SortDisplaysForSelection(list);
     return list;
 }
 
@@ -445,12 +351,16 @@ int GetMonitorNumber(
 ) {
     for (size_t i = 0; i < list.count; ++i) {
         if (list.entries[i].monitor == monitor) {
-            return static_cast<int>(i + 1);
+            return GetDisplayDeviceNumber(
+                list.entries[i].deviceName
+            );
         }
     }
 
     return 0;
 }
+
+bool IsBottomDockedTaskbar(HWND hTaskbar, HMONITOR monitor);
 
 bool ShouldHideMonitor(
     int monitorNumber
@@ -517,8 +427,7 @@ bool IsTransientShellWindow(
         wcscmp(
             className,
             L"TaskbarOverflowWnd"
-        ) == 0 ||
-        wcscmp(className, L"DirectUIHWND") == 0
+        ) == 0
     ) {
         return true;
     }
@@ -930,6 +839,34 @@ void RefreshTaskbarMonitorStates(
     }
 }
 
+bool IsNativeAutoHideEnabled(HWND taskbar) {
+    if (!taskbar || !IsWindow(taskbar)) {
+        return false;
+    }
+
+    APPBARDATA data = {};
+    data.cbSize = sizeof(data);
+    data.hWnd = taskbar;
+
+    return (SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE) != 0;
+}
+
+
+bool ShouldHideTaskbar(
+    const TaskbarMonitorState& state
+) {
+    return
+        state.hwnd &&
+        state.monitor &&
+        ShouldHideMonitor(state.monitorNumber) &&
+        IsBottomDockedTaskbar(
+            state.hwnd,
+            state.monitor
+        ) &&
+        !IsNativeAutoHideEnabled(state.hwnd);
+}
+
+
 void SetTaskbarState(
     TaskbarMonitorState& state,
     bool show
@@ -1105,163 +1042,92 @@ bool IsCursorNearBottomEdge(
         pt.y < mi.rcMonitor.bottom;
 }
 
-HMONITOR GetForegroundShellPopupMonitor() {
-    HWND foreground =
-        GetForegroundWindow();
+struct TaskbarPopupScanContext {
+    DWORD taskbarProcessId;
+    HMONITOR monitor;
+    bool found;
+};
 
-    if (!foreground) {
-        return nullptr;
+BOOL CALLBACK FindTaskbarPopupProc(HWND hwnd, LPARAM lParam) {
+    TaskbarPopupScanContext* context =
+        reinterpret_cast<TaskbarPopupScanContext*>(lParam);
+
+    if (!context || context->found || !IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+
+    if (processId != context->taskbarProcessId) {
+        return TRUE;
     }
 
     WCHAR className[128] = {};
-
-    if (
-        GetClassNameW(
-            foreground,
+    if (!GetClassNameW(
+            hwnd,
             className,
-            ARRAYSIZE(className)
-        ) == 0
-    ) {
-        return nullptr;
+            ARRAYSIZE(className))) {
+        return TRUE;
     }
 
-    HWND taskbar =
-        FindWindowW(
-            L"Shell_TrayWnd",
-            nullptr
-        );
-
-    DWORD explorerPid = 0;
-
-    if (taskbar) {
-        GetWindowThreadProcessId(
-            taskbar,
-            &explorerPid
-        );
+    if (!IsTaskbarPopupClass(className)) {
+        return TRUE;
     }
 
-    if (
-        !IsExplorerShellPopup(
-            foreground,
-            className,
-            explorerPid
-        )
-    ) {
-        return nullptr;
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect)) {
+        return TRUE;
     }
 
-    return MonitorFromWindow(
-        foreground,
-        MONITOR_DEFAULTTONEAREST
-    );
+    POINT center = {
+        rect.left + (rect.right - rect.left) / 2,
+        rect.top + (rect.bottom - rect.top) / 2
+    };
+
+    if (MonitorFromPoint(
+            center,
+            MONITOR_DEFAULTTONEAREST) == context->monitor) {
+        context->found = true;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
-
-HMONITOR GetCursorPopupMonitor() {
-    POINT pt = {};
-
-    if (!GetCursorPos(&pt)) {
-        return nullptr;
+bool IsTaskbarContextMenuOpen(
+    HWND taskbar,
+    HMONITOR monitor) {
+    if (!taskbar || !monitor || !IsWindow(taskbar)) {
+        return false;
     }
 
-    HWND current =
-        WindowFromPoint(pt);
+    DWORD processId = 0;
+    GetWindowThreadProcessId(taskbar, &processId);
 
-    if (!current) {
-        return nullptr;
+    if (!processId) {
+        return false;
     }
 
-    HWND taskbar =
-        FindWindowW(
-            L"Shell_TrayWnd",
-            nullptr
-        );
+    TaskbarPopupScanContext context = {
+        processId,
+        monitor,
+        false
+    };
 
-    DWORD explorerPid = 0;
+    EnumWindows(
+        FindTaskbarPopupProc,
+        reinterpret_cast<LPARAM>(&context));
 
-    if (taskbar) {
-        GetWindowThreadProcessId(
-            taskbar,
-            &explorerPid
-        );
-    }
+    return context.found;
+}
 
-    for (
-        int depth = 0;
-        current && depth < 12;
-        ++depth
-    ) {
-        WCHAR className[128] = {};
-
-        if (
-            GetClassNameW(
-                current,
-                className,
-                ARRAYSIZE(className)
-            ) != 0 &&
-            IsExplorerShellPopup(
-                current,
-                className,
-                explorerPid
-            )
-        ) {
-            RECT rect = {};
-
-            if (GetWindowRect(
-                    current,
-                    &rect
-                )) {
-                POINT center = {
-                    rect.left +
-                        (rect.right - rect.left) / 2,
-                    rect.top +
-                        (rect.bottom - rect.top) / 2
-                };
-
-                HMONITOR popupMonitor =
-                    MonitorFromPoint(
-                        center,
-                        MONITOR_DEFAULTTONEAREST
-                    );
-
-                HMONITOR cursorMonitor =
-                    MonitorFromPoint(
-                        pt,
-                        MONITOR_DEFAULTTONEAREST
-                    );
-
-                if (
-                    popupMonitor &&
-                    popupMonitor == cursorMonitor
-                ) {
-                    return popupMonitor;
-                }
-
-                return nullptr;
-            }
-        }
-
-        HWND parent =
-            GetParent(current);
-
-        HWND owner =
-            GetWindow(
-                current,
-                GW_OWNER
-            );
-
-        if (
-            parent &&
-            parent != current
-        ) {
-            current = parent;
-        } else if (
-            owner &&
-            owner != current
-        ) {
-            current = owner;
-        } else {
-            break;
+HMONITOR GetTaskbarPopupMonitor() {
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (IsTaskbarContextMenuOpen(
+                g_taskbarStates[i].hwnd,
+                g_taskbarStates[i].monitor)) {
+            return g_taskbarStates[i].monitor;
         }
     }
 
@@ -1269,30 +1135,22 @@ HMONITOR GetCursorPopupMonitor() {
 }
 
 bool IsAltTabActive() {
-    HWND foreground =
-        GetForegroundWindow();
+    HWND foreground = GetForegroundWindow();
+    if (!foreground || !IsWindowVisible(foreground)) {
+        return false;
+    }
 
-    if (foreground) {
-        WCHAR className[128] = {};
-
-        if (
-            GetClassNameW(
-                foreground,
-                className,
-                ARRAYSIZE(className)
-            ) != 0 &&
-            wcscmp(
-                className,
-                L"#32771"
-            ) == 0
-        ) {
-            return true;
-        }
+    WCHAR className[128] = {};
+    if (!GetClassNameW(
+            foreground,
+            className,
+            ARRAYSIZE(className))) {
+        return false;
     }
 
     return
-        (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 &&
-        (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
+        wcscmp(className, L"TaskSwitcherWnd") == 0 ||
+        wcscmp(className, L"MultitaskingViewFrame") == 0;
 }
 
 void UpdateTaskbarState() {
@@ -1377,13 +1235,11 @@ void UpdateTaskbarState() {
             cursorMonitor
         );
 
+    // Keep the taskbar visible for an open shell context menu/overflow
+    // surface even after the cursor leaves the popup. This prevents the
+    // desktop-only hide logic from hiding the taskbar while its menu is open.
     HMONITOR popupMonitor =
-        GetForegroundShellPopupMonitor();
-
-    if (!popupMonitor) {
-        popupMonitor =
-            GetCursorPopupMonitor();
-    }
+        GetTaskbarPopupMonitor();
 
     if (popupMonitor) {
         g_hoverActive = false;
@@ -1398,9 +1254,7 @@ void UpdateTaskbarState() {
                 state,
                 state.monitor == popupMonitor ||
                 !state.desktopOnly ||
-                !ShouldHideMonitor(
-                    state.monitorNumber
-                )
+                !ShouldHideTaskbar(state)
             );
         }
 
@@ -1413,9 +1267,13 @@ void UpdateTaskbarState() {
         g_hoverDeadline = 0;
 
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            TaskbarMonitorState& state =
+                g_taskbarStates[i];
+
             SetTaskbarState(
-                g_taskbarStates[i],
-                true
+                state,
+                !state.desktopOnly ||
+                !ShouldHideTaskbar(state)
             );
         }
 
@@ -1435,9 +1293,7 @@ void UpdateTaskbarState() {
                 state,
                 state.monitor == g_hoverMonitor ||
                 !state.desktopOnly ||
-                !ShouldHideMonitor(
-                    state.monitorNumber
-                )
+                !ShouldHideTaskbar(state)
             );
         }
 
@@ -1574,6 +1430,77 @@ bool IsCursorInConfiguredHoverZone() {
 }
 
 
+void PostRefresh() {
+    if (
+        InterlockedExchange(
+            &g_refreshPosted,
+            1
+        ) != 0
+    ) {
+        return;
+    }
+
+    if (!PostThreadMessageW(
+            g_workerThreadId,
+            WM_APP_REFRESH,
+            0,
+            0
+        )) {
+        InterlockedExchange(
+            &g_refreshPosted,
+            0
+        );
+    }
+}
+
+
+LRESULT CALLBACK LowLevelMouseProc(
+    int code,
+    WPARAM message,
+    LPARAM lParam
+) {
+    if (
+        code == HC_ACTION &&
+        message == WM_MOUSEMOVE
+    ) {
+        const MSLLHOOKSTRUCT* mouse =
+            reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+
+        if (mouse) {
+            HMONITOR monitor =
+                MonitorFromPoint(
+                    mouse->pt,
+                    MONITOR_DEFAULTTONEAREST
+                );
+
+            MONITORINFO mi = {};
+            mi.cbSize = sizeof(mi);
+
+            if (
+                monitor &&
+                GetMonitorInfoW(
+                    monitor,
+                    &mi
+                ) &&
+                mouse->pt.y >=
+                    mi.rcMonitor.bottom - 256 &&
+                mouse->pt.y <
+                    mi.rcMonitor.bottom
+            ) {
+                PostRefresh();
+            }
+        }
+    }
+
+    return CallNextHookEx(
+        g_mouseHook,
+        code,
+        message,
+        lParam
+    );
+}
+
+
 void CALLBACK WinEventProc(
     HWINEVENTHOOK,
     DWORD event,
@@ -1639,24 +1566,65 @@ void CALLBACK WinEventProc(
         return;
     }
 
-    if (
-        InterlockedExchange(
-            &g_refreshPosted,
-            1
-        ) == 0
-    ) {
-        if (!PostThreadMessageW(
-                g_workerThreadId,
-                WM_APP_REFRESH,
-                0,
-                0
-            )) {
-            InterlockedExchange(
-                &g_refreshPosted,
-                0
-            );
+    PostRefresh();
+}
+
+
+void EnsureTaskbarShowHook() {
+    HWND taskbar =
+        FindWindowW(
+            L"Shell_TrayWnd",
+            nullptr
+        );
+
+    DWORD explorerPid = 0;
+    if (taskbar) {
+        GetWindowThreadProcessId(
+            taskbar,
+            &explorerPid
+        );
+    }
+
+    if (explorerPid == g_taskbarShowHookProcessId) {
+        return;
+    }
+
+    if (g_taskbarShowHook) {
+        UnhookWinEvent(g_taskbarShowHook);
+        g_taskbarShowHook = nullptr;
+        g_taskbarShowHookProcessId = 0;
+    }
+
+    if (explorerPid) {
+        g_taskbarShowHook = SetWinEventHook(
+            EVENT_OBJECT_SHOW,
+            EVENT_OBJECT_SHOW,
+            nullptr,
+            WinEventProc,
+            explorerPid,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
+        if (g_taskbarShowHook) {
+            g_taskbarShowHookProcessId = explorerPid;
         }
     }
+}
+
+
+bool HasHiddenTaskbar() {
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (
+            g_taskbarStates[i].hwnd &&
+            !IsWindowVisible(g_taskbarStates[i].hwnd) &&
+            ShouldHideTaskbar(g_taskbarStates[i])
+        ) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 
@@ -1712,26 +1680,32 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
-    g_taskbarShowHook =
-        SetWinEventHook(
-            EVENT_OBJECT_SHOW,
-            EVENT_OBJECT_SHOW,
-            nullptr,
-            WinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        );
-
+    EnsureTaskbarShowHook();
     UpdateTaskbarState();
 
-    const UINT kPollIntervalMs = 250;
+    const UINT kIdlePollIntervalMs = 1000;
+    const UINT kHiddenPollIntervalMs = 250;
+    const UINT kHoverPollIntervalMs = 50;
+
+    g_mouseHook =
+        SetWindowsHookExW(
+            WH_MOUSE_LL,
+            LowLevelMouseProc,
+            nullptr,
+            0
+        );
+
+    if (!g_mouseHook) {
+        Wh_Log(
+            L"SetWindowsHookExW(WH_MOUSE_LL) failed; timer remains fallback"
+        );
+    }
 
     UINT_PTR timerId =
         SetTimer(
             nullptr,
             1,
-            kPollIntervalMs,
+            kIdlePollIntervalMs,
             nullptr
         );
 
@@ -1749,7 +1723,22 @@ DWORD WINAPI WorkerThread(
         }
 
         if (msg.message == WM_TIMER) {
+            EnsureTaskbarShowHook();
             UpdateTaskbarState();
+
+            if (timerId) {
+                SetTimer(
+                    nullptr,
+                    timerId,
+                    g_hoverActive
+                        ? kHoverPollIntervalMs
+                        : HasHiddenTaskbar()
+                            ? kHiddenPollIntervalMs
+                            : kIdlePollIntervalMs,
+                    nullptr
+                );
+            }
+
             continue;
         }
 
@@ -1759,23 +1748,61 @@ DWORD WINAPI WorkerThread(
                 0
             );
 
+            EnsureTaskbarShowHook();
             UpdateTaskbarState();
+
+            if (timerId) {
+                SetTimer(
+                    nullptr,
+                    timerId,
+                    g_hoverActive
+                        ? kHoverPollIntervalMs
+                        : HasHiddenTaskbar()
+                            ? kHiddenPollIntervalMs
+                            : kIdlePollIntervalMs,
+                    nullptr
+                );
+            }
+
             continue;
         }
 
         if (msg.message == WM_APP_SETTINGS) {
-            InterlockedExchange(
-                &g_refreshPosted,
-                0
-            );
-
             LoadSettings();
+            EnsureTaskbarShowHook();
             UpdateTaskbarState();
+
+            if (timerId) {
+                SetTimer(
+                    nullptr,
+                    timerId,
+                    g_hoverActive
+                        ? kHoverPollIntervalMs
+                        : HasHiddenTaskbar()
+                            ? kHiddenPollIntervalMs
+                            : kIdlePollIntervalMs,
+                    nullptr
+                );
+            }
+
             continue;
         }
 
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+
+        if (timerId) {
+            SetTimer(
+                nullptr,
+                timerId,
+                g_hoverActive
+                    ? kHoverPollIntervalMs
+                    : HasHiddenTaskbar()
+                        ? kHiddenPollIntervalMs
+                        : kIdlePollIntervalMs,
+                nullptr
+            );
+        }
     }
 
     if (timerId) {
@@ -1811,6 +1838,14 @@ DWORD WINAPI WorkerThread(
             g_taskbarShowHook
         );
         g_taskbarShowHook = nullptr;
+        g_taskbarShowHookProcessId = 0;
+    }
+
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(
+            g_mouseHook
+        );
+        g_mouseHook = nullptr;
     }
 
     return 0;
