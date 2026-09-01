@@ -1310,7 +1310,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
     Wh_Log(L"Resolving symbols for: %ls", path);
   }
 
-  WindhawkUtils::SYMBOL_HOOK hooks[] = {
+  WindhawkUtils::SYMBOL_HOOK chromeDllHooks[] = {
 
       // -----------------------------------------------------------------------
       // Bookmark/core: REQUIRED
@@ -1473,7 +1473,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
   options.noUndecoratedSymbols = TRUE;
 
-  if (!WindhawkUtils::HookSymbols(chromeDll, hooks, ARRAYSIZE(hooks), &options)) {
+  if (!WindhawkUtils::HookSymbols(chromeDll, chromeDllHooks, ARRAYSIZE(chromeDllHooks), &options)) {
     Wh_Log(L"ERROR: Failed to resolve required Chrome symbols");
 
     return false;
