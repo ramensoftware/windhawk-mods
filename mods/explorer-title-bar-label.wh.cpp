@@ -3,7 +3,7 @@
 // @name            Explorer Title Bar Label
 // @description     Add custom text, date and time to the Windows 11 File Explorer title bar.
 // @version         1.0.0
-// @author          digitalART
+// @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
 // @include         explorer.exe
