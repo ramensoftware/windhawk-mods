@@ -623,7 +623,13 @@ static UINT GetWindowDpi(HWND hwnd) {
     HMONITOR hMon = (hwnd && IsWindow(hwnd)) ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : NULL;
     return GetMonitorDpi(hMon);
 }
-
+static bool IsTaskbarWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
+    WCHAR className[64] = {};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) == 0) return false;
+    return (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+            _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0);
+}
 static void GetLocalizedFooterStrings(std::wstring& outPreferences, std::wstring& outHint, std::wstring* outShowBar = nullptr) {
     try {
         ModSettings settings = GetSettingsSnapshot();
@@ -952,17 +958,60 @@ static void SwitchToLayout(size_t index) {
 
         HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
         hTarget = AtomicLoadHwnd(g_targetWindow);
-        if (!hTarget || !IsWindow(hTarget) || hTarget == hFlyout) {
+        
+        if (!hTarget || !IsWindow(hTarget) || hTarget == hFlyout || IsTaskbarWindow(hTarget)) {
             hTarget = GetForegroundWindow();
-            if (hTarget == hFlyout) hTarget = nullptr;
+            if (!hTarget || IsTaskbarWindow(hTarget) || hTarget == hFlyout) {
+                hTarget = GetActiveWindow();
+                if (!hTarget || IsTaskbarWindow(hTarget) || hTarget == hFlyout) {
+                    GUITHREADINFO gti = { sizeof(GUITHREADINFO) };
+                    if (GetGUIThreadInfo(0, &gti)) {
+                        if (gti.hwndActive && !IsTaskbarWindow(gti.hwndActive) && gti.hwndActive != hFlyout) {
+                            hTarget = gti.hwndActive;
+                        } else if (gti.hwndFocus && !IsTaskbarWindow(gti.hwndFocus) && gti.hwndFocus != hFlyout) {
+                            hTarget = gti.hwndFocus;
+                        }
+                    }
+                }
+            }
+            
+            if (hTarget && !IsTaskbarWindow(hTarget) && hTarget != hFlyout) {
+                g_targetWindow.store(hTarget, std::memory_order_release);
+            } else {
+                Wh_Log(L"SwitchToLayout: No valid target window found");
+                return;
+            }
         }
 
-        if (hTarget && IsWindow(hTarget)) {
-            PostMessageW(hTarget, WM_INPUTLANGCHANGEREQUEST, 0, reinterpret_cast<LPARAM>(targetHkl));
+        DWORD dwTargetThreadId = GetWindowThreadProcessId(hTarget, nullptr);
+        
+        if (hTarget && IsWindow(hTarget) && dwTargetThreadId != 0) {
+            HKL currentLayout = GetKeyboardLayout(dwTargetThreadId);
+            
+            if (currentLayout != targetHkl) {
+                // Try ActivateKeyboardLayout (returns HKL, not BOOL)
+                ActivateKeyboardLayout(targetHkl, KLF_SETFORPROCESS);
+                
+                // Verify if change succeeded
+                if (GetKeyboardLayout(dwTargetThreadId) != targetHkl) {
+                    // Fallback: try message-based approach
+                    if (!PostMessageW(hTarget, WM_INPUTLANGCHANGEREQUEST, 0, reinterpret_cast<LPARAM>(targetHkl))) {
+                        SendMessageW(hTarget, WM_INPUTLANGCHANGEREQUEST, 0, reinterpret_cast<LPARAM>(targetHkl));
+                    }
+                    // Final fallback with reset flag
+                    if (GetKeyboardLayout(dwTargetThreadId) != targetHkl) {
+                        ActivateKeyboardLayout(targetHkl, KLF_SETFORPROCESS | KLF_RESET);
+                    }
+                }
+                
+                Wh_Log(L"SwitchToLayout: Changed to layout %p for thread %d (window: %p)", 
+                       targetHkl, dwTargetThreadId, hTarget);
+            }
         }
-    } catch (...) {}
+    } catch (...) {
+        Wh_Log(L"SwitchToLayout: Exception occurred");
+    }
 }
-
 void ToggleFlyoutWindow();
 void ShowFlyoutWindow();
 static void CycleSwitcher(bool forward, bool switchImmediately, bool showFlyout);
@@ -1969,17 +2018,16 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 return TRUE;
             }
 
-            if (_wcsicmp(className, L"Shell_InputSwitchTopLevelWindow") == 0 ||
-                _wcsicmp(className, L"Shell_InputSwitch") == 0 ||
-                _wcsicmp(className, L"InputSwitch") == 0) {
-
-                HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
-                HWND hFore = GetForegroundWindow();
-                if (hFore != hWnd && hFore != hFlyout) {
-                    g_targetWindow.store(hFore, std::memory_order_release);
-                }
-                ShowFlyoutWindow();
-                return TRUE;
+           if (_wcsicmp(className, L"Shell_InputSwitchTopLevelWindow") == 0) {
+    HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+    HWND hFore = GetForegroundWindow();
+    if (hFore != hWnd && hFore != hFlyout) {
+        if (!IsTaskbarWindow(hFore)) {
+            g_targetWindow.store(hFore, std::memory_order_release);
+        }
+    }
+    ShowFlyoutWindow();
+    return TRUE;
             }
         }
     }
@@ -2069,22 +2117,34 @@ static LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
                     if (IsLanguageButton(hWnd, tb.idCommand)) {
                         if (msg == WM_LBUTTONUP) {
-                            static DWORD lastClickTime = 0;
-                            DWORD currentTime = GetTickCount();
-                            if (currentTime - g_lastInactiveTick.load(std::memory_order_relaxed) < 350) {
-                                return 0;
-                            }
-                            if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
-                                lastClickTime = currentTime;
-                                HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
-                                HWND hFore = GetForegroundWindow();
-                                if (hFore != hWnd && hFore != hFlyout) {
-                                    g_targetWindow.store(hFore, std::memory_order_release);
-                                }
-                                g_hClickedTaskbar.store(FindAncestorTaskbar(hWnd), std::memory_order_release);
-                                ToggleFlyoutWindow();
-                            }
-                        }
+    static DWORD lastClickTime = 0;
+    DWORD currentTime = GetTickCount();
+    if (currentTime - g_lastInactiveTick.load(std::memory_order_relaxed) < 350) {
+        return 0;
+    }
+    if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
+        lastClickTime = currentTime;
+        HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
+        HWND hFore = GetForegroundWindow();
+        // FIX: Se hFore è la taskbar, usa l'ultima finestra non-taskbar valida
+        if (hFore != hWnd && hFore != hFlyout) {
+            if (IsTaskbarWindow(hFore)) {
+                // Cerca la finestra attiva nella stessa sessione
+                HWND hRealFore = GetForegroundWindow();
+                // Se è ancora la taskbar, mantieni il target esistente
+                if (IsTaskbarWindow(hRealFore)) {
+                    // Non aggiornare, mantieni il target precedente
+                } else {
+                    g_targetWindow.store(hRealFore, std::memory_order_release);
+                }
+            } else {
+                g_targetWindow.store(hFore, std::memory_order_release);
+            }
+        }
+        g_hClickedTaskbar.store(FindAncestorTaskbar(hWnd), std::memory_order_release);
+        ToggleFlyoutWindow();
+    }
+}
                         if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
                         return 0;
                     }
@@ -2308,7 +2368,22 @@ static void RememberForegroundTarget() {
     HWND hFlyout = AtomicLoadHwnd(g_hFlyoutWnd);
     HWND hFore = GetForegroundWindow();
     if (hFore && hFore != hFlyout) {
-        g_targetWindow.store(hFore, std::memory_order_release);
+        if (!IsTaskbarWindow(hFore)) {
+            g_targetWindow.store(hFore, std::memory_order_release);
+        } else {
+            HWND hCurrent = AtomicLoadHwnd(g_targetWindow);
+            if (hCurrent && IsWindow(hCurrent) && !IsTaskbarWindow(hCurrent)) {
+            } else {
+                HWND hReal = GetWindow(GetDesktopWindow(), GW_CHILD);
+                while (hReal) {
+                    if (IsWindowVisible(hReal) && !IsTaskbarWindow(hReal)) {
+                        g_targetWindow.store(hReal, std::memory_order_release);
+                        break;
+                    }
+                    hReal = GetWindow(hReal, GW_HWNDNEXT);
+                }
+            }
+        }
     }
 }
 
