@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.6
+// @version         1.1.7
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -61,7 +61,9 @@ keeps overhead low and avoids tying Num Lock to the shell process.
   the next Num Lock event re-reads the real modifier state from the OS, and
   the worker does the same before skipping a force-on.
 - **Block** also swallows the ToggleKeys accessibility shortcut (hold Num
-  Lock for 5 seconds). Use **Allow** if you need that shortcut.
+  Lock for 5 seconds) and the MouseKeys shortcut (Left Alt + Left Shift +
+  Num Lock) whenever your override modifier is not Shift or Alt. Use
+  **Allow** if you need those shortcuts.
 - Synthetic Num Lock presses this mod sends are tagged and ignored by
   *this* hook, so the force-on path cannot fight itself. Other apps still
   see those injected presses (the pulse has to reach the OS to move the
@@ -139,6 +141,9 @@ constexpr UINT_PTR kSafetyTimerId = 1;
 // Worker-thread only. Caps evidence-driven rehooks so an elevated window
 // that keeps Num Lock off (UIPI) does not swap the hook every safety tick.
 constexpr ULONGLONG kRehookMinIntervalMs = 60 * 1000;
+// SendInput is asynchronous; wait for the injected toggle to land before
+// sending another pulse or Num Lock can flip back OFF.
+constexpr ULONGLONG kPulseDebounceMs = 300;
 
 // dwExtraInfo stamped on every synthetic Num Lock we send, so the hook can
 // let our own keystrokes through without treating them as user input.
@@ -163,7 +168,8 @@ std::atomic<bool> g_blockNumLockKey{true};
 std::atomic<int> g_safetyCheckSeconds{10};
 
 // ---------------------------------------------------------------------------
-// Live input state, updated only from the hook (cheap atomics)
+// Live input state (atomics). The hook updates these on key events;
+// the worker also re-seeds from GetAsyncKeyState when verifying a hold.
 // ---------------------------------------------------------------------------
 
 std::atomic<bool> g_leftModDown{false};
@@ -204,6 +210,8 @@ HWINEVENTHOOK g_foregroundHook = nullptr;
 bool g_sessionNotifyRegistered = false;
 // Worker thread only. Last time we posted WM_APP_REHOOK.
 ULONGLONG g_lastRehookMs = 0;
+// Worker thread only. Last time we sent a Num Lock pulse.
+ULONGLONG g_lastPulseMs = 0;
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -409,11 +417,15 @@ void UninstallKeyboardHook() {
 
 // Worker thread only. Unconditional: unlock/resume.
 void RequestRehook() {
-    g_lastRehookMs = GetTickCount64();
     DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
-    if (threadId) {
-        PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0);
+    if (!threadId) {
+        return;
     }
+    if (!PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0)) {
+        Wh_Log(L"PostThreadMessageW(WM_APP_REHOOK) failed: %lu", GetLastError());
+        return;
+    }
+    g_lastRehookMs = GetTickCount64();
 }
 
 // Worker thread only. Num Lock found off is the signal the hook may have
@@ -427,14 +439,23 @@ void RequestEvidenceRehook() {
 }
 
 // Must run on the worker thread, never inside the LL hook.
-void ForceNumLockOn(bool logSafety) {
+void ForceNumLockOn(bool fromSafetyCheck) {
     if (IsOverrideHeldVerified() || IsNumLockOn()) {
         return;
     }
-    if (logSafety) {
-        Wh_Log(L"Safety check: Num Lock was off, forcing ON");
+
+    const ULONGLONG now = GetTickCount64();
+    if (g_lastPulseMs != 0 && now - g_lastPulseMs < kPulseDebounceMs) {
+        return;
     }
-    RequestEvidenceRehook();
+
+    if (fromSafetyCheck) {
+        Wh_Log(L"Safety check: Num Lock was off, forcing ON");
+        // Nothing reported this one, so the hook may have been dropped.
+        RequestEvidenceRehook();
+    }
+
+    g_lastPulseMs = now;
     SendNumLockPulse();
 }
 
@@ -499,10 +520,12 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         // Only wake the worker after an override was actually used. Ordinary
         // Shift taps during typing stay on this thread.
-        if (isUp && !IsOverrideHeld() &&
-            !g_allowedNumLockDown.load(std::memory_order_relaxed) &&
-            g_overrideUsedThisHold.exchange(false, std::memory_order_relaxed)) {
-            RequestForceOn();
+        if (isUp && !IsOverrideHeld()) {
+            const bool used =
+                g_overrideUsedThisHold.exchange(false, std::memory_order_relaxed);
+            if (used && !g_allowedNumLockDown.load(std::memory_order_relaxed)) {
+                RequestForceOn();
+            }
         }
 
         return Pass(nCode, wParam, lParam);
