@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.8
+// @version         1.1.9
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -138,6 +138,9 @@ constexpr UINT WM_APP_QUIT = WM_APP + 3;
 constexpr UINT WM_APP_REHOOK = WM_APP + 4;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
+// Retries a missing keyboard hook when the safety check is disabled.
+constexpr UINT_PTR kHookRetryTimerId = 2;
+constexpr UINT kHookRetryIntervalMs = 60 * 1000;
 // SendInput is asynchronous; wait for the injected toggle to land before
 // sending another pulse or Num Lock can flip back OFF.
 constexpr ULONGLONG kPulseDebounceMs = 300;
@@ -421,6 +424,12 @@ void RequestRehook() {
     }
 }
 
+void RequestRehookIfMissing() {
+    if (!g_keyboardHook.load(std::memory_order_acquire)) {
+        RequestRehook();
+    }
+}
+
 // Must run on the worker thread, never inside the LL hook.
 void ForceNumLockOn(bool fromSafetyCheck) {
     if (IsOverrideHeldVerified() || IsNumLockOn()) {
@@ -440,6 +449,19 @@ void ForceNumLockOn(bool fromSafetyCheck) {
     SendNumLockPulse();
 }
 
+void UpdateHookRetryTimer(HWND hwnd) {
+    KillTimer(hwnd, kHookRetryTimerId);
+
+    int seconds = g_safetyCheckSeconds.load(std::memory_order_relaxed);
+    if (seconds > 0) {
+        return;
+    }
+
+    if (!SetTimer(hwnd, kHookRetryTimerId, kHookRetryIntervalMs, nullptr)) {
+        Wh_Log(L"SetTimer (hook retry) failed: %lu", GetLastError());
+    }
+}
+
 void UpdateSafetyTimer() {
     HWND hwnd = g_workerHwnd.load(std::memory_order_acquire);
     if (!hwnd) {
@@ -447,6 +469,7 @@ void UpdateSafetyTimer() {
     }
 
     KillTimer(hwnd, kSafetyTimerId);
+    UpdateHookRetryTimer(hwnd);
 
     int seconds = g_safetyCheckSeconds.load(std::memory_order_relaxed);
     if (seconds <= 0) {
@@ -622,7 +645,10 @@ LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
         case WM_TIMER:
             if (wParam == kSafetyTimerId) {
+                RequestRehookIfMissing();
                 ForceNumLockOn(true);
+            } else if (wParam == kHookRetryTimerId) {
+                RequestRehookIfMissing();
             }
             return 0;
 
@@ -757,6 +783,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     hwnd = g_workerHwnd.exchange(nullptr, std::memory_order_acq_rel);
     if (hwnd) {
         KillTimer(hwnd, kSafetyTimerId);
+        KillTimer(hwnd, kHookRetryTimerId);
         UnregisterPowerAndSession(hwnd);
         DestroyWindow(hwnd);
     }
