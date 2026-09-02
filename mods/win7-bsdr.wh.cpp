@@ -29,6 +29,7 @@
     * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2.
+* This mod does not modify any system files. The above optional DLL can be saved anywhere in the file system.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
@@ -621,7 +622,7 @@ static constexpr unsigned char RES_BSDR_BTN_NORMAL[] = {
     0x00, 0x00, 0x00, 0x1b, 0xff, 0xff, 0xff, 0x00
 };
 alignas(BITMAPINFOHEADER)
-static constexpr const unsigned char RES_BSDR_BTN_HOVER[] = {
+static constexpr unsigned char RES_BSDR_BTN_HOVER[] = {
     0x28, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc4, 0x0e, 0x00, 0x00, 0xc4, 0x0e, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43, 
@@ -1963,6 +1964,7 @@ void CustomBSDR::CenterWindow(HWND hWnd) {
     if (!GetWindowRect(hWnd, &rcWindow)) {
         return;
     }
+    // Honor work area like Windows 7 (verified pixel perfectness)
     if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWorkArea, 0)) {
         return;
     }
@@ -2116,6 +2118,13 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
         }
     } else {
         Wh_Log(L"Image load error: no hBitmap/pBits");
+        if (hBitmap) {
+            DeleteObject(hBitmap);
+        }
+        if (forceHardcoded) {
+            Wh_Log(L"Failed to load hardcoded image!");
+            return nullptr;
+        }
         return LoadAlphaBitmap(resourceId, true);
     }
 
@@ -2480,7 +2489,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
 
     int iconSize = MulDiv(32, dpi, 96);
 
-    tile.hIcon = CreateWindowExW(0, L"Static", nullptr, WS_CHILD | WS_VISIBLE | SS_BITMAP, -iconSize, -iconSize, iconSize, iconSize, hAppListScroll, nullptr, nullptr, nullptr);
+    tile.hIcon = CreateWindowExW(0, L"Static", nullptr, WS_CHILD | WS_VISIBLE | SS_BITMAP | SS_REALSIZECONTROL, -iconSize, -iconSize, iconSize, iconSize, hAppListScroll, nullptr, nullptr, nullptr);
     tile.hTitle = CreateWindowExW(0, L"Static", titleText.c_str(), WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, -100, -20, 100, 20, hAppListScroll, nullptr, nullptr, nullptr);
 
     if (!blockReasonText.empty()) {
@@ -2760,6 +2769,7 @@ void CustomBSDR::Cancel(bool noExitProcess) {
             // Here comes the old terrible workaround
             // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
             // and winlogon has already got out of the mid-logoff state. Subsequent LogonUI launches (lock/C-A-D) are fine too.
+            // Has been using this approach from my AuthUX BSDR for months and have not seen any issues with it
             Wh_Log(L"Force exiting LogonUI!");
             ExitProcess(0);
         }
@@ -3282,6 +3292,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         }
         // Retaking screenshot requires temporarily hiding the window
         // Windows 7 doesn't do that either so skip that
+        // (Win7 also leaves the empty area from resolution increase black)
         return 0;
     }
     case WM_BSDR_SETFOCUS: {
@@ -3942,35 +3953,46 @@ CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
     if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
-        HANDLE duplicated = nullptr;
-        if (!DuplicateHandle(
-            GetCurrentProcess(),
-            result,
-            GetCurrentProcess(),
-            &duplicated,
-            0,
-            FALSE,
-            DUPLICATE_SAME_ACCESS
-        )) {
-            Wh_Log(L"DuplicateHandle failed, GLE=%d", GetLastError());
-            return result;
-        }
+        void* returnAddress = __builtin_return_address(0);
+        HMODULE callerModule;
+        DWORD dwFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if (GetModuleHandleExW(dwFlags, (LPCWSTR)returnAddress, &callerModule)) {
+            if (callerModule == g_hLogonControllerDll) {
+                HANDLE duplicated = nullptr;
+                if (!DuplicateHandle(
+                    GetCurrentProcess(),
+                    result,
+                    GetCurrentProcess(),
+                    &duplicated,
+                    0,
+                    FALSE,
+                    DUPLICATE_SAME_ACCESS
+                )) {
+                    Wh_Log(L"DuplicateHandle failed, GLE=%d", GetLastError());
+                    return result;
+                }
 
-        {
-            std::lock_guard lock(g_doModalExitEventMutex);
+                {
+                    std::lock_guard lock(g_doModalExitEventMutex);
 
-            if (!g_hDoModalExitEventDup) {
-                g_hDoModalExitEventDup = duplicated;
-                duplicated = nullptr;
-                // Works cleanly on LTSC 2021 and 11 25H2
-                Wh_Log(L"Caught DoModal event");
+                    if (!g_hDoModalExitEventDup) {
+                        g_hDoModalExitEventDup = duplicated;
+                        duplicated = nullptr;
+                        // Works cleanly on LTSC 2021 and 11 25H2
+                        Wh_Log(L"Caught DoModal event");
+                    } else {
+                        Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
+                    }
+                }
+
+                if (duplicated) {
+                    CloseHandle(duplicated);
+                }
             } else {
-                Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
+                Wh_Log(L"Caught matching event from non-LogonController module; ignoring...");
             }
-        }
-
-        if (duplicated) {
-            CloseHandle(duplicated);
+        } else {
+            Wh_Log(L"GetModuleHandleExW failed, GLE=%d", GetLastError());
         }
     }
     return result;
@@ -4150,6 +4172,9 @@ BOOL Wh_ModInit() {
                 Wh_Log(L"HookSymbols winlogon failed");
                 return FALSE;
             }
+        } else {
+            Wh_Log(L"GetModuleHandleW(NULL) == NULL??");
+            return FALSE;
         }
         g_noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
         return TRUE;
@@ -4285,7 +4310,6 @@ void Wh_ModBeforeUninit() {
             }
 
             Resolve(BlockedShutdownResolution_Cancel);
-            Sleep(BSDR_CANCEL_TIMER_MS);
             Cancel(true);
         }
         Stop();
