@@ -61,7 +61,7 @@ Windows 11 only.
   $options:
   - contextMenu: Context menu
   - middleClick: Middle click
-- iconRotation: "0"
+- iconRotation: 0
   $name: Icon rotation
   $description: Rotation in whole degrees clockwise. Any integer is accepted and normalized to 0-359. This can also compensate for different taskbar orientations. Changing this reloads the mod.
 - iconBrightness: 168
@@ -1558,17 +1558,7 @@ static bool LoadCustomIconFile(
 static IconAppearanceSettings LoadIconAppearanceSettings() {
     IconAppearanceSettings settings;
 
-    std::wstring rotationText =
-        WindhawkUtils::StringSetting::make(
-            L"iconRotation").get();
-
-    int configuredRotation = 0;
-    if (!ParseWideInt(rotationText, &configuredRotation)) {
-        Wh_Log(
-            L"[SETTINGS] Invalid icon rotation '%s'; using 0 degrees",
-            rotationText.c_str());
-        configuredRotation = 0;
-    }
+    int configuredRotation = Wh_GetIntSetting(L"iconRotation");
 
     int rotation = configuredRotation % 360;
     if (rotation < 0) {
