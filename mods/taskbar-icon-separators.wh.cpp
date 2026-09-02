@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.31
+// @version         1.0.32
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -38,8 +38,10 @@ to remove it.
 A newly added, unanchored separator keeps a small "Drag to anchor this separator"
 guide on the desktop side of the taskbar until it is moved once. Win+1 through Win+0
 skips live separator buttons when selecting numbered apps. Windhawk settings also
-provide a single global separator width plus rotation, brightness, and alpha controls
-for the bundled icon.
+provide a single global separator width plus arbitrary icon rotation, brightness, alpha,
+and an optional custom icon. Anchor-guide placement follows the detected taskbar geometry.
+
+Custom icon source support incorporates the contribution by **phntsm**.
 
 Windows 11 only.
 */
@@ -59,20 +61,18 @@ Windows 11 only.
   $options:
   - contextMenu: Context menu
   - middleClick: Middle click
-- iconRotation: "0"
+- iconRotation: 0
   $name: Icon rotation
-  $description: Rotation of the bundled separator artwork. Changing this reloads the mod.
-  $options:
-  - "0": 0 degrees
-  - "90": 90 degrees clockwise
-  - "180": 180 degrees
-  - "270": 270 degrees clockwise
+  $description: Rotation in whole degrees clockwise. Any integer is accepted and normalized to 0-359. This can also compensate for different taskbar orientations. Changing this reloads the mod.
 - iconBrightness: 168
   $name: Icon brightness
   $description: 0 = black, 168 = default, 255 = white. Changing this reloads the mod.
 - iconAlpha: 173
   $name: Icon alpha
   $description: 0 = transparent, 173 = default, 255 = fully opaque. Changing this reloads the mod.
+- customIcon: ""
+  $name: Custom icon
+  $description: Optional full path to an .ico file; matching single or double surrounding quotes are accepted. Rotation, brightness, and alpha are applied to it too. Unsupported files fall back to the bundled icon. Changing this reloads the mod.
 */
 // ==/WindhawkModSettings==
 
@@ -107,6 +107,7 @@ Windows 11 only.
 #include <cwchar>
 #include <cstring>
 #include <climits>
+#include <cmath>
 #include <iterator>
 #include <list>
 #include <mutex>
@@ -239,6 +240,8 @@ struct IconAppearanceSettings {
     int rotation = 0;
     int brightness = kDefaultIconBrightness;
     int alpha = kDefaultIconAlpha;
+    unsigned long long customIconHash = 0;
+    std::vector<BYTE> customIconBytes;
 };
 
 static IconAppearanceSettings g_iconAppearance;
@@ -458,14 +461,27 @@ static std::wstring JoinPath(
 
 static std::wstring BuildIconGenerationToken(
     const IconAppearanceSettings& appearance) {
-    wchar_t token[64] = {};
-    swprintf_s(
-        token,
-        L"g%d-r%d-b%d-a%d",
-        kIconGenerationRevision,
-        appearance.rotation,
-        appearance.brightness,
-        appearance.alpha);
+    wchar_t token[96] = {};
+
+    if (!appearance.customIconBytes.empty()) {
+        swprintf_s(
+            token,
+            L"g%d-r%d-b%d-a%d-c%016llx",
+            kIconGenerationRevision,
+            appearance.rotation,
+            appearance.brightness,
+            appearance.alpha,
+            appearance.customIconHash);
+    } else {
+        swprintf_s(
+            token,
+            L"g%d-r%d-b%d-a%d",
+            kIconGenerationRevision,
+            appearance.rotation,
+            appearance.brightness,
+            appearance.alpha);
+    }
+
     return token;
 }
 
@@ -564,8 +580,46 @@ static bool IsValidIconGenerationToken(std::wstring_view token) {
     int rotation = 0;
     int brightness = 0;
     int alpha = 0;
+    unsigned long long customIconHash = 0;
     int consumed = 0;
+
     int matched = swscanf(
+        candidate.c_str(),
+        L"g%d-r%d-b%d-a%d-c%16llx%n",
+        &revision,
+        &rotation,
+        &brightness,
+        &alpha,
+        &customIconHash,
+        &consumed);
+
+    if (matched == 5 &&
+        consumed == static_cast<int>(candidate.size())) {
+        // BuildIconGenerationToken always writes exactly 16 hexadecimal hash
+        // digits. Keep ownership recognition equally strict so cleanup never
+        // adopts a merely prefix-compatible filename that this mod can't emit.
+        const size_t hashMarker = candidate.rfind(L"-c");
+        const bool hashWidthValid =
+            hashMarker != std::wstring::npos &&
+            candidate.size() - hashMarker - 2 == 16 &&
+            std::all_of(
+                candidate.begin() + hashMarker + 2,
+                candidate.end(),
+                [](wchar_t ch) {
+                    return (ch >= L'0' && ch <= L'9') ||
+                           (ch >= L'a' && ch <= L'f') ||
+                           (ch >= L'A' && ch <= L'F');
+                });
+
+        return hashWidthValid &&
+            revision > 0 &&
+            rotation >= 0 && rotation < 360 &&
+            brightness >= 0 && brightness <= 255 &&
+            alpha >= 0 && alpha <= 255;
+    }
+
+    consumed = 0;
+    matched = swscanf(
         candidate.c_str(),
         L"g%d-r%d-b%d-a%d%n",
         &revision,
@@ -577,8 +631,7 @@ static bool IsValidIconGenerationToken(std::wstring_view token) {
     return matched == 4 &&
         consumed == static_cast<int>(candidate.size()) &&
         revision > 0 &&
-        (rotation == 0 || rotation == 90 ||
-         rotation == 180 || rotation == 270) &&
+        rotation >= 0 && rotation < 360 &&
         brightness >= 0 && brightness <= 255 &&
         alpha >= 0 && alpha <= 255;
 }
@@ -810,7 +863,17 @@ static std::optional<std::wstring> ExtractStableIdFromSeparatorIdentity(
 static bool ParseWideInt(
     std::wstring_view text,
     int* valueOut) {
-    if (!valueOut || text.empty()) {
+    if (!valueOut) {
+        return false;
+    }
+
+    while (!text.empty() && std::iswspace(text.front())) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && std::iswspace(text.back())) {
+        text.remove_suffix(1);
+    }
+    if (text.empty()) {
         return false;
     }
 
@@ -933,7 +996,10 @@ static bool GenerateRandomBytes(
         HMODULE bcrypt =
             GetModuleHandleW(L"bcrypt.dll");
         if (!bcrypt) {
-            bcrypt = LoadLibraryW(L"bcrypt.dll");
+            bcrypt = LoadLibraryExW(
+                L"bcrypt.dll",
+                nullptr,
+                LOAD_LIBRARY_SEARCH_SYSTEM32);
         }
 
         return bcrypt
@@ -1372,24 +1438,137 @@ static InteractionMode LoadInteractionModeSetting() {
     return InteractionMode::ContextMenu;
 }
 
+static bool LoadCustomIconFile(
+    const std::wstring& path,
+    std::vector<BYTE>* bytesOut,
+    unsigned long long* hashOut) {
+    if (!bytesOut || !hashOut || path.empty()) {
+        return false;
+    }
+
+    bytesOut->clear();
+    *hashOut = 0;
+
+    HANDLE file = CreateFileW(
+        path.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(
+            L"[ICON] Couldn't open custom icon '%s' error=%u; using bundled icon",
+            path.c_str(),
+            GetLastError());
+        return false;
+    }
+
+    LARGE_INTEGER size = {};
+    constexpr LONGLONG kMaximumCustomIconSize = 32LL * 1024 * 1024;
+    if (!GetFileSizeEx(file, &size) ||
+        size.QuadPart < 6 ||
+        size.QuadPart > kMaximumCustomIconSize) {
+        Wh_Log(
+            L"[ICON] Custom icon '%s' has an invalid size; using bundled icon",
+            path.c_str());
+        CloseHandle(file);
+        return false;
+    }
+
+    bytesOut->resize(static_cast<size_t>(size.QuadPart));
+    DWORD bytesRead = 0;
+    BOOL readOk = ReadFile(
+        file,
+        bytesOut->data(),
+        static_cast<DWORD>(bytesOut->size()),
+        &bytesRead,
+        nullptr);
+    CloseHandle(file);
+
+    if (!readOk || bytesRead != bytesOut->size()) {
+        Wh_Log(
+            L"[ICON] Couldn't read custom icon '%s'; using bundled icon",
+            path.c_str());
+        bytesOut->clear();
+        return false;
+    }
+
+    const auto readLe16 = [bytesOut](size_t offset) -> unsigned int {
+        return static_cast<unsigned int>((*bytesOut)[offset]) |
+            (static_cast<unsigned int>((*bytesOut)[offset + 1]) << 8);
+    };
+    const auto readLe32 = [bytesOut](size_t offset) -> unsigned long {
+        return static_cast<unsigned long>((*bytesOut)[offset]) |
+            (static_cast<unsigned long>((*bytesOut)[offset + 1]) << 8) |
+            (static_cast<unsigned long>((*bytesOut)[offset + 2]) << 16) |
+            (static_cast<unsigned long>((*bytesOut)[offset + 3]) << 24);
+    };
+
+    const unsigned int reserved = readLe16(0);
+    const unsigned int type = readLe16(2);
+    const unsigned int frameCount = readLe16(4);
+    const size_t directorySize =
+        6 + static_cast<size_t>(frameCount) * 16;
+
+    bool valid =
+        reserved == 0 && type == 1 &&
+        frameCount > 0 && frameCount <= 32 &&
+        directorySize <= bytesOut->size();
+
+    if (valid) {
+        for (unsigned int i = 0; i < frameCount; i++) {
+            const size_t entry = 6 + static_cast<size_t>(i) * 16;
+            const unsigned int width =
+                (*bytesOut)[entry] ? (*bytesOut)[entry] : 256;
+            const unsigned int height =
+                (*bytesOut)[entry + 1] ? (*bytesOut)[entry + 1] : 256;
+            const unsigned long imageSize = readLe32(entry + 8);
+            const unsigned long imageOffset = readLe32(entry + 12);
+
+            if (width != height ||
+                !imageSize ||
+                imageOffset < directorySize ||
+                imageOffset > bytesOut->size() ||
+                imageSize > bytesOut->size() - imageOffset) {
+                valid = false;
+                break;
+            }
+        }
+    }
+
+    if (!valid) {
+        Wh_Log(
+            L"[ICON] Custom icon '%s' isn't a structurally valid ICO; using bundled icon",
+            path.c_str());
+        bytesOut->clear();
+        return false;
+    }
+
+    unsigned long long hash = 14695981039346656037ULL;
+    for (BYTE byte : *bytesOut) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    *hashOut = hash;
+    return true;
+}
+
 static IconAppearanceSettings LoadIconAppearanceSettings() {
     IconAppearanceSettings settings;
 
-    std::wstring rotationText =
-        WindhawkUtils::StringSetting::make(
-            L"iconRotation").get();
+    int configuredRotation = Wh_GetIntSetting(L"iconRotation");
 
-    int rotation = 0;
-    if (rotationText == L"90") {
-        rotation = 90;
-    } else if (rotationText == L"180") {
-        rotation = 180;
-    } else if (rotationText == L"270") {
-        rotation = 270;
-    } else if (rotationText != L"0") {
+    int rotation = configuredRotation % 360;
+    if (rotation < 0) {
+        rotation += 360;
+    }
+    if (rotation != configuredRotation) {
         Wh_Log(
-            L"[SETTINGS] Unsupported icon rotation '%s'; using 0 degrees",
-            rotationText.c_str());
+            L"[SETTINGS] Normalized icon rotation from %d to %d degrees",
+            configuredRotation,
+            rotation);
     }
 
     int brightness = Wh_GetIntSetting(L"iconBrightness");
@@ -1414,6 +1593,31 @@ static IconAppearanceSettings LoadIconAppearanceSettings() {
     settings.rotation = rotation;
     settings.brightness = clampedBrightness;
     settings.alpha = clampedAlpha;
+    std::wstring customIconPath =
+        WindhawkUtils::StringSetting::make(
+            L"customIcon").get();
+
+    // Paths are often pasted from Explorer/terminal output with surrounding
+    // quotes. Strip one matching pair, but leave unmatched quotes untouched so
+    // an accidental typo fails visibly instead of silently changing the path.
+    if (customIconPath.size() >= 2) {
+        const wchar_t first = customIconPath.front();
+        const wchar_t last = customIconPath.back();
+        if ((first == L'\"' && last == L'\"') ||
+            (first == L'\'' && last == L'\'')) {
+            customIconPath = customIconPath.substr(
+                1,
+                customIconPath.size() - 2);
+        }
+    }
+
+    if (!customIconPath.empty()) {
+        LoadCustomIconFile(
+            customIconPath,
+            &settings.customIconBytes,
+            &settings.customIconHash);
+    }
+
     return settings;
 }
 
@@ -1422,7 +1626,9 @@ static bool IconAppearanceSettingsEqual(
     const IconAppearanceSettings& right) {
     return left.rotation == right.rotation &&
         left.brightness == right.brightness &&
-        left.alpha == right.alpha;
+        left.alpha == right.alpha &&
+        left.customIconBytes.empty() == right.customIconBytes.empty() &&
+        left.customIconHash == right.customIconHash;
 }
 
 static const wchar_t* InteractionModeName(
@@ -2098,7 +2304,7 @@ static bool TransformIconFrame(
     }
 
     for (size_t i = 0; i + 3 < frame->pixels.size(); i += 4) {
-        // Preserve the embedded artwork's anti-aliasing by scaling its existing
+        // Preserve the source artwork's anti-aliasing by scaling its existing
         // straight-alpha BGRA channels instead of flattening non-zero pixels.
         for (size_t channel = 0; channel < 3; channel++) {
             frame->pixels[i + channel] = ScaleIconChannel(
@@ -2115,42 +2321,138 @@ static bool TransformIconFrame(
     if (appearance.rotation == 0) {
         return true;
     }
-    if ((appearance.rotation != 90 &&
-         appearance.rotation != 180 &&
-         appearance.rotation != 270) ||
-        frame->width != frame->height) {
+    if (appearance.rotation < 0 ||
+        appearance.rotation >= 360 ||
+        frame->width != frame->height ||
+        frame->stride != frame->width * 4) {
         return false;
     }
 
-    std::vector<BYTE> rotated(frame->pixels.size());
-    for (UINT y = 0; y < frame->height; y++) {
-        for (UINT x = 0; x < frame->width; x++) {
-            UINT dstX = x;
-            UINT dstY = y;
+    // Keep the original lossless pixel-copy paths for cardinal rotations.
+    // Besides avoiding interpolation blur, this preserves byte-identical output
+    // for the four rotations supported by earlier versions of the mod.
+    if (appearance.rotation == 90 ||
+        appearance.rotation == 180 ||
+        appearance.rotation == 270) {
+        std::vector<BYTE> rotated(frame->pixels.size());
+        for (UINT y = 0; y < frame->height; y++) {
+            for (UINT x = 0; x < frame->width; x++) {
+                UINT dstX = x;
+                UINT dstY = y;
 
-            switch (appearance.rotation) {
-                case 90:
-                    dstX = frame->height - 1 - y;
-                    dstY = x;
-                    break;
-                case 180:
-                    dstX = frame->width - 1 - x;
-                    dstY = frame->height - 1 - y;
-                    break;
-                case 270:
-                    dstX = y;
-                    dstY = frame->width - 1 - x;
-                    break;
+                switch (appearance.rotation) {
+                    case 90:
+                        dstX = frame->height - 1 - y;
+                        dstY = x;
+                        break;
+                    case 180:
+                        dstX = frame->width - 1 - x;
+                        dstY = frame->height - 1 - y;
+                        break;
+                    case 270:
+                        dstX = y;
+                        dstY = frame->width - 1 - x;
+                        break;
+                }
+
+                const size_t sourceOffset =
+                    static_cast<size_t>(y) * frame->stride + x * 4;
+                const size_t destinationOffset =
+                    static_cast<size_t>(dstY) * frame->stride + dstX * 4;
+                std::copy_n(
+                    frame->pixels.data() + sourceOffset,
+                    4,
+                    rotated.data() + destinationOffset);
+            }
+        }
+
+        frame->pixels = std::move(rotated);
+        return true;
+    }
+
+    // Arbitrary rotations use inverse mapping and bilinear interpolation around
+    // the frame center. Interpolate colors in premultiplied-alpha space so
+    // transparent source pixels can't introduce dark fringes around the stroke.
+    constexpr double kPi = 3.1415926535897932384626433832795;
+    const double radians =
+        static_cast<double>(appearance.rotation) * kPi / 180.0;
+    const double cosine = std::cos(radians);
+    const double sine = std::sin(radians);
+    const double centerX = (static_cast<double>(frame->width) - 1.0) / 2.0;
+    const double centerY = (static_cast<double>(frame->height) - 1.0) / 2.0;
+
+    std::vector<BYTE> rotated(frame->pixels.size(), 0);
+
+    for (UINT dstY = 0; dstY < frame->height; dstY++) {
+        for (UINT dstX = 0; dstX < frame->width; dstX++) {
+            const double relativeX = static_cast<double>(dstX) - centerX;
+            const double relativeY = static_cast<double>(dstY) - centerY;
+
+            const double sourceX =
+                cosine * relativeX + sine * relativeY + centerX;
+            const double sourceY =
+                -sine * relativeX + cosine * relativeY + centerY;
+
+            const int x0 = static_cast<int>(std::floor(sourceX));
+            const int y0 = static_cast<int>(std::floor(sourceY));
+            const double fractionX = sourceX - x0;
+            const double fractionY = sourceY - y0;
+
+            double alpha = 0.0;
+            double premultiplied[3] = {};
+
+            for (int sampleY = 0; sampleY < 2; sampleY++) {
+                const int y = y0 + sampleY;
+                if (y < 0 || y >= static_cast<int>(frame->height)) {
+                    continue;
+                }
+
+                const double weightY =
+                    sampleY ? fractionY : 1.0 - fractionY;
+
+                for (int sampleX = 0; sampleX < 2; sampleX++) {
+                    const int x = x0 + sampleX;
+                    if (x < 0 || x >= static_cast<int>(frame->width)) {
+                        continue;
+                    }
+
+                    const double weightX =
+                        sampleX ? fractionX : 1.0 - fractionX;
+                    const double weight = weightX * weightY;
+                    const size_t sourceOffset =
+                        static_cast<size_t>(y) * frame->stride +
+                        static_cast<size_t>(x) * 4;
+                    const double sourceAlpha =
+                        frame->pixels[sourceOffset + 3];
+
+                    alpha += weight * sourceAlpha;
+                    for (size_t channel = 0; channel < 3; channel++) {
+                        premultiplied[channel] +=
+                            weight *
+                            frame->pixels[sourceOffset + channel] *
+                            sourceAlpha;
+                    }
+                }
             }
 
-            const size_t sourceOffset =
-                static_cast<size_t>(y) * frame->stride + x * 4;
             const size_t destinationOffset =
                 static_cast<size_t>(dstY) * frame->stride + dstX * 4;
-            std::copy_n(
-                frame->pixels.data() + sourceOffset,
-                4,
-                rotated.data() + destinationOffset);
+
+            if (alpha > 0.0) {
+                for (size_t channel = 0; channel < 3; channel++) {
+                    rotated[destinationOffset + channel] =
+                        static_cast<BYTE>(std::clamp(
+                            static_cast<int>(std::lround(
+                                premultiplied[channel] / alpha)),
+                            0,
+                            255));
+                }
+                rotated[destinationOffset + 3] =
+                    static_cast<BYTE>(std::clamp(
+                        static_cast<int>(std::lround(alpha)),
+                        0,
+                        255));
+            }
         }
     }
 
@@ -2237,7 +2539,15 @@ static bool BuildDibIconFrame(
 static bool BuildCustomizedSeparatorIcon(
     const IconAppearanceSettings& appearance,
     std::vector<BYTE>* output) {
-    if (!output || sizeof(kSeparatorIcon) > MAXDWORD) {
+    const bool usingCustomIcon = !appearance.customIconBytes.empty();
+    const BYTE* sourceBytes = usingCustomIcon
+        ? appearance.customIconBytes.data()
+        : kSeparatorIcon;
+    const size_t sourceSize = usingCustomIcon
+        ? appearance.customIconBytes.size()
+        : sizeof(kSeparatorIcon);
+
+    if (!output || !sourceBytes || !sourceSize || sourceSize > MAXDWORD) {
         return false;
     }
 
@@ -2259,8 +2569,8 @@ static bool BuildCustomizedSeparatorIcon(
     hr = factory->CreateStream(stream.put());
     if (SUCCEEDED(hr)) {
         hr = stream->InitializeFromMemory(
-            const_cast<BYTE*>(kSeparatorIcon),
-            static_cast<DWORD>(sizeof(kSeparatorIcon)));
+            const_cast<BYTE*>(sourceBytes),
+            static_cast<DWORD>(sourceSize));
     }
 
     winrt::com_ptr<IWICBitmapDecoder> decoder;
@@ -2289,6 +2599,9 @@ static bool BuildCustomizedSeparatorIcon(
     frames.reserve(frameCount);
     dibFrames.reserve(frameCount);
 
+    std::optional<DecodedIconFrame> customLargeFrame;
+    std::optional<std::vector<BYTE>> customLargeDib;
+
     for (UINT i = 0; i < frameCount; i++) {
         winrt::com_ptr<IWICBitmapFrameDecode> sourceFrame;
         hr = decoder->GetFrame(i, sourceFrame.put());
@@ -2309,9 +2622,10 @@ static bool BuildCustomizedSeparatorIcon(
             return false;
         }
 
-        // Taskbar pins don't need the embedded 256px frame. Re-encoding it as
-        // an uncompressed DIB would dominate the generated ICO's size.
-        if (width == 256) {
+        // Taskbar pins don't need a 256px frame when a smaller taskbar-sized
+        // frame is available. For custom icons, defer one 256px candidate and
+        // keep it only if no smaller frame survives decoding.
+        if (!usingCustomIcon && width == 256) {
             continue;
         }
 
@@ -2360,8 +2674,21 @@ static bool BuildCustomizedSeparatorIcon(
             return false;
         }
 
+        if (usingCustomIcon && width == 256) {
+            if (!customLargeFrame) {
+                customLargeFrame = std::move(frame);
+                customLargeDib = std::move(dib);
+            }
+            continue;
+        }
+
         frames.push_back(std::move(frame));
         dibFrames.push_back(std::move(dib));
+    }
+
+    if (frames.empty() && customLargeFrame && customLargeDib) {
+        frames.push_back(std::move(*customLargeFrame));
+        dibFrames.push_back(std::move(*customLargeDib));
     }
 
     constexpr size_t kIcoHeaderSize = 6;
@@ -2418,9 +2745,43 @@ GetConfiguredBundledSeparatorIconBytes() {
 
     std::vector<BYTE> iconBytes;
 
-    if (g_iconAppearance.rotation == 0 &&
-        g_iconAppearance.brightness == kDefaultIconBrightness &&
-        g_iconAppearance.alpha == kDefaultIconAlpha) {
+    if (!g_iconAppearance.customIconBytes.empty()) {
+        // Always pass custom files through WIC once, even for the neutral
+        // appearance. The lightweight ICO-directory check at settings load is
+        // intentionally cheap; decoding here proves every frame we will hand to
+        // Explorer is actually readable and canonicalizes it into our known
+        // 32-bit DIB representation. Neutral brightness/alpha are exact identity
+        // operations, so this doesn't alter the decoded pixels.
+        if (!BuildCustomizedSeparatorIcon(
+                g_iconAppearance,
+                &iconBytes) ||
+            iconBytes.empty() ||
+            iconBytes.size() > MAXDWORD) {
+            Wh_Log(
+                L"[ICON] Custom icon couldn't be decoded safely; using bundled icon");
+
+            IconAppearanceSettings bundledAppearance = g_iconAppearance;
+            bundledAppearance.customIconBytes.clear();
+            bundledAppearance.customIconHash = 0;
+            iconBytes.clear();
+
+            if (bundledAppearance.rotation == 0 &&
+                bundledAppearance.brightness == kDefaultIconBrightness &&
+                bundledAppearance.alpha == kDefaultIconAlpha) {
+                iconBytes.assign(
+                    std::begin(kSeparatorIcon),
+                    std::end(kSeparatorIcon));
+            } else if (!BuildCustomizedSeparatorIcon(
+                           bundledAppearance,
+                           &iconBytes) ||
+                       iconBytes.empty() ||
+                       iconBytes.size() > MAXDWORD) {
+                return nullptr;
+            }
+        }
+    } else if (g_iconAppearance.rotation == 0 &&
+               g_iconAppearance.brightness == kDefaultIconBrightness &&
+               g_iconAppearance.alpha == kDefaultIconAlpha) {
         iconBytes.assign(
             std::begin(kSeparatorIcon),
             std::end(kSeparatorIcon));
@@ -2538,11 +2899,13 @@ static bool WriteConfiguredBundledSeparatorIcon() {
         return false;
     }
 
-    if (g_iconAppearance.rotation != 0 ||
+    if (!g_iconAppearance.customIconBytes.empty() ||
+        g_iconAppearance.rotation != 0 ||
         g_iconAppearance.brightness != kDefaultIconBrightness ||
         g_iconAppearance.alpha != kDefaultIconAlpha) {
         Wh_Log(
-            L"[ICON] Generated bundled icon rotation=%d brightness=%d alpha=%d size=%zu",
+            L"[ICON] Prepared %s icon rotation=%d brightness=%d alpha=%d size=%zu",
+            g_iconAppearance.customIconBytes.empty() ? L"bundled" : L"custom",
             g_iconAppearance.rotation,
             g_iconAppearance.brightness,
             g_iconAppearance.alpha,
@@ -3227,7 +3590,8 @@ GetSeparatorAnchorHintPlacement() {
                 return a >= b ? a - b : b - a;
             };
 
-            if (height > width) {
+            bool vertical = height > width;
+            if (vertical) {
                 LONG leftDistance =
                     distance(
                         taskbarRect.left,
@@ -3257,12 +3621,9 @@ GetSeparatorAnchorHintPlacement() {
         }
     }
 
-    // Fall back to the configured artwork orientation if a customized taskbar
-    // no longer exposes a recognizable tray HWND on this UI thread.
-    return (g_iconAppearance.rotation == 90 ||
-            g_iconAppearance.rotation == 270)
-               ? PopupPlacementMode::Right
-               : PopupPlacementMode::Top;
+    // If taskbar geometry is temporarily unavailable during shell reconstruction,
+    // use the normal horizontal taskbar's desktop-side placement as a fallback.
+    return PopupPlacementMode::Top;
 }
 
 static void ShowQueuedSeparatorAnchorHint(
@@ -7834,12 +8195,13 @@ BOOL ExplorerModInit() {
     ConfigureAppearanceGenerationPaths();
 
     Wh_Log(
-        L"[SETTINGS] Interaction mode=%s icon(rotation=%d brightness=%d alpha=%d path='%s')",
+        L"[SETTINGS] Interaction=%s icon(rotation=%d brightness=%d alpha=%d source=%s path='%s')",
         InteractionModeName(
             g_interactionMode.load(std::memory_order_acquire)),
         g_iconAppearance.rotation,
         g_iconAppearance.brightness,
         g_iconAppearance.alpha,
+        g_iconAppearance.customIconBytes.empty() ? L"bundled" : L"custom",
         g_bundledIconPath.c_str());
 
     if (!LoadSettings()) {
