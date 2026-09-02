@@ -5224,7 +5224,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1788290388000,
+        "updated": 1788389890000,
         "users": 3
       },
       "metadata": {
@@ -5238,7 +5238,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Explorer Info Bar+",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "explorer-name-windows": {
@@ -11981,7 +11981,7 @@
           17
         ],
         "ratingUsers": 18,
-        "updated": 1785493008000,
+        "updated": 1788389941000,
         "users": 419
       },
       "metadata": {
@@ -11995,11 +11995,12 @@
         "include": [
           "StartMenuExperienceHost.exe",
           "SearchHost.exe",
-          "SearchApp.exe"
+          "SearchApp.exe",
+          "RuntimeBroker.exe"
         ],
         "license": "MIT",
         "name": "Start Menu Open Real File Location",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "start-menu-size": {

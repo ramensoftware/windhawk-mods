@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-02T17:36:02.000Z</updated>
+    <updated>2026-09-02T22:59:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Open Real File Location 1.1.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-open-real-file-location#436ad54c3756f16628555963ccb46bba481ed8f1</id>
+        <link href="https://windhawk.net/mods/start-menu-open-real-file-location"/>
+        <updated>2026-09-02T22:59:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed start-menu-open-real-file-location.wh.cpp so it works for search results as well.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Info Bar+ 1.1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-info-bar#08025d3448b960177420ffba3cc4e6dcb68fbfe8</id>
+        <link href="https://windhawk.net/mods/explorer-info-bar"/>
+        <updated>2026-09-02T22:58:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds an optional setting to hide Explorer's native bottom-right view buttons.</li>
+<li>Covers the native button area when hidden so the controls don't peek through on hover or press.</li>
+<li>Suppresses pointer interaction in the hidden button area while preserving Explorer's keyboard view shortcuts.</li>
+<li>Keeps the existing behavior by default (<code>Show Explorer view buttons</code> is enabled).</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Window Title Format 1.0]]></title>
         <id>https://windhawk.net/mods/chromium-window-title-format#6dc728a85328d84fdaddb6b4339cd9347accc66e</id>
@@ -711,120 +740,6 @@ starts.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Info 1.3.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-info#5305a79fdc7c0a10a0a04af1dcddf2578dd59545</id>
-        <link href="https://windhawk.net/mods/taskbar-system-info"/>
-        <updated>2026-08-29T11:43:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarsysteminfo">Taskbar System Info</h1>
-<p>A compact, click-through system monitor for the far-left free area of the
-Windows 11 taskbar. It is designed for a quick administrator glance: current
-values show what is happening now, while two restrained history traces reveal
-whether a CPU or GPU spike is momentary or sustained.</p>
-<p><img src="https://raw.githubusercontent.com/starychenko/windhawk-taskbar-system-info/main/assets/taskbar-system-info.png" alt="Taskbar System Info preview" /></p>
-<p>The fixed two-column layout keeps every metric in a predictable place:</p>
-<pre><code class="text language-text">CPU  10%  72°C  [60-second graph]    RAM   52%  16.7/32G
-GPU   4%  56°C  [60-second graph]    VRAM   9%   2.1/24G
-</code></pre>
-<p>CPU and GPU history uses a fixed 0-100% scale. RAM and VRAM use thin capacity
-bars. Fixed-width fields prevent the layout from shifting as values change.
-Normal values remain monochrome; only warning and critical readings receive
-color. Network and disk activity are intentionally not collected.</p>
-<p>Unlike the performance placeholders in
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-clock-customization.wh.cpp">Taskbar Clock Customization</a>,
-this mod does not alter the clock. It uses the free far-left taskbar area for a
-stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.</p>
-<h2 id="metrics">Metrics</h2>
-<ul>
-<li>CPU utilization from Windows system time counters.</li>
-<li>RAM usage and capacity from Windows memory status.</li>
-<li>GPU utilization and dedicated or shared GPU-memory usage from Windows PDH
-counters.</li>
-<li>GPU-memory capacity and adapter identity from live D3DKMT enumeration, with
-DXGI as a compatibility fallback. Shared system memory is used when an
-integrated adapter reports no dedicated video memory.</li>
-<li>CPU and GPU temperatures from HWiNFO when available.</li>
-<li>GPU fallback from the Windows display-driver interface (D3DKMT).</li>
-<li>CPU fallback from Windows ACPI thermal zones exposed through PDH.</li>
-</ul>
-<p>Metric collection runs on a worker thread. The taskbar UI thread only renders
-the latest completed snapshot. If a display-driver restart changes an adapter
-LUID or invalidates the active performance counters, the mod refreshes the live
-adapter list and rebuilds the counters automatically. A missing VRAM instance
-alone does not trigger recovery unless fresh enumeration confirms a LUID change.</p>
-<p>The adapter with the most dedicated VRAM is selected automatically. A partial
-adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
-matched to the selected live adapter by LUID. Duplicate stale adapters without
-a driver name are ignored when a named adapter with the same capacity exists.</p>
-<h2 id="temperatureproviders">Temperature providers</h2>
-<p>The <strong>Temperature source</strong> setting provides these modes:</p>
-<ul>
-<li><strong>Automatic</strong> fills CPU and GPU independently: HWiNFO shared memory first,
-then HWiNFO Gadget Registry, then Windows D3DKMT for a still-missing GPU
-reading and Windows thermal zones for a still-missing CPU reading.</li>
-<li><strong>HWiNFO automatic</strong> uses only the two HWiNFO interfaces.</li>
-<li><strong>HWiNFO Shared Memory</strong> uses only <code>Global\\HWiNFO_SENS_SM2</code>.</li>
-<li><strong>HWiNFO Gadget Registry</strong> uses only
-<code>HKCU\\Software\\HWiNFO64\\VSB</code>.</li>
-<li><strong>Windows native</strong> reads GPU temperature from the selected display driver via
-D3DKMT and CPU temperature from the same
-<code>\\Thermal Zone Information(*)\\Temperature</code> PDH source as Taskbar Clock
-Customization. It needs no third-party monitor. ACPI platform zones don't
-necessarily represent the CPU package sensor; the optional zone filter and
-average/hottest setting make this fallback explicit and controllable.</li>
-<li><strong>Disabled</strong> skips temperature collection while keeping every other metric.</li>
-</ul>
-<p>HWiNFO is optional and is not bundled with this mod. Shared-memory integration
-targets HWiNFO 7.0 or newer, which permits full disclosure of the interface.
-Temperature units are classified from HWiNFO's raw unit bytes, independently of
-the Windows ANSI code page.
-The free HWiNFO64 edition disables shared memory after 12 hours of continuous
-use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
-interface. Configure it under <strong>Sensor Settings > HWiNFO Gadget</strong> by enabling
-<strong>Report to Gadget</strong> for the desired CPU and GPU temperature readings. If the
-selected source is unavailable, temperatures are shown as <code>--°C</code>; all other
-metrics continue to work. The active provider is written to the Windhawk log
-only when it changes, which makes fallback behavior diagnosable without adding
-noise every second.</p>
-<h2 id="compatibilityandplacement">Compatibility and placement</h2>
-<ul>
-<li>Windows 11 64-bit, primary taskbar. x64 is hardware-tested; ARM64 is
-compilation-tested.</li>
-<li>Centered taskbar icons are recommended.</li>
-<li>Enable <strong>Reserve space before the Start button</strong> if the widget overlaps
-left-aligned taskbar buttons.</li>
-<li>The widget is native XAML inside the taskbar and can coexist with Taskbar
-Styler.</li>
-</ul>
-<h2 id="creditsandlicense">Credits and license</h2>
-<p>Taskbar discovery and window-thread marshaling follow techniques from
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multirow.wh.cpp">Multirow taskbar for Windows 11</a>
-by Michael Maltsev (<code>m417z</code>). Native GPU temperature collection follows his
-<a href="https://github.com/m417z/my-windhawk-mods/commit/861920df6380f4c13abec5d9226362c4725e8362">Taskbar Clock Customization implementation</a>.
-Released under GPL-3.0.</p>]]></content>
-        <author>
-            <name>Yevhenii Starychenko</name>
-            <uri>https://github.com/starychenko</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota Bars 1.5.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#d8be922fa99b327d58f6085971c84cfea5863f47</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-08-29T09:38:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a new settings system (Right Click taskbar -&gt; Settings) with account management and display controls.</li>
-<li>Add Google Antigravity quota support through its running local app or CLI session.</li>
-<li>Add per-account quota selection, Anthropic Fable and extra-usage bars, pace ticks, compact labels, percentage alignment, and visual previews.</li>
-<li>Improve monitor selection, DPI rendering, tooltip readability, and taskbar layouts.</li>
-<li>Fixed minor bugs and rare crashes (harden OAuth, HTTP retry handling, taskbar lifecycle)</li>
-</ul>
-<p>Note: existing Windhawk settings are imported automatically, and stored credentials are preserved.</p>]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
         </author>
     </entry>
 </feed>
