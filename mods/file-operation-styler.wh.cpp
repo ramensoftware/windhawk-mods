@@ -1254,6 +1254,9 @@ namespace
         HWND hostWindow;
         bool sawNormalProgressCaption;
         bool specialOperationState;
+        // Excludes incomplete registration so ordinary tile activation does
+        // not enter the post-conflict measured-rate recovery path.
+        bool nativeSpecialState;
     };
 
     struct HostNativeGeometry
@@ -1536,6 +1539,9 @@ namespace
     bool GetVerifiedCustomHostWindowHeight(HWND hostWindow,
                                            int nativeWindowHeight,
                                            int *targetWindowHeight);
+    bool IsHostInSpecialOperationState(HWND hostWindow);
+    bool IsNormalPresentationHierarchyValidForHost(HWND hostWindow,
+                                                   bool *stateAvailable);
     bool IsSingleNormalProgressTileForHost(OperationTileElement *tile,
                                            HWND hostWindow);
     void ApplyNativeDisplayRatesForHost(HWND hostWindow);
@@ -1889,6 +1895,8 @@ namespace
         std::wstring secondLocation;
         std::wstring descriptionEnd;
         std::wstring currentItemName;
+        std::wstring timeRemainingLabel;
+        std::wstring itemsRemainingLabel;
         std::vector<double> rateHistory;
     };
 
@@ -1919,19 +1927,23 @@ namespace
         // tile state from Explorer's localized or aggregate host caption.
         snapshot->paused = storedPausedKnown && storedPaused;
 
-        std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
-        auto it = std::find_if(
-            g_transferSummaries.begin(), g_transferSummaries.end(),
-            [tile](TransferSummaryState const &state)
-            { return state.tile == tile; });
-        if (it == g_transferSummaries.end())
+        TransferSummaryState stateCopy{};
         {
-            return false;
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            auto it = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [tile](TransferSummaryState const &state)
+                { return state.tile == tile; });
+            if (it == g_transferSummaries.end())
+            {
+                return false;
+            }
+            stateCopy = *it;
         }
 
-        snapshot->completedBytes = it->completedBytes;
-        snapshot->totalBytes = it->totalBytes;
-        if (it->resumedFromSpecialState && snapshot->totalBytes > 0 &&
+        snapshot->completedBytes = stateCopy.completedBytes;
+        snapshot->totalBytes = stateCopy.totalBytes;
+        if (stateCopy.resumedFromSpecialState && snapshot->totalBytes > 0 &&
             snapshot->completedBytes == 0 && snapshot->percent > 0)
         {
             long double estimated =
@@ -1943,32 +1955,34 @@ namespace
                         estimated, 0.0L,
                         static_cast<long double>(snapshot->totalBytes)));
         }
-        snapshot->completedItems = it->completedItems;
-        snapshot->totalItems = it->totalItems;
-        snapshot->bytesValid = it->bytesValid;
-        snapshot->itemsValid = it->itemsValid;
+        snapshot->completedItems = stateCopy.completedItems;
+        snapshot->totalItems = stateCopy.totalItems;
+        snapshot->bytesValid = stateCopy.bytesValid;
+        snapshot->itemsValid = stateCopy.itemsValid;
         bool useMeasuredRate =
-            it->preferMeasuredRate && it->measuredDisplayRateValid;
+            stateCopy.preferMeasuredRate &&
+            stateCopy.measuredDisplayRateValid;
         if (useMeasuredRate)
         {
-            snapshot->nativeRate = it->measuredDisplayRate;
+            snapshot->nativeRate = stateCopy.measuredDisplayRate;
             snapshot->nativeRateValid = true;
         }
-        else if (it->nativeDisplayRateValid)
+        else if (stateCopy.nativeDisplayRateValid)
         {
-            snapshot->nativeRate = it->nativeDisplayRate;
+            snapshot->nativeRate = stateCopy.nativeDisplayRate;
             snapshot->nativeRateValid = true;
         }
         else
         {
-            snapshot->nativeRate = it->measuredDisplayRate;
-            snapshot->nativeRateValid = it->measuredDisplayRateValid;
+            snapshot->nativeRate = stateCopy.measuredDisplayRate;
+            snapshot->nativeRateValid =
+                stateCopy.measuredDisplayRateValid;
         }
-        snapshot->expanded = it->expanded;
-        snapshot->displayModeKnown = it->displayModeKnown;
-        snapshot->deleteLike = it->deleteLikeKnown && it->deleteLike;
-        snapshot->rateHistory = it->nativeRateHistory;
-        TransferSummaryState stateCopy = *it;
+        snapshot->expanded = stateCopy.expanded;
+        snapshot->displayModeKnown = stateCopy.displayModeKnown;
+        snapshot->deleteLike =
+            stateCopy.deleteLikeKnown && stateCopy.deleteLike;
+        snapshot->rateHistory = stateCopy.nativeRateHistory;
         // DirectUI is queried only on this UI thread and its returned buffer is
         // copied immediately. No native string pointer crosses a paint pass.
         snapshot->description = ReadNativeOperationDescription(stateCopy);
@@ -1993,6 +2007,18 @@ namespace
             readDescriptionFragment(L"eltSecondLocation");
         snapshot->descriptionEnd =
             readDescriptionFragment(L"eltEndText");
+        snapshot->timeRemainingLabel =
+            readDescriptionFragment(L"eltTimeRemainingLabel");
+        snapshot->itemsRemainingLabel =
+            readDescriptionFragment(L"eltItemsRemainingLabel");
+        if (snapshot->timeRemainingLabel.empty())
+        {
+            snapshot->timeRemainingLabel = L"Time remaining:";
+        }
+        if (snapshot->itemsRemainingLabel.empty())
+        {
+            snapshot->itemsRemainingLabel = L"Items remaining:";
+        }
         if (snapshot->expanded)
         {
             DirectUI::Element *currentItem = FindSkinElement(
@@ -2616,8 +2642,11 @@ namespace
                 ScaleForDpi(kInfoPanelSpeedTop, dpi));
             drawInlineSegment(L"Speed: ", &secondaryBrush, speedY, &speedX);
             drawInlineSegment(rateValue, &primaryBrush, speedY, &speedX);
-            drawInlineSegment(L"  \x2022  Time remaining: ", &secondaryBrush,
-                              speedY, &speedX);
+            drawInlineSegment(L"  \x2022  ", &secondaryBrush, speedY,
+                              &speedX);
+            drawInlineSegment(snapshot.timeRemainingLabel.c_str(),
+                              &secondaryBrush, speedY, &speedX);
+            drawInlineSegment(L" ", &secondaryBrush, speedY, &speedX);
             drawInlineSegment(timeText, &primaryBrush, speedY, &speedX);
         }
 
@@ -2661,8 +2690,9 @@ namespace
             Gdiplus::REAL itemsY = static_cast<Gdiplus::REAL>(
                 detailsOffset + expandedDetailOffset +
                 ScaleForDpi(kInfoPanelItemsTop, dpi));
-            drawInlineSegment(L"Items remaining: ", &secondaryBrush, itemsY,
-                              &itemsX);
+            drawInlineSegment(snapshot.itemsRemainingLabel.c_str(),
+                              &secondaryBrush, itemsY, &itemsX);
+            drawInlineSegment(L" ", &secondaryBrush, itemsY, &itemsX);
             drawInlineSegment(itemsValue, &primaryBrush, itemsY, &itemsX);
         }
 
@@ -3352,6 +3382,11 @@ namespace
             // The normal-operation surface is intentionally opaque and owns
             // its hit area. This prevents invisible native buttons underneath
             // from being activated at machine-dependent coordinates.
+            if (IsHostInSpecialOperationState(
+                    GetAncestor(window, GA_ROOT)))
+            {
+                return HTTRANSPARENT;
+            }
             return HTCLIENT;
         case WM_LBUTTONUP:
         {
@@ -3407,25 +3442,55 @@ namespace
             GetWindowLongPtrW(footerWindow, GWLP_USERDATA));
     }
 
-    bool GetFooterExpandedState(OperationTileElement *tile,
-                                bool *expanded)
+    struct FooterOverlaySnapshot
     {
-        if (!tile || !expanded)
+        bool expanded = false;
+        std::wstring displayModeLabel;
+        std::wstring cancelLabel;
+    };
+
+    bool GetFooterOverlaySnapshot(OperationTileElement *tile,
+                                  FooterOverlaySnapshot *snapshot)
+    {
+        if (!tile || !snapshot)
         {
             return false;
         }
 
-        std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
-        auto it = std::find_if(
-            g_transferSummaries.begin(), g_transferSummaries.end(),
-            [tile](TransferSummaryState const &state)
-            { return state.tile == tile; });
-        if (it == g_transferSummaries.end() || !it->displayModeKnown)
+        TransferSummaryState stateCopy{};
         {
-            return false;
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            auto it = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [tile](TransferSummaryState const &state)
+                { return state.tile == tile; });
+            if (it == g_transferSummaries.end() || !it->displayModeKnown)
+            {
+                return false;
+            }
+            stateCopy = *it;
         }
 
-        *expanded = it->expanded;
+        snapshot->expanded = stateCopy.expanded;
+        DirectUI::Element *displayModeButton =
+            FindSkinElementWithAncestorFallback(
+                stateCopy.operationTileRoot, stateCopy.tileHeaderRoot,
+                stateCopy.operationTileRoot, L"eltDisplayModeBtn", true);
+        snapshot->displayModeLabel = ReadDirectUiText(displayModeButton);
+        if (snapshot->displayModeLabel.empty())
+        {
+            snapshot->displayModeLabel =
+                snapshot->expanded ? L"Fewer details" : L"More details";
+        }
+
+        DirectUI::Element *cancelButton = FindSkinElement(
+            stateCopy.operationTileRoot, stateCopy.tileHeaderRoot,
+            L"eltCancelButton", false);
+        snapshot->cancelLabel = ReadDirectUiText(cancelButton);
+        if (snapshot->cancelLabel.empty())
+        {
+            snapshot->cancelLabel = L"Cancel";
+        }
         return true;
     }
 
@@ -3481,9 +3546,13 @@ namespace
         ThemePalette theme = GetDrawingTheme(footerWindow);
         TypographyConfig const &type = ActiveTypography();
 
-        bool expanded = false;
-        GetFooterExpandedState(GetFooterOverlayTile(footerWindow),
-                               &expanded);
+        FooterOverlaySnapshot snapshot{};
+        if (!GetFooterOverlaySnapshot(
+                GetFooterOverlayTile(footerWindow), &snapshot))
+        {
+            snapshot.displayModeLabel = L"More details";
+            snapshot.cancelLabel = L"Cancel";
+        }
 
         Gdiplus::Graphics graphics(deviceContext);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -3530,7 +3599,7 @@ namespace
             GetBValue(theme.secondaryText)),
             1.0f);
 
-        if (expanded)
+        if (snapshot.expanded)
         {
             graphics.DrawLine(&chevronPen,
                               chevronX - half, centerY + rise,
@@ -3550,7 +3619,7 @@ namespace
         }
 
         graphics.DrawString(
-            expanded ? L"Fewer details" : L"More details",
+            snapshot.displayModeLabel.c_str(),
             -1, selectedFont,
             Gdiplus::PointF(
                 static_cast<Gdiplus::REAL>(ScaleForDpi(55, dpi)),
@@ -3583,8 +3652,9 @@ namespace
             Gdiplus::StringFormat centered;
             centered.SetAlignment(Gdiplus::StringAlignmentCenter);
             centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-            graphics.DrawString(L"Cancel", -1, selectedFont, buttonBounds,
-                                &centered, &actionTextBrush);
+            graphics.DrawString(snapshot.cancelLabel.c_str(), -1,
+                                selectedFont, buttonBounds, &centered,
+                                &actionTextBrush);
         }
     }
 
@@ -3711,6 +3781,11 @@ namespace
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
         case WM_NCHITTEST:
+            if (IsHostInSpecialOperationState(
+                    GetAncestor(window, GA_ROOT)))
+            {
+                return HTTRANSPARENT;
+            }
             return HTCLIENT;
         case WM_LBUTTONUP:
         {
@@ -4251,8 +4326,7 @@ namespace
         }
 
         // Non-authoritative English heuristics observed on this shell build.
-        // The generic transition fallback below remains authoritative once
-        // the host has shown a normal percentage caption.
+        // DirectUI normal-presentation validation remains authoritative.
         return lstrcmpW(caption, L"Replace or Skip Files") == 0 ||
                lstrcmpW(caption, L"File In Use") == 0 ||
                lstrcmpW(caption, L"Folder In Use") == 0 ||
@@ -4403,7 +4477,8 @@ namespace
         }
     }
 
-    void ScheduleCustomReapplyForHost(HWND hostWindow)
+    void ScheduleCustomReapplyForHost(HWND hostWindow,
+                                      bool resumeTransferState)
     {
         if (ShouldApplyNativeColorOverrides())
         {
@@ -4422,6 +4497,7 @@ namespace
             }
         }
 
+        if (resumeTransferState)
         {
             std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
             for (TransferSummaryState &state : g_transferSummaries)
@@ -4507,7 +4583,8 @@ namespace
         HWND hostWindow,
         PCWSTR caption,
         bool *enteredSpecial,
-        bool *leftSpecial)
+        bool *leftSpecial,
+        bool *leftNativeSpecial)
     {
         if (enteredSpecial)
         {
@@ -4517,8 +4594,12 @@ namespace
         {
             *leftSpecial = false;
         }
+        if (leftNativeSpecial)
+        {
+            *leftNativeSpecial = false;
+        }
 
-        if (!hostWindow || !caption || !*caption)
+        if (!hostWindow)
         {
             return;
         }
@@ -4527,14 +4608,24 @@ namespace
         bool transferSummary = LooksLikeTransferSummaryCaption(caption);
         bool knownSpecial = IsKnownSpecialOperationCaption(caption);
 
-        // The host caption is not a per-operation error signal once Explorer
-        // aggregates multiple live tiles (for example "2 Actions" /
-        // "2 Paused Actions"). Delete can also republish its ordinary
-        // operation description after a percentage caption. Resolve these
-        // facts before taking g_hostPresentationMutex so the presentation
-        // lock is never nested with the tile/transfer registries.
+        // Caption shape is not authoritative: it is localized and can be an
+        // aggregate host description. Validate the already-discovered normal
+        // DirectUI presentation before taking g_hostPresentationMutex so the
+        // presentation lock is never nested with tile/transfer registries.
+        bool hierarchyStateAvailable = false;
+        bool normalHierarchy = IsNormalPresentationHierarchyValidForHost(
+            hostWindow, &hierarchyStateAvailable);
         bool multiTileHost = GetRegisteredTileCountForHost(hostWindow) > 1;
         bool deleteLikeHost = HostHasDeleteLikeOperation(hostWindow);
+        bool sawNormalCaptionHint =
+            normalProgress || transferSummary ||
+            ((multiTileHost || deleteLikeHost) &&
+             hierarchyStateAvailable && normalHierarchy);
+        bool specialOperationState =
+            knownSpecial || !hierarchyStateAvailable || !normalHierarchy;
+        bool nativeSpecialState =
+            knownSpecial ||
+            (hierarchyStateAvailable && !normalHierarchy);
 
         std::lock_guard<std::mutex> lock(g_hostPresentationMutex);
 
@@ -4547,8 +4638,9 @@ namespace
         if (it == g_hostPresentationStates.end())
         {
             g_hostPresentationStates.push_back(
-                {hostWindow, normalProgress, knownSpecial});
-            if (enteredSpecial && knownSpecial)
+                {hostWindow, sawNormalCaptionHint, specialOperationState,
+                 nativeSpecialState});
+            if (enteredSpecial && specialOperationState)
             {
                 *enteredSpecial = true;
             }
@@ -4556,49 +4648,18 @@ namespace
         }
 
         bool wasSpecial = it->specialOperationState;
+        bool wasNativeSpecial = it->nativeSpecialState;
+        if (sawNormalCaptionHint)
+        {
+            it->sawNormalProgressCaption = true;
+        }
 
-        if (normalProgress)
-        {
-            it->sawNormalProgressCaption = true;
-            it->specialOperationState = false;
-        }
-        else if (knownSpecial)
-        {
-            // Explicitly recognized conflict/error captions always win, even
-            // for delete and multi-operation hosts.
-            it->specialOperationState = true;
-        }
-        else if (transferSummary && wasSpecial)
-        {
-            // Explorer commonly resumes from Replace/Skip (and similar native
-            // interruption UIs) by first publishing a transient byte-summary
-            // caption such as "0 bytes / 80.5 KB", before it ever publishes a
-            // "% complete" caption again. 0.10.90 left the host permanently
-            // marked special at that point, so our circle/info panel stayed
-            // hidden and Explorer's native graph/details remained visible.
-            //
-            // A transferred/total caption is part of the normal progress-tile
-            // presentation, so after an already-confirmed special state it is
-            // also a valid "resume normal" signal.
-            it->sawNormalProgressCaption = true;
-            it->specialOperationState = false;
-        }
-        else if (multiTileHost || deleteLikeHost)
-        {
-            // Aggregate multi-operation captions and normal delete captions
-            // are not special states. This also repairs a false special-state
-            // classification that may have happened just before the second
-            // tile or delete-kind information became available.
-            it->specialOperationState = false;
-        }
-        else if (!transferSummary && it->sawNormalProgressCaption)
-        {
-            // Keep the proven 0.10.81 generic fallback for ordinary
-            // single copy/move operations: once a percentage caption was seen,
-            // a later unrelated non-percentage caption is treated as Explorer
-            // switching to a native interruption/conflict presentation.
-            it->specialOperationState = true;
-        }
+        // The language-independent normal hierarchy is authoritative. Any
+        // missing, invalid, hidden, or ambiguous normal presentation fails
+        // closed to Explorer's native UI. English captions remain only a
+        // secondary special-state hint.
+        it->specialOperationState = specialOperationState;
+        it->nativeSpecialState = nativeSpecialState;
 
         if (enteredSpecial && !wasSpecial && it->specialOperationState)
         {
@@ -4607,6 +4668,34 @@ namespace
         if (leftSpecial && wasSpecial && !it->specialOperationState)
         {
             *leftSpecial = true;
+            if (leftNativeSpecial)
+            {
+                *leftNativeSpecial = wasNativeSpecial;
+            }
+        }
+    }
+
+    void RefreshHostPresentationState(HWND hostWindow)
+    {
+        wchar_t caption[256]{};
+        PCWSTR captionHint =
+            GetWindowTextW(hostWindow, caption, ARRAYSIZE(caption))
+                ? caption
+                : nullptr;
+        bool enteredSpecial = false;
+        bool leftSpecial = false;
+        bool leftNativeSpecial = false;
+        UpdateHostPresentationStateFromCaption(
+            hostWindow, captionHint, &enteredSpecial, &leftSpecial,
+            &leftNativeSpecial);
+
+        if (enteredSpecial)
+        {
+            HideCustomPresentationForHost(hostWindow);
+        }
+        else if (leftSpecial)
+        {
+            ScheduleCustomReapplyForHost(hostWindow, leftNativeSpecial);
         }
     }
 
@@ -4629,28 +4718,6 @@ namespace
             message != WM_NCDESTROY)
         {
             return DefSubclassProc(window, message, wParam, lParam);
-        }
-
-        if (message == WM_SETTEXT)
-        {
-            PCWSTR caption = reinterpret_cast<PCWSTR>(lParam);
-
-            bool enteredSpecial = false;
-            bool leftSpecial = false;
-            UpdateHostPresentationStateFromCaption(
-                window, caption, &enteredSpecial, &leftSpecial);
-
-            if (enteredSpecial)
-            {
-                HideCustomPresentationForHost(window);
-            }
-            else if (leftSpecial)
-            {
-                ScheduleCustomReapplyForHost(window);
-            }
-
-            // Caption inspection is limited to native special-state fallback.
-            // Explorer always owns and localizes the actual window title.
         }
 
         if (g_removeHostSubclassMessage &&
@@ -4728,6 +4795,15 @@ namespace
         }
 
         LRESULT result = DefSubclassProc(window, message, wParam, lParam);
+        if (message == WM_SETTEXT || message == WM_SIZE ||
+            message == WM_WINDOWPOSCHANGED)
+        {
+            RefreshHostPresentationState(window);
+
+            // Explorer owns/localizes the caption. Its text is only a
+            // secondary hint after native state processing; DirectUI normal-
+            // hierarchy validation is the primary fallback signal.
+        }
         if (message == WM_WINDOWPOSCHANGING && lParam)
         {
             auto *windowPosition = reinterpret_cast<WINDOWPOS *>(lParam);
@@ -5058,6 +5134,7 @@ namespace
             {
                 InvalidateRect(infoWindow, nullptr, FALSE);
             }
+
         }
     }
 
@@ -5391,7 +5468,7 @@ namespace
             bool leftSpecial = false;
             UpdateHostPresentationStateFromCaption(
                 hostWindow, currentCaption,
-                &enteredSpecial, &leftSpecial);
+                &enteredSpecial, &leftSpecial, nullptr);
             if (enteredSpecial)
             {
                 HideCustomPresentationForHost(hostWindow);
@@ -5847,6 +5924,11 @@ namespace
             RefreshDeleteLikeOperationKind(owner, registeredState);
         }
 
+        if (hostWindow)
+        {
+            RefreshHostPresentationState(hostWindow);
+        }
+
         // Reapply only state already associated with this exact live owner.
         // Unregistered display-mode subobject pointers are never retained.
         InitializeRegisteredDisplayMode(owner);
@@ -6255,6 +6337,80 @@ namespace
                      progressBarUnderContainer;
 
         return valid;
+    }
+
+    bool IsNormalPresentationHierarchyValidForHost(HWND hostWindow,
+                                                   bool *stateAvailable)
+    {
+        if (stateAvailable)
+        {
+            *stateAvailable = false;
+        }
+        if (!hostWindow || !IsWindow(hostWindow) ||
+            !Element_GetVisible_Original || !stateAvailable)
+        {
+            return false;
+        }
+
+        size_t registeredTileCount =
+            GetRegisteredTileCountForHost(hostWindow);
+        if (!registeredTileCount)
+        {
+            return false;
+        }
+
+        std::vector<TransferSummaryState> states;
+        {
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            states = g_transferSummaries;
+        }
+
+        std::vector<TransferSummaryState> hostStates;
+        for (TransferSummaryState const &state : states)
+        {
+            if (state.tile &&
+                GetRegisteredCircleHost(state.tile) == hostWindow)
+            {
+                hostStates.push_back(state);
+            }
+        }
+        if (hostStates.size() != registeredTileCount)
+        {
+            return false;
+        }
+        *stateAvailable = true;
+
+        for (TransferSummaryState const &state : hostStates)
+        {
+            if (!state.operationTileRoot ||
+                !Element_GetVisible_Original(state.operationTileRoot))
+            {
+                return false;
+            }
+
+            NormalProgressLayoutElements elements{};
+            bool completeNormalLayout =
+                DiscoverNormalProgressLayout(state, &elements);
+            bool deleteLike = state.deleteLikeKnown && state.deleteLike;
+            if (!state.deleteLikeKnown &&
+                !TryGetDeleteLikeOperationKind(state, &deleteLike))
+            {
+                return false;
+            }
+
+            bool validHierarchy =
+                deleteLike
+                    ? ValidateDeleteLikeProgressHierarchy(elements, 0, false)
+                    : completeNormalLayout &&
+                          ValidateNormalProgressHierarchy(elements, 0, false);
+            if (!validHierarchy || !elements.regularTile ||
+                !Element_GetVisible_Original(elements.regularTile))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
 
