@@ -2,7 +2,7 @@
 // @id              numlock-lockdown
 // @name            Num Lock Lockdown
 // @description     Keeps Num Lock permanently ON, with a modifier key for temporary override
-// @version         1.1.7
+// @version         1.1.8
 // @author          tonythethompson
 // @github          https://github.com/tonythethompson
 // @include         windhawk.exe
@@ -138,9 +138,6 @@ constexpr UINT WM_APP_QUIT = WM_APP + 3;
 constexpr UINT WM_APP_REHOOK = WM_APP + 4;
 
 constexpr UINT_PTR kSafetyTimerId = 1;
-// Worker-thread only. Caps evidence-driven rehooks so an elevated window
-// that keeps Num Lock off (UIPI) does not swap the hook every safety tick.
-constexpr ULONGLONG kRehookMinIntervalMs = 60 * 1000;
 // SendInput is asynchronous; wait for the injected toggle to land before
 // sending another pulse or Num Lock can flip back OFF.
 constexpr ULONGLONG kPulseDebounceMs = 300;
@@ -208,8 +205,6 @@ HANDLE g_hookReadyEvent = nullptr;
 HPOWERNOTIFY g_suspendResumeNotify = nullptr;
 HWINEVENTHOOK g_foregroundHook = nullptr;
 bool g_sessionNotifyRegistered = false;
-// Worker thread only. Last time we posted WM_APP_REHOOK.
-ULONGLONG g_lastRehookMs = 0;
 // Worker thread only. Last time we sent a Num Lock pulse.
 ULONGLONG g_lastPulseMs = 0;
 
@@ -415,7 +410,7 @@ void UninstallKeyboardHook() {
     }
 }
 
-// Worker thread only. Unconditional: unlock/resume.
+// Worker thread only. Unlock/resume only.
 void RequestRehook() {
     DWORD threadId = g_hookThreadId.load(std::memory_order_acquire);
     if (!threadId) {
@@ -423,19 +418,7 @@ void RequestRehook() {
     }
     if (!PostThreadMessageW(threadId, WM_APP_REHOOK, 0, 0)) {
         Wh_Log(L"PostThreadMessageW(WM_APP_REHOOK) failed: %lu", GetLastError());
-        return;
     }
-    g_lastRehookMs = GetTickCount64();
-}
-
-// Worker thread only. Num Lock found off is the signal the hook may have
-// been dropped. Do not swap a healthy hook on a timer.
-void RequestEvidenceRehook() {
-    const ULONGLONG now = GetTickCount64();
-    if (g_lastRehookMs != 0 && now - g_lastRehookMs < kRehookMinIntervalMs) {
-        return;
-    }
-    RequestRehook();
 }
 
 // Must run on the worker thread, never inside the LL hook.
@@ -451,8 +434,6 @@ void ForceNumLockOn(bool fromSafetyCheck) {
 
     if (fromSafetyCheck) {
         Wh_Log(L"Safety check: Num Lock was off, forcing ON");
-        // Nothing reported this one, so the hook may have been dropped.
-        RequestEvidenceRehook();
     }
 
     g_lastPulseMs = now;
@@ -846,13 +827,6 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     TryInstallKeyboardHook();
-    for (int attempt = 1; attempt < 3 &&
-                          !g_keyboardHook.load(std::memory_order_acquire) &&
-                          !g_hookQuit.load(std::memory_order_relaxed);
-         ++attempt) {
-        Sleep(100);
-        TryInstallKeyboardHook();
-    }
 
     if (g_hookReadyEvent) {
         SetEvent(g_hookReadyEvent);
@@ -925,9 +899,7 @@ BOOL WhTool_ModInit() {
     }
 
     if (!g_keyboardHook.load(std::memory_order_acquire)) {
-        Wh_Log(L"Keyboard hook failed to install");
-        WhTool_ModUninit();
-        return FALSE;
+        Wh_Log(L"Keyboard hook failed to install; will retry on unlock/resume");
     }
 
     return TRUE;
