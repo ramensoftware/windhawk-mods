@@ -2,7 +2,7 @@
 // @id              explorer-info-bar
 // @name            Explorer Info Bar+
 // @description     Enhances File Explorer's bottom info bar with drive, content, selection, and single-file details, with customizable styles and colors.
-// @version         1.0.0
+// @version         1.1.0
 // @author          digART
 // @github          https://github.com/digart11
 // @homepage        https://github.com/digart11/explorer-info-bar
@@ -49,6 +49,7 @@ Unlike mods that restore the classic status bar or focus only on metadata, Explo
 - Individual section visibility controls
 - Custom text and panel colors
 - Automatic theme-derived colors by default
+- Optional hiding of Explorer's native bottom-right view buttons
 - Works with File Explorer's native status area rather than replacing Explorer itself
 
 ## Compatibility / Why this mod is separate
@@ -118,6 +119,10 @@ When one file is selected, additional details can appear:
 - singleFileDetails: false
   $name: Show Single File Details
   $description: Show file extension and details when possible.
+
+- showExplorerViewButtons: true
+  $name: Show Explorer view buttons
+  $description: Show Explorer's native view buttons at the far right of the bottom info bar.
 
 - textColor: auto
   $name: Text color
@@ -268,10 +273,12 @@ struct ModSettings
     bool showContent = true;
     bool showSelection = true;
     bool singleFileDetails = false;
+    bool showExplorerViewButtons = true;
 };
 
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static ModSettings g_settings;
+static std::atomic<bool> g_showExplorerViewButtons{true};
 
 static UINT g_refreshDirectUiMessage = 0;
 
@@ -609,6 +616,11 @@ static void LoadSettings()
             L"singleFileDetails"
         ) != 0;
 
+    settings.showExplorerViewButtons =
+        Wh_GetIntSetting(
+            L"showExplorerViewButtons"
+        ) != 0;
+
     AcquireSRWLockExclusive(
         &g_settingsLock
     );
@@ -618,6 +630,11 @@ static void LoadSettings()
 
     ReleaseSRWLockExclusive(
         &g_settingsLock
+    );
+
+    g_showExplorerViewButtons.store(
+        settings.showExplorerViewButtons,
+        std::memory_order_release
     );
 }
 
@@ -4571,16 +4588,24 @@ static void PaintFinalInfoBar(
         }
     }
 
+    const ModSettings settings =
+        GetSettingsSnapshot();
+
+    const bool hideExplorerViewButtons =
+        !settings.showExplorerViewButtons;
+
     RECT coverRow = row;
 
-    // The native controls occupy only the compact area at the far right.
-    // Cover native status text up to that area independently of the wider
-    // content-layout reservation below.
+    // Normally preserve Explorer's compact native view-controls area.
+    // When those controls are hidden, cover the complete validated row so
+    // their normal, hover and pressed visuals can't peek through.
     coverRow.right =
-        std::max(
-            coverRow.left,
-            client.right - ScaleForDpi(dpi, 64)
-        );
+        hideExplorerViewButtons
+            ? client.right
+            : std::max(
+                coverRow.left,
+                client.right - ScaleForDpi(dpi, 64)
+            );
 
     row.left = ScaleForDpi(dpi, 6);
 
@@ -4613,9 +4638,6 @@ static void PaintFinalInfoBar(
         selected
     );
 
-    const ModSettings settings =
-        GetSettingsSnapshot();
-
     const bool showFileDetails =
         settings.singleFileDetails &&
         !fileDetailsGroup.empty();
@@ -4635,8 +4657,9 @@ static void PaintFinalInfoBar(
         ) ||
         showFileDetails;
 
-    // Leave Explorer's native status row untouched when nothing custom is visible.
-    if (!hasVisibleContent)
+    // Leave Explorer's native status row untouched when nothing custom is
+    // visible, unless the user explicitly asked to hide the native controls.
+    if (!hasVisibleContent && !hideExplorerViewButtons)
         return;
 
     RECT paintRect =
@@ -5284,6 +5307,97 @@ static void TryAttachExplorerDirectUiWindow(HWND hwnd)
         EnsureDirectUiSubclass(hwnd);
 }
 
+static bool IsExplorerViewButtonsPointerMessage(
+    UINT msg
+)
+{
+    switch (msg)
+    {
+        case WM_MOUSEMOVE:
+        case WM_MOUSEHOVER:
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+        case WM_XBUTTONDBLCLK:
+            return true;
+    }
+
+    return false;
+}
+
+static bool IsPointInHiddenExplorerViewButtons(
+    HWND hwnd,
+    LPARAM lParam
+)
+{
+    if (
+        g_showExplorerViewButtons.load(
+            std::memory_order_acquire
+        )
+    )
+    {
+        return false;
+    }
+
+    RECT row{};
+
+    if (
+        !GetValidatedStatusRow(hwnd, &row) &&
+        (
+            !RefreshValidatedStatusRow(hwnd) ||
+            !GetValidatedStatusRow(hwnd, &row)
+        )
+    )
+    {
+        return false;
+    }
+
+    UINT dpi = GetDpiForWindow(hwnd);
+
+    if (!dpi)
+        dpi = 96;
+
+    const LONG reservedWidth =
+        static_cast<LONG>(
+            ScaleForDpi(
+                dpi,
+                64
+            )
+        );
+
+    RECT buttonsRect = row;
+
+    buttonsRect.left =
+        std::max(
+            buttonsRect.left,
+            buttonsRect.right - reservedWidth
+        );
+
+    const POINT point
+    {
+        static_cast<short>(
+            LOWORD(lParam)
+        ),
+        static_cast<short>(
+            HIWORD(lParam)
+        )
+    };
+
+    return
+        PtInRect(
+            &buttonsRect,
+            point
+        ) != FALSE;
+}
+
 static LRESULT CALLBACK DirectUiSubclassProc(
     HWND hwnd,
     UINT msg,
@@ -5292,6 +5406,18 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     DWORD_PTR
 )
 {
+    if (
+        IsExplorerViewButtonsPointerMessage(msg) &&
+        IsPointInHiddenExplorerViewButtons(hwnd, lParam)
+    )
+    {
+        // The native view-mode controls are internal DirectUI elements, not
+        // child HWNDs. Swallow pointer input in their reserved status-row area
+        // before DirectUI can enter hover or pressed states. Keyboard view
+        // shortcuts remain Explorer-owned and unchanged.
+        return 0;
+    }
+
     if (
         g_refreshDirectUiMessage &&
         msg == g_refreshDirectUiMessage
