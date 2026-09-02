@@ -7,7 +7,7 @@
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
 // @include     explorer.exe
-// @compilerOptions -lgdiplus -liphlpapi -lgdi32
+// @compilerOptions -lgdiplus -liphlpapi -lgdi32 -lshell32 -DWIN32_LEAN_AND_MEAN
 // @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
@@ -33,7 +33,6 @@ actually be an `explorer.exe` image.
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
 - Click-through: it won't get in the way of your taskbar buttons.
-- Recovers automatically on an Explorer crash/restart, not just a clean shell exit.
 - Hides while a full-screen app or game covers the taskbar's monitor.
 
 Note: [Taskbar Clock Customization](https://windhawk.net) and
@@ -65,12 +64,19 @@ along the taskbar and the sparkline chart layouts.
 */
 // ==/WindhawkModSettings==
 
-// winsock2.h must come before windows.h so that iphlpapi.h pulls in the
-// netioapi.h declarations (GetIfEntry2 / MIB_IF_ROW2) instead of only the
-// legacy 32-bit-counter API.
+// iphlpapi.h only declares the netioapi APIs (GetIfEntry2 / MIB_IF_ROW2)
+// once winsock2 types are already in scope. -DWIN32_LEAN_AND_MEAN in
+// @compilerOptions stops windows.h from pulling in the legacy winsock.h,
+// which is what actually avoids the winsock2.h/windows.h ordering warning.
+// That flag also drops windows.h's normal auto-includes of shellapi.h
+// (CommandLineToArgvW) and ole2.h (PROPID, via wtypes.h), so both are
+// pulled in explicitly below.
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windhawk_utils.h>
 #include <windows.h>
+#include <shellapi.h>
+#include <wtypes.h>
 #include <gdiplus.h>
 #include <iphlpapi.h>
 #include <string>
@@ -80,7 +86,6 @@ along the taskbar and the sparkline chart layouts.
 #include <memory>
 #include <mutex>
 #include <cstdio>
-#include <windhawk_utils.h>
 
 using namespace Gdiplus;
 
