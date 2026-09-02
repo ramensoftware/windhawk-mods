@@ -413,9 +413,18 @@ LRESULT CALLBACK DefWindowProcA_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     return DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
 }
 
+bool ShouldMenusBeDark()
+{
+    return g_currentAppMode == AppMode::ForceDark ||
+           (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode());
+}
+
 decltype(&SetMenuInfo) SetMenuInfo_Original;
 WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
 {
+    if (!ShouldMenusBeDark())
+        return SetMenuInfo_Original(hMenu, lpInfo);
+
     //Disable custom menu backgrounds because they are broken in dark mode. (See https://github.com/MGGSK/DarkMenus/issues/16)
     alignas(MENUINFO) BYTE buffer[256];
     if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer))
