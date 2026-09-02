@@ -1,3 +1,10 @@
+## 1.6.2 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0a4b26cb2cb709280cbafe70422c4f9aefce092b/mods/taskbar-ai-quota.wh.cpp))
+
+- Add OpenAI credits bar: balance shown against a per-account max, with thresholds and notifications
+- Add option to show $ or credit amounts on extra-usage/credits bars instead of percentages
+- Fix Anthropic extra-usage bar vanishing at the start of each monthly cycle
+- Hide extra OpenAI rate limits (Codex Spark, gpt-reserve) behind one opt-in toggle
+
 ## 1.5.8 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d8be922fa99b327d58f6085971c84cfea5863f47/mods/taskbar-ai-quota.wh.cpp))
 
 - Add a new settings system (Right Click taskbar -> Settings) with account management and display controls.

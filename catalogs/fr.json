@@ -1510,6 +1510,38 @@
         "version": "0.2"
       }
     },
+    "chromium-window-title-format": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788370562000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788370562000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mazany",
+        "compilerOptions": "-lshell32 -lole32 -luuid",
+        "description": "Customize how Edge and Chrome compose window titles - drop the browser suffix, restyle the tab count and profile, and rebuild the title from a template.",
+        "donateUrl": "https://ko-fi.com/mazany",
+        "github": "https://github.com/mazany",
+        "include": [
+          "msedge.exe",
+          "chrome.exe"
+        ],
+        "license": "MIT",
+        "name": "Chromium Window Title Format",
+        "twitter": "https://x.com/tomazany",
+        "version": "1.0"
+      }
+    },
     "cjk-spacer": {
       "details": {
         "defaultSorting": 240,
@@ -3456,6 +3488,35 @@
         ],
         "name": "Desktop Audio Visualizer",
         "version": "1.0.0"
+      }
+    },
+    "desktop-draggable-widgets": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788370330000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788370330000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Jona like it, code it",
+        "compilerOptions": "-ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32",
+        "description": "Draggable widgets with transparent, light, and dark themes. You can add a custom folder path in the mod settings to open your desired music folder.",
+        "github": "https://github.com/Stunning-dev",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "JonaOS Draggable Desktop Widgets",
+        "version": "7"
       }
     },
     "desktop-icon-selection-style": {
@@ -12165,7 +12226,7 @@
           7
         ],
         "ratingUsers": 10,
-        "updated": 1787996292000,
+        "updated": 1788370121000,
         "users": 89
       },
       "metadata": {
@@ -12181,7 +12242,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar AI Quota Bars",
-        "version": "1.5.8"
+        "version": "1.6.2"
       }
     },
     "taskbar-audio-device-switcher": {
@@ -13111,7 +13172,7 @@
           35
         ],
         "ratingUsers": 39,
-        "updated": 1787410681000,
+        "updated": 1788370166000,
         "users": 541
       },
       "metadata": {
@@ -13127,7 +13188,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Icon Separators",
-        "version": "1.0.31"
+        "version": "1.0.32"
       }
     },
     "taskbar-icon-size": {
@@ -16418,7 +16479,7 @@
           4
         ],
         "ratingUsers": 6,
-        "updated": 1788026840000,
+        "updated": 1788370054000,
         "users": 260
       },
       "metadata": {
@@ -16427,14 +16488,14 @@
         ],
         "author": "babamohammed",
         "compilerOptions": "-lcomctl32 -lshlwapi -lole32 -lpsapi",
-        "description": "This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11",
+        "description": "This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11 including optional additions",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe",
           "control.exe"
         ],
         "name": "Windows 7 Legacy Applet Restorer",
-        "version": "3.0.0"
+        "version": "3.1.0"
       }
     },
     "win7-login-fade": {

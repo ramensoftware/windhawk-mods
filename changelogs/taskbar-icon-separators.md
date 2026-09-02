@@ -1,3 +1,8 @@
+## 1.0.32 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/02f079f671bc75ec5a452696bf2d3db712733079/mods/taskbar-icon-separators.wh.cpp))
+
+- Added arbitrary rotation support. You can now have cool backslashes on your taskbar (suggestion by @phntsm).
+- Custom icon paths support (contribution by @phntsm).
+
 ## 1.0.31 ([Aug 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/100b6facb46b006fcd0130731c41900695665eba/mods/taskbar-icon-separators.wh.cpp))
 
 * Added middle-click only add / remove logic for better compatibility in cases where context menu interaction isn't available (#5148)

@@ -1,3 +1,12 @@
+## 3.1.0 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4bc0c8b1cc92febe0bdadacb4330bb09d8669550/mods/win7-legacy-applet-restorer.wh.cpp))
+
+- Added "In-place Personalization navigation" setting to keep "Desktop Background" and "Window Color" inside the Control Panel window
+- Restored the iSCSi Initiator applet
+- Restored the Game Controllers applet
+- Restored the Personalization category view links
+- Simplified the code
+- Updated the README
+
 ## 3.0.0 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2eedecca227cd1f5c0d9fd3e95822dddd00fb8f/mods/win7-legacy-applet-restorer.wh.cpp))
 
 - Added the Speech Recognition link

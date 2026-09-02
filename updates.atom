@@ -2,12 +2,275 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-01T20:53:36.000Z</updated>
+    <updated>2026-09-02T17:36:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chromium Window Title Format 1.0]]></title>
+        <id>https://windhawk.net/mods/chromium-window-title-format#6dc728a85328d84fdaddb6b4339cd9347accc66e</id>
+        <link href="https://windhawk.net/mods/chromium-window-title-format"/>
+        <updated>2026-09-02T17:36:02.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromiumwindowtitleformat">Chromium Window Title Format</h1>
+<p>Rewrites Microsoft Edge and Google Chrome window titles using a template you
+control, so a window with many tabs is identifiable at a glance in Alt+Tab, the
+taskbar and jump lists.</p>
+<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/7a382537a7e63a8645df1d3599f30cda286128d3/chromium-window-title-format/before-after.png" alt="Before and after, on Edge and Chrome" /></p>
+<p>Taskbar previews before and after, on both browsers. The bottom row is the same
+window list under two different templates - bold digits, and a superscript count
+with the profile in italics.</p>
+<p>Default title:</p>
+<pre><code>E-Mail and 16 more pages - Personal - Microsoft Edge
+</code></pre>
+<p>Some things you can ask for instead:</p>
+<pre><code>E-Mail and 16 more pages - Personal      {title}?( {more})?( - {profile})
+E-Mail and 16 more pages                 {title}?( {more})
+[17] E-Mail                              ?([{count}] ){title}
+17 E-Mail (bold digits)                  ?({count:bold} ){title}
+03 E-Mail - Personal (superscript+italic) ?({count:pad2:sup} ){title}?( — {profile:italic})
+</code></pre>
+<h2 id="howitworksandwhatitwillnottouch">How it works, and what it will not touch</h2>
+<p>The mod never guesses at English text. On startup it reads the browser's <strong>own
+localized resource file</strong> to learn the exact browser suffix, the private-window
+wording and the page-count wording for your language, then matches those
+literals right-anchored against each title. The profile is matched against the
+names the install actually has, rather than against punctuation - browsers do
+not always join the profile with the same character they use elsewhere in the
+title.</p>
+<p>If a title does not match the grammar it discovered, the title is left <strong>exactly
+as it is</strong>. That is a hard rule, not a setting, and it is what keeps the
+following safe:</p>
+<ul>
+<li>app and installed-web-app (PWA) windows</li>
+<li>picture-in-picture, DevTools, print preview, task manager</li>
+<li>dialogs</li>
+<li><strong>windows you named yourself</strong> with the browser's own "Name window" command</li>
+</ul>
+<p>A window you named yourself is left alone for the same reason as the rest: its
+title is <em>only</em> the name you gave it - no tab count, no page title, no profile -
+so there is nothing in the text for a template to work from, and nothing that
+distinguishes it from a dialog or an app window. Recognising those needs the
+browser's own objects rather than its text, which is a separate feature and a
+separate discussion.</p>
+<h2 id="edgeandchromearenotequallycapable">Edge and Chrome are not equally capable</h2>
+<p>Chrome's window title contains <strong>only</strong> the page title and the browser name -
+there is no tab count and no profile anywhere in it. That is a fact about
+Chrome, not a limitation of the mod, so <code>{extra}</code>, <code>{more}</code>, <code>{profile}</code> and
+<code>{private}</code> are always empty there and any <code>?( ... )</code> group containing only
+those tokens disappears. <code>{title}</code> and <code>{browser}</code> work on both.</p>
+<p>On Chrome, <code>{count}</code> is therefore empty too: the count is not in the title, and
+this mod reads only the title.</p>
+<h2 id="templatesyntax">Template syntax</h2>
+<p>| Token | Meaning |
+| --- | --- |
+| <code>{title}</code> | Active tab title |
+| <code>{more}</code> | The browser's own count phrase, e.g. <code>and 16 more pages</code> (Edge) |
+| <code>{count}</code> | Total tabs, including the active one (Edge) |
+| <code>{extra}</code> | Just the number from the count phrase (Edge) |
+| <code>{profile}</code> | Profile name, or the privacy marker (Edge) |
+| <code>{private}</code> | <code>InPrivate</code> / <code>Guest</code> without brackets, else empty (Edge) |
+| <code>{browser}</code> | Browser name as it appears in the suffix |</p>
+<p>Modifiers chain with <code>:</code> - <code>{count:pad2:sup}</code>, <code>{profile:italic}</code>.</p>
+<ul>
+<li>Numeric: <code>pad2</code>, <code>pad3</code> (zero-pad), <code>min2</code> (empty unless 2 or more)</li>
+<li>Style: <code>sup</code>, <code>sub</code> (digits only), <code>bold</code>, <code>italic</code>, <code>bolditalic</code>, <code>sans</code>,
+<code>serifbold</code>, <code>serifitalic</code>, <code>mono</code>, <code>script</code>, <code>fraktur</code>, <code>dbl</code></li>
+<li>Text: <code>upper</code>, <code>lower</code>, <code>trim</code>, <code>max&lt;N&gt;</code></li>
+</ul>
+<p><code>?( ... )</code> drops the whole group, literal text included, when every token inside
+is empty. Escapes: <code>\{ \} \? \( \) \\</code> and <code>\uXXXX</code>.</p>
+<h2 id="acautionaboutthefancyletterstyles">A caution about the fancy letter styles</h2>
+<p><code>bold</code>, <code>italic</code> and friends use Unicode mathematical alphanumerics. They look
+great in the taskbar but they are not plain letters, which has real costs:</p>
+<ul>
+<li>Screen readers announce them character by character. The window's
+accessibility name is the title you display, so styling <code>{title}</code> degrades it.</li>
+<li>Alt+Tab type-to-search stops matching what you type.</li>
+<li>They need a font that covers the range. Superscript and subscript digits live
+in Segoe UI itself and are safe; the mathematical letters come from Segoe UI
+Symbol, so on a trimmed Windows image they can render as boxes.</li>
+<li>The italic, bold-italic, serif-italic, script and fraktur styles contain <strong>no
+digits</strong>, so
+digits pass through unstyled.</li>
+</ul>
+<p>Style short prefixes like <code>{count}</code>, not <code>{title}</code>.</p>
+<h2 id="limitsworthknowing">Limits worth knowing</h2>
+<ul>
+<li><p><strong>If all you want is the browser name gone</strong>, <a href="https://windhawk.net/mods/file-explorer-remove-suffixes">Remove Taskbar Window Suffixes</a>
+is designed for exactly that and does it for every program at once, with far
+less machinery. Its <em>Universal</em> mode drops the last <code>-</code> or <code>—</code> segment from
+any title, and its custom regex rules can target <code>msedge.exe</code> or <code>chrome.exe</code>
+and rewrite with capture groups - which covers dropping the suffix and a fair
+amount of reordering too.</p>
+<p>Two things are genuinely different here, and neither is a criticism of that
+mod. It edits <strong>how a title appears on the taskbar</strong>, by its own description,
+while this one changes the <strong>real window title</strong> - so Alt+Tab, the window's own
+title bar and jump lists follow. And a regex matches text, whereas this mod
+decomposes a title into <em>named</em> fields - page title, tab count, profile,
+privacy marker - using the browser's own localized resources, so <code>{count}</code> is
+a number you can style or pad and stays right in every language the browser
+ships. If you want the suffix gone, use that mod. Use this one when you want
+the parts.</p></li>
+<li><p><strong>Edge and Chrome only.</strong> The mod targets <code>msedge.exe</code> and <code>chrome.exe</code>. It
+needs no symbols and no PDB, so it is not pinned to a particular browser
+build, but other Chromium forks are not currently recognized and would each
+need their own entry and browser-name hint.</p></li>
+<li><p><strong><code>{profile}</code> is matched by name, never by position.</strong> A trailing segment is
+removed only when it is exactly one of the profile names this install actually
+has, read from the browser's own <code>Local State</code>. One profile is enough. The
+cost of matching by name is a page genuinely titled <code>Notes - Personal</code> on an
+install whose profile is <code>Personal</code>, whose tail moves into <code>{profile}</code>; the
+alternative - stripping whatever follows the last separator - would truncate
+every title containing a dash, so the name match is the floor.
+Where the profile list cannot be read at all, nothing is stripped, and any
+count sitting behind the profile is lost with it. The setting <code>Guess the
+profile when the profile list cannot be read</code> trades that back on weaker
+evidence, and is off by default - its description says what it costs.</p></li>
+<li><p><strong>The profile list is read once, at startup.</strong> Add, rename or remove a profile
+and <code>{profile}</code> keeps working from the old list until the browser restarts or
+the mod is reloaded. This is deliberate: the list decides whether text is
+removed from a title, so going stale is safer than re-reading it underneath a
+composition in progress.</p></li>
+<li><p><strong>Titles are restored on unload on a best-effort budget.</strong> Each window gets
+250 ms to acknowledge the restoring write, because the alternative is letting
+one unresponsive window hang the uninstall. A window whose thread is busy at
+that moment keeps the rewritten title until it next sets it itself. A window
+that has changed its own title since is left alone rather than being handed a
+now-older one. Both counts are logged.</p></li>
+<li><p><strong>The language is resolved in the browser's own order</strong>: <code>--lang</code>, then the
+browser's stored UI language, then Windows' display-language list, then the
+regional-format locale, then <code>en-US</code>. Each is matched against the packs the
+browser actually ships, which are mostly bare language codes. Picking the
+wrong one would make the mod appear to work and rewrite nothing, so the pack
+that was read, every page-count form found in it, and the browser suffix that
+actually matched a title are all logged to make that visible.</p></li>
+<li><p><strong>A <code>UserDataDir</code> group policy is read; a portable install still is not.</strong> The
+policy is taken from <code>HKLM</code> and then <code>HKCU</code> under
+<code>SOFTWARE\Policies\Microsoft\Edge</code> (<code>Google\Chrome</code> for Chrome), which is where
+the browser reads it and it outranks <code>--user-data-dir</code>, so a managed machine
+matches profile names normally. A policy path still holding a <code>${...}</code> variable
+that this mod cannot expand is treated as unknown rather than guessed at. What
+remains unreadable - a portable or repacked install, a truncated <code>Local State</code> -
+leaves <code>{profile}</code> empty and takes any count behind it, unless the guess setting
+above is turned on.</p></li>
+<li><p><strong>A profile that has never been renamed may not be matched.</strong> A freshly created
+profile can be shown under a localized default label - <code>Personal</code>,
+<code>Henkilökohtainen</code> - that appears nowhere in <code>Local State</code>, which still records
+the internal name. Once the profile has been used normally the browser writes
+the displayed name and the match works. Nothing is mangled meanwhile; the
+segment simply stays in <code>{title}</code>.</p></li>
+</ul>]]></content>
+        <author>
+            <name>mazany</name>
+            <uri>https://github.com/mazany</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7]]></title>
+        <id>https://windhawk.net/mods/desktop-draggable-widgets#f1a98ea9fc2204646d7660f0c9474d174a800510</id>
+        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
+        <updated>2026-09-02T17:32:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="jonaosdraggabledesktopwidgets">JonaOS Draggable Desktop Widgets</h1>
+<p>View Calendar, Time, Battery, Open your Music easily and fast without need of navigating through folders to reach Music folder, and Control Volume really fast by dragging the slider. Dragging moves them to any position on the Desktop and positions are remembered, the Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
+<img src="https://i.imgur.com/OT1h1u1.png" alt="image" />
+<em>LiquidGlass</em>
+<img src="https://i.imgur.com/DjpCK5N.png" alt="image" />
+<em>WhiteTransparent</em>
+<img src="https://i.imgur.com/9gl361Y.png" alt="image" />
+<em>AcrylicTranslucent</em>
+<img src="https://i.imgur.com/KY8iKNf.png" alt="image" />
+<em>JonaOSLight</em>
+<img src="https://i.imgur.com/MOJocT6.png" alt="image" />
+<em>JonaOSDark</em>
+<img src="https://i.imgur.com/gXqefEW.png" alt="image" />
+<em>Banana</em>
+<img src="https://i.imgur.com/sKjSb9O.png" alt="image" />
+<em>Winblue</em>
+<img src="https://i.imgur.com/qFwDZWj.png" alt="image" />
+<em>Monochrome</em>
+<img src="https://i.imgur.com/LVPGKke.png" alt="image" />
+<em>Altmonochrome</em>
+<img src="https://i.imgur.com/KjSVQMg.png" alt="image" />
+<em>HoneyDawn</em>
+<img src="https://i.imgur.com/pW2OSDr.png" alt="image" />
+<em>Pink</em>
+<img src="https://i.imgur.com/bqdmOPo.png" alt="image" />
+<em>CharcoalCream</em>
+<img src="https://i.imgur.com/YKWtU5i.png" alt="image" />
+<em>CrimsomBlush</em>
+<img src="https://i.imgur.com/evaldRJ.png" alt="image" />
+<em>DeepTeal</em>
+<img src="https://i.imgur.com/1yBbaNX.png" alt="image" />
+<em>OceanSand</em>
+<img src="https://i.imgur.com/GnqSLmN.png" alt="image" />
+<em>IndigoMist</em>
+<img src="https://i.imgur.com/77dsN6g.png" alt="image" />
+<em>SpruceMist</em>
+<img src="https://i.imgur.com/3ZjPKWy.png" alt="image" />
+<em>PlumCream</em>
+<img src="https://i.imgur.com/vH5eTqi.png" alt="image" />
+<em>ForestSage</em>
+<img src="https://i.imgur.com/0vqcJfm.png" alt="image" />
+<em>PineFrost</em>
+<img src="https://i.imgur.com/nodjpJE.png" alt="image" />
+<em>You can paste your custom folder path eg(E:Music) to open your Music</em>
+<img src="https://i.imgur.com/Eyx3ht4.png" alt="image" />
+<em>You can apply a your custom color code eg(#177DDC)</em></p>]]></content>
+        <author>
+            <name>Jona like it, code it</name>
+            <uri>https://github.com/Stunning-dev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.32]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-separators#02f079f671bc75ec5a452696bf2d3db712733079</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
+        <updated>2026-09-02T17:29:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added arbitrary rotation support. You can now have cool backslashes on your taskbar (suggestion by @phntsm).</li>
+<li>Custom icon paths support (contribution by @phntsm).</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota Bars 1.6.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#0a4b26cb2cb709280cbafe70422c4f9aefce092b</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-09-02T17:28:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add OpenAI credits bar: balance shown against a per-account max, with thresholds and notifications</li>
+<li>Add option to show $ or credit amounts on extra-usage/credits bars instead of percentages</li>
+<li>Fix Anthropic extra-usage bar vanishing at the start of each monthly cycle</li>
+<li>Hide extra OpenAI rate limits (Codex Spark, gpt-reserve) behind one opt-in toggle</li>
+</ul>]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 3.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#4bc0c8b1cc92febe0bdadacb4330bb09d8669550</id>
+        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
+        <updated>2026-09-02T17:27:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added "In-place Personalization navigation" setting to keep "Desktop Background" and "Window Color" inside the Control Panel window</li>
+<li>Restored the iSCSi Initiator applet</li>
+<li>Restored the Game Controllers applet</li>
+<li>Restored the Personalization category view links</li>
+<li>Simplified the code</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.0.1]]></title>
         <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#e01d0d0dbd6204804235831fd7f68821e4614028</id>
@@ -562,180 +825,6 @@ Released under GPL-3.0.</p>]]></content>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.2.6]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#3a64981cd805fadceec72d0b4db1aecadadc3408</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-08-29T09:03:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A position per indicator kind, with everything defaulting to the main position</li>
-<li>PlaceInArea takes the position as a parameter rather than reading the global</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.3.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#7934234cb1abdc0a80161c7a8cbade322549e6cb</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2026-08-29T01:34:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed tray layout changing for specific taskbar height values: 24, 32, and 72.</li>
-<li>Fixed a visual bug with a grouped taskbar button when the icon size is 16x16.</li>
-<li>Fixed compatibility with the latest Windows 11 update.</li>
-<li>Fixed a crash with some icon sizes when the overflow popup is opened.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.7]]></title>
-        <id>https://windhawk.net/mods/mutealert#accf687cec4460a68914869c4d7fcd998a626265</id>
-        <link href="https://windhawk.net/mods/mutealert"/>
-        <updated>2026-08-28T20:37:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mutealertforwindhawk">MuteAlert for Windhawk</h1>
-<p>Adds a microphone button to the Windows 11 system tray area.</p>
-<p><img src="https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png" alt="MuteAlert microphone activity widget" /></p>
-<ul>
-<li>The microphone fills from bottom to top as the default input device detects
-sound.</li>
-<li>Hover to see the default microphone name, input volume, mute state, and
-available mouse controls.</li>
-<li>Scroll over the button to change the input volume.</li>
-<li>Optionally lock the microphone at a chosen volume. Scrolling updates the
-locked target when this is enabled.</li>
-<li>Left-click the button to mute or unmute the microphone.</li>
-<li>A secondary Slack, Teams, or Zoom logo shows the active call microphone
-state and focuses the call window when left-clicked.</li>
-<li>Headset mute synchronization supports Windows hardware mute reporting,
-standard USB HID mute controls, and vendor-specific adapters. SteelSeries
-Arctis Nova Pro Wireless is the first high-confidence vendor adapter.</li>
-<li>If you speak while muted in a Slack huddle, Microsoft Teams call, or Zoom
-meeting, the widget warns you and can play an optional audio cue.</li>
-<li>Right-click the widget to mute or unmute active call apps when that action
-is shown in the tooltip.</li>
-</ul>
-<p>The widget follows the default Windows capture endpoint. Changing the default
-input device in Windows automatically moves the widget to the new device.</p>
-<p>Call-app monitoring and call synchronization are disabled by default. Enable
-only the Slack, Teams, or Zoom features you use. When enabled, MuteAlert first
-checks capture audio sessions and only performs UI Automation scans for an app
-that is recording, has a pending command, or was already detected in a call.</p>
-<p>Headset detection reports one of four methods in the hover tooltip: Windows
-hardware mute, Standard HID mute button, SteelSeries device state, or
-Unsupported/no observable state. Standard HID buttons are events and do not
-prove the position of a latched switch. Purely mechanical disconnect switches
-cannot be observed, and a zero audio level is never interpreted as mute.</p>
-<p>For unsupported headsets, set <strong>Export sanitized headset diagnostics</strong> to a
-full <code>.txt</code> path and apply Settings. The report includes device IDs, HID
-descriptors, provider slots, and changed byte offsets, but excludes device
-paths, serial numbers, and raw report values.</p>
-<p>Windows 11 is required. x64 and ARM64 Explorer are supported.</p>
-<h2 id="howthisdiffersfromexistingmicrophonemods">How this differs from existing microphone mods</h2>
-<p>Unlike <strong>mic-tray-control</strong>, MuteAlert injects a native XAML taskbar widget
-with a live bottom-to-top peak meter and an optional separate call-app badge.
-It also detects speaking while a Slack, Teams, or Zoom call is muted and can
-synchronize observable headset mute controls with Windows and active calls.
-<strong>adaptive-microphone-icon-visibility</strong> controls the visibility of Windows'
-built-in microphone indicator; MuteAlert supplies its own interactive meter,
-volume control, call state, and headset integration.</p>]]></content>
-        <author>
-            <name>Nikolay</name>
-            <uri>https://github.com/Nikolay1243</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Tree View Expando Fade Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-tree-view-expando-fade-fix#f5ce429ffd771669f3038072c678c8c2a9e25579</id>
-        <link href="https://windhawk.net/mods/classic-tree-view-expando-fade-fix"/>
-        <updated>2026-08-28T20:30:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classictreeviewexpandofadefix">Classic Tree View Expando Fade Fix</h1>
-<p>In newer versions of Windows 10, tree views with the extended style
-<code>TVS_EX_FADEINOUTEXPANDOS</code> (most notably the Explorer navigation pane) fail to
-render expandos in classic theme. This mod fixes that bug, restoring the previous behavior.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-tree-view-expando-fade-fix/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mix Files and Folders When Sorting in Windows Explorer 1.5]]></title>
-        <id>https://windhawk.net/mods/mix-files-and-folders-sorting#e087a203889a8e5c177ae18722c883f09559b5b1</id>
-        <link href="https://windhawk.net/mods/mix-files-and-folders-sorting"/>
-        <updated>2026-08-28T20:24:38.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/XVMBh65.png" alt="MixFilesAndFolders" /></p>
-<h1 id="mixfilesandfolderswhensorting">Mix files and folders when sorting</h1>
-<p>Windows Explorer always lists all folders before (or after, when sorting
-descending) all files, regardless of which column is sorted by. This is
-hardcoded shell behavior, not a UI setting, and it's independent from
-"Group by".</p>
-<p>This mod removes that separation: a folder and a file are compared according
-to the selected column's value (name, date, …) instead of the folder
-automatically winning. Folder-vs-folder and file-vs-file comparisons are left
-to the shell untouched, so Explorer's own ordering still applies there.</p>
-<p>Only real directories count as folders here. Items that Explorer shows as
-browsable but stores as files — <code>.zip</code> and other compressed folders, folder
-shortcuts — are treated as files, which is what stock Explorer does for its
-folders-first rule too.</p>
-<h2 id="scope">Scope</h2>
-<p>This only affects regular file-system folders (the <code>CFSFolder</code> shell object,
-i.e. anything you'd browse to on disk). Special views such as Libraries,
-"This PC", and search results use different, independent shell folder
-implementations that this mod doesn't touch, so folders may still be grouped
-first there. The Desktop is a composite view that delegates comparisons
-between two file-system items to the backing <code>CFSFolder</code>, so desktop icon
-sorting is affected.</p>
-<p>The mod is also scoped to <code>explorer.exe</code> only, so common file/save dialogs in
-other applications — which use the same <code>CFSFolder</code> implementation, just in
-a different process — keep the default folders-first ordering.</p>
-<p>Sorting by Size is left to the shell entirely. Folders report an empty size, so
-that column never interleaved on its own, and
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp"><code>explorer-details-better-file-sizes</code></a>
-already owns it — see below.</p>
-<p>Sorting by Type does not interleave either, for a different reason: the Type
-column carries <code>PKEY_ItemTypeText</code> ("File folder", "Application extension"),
-which isn't one of <code>CFSFolder</code>'s columns at all — Explorer sorts it outside
-<code>CFSFolder::CompareIDs</code>, so the folders-first grouping there is out of this
-mod's reach.</p>
-<h2 id="interactionwithexplorerdetailsbetterfilesizes">Interaction with <code>explorer-details-better-file-sizes</code></h2>
-<p><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-details-better-file-sizes.wh.cpp"><code>explorer-details-better-file-sizes</code></a>
-hooks the same <code>CFSFolder::CompareIDs</code> function and has its own
-"Mix files and folders when sorting by size" setting (<code>sortSizesMixFolders</code>,
-on by default). Both hooks delegate to the original for anything they don't
-handle, so they chain rather than fight: that mod handles the Size column,
-this one handles the rest.</p>
-<p>To keep that clean, this mod returns the Size column to the original
-comparison untouched. That mod's <code>sortSizesMixFolders</code> setting therefore stays
-authoritative for Size whether it's on or off, and the result no longer depends
-on which mod's hook happens to run first.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<p>The shell's own file-vs-file comparison and this mod's folder-vs-file
-comparison are separate pieces of code, so they can disagree at the margins
-and place a folder in a spot that looks slightly off relative to nearby
-files. Known cases: date columns reported as <code>VT_DATE</code> are compared as a
-double (~ms resolution) where the shell compares <code>FILETIME</code> at 100 ns;
-locale collation of punctuation or accented characters may differ; and a
-blank value is sorted before any present value, which the shell doesn't
-necessarily do for sparsely-populated columns (Date taken, Length,
-Dimensions).</p>
-<h2 id="creditrelatedmod">Credit / related mod</h2>
-<p>The <code>CFSFolder</code> hooking scaffolding (symbol hook, hook lifetime tracking,
-<code>CompareIDs</code> hook skeleton) is derived from m417z's
-<code>explorer-details-better-file-sizes</code>, which is licensed under GPLv3; this mod
-is licensed under GPLv3 for that reason.</p>]]></content>
-        <author>
-            <name>Extremenis</name>
-            <uri>https://github.com/Extremenis</uri>
         </author>
     </entry>
 </feed>
