@@ -15,7 +15,7 @@
 /*
 # Instant Taskbar Thumbnail Previews
 
-![https://github.com/user-attachments/assets/ac176503-f162-4da6-8f4d-b6a8dac5cd79]
+![Demo](https://raw.githubusercontent.com/alchemyyy/windhawk-mods/assets/instant-taskbar-thumbnail-previews-demo.gif)
 
 Adds the ability to configure or remove the delays before Windows 11 shows and closes taskbar thumbnail previews,
 as well as the ability to configure mouse actions that close them.
@@ -24,7 +24,7 @@ The hover and close delay settings replace the corresponding Windows value, so t
 
 Version 1.1 changes the default "Thumbnail close delay" from 1 to 200 milliseconds. Set it to 1 to retain effectively immediate closing when the pointer leaves the thumbnail area.
 
-"Delay after thumbnail removal" keeps the remaining thumbnail previews open after a thumbnail is removed, whether it was closed from the preview or externally, giving the pointer time to reach another preview before the flyout closes. The normal close delay applies when the last thumbnail is removed. Windows reports removal-driven and pointer-driven dismissals through the same transition, so the mod attributes removals using a short event-correlation window.
+"Delay after thumbnail removal" controls how long the remaining thumbnail previews stay open after one is removed, whether it was closed from the preview or externally. The normal close delay applies when the last thumbnail is removed.
 
 The optional outside-click behavior arms the taskbar's native light-dismiss action while a thumbnail flyout is open.
 
@@ -45,7 +45,7 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
   $description: Exact delay after the pointer leaves the thumbnail area. The minimum value is 1, which is effectively immediate.
 - thumbnailRemovalDelayMs: 500
   $name: Delay after thumbnail removal
-  $description: Delay used when dismissal is attributed to a recent thumbnail removal and at least one preview remains, including when its window closes outside the preview. Attribution uses a short event-correlation window. The minimum value is 1, which is effectively immediate.
+  $description: How long the remaining previews stay open after one is removed, including when its window closes outside the preview. The normal close delay applies when none remain. The minimum value is 1, which is effectively immediate.
 - closeOnOutsideClick: false
   $name: Close on outside click
   $description: Immediately close open thumbnail previews when clicking outside the taskbar and thumbnail surface.
@@ -89,38 +89,23 @@ std::atomic<bool> g_closeOnOutsideClick{false};
 std::atomic<bool> g_closeOnStartButtonHover{false};
 std::atomic<bool> g_initialized{false};
 std::atomic<bool> g_lateHookApplicationReady{false};
-std::atomic<bool> g_hookInstallationPending{true};
 std::atomic<bool> g_taskbarHooksApplied{false};
 std::atomic<bool> g_taskbarViewHooksApplied{false};
 
 enum class HookInstallState {
     waitingForModule,
+    resolving,
     queued,
+    applying,
     applied,
     failed,
     notApplicable,
 };
 
-SRWLOCK g_hookInstallLock = SRWLOCK_INIT;
-HookInstallState g_taskbarHookInstallState =
-    HookInstallState::waitingForModule;
-HookInstallState g_taskbarViewHookInstallState =
-    HookInstallState::waitingForModule;
-thread_local bool g_hookInstallationInProgress = false;
-
-class HookInstallationScope {
-   public:
-    HookInstallationScope() noexcept {
-        g_hookInstallationInProgress = true;
-    }
-
-    HookInstallationScope(const HookInstallationScope&) = delete;
-    HookInstallationScope& operator=(const HookInstallationScope&) = delete;
-
-    ~HookInstallationScope() noexcept {
-        g_hookInstallationInProgress = false;
-    }
-};
+std::atomic<HookInstallState> g_taskbarHookInstallState{
+    HookInstallState::waitingForModule};
+std::atomic<HookInstallState> g_taskbarViewHookInstallState{
+    HookInstallState::waitingForModule};
 
 enum class LightDismissOwnership {
     unknown,
@@ -1336,26 +1321,34 @@ bool IsTaskbarOwnedByAnotherProcess() {
 }
 
 void MarkWaitingHookStatesNotApplicable() {
-    if (g_taskbarHookInstallState ==
-        HookInstallState::waitingForModule) {
-        g_taskbarHookInstallState = HookInstallState::notApplicable;
-    }
+    HookInstallState expectedState = HookInstallState::waitingForModule;
+    g_taskbarHookInstallState.compare_exchange_strong(
+        expectedState,
+        HookInstallState::notApplicable,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
 
-    if (g_taskbarViewHookInstallState ==
-        HookInstallState::waitingForModule) {
-        g_taskbarViewHookInstallState = HookInstallState::notApplicable;
-    }
+    expectedState = HookInstallState::waitingForModule;
+    g_taskbarViewHookInstallState.compare_exchange_strong(
+        expectedState,
+        HookInstallState::notApplicable,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
 }
 
 bool ResolveTaskbarSymbols(HMODULE module) {
-    if (!module ||
-        g_taskbarHookInstallState !=
-            HookInstallState::waitingForModule) {
+    if (!module) {
         return false;
     }
 
-    // Mark the module terminal before symbol work so it is never resolved twice.
-    g_taskbarHookInstallState = HookInstallState::failed;
+    HookInstallState expectedState = HookInstallState::waitingForModule;
+    if (!g_taskbarHookInstallState.compare_exchange_strong(
+            expectedState,
+            HookInstallState::resolving,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return false;
+    }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
@@ -1426,11 +1419,14 @@ bool ResolveTaskbarSymbols(HMODULE module) {
 
     if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                     ARRAYSIZE(taskbarDllHooks))) {
+        g_taskbarHookInstallState.store(
+            HookInstallState::failed, std::memory_order_release);
         Wh_Log(L"Failed to resolve Taskbar.dll symbols");
         return false;
     }
 
-    g_taskbarHookInstallState = HookInstallState::queued;
+    g_taskbarHookInstallState.store(
+        HookInstallState::queued, std::memory_order_release);
 
     if (!HasTaskbarLightDismissSymbols()) {
         Wh_Log(L"Taskbar light-dismiss support isn't available on this build");
@@ -1440,14 +1436,18 @@ bool ResolveTaskbarSymbols(HMODULE module) {
 }
 
 bool ResolveTaskbarViewSymbols(HMODULE module) {
-    if (!module ||
-        g_taskbarViewHookInstallState !=
-            HookInstallState::waitingForModule) {
+    if (!module) {
         return false;
     }
 
-    // Mark the module terminal before symbol work so it is never resolved twice.
-    g_taskbarViewHookInstallState = HookInstallState::failed;
+    HookInstallState expectedState = HookInstallState::waitingForModule;
+    if (!g_taskbarViewHookInstallState.compare_exchange_strong(
+            expectedState,
+            HookInstallState::resolving,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return false;
+    }
 
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
@@ -1597,11 +1597,14 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             module,
             taskbarViewHooks,
             ARRAYSIZE(taskbarViewHooks))) {
+        g_taskbarViewHookInstallState.store(
+            HookInstallState::failed, std::memory_order_release);
         Wh_Log(L"Failed to resolve Taskbar.View symbols");
         return false;
     }
 
-    g_taskbarViewHookInstallState = HookInstallState::queued;
+    g_taskbarViewHookInstallState.store(
+        HookInstallState::queued, std::memory_order_release);
 
     if (!TransitionToFlyoutDismissPendingState_Original ||
         !MouseHoverTime_Original) {
@@ -1635,73 +1638,78 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
 }
 
 void PublishHookInstallState() {
-    bool taskbarHooksApplied =
-        g_taskbarHookInstallState == HookInstallState::applied;
-    bool taskbarViewHooksApplied =
-        g_taskbarViewHookInstallState == HookInstallState::applied;
+    if (g_taskbarHookInstallState.load(std::memory_order_acquire) ==
+        HookInstallState::applied) {
+        g_taskbarHooksApplied.store(true, std::memory_order_release);
+    }
 
-    g_taskbarHooksApplied.store(
-        taskbarHooksApplied, std::memory_order_release);
-    g_taskbarViewHooksApplied.store(
-        taskbarViewHooksApplied, std::memory_order_release);
-    g_hookInstallationPending.store(
-        g_taskbarHookInstallState ==
-                HookInstallState::waitingForModule ||
-            g_taskbarViewHookInstallState ==
-                HookInstallState::waitingForModule,
-        std::memory_order_release);
+    if (g_taskbarViewHookInstallState.load(std::memory_order_acquire) ==
+        HookInstallState::applied) {
+        g_taskbarViewHooksApplied.store(true, std::memory_order_release);
+    }
 }
 
 bool ResolveLoadedTaskbarSymbols() {
     bool hooksQueued = false;
 
-    HMODULE taskbarModule = GetTaskbarModuleHandle();
-    if (taskbarModule &&
-        g_taskbarHookInstallState ==
-            HookInstallState::waitingForModule) {
-        hooksQueued = ResolveTaskbarSymbols(taskbarModule) || hooksQueued;
+    if (g_taskbarHookInstallState.load(std::memory_order_acquire) ==
+        HookInstallState::waitingForModule) {
+        HMODULE taskbarModule = GetTaskbarModuleHandle();
+        if (taskbarModule) {
+            hooksQueued = ResolveTaskbarSymbols(taskbarModule) || hooksQueued;
+        }
     }
 
-    HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
-    if (taskbarViewModule &&
-        g_taskbarViewHookInstallState ==
-            HookInstallState::waitingForModule) {
-        hooksQueued =
-            ResolveTaskbarViewSymbols(taskbarViewModule) || hooksQueued;
+    if (g_taskbarViewHookInstallState.load(std::memory_order_acquire) ==
+        HookInstallState::waitingForModule) {
+        HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
+        if (taskbarViewModule) {
+            hooksQueued =
+                ResolveTaskbarViewSymbols(taskbarViewModule) || hooksQueued;
+        }
     }
 
     return hooksQueued;
 }
 
-bool ApplyQueuedTaskbarHooks() {
-    bool taskbarHooksQueued =
-        g_taskbarHookInstallState == HookInstallState::queued;
-    bool taskbarViewHooksQueued =
-        g_taskbarViewHookInstallState == HookInstallState::queued;
-    if (!taskbarHooksQueued && !taskbarViewHooksQueued) {
-        PublishHookInstallState();
-        return true;
+bool TryClaimQueuedHookState(
+    std::atomic<HookInstallState>& hookInstallState) {
+    HookInstallState expectedState = HookInstallState::queued;
+    return hookInstallState.compare_exchange_strong(
+        expectedState,
+        HookInstallState::applying,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
+}
+
+void ApplyQueuedTaskbarHooks() {
+    bool taskbarHooksClaimed =
+        TryClaimQueuedHookState(g_taskbarHookInstallState);
+    bool taskbarViewHooksClaimed =
+        TryClaimQueuedHookState(g_taskbarViewHookInstallState);
+    if (!taskbarHooksClaimed && !taskbarViewHooksClaimed) {
+        return;
     }
 
-    if (!Wh_ApplyHookOperations()) {
-        if (taskbarHooksQueued) {
-            g_taskbarHookInstallState = HookInstallState::failed;
-        }
-        if (taskbarViewHooksQueued) {
-            g_taskbarViewHookInstallState = HookInstallState::failed;
-        }
-        PublishHookInstallState();
-        return false;
+    bool hooksApplied = Wh_ApplyHookOperations();
+    HookInstallState completedState =
+        hooksApplied ? HookInstallState::applied
+                     : HookInstallState::failed;
+
+    if (taskbarHooksClaimed) {
+        g_taskbarHookInstallState.store(
+            completedState, std::memory_order_release);
+    }
+    if (taskbarViewHooksClaimed) {
+        g_taskbarViewHookInstallState.store(
+            completedState, std::memory_order_release);
     }
 
-    if (taskbarHooksQueued) {
-        g_taskbarHookInstallState = HookInstallState::applied;
+    if (!hooksApplied) {
+        Wh_Log(L"Failed to apply late taskbar hooks");
     }
-    if (taskbarViewHooksQueued) {
-        g_taskbarViewHookInstallState = HookInstallState::applied;
-    }
+
     PublishHookInstallState();
-    return true;
 }
 
 enum class TaskbarModuleType {
@@ -1709,6 +1717,25 @@ enum class TaskbarModuleType {
     taskbar,
     taskbarView,
 };
+
+bool HookStateIsWaitingForModule(TaskbarModuleType moduleType) {
+    switch (moduleType) {
+        case TaskbarModuleType::taskbar:
+            return g_taskbarHookInstallState.load(
+                       std::memory_order_acquire) ==
+                   HookInstallState::waitingForModule;
+
+        case TaskbarModuleType::taskbarView:
+            return g_taskbarViewHookInstallState.load(
+                       std::memory_order_acquire) ==
+                   HookInstallState::waitingForModule;
+
+        case TaskbarModuleType::none:
+            return false;
+    }
+
+    return false;
+}
 
 PCWSTR GetFileNamePart(PCWSTR path) {
     if (!path) {
@@ -1748,43 +1775,34 @@ void HandleLoadedModule(
     TaskbarModuleType moduleType) {
     if (!module ||
         !g_lateHookApplicationReady.load(std::memory_order_acquire) ||
-        !g_hookInstallationPending.load(std::memory_order_acquire) ||
         !g_initialized.load(std::memory_order_acquire) ||
-        g_hookInstallationInProgress ||
-        moduleType == TaskbarModuleType::none) {
+        !HookStateIsWaitingForModule(moduleType)) {
         return;
     }
 
-    AcquireSRWLockExclusive(&g_hookInstallLock);
-    {
-        HookInstallationScope hookInstallationScope;
-        bool hooksQueued = false;
-        if (g_initialized.load(std::memory_order_acquire) &&
-            g_lateHookApplicationReady.load(std::memory_order_acquire) &&
-            g_hookInstallationPending.load(std::memory_order_acquire)) {
-            switch (moduleType) {
-                case TaskbarModuleType::taskbar:
-                    hooksQueued = ResolveTaskbarSymbols(module);
-                    break;
-
-                case TaskbarModuleType::taskbarView:
-                    hooksQueued = ResolveTaskbarViewSymbols(module);
-                    break;
-
-                case TaskbarModuleType::none:
-                    break;
+    bool hooksQueued = false;
+    switch (moduleType) {
+        case TaskbarModuleType::taskbar:
+            if (GetTaskbarModuleHandle() == module) {
+                hooksQueued = ResolveTaskbarSymbols(module);
             }
+            break;
 
-            if (hooksQueued) {
-                if (!ApplyQueuedTaskbarHooks()) {
-                    Wh_Log(L"Failed to apply late taskbar hooks");
-                }
-            } else {
-                PublishHookInstallState();
+        case TaskbarModuleType::taskbarView:
+            if (GetTaskbarViewModuleHandle() == module) {
+                hooksQueued = ResolveTaskbarViewSymbols(module);
             }
-        }
+            break;
+
+        case TaskbarModuleType::none:
+            break;
     }
-    ReleaseSRWLockExclusive(&g_hookInstallLock);
+
+    if (hooksQueued) {
+        ApplyQueuedTaskbarHooks();
+    }
+
+    PublishHookInstallState();
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -1795,8 +1813,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
     DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
     if (!(flags & NONEXECUTABLE_LIBRARY_LOAD_FLAGS) &&
-        g_lateHookApplicationReady.load(std::memory_order_acquire) &&
-        g_hookInstallationPending.load(std::memory_order_acquire)) {
+        g_lateHookApplicationReady.load(std::memory_order_acquire)) {
         HandleLoadedModule(module, GetTaskbarModuleType(fileName));
     }
     return module;
@@ -1978,13 +1995,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    AcquireSRWLockExclusive(&g_hookInstallLock);
-    {
-        HookInstallationScope hookInstallationScope;
-        ResolveLoadedTaskbarSymbols();
-        PublishHookInstallState();
-    }
-    ReleaseSRWLockExclusive(&g_hookInstallLock);
+    ResolveLoadedTaskbarSymbols();
+    PublishHookInstallState();
 
     g_initialized.store(true, std::memory_order_release);
     Wh_Log(L"Initialized");
@@ -1992,45 +2004,41 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    AcquireSRWLockExclusive(&g_hookInstallLock);
-    {
-        HookInstallationScope hookInstallationScope;
+    // Windhawk applies hooks queued by Wh_ModInit before this callback.
+    HookInstallState expectedState = HookInstallState::queued;
+    g_taskbarHookInstallState.compare_exchange_strong(
+        expectedState,
+        HookInstallState::applied,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
 
-        // Windhawk applies hooks queued by Wh_ModInit before this callback.
-        if (g_taskbarHookInstallState == HookInstallState::queued) {
-            g_taskbarHookInstallState = HookInstallState::applied;
-        }
-        if (g_taskbarViewHookInstallState == HookInstallState::queued) {
-            g_taskbarViewHookInstallState = HookInstallState::applied;
-        }
+    expectedState = HookInstallState::queued;
+    g_taskbarViewHookInstallState.compare_exchange_strong(
+        expectedState,
+        HookInstallState::applied,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
+    PublishHookInstallState();
 
-        // A concurrent late load will wait on the installation lock.
-        // Publishing readiness here closes the gap between the module scan
-        // and lock release.
-        g_lateHookApplicationReady.store(true, std::memory_order_release);
-
-        if (IsTaskbarOwnedByAnotherProcess()) {
-            MarkWaitingHookStatesNotApplicable();
-            Wh_Log(L"Taskbar is owned by another process; late taskbar hooks "
-                   L"aren't applicable");
-        }
-
-        bool hooksQueued = ResolveLoadedTaskbarSymbols();
-        if (hooksQueued) {
-            if (!ApplyQueuedTaskbarHooks()) {
-                Wh_Log(L"Failed to apply taskbar hooks loaded during "
-                       L"initialization");
-            }
-        } else {
-            PublishHookInstallState();
-        }
-
-        if (g_taskbarViewHookInstallState ==
-            HookInstallState::waitingForModule) {
-            Wh_Log(L"Taskbar.View isn't loaded yet");
-        }
+    if (IsTaskbarOwnedByAnotherProcess()) {
+        MarkWaitingHookStatesNotApplicable();
+        Wh_Log(L"Taskbar is owned by another process; late taskbar hooks "
+               L"aren't applicable");
     }
-    ReleaseSRWLockExclusive(&g_hookInstallLock);
+
+    // Publishing readiness before rescanning closes the gap for modules loaded
+    // between Wh_ModInit and this callback. Each module state is claimed once.
+    g_lateHookApplicationReady.store(true, std::memory_order_release);
+
+    if (ResolveLoadedTaskbarSymbols()) {
+        ApplyQueuedTaskbarHooks();
+    }
+    PublishHookInstallState();
+
+    if (g_taskbarViewHookInstallState.load(std::memory_order_acquire) ==
+        HookInstallState::waitingForModule) {
+        Wh_Log(L"Taskbar.View isn't loaded yet");
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -2038,10 +2046,11 @@ void Wh_ModSettingsChanged() {
         g_closeOnOutsideClick.load(std::memory_order_relaxed);
     LoadSettings();
 
-    HandleLoadedModule(
-        GetTaskbarModuleHandle(), TaskbarModuleType::taskbar);
-    HandleLoadedModule(
-        GetTaskbarViewModuleHandle(), TaskbarModuleType::taskbarView);
+    if (g_lateHookApplicationReady.load(std::memory_order_acquire) &&
+        ResolveLoadedTaskbarSymbols()) {
+        ApplyQueuedTaskbarHooks();
+    }
+    PublishHookInstallState();
 
     if (previousCloseOnOutsideClick !=
         g_closeOnOutsideClick.load(std::memory_order_relaxed)) {
@@ -2054,9 +2063,6 @@ void Wh_ModBeforeUninit() {
     g_lateHookApplicationReady.store(false, std::memory_order_release);
     g_closeOnOutsideClick.store(false, std::memory_order_relaxed);
     g_closeOnStartButtonHover.store(false, std::memory_order_relaxed);
-
-    AcquireSRWLockExclusive(&g_hookInstallLock);
-    ReleaseSRWLockExclusive(&g_hookInstallLock);
 
     RunOnTaskbarThreads(CleanupTaskbarThreadState);
 
