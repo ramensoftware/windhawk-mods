@@ -2,7 +2,7 @@
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
 // @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
-// @version     1.3
+// @version     1.4
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
@@ -33,6 +33,13 @@ actually be an `explorer.exe` image.
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
 - Click-through: it won't get in the way of your taskbar buttons.
+- Recovers automatically on an Explorer crash/restart, not just a clean shell exit.
+- Hides while a full-screen app or game covers the taskbar's monitor.
+
+Note: [Taskbar Clock Customization](https://windhawk.net) and
+[taskbar-system-info](https://windhawk.net) both offer similar taskbar network
+readouts. This mod's differentiators are the free horizontal placement anywhere
+along the taskbar and the sparkline chart layouts.
 */
 // ==/WindhawkModReadme==
 
@@ -58,6 +65,11 @@ actually be an `explorer.exe` image.
 */
 // ==/WindhawkModSettings==
 
+// winsock2.h must come before windows.h so that iphlpapi.h pulls in the
+// netioapi.h declarations (GetIfEntry2 / MIB_IF_ROW2) instead of only the
+// legacy 32-bit-counter API.
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <gdiplus.h>
 #include <iphlpapi.h>
@@ -150,8 +162,6 @@ int g_currentWidgetHeight = 0;
 ULONGLONG g_lastTick = 0;
 ULONG64 g_lastIn = 0;
 ULONG64 g_lastOut = 0;
-ULONG64 g_cumIn = 0;
-ULONG64 g_cumOut = 0;
 double g_downBps = 0.0;
 double g_upBps = 0.0;
 
@@ -257,6 +267,10 @@ void GetThemeDimensions(const std::wstring& theme, int& width, int& height) {
     }
 }
 
+// Uses GetIfEntry2 / MIB_IF_ROW2 (64-bit counters), so no 32-bit-wrap
+// emulation is needed. A counter reset (adapter toggle, driver reset,
+// resume from sleep) is instead caught in UpdateSpeedSample by comparing
+// against the previous sample.
 bool GetTotalOctets(ULONG64* inOctets, ULONG64* outOctets) {
     ULONGLONG now = GetTickCount64();
     if (g_bestIfIndex == 0 || (now - g_lastRouteCheck) > 10000) {
@@ -272,22 +286,14 @@ bool GetTotalOctets(ULONG64* inOctets, ULONG64* outOctets) {
 
     if (g_bestIfIndex == 0) return false;
 
-    // Windhawk's bundled mingw headers only declare the older MIB_IFROW /
-    // GetIfEntry (32-bit counters), not MIB_IF_ROW2 / GetIfEntry2. The
-    // 32-bit wrap (~34s on a gigabit link) is handled explicitly in
-    // UpdateSpeedSample via a 64-bit running total.
-    MIB_IFROW row{};
-    row.dwIndex = g_bestIfIndex;
-    if (GetIfEntry(&row) != NO_ERROR) {
+    MIB_IF_ROW2 row{};
+    row.InterfaceIndex = g_bestIfIndex;
+    if (GetIfEntry2(&row) != NO_ERROR || row.OperStatus != IfOperStatusUp) {
         return false;
     }
 
-    if (row.dwOperStatus != MIB_IF_OPER_STATUS_OPERATIONAL && row.dwOperStatus != MIB_IF_OPER_STATUS_CONNECTED) {
-        return false;
-    }
-
-    *inOctets = row.dwInOctets;
-    *outOctets = row.dwOutOctets;
+    *inOctets = row.InOctets;
+    *outOctets = row.OutOctets;
     return true;
 }
 
@@ -311,31 +317,24 @@ void UpdateSpeedSample() {
         g_lastTick = 0;
     } else {
         ULONGLONG now = GetTickCount64();
-        bool discontinuity = (g_lastTick == 0);
+        // A raw counter smaller than the previous sample means the adapter's
+        // counters were reset, not that they wrapped (64-bit wrap isn't a
+        // practical concern). Report 0 for that sample and resync.
+        bool discontinuity = (g_lastTick == 0) || (rawIn < g_lastIn) || (rawOut < g_lastOut);
 
-        if (discontinuity) {
-            g_cumIn = rawIn;
-            g_cumOut = rawOut;
-        } else {
-            auto accumulate = [](ULONG64& cumulative, ULONG64 rawSample) {
-                ULONG64 prevLow = cumulative & 0xFFFFFFFFULL;
-                ULONG64 delta = (rawSample >= prevLow)
-                                     ? (rawSample - prevLow)
-                                     : (0x100000000ULL - prevLow + rawSample);
-                cumulative += delta;
-            };
-            accumulate(g_cumIn, rawIn);
-            accumulate(g_cumOut, rawOut);
-
+        if (!discontinuity) {
             double elapsedSec = (now - g_lastTick) / 1000.0;
             if (elapsedSec > 0.05) {
-                g_downBps = (double)(g_cumIn - g_lastIn) / elapsedSec;
-                g_upBps = (double)(g_cumOut - g_lastOut) / elapsedSec;
+                g_downBps = (double)(rawIn - g_lastIn) / elapsedSec;
+                g_upBps = (double)(rawOut - g_lastOut) / elapsedSec;
             }
+        } else {
+            g_downBps = 0.0;
+            g_upBps = 0.0;
         }
 
-        g_lastIn = g_cumIn;
-        g_lastOut = g_cumOut;
+        g_lastIn = rawIn;
+        g_lastOut = rawOut;
         g_lastTick = now;
     }
 
@@ -344,8 +343,24 @@ void UpdateSpeedSample() {
     g_historyIdx = (g_historyIdx + 1) % kHistorySize;
 }
 
+// True when the foreground window exactly covers the taskbar's monitor,
+// which is Explorer's own signal that a full-screen app/game is active
+// (Shell_TrayWnd stays IsWindowVisible==TRUE, just pushed down in Z-order).
+bool IsFullScreenBlockingTaskbar(HWND hTaskbar) {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == GetShellWindow()) return false;
+
+    HMONITOR mon = MonitorFromWindow(hTaskbar, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{sizeof(mi)};
+    RECT fgRect{};
+    if (!GetMonitorInfo(mon, &mi) || !GetWindowRect(fg, &fgRect)) return false;
+
+    return EqualRect(&fgRect, &mi.rcMonitor);
+}
+
 void RepositionWidget(HWND hWnd, const Settings& s) {
-    if (!IsWindow(g_hCachedTaskbar) || !IsWindowVisible(g_hCachedTaskbar)) {
+    if (!IsWindow(g_hCachedTaskbar) || !IsWindowVisible(g_hCachedTaskbar) ||
+        IsFullScreenBlockingTaskbar(g_hCachedTaskbar)) {
         if (IsWindowVisible(hWnd)) ShowWindow(hWnd, SW_HIDE);
         return;
     }
@@ -572,11 +587,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == kTimerId) {
                 UpdateSpeedSample();
-                if (g_hCachedTaskbar && IsWindow(g_hCachedTaskbar)) {
-                    Settings s = GetSafeSettings();
-                    RepositionWidget(hWnd, s);
-                    RenderWidget(hWnd, s.opacity);
+                if (!g_hCachedTaskbar || !IsWindow(g_hCachedTaskbar)) {
+                    // Taskbar vanished without a destroy event (e.g. Explorer
+                    // crashed rather than exiting cleanly). Tear down so the
+                    // outer loop re-attaches to the new taskbar.
+                    g_hCachedTaskbar = nullptr;
+                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                    return 0;
                 }
+                Settings s = GetSafeSettings();
+                RepositionWidget(hWnd, s);
+                RenderWidget(hWnd, s.opacity);
             }
             return 0;
         case WM_ERASEBKGND:
@@ -799,8 +820,15 @@ void WhTool_ModSettingsChanged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to
-// other processes or hook other functions. Pasted verbatim from:
+// other processes or hook other functions. Based on:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// Deviation from the verbatim snippet: only the real Explorer shell process
+// (started with no command-line arguments) becomes the tool-mod launcher.
+// Without this, every explorer.exe instance -- including short-lived
+// /factory,{...} -Embedding COM-server instances and separate-process
+// folder windows -- would spawn and immediately exit a throwaway tool-mod
+// process on every launch.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -846,6 +874,11 @@ BOOL Wh_ModInit() {
         }
     }
 
+    // Only the shell instance (no arguments) should be treated as a
+    // candidate launcher; -Embedding COM servers, folder windows, etc.
+    // shouldn't spawn a tool-mod process of their own.
+    bool isPlainShellInstance = (argc == 1);
+
     LocalFree(argv);
 
     if (isExcluded) {
@@ -885,7 +918,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_isToolModProcessLauncher = true;
+    g_isToolModProcessLauncher = isPlainShellInstance;
     return TRUE;
 }
 
