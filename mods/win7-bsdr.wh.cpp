@@ -80,6 +80,7 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 #include <cstdint>
 #include <cstring>
 #include <climits>
+#include <cwchar>
 #include <wrl/client.h>
 #include <winstring.h>
 #include <windows.storage.streams.h>
@@ -96,6 +97,7 @@ exclusion option. Otherwise the logoff sequence portion of the mod will not func
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
 #define BSDR_CLOSE 1337
 #define BSDR_CANCEL_TIMER 1
+#define BSDR_CANCEL_TIMER_MS 700
 
 #define RETURN_IF_FAILED(x) do { \
     HRESULT hr = (x); \
@@ -108,7 +110,8 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 HINSTANCE g_hLogonControllerDll;
 HINSTANCE g_hBlockedShutdownDll;
 
-std::atomic<HANDLE> g_hDoModalExitEventDup = nullptr;
+std::mutex g_doModalExitEventMutex;
+HANDLE g_hDoModalExitEventDup = nullptr;
 
 std::atomic<bool> g_isExiting = false;
 
@@ -1793,7 +1796,7 @@ namespace CustomBSDR {
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
     void UpdateAppListLayout();
-    void Cancel();
+    void Cancel(bool noExitProcess = false);
     LRESULT CALLBACK ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     LRESULT CALLBACK AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     INT_PTR CALLBACK DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -2407,7 +2410,6 @@ LRESULT CALLBACK CustomBSDR::AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
             SetBkColor((HDC)wParam, GetSysColor(COLOR_BTNFACE));
         }
         return (INT_PTR)GetStockObject(NULL_BRUSH);
-        break;
     }
     case WM_NCDESTROY: {
         RemoveWindowSubclass(hWnd, AppListSubclassProc, uIdSubclass);
@@ -2723,7 +2725,7 @@ void CustomBSDR::UpdateAppListLayout() {
     RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
 
-void CustomBSDR::Cancel() {
+void CustomBSDR::Cancel(bool noExitProcess) {
     if (!isOnSecureDesktop) {
         // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
         // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
@@ -2731,12 +2733,22 @@ void CustomBSDR::Cancel() {
         // and makes the thread stuck in WaitForSingleObject
         // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
         // (I still haven't found neither the culprint nor which code signals that event)
-        HANDLE hDoModalExitEvent = g_hDoModalExitEventDup.load();
-        if (hDoModalExitEvent) {
-            if (!SetEvent(hDoModalExitEvent)) {
-                Wh_Log(L"SetEvent(DoModal exit) failed, GLE=%u", GetLastError());
+        bool signaled = false;
+        {
+            std::lock_guard lock(g_doModalExitEventMutex);
+
+            if (g_hDoModalExitEventDup) {
+                signaled = SetEvent(g_hDoModalExitEventDup);
+                if (!signaled) {
+                    Wh_Log(
+                        L"SetEvent(DoModal exit) failed, GLE=%u",
+                        GetLastError()
+                    );
+                }
             }
-        } else {
+        }
+
+        if (!signaled && !noExitProcess) {
             // Event capture failed, oh noes!
             // Here comes the old terrible workaround
             // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
@@ -2745,6 +2757,7 @@ void CustomBSDR::Cancel() {
             ExitProcess(0);
         }
     }
+
     {
         std::lock_guard lock(cancelMutex);
         isCanceling = false;
@@ -3010,7 +3023,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             ShowWindow(hBgWnd, SW_HIDE);
             // Make sure the resolve request reaches winlogon
             // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
-            if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, 700, nullptr)) {
+            if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, BSDR_CANCEL_TIMER_MS, nullptr)) {
                 Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
                 Cancel();
                 PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
@@ -3418,9 +3431,20 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         wchar_t desktopName[256] = {};
         if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), nullptr)) {
             isOnSecureDesktop = (_wcsicmp(desktopName, L"winlogon") == 0);
-        }
-        if (!SetThreadDesktop(hDesktop)) {
-            Wh_Log(L"SetThreadDesktop failed, GLE=%d", GetLastError());
+            if (!isOnSecureDesktop) {
+                if (!SetThreadDesktop(hDesktop)) {
+                    Wh_Log(L"SetThreadDesktop failed, GLE=%d", GetLastError());
+                    isOnSecureDesktop = true;
+                    CloseDesktop(hDesktop);
+                    hDesktop = nullptr;
+                }
+            } else {
+                // no need to switch to secure desktop because we're alr in there
+                CloseDesktop(hDesktop);
+                hDesktop = nullptr;
+            }
+        } else {
+            Wh_Log(L"GetUserObjectInformationW failed, GLE=%d", GetLastError());
         }
     } else {
         Wh_Log(L"OpenInputDesktop failed, GLE=%d", GetLastError());
@@ -3859,8 +3883,20 @@ CLogonController__DoModal_t CLogonController__DoModal_orig;
 long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5) {
     g_enteringDoModal = true;
     Wh_Log(L"DoModal");
-    int result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
+
+    long result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
     g_enteringDoModal = false;
+
+    HANDLE eventToClose = nullptr;
+    {
+        std::lock_guard lock(g_doModalExitEventMutex);
+        eventToClose = g_hDoModalExitEventDup;
+        g_hDoModalExitEventDup = nullptr;
+    }
+
+    if (eventToClose) {
+        CloseHandle(eventToClose);
+    }
     return result;
 }
 
@@ -3894,13 +3930,21 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
             return result;
         }
 
-        HANDLE expected = nullptr;
-        if (g_hDoModalExitEventDup.compare_exchange_strong(expected, duplicated, std::memory_order_release, std::memory_order_relaxed)) {
-            // Works cleanly on LTSC 2021 and 11 25H2
-            Wh_Log(L"Caught DoModal event");
-        } else {
+        {
+            std::lock_guard lock(g_doModalExitEventMutex);
+
+            if (!g_hDoModalExitEventDup) {
+                g_hDoModalExitEventDup = duplicated;
+                duplicated = nullptr;
+                // Works cleanly on LTSC 2021 and 11 25H2
+                Wh_Log(L"Caught DoModal event");
+            } else {
+                Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
+            }
+        }
+
+        if (duplicated) {
             CloseHandle(duplicated);
-            Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
         }
     }
     return result;
@@ -4189,9 +4233,14 @@ void Wh_ModBeforeUninit() {
             needsResolve = g_resolvedValue == BlockedShutdownResolution_None;
         }
         if (needsResolve) {
+            {
+                std::lock_guard lock(cancelMutex);
+                isCanceling = true;
+            }
+
             Resolve(BlockedShutdownResolution_Cancel);
-            Sleep(700);
-            Cancel();
+            Sleep(BSDR_CANCEL_TIMER_MS);
+            Cancel(true);
         }
         Stop();
 
@@ -4215,9 +4264,15 @@ void Wh_ModUninit() {
 
     using namespace CustomBSDR;
 
-    HANDLE hDoModalExitEventDup = g_hDoModalExitEventDup.exchange(nullptr, std::memory_order_acq_rel);
-    if (hDoModalExitEventDup) {
-        CloseHandle(hDoModalExitEventDup);
+    HANDLE eventToClose = nullptr;
+    {
+        std::lock_guard lock(g_doModalExitEventMutex);
+        eventToClose = g_hDoModalExitEventDup;
+        g_hDoModalExitEventDup = nullptr;
+    }
+
+    if (eventToClose) {
+        CloseHandle(eventToClose);
     }
 
     pendingApps.reset();
