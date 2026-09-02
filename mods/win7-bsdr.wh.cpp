@@ -2501,23 +2501,33 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
     if (tile.hTitle) {
         SendMessageW(tile.hTitle, WM_SETFONT, (WPARAM)hDescFont, FALSE);
         HDC hdc = GetDC(tile.hTitle);
-        HFONT hOldFont = (HFONT)SelectObject(hdc, hDescFont);
-        SIZE textSize;
-        GetTextExtentPoint32W(hdc, titleText.c_str(), (int)titleText.length(), &textSize);
-        SelectObject(hdc, hOldFont);
-        ReleaseDC(tile.hTitle, hdc);
-        SetWindowPos(tile.hTitle, nullptr, 0, 0, textSize.cx, textSize.cy, SWP_NOMOVE | SWP_NOZORDER); // Width is corrected later
+        if (hdc) {
+            HFONT hOldFont = hDescFont ? (HFONT)SelectObject(hdc, hDescFont) : nullptr;
+            SIZE textSize = {};
+            if (GetTextExtentPoint32W(hdc, titleText.c_str(), (int)titleText.length(), &textSize)) {
+                SetWindowPos(tile.hTitle, nullptr, 0, 0, textSize.cx, textSize.cy, SWP_NOMOVE | SWP_NOZORDER); // Width is corrected later
+            }
+            if (hOldFont && hOldFont != HGDI_ERROR) {
+                SelectObject(hdc, hOldFont);
+            }
+            ReleaseDC(tile.hTitle, hdc);
+        }
     }
     HFONT hFont = (HFONT)SendMessageW(hDlg, WM_GETFONT, 0, 0);
     if (tile.hBlockReason) {
         SendMessageW(tile.hBlockReason, WM_SETFONT, (WPARAM)hFont, FALSE);
         HDC hdc = GetDC(tile.hBlockReason);
-        HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-        SIZE textSize;
-        GetTextExtentPoint32W(hdc, blockReasonText.c_str(), (int)blockReasonText.length(), &textSize);
-        SelectObject(hdc, hOldFont);
-        ReleaseDC(tile.hBlockReason, hdc);
-        SetWindowPos(tile.hBlockReason, nullptr, 0, 0, textSize.cx, textSize.cy * 2, SWP_NOMOVE | SWP_NOZORDER); // Always two lines
+        if (hdc) {
+            HFONT hOldFont = hFont ? (HFONT)SelectObject(hdc, hFont) : nullptr;
+            SIZE textSize = {};
+            if (GetTextExtentPoint32W(hdc, blockReasonText.c_str(), (int)blockReasonText.length(), &textSize)) {
+                SetWindowPos(tile.hBlockReason, nullptr, 0, 0, textSize.cx, textSize.cy * 2, SWP_NOMOVE | SWP_NOZORDER); // Always two lines
+            }
+            if (hOldFont && hOldFont != HGDI_ERROR) {
+                SelectObject(hdc, hOldFont);
+            }
+            ReleaseDC(tile.hBlockReason, hdc);
+        }
     }
 
     ABI::Windows::Storage::Streams::IRandomAccessStream* iconStream = nullptr;
