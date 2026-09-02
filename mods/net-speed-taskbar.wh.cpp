@@ -2,7 +2,7 @@
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
 // @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
-// @version     1.4
+// @version     1.5
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
@@ -33,12 +33,24 @@ actually be an `explorer.exe` image.
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
 - Click-through: it won't get in the way of your taskbar buttons.
+- Recovers automatically on an Explorer crash/restart, not just a clean shell exit.
 - Hides while a full-screen app or game covers the taskbar's monitor.
 
-Note: [Taskbar Clock Customization](https://windhawk.net) and
-[taskbar-system-info](https://windhawk.net) both offer similar taskbar network
-readouts. This mod's differentiators are the free horizontal placement anywhere
-along the taskbar and the sparkline chart layouts.
+Note: [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization)
+and [Taskbar System Info](https://windhawk.net/mods/taskbar-system-info) both
+offer similar taskbar network readouts. This mod's differentiators are the
+free horizontal placement anywhere along the taskbar and the sparkline chart
+layouts.
+
+A few consequences of running as a dedicated `explorer.exe` helper process,
+worth knowing:
+
+- A second **"Windows Explorer"** entry appears in Task Manager. Ending it
+  won't relaunch the widget until the shell restarts or the mod is reloaded.
+- Any other mod you have enabled with `@include explorer.exe` gets injected
+  into this helper process too, since it genuinely is an `explorer.exe`. Most
+  mods no-op there, but it can make Windhawk's per-process mod list and crash
+  attribution look busier than expected.
 */
 // ==/WindhawkModReadme==
 
@@ -879,11 +891,6 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Only the shell instance (no arguments) should be treated as a
-    // candidate launcher; -Embedding COM servers, folder windows, etc.
-    // shouldn't spawn a tool-mod process of their own.
-    bool isPlainShellInstance = (argc == 1);
-
     LocalFree(argv);
 
     if (isExcluded) {
@@ -919,11 +926,17 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    if (isToolModProcess) {
+    // Only the shell instance (no arguments) should be treated as a
+    // candidate launcher; -Embedding COM servers, folder windows, etc.
+    // shouldn't spawn a tool-mod process of their own, and must return
+    // FALSE here rather than fall through with g_isToolModProcessLauncher
+    // left false -- otherwise Wh_ModUninit's ExitProcess(0) (meant only
+    // for the -tool-mod process) would kill them when the mod unloads.
+    if (isToolModProcess || argc != 1) {
         return FALSE;
     }
 
-    g_isToolModProcessLauncher = isPlainShellInstance;
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
