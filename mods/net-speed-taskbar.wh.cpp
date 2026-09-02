@@ -2,7 +2,7 @@
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
 // @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
-// @version     1.5
+// @version     1.6
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
@@ -253,14 +253,15 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
         upColor = Color(255, 200, 200, 200);
     }
 
+    float sc = dpi / 96.0f;
     newGdi->bgBrush = std::make_unique<Gdiplus::SolidBrush>(bgColor);
     newGdi->downBrush = std::make_unique<Gdiplus::SolidBrush>(downColor);
     newGdi->upBrush = std::make_unique<Gdiplus::SolidBrush>(upColor);
     newGdi->shadowBrush = std::make_unique<Gdiplus::SolidBrush>(Color(200, 0, 0, 0));
-    newGdi->borderPen = std::make_unique<Gdiplus::Pen>(Color(60, 255, 255, 255), 1.0f);
-    newGdi->dividerPen = std::make_unique<Gdiplus::Pen>(Color(40, 255, 255, 255), 1.0f);
-    newGdi->downChartPen = std::make_unique<Gdiplus::Pen>(downColor, 1.5f);
-    newGdi->upChartPen = std::make_unique<Gdiplus::Pen>(upColor, 1.5f);
+    newGdi->borderPen = std::make_unique<Gdiplus::Pen>(Color(60, 255, 255, 255), 1.0f * sc);
+    newGdi->dividerPen = std::make_unique<Gdiplus::Pen>(Color(40, 255, 255, 255), 1.0f * sc);
+    newGdi->downChartPen = std::make_unique<Gdiplus::Pen>(downColor, 1.5f * sc);
+    newGdi->upChartPen = std::make_unique<Gdiplus::Pen>(upColor, 1.5f * sc);
 
     newGdi->downChartPen->SetLineJoin(LineJoinRound);
     newGdi->upChartPen->SetLineJoin(LineJoinRound);
@@ -272,7 +273,7 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
     }
 }
 
-void GetThemeDimensions(const std::wstring& theme, int& width, int& height) {
+void GetThemeDimensions(const std::wstring& theme, int fontSize, int& width, int& height) {
     if (theme == L"Top-Down") {
         width = 75; height = 36;
     } else if (theme == L"Chart") {
@@ -282,6 +283,13 @@ void GetThemeDimensions(const std::wstring& theme, int& width, int& height) {
     } else {
         width = 140; height = 40;
     }
+
+    // Base dimensions above assume the default 13px font; widen/heighten
+    // proportionally so a larger "Font size" setting doesn't push text
+    // outside a fixed box.
+    float fontScale = fontSize / 13.0f;
+    width = (int)(width * fontScale);
+    height = (int)(height * fontScale);
 }
 
 // Uses GetIfEntry2 / MIB_IF_ROW2 (64-bit counters), so no 32-bit-wrap
@@ -397,7 +405,7 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
     }
 
     int baseW, baseH;
-    GetThemeDimensions(s.theme, baseW, baseH);
+    GetThemeDimensions(s.theme, s.fontSize, baseW, baseH);
 
     int scaledWidth = MulDiv(baseW, dpi, 96);
     int scaledHeight = MulDiv(baseH, dpi, 96);
@@ -415,14 +423,18 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
     if (!IsWindowVisible(hWnd)) flags |= SWP_SHOWWINDOW;
 
     RECT newRect = {x, y, x + scaledWidth, y + scaledHeight};
+    HWND zOrderTarget = g_usingBandedWindow.load() ? HWND_TOP : HWND_TOPMOST;
     if (memcmp(&g_lastWidgetRect, &newRect, sizeof(RECT)) != 0 || (flags & SWP_SHOWWINDOW)) {
-        HWND zOrderTarget = g_usingBandedWindow.load() ? HWND_TOP : HWND_TOPMOST;
         if (!SetWindowPos(hWnd, zOrderTarget, x, y, scaledWidth, scaledHeight, flags)) {
             Wh_Log(L"RepositionWidget: SetWindowPos failed, gle=%lu", GetLastError());
         }
         g_lastWidgetRect = newRect;
-    } else if (!g_usingBandedWindow.load()) {
-        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+    } else {
+        // Re-assert Z-order every tick even when the rect hasn't moved --
+        // Explorer raises Shell_TrayWnd within its own band on auto-hide
+        // reveal, ABM_ACTIVATE, and returning from full-screen, which would
+        // otherwise leave the widget stuck behind the taskbar.
+        SetWindowPos(hWnd, zOrderTarget, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
@@ -451,12 +463,13 @@ void DrawSparkline(Graphics& g, Pen* pen, const std::vector<double>& hist, size_
     g.DrawLines(pen, pts, kHistorySize);
 }
 
-void PaintWidgetContent(Graphics& graphics, int width, int height, const Settings& s) {
+void PaintWidgetContent(Graphics& graphics, int width, int height, const Settings& s, UINT dpi) {
     RectF bounds(0.0f, 0.0f, (float)width - 1.0f, (float)height - 1.0f);
+    float sc = dpi / 96.0f;
 
     if (s.theme != L"Minimal") {
         GraphicsPath path;
-        AddRoundRect(path, bounds, 8.0f);
+        AddRoundRect(path, bounds, 8.0f * sc);
         graphics.FillPath(g_gdi->bgBrush.get(), &path);
         if (g_gdi->borderPen) graphics.DrawPath(g_gdi->borderPen.get(), &path);
     }
@@ -473,22 +486,22 @@ void PaintWidgetContent(Graphics& graphics, int width, int height, const Setting
         float halfW = w / 2.0f;
         if (g_gdi->dividerPen) graphics.DrawLine(g_gdi->dividerPen.get(), halfW, h * 0.2f, halfW, h * 0.8f);
 
-        graphics.DrawString(L"\x2193", -1, g_gdi->largeFont.get(), RectF(0, 0, halfW, h / 2 + 4), &format, g_gdi->downBrush.get());
-        graphics.DrawString(strDown.c_str(), -1, g_gdi->font.get(), RectF(0, h / 2, halfW, h / 2 - 2), &format, g_gdi->downBrush.get());
+        graphics.DrawString(L"\x2193", -1, g_gdi->largeFont.get(), RectF(0, 0, halfW, h / 2 + 4 * sc), &format, g_gdi->downBrush.get());
+        graphics.DrawString(strDown.c_str(), -1, g_gdi->font.get(), RectF(0, h / 2, halfW, h / 2 - 2 * sc), &format, g_gdi->downBrush.get());
 
-        graphics.DrawString(L"\x2191", -1, g_gdi->largeFont.get(), RectF(halfW, 0, halfW, h / 2 + 4), &format, g_gdi->upBrush.get());
-        graphics.DrawString(strUp.c_str(), -1, g_gdi->font.get(), RectF(halfW, h / 2, halfW, h / 2 - 2), &format, g_gdi->upBrush.get());
+        graphics.DrawString(L"\x2191", -1, g_gdi->largeFont.get(), RectF(halfW, 0, halfW, h / 2 + 4 * sc), &format, g_gdi->upBrush.get());
+        graphics.DrawString(strUp.c_str(), -1, g_gdi->font.get(), RectF(halfW, h / 2, halfW, h / 2 - 2 * sc), &format, g_gdi->upBrush.get());
 
     } else if (s.theme == L"Top-Down") {
         format.SetAlignment(StringAlignmentNear);
         format.SetLineAlignment(StringAlignmentCenter);
         float halfH = h / 2.0f;
 
-        graphics.DrawString(L"\x2193", -1, g_gdi->font.get(), RectF(8, 0, 16, halfH), &format, g_gdi->downBrush.get());
-        graphics.DrawString(strDown.c_str(), -1, g_gdi->font.get(), RectF(22, 0, w - 22, halfH), &format, g_gdi->downBrush.get());
+        graphics.DrawString(L"\x2193", -1, g_gdi->font.get(), RectF(8 * sc, 0, 16 * sc, halfH), &format, g_gdi->downBrush.get());
+        graphics.DrawString(strDown.c_str(), -1, g_gdi->font.get(), RectF(22 * sc, 0, w - 22 * sc, halfH), &format, g_gdi->downBrush.get());
 
-        graphics.DrawString(L"\x2191", -1, g_gdi->font.get(), RectF(8, halfH, 16, halfH), &format, g_gdi->upBrush.get());
-        graphics.DrawString(strUp.c_str(), -1, g_gdi->font.get(), RectF(22, halfH, w - 22, halfH), &format, g_gdi->upBrush.get());
+        graphics.DrawString(L"\x2191", -1, g_gdi->font.get(), RectF(8 * sc, halfH, 16 * sc, halfH), &format, g_gdi->upBrush.get());
+        graphics.DrawString(strUp.c_str(), -1, g_gdi->font.get(), RectF(22 * sc, halfH, w - 22 * sc, halfH), &format, g_gdi->upBrush.get());
 
     } else if (s.theme == L"Chart") {
         format.SetAlignment(StringAlignmentNear);
@@ -496,23 +509,23 @@ void PaintWidgetContent(Graphics& graphics, int width, int height, const Setting
         float halfH = h / 2.0f;
         float chartW = w * 0.40f;
 
-        RectF chartDown(8.0f, 6.0f, chartW, halfH - 8.0f);
+        RectF chartDown(8.0f * sc, 6.0f * sc, chartW, halfH - 8.0f * sc);
         DrawSparkline(graphics, g_gdi->downChartPen.get(), g_downHistory, g_historyIdx, chartDown);
-        graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(chartW + 16, 0, w - chartW - 16, halfH), &format, g_gdi->downBrush.get());
+        graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(chartW + 16 * sc, 0, w - chartW - 16 * sc, halfH), &format, g_gdi->downBrush.get());
 
-        RectF chartUp(8.0f, halfH + 2.0f, chartW, halfH - 8.0f);
+        RectF chartUp(8.0f * sc, halfH + 2.0f * sc, chartW, halfH - 8.0f * sc);
         DrawSparkline(graphics, g_gdi->upChartPen.get(), g_upHistory, g_historyIdx, chartUp);
-        graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(chartW + 16, halfH, w - chartW - 16, halfH), &format, g_gdi->upBrush.get());
+        graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(chartW + 16 * sc, halfH, w - chartW - 16 * sc, halfH), &format, g_gdi->upBrush.get());
 
     } else if (s.theme == L"Minimal") {
         format.SetAlignment(StringAlignmentNear);
         format.SetLineAlignment(StringAlignmentCenter);
         float halfW = w / 2.0f;
 
-        graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(1, 1, halfW, h), &format, g_gdi->shadowBrush.get());
+        graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(1 * sc, 1 * sc, halfW, h), &format, g_gdi->shadowBrush.get());
         graphics.DrawString((L"\x2193 " + strDown).c_str(), -1, g_gdi->font.get(), RectF(0, 0, halfW, h), &format, g_gdi->downBrush.get());
 
-        graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(halfW + 1, 1, halfW, h), &format, g_gdi->shadowBrush.get());
+        graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(halfW + 1 * sc, 1 * sc, halfW, h), &format, g_gdi->shadowBrush.get());
         graphics.DrawString((L"\x2191 " + strUp).c_str(), -1, g_gdi->font.get(), RectF(halfW, 0, halfW, h), &format, g_gdi->upBrush.get());
     }
 }
@@ -548,7 +561,7 @@ void RenderWidget(HWND hWnd, int opacity) {
 
             if (g_gdi && g_gdi->IsValid()) {
                 Settings s = GetSafeSettings();
-                PaintWidgetContent(graphics, width, height, s);
+                PaintWidgetContent(graphics, width, height, s, g_currentDpi);
             }
         }
 
