@@ -11,7 +11,6 @@
 // @include        ShellHost.exe
 // @include        SearchHost.exe
 // @include        Taskmgr.exe
-// @include        shutdown.exe
 // @architecture   x86-64
 // @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32 -lcrypt32
 // ==/WindhawkMod==
@@ -19,7 +18,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 Logoff Screen Restorer
+# Windows Vista/7 Logoff Screen Restorer
 
 ## Overview
 
@@ -29,9 +28,15 @@ It does **not** modify any system files (like winlogon.exe or LogonUI.exe). Inst
 
 ---
 
+## Screenshots 
+
+![Windows 7 Logoff](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7logoff.PNG)
+
+![Windows Vista Logoff](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winvistalogoff.PNG)
+
 ## Key Features
 
-- **Accurate Windows 7 style list**: Shows the total number of open programs (no artificial cap) and displays as many as fit on screen, with a scrollbar for the rest.
+- **Accurate Windows Vista/7 style list**: Shows the total number of open programs (no artificial cap) and displays as many as fit on screen, with a scrollbar for the rest.
 - **Adaptive layout**: The panel resizes based on the number of programs. When space is tight, it uses smaller icons and rows to fit more entries before scrolling.
 - **Priority to unresponsive programs**: Programs that are not responding are detected and moved to the top, with a clear "This program is not responding." note.
 - **Live updates**: The list refreshes every second, so entries disappear and the counter updates as programs close on their own.
@@ -41,7 +46,7 @@ It does **not** modify any system files (like winlogon.exe or LogonUI.exe). Inst
 - **Two visual skins**: The mods allows to choose between **Windows 7** (with blue Aero glass) and **Windows Vista** (with a red power button). Switch anytime via settings; changes apply instantly.
 - **Action-aware wording**: All text (heading, notes, buttons) adapts to logoff, shutdown, or restart, in all 21 supported languages.
 - **Built-in translations**: The interface is fully localised in 21 languages. The user can also manually select a preferred language, independent of the system locale.
-- **Easy on/off toggle**: The mod can be disabled entirely via the **Enable the screen** setting, without uninstalling. If disabled while active, the screen closes and the action continues.
+- **Easy on/off toggle**: The mod can be disabled entirely via the **Enable the custom screen** setting, without uninstalling. If disabled while active, the screen closes and the action continues.
 - **Clean filtering**: System processes (lock screen, Start menu, search, etc.) are never listed, and each program appears only once regardless of how many windows it has.
 - **100% reversible**: Only two user-mode hooks are installed. Disabling the mod (via Windhawk or the internal setting) removes it completely and there are not registry or system changes.
 
@@ -62,7 +67,8 @@ The screen can be tested without logging off by pressing `Ctrl+Alt+Shift+L` (whi
 
 ## Safety & Design
 
-- A 60-second watchdog ensures the screen never blocks a logoff.
+- A 60-second watchdog dismisses the screen and lets the logoff continue normally (it never force-closes apps), so it can neither block a logoff nor destroy unsaved work.
+- The full screen spans every monitor and is scaled per the monitor it appears on.
 - All operations (enumeration, painting, hooks) are wrapped to fall back safely to normal shutdown in case of errors.
 - Conservative filters skip invisible, owned, tool, or system windows, and deduplicate entries by process ID.
 - A safety limit prevents unbounded icon allocation; the total count remains accurate even if the list is truncated.
@@ -91,9 +97,9 @@ If any issues are encountered, please report them to the mod's author.
 // ==WindhawkModSettings==
 /*
 - enabled: true
-  $name: Enable the screen
+  $name: Enable the custom screen
   $description: >-
-    This setting turns the screen on or off. This setting takes effect
+    This setting turns the custom screen created by the mod on or off. This setting takes effect
     immediately, dismissing a screen already showing. This setting, when off,
     leaves log off, shut down and restart unchanged from stock Windows.
 - skin: win7
@@ -153,7 +159,6 @@ If any issues are encountered, please report them to the mod's author.
   - none: None (disable the preview)
 */
 // ==/WindhawkModSettings==
-
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
@@ -164,6 +169,7 @@ If any issues are encountered, please report them to the mod's author.
 #include <wincrypt.h>
 #include <string>
 
+#include <unordered_map>
 using ExitWindowsEx_t = BOOL (WINAPI*)(UINT, DWORD);
 static ExitWindowsEx_t ExitWindowsEx_Original = nullptr;
 // Second entry point. The Start menu power button and several shell surfaces
@@ -338,11 +344,12 @@ static const Skin* g_skin = &kSkinWin7;
 // one branch on a path that runs at most once per shutdown.
 static bool g_enabled = true;
 
-// Read once per session, when the screen is about to be shown, so switching
-// the setting in Windhawk takes effect on the next screen without a reload.
-// Empty means "follow the Windows user locale". Anything else is one of the
-// locale prefixes in kTexts, validated when it is used rather than here, so an
-// unknown value degrades to the automatic behaviour instead of failing.
+// Read on the UI thread, when the screen is about to be shown (and again on
+// every settings Save), so switching the setting in Windhawk takes effect on
+// the next screen without a reload. Empty means "follow the Windows user
+// locale". Anything else is one of the locale prefixes in kTexts, validated
+// when it is used rather than here, so an unknown value degrades to the
+// automatic behaviour instead of failing.
 static wchar_t g_forcedLocale[16] = L"";
 
 static constexpr int kHotkeyId = 0x574C;
@@ -375,8 +382,9 @@ static void LoadSkinSetting() {
         Wh_FreeStringSetting(lang);
     }
 
-    // The shortcut is only re-read here; changing it takes effect after the
-    // mod is reloaded, because the registration lives in the hotkey thread.
+    // The shortcut lives on the UI thread's message-only window; a changed
+    // setting is applied from Wh_ModSettingsChanged via WM_APP_APPLYSETTINGS,
+    // so the new combination (or "None") takes effect without a mod reload.
     g_hotkeyMods = MOD_CONTROL | MOD_ALT | MOD_SHIFT;
     g_hotkeyVk   = 'L';
     PCWSTR hk = Wh_GetStringSetting(L"previewHotkey");
@@ -396,13 +404,77 @@ static void LoadSkinSetting() {
         Wh_FreeStringSetting(hk);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Threading and teardown
+//
+// Every window the mod creates (the hotkey's message-only window and the
+// full-screen dialog) belongs to one dedicated UI thread per injected
+// process. That thread owns its window classes, its message loops and the
+// RegisterHotKey call; nothing else ever calls CreateWindow/DestroyWindow/
+// RegisterClass against them. This fixes the cross-thread teardown hazards a
+// "dialog created on the caller's thread, hotkeys on another" design has:
+//
+//   * DestroyWindow cannot touch a window owned by another thread, so the
+//     dialog is always closed with a posted message and torn down by the
+//     thread that owns it.
+//   * A window class is only ever unregistered from the thread that owns its
+//     windows, after they are gone, and always on every exit path.
+//   * The classes are registered with the mod's own module handle, never
+//     with explorer.exe's, so a stale class can never point at an unmapped
+//     WndProc.
+//   * Wh_ModUninit asks the UI thread to wind up and joins it INFINITE: the
+//     DLL image is never freed while any thread can still be executing mod
+//     code or blocked in GetMessage with a return address inside it.
+//
+// The shutdown hooks run on the caller's (shell) thread; they hand the
+// request to the UI thread and block until it signals the outcome.
+// ---------------------------------------------------------------------------
+
+// Module handle of the mod DLL itself. GetModuleHandleW(nullptr) would return
+// the host executable (explorer.exe, ...), whose HINSTANCE is the wrong value
+// for a class registered by the mod: on unload the class entry survives with
+// lpfnWndProc pointing into freed memory.
+static HMODULE GetModModuleHandle() {
+    HMODULE hModule = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&GetModModuleHandle), &hModule);
+    return hModule;
+}
+
+static const wchar_t kCtrlClassName[]  = L"WindhawkWin7LogoffRestorerCtrl";
+
+// Private messages for the UI thread's message-only control window.
+static constexpr UINT WM_APP_SHOW         = WM_APP + 1; // lParam: HANDLE reply event
+static constexpr UINT WM_APP_APPLYSETTINGS = WM_APP + 2;
+static constexpr UINT WM_APP_QUITUI       = WM_APP + 3;
+
+static HWND   g_hotkeyWindow = nullptr;   // message-only control window (UI thread)
+static HANDLE g_uiThread = nullptr;
+static DWORD  g_uiThreadId = 0;
+static bool   g_isExplorer = false;       // only explorer registers the preview hotkey
+
+// Set while the control window exists; the UI thread clears it just before it
+// exits. Uninit waits on it so the FreeLibrary that Windhawk does on return
+// can never happen while the thread is still inside mod code.
+static HANDLE g_uiThreadDone = nullptr;
+// Fired once the control window has been created (or creation failed), so a
+// shutdown that arrives immediately after init posts to a valid window.
+static HANDLE g_uiReady = nullptr;
+// Signalled while no hook is inside the mod's own code. Uninit waits on it
+// before unhooking, for the same "never free the image under live code"
+// reason as the UI-thread join.
+static HANDLE g_hooksIdle = nullptr;
+
+struct InFlightHook {
+    InFlightHook()  { ResetEvent(g_hooksIdle); }
+    ~InFlightHook() { SetEvent(g_hooksIdle); }
+};
 static bool g_hoverForce = false;
 static bool g_hoverCancel = false;
 static ULONGLONG g_dialogStart = 0;
 static ULONGLONG g_captureFailedAt = 0;
-static HWND g_hotkeyWindow = nullptr;
-static HANDLE g_hotkeyThread = nullptr;
-static DWORD g_hotkeyThreadId = 0;
 
 // ---------------------------------------------------------------------------
 // DPI scaling
@@ -410,21 +482,33 @@ static DWORD g_hotkeyThreadId = 0;
 // Every metric the painter uses (fonts, rows, icons, paddings, the 800 px
 // panel, the button sizes, ...) is written in 96-DPI reference pixels, i.e.
 // the size the UI has at 100% scaling. The shell processes this mod runs
-// inside (explorer.exe, StartMenuExperienceHost.exe, ...) are DPI-aware, so
-// at 125% or 150% scaling Windows gives them physical pixels and scales its
-// own UI up by the same factor -- while hardcoded metrics would stay put and
-// the whole screen would come out too small next to the rest of the shell.
-// Every metric is therefore multiplied by the process's actual DPI (96, 120,
-// 144, ...) through DpiScale() before it is used.
-//
-// GetDeviceCaps(LOGPIXELSX) on a screen DC is deliberately used instead of
-// GetDpiForSystem(): it returns the DPI the process *actually renders at*.
-// For a DPI-aware process that is the real scaling (120 at 125%); for a
-// DPI-unaware process (e.g. shutdown.exe, whose windows Windows scales and
-// stretches for it) it returns 96, so the metrics stay unscaled and DWM's
-// own stretch factor does the rest -- the two must never be combined.
+// inside (explorer.exe, StartMenuExperienceHost.exe, ...) are per-monitor
+// DPI-aware, so on a mixed-DPI multi-monitor setup a single process-wide DPI
+// is wrong for every monitor but the first. The DPI is therefore taken from
+// the actual screen window (GetDpiForWindow, available on Windows 10 1607+,
+// resolved dynamically so the mod still loads everywhere) and refreshed in
+// WM_DPICHANGED when the window moves between monitors. GetProcessDpi() only
+// remains as a pre-creation fallback; for a DPI-unaware host it returns 96, so
+// the metrics stay unscaled and DWM's own stretch factor does the rest -- the
+// two must never be combined.
 // ---------------------------------------------------------------------------
-static int g_dpi = 96;   // process DPI (dots per inch); 96 == 100% scaling
+static int g_dpi = 96;   // DPI of the monitor the screen is on; 96 == 100%
+
+typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
+static int GetProcessDpi();
+
+static int GetWindowDpi(HWND hwnd) {
+    int dpi = 0;
+    static const GetDpiForWindow_t pGetDpiForWindow = []() -> GetDpiForWindow_t {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? reinterpret_cast<GetDpiForWindow_t>(
+                            GetProcAddress(user32, "GetDpiForWindow"))
+                      : nullptr;
+    }();
+    if (pGetDpiForWindow) dpi = (int)pGetDpiForWindow(hwnd);
+    if (dpi < 96 || dpi > 480) dpi = GetProcessDpi();
+    return dpi;
+}
 
 static int GetProcessDpi() {
     int dpi = 96;
@@ -439,7 +523,6 @@ static int GetProcessDpi() {
 // Scales a 96-DPI reference value to the current DPI, rounding to the
 // nearest whole pixel so 1 px at 125% still rounds to something sane.
 static int DpiScale(int v) { return (v * g_dpi + 48) / 96; }
-
 // Windows 7 never capped this list at a fixed number of entries: the heading
 // reported the true total and the list showed as many programs as the screen
 // resolution allowed, adding a scrollbar (and smaller icons) for the rest.
@@ -465,20 +548,19 @@ static int g_dragOffset = 0;          // grab point inside the thumb
 enum { kListUnchanged = 0, kListContentChanged = 1, kListLayoutChanged = 2 };
 
 static const wchar_t kClassName[] = L"WindhawkWin7LogoffRestorer";
-static void LogCritical(const wchar_t* message) {
-    wchar_t path[MAX_PATH]{};
-    DWORD n = GetTempPathW(ARRAYSIZE(path), path);
-    if (!n || n >= ARRAYSIZE(path) - 32) return;
-    wcscat_s(path, L"Win7LogoffRestorer.log");
-    HANDLE f = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
-                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    SYSTEMTIME t{}; GetLocalTime(&t);
-    wchar_t line[512]{};
-    swprintf_s(line, L"%04u-%02u-%02u %02u:%02u:%02u: %s\r\n",
-               t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond,message);
-    DWORD written=0; WriteFile(f,line,(DWORD)(wcslen(line)*sizeof(wchar_t)),&written,nullptr);
-    CloseHandle(f);
+
+// Program icons are keyed by PID and survive the one-second list refreshes.
+// Previously every refresh destroyed every icon and re-ran WM_GETICON /
+// ExtractIconExW / SHGetFileInfoW for every program every second; the latter
+// two can hit the disk and the shell icon cache and block for a long time on
+// a slow or network path. The map keeps the CloneIcon'd 32x32 bitmap owned by
+// the mod (window icons belong to the window's process and can vanish), and
+// entries for PIDs no longer present are pruned each refresh.
+static std::unordered_map<DWORD, HICON> g_iconCache;
+
+static void ClearIconCache() {
+    for (auto& kv : g_iconCache) if (kv.second) DestroyIcon(kv.second);
+    g_iconCache.clear();
 }
 
 
@@ -512,44 +594,29 @@ static void FreeDesktopBitmap() {
     }
 }
 
+// Grabs the whole virtual desktop (all monitors) so the backdrop covers the
+// same area the full-screen window spans.
 static HBITMAP CaptureDesktop() {
-    HWND desktop = GetDesktopWindow();
-    HDC src = GetDC(desktop);
+    HDC src = GetDC(nullptr);
     if (!src) return nullptr;
-    RECT r{};
-    GetWindowRect(desktop, &r);
-    int w = r.right - r.left;
-    int h = r.bottom - r.top;
+    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (w <= 0 || h <= 0) { ReleaseDC(nullptr, src); return nullptr; }
     DcGuard mem(CreateCompatibleDC(src));
     BitmapGuard bmp(CreateCompatibleBitmap(src, w, h));
     if (mem.get() && bmp.get()) {
         HGDIOBJ old = SelectObject(mem.get(), bmp.get());
-        BitBlt(mem.get(), 0, 0, w, h, src, 0, 0, SRCCOPY);
+        BitBlt(mem.get(), 0, 0, w, h, src, x, y, SRCCOPY);
         SelectObject(mem.get(), old);
         HBITMAP result = bmp.release();
-        ReleaseDC(desktop, src);
+        ReleaseDC(nullptr, src);
         return result;
     }
-    ReleaseDC(desktop, src);
+    ReleaseDC(nullptr, src);
     return nullptr;
 }
-
-// Every string the screen shows depends on which action was actually
-// requested: promising a "Force log off" while the machine is about to shut
-// down, or saying a program "is preventing Windows from logging off" during a
-// restart, would simply be wrong. So each action-dependent string exists in
-// all three variants -- log off, shut down, restart -- for every language,
-// indexed by ActionKind, and no locale silently falls back to English.
-//
-// cancel is action-neutral (the button cancels whatever was requested).
-// stillOne/stillMany are the full suffix shown after the numeric count
-// ("<N> <suffix>"), already agreeing in number (and, where the language
-// needs it, in verb form) so no language ever shows a mismatched count
-// like "3 programma" -- singular suffix is used only when count == 1. They
-// are action-neutral too: the heading only counts programs, it does not name
-// the action.
-// notResponding is the line shown under a program that has stopped answering
-// messages; it describes the program, not the action, so it is single-valued.
 struct UiText {
     const wchar_t* locale;
     const wchar_t* cancel;
@@ -828,23 +895,39 @@ static std::wstring ProgramListSignature() {
     for (const auto& p : g_openPrograms) { r += p.blocking ? L"!" : L"-"; r += p.name; r += L"\n"; }
     return r;
 }
-static void FreeProgramIcons() {
-    for (auto& p : g_openPrograms) if (p.icon) DestroyIcon(p.icon);
-}
+
 static HICON CloneIcon(HICON icon, int cx, int cy) {
     if (!icon) return nullptr;
     return (HICON)CopyImage(icon, IMAGE_ICON, cx, cy, LR_COPYFROMRESOURCE | LR_DEFAULTSIZE);
 }
 
-static HICON GetProgramIcon(HWND window, const wchar_t* exePath) {
-    HICON source = (HICON)SendMessageW(window, WM_GETICON, ICON_BIG, 0);
-    if (!source) source = (HICON)SendMessageW(window, WM_GETICON, ICON_SMALL2, 0);
-    if (!source) source = (HICON)SendMessageW(window, WM_GETICON, ICON_SMALL, 0);
+// A directed SendMessage to a window of another thread is delivered only
+// when that thread pumps messages; a hung window -- exactly the app this mod
+// exists to report -- never pumps, so a plain SendMessageW(WM_GETICON) blocks
+// the calling thread forever, freezing the shell UI thread that triggered
+// the logoff. SendMessageTimeoutW with SMTO_ABORTIFHUNG gives up instead, and
+// SMTO_BLOCK stops our own message queue being re-entered while we wait.
+static HICON QueryWindowIcon(HWND window, int type) {
+    DWORD_PTR result = 0;
+    LRESULT ok = SendMessageTimeoutW(window, WM_GETICON, (WPARAM)type, 0,
+                                     SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result);
+    return ok ? (HICON)result : nullptr;
+}
+
+static HICON GetProgramIcon(HWND window, DWORD pid, const wchar_t* exePath) {
+    auto cached = g_iconCache.find(pid);
+    if (cached != g_iconCache.end() && cached->second) return cached->second;
+
+    HICON source = QueryWindowIcon(window, ICON_BIG);
+    if (!source) source = QueryWindowIcon(window, ICON_SMALL2);
+    if (!source) source = QueryWindowIcon(window, ICON_SMALL);
+    // GCLP_HICON is a direct read of the window's class word, no message is
+    // sent, so it cannot block.
     if (!source) source = (HICON)GetClassLongPtrW(window, GCLP_HICON);
     if (!source) source = (HICON)GetClassLongPtrW(window, GCLP_HICONSM);
 
     HICON copy = CloneIcon(source, 32, 32);
-    if (copy) return copy;
+    if (copy) { g_iconCache[pid] = copy; return copy; }
 
     // More reliable fallback: extract the icon from the executable itself.
     if (exePath && *exePath) {
@@ -853,7 +936,7 @@ static HICON GetProgramIcon(HWND window, const wchar_t* exePath) {
             HICON result = CloneIcon(large ? large : small, 32, 32);
             if (large) DestroyIcon(large);
             if (small) DestroyIcon(small);
-            if (result) return result;
+            if (result) { g_iconCache[pid] = result; return result; }
         }
     }
 
@@ -862,11 +945,13 @@ static HICON GetProgramIcon(HWND window, const wchar_t* exePath) {
         if (SHGetFileInfoW(exePath, 0, &fi, sizeof(fi), SHGFI_ICON | SHGFI_LARGEICON) && fi.hIcon) {
             HICON result = CloneIcon(fi.hIcon, 32, 32);
             DestroyIcon(fi.hIcon);
-            if (result) return result;
+            if (result) { g_iconCache[pid] = result; return result; }
         }
     }
     // Last-resort generic Windows application icon.
-    return CloneIcon(LoadIconW(nullptr, IDI_APPLICATION), 32, 32);
+    HICON fallback = CloneIcon(LoadIconW(nullptr, IDI_APPLICATION), 32, 32);
+    if (fallback) g_iconCache[pid] = fallback;
+    return fallback;
 }
 
 // Background/system host processes that own hidden or auxiliary top-level
@@ -899,6 +984,9 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
         if (SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked)
             return TRUE;
         wchar_t title[256]{};
+        // GetWindowTextW on a foreign window already applies USER32's
+        // internal hang timeout, so it cannot deadlock the way a plain
+        // SendMessage would.
         if (!GetWindowTextW(w, title, ARRAYSIZE(title)) || !title[0]) return TRUE;
         // The Start menu is an Explorer-owned shell surface, not a program
         // that must be closed. Never show it in the shutdown list.
@@ -926,15 +1014,30 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
         // A window that no longer pumps messages is what actually holds the
         // shutdown back, so remember it: those entries are listed first.
         bool blocking = IsHungAppWindow(w) != FALSE;
-        g_openPrograms.push_back({x, GetProgramIcon(w, path), pid, blocking});
+        g_openPrograms.push_back({x, GetProgramIcon(w, pid, path), pid, blocking});
     } catch (...) {}
     return TRUE;
 }
+
+// Drops cached icons of processes that are no longer in the list, so a
+// closed program does not leak its HICON for the lifetime of the process.
+static void PruneIconCache() {
+    for (auto it = g_iconCache.begin(); it != g_iconCache.end();) {
+        bool stillOpen = false;
+        for (const auto& p : g_openPrograms) {
+            if (p.pid == it->first) { stillOpen = true; break; }
+        }
+        if (stillOpen) { ++it; continue; }
+        if (it->second) DestroyIcon(it->second);
+        it = g_iconCache.erase(it);
+    }
+}
+
 static int RefreshOpenPrograms(){
  try {
   std::wstring before=ProgramListSignature();
   size_t beforeCount=g_totalPrograms;
-  FreeProgramIcons(); g_openPrograms.clear();
+  g_openPrograms.clear();
   EnumWindows(CollectVisibleWindows,0);
 
   // Windows 7 showed the programs that were actively blocking the shutdown
@@ -952,21 +1055,16 @@ static int RefreshOpenPrograms(){
 
   // There is no artificial three-item truncation any more: every program
   // returned by the (unchanged) filters in CollectVisibleWindows is listed
-  // and reachable by scrolling. Only the generous safety bound is enforced,
-  // and the icons of the entries it drops are destroyed so no HICON leaks.
+  // and reachable by scrolling. Only the generous safety bound is enforced;
+  // icons of dropped entries stay in the PID cache and are pruned below.
   if(g_openPrograms.size()>kMaxListedPrograms){
-      for(size_t i=kMaxListedPrograms;i<g_openPrograms.size();++i)
-          if(g_openPrograms[i].icon) DestroyIcon(g_openPrograms[i].icon);
       g_openPrograms.resize(kMaxListedPrograms);
   }
+  PruneIconCache();
   if (g_totalPrograms!=beforeCount) return kListLayoutChanged;
   return before!=ProgramListSignature() ? kListContentChanged : kListUnchanged;
- } catch (...) { FreeProgramIcons(); g_openPrograms.clear(); g_totalPrograms=0; LogCritical(L"Program enumeration failed"); return kListLayoutChanged; }
+ } catch (...) { g_openPrograms.clear(); g_totalPrograms=0; PruneIconCache(); Wh_Log(L"Program enumeration failed"); return kListLayoutChanged; }
 }
-
-// All four accessors are now a plain lookup: the table already holds the
-// wording for the exact action in progress, so nothing has to be patched up
-// at draw time and no string can contradict what is about to happen.
 static const wchar_t* GetActionText()  { return GetUiText()->force[g_action]; }
 static const wchar_t* GetActionBody()  { return GetUiText()->body[g_action]; }
 static const wchar_t* GetBlockedNote() { return GetUiText()->blocked[g_action]; }
@@ -1494,7 +1592,6 @@ static DialogLayout ComputeLayout(int clientW, int clientH, size_t programCount)
     L.listRegion = RECT{ox + DpiScale(84), L.listTop, ox + DpiScale(722), L.listBottom + 1};
     return L;
 }
-
 static DialogLayout LayoutForWindow(HWND hwnd) {
     RECT cr{}; GetClientRect(hwnd, &cr);
     int w = cr.right - cr.left, h = cr.bottom - cr.top;
@@ -1540,90 +1637,108 @@ static void ScrollToThumbPosition(HWND hwnd, int y) {
     }
 }
 
-static bool ShowWin7LogoffDialog(UINT flags, DWORD reason);
+// ---------------------------------------------------------------------------
+// The full-screen dialog and the UI thread that owns it
+// ---------------------------------------------------------------------------
 
-static LRESULT CALLBACK HotkeyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_HOTKEY && wp == kHotkeyId && !g_dialog && g_enabled) {
-        // Preview only: the return value is deliberately ignored, so no
-        // logoff is ever performed. With no program open the screen skips
-        // itself just like it would during a real logoff.
-        try {
-            ShowWin7LogoffDialog(EWX_LOGOFF, 0);
-            if (g_totalPrograms == 0)
-                Wh_Log(L"Preview skipped: no program is currently open");
-        }
-        catch (...) { Wh_Log(L"Simulation failed: exception contained"); }
-        return 0;
+static DWORD WINAPI UiThreadProc(LPVOID);
+
+// Runs on the UI thread. Creates the dialog; the outcome is reported through
+// g_proceed/g_force when the window is destroyed (WM_DESTROY sets the reply
+// event). It never runs a nested modal loop: the dialog is modeless on this
+// thread, so the same loop also keeps the hotkey window alive (the preview
+// hotkey can therefore never fire while a screen is already up) and a quit
+// message posted to the thread is always reached.
+static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
+    // Re-read every setting on the thread that consumes it.
+    LoadSkinSetting();
+    if (!g_enabled) { g_force = false; g_proceed = true;  SetEvent(replyEvent); return; }
+
+    g_force = false; g_proceed = false;
+    g_action = action;
+    g_listScroll = 0; g_draggingThumb = false; // always open at the top of the list
+    RefreshOpenPrograms();
+
+    // Nothing is holding the logoff back, so there is nothing to report and
+    // nothing to decide: staying out of the way is what Windows 7 did too.
+    // Putting up a screen that reads "0 programs still need to close:" would
+    // be awkward and would only delay a logoff that can just go ahead.
+    if (g_totalPrograms == 0) {
+        g_openPrograms.clear();
+        g_force = false; g_proceed = true;
+        SetEvent(replyEvent);
+        return;
     }
-    return DefWindowProcW(hwnd, msg, wp, lp);
+
+    g_dialogStart = GetTickCount64();
+    FreeDesktopBitmap(); g_desktop = CaptureDesktop();
+    g_captureFailedAt = g_desktop ? 0 : g_dialogStart;
+
+    HINSTANCE hMod = GetModModuleHandle();
+    // Span the virtual desktop so every monitor is covered and the screen is
+    // modal on a multi-monitor setup.
+    const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    HWND dlg = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClassName, L"Windows",
+                               WS_POPUP | WS_VISIBLE, vx, vy, vw, vh,
+                               nullptr, nullptr, hMod, nullptr);
+    if (!dlg) {
+        Wh_Log(L"CreateWindowExW for the logoff screen failed");
+        FreeDesktopBitmap();
+        g_force = false; g_proceed = true;   // fail open: never block a logoff
+        SetEvent(replyEvent);
+        return;
+    }
+    g_dialog = dlg;
+    // The reply event is stashed on the window so WM_DESTROY can signal it.
+    SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(replyEvent));
+    // The DPI is a property of the monitor the window landed on.
+    g_dpi = GetWindowDpi(dlg);
+    SetForegroundWindow(dlg);
+    SetFocus(dlg);
 }
 
-static DWORD WINAPI HotkeyThreadProc(LPVOID) {
-    try {
-        WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr); wc.lpfnWndProc=HotkeyProc;
-        wc.lpszClassName=L"WindhawkWin7LogoffHotkey";
-        RegisterClassW(&wc);
-        g_hotkeyWindow=CreateWindowExW(0,wc.lpszClassName,L"",0,0,0,0,0,
-                                       HWND_MESSAGE,nullptr,wc.hInstance,nullptr);
-        if (!g_hotkeyWindow) { LogCritical(L"Hotkey window could not be created"); return 1; }
-        if (!RegisterHotKey(g_hotkeyWindow, kHotkeyId, g_hotkeyMods, g_hotkeyVk)) {
-            // Almost always ERROR_HOTKEY_ALREADY_REGISTERED: something else,
-            // or Windows itself, already owns the combination. Naming the
-            // error saves the user guessing why nothing happens on the keys.
-            const DWORD err = GetLastError();
-            if (err == ERROR_HOTKEY_ALREADY_REGISTERED)
-                LogCritical(L"The preview shortcut is already taken by another "
-                            L"program; choose a different one in the settings");
-            else
-                LogCritical(L"RegisterHotKey failed");
-            Wh_Log(L"RegisterHotKey error %u (mods 0x%X, vk 0x%X)", err, g_hotkeyMods, g_hotkeyVk);
-            DestroyWindow(g_hotkeyWindow); g_hotkeyWindow = nullptr;
-            return 1;
-        }
-        Wh_Log(L"Preview shortcut registered (mods 0x%X, vk 0x%X)", g_hotkeyMods, g_hotkeyVk);
-        MSG m{};
-        while (GetMessageW(&m,nullptr,0,0)>0) {
-            TranslateMessage(&m); DispatchMessageW(&m);
-        }
-        UnregisterHotKey(g_hotkeyWindow,kHotkeyId);
-        DestroyWindow(g_hotkeyWindow); g_hotkeyWindow=nullptr;
-        UnregisterClassW(wc.lpszClassName,wc.hInstance);
-    } catch (...) { LogCritical(L"Hotkey thread exception"); }
-    return 0;
-}
+static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
         SetTimer(hwnd, 1, 1000, nullptr);
         return 0;
-    case WM_TIMER:
+    case WM_TIMER: {
         // Safety watchdog only: it never redraws. Rendering is event-driven.
-        // The dialog is closed after 60 seconds so logoff cannot be blocked.
+        // The dialog is dismissed after 60 seconds so a logoff can never be
+        // blocked forever -- but it proceeds UNFORCED, exactly like the
+        // "last program closed by itself" path: force-closing apps on a timer
+        // would throw away unsaved work for a user who simply walked away,
+        // while stock Windows would instead show its own "app is preventing
+        // shutdown" screen and wait.
         if (GetTickCount64() - g_dialogStart >= 60000) {
-            g_force = true; g_proceed = true;
+            g_force = false; g_proceed = true;
             DestroyWindow(hwnd);
-        } else {
-            const int changed = RefreshOpenPrograms();
-            // Programs close by themselves in the background, so the list can
-            // empty out while the screen is up. Showing "0 programs still
-            // need to close:" would be nonsense, and there is nothing left to
-            // wait for either: close the screen and let Windows carry on
-            // normally (g_force stays false -- nothing had to be forced).
-            if (g_totalPrograms == 0) {
-                g_force = false; g_proceed = true;
-                DestroyWindow(hwnd);
-                return 0;
-            }
-            if (changed != kListUnchanged) {
-                DialogLayout L = LayoutForWindow(hwnd);
-                ClampListScroll(L);
-                // When the number of entries changes the whole panel is
-                // re-laid out (it grows/shrinks with the list), so a partial
-                // invalidate would leave stale pixels behind.
-                if (changed == kListLayoutChanged) InvalidateRect(hwnd, nullptr, FALSE);
-                else InvalidateRect(hwnd, &L.listRegion, FALSE);
-            }
+            return 0;
+        }
+        const int changed = RefreshOpenPrograms();
+        // Programs close by themselves in the background, so the list can
+        // empty out while the screen is up. Showing "0 programs still
+        // need to close:" would be nonsense, and there is nothing left to
+        // wait for either: close the screen and let Windows carry on
+        // normally (g_force stays false -- nothing had to be forced).
+        if (g_totalPrograms == 0) {
+            g_force = false; g_proceed = true;
+            DestroyWindow(hwnd);
+            return 0;
+        }
+        if (changed != kListUnchanged) {
+            DialogLayout L = LayoutForWindow(hwnd);
+            ClampListScroll(L);
+            // When the number of entries changes the whole panel is
+            // re-laid out (it grows/shrinks with the list), so a partial
+            // invalidate would leave stale pixels behind.
+            if (changed == kListLayoutChanged) InvalidateRect(hwnd, nullptr, FALSE);
+            else InvalidateRect(hwnd, &L.listRegion, FALSE);
         }
         if (!g_desktop && GetTickCount64() - g_captureFailedAt >= 1000) {
             FreeDesktopBitmap();
@@ -1632,6 +1747,7 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         return 0;
+    }
     case WM_KEYDOWN:
         if (wp == VK_ESCAPE) { g_force = false; g_proceed = false; DestroyWindow(hwnd); return 0; }
         if (wp == VK_RETURN) { g_force = true;  g_proceed = true;  DestroyWindow(hwnd); return 0; }
@@ -1682,6 +1798,40 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
+    case WM_DISPLAYCHANGE: {
+        // Monitor added/removed or resolution changed: re-span the virtual
+        // desktop and refresh the backdrop.
+        const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        const int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        SetWindowPos(hwnd, HWND_TOPMOST, vx, vy, vw, vh,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        FreeDesktopBitmap();
+        g_desktop = CaptureDesktop();
+        g_captureFailedAt = g_desktop ? 0 : GetTickCount64();
+        g_dpi = GetWindowDpi(hwnd);
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
+    case WM_DPICHANGED: {
+        // The window moved to a monitor with different scaling. Adopt the new
+        // DPI, accept the suggested rect, and repaint with the new metrics.
+        int newDpi = HIWORD(wp);
+        if (newDpi >= 96 && newDpi <= 480) g_dpi = newDpi;
+        else g_dpi = GetWindowDpi(hwnd);
+        const RECT* suggested = reinterpret_cast<const RECT*>(lp);
+        if (suggested && suggested->right > suggested->left) {
+            SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                         suggested->right - suggested->left,
+                         suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        FreeDesktopBitmap();
+        g_desktop = CaptureDesktop();
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
     case WM_LBUTTONUP: {
         if (g_draggingThumb) { g_draggingThumb = false; ReleaseCapture(); return 0; }
         const int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
@@ -1691,6 +1841,11 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         else if (PtInRect(&cancel, POINT{x,y})) { g_force = false; g_proceed = false; DestroyWindow(hwnd); }
         return 0;
     }
+    case WM_CLOSE:
+        // Alt+F4 / system close == Cancel.
+        g_force = false; g_proceed = false;
+        DestroyWindow(hwnd);
+        return 0;
     case WM_ERASEBKGND:
         // The whole client area is always fully repainted in WM_PAINT (via
         // an off-screen buffer), so letting DefWindowProc erase it first
@@ -1869,26 +2024,188 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (dc != screenDc) DeleteDC(dc);
         EndPaint(hwnd,&ps); return 0;
     }
-    case WM_DESTROY: KillTimer(hwnd,1); PostQuitMessage(0); return 0;
+
+    // No PostQuitMessage here: the dialog is modeless on the UI thread,
+    // which also owns the hotkey window and keeps pumping after the screen
+    // closes. Report the outcome: a real hook caller waits on this event;
+    // for a preview the event is a dummy that nobody waits on.
+    case WM_DESTROY: {
+        KillTimer(hwnd, 1);
+        g_dialog = nullptr;
+        FreeDesktopBitmap();
+        g_openPrograms.clear();
+        g_hoverForce = g_hoverCancel = false;
+        HANDLE reply = reinterpret_cast<HANDLE>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (reply) SetEvent(reply);
+        return 0;
+    }
     }
     return DefWindowProcW(hwnd,msg,wp,lp);
 }
 
-static bool ShowWin7LogoffDialog(UINT flags, DWORD reason) {
+// Applies (or clears) the preview hotkey on the thread that owns the window.
+static void ApplyHotkey() {
+    if (!g_isExplorer || !g_hotkeyWindow) return;
+    UnregisterHotKey(g_hotkeyWindow, kHotkeyId);   // harmless if not registered
+    if (g_hotkeyVk == 0) return;                   // "None": preview disabled
+    if (!RegisterHotKey(g_hotkeyWindow, kHotkeyId, g_hotkeyMods, g_hotkeyVk)) {
+        const DWORD err = GetLastError();
+        if (err == ERROR_HOTKEY_ALREADY_REGISTERED)
+            Wh_Log(L"The preview shortcut is already taken by another "
+                   L"program; choose a different one in the settings");
+        else
+            Wh_Log(L"RegisterHotKey failed (error %u)", err);
+        return;
+    }
+    Wh_Log(L"Preview shortcut registered (mods 0x%X, vk 0x%X)", g_hotkeyMods, g_hotkeyVk);
+}
+
+// Registers a window class for the mod, retrying once after unregistering a
+// stale class left behind by an earlier mod image (its WndProc pointer is
+// dangling, so the class must never be reused).
+static ATOM RegisterModClass(WNDCLASSW* wc) {
+    ATOM atom = RegisterClassW(wc);
+    if (!atom) {
+        UnregisterClassW(wc->lpszClassName, wc->hInstance);
+        atom = RegisterClassW(wc);
+    }
+    return atom;
+}
+
+static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_APP_SHOW: {
+        // A shutdown hook is asking for the screen. The action (logoff/
+        // shutdown/restart) is carried in wParam so it is decided by the hook
+        // thread and never read by this thread while another request changes it.
+        HANDLE reply = reinterpret_cast<HANDLE>(lp);
+        if (g_dialog) {
+            // A screen is already up; let the second caller continue.
+            g_force = false; g_proceed = true;
+            SetEvent(reply);
+            return 0;
+        }
+        try {
+            ShowScreenOnUiThread(reply, (ActionKind)wp);
+        } catch (...) {
+            Wh_Log(L"Logoff screen failed: exception contained");
+            g_force = false; g_proceed = true;
+            g_dialog = nullptr; FreeDesktopBitmap(); g_openPrograms.clear();
+            SetEvent(reply);
+        }
+        return 0;
+    }
+    case WM_HOTKEY:
+        if (wp == kHotkeyId && !g_dialog && g_enabled) {
+            // Preview only: the reply event is signalled but nobody waits on
+            // it, so no logoff is ever performed. With no program open the
+            // screen skips itself just like it would during a real logoff.
+            HANDLE dummy = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            try {
+                ShowScreenOnUiThread(dummy, kActionLogoff);
+                if (g_totalPrograms == 0)
+                    Wh_Log(L"Preview skipped: no program is currently open");
+            } catch (...) {
+                // If a dialog made it into existence before the throw, close
+                // it; its WM_DESTROY signals the (unwaited) dummy event.
+                Wh_Log(L"Preview failed: exception contained");
+                if (g_dialog) { g_force = false; g_proceed = false; DestroyWindow(g_dialog); }
+                if (dummy) SetEvent(dummy);
+            }
+            if (dummy) CloseHandle(dummy);
+        }
+        return 0;
+    case WM_APP_APPLYSETTINGS:
+        LoadSkinSetting();
+        ApplyHotkey();   // re-registration picks up the changed shortcut
+        if (g_dialog) {
+            if (!g_enabled) {
+                // Turned off while the screen was up: dismiss it and let the
+                // pending action continue unforced, as if never intercepted.
+                g_force = false; g_proceed = true;
+                DestroyWindow(g_dialog);
+            } else {
+                InvalidateRect(g_dialog, nullptr, TRUE);
+            }
+        }
+        return 0;
+    case WM_APP_QUITUI:
+        // Close any screen first (on this thread, so DestroyWindow is legal)
+        // so the hooks blocked in the screen wake up, then stop the loop.
+        if (g_dialog) { g_force = false; g_proceed = false; DestroyWindow(g_dialog); }
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static DWORD WINAPI UiThreadProc(LPVOID) {
+    HINSTANCE hMod = GetModModuleHandle();
+    auto cleanup = [&]() {
+        if (g_hotkeyWindow) { UnregisterHotKey(g_hotkeyWindow, kHotkeyId);
+                              DestroyWindow(g_hotkeyWindow); g_hotkeyWindow = nullptr; }
+        UnregisterClassW(kCtrlClassName, hMod);
+        UnregisterClassW(kClassName, hMod);
+        ClearIconCache();
+        FreeDesktopBitmap();
+        g_openPrograms.clear();
+        g_uiThreadId = 0;
+        if (g_uiThreadDone) SetEvent(g_uiThreadDone);
+        if (g_uiReady) SetEvent(g_uiReady);
+    };
+
     try {
-    if (g_dialog || g_insideHook) return true;
-    // Master switch. Read before anything else is touched so that a disabled
-    // mod does not even enumerate windows or capture the desktop: the caller
-    // is told to proceed, unforced, exactly as if the mod were not installed.
-    // Both hooks and the preview hotkey funnel through here, so this single
-    // test is enough to make the whole feature inert.
-    LoadSkinSetting();
-    // Re-read the DPI every time the screen is shown: a scaling change made
-    // while the mod was loaded is picked up here, and the value is what the
-    // whole layout multiplies its reference metrics by.
-    g_dpi = GetProcessDpi();
-    if (!g_enabled) return true;
-    g_pendingFlags=flags; g_pendingReason=reason; g_force=false; g_proceed=false;
+        WNDCLASSW ctrl{};
+        ctrl.hInstance = hMod;
+        ctrl.lpfnWndProc = ControlProc;
+        ctrl.lpszClassName = kCtrlClassName;
+        if (!RegisterModClass(&ctrl)) { Wh_Log(L"Control window class could not be registered"); cleanup(); return 1; }
+
+        WNDCLASSW dlg{};
+        dlg.hInstance = hMod;
+        dlg.lpfnWndProc = DialogProc;
+        dlg.lpszClassName = kClassName;
+        dlg.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        dlg.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        if (!RegisterModClass(&dlg)) { Wh_Log(L"Dialog window class could not be registered"); cleanup(); return 1; }
+
+        g_hotkeyWindow = CreateWindowExW(0, kCtrlClassName, L"", 0, 0, 0, 0, 0,
+                                         HWND_MESSAGE, nullptr, hMod, nullptr);
+        if (!g_hotkeyWindow) { Wh_Log(L"Control window could not be created"); cleanup(); return 1; }
+
+        // The hotkey only makes sense in the process that owns the desktop;
+        // registering it in every injected shell host would make all but the
+        // first registration fail and log spurious errors.
+        ApplyHotkey();
+
+        SetEvent(g_uiReady);   // init may now post requests
+
+        MSG m{};
+        while (GetMessageW(&m, nullptr, 0, 0) > 0) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+
+        if (g_dialog) DestroyWindow(g_dialog);
+        if (g_hotkeyWindow) UnregisterHotKey(g_hotkeyWindow, kHotkeyId);
+        if (g_hotkeyWindow) { DestroyWindow(g_hotkeyWindow); g_hotkeyWindow = nullptr; }
+        UnregisterClassW(kCtrlClassName, hMod);
+        UnregisterClassW(kClassName, hMod);
+    } catch (...) {
+        Wh_Log(L"UI thread exception");
+    }
+    cleanup();
+    return 0;
+}
+
+// Hook-side entry: hand the request to the UI thread and block until the
+// screen reports its decision. Returns true when Windows should proceed.
+static bool ShowWin7LogoffDialog(UINT flags, DWORD reason) {
+    if (g_insideHook || !g_uiThreadId || !g_hotkeyWindow) return true;
+
+    g_pendingFlags = flags;
+    g_pendingReason = reason;
+
     // Which wording the screen uses is decided here, once. EWX_REBOOT is
     // tested first because a restart also carries the shutdown semantics, and
     // EWX_POWEROFF is treated as a shutdown because "Shut down" from the Start
@@ -1897,46 +2214,45 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason) {
     g_action = (flags & EWX_REBOOT)                     ? kActionRestart
              : (flags & (EWX_SHUTDOWN | EWX_POWEROFF))  ? kActionShutdown
              : kActionLogoff;
-    g_listScroll = 0; g_draggingThumb = false; // always open at the top of the list
-    // The settings were already re-read above, so a skin or language changed
-    // in Windhawk applies to this very screen without a reload.
-    RefreshOpenPrograms();
 
-    // Nothing is holding the logoff back, so there is nothing to report and
-    // nothing to decide: staying out of the way is what Windows 7 did too.
-    // Putting up a screen that reads "0 programs still need to close:" would
-    // be awkward and would only delay a logoff that can just go ahead.
-    if (g_totalPrograms == 0) {
-        FreeProgramIcons(); g_openPrograms.clear();
-        return true; // continue with the logoff/shutdown, unforced
-    }
-    g_dialogStart = GetTickCount64();
-    FreeDesktopBitmap(); g_desktop=CaptureDesktop();
-    g_captureFailedAt = g_desktop ? 0 : g_dialogStart;
-    WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr); wc.lpfnWndProc=DialogProc;
-    wc.lpszClassName=kClassName; wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
-    wc.hbrBackground=(HBRUSH)(COLOR_WINDOW+1); RegisterClassW(&wc);
-    int w=GetSystemMetrics(SM_CXSCREEN), h=GetSystemMetrics(SM_CYSCREEN); int x=0, y=0;
-    g_dialog=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kClassName,L"Windows",WS_POPUP|WS_VISIBLE,x,y,w,h,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-    if (g_dialog) { SetForegroundWindow(g_dialog); SetFocus(g_dialog); }
-    if (!g_dialog) { LogCritical(L"CreateWindowExW failed"); FreeDesktopBitmap(); return true; }
-    MSG m{}; while (g_dialog && GetMessageW(&m,nullptr,0,0)>0) { TranslateMessage(&m); DispatchMessageW(&m); }
-    g_dialog=nullptr; FreeDesktopBitmap(); return g_proceed;
-    } catch (...) {
-        g_dialog = nullptr; FreeDesktopBitmap();
-        Wh_Log(L"Logoff dialog exception contained");
+    HANDLE reply = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!reply) return true;   // fail open: never block a logoff
+
+    if (!PostMessageW(g_hotkeyWindow, WM_APP_SHOW, (WPARAM)g_action,
+                      reinterpret_cast<LPARAM>(reply))) {
+        CloseHandle(reply);
         return true;
     }
+
+    // Wait for the screen to close. The UI thread always signals the event
+    // (every ShowScreenOnUiThread path, WM_DESTROY, and the exception path),
+    // so this cannot deadlock: disable/uninit posts WM_APP_QUITUI, which tears
+    // the dialog down and signals us.
+    MsgWaitForMultipleObjects(1, &reply, FALSE, INFINITE, QS_ALLINPUT);
+    while (WaitForSingleObject(reply, 0) != WAIT_OBJECT_0) {
+        // Pump any messages sent to this thread (e.g. DWM queries) while the
+        // screen is up, so the shell stays responsive.
+        MSG m{};
+        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+        MsgWaitForMultipleObjects(1, &reply, FALSE, INFINITE, QS_ALLINPUT);
+    }
+
+    CloseHandle(reply);
+    return g_proceed;
 }
 
 static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
+    InFlightHook guard;
     try {
-    if (!ExitWindowsEx_Original) return FALSE;
-    if (g_insideHook) return ExitWindowsEx_Original(flags, reason);
-    if (!ShowWin7LogoffDialog(flags, reason)) return TRUE;
-    g_insideHook=true;
-    BOOL result=ExitWindowsEx_Original(flags | (g_force ? EWX_FORCEIFHUNG : 0), reason);
-    g_insideHook=false; return result;
+        if (!ExitWindowsEx_Original) return FALSE;
+        if (g_insideHook) return ExitWindowsEx_Original(flags, reason);
+        if (!ShowWin7LogoffDialog(flags, reason)) return TRUE;
+        g_insideHook=true;
+        BOOL result=ExitWindowsEx_Original(flags | (g_force ? EWX_FORCEIFHUNG : 0), reason);
+        g_insideHook=false; return result;
     } catch (...) {
         g_insideHook=false;
         return ExitWindowsEx_Original ? ExitWindowsEx_Original(flags, reason) : FALSE;
@@ -1951,23 +2267,27 @@ static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
 static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
                                            DWORD gracePeriod, DWORD shutdownFlags,
                                            DWORD reason) {
+    InFlightHook guard;
     try {
-    if (!InitiateShutdownW_Original) return ERROR_PROC_NOT_FOUND;
-    // Only local, interactive requests get the screen. A remote shutdown or a
-    // re-entrant call must pass straight through.
-    if (g_insideHook || (machineName && *machineName))
-        return InitiateShutdownW_Original(machineName, message, gracePeriod, shutdownFlags, reason);
+        if (!InitiateShutdownW_Original) return ERROR_PROC_NOT_FOUND;
+        // Only local, interactive requests get the screen. A remote shutdown or a
+        // re-entrant call must pass straight through.
+        if (g_insideHook || (machineName && *machineName))
+            return InitiateShutdownW_Original(machineName, message, gracePeriod, shutdownFlags, reason);
 
-    UINT ewx = (shutdownFlags & SHUTDOWN_RESTART) ? EWX_REBOOT
-             : (shutdownFlags & SHUTDOWN_POWEROFF) ? EWX_POWEROFF
-             : EWX_SHUTDOWN;
-    if (!ShowWin7LogoffDialog(ewx, reason)) return ERROR_SUCCESS; // cancelled by the user
+        UINT ewx = (shutdownFlags & SHUTDOWN_RESTART) ? EWX_REBOOT
+                 : (shutdownFlags & SHUTDOWN_POWEROFF) ? EWX_POWEROFF
+                 : EWX_SHUTDOWN;
+        if (!ShowWin7LogoffDialog(ewx, reason)) return ERROR_SUCCESS; // cancelled by the user
 
-    g_insideHook=true;
-    DWORD extra = g_force ? (SHUTDOWN_FORCE_OTHERS | SHUTDOWN_FORCE_SELF) : 0;
-    DWORD result=InitiateShutdownW_Original(machineName, message, gracePeriod,
-                                            shutdownFlags | extra, reason);
-    g_insideHook=false; return result;
+        g_insideHook=true;
+        // The watchdog and "programs closed by themselves" paths proceed
+        // UNFORCED, so no SHUTDOWN_FORCE_* flags are added behind the user's
+        // back: a real force only happens when the user clicks the button.
+        DWORD extra = g_force ? (SHUTDOWN_FORCE_OTHERS | SHUTDOWN_FORCE_SELF) : 0;
+        DWORD result=InitiateShutdownW_Original(machineName, message, gracePeriod,
+                                                shutdownFlags | extra, reason);
+        g_insideHook=false; return result;
     } catch (...) {
         g_insideHook=false;
         return InitiateShutdownW_Original
@@ -1976,7 +2296,37 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
     }
 }
 
+// Brings the UI thread up. Returns false if it could not be started.
+static bool StartUiThread() {
+    if (g_uiThread) return true;
+    g_uiReady     = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_uiThreadDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hooksIdle   = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!g_uiReady || !g_uiThreadDone || !g_hooksIdle) return false;
+    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
+    if (!g_uiThread) { Wh_Log(L"CreateThread for the UI thread failed"); return false; }
+    // Do not post anything to the control window before the thread has
+    // actually created it.
+    WaitForSingleObject(g_uiReady, 5000);
+    return g_hotkeyWindow != nullptr;
+}
+
 BOOL Wh_ModInit() {
+    wchar_t exePath[MAX_PATH]{};
+    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
+        const wchar_t* exe = wcsrchr(exePath, L'\\');
+        exe = exe ? exe + 1 : exePath;
+        g_isExplorer = (_wcsicmp(exe, L"explorer.exe") == 0);
+    }
+
+    LoadSkinSetting();
+
+    // The UI thread (window classes, hotkey window, full-screen dialog) is
+    // started before any hook can fire.
+    if (!StartUiThread()) {
+        Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
+    }
+
     // Both entry points are hooked. Which one a given shell surface uses
     // varies with the Windows version and with the action (sign out vs shut
     // down vs restart), so requiring both to be present would make the mod
@@ -1988,8 +2338,8 @@ BOOL Wh_ModInit() {
         if (auto target=(ExitWindowsEx_t)(void*)GetProcAddress(user32,"ExitWindowsEx")) {
             if (WindhawkUtils::SetFunctionHook(target, ExitWindowsEx_Hook, &ExitWindowsEx_Original))
                 anyHook = true;
-            else LogCritical(L"Hooking ExitWindowsEx failed");
-        } else LogCritical(L"ExitWindowsEx not found");
+            else Wh_Log(L"Hooking ExitWindowsEx failed");
+        } else Wh_Log(L"ExitWindowsEx not found");
     }
 
     // advapi32 is not always loaded yet in the shell host processes, so it is
@@ -1999,53 +2349,60 @@ BOOL Wh_ModInit() {
         if (auto target=(InitiateShutdownW_t)(void*)GetProcAddress(advapi32,"InitiateShutdownW")) {
             if (WindhawkUtils::SetFunctionHook(target, InitiateShutdownW_Hook, &InitiateShutdownW_Original))
                 anyHook = true;
-            else LogCritical(L"Hooking InitiateShutdownW failed");
-        } else LogCritical(L"InitiateShutdownW not found");
+            else Wh_Log(L"Hooking InitiateShutdownW failed");
+        } else Wh_Log(L"InitiateShutdownW not found");
     }
 
-    if (!anyHook) { LogCritical(L"No shutdown entry point could be hooked"); return FALSE; }
+    if (!anyHook) { Wh_Log(L"No shutdown entry point could be hooked"); return FALSE; }
 
-    LoadSkinSetting();
-
-    // The preview hotkey only makes sense in the process that owns the
-    // desktop; registering the same hotkey in every shell host would make all
-    // but the first registration fail and log a spurious error.
-    wchar_t exePath[MAX_PATH]{};
-    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
-        const wchar_t* exe = wcsrchr(exePath, L'\\');
-        exe = exe ? exe + 1 : exePath;
-        if (_wcsicmp(exe, L"explorer.exe") == 0 && g_hotkeyVk != 0) {
-            g_hotkeyThread = CreateThread(nullptr, 0, HotkeyThreadProc, nullptr, 0, &g_hotkeyThreadId);
-            if (!g_hotkeyThread) LogCritical(L"CreateThread for hotkey failed");
-        }
-    }
     return TRUE;
 }
 
-// Windhawk calls this when the user presses Save in the settings. Skin and
-// language are picked up immediately; if the screen happens to be on display
-// it is repainted, so a language change is visible on the spot rather than
-// only on the next shutdown.
+// Windhawk calls this when the user presses Save in the settings. Skin,
+// language and hotkey are picked up on the UI thread; if the screen happens
+// to be on display it is repainted (or, when the master switch was turned
+// off, dismissed) on the spot, rather than only on the next shutdown.
 void Wh_ModSettingsChanged() {
-    LoadSkinSetting();
-    if (!g_dialog) return;
-    if (!g_enabled) {
-        // Turned off while the screen was up. Letting it stand would leave a
-        // full-screen window belonging to a feature the user just disabled,
-        // so it is dismissed and the pending action is allowed to continue
-        // unforced -- the same outcome as if the mod had never intercepted it.
-        g_force = false; g_proceed = true;
-        DestroyWindow(g_dialog);
-        return;
-    }
-    InvalidateRect(g_dialog, nullptr, TRUE);
+    if (g_hotkeyWindow)
+        PostMessageW(g_hotkeyWindow, WM_APP_APPLYSETTINGS, 0, 0);
 }
 
 void Wh_ModUninit() {
-    if (g_hotkeyThreadId) PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
-    if (g_hotkeyThread) { WaitForSingleObject(g_hotkeyThread, 3000); CloseHandle(g_hotkeyThread); g_hotkeyThread=nullptr; }
-    g_hotkeyThreadId=0;
-    if (g_dialog) { g_force=false; g_proceed=false; DestroyWindow(g_dialog); g_dialog=nullptr; }
-    FreeProgramIcons(); g_openPrograms.clear(); g_listScroll = 0; g_totalPrograms = 0;
-    g_draggingThumb = false; FreeDesktopBitmap(); UnregisterClassW(kClassName,GetModuleHandleW(nullptr));
+    // 1. Ask the UI thread to wind up: it closes the full-screen dialog on
+    //    its own thread (DestroyWindow from any other thread fails with
+    //    ERROR_ACCESS_DENIED and leaves the window alive with a WndProc about
+    //    to be unmapped), unregisters the hotkey and both window classes, and
+    //    frees the icon cache.
+    if (g_hotkeyWindow) PostMessageW(g_hotkeyWindow, WM_APP_QUITUI, 0, 0);
+
+    // 2. Do not let any hook thread keep executing mod code after the DLL is
+    //    freed. During a real logoff the screen being torn down wakes the
+    //    hook and it proceeds immediately.
+    WaitForSingleObject(g_hooksIdle, INFINITE);
+
+    // 3. Join the UI thread INFINITE. A bounded wait that gives up and lets
+    //    Windhawk FreeLibrary the image while the thread is still inside mod
+    //    code (or blocked in GetMessage with a return address in it) crashes
+    //    the host process.
+    if (g_uiThread) {
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+    }
+    g_hotkeyWindow = nullptr;
+    g_uiThreadId = 0;
+
+    // 4. Only now, with every thread that could touch this state gone, is it
+    //    safe to release it.
+    g_dialog = nullptr;
+    ClearIconCache();
+    g_openPrograms.clear();
+    g_listScroll = 0;
+    g_totalPrograms = 0;
+    g_draggingThumb = false;
+    FreeDesktopBitmap();
+
+    if (g_uiReady)      { CloseHandle(g_uiReady);      g_uiReady = nullptr; }
+    if (g_uiThreadDone) { CloseHandle(g_uiThreadDone); g_uiThreadDone = nullptr; }
+    if (g_hooksIdle)    { CloseHandle(g_hooksIdle);    g_hooksIdle = nullptr; }
 }
