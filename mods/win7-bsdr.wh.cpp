@@ -2230,7 +2230,7 @@ void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
         }
 
         if (hBitmap) {
-            BITMAP bm;
+            BITMAP bm = {};
             GetObject(hBitmap, sizeof(bm), &bm);
 
             int width = rcButton.right - rcButton.left;
@@ -2510,9 +2510,13 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
 
     ABI::Windows::Storage::Streams::IRandomAccessStream* iconStream = nullptr;
     if (SUCCEEDED(blockingApp->get_Icon(&iconStream)) && iconStream) {
-        GetBitmapFromRandomStream(spWICFactory.Get(), iconStream, &tile.hIconBitmap);
-        if (tile.hIcon && tile.hIconBitmap) {
-            SendMessageW(tile.hIcon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)tile.hIconBitmap);
+        HRESULT hr = GetBitmapFromRandomStream(spWICFactory.Get(), iconStream, &tile.hIconBitmap);
+        if (SUCCEEDED(hr)) {
+            if (tile.hIcon && tile.hIconBitmap) {
+                SendMessageW(tile.hIcon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)tile.hIconBitmap);
+            }
+        } else {
+            Wh_Log(L"GetBitmapFromRandomStream failed, HR=%08X", hr);
         }
         iconStream->Release();
     }
@@ -2748,7 +2752,7 @@ void CustomBSDR::Cancel(bool noExitProcess) {
             }
         }
 
-        if (!signaled && !noExitProcess) {
+        if (!signaled && !noExitProcess && !g_isExiting.load()) {
             // Event capture failed, oh noes!
             // Here comes the old terrible workaround
             // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
@@ -3330,16 +3334,11 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             DestroyWindow(hDlgLocal);
         }
 
-        HWND hBgWndLocal = nullptr;
         {
             std::lock_guard lock(hBgWndMutex);
-            hBgWndLocal = hBgWnd;
             hBgWnd = nullptr;
         }
-
-        if (hBgWndLocal) {
-            DestroyWindow(hBgWndLocal);
-        }
+        DestroyWindow(hWnd);
 
         for (auto& tile : appTiles) {
             if (tile.hIconBitmap) DeleteObject(tile.hIconBitmap);
@@ -3421,6 +3420,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 }
 
 DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
+    bool failed = false;
     int ret = 0;
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
@@ -3536,6 +3536,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                         break;
                     }
                 } else {
+                    failed = true;
                     ret = GetLastError();
                     Wh_Log(L"MsgWaitForMultipleObjects returned %d, GLE=%d", result, ret);
 
@@ -3556,6 +3557,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 }
             }
         } else {
+            failed = true;
             ret = GetLastError();
             Wh_Log(L"CreateWindowExW failed, GLE=%d", ret);
         }
@@ -3564,6 +3566,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
             Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
         }
     } else {
+        failed = true;
         ret = GetLastError();
         Wh_Log(L"RegisterClassExW failed, GLE=%d", ret);
     }
@@ -3574,7 +3577,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         CoUninitialize();
     }
 
-    if (ret != 0) {
+    if (failed || ret != 0) {
         Wh_Log(L"CustomBSDR thread init failed");
         // Note: Windows also does force logoff when the BSDR is not available, e.g. the BSDR DLL is missing, on Server Core, etc.
         // Probably this is better than leaving a system that never shuts down (if the mod is repeatedly failing)
@@ -3707,7 +3710,9 @@ long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettin
 
 long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsigned int* scaleFactor) {
     Wh_Log(L"BlockedShutdownUXImpl::get_ScaleFactor");
-    *scaleFactor = CustomBSDR::GetScaleFactor();
+    if (scaleFactor) {
+        *scaleFactor = CustomBSDR::GetScaleFactor();
+    }
     return S_OK;
 }
 
@@ -3915,7 +3920,7 @@ using CreateEventW_t = decltype(&CreateEventW);
 CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
-    if (lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
+    if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
         HANDLE duplicated = nullptr;
         if (!DuplicateHandle(
             GetCurrentProcess(),
