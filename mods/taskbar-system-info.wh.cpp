@@ -443,6 +443,10 @@ constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 constexpr uint32_t kMaximumTaskbarViewHookAttempts = 3;
 constexpr uint32_t kMaximumUnknownPlacementProbeFailures = 3;
 constexpr auto kGadgetRegistryRescanInterval = std::chrono::seconds(30);
+constexpr auto kGadgetRegistryPartialRescanInterval =
+    std::chrono::seconds(5);
+constexpr auto kSharedMemoryRescanInterval = std::chrono::seconds(60);
+constexpr auto kSharedMemoryPartialRescanInterval = std::chrono::seconds(5);
 constexpr wchar_t kDefaultGraphColor[] = L"#78A8FF";
 constexpr wchar_t kDefaultWarningColor[] = L"#FFFFB900";
 constexpr wchar_t kDefaultCriticalColor[] = L"#FFFF6B6B";
@@ -609,7 +613,7 @@ struct HwInfoGadgetRegistryCache {
     std::wstring gpuAdapter;
 };
 
-[[clang::no_destroy]] HwInfoGadgetRegistryCache g_hwInfoGadgetRegistryCache;
+HwInfoGadgetRegistryCache g_hwInfoGadgetRegistryCache;
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -1095,6 +1099,32 @@ static_assert(sizeof(HwInfoSensorPrefix) == 264);
 static_assert(offsetof(HwInfoReadingPrefix, value) == 284);
 static_assert(sizeof(HwInfoReadingPrefix) == 292);
 
+struct HwInfoSharedMemoryCache {
+    std::optional<uint32_t> cpuReadingIndex;
+    std::optional<uint32_t> gpuReadingIndex;
+    std::chrono::steady_clock::time_point nextFullScan{};
+    std::wstring cpuFilter;
+    std::wstring gpuFilter;
+    std::wstring gpuAdapter;
+    uint32_t version = 0;
+    uint32_t revision = 0;
+    uint32_t sensorOffset = 0;
+    uint32_t sensorStride = 0;
+    uint32_t sensorCount = 0;
+    uint32_t readingOffset = 0;
+    uint32_t readingStride = 0;
+    uint32_t readingCount = 0;
+    bool layoutKnown = false;
+};
+
+struct HwInfoRawTemperatureReading {
+    uint32_t index = 0;
+    HwInfoSensorPrefix sensor{};
+    HwInfoReadingPrefix reading{};
+};
+
+HwInfoSharedMemoryCache g_hwInfoSharedMemoryCache;
+
 bool IsRangeValid(size_t totalSize,
                   uint32_t offset,
                   uint32_t stride,
@@ -1183,6 +1213,16 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                             const ModSettings& settings,
                             const std::optional<std::wstring>& gpuAdapterName,
                             HwInfoTemperatureDiagnostics& diagnostics) {
+    std::wstring gpuAdapter = gpuAdapterName.value_or(L"");
+    if (g_hwInfoSharedMemoryCache.cpuFilter != settings.cpuTempSensor ||
+        g_hwInfoSharedMemoryCache.gpuFilter != settings.gpuTempSensor ||
+        g_hwInfoSharedMemoryCache.gpuAdapter != gpuAdapter) {
+        g_hwInfoSharedMemoryCache = {};
+        g_hwInfoSharedMemoryCache.cpuFilter = settings.cpuTempSensor;
+        g_hwInfoSharedMemoryCache.gpuFilter = settings.gpuTempSensor;
+        g_hwInfoSharedMemoryCache.gpuAdapter = std::move(gpuAdapter);
+    }
+
     HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE,
                                       L"Global\\HWiNFO_SENS_SM2");
     if (!mapping) {
@@ -1217,6 +1257,10 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
 
     std::vector<HwInfoSensorPrefix> sensors;
     std::vector<HwInfoReadingPrefix> readings;
+    std::optional<HwInfoRawTemperatureReading> cachedCpuReading;
+    std::optional<HwInfoRawTemperatureReading> cachedGpuReading;
+    bool fullScanCopied = false;
+    auto now = std::chrono::steady_clock::now();
     MEMORY_BASIC_INFORMATION memoryInfo{};
     if (VirtualQuery(view, &memoryInfo, sizeof(memoryInfo))) {
         size_t viewOffset = static_cast<const uint8_t*>(view) -
@@ -1240,19 +1284,108 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                              header.readingStride, header.readingCount,
                              sizeof(HwInfoReadingPrefix))) {
                 const auto* bytes = static_cast<const uint8_t*>(view);
-                sensors.resize(header.sensorCount);
-                readings.resize(header.readingCount);
-                for (uint32_t i = 0; i < header.sensorCount; i++) {
-                    const uint8_t* address =
-                        bytes + header.sensorOffset +
-                        static_cast<size_t>(i) * header.sensorStride;
-                    std::memcpy(&sensors[i], address, sizeof(sensors[i]));
+                bool layoutChanged =
+                    !g_hwInfoSharedMemoryCache.layoutKnown ||
+                    g_hwInfoSharedMemoryCache.version != header.version ||
+                    g_hwInfoSharedMemoryCache.revision != header.revision ||
+                    g_hwInfoSharedMemoryCache.sensorOffset !=
+                        header.sensorOffset ||
+                    g_hwInfoSharedMemoryCache.sensorStride !=
+                        header.sensorStride ||
+                    g_hwInfoSharedMemoryCache.sensorCount !=
+                        header.sensorCount ||
+                    g_hwInfoSharedMemoryCache.readingOffset !=
+                        header.readingOffset ||
+                    g_hwInfoSharedMemoryCache.readingStride !=
+                        header.readingStride ||
+                    g_hwInfoSharedMemoryCache.readingCount !=
+                        header.readingCount;
+                if (layoutChanged) {
+                    g_hwInfoSharedMemoryCache.cpuReadingIndex.reset();
+                    g_hwInfoSharedMemoryCache.gpuReadingIndex.reset();
+                    g_hwInfoSharedMemoryCache.nextFullScan = {};
+                    g_hwInfoSharedMemoryCache.version = header.version;
+                    g_hwInfoSharedMemoryCache.revision = header.revision;
+                    g_hwInfoSharedMemoryCache.sensorOffset =
+                        header.sensorOffset;
+                    g_hwInfoSharedMemoryCache.sensorStride =
+                        header.sensorStride;
+                    g_hwInfoSharedMemoryCache.sensorCount = header.sensorCount;
+                    g_hwInfoSharedMemoryCache.readingOffset =
+                        header.readingOffset;
+                    g_hwInfoSharedMemoryCache.readingStride =
+                        header.readingStride;
+                    g_hwInfoSharedMemoryCache.readingCount =
+                        header.readingCount;
+                    g_hwInfoSharedMemoryCache.layoutKnown = true;
                 }
-                for (uint32_t i = 0; i < header.readingCount; i++) {
-                    const uint8_t* address =
-                        bytes + header.readingOffset +
-                        static_cast<size_t>(i) * header.readingStride;
-                    std::memcpy(&readings[i], address, sizeof(readings[i]));
+
+                bool performFullScan =
+                    g_hwInfoSharedMemoryCache.nextFullScan ==
+                        std::chrono::steady_clock::time_point{} ||
+                    now >= g_hwInfoSharedMemoryCache.nextFullScan;
+                auto copyCachedReading =
+                    [&](std::optional<uint32_t>& cachedIndex,
+                        std::optional<HwInfoRawTemperatureReading>& output) {
+                        if (!cachedIndex || performFullScan) {
+                            return;
+                        }
+                        if (*cachedIndex >= header.readingCount) {
+                            cachedIndex.reset();
+                            performFullScan = true;
+                            return;
+                        }
+
+                        HwInfoRawTemperatureReading raw{};
+                        raw.index = *cachedIndex;
+                        const uint8_t* readingAddress =
+                            bytes + header.readingOffset +
+                            static_cast<size_t>(raw.index) *
+                                header.readingStride;
+                        std::memcpy(&raw.reading, readingAddress,
+                                    sizeof(raw.reading));
+                        if (raw.reading.readingType !=
+                                kHwInfoTemperatureType ||
+                            raw.reading.sensorIndex >= header.sensorCount) {
+                            cachedIndex.reset();
+                            performFullScan = true;
+                            return;
+                        }
+                        const uint8_t* sensorAddress =
+                            bytes + header.sensorOffset +
+                            static_cast<size_t>(raw.reading.sensorIndex) *
+                                header.sensorStride;
+                        std::memcpy(&raw.sensor, sensorAddress,
+                                    sizeof(raw.sensor));
+                        output = raw;
+                    };
+
+                copyCachedReading(
+                    g_hwInfoSharedMemoryCache.cpuReadingIndex,
+                    cachedCpuReading);
+                copyCachedReading(
+                    g_hwInfoSharedMemoryCache.gpuReadingIndex,
+                    cachedGpuReading);
+
+                if (performFullScan) {
+                    cachedCpuReading.reset();
+                    cachedGpuReading.reset();
+                    sensors.resize(header.sensorCount);
+                    readings.resize(header.readingCount);
+                    for (uint32_t i = 0; i < header.sensorCount; i++) {
+                        const uint8_t* address =
+                            bytes + header.sensorOffset +
+                            static_cast<size_t>(i) * header.sensorStride;
+                        std::memcpy(&sensors[i], address, sizeof(sensors[i]));
+                    }
+                    for (uint32_t i = 0; i < header.readingCount; i++) {
+                        const uint8_t* address =
+                            bytes + header.readingOffset +
+                            static_cast<size_t>(i) * header.readingStride;
+                        std::memcpy(&readings[i], address,
+                                    sizeof(readings[i]));
+                    }
+                    fullScanCopied = true;
                 }
                 if (!mutexOwned) {
                     HwInfoHeader verificationHeader{};
@@ -1265,6 +1398,9 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                         // generation changed while the raw records were copied.
                         sensors.clear();
                         readings.clear();
+                        cachedCpuReading.reset();
+                        cachedGpuReading.reset();
+                        fullScanCopied = false;
                     }
                 }
             }
@@ -1280,52 +1416,119 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
     }
     CloseHandle(mapping);
 
-    // Keep HWiNFO's shared mutex only while copying the validated raw records.
-    // String conversion, scoring and unit normalization don't need to block the
-    // producer from refreshing its shared memory.
-    int bestCpuScore = -1;
-    int bestGpuScore = -1;
     bool sawTemperatureReading = false;
     bool sawSupportedTemperatureUnit = false;
-    for (const HwInfoReadingPrefix& reading : readings) {
-        if (reading.readingType != kHwInfoTemperatureType ||
-            reading.sensorIndex >= sensors.size()) {
-            continue;
-        }
-        sawTemperatureReading = true;
+    if (fullScanCopied) {
+        // The full table is copied only for discovery or periodic refresh.
+        // Normal samples below validate and read the two cached records.
+        int bestCpuScore = -1;
+        int bestGpuScore = -1;
+        std::optional<uint32_t> bestCpuIndex;
+        std::optional<uint32_t> bestGpuIndex;
+        for (uint32_t i = 0; i < readings.size(); i++) {
+            const HwInfoReadingPrefix& reading = readings[i];
+            if (reading.readingType != kHwInfoTemperatureType ||
+                reading.sensorIndex >= sensors.size()) {
+                continue;
+            }
+            sawTemperatureReading = true;
 
-        auto value = NormalizeHwInfoTemperature(
-            reading.value, reading.unit, std::size(reading.unit));
-        if (!value) {
-            continue;
-        }
-        sawSupportedTemperatureUnit = true;
+            auto value = NormalizeHwInfoTemperature(
+                reading.value, reading.unit, std::size(reading.unit));
+            if (!value) {
+                continue;
+            }
+            sawSupportedTemperatureUnit = true;
 
-        const HwInfoSensorPrefix& sensor = sensors[reading.sensorIndex];
-        std::wstring sensorName =
-            FixedAnsiToWide(sensor.originalName,
-                            std::size(sensor.originalName));
-        std::wstring label =
-            FixedAnsiToWide(reading.originalLabel,
-                            std::size(reading.originalLabel));
-        RecordGpuTemperatureDiagnostic(diagnostics, sensorName, label,
-                                       gpuAdapterName);
+            const HwInfoSensorPrefix& sensor = sensors[reading.sensorIndex];
+            std::wstring sensorName = FixedAnsiToWide(
+                sensor.originalName, std::size(sensor.originalName));
+            std::wstring label = FixedAnsiToWide(
+                reading.originalLabel, std::size(reading.originalLabel));
+            RecordGpuTemperatureDiagnostic(diagnostics, sensorName, label,
+                                           gpuAdapterName);
 
-        int cpuScore = CpuTemperatureScore(
-            sensorName, label, settings.cpuTempSensor);
-        if (cpuScore > bestCpuScore) {
-            bestCpuScore = cpuScore;
-            snapshot.cpuTemp = *value;
-            snapshot.cpuTempProvider = TemperatureProvider::HwInfoSharedMemory;
+            int cpuScore = CpuTemperatureScore(
+                sensorName, label, settings.cpuTempSensor);
+            if (cpuScore > bestCpuScore) {
+                bestCpuScore = cpuScore;
+                bestCpuIndex = i;
+                snapshot.cpuTemp = *value;
+                snapshot.cpuTempProvider =
+                    TemperatureProvider::HwInfoSharedMemory;
+            }
+
+            int gpuScore = GpuTemperatureScore(
+                sensorName, label, settings.gpuTempSensor, gpuAdapterName);
+            if (gpuScore > bestGpuScore) {
+                bestGpuScore = gpuScore;
+                bestGpuIndex = i;
+                snapshot.gpuTemp = *value;
+                snapshot.gpuTempProvider =
+                    TemperatureProvider::HwInfoSharedMemory;
+            }
         }
 
-        int gpuScore = GpuTemperatureScore(
-            sensorName, label, settings.gpuTempSensor, gpuAdapterName);
-        if (gpuScore > bestGpuScore) {
-            bestGpuScore = gpuScore;
-            snapshot.gpuTemp = *value;
-            snapshot.gpuTempProvider = TemperatureProvider::HwInfoSharedMemory;
-        }
+        g_hwInfoSharedMemoryCache.cpuReadingIndex = bestCpuIndex;
+        g_hwInfoSharedMemoryCache.gpuReadingIndex = bestGpuIndex;
+        g_hwInfoSharedMemoryCache.nextFullScan =
+            now + (bestCpuIndex && bestGpuIndex
+                       ? kSharedMemoryRescanInterval
+                       : kSharedMemoryPartialRescanInterval);
+    } else {
+        auto applyCachedReading =
+            [&](const std::optional<HwInfoRawTemperatureReading>& raw,
+                std::optional<uint32_t>& cachedIndex, bool cpu) {
+                if (!raw) {
+                    return;
+                }
+                sawTemperatureReading = true;
+
+                const HwInfoReadingPrefix& reading = raw->reading;
+                std::wstring sensorName = FixedAnsiToWide(
+                    raw->sensor.originalName,
+                    std::size(raw->sensor.originalName));
+                std::wstring label = FixedAnsiToWide(
+                    reading.originalLabel,
+                    std::size(reading.originalLabel));
+                RecordGpuTemperatureDiagnostic(diagnostics, sensorName, label,
+                                               gpuAdapterName);
+                int score = cpu
+                                ? CpuTemperatureScore(
+                                      sensorName, label,
+                                      settings.cpuTempSensor)
+                                : GpuTemperatureScore(
+                                      sensorName, label,
+                                      settings.gpuTempSensor,
+                                      gpuAdapterName);
+                if (score < 0) {
+                    cachedIndex.reset();
+                    g_hwInfoSharedMemoryCache.nextFullScan = {};
+                    return;
+                }
+
+                auto value = NormalizeHwInfoTemperature(
+                    reading.value, reading.unit, std::size(reading.unit));
+                if (!value) {
+                    return;
+                }
+                sawSupportedTemperatureUnit = true;
+
+                if (cpu) {
+                    snapshot.cpuTemp = *value;
+                    snapshot.cpuTempProvider =
+                        TemperatureProvider::HwInfoSharedMemory;
+                } else {
+                    snapshot.gpuTemp = *value;
+                    snapshot.gpuTempProvider =
+                        TemperatureProvider::HwInfoSharedMemory;
+                }
+            };
+
+        applyCachedReading(cachedCpuReading,
+                           g_hwInfoSharedMemoryCache.cpuReadingIndex, true);
+        applyCachedReading(cachedGpuReading,
+                           g_hwInfoSharedMemoryCache.gpuReadingIndex, false);
     }
 
     if (sawTemperatureReading && !sawSupportedTemperatureUnit &&
@@ -1433,7 +1636,7 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
         g_hwInfoGadgetRegistryCache.gpuIndex.reset();
         g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
         g_hwInfoGadgetRegistryCache.nextFullScan =
-            now + kGadgetRegistryRescanInterval;
+            now + kGadgetRegistryPartialRescanInterval;
         return;
     }
 
@@ -1538,7 +1741,9 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     g_hwInfoGadgetRegistryCache.gpuIndex = bestGpuIndex;
     g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
     g_hwInfoGadgetRegistryCache.nextFullScan =
-        now + kGadgetRegistryRescanInterval;
+        now + (bestCpuIndex && bestGpuIndex
+                   ? kGadgetRegistryRescanInterval
+                   : kGadgetRegistryPartialRescanInterval);
 
     if (!snapshot.cpuTemp && bestCpuValue) {
         snapshot.cpuTemp = *bestCpuValue;
@@ -2512,11 +2717,38 @@ bool LooksLikeIntegratedGpu(const GpuAdapterInfo& adapter) {
     }
 
     // Some WDDM drivers don't set HybridIntegrated for newer integrated parts
-    // such as Radeon 890M or Intel Arc iGPUs. Their small firmware carve-out
-    // plus usable shared memory is a more stable signal than marketing names.
+    // such as Radeon 890M or Intel Arc iGPUs. Require both the characteristic
+    // memory shape and an integrated-family name so an old low-memory discrete
+    // adapter isn't silently switched to the shared-memory pool.
     constexpr uint64_t kMaximumIntegratedCarveout = 512ull * 1024 * 1024;
-    return adapter.dedicatedVideoMemory <= kMaximumIntegratedCarveout &&
-           adapter.sharedSystemMemory > 0;
+    if (adapter.dedicatedVideoMemory > kMaximumIntegratedCarveout ||
+        adapter.sharedSystemMemory == 0) {
+        return false;
+    }
+
+    std::wstring name = NormalizeAdapterIdentity(adapter.description);
+    bool radeonMobileModel = false;
+    if (Contains(name, L"radeon")) {
+        for (const std::wstring& token : IdentityTokens(name)) {
+            if (token.size() < 2 || token.back() != L'm') {
+                continue;
+            }
+            radeonMobileModel = std::all_of(
+                token.begin(), token.end() - 1,
+                [](wchar_t character) { return std::iswdigit(character) != 0; });
+            if (radeonMobileModel) {
+                break;
+            }
+        }
+    }
+
+    bool intelArcGraphics = Contains(name, L"intel") &&
+                            Contains(name, L"arc") &&
+                            Contains(name, L"graphics");
+    return Contains(name, L"uhd graphics") || Contains(name, L"iris") ||
+           Contains(name, L"radeon graphics") || Contains(name, L"vega") ||
+           Contains(name, L"integrated") || radeonMobileModel ||
+           intelArcGraphics;
 }
 
 bool UseSharedGpuMemory(const GpuAdapterInfo& adapter,
@@ -3266,6 +3498,8 @@ void ApplyReservedSpace(const ModSettings& settings) {
     }
 }
 
+void UpdateTimerInterval();
+
 void ApplyWidgetSettings() {
     if (!g_widget) {
         return;
@@ -3332,9 +3566,7 @@ void ApplyWidgetSettings() {
     UpdateSparkline(g_gpuGraph, g_gpuHistory, capacity);
     ApplyReservedSpace(settings);
 
-    if (g_timer) {
-        g_timer.Interval(std::chrono::milliseconds(250));
-    }
+    UpdateTimerInterval();
 }
 
 void UpdateWidgetText(bool force = false) {
@@ -3450,7 +3682,7 @@ void EnsureTimer() {
         g_taskbarThreadId = GetCurrentThreadId();
     }
     g_timer = DispatcherTimer();
-    g_timer.Interval(std::chrono::milliseconds(g_widget ? 250 : 1000));
+    UpdateTimerInterval();
     auto now = std::chrono::steady_clock::now();
     g_nextSystemColorCheck = now + std::chrono::seconds(1);
     g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
@@ -4282,6 +4514,7 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 
 struct ApplyWidgetContext {
     HWND taskbarWindow = nullptr;
+    FrameworkElement taskbarFrame{nullptr};
     bool succeeded = false;
 };
 
@@ -4293,15 +4526,20 @@ void ApplyToTaskbarWindow(void* contextValue) {
     }
 
     try {
-        XamlRoot xamlRoot = GetTaskbarXamlRoot(taskbarWindow);
-        if (!xamlRoot) {
-            Wh_Log(L"GetTaskbarXamlRoot failed");
-            return;
+        FrameworkElement taskbarFrame = context->taskbarFrame;
+        if (!taskbarFrame) {
+            XamlRoot xamlRoot = GetTaskbarXamlRoot(taskbarWindow);
+            if (!xamlRoot) {
+                Wh_Log(L"GetTaskbarXamlRoot failed");
+                return;
+            }
+            auto content = xamlRoot.Content().try_as<FrameworkElement>();
+            taskbarFrame =
+                FindChildRecursive(content, [](FrameworkElement child) {
+                    return winrt::get_class_name(child) ==
+                           L"Taskbar.TaskbarFrame";
+                });
         }
-        auto content = xamlRoot.Content().try_as<FrameworkElement>();
-        auto taskbarFrame = FindChildRecursive(content, [](FrameworkElement child) {
-            return winrt::get_class_name(child) == L"Taskbar.TaskbarFrame";
-        });
         if (taskbarFrame && InjectWidget(taskbarFrame)) {
             RememberTaskbarWindow(taskbarWindow);
             context->succeeded = true;
@@ -4313,15 +4551,17 @@ void ApplyToTaskbarWindow(void* contextValue) {
     }
 }
 
-bool ApplyWidgetToTaskbarWindow(HWND taskbarWindow) {
-    ApplyWidgetContext context{taskbarWindow, false};
+bool ApplyWidgetToTaskbarWindow(
+    HWND taskbarWindow,
+    FrameworkElement taskbarFrame = nullptr) {
+    ApplyWidgetContext context{taskbarWindow, taskbarFrame, false};
     return RunFromWindowThread(taskbarWindow, ApplyToTaskbarWindow, &context) &&
            context.succeeded;
 }
 
 struct TaskbarProbeContext {
     HWND window = nullptr;
-    bool ready = false;
+    FrameworkElement frame{nullptr};
 };
 
 void ProbeTaskbarWindow(void* contextValue) {
@@ -4332,10 +4572,10 @@ void ProbeTaskbarWindow(void* contextValue) {
             return;
         }
         auto content = xamlRoot.Content().try_as<FrameworkElement>();
-        context->ready = static_cast<bool>(FindChildRecursive(
+        context->frame = FindChildRecursive(
             content, [](FrameworkElement child) {
                 return winrt::get_class_name(child) == L"Taskbar.TaskbarFrame";
-            }));
+            });
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         Wh_Log(L"Probing taskbar XAML failed: %08X",
@@ -4343,10 +4583,12 @@ void ProbeTaskbarWindow(void* contextValue) {
     }
 }
 
-bool IsTaskbarReady(HWND window) {
-    TaskbarProbeContext context{window, false};
-    return RunFromWindowThread(window, ProbeTaskbarWindow, &context) &&
-           context.ready;
+FrameworkElement FindReadyTaskbarFrame(HWND window) {
+    TaskbarProbeContext context{window, nullptr};
+    if (!RunFromWindowThread(window, ProbeTaskbarWindow, &context)) {
+        return nullptr;
+    }
+    return context.frame;
 }
 
 struct RemoveWidgetForMoveContext {
@@ -4404,7 +4646,7 @@ void ResetPlacementRetryState() {
     g_placementFailures = 0;
 }
 
-void RecordPlacementFailure(HWND targetWindow) {
+uint32_t SchedulePlacementRetry(HWND targetWindow) {
     if (!g_hasFailedPlacementTarget ||
         targetWindow != g_lastFailedPlacementTarget) {
         g_lastFailedPlacementTarget = targetWindow;
@@ -4419,7 +4661,18 @@ void RecordPlacementFailure(HWND targetWindow) {
     uint32_t retrySeconds = std::min(1u << exponent, 60u);
     g_nextPlacementRetry =
         std::chrono::steady_clock::now() + std::chrono::seconds(retrySeconds);
+    return retrySeconds;
+}
+
+void RecordPlacementFailure(HWND targetWindow) {
+    uint32_t retrySeconds = SchedulePlacementRetry(targetWindow);
     Wh_Log(L"Taskbar placement failed; retrying in %u seconds", retrySeconds);
+}
+
+void RecordPlacementFallback(HWND targetWindow) {
+    uint32_t retrySeconds = SchedulePlacementRetry(targetWindow);
+    Wh_Log(L"Taskbar placement fell back; re-checking in %u seconds",
+           retrySeconds);
 }
 
 void MarkPlacementForRetry(HWND requestedWindow) {
@@ -4444,7 +4697,7 @@ void CompletePlacement(HWND requestedWindow, HWND actualWindow) {
         ResetPlacementRetryState();
     } else {
         g_placementIsFallback = true;
-        RecordPlacementFailure(requestedWindow);
+        RecordPlacementFallback(requestedWindow);
     }
 }
 
@@ -4486,6 +4739,7 @@ bool ApplyLoadedFrameFallback(FrameworkElement fallbackFrame,
 
 struct ApplyOnTaskbarThreadContext {
     FrameworkElement fallbackFrame{nullptr};
+    HWND requestedWindow = nullptr;
     bool refreshExistingWidget = true;
     bool resetUnknownPlacementProbes = false;
     bool succeeded = false;
@@ -4505,7 +4759,10 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     // below is intentionally owned by Explorer's taskbar/XAML UI thread.
     EnsureTimer();
 
-    HWND requestedWindow = FindConfiguredTaskbarWindow();
+    HWND requestedWindow = context->requestedWindow;
+    if (!IsCurrentProcessTaskbarWindow(requestedWindow)) {
+        requestedWindow = FindConfiguredTaskbarWindow();
+    }
     if (!requestedWindow) {
         Wh_Log(L"Taskbar window not found");
         MarkPlacementForRetry(nullptr);
@@ -4527,18 +4784,22 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     }
 
     HWND targetWindow = requestedWindow;
-    bool targetReady = IsTaskbarReady(targetWindow);
-    if (!targetReady) {
+    FrameworkElement targetFrame = FindReadyTaskbarFrame(targetWindow);
+    if (!targetFrame) {
         HWND primaryWindow = FindPrimaryTaskbarWindow();
-        if (primaryWindow && primaryWindow != targetWindow &&
-            IsTaskbarReady(primaryWindow)) {
-            Wh_Log(L"Selected taskbar is not ready; using the primary taskbar");
-            targetWindow = primaryWindow;
-            targetReady = true;
+        if (primaryWindow && primaryWindow != targetWindow) {
+            FrameworkElement primaryFrame =
+                FindReadyTaskbarFrame(primaryWindow);
+            if (primaryFrame) {
+                Wh_Log(
+                    L"Selected taskbar is not ready; using the primary taskbar");
+                targetWindow = primaryWindow;
+                targetFrame = std::move(primaryFrame);
+            }
         }
     }
 
-    if (!targetReady) {
+    if (!targetFrame) {
         Wh_Log(L"No taskbar exposes a ready XAML root");
         if (ApplyLoadedFrameFallback(context->fallbackFrame, targetWindow)) {
             context->succeeded = true;
@@ -4577,7 +4838,7 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
         widgetRemovedForMove = true;
     }
 
-    if (ApplyWidgetToTaskbarWindow(targetWindow)) {
+    if (ApplyWidgetToTaskbarWindow(targetWindow, targetFrame)) {
         CompletePlacement(requestedWindow, targetWindow);
         context->succeeded = true;
         return;
@@ -4612,7 +4873,8 @@ void ApplyOnTaskbarUiThread(void* contextValue) {
 
 void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
                           bool refreshExistingWidget = true,
-                          bool resetUnknownPlacementProbes = false) {
+                          bool resetUnknownPlacementProbes = false,
+                          HWND requestedWindow = nullptr) {
     if (g_unloading) {
         return;
     }
@@ -4633,7 +4895,8 @@ void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
         return;
     }
 
-    ApplyOnTaskbarThreadContext context{fallbackFrame, refreshExistingWidget,
+    ApplyOnTaskbarThreadContext context{fallbackFrame, requestedWindow,
+                                        refreshExistingWidget,
                                         resetUnknownPlacementProbes, false};
     if (!RunFromWindowThread(dispatchWindow, ApplyOnTaskbarUiThread, &context)) {
         Wh_Log(L"Dispatching taskbar placement failed");
@@ -4693,7 +4956,7 @@ void EnsureConfiguredTaskbarPlacement() {
     } else {
         Wh_Log(L"Retrying taskbar placement");
     }
-    ApplyOnTaskbarThread(nullptr, false);
+    ApplyOnTaskbarThread(nullptr, false, false, targetWindow);
 }
 
 void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
@@ -4853,6 +5116,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 void CloseMetricSources() {
     ClosePdhQuery();
     InvalidateGpuAdapterCache();
+    g_hwInfoSharedMemoryCache = {};
+    g_hwInfoGadgetRegistryCache = {};
     g_nextPdhCounterRetry = {};
     g_nextPdhRecovery = {};
     g_consecutivePdhReadFailures = 0;
