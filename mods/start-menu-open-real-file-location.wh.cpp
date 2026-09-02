@@ -61,7 +61,6 @@ using UniqueWideString = std::unique_ptr<WCHAR, CoTaskMemoryDeleter>;
 SHOpenFolderAndSelectItemsFunction s_windowsStorageOriginal = nullptr;
 SHOpenFolderAndSelectItemsFunction s_shell32Original = nullptr;
 HMODULE s_windowsStorageModule = nullptr;
-bool s_isSearchProcess = false;
 
 void ReleaseWindowsStorageModule() {
     if (!s_windowsStorageModule) {
@@ -161,7 +160,7 @@ HRESULT HandleSHOpenFolderAndSelectItems(
     DWORD flags,
     void* returnAddress) {
     if (!folderPidl || childCount != 0 || childPidls ||
-        (!s_isSearchProcess && !IsAppResolverCaller(returnAddress))) {
+        !IsAppResolverCaller(returnAddress)) {
         return originalFunction(folderPidl, childCount, childPidls, flags);
     }
 
@@ -206,9 +205,6 @@ HRESULT WINAPI Shell32SHOpenFolderAndSelectItemsHook(
 }  // namespace
 
 BOOL Wh_ModInit() {
-    s_isSearchProcess = GetModuleHandleW(L"SearchHost.exe") ||
-                        GetModuleHandleW(L"SearchApp.exe");
-
     s_windowsStorageModule = LoadLibraryExW(
         L"Windows.Storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     HMODULE shell32Module = GetModuleHandleW(L"shell32.dll");
