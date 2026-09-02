@@ -776,6 +776,10 @@ static bool PlayCloseAnimation(HWND hwnd,CaptureBits&& preCap,const RECT& preRec
                 lastT=t; auto params=ParamsFor(req.type,t,float(RECTH(rcWin)));
                 PresentOverlay(ha,*req.gdi,req,rcWin,params);
             }
+            // Service any sent messages targeting this thread (PM_NOREMOVE peeks without
+            // dispatching posted messages) so cross-thread/cross-process SendMessage callers
+            // don't stall for the full animation duration while we wait here.
+            MSG pumpMsg; PeekMessageW(&pumpMsg,nullptr,0,0,PM_NOREMOVE);
             DwmFlush();
         }
         Win7TransformParams pe=ParamsFor(req.type,1.f,float(RECTH(rcWin))); pe.opacity=0.f;
@@ -989,12 +993,12 @@ static void SafeCleanup(){
     g_fDisabled.store(true); g_stopping.store(true);
     HWND ha=g_hwndAnim.load();
     if(ha&&IsWindow(ha)){
+        // AnimWndProc handles WM_CLOSE by calling DestroyWindow(hwnd) itself, on its own
+        // thread. We don't own that thread here, so we don't pump/dispatch its queue, and
+        // we don't attempt a cross-thread DestroyWindow (it would fail with
+        // ERROR_ACCESS_DENIED regardless). StopAnimThread() below posts WM_QUIT and joins
+        // the thread, which is what actually guarantees teardown.
         SendMessageW(ha,WM_CLOSE,0,0);
-        for(int i=0;i<50&&IsWindow(ha);++i){
-            MSG msg; while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){ TranslateMessage(&msg); DispatchMessageW(&msg); }
-            Sleep(10);
-        }
-        if(IsWindow(ha)) DestroyWindow(ha);
     }
     { std::lock_guard<std::mutex> lock(g_queueMutex); while(!g_queue.empty()){ auto* req=g_queue.front(); g_queue.pop_front(); if(!req) continue; if(req->deferOrig&&!req->origIssued&&req->hwnd&&IsWindow(req->hwnd)&&ShowWindowAsync_orig) ShowWindowAsync_orig(req->hwnd,req->origShowCmd?req->origShowCmd:SW_RESTORE); if(req->hwnd&&IsWindow(req->hwnd)) DisableTransitions(req->hwnd,FALSE); delete req; } }
     HWND cur=g_hwndCurrent.load(); if(cur&&IsWindow(cur)) DisableTransitions(cur,FALSE);
