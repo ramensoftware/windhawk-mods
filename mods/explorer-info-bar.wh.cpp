@@ -5352,6 +5352,7 @@ static bool IsPointInHiddenExplorerViewButtons(
     if (
         !GetValidatedStatusRow(hwnd, &row) &&
         (
+            !IsStatusRowRevalidationDue(hwnd) ||
             !RefreshValidatedStatusRow(hwnd) ||
             !GetValidatedStatusRow(hwnd, &row)
         )
@@ -5407,6 +5408,7 @@ static LRESULT CALLBACK DirectUiSubclassProc(
 )
 {
     if (
+        !GetCapture() &&
         IsExplorerViewButtonsPointerMessage(msg) &&
         IsPointInHiddenExplorerViewButtons(hwnd, lParam)
     )
