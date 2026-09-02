@@ -28,6 +28,7 @@
     * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
     * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
+* This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
@@ -35,12 +36,12 @@
 ![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 ## ⚠ Important usage note ⚠
 
-In order to use this mod, you must allow Windhawk to inject into the **LogonUI.exe**
-system process. To do so, add it to the process inclusion list in the advanced
-settings. If you do not do this, it will silently fail to inject.
+This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
+Settings > Advanced settings > More advanced settings > Process inclusion list,
+and make sure that `LogonUI.exe` is in the list.
 
-You must add it to the inclusion list even if you have disabled the critical system process
-exclusion option. Otherwise the logoff sequence portion of the mod will not function.
+Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry
+in the global exclusion list or inclusion options in this mod's advanced settings page.
 
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
@@ -1792,7 +1793,7 @@ namespace CustomBSDR {
     bool IsHighContrast();
     HBITMAP LoadAlphaBitmap(UINT resourceId, bool forceHardcoded = false);
     void DrawSeparator(LPDRAWITEMSTRUCT pDIS);
-    void DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS);
+    void DrawButton(LPDRAWITEMSTRUCT pDIS);
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
     void UpdateAppListLayout();
@@ -2200,7 +2201,9 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
     }
 }
 
-void CustomBSDR::DrawButton(HDC hdc, LPDRAWITEMSTRUCT pDIS) {
+void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
+    HDC hdc = pDIS->hDC;
+
     bool isPressed = (pDIS->itemState & ODS_SELECTED);
     bool isFocused = (pDIS->itemState & ODS_FOCUS);
 
@@ -3010,7 +3013,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         } else if (pDIS->CtlType == ODT_BUTTON) {
-            DrawButton(pDIS->hDC, pDIS);
+            DrawButton(pDIS);
             SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         }
@@ -3350,6 +3353,11 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             pendingApps->clear();
         }
 
+        {
+            std::lock_guard lock(cancelMutex);
+            isCanceling = false;
+        }
+
         if (bgBitmap) {
             DeleteObject(bgBitmap);
             bgBitmap = nullptr;
@@ -3577,7 +3585,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         CoUninitialize();
     }
 
-    if (failed || ret != 0) {
+    if (failed) {
         Wh_Log(L"CustomBSDR thread init failed");
         // Note: Windows also does force logoff when the BSDR is not available, e.g. the BSDR DLL is missing, on Server Core, etc.
         // Probably this is better than leaving a system that never shuts down (if the mod is repeatedly failing)
@@ -3594,6 +3602,12 @@ void CustomBSDR::Start(LogonUIState state) {
     std::lock_guard lock(workerMutex);
     if (g_isExiting.load()) {
         Wh_Log(L"Mod is unloading!");
+
+        {
+            std::lock_guard resolvedLock(g_resolvedMutex);
+            g_rejectNextResolved = true;
+        }
+
         return;
     }
 
@@ -3710,14 +3724,18 @@ long __fastcall BlockedShutdownUXImpl_Start_hook(void* thisPtr, void* userSettin
 
 long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsigned int* scaleFactor) {
     Wh_Log(L"BlockedShutdownUXImpl::get_ScaleFactor");
-    if (scaleFactor) {
-        *scaleFactor = CustomBSDR::GetScaleFactor();
-    }
+    if (!scaleFactor)
+        return E_POINTER;
+
+    *scaleFactor = CustomBSDR::GetScaleFactor();
     return S_OK;
 }
 
 long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigned char* wasClicked) {
     Wh_Log(L"BlockedShutdownUXImpl::get_WasClicked");
+    if (!wasClicked)
+        return E_POINTER;
+
     {
         std::lock_guard lock(g_resolvedMutex);
         // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
@@ -3728,6 +3746,9 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
 }
 
 long __fastcall BlockedShutdownUXImpl_AddApplication_hook(void* thisPtr, IShutdownBlockingApp* blockingApp) {
+    if (!blockingApp)
+        return E_POINTER;
+
     UINT appId = 0;
     BOOLEAN isBlocking = FALSE;
     HSTRING caption = nullptr, blockReason = nullptr;
@@ -4006,7 +4027,7 @@ bool IsLogonUiInjectionEnabled() {
         return true;
     }
 
-    // Check for the global WH inclusion key (only for non portable)
+    // Check for the global WH inclusion settings (only for non portable)
     HKEY hKey;
     int res = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Windhawk\\Engine\\Settings", 0, KEY_READ, &hKey);
     if (res != ERROR_SUCCESS) {
@@ -4023,21 +4044,41 @@ bool IsLogonUiInjectionEnabled() {
         return false;
     }
 
-    wchar_t* data = new wchar_t[size / sizeof(wchar_t) + 1];
-    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)data, &size);
-    RegCloseKey(hKey);
+    wchar_t* inclData = new wchar_t[size / sizeof(wchar_t) + 1];
+    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)inclData, &size);
     if (res != ERROR_SUCCESS) {
         Wh_Log(L"WH inclusion check failed, error=%d", res);
-        delete[] data;
+        delete[] inclData;
+        RegCloseKey(hKey);
         return false;
     }
 
-    data[size / sizeof(wchar_t)] = L'\0';
-    int isLogonUiThere = wcsstr(_wcsupr(data), L"LOGONUI.EXE") != NULL;
-    delete[] data;
+    inclData[size / sizeof(wchar_t)] = L'\0';
+    int isLogonUiInInclusion = wcsstr(_wcsupr(inclData), L"LOGONUI.EXE") != NULL;
+    delete[] inclData;
 
-    if (!isLogonUiThere) {
-        return false;
+    Wh_Log(L"WH inclusion check: isLogonUiInInclusion=%d", isLogonUiInInclusion);
+
+    if (!isLogonUiInInclusion) {
+        size = sizeof(DWORD);
+        DWORD type = 0;
+
+        DWORD inclCritSysData;
+        res = RegQueryValueExW(hKey, L"InjectIntoCriticalProcesses", nullptr, &type, (LPBYTE)&inclCritSysData, &size);
+        RegCloseKey(hKey);
+        if (res != ERROR_SUCCESS || type != REG_DWORD || size != sizeof(DWORD)) {
+            Wh_Log(L"WH inclusion check failed, error=%d, type=%lu, size=%lu", res, type, size);
+            return false;
+        }
+
+        Wh_Log(L"WH inclusion check: inclCritSysData=%d", inclCritSysData);
+
+        // Deny if LogonUI isn't explicitly included and critical-process injection is disabled.
+        if (inclCritSysData == 0) {
+            return false;
+        }
+    } else {
+        RegCloseKey(hKey);
     }
 
     // Check if Windhawk service is running, to deny the portable version
