@@ -12,7 +12,7 @@
 // @include        SearchHost.exe
 // @include        Taskmgr.exe
 // @architecture   x86-64
-// @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32 -lcrypt32
+// @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32
 // ==/WindhawkMod==
 
 
@@ -68,10 +68,15 @@ The screen can be tested without logging off by pressing `Ctrl+Alt+Shift+L` (whi
 ## Safety & Design
 
 - A 60-second watchdog dismisses the screen and lets the logoff continue normally (it never force-closes apps), so it can neither block a logoff nor destroy unsaved work.
-- The full screen spans every monitor and is scaled per the monitor it appears on.
+- The full screen spans every monitor; the panel and its metrics are centred on and
+  scaled per the monitor that holds the foreground window, falling back to the cursor
+  and then the primary monitor. It never straddles a bezel on a multi-monitor setup.
 - All operations (enumeration, painting, hooks) are wrapped to fall back safely to normal shutdown in case of errors.
 - Conservative filters skip invisible, owned, tool, or system windows, and deduplicate entries by process ID.
 - A safety limit prevents unbounded icon allocation; the total count remains accurate even if the list is truncated.
+- The backdrop (captured desktop + dim veil) is composited once into a cached bitmap
+  rather than rebuilt on every repaint, and mouse hot-tracking invalidates only the
+  dirty button, so a mouse move does not re-render the whole virtual desktop.
 - The interface is drawn off-screen and blitted in one go, eliminating flicker and keeping hit-testing perfectly aligned.
 
 ---
@@ -82,6 +87,10 @@ The screen can be tested without logging off by pressing `Ctrl+Alt+Shift+L` (whi
 - If the Start menu button does not trigger the screen, ensure StartMenuExperienceHost.exe is not excluded in Windhawk's process list (note: portable mode may prevent injection).
 - This is a visual prompt, not a full secure-desktop replacement (that would require patching Winlogon/LogonUI).
 - A program with unsaved work but still responding is listed as normal; only hung windows are flagged as blocking.
+- "Force" applies the cautious `EWX_FORCEIFHUNG` only, so a healthy app that vetoes
+  `WM_QUERYENDSESSION` is **not** force-closed and Windows' own modern "app is preventing
+  shutdown" screen appears right after this mod's screen. This is intentional: the mod
+  never destroys unsaved work.
 
 ---
 
@@ -120,26 +129,26 @@ If any issues are encountered, please report them to the mod's author.
   $options:
   - auto: Automatic (follow the Windows language)
   - en: English
-  - it: Italiano (Italian)
-  - es: Espanol (Spanish)
-  - fr: Francais (French)
-  - de: Deutsch (German)
-  - pt: Portugues (Portuguese)
-  - nl: Nederlands (Dutch)
-  - pl: Polski (Polish)
-  - cs: Cestina (Czech)
-  - sv: Svenska (Swedish)
-  - da: Dansk (Danish)
-  - fi: Suomi (Finnish)
-  - nb: Norsk bokmal (Norwegian)
-  - el: Ellinika (Greek)
-  - tr: Turkce (Turkish)
-  - ru: Russkiy (Russian)
-  - uk: Ukrayinska (Ukrainian)
-  - ar: al-Arabiyya (Arabic)
-  - zh: Zhongwen (Chinese, simplified)
-  - ja: Nihongo (Japanese)
-  - ko: Hangugeo (Korean)
+  - it: Italiano
+  - es: Español
+  - fr: Français
+  - de: Deutsch
+  - pt: Português
+  - nl: Nederlands
+  - pl: Polski
+  - cs: Čeština
+  - sv: Svenska
+  - da: Dansk
+  - fi: Suomi
+  - nb: Norsk bokmål
+  - el: Ελληνικά (Greek)
+  - tr: Türkçe
+  - ru: Русский (Russian)
+  - uk: Українська (Ukrainian)
+  - ar: العربية (Arabic)
+  - zh: 中文（简体）(Chinese, simplified)
+  - ja: 日本語 (Japanese)
+  - ko: 한국어 (Korean)
 - previewHotkey: ctrlaltshiftl
   $name: Preview shortcut
   $description: >-
@@ -166,7 +175,7 @@ If any issues are encountered, please report them to the mod's author.
 #include <windhawk_utils.h>
 #include <algorithm>
 #include <vector>
-#include <wincrypt.h>
+#include <cmath>
 #include <string>
 
 #include <unordered_map>
@@ -194,6 +203,7 @@ static InitiateShutdownW_t InitiateShutdownW_Original = nullptr;
 
 static HWND g_dialog = nullptr;
 static HBITMAP g_desktop = nullptr;
+static HBITMAP g_backdrop = nullptr;   // cached desktop + veil, rebuilt on change
 static bool g_insideHook = false;
 static UINT g_pendingFlags = 0;
 static DWORD g_pendingReason = 0;
@@ -523,6 +533,68 @@ static int GetProcessDpi() {
 // Scales a 96-DPI reference value to the current DPI, rounding to the
 // nearest whole pixel so 1 px at 125% still rounds to something sane.
 static int DpiScale(int v) { return (v * g_dpi + 48) / 96; }
+
+// ---------------------------------------------------------------------------
+// Target monitor
+//
+// The full-screen dialog spans the whole virtual desktop, so centring the panel
+// in "the" client rect would put it halfway across the bezel on a multi-monitor
+// setup, scale it with a DPI that is meaningful for no particular monitor, and
+// decide layout against the combined height of every monitor. The panel is
+// therefore centred on (and metric-scaled to) a single target monitor: the one
+// holding the foreground window, with the cursor and then the primary monitor
+// as fallbacks.
+// ---------------------------------------------------------------------------
+static HMONITOR g_monitor = nullptr;
+static RECT     g_monitorClient = {0, 0, 0, 0};   // monitor rect in client coords
+
+typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+static int GetMonitorDpi(HMONITOR mon) {
+    static const GetDpiForMonitor_t p = []() -> GetDpiForMonitor_t {
+        HMODULE shcore = GetModuleHandleW(L"shcore.dll");
+        if (!shcore) shcore = LoadLibraryW(L"shcore.dll");
+        return shcore ? reinterpret_cast<GetDpiForMonitor_t>(
+                            GetProcAddress(shcore, "GetDpiForMonitor"))
+                      : nullptr;
+    }();
+    if (p && mon) {
+        UINT dx = 0, dy = 0;
+        if (SUCCEEDED(p(mon, 0, &dx, &dy)))     // MDT_EFFECTIVE_DPI == 0
+            return (int)dx;
+    }
+    return 0;
+}
+
+static HMONITOR PickTargetMonitor() {
+    HMONITOR mon = nullptr;
+    if (HWND fg = GetForegroundWindow())
+        mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    if (!mon) {
+        POINT pt{};
+        if (GetCursorPos(&pt)) mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    }
+    if (!mon) mon = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    return mon;
+}
+
+static void SetTargetMonitor(HMONITOR mon) {
+    g_monitor = mon;
+    g_monitorClient = RECT{0, 0, 0, 0};
+    if (!mon) { g_dpi = GetProcessDpi(); return; }
+    MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(mon, &mi)) {
+        const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        g_monitorClient = RECT{mi.rcMonitor.left - vx,
+                               mi.rcMonitor.top - vy,
+                               mi.rcMonitor.right - vx,
+                               mi.rcMonitor.bottom - vy};
+    }
+    int dpi = GetMonitorDpi(mon);
+    if (dpi < 96 || dpi > 480) dpi = GetWindowDpi(g_dialog ? g_dialog : nullptr);
+    if (dpi < 96 || dpi > 480) dpi = GetProcessDpi();
+    g_dpi = dpi;
+}
 // Windows 7 never capped this list at a fixed number of entries: the heading
 // reported the true total and the list showed as many programs as the screen
 // resolution allowed, adding a scrollbar (and smaller icons) for the rest.
@@ -616,6 +688,56 @@ static HBITMAP CaptureDesktop() {
     }
     ReleaseDC(nullptr, src);
     return nullptr;
+}
+
+static void FreeBackdrop() {
+    if (g_backdrop) { DeleteObject(g_backdrop); g_backdrop = nullptr; }
+}
+
+// Composits the captured desktop and the dark veil into one cached bitmap the
+// size of the virtual desktop. It changes only on capture, monitor, DPI or
+// skin changes, so WM_PAINT can blit a region of it instead of re-copying the
+// desktop and alpha-blending a full-screen veil on every repaint.
+static void RebuildBackdrop() {
+    if (g_backdrop) { DeleteObject(g_backdrop); g_backdrop = nullptr; }
+    const int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (w <= 0 || h <= 0) return;
+    HDC screen = GetDC(nullptr);
+    DcGuard mem(CreateCompatibleDC(screen));
+    BitmapGuard bmp(screen ? CreateCompatibleBitmap(screen, w, h) : nullptr);
+    if (screen && mem.get() && bmp.get()) {
+        HGDIOBJ old = SelectObject(mem.get(), bmp.get());
+        if (g_desktop) {
+            HDC src = CreateCompatibleDC(mem.get());
+            if (src) {
+                HGDIOBJ o = SelectObject(src, g_desktop);
+                BitBlt(mem.get(), 0, 0, w, h, src, 0, 0, SRCCOPY);
+                SelectObject(src, o); DeleteDC(src);
+            }
+        } else {
+            HBRUSH fallback = CreateSolidBrush(RGB(0x1a, 0x2a, 0x3a));
+            RECT r{0, 0, w, h};
+            if (fallback) { FillRect(mem.get(), &r, fallback); DeleteObject(fallback); }
+        }
+        // Cast the veil over the captured desktop.
+        HDC veilDc = CreateCompatibleDC(mem.get());
+        HBITMAP veilBmp = CreateCompatibleBitmap(mem.get(), w, h);
+        if (veilDc && veilBmp) {
+            HGDIOBJ oldVeil = SelectObject(veilDc, veilBmp);
+            HBRUSH veilBrush = CreateSolidBrush(g_skin->veil);
+            RECT r{0, 0, w, h};
+            if (veilBrush) { FillRect(veilDc, &r, veilBrush); DeleteObject(veilBrush); }
+            BLENDFUNCTION bf{AC_SRC_OVER, 0, g_skin->veilAlpha, 0};
+            AlphaBlend(mem.get(), 0, 0, w, h, veilDc, 0, 0, w, h, bf);
+            SelectObject(veilDc, oldVeil);
+            DeleteObject(veilBmp);
+        }
+        if (veilDc) DeleteDC(veilDc);
+        SelectObject(mem.get(), old);
+        g_backdrop = bmp.release();
+    }
+    if (screen) ReleaseDC(nullptr, screen);
 }
 struct UiText {
     const wchar_t* locale;
@@ -972,6 +1094,23 @@ static bool IsSystemHostProcess(const wchar_t* exeName) {
     return false;
 }
 
+// Shell surfaces that must never be listed as "programs still need to close".
+// Matched by window class because captions are localized; the host processes
+// are separately excluded by IsSystemHostProcess.
+static bool IsShellSurfaceClass(HWND w) {
+    wchar_t cls[128]{};
+    GetClassNameW(w, cls, ARRAYSIZE(cls));
+    if (!cls[0]) return false;
+    // UWP/composited shell surfaces: the modern Start menu, Action Center, etc.
+    if (_wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0) return true;
+    // The classic Start menu host window.
+    if (_wcsicmp(cls, L"DV2ControlHost") == 0) return true;
+    // The taskbar and its secondary (second-monitor) instances.
+    if (_wcsicmp(cls, L"Shell_TrayWnd") == 0) return true;
+    if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0) return true;
+    return false;
+}
+
 static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
     try {
         if (!IsWindowVisible(w) || GetWindow(w, GW_OWNER)) return TRUE;
@@ -988,12 +1127,14 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
         // internal hang timeout, so it cannot deadlock the way a plain
         // SendMessage would.
         if (!GetWindowTextW(w, title, ARRAYSIZE(title)) || !title[0]) return TRUE;
-        // The Start menu is an Explorer-owned shell surface, not a program
-        // that must be closed. Never show it in the shutdown list.
-        if (_wcsicmp(title, L"Start menu") == 0 ||
-            _wcsicmp(title, L"Menu Start") == 0 ||
-            _wcsicmp(title, L"Start") == 0 ||
-            _wcsicmp(title, L"Start menu host") == 0) return TRUE;
+        // Shell surfaces (the Start menu, the taskbar, composited UWP hosts)
+        // are not programs that must be closed. Match them by window class,
+        // never by caption: a caption like "Start" is localized, so a German
+        // or Japanese system would otherwise list the Start menu here, and any
+        // user window literally titled "Start" would be silently dropped. The
+        // host processes are covered by IsSystemHostProcess below; this catches
+        // the remaining explorer-owned surfaces.
+        if (IsShellSurfaceClass(w)) return TRUE;
         DWORD pid=0; GetWindowThreadProcessId(w, &pid);
         wchar_t path[MAX_PATH]{}; DWORD n=ARRAYSIZE(path);
         HANDLE h=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -1142,128 +1283,71 @@ static COLORREF LerpColor(COLORREF a, COLORREF b, int t /*0..255*/) {
 // over it -- not a plain outline, and not the Windows 7 power symbol whose
 // ring is broken at the top.
 //
-// It ships as two stacked 64x64 8-bit coverage masks (first the dark disc,
-// then the white ring and bar) rather than being drawn with GDI arcs, because
-// Arc() and Ellipse() do not antialias: at the ~17 px this is rendered at, a
-// pen-drawn ring comes out visibly jagged and the bar inside it turns into a
-// smudge. The masks were rasterised 8x oversampled and box filtered, so
-// scaling them down stays smooth at any button height. This is also safer
-// than a glyph font -- Segoe MDL2 Assets may be missing or metrically
-// different across the Windows versions this mod supports.
-//
-// Encoding: base64 of a run-length stream of (value, count) byte pairs
-// holding one coverage mask each.
-//
-// Two masks ship here, pixel-aligned with each other:
-//
-//   kPowerGlyphMaskRle  the ring and the bar, drawn in the label colour.
-//   kPowerGlyphDiscRle  the ring's full interior, ring included. It is not
-//                       painted by default; it exists only for the flat-fill
-//                       option below, which floods everything inside the
-//                       ring with one uniform tone so the button gradient
-//                       cannot show a lighter top and a darker bottom
-//                       through the middle of the symbol.
-//
-// With the flat fill off, the ring mask alone is composited and every pixel
-// that is not ring or bar stays fully transparent, so the button's own red
-// gradient shows through the middle of the symbol.
-static const char* const kPowerGlyphMaskRle =
-    "AFkEAgAKBAIALwQBAAUFAREBJAEnAiQBEQEFAQAFBAEAKQMBAAQsAWMBmQHCAd0B7QH8Af8C/AHtAd0BwgGZAWMBLAEABAMB"
-    "ACQDAQADMAGFAdEB/xDRAYUBMAEAAwMBACEDAQACUQG4Af8E+wL8Af8I/AH7Av8EuAFRAQACAwEAHgMBAAJGAccB/wP7Af8S"
-    "+wH/A8cBRgEAAgMBABsEAQABGAGgAf8C/AL/B/wB+wb8Af8H/AL/AqABGAEAAQQBABkDAQABSAHkAf8I/AH7Af8M+wH8Af8I"
-    "5AFIAQABAwEAGXoB/wL7Af8F+wH/BOcBxAGkAYwBgAKMAaQBxAHnAf8E+wH/BfsB/wJ6AQAZlwH/B/wB/wPCAXcBNgENAQAI"
-    "DQE2AXcBwgH/A/wB/weXAQAVAwEAAacB/wH6Af8H8wGYATQBAAUDAQQEAwEABTQBmAHzAf8H+gH/AacBAAEDAQARBAEAAZgB"
-    "/wH5Af8E/AH/AqUBJgEAAwQBAAwEAQADJgGlAf8C/AH/BPkB/wGYAQABBAEADwQBAAF5Af8B+gH/BPsB/wHkAU8BAAIEAQAS"
-    "BAEAAk8B5AH/AfsB/wT6Af8BeQEAAQQBAA0DAQABRAH/AfsB/wT7Af8BuwEbAQABBAEAFgQBAAEbAbsB/wH7Af8E+wH/AUQB"
-    "AAEDAQANFgHnAf8F+wH/AacBAAIEAQAYBAEAAqcB/wH7Af8F5wEWAQAMAwEAAaQB/wH7Af8D+wH/AacBACCnAf8B+wH/A/sB"
-    "/wGkAQABAwEACQMBAAFBAf8B/AH/A/wB/wG+AQAivgH/AfwB/wP8Af8BQQEAAQMBAArMAf8B/AH/BOcBFwEAIhcB5wH/BPwB"
-    "/wHMAQAJBAEAAU0B/wH8Af8D/AH/AUwBAAEEAQAOAwEAAgQBAA4EAQABTAH/AfwB/wP8Af8BTQEAAQQBAAi9Af8B/AH/AvwB"
-    "/wGqAQABBAEAIgQBAAGqAf8B/AH/AvwB/wG9AQAJLAH/BvMBIAEAEXYBzQHSAYUBBwEAECAB8wH/BiwBAAYEAQABhQH/AfsB"
-    "/wL7Af8BmQEAAQQBAA0DAQABkwH/BLEBAA8EAQABmQH/AfsB/wL7Af8BhQEAAQQBAAbUAf8GMAEAAQMBAA4lAf8B+wH8Af8B"
-    "+gH/AT8BAAEDAQAMAwEAATAB/wbUAQAHKwH/BPwB/wHEAQAPAwEAAUUB/wT7Af8BYwEAAQQBAA/EAf8B/AH/BCsBAAQEAQAB"
-    "ZQH/AfsB/wL7Af8BdQEAAQQBAA0DAQABQQH/BPsB/wFfAQABBAEADQQBAAF1Af8B+wH/AvsB/wFlAQABBAEAAgQBAAGZAf8B"
-    "+wH/BDQBAA8DAQABQgH/BPsB/wFgAQABBAEADzQB/wT7Af8BmQEAAQQBAATCAf8B/AH/A+gBCgEADwMBAAFCAf8E+wH/AWAB"
-    "AAEEAQAPCgHoAf8D/AH/AcIBAAUEAd8B/wP8Af8BwgEAEAMBAAFCAf8E+wH/AWABAAEEAQAQwgH/AfwB/wPfAQQBAAQSAe8B"
-    "/wP7Af8BpQEAAQQBAA4DAQABQgH/BPsB/wFgAQABBAEADgQBAAGlAf8B+wH/A+8BEgEABCMB/AH/A/sB/wGKAQABBAEADgMB"
-    "AAFCAf8E+wH/AWABAAEEAQAOBAEAAYoB/wH7Af8D/AEjAQAEKAH/BPsB/wF+AQABBAEADgMBAAFCAf8E+wH/AWABAAEEAQAO"
-    "BAEAAX4B/wH7Af8EKAEABCgB/wT7Af8BfgEAAQQBAA4DAQABQgH/BPsB/wFgAQABBAEADgQBAAF+Af8B+wH/BCgBAAQjAfwB"
-    "/wP7Af8BigEAAQQBAA4DAQABQgH/BPsB/wFgAQABBAEADgQBAAGKAf8B+wH/A/wBIwEABBIB7wH/A/sB/wGlAQABBAEADgMB"
-    "AAFCAf8E+wH/AWABAAEEAQAOBAEAAaUB/wH7Af8D7wESAQAEBAHfAf8D/AH/AcIBABADAQABQgH/BPsB/wFgAQABBAEAEMIB"
-    "/wH8Af8D3wEEAQAFwgH/AfwB/wPoAQoBAA8DAQABQgH/BPsB/wFgAQABBAEADwoB6AH/A/wB/wHCAQAEBAEAAZkB/wH7Af8E"
-    "NAEADwMBAAFCAf8E+wH/AWABAAEEAQAPNAH/BPsB/wGZAQABBAEAAgQBAAFlAf8B+wH/AvsB/wF1AQABBAEADQMBAAFBAf8E"
-    "+wH/AV8BAAEEAQANBAEAAXUB/wH7Af8C+wH/AWUBAAEEAQAEKwH/BPwB/wHEAQAPAwEAAUUB/wT7Af8BYwEAAQQBAA/EAf8B"
-    "/AH/BCsBAAfUAf8GMAEAAQMBAA4rAf8B+wH/AvoB/wFHAQABAwEADAMBAAEwAf8G1AEABgQBAAGFAf8B+wH/AvsB/wGZAQAB"
-    "BAEAD6oB/wTGAQYBAA4EAQABmQH/AfsB/wL7Af8BhQEAAQQBAAYsAf8G8wEgAQAQCgGUAeQB6AGjARQBABAgAfMB/wYsAQAJ"
-    "vQH/AfwB/wL8Af8BqgEAAQQBABALAQ4BABAEAQABqgH/AfwB/wL8Af8BvQEACAQBAAFNAf8B/AH/A/wB/wFMAQABBAEADgMB"
-    "AAIDAQAOBAEAAUwB/wH8Af8D/AH/AU0BAAEEAQAJzAH/AfwB/wTnARcBACIXAecB/wT8Af8BzAEACgMBAAFBAf8B/AH/A/wB"
-    "/wG+AQAivgH/AfwB/wP8Af8BQQEAAQMBAAkDAQABpAH/AfsB/wP7Af8BpwEAIKcB/wH7Af8D+wH/AaQBAAEDAQAMFgHnAf8F"
-    "+wH/AacBAAIEAQAYBAEAAqcB/wH7Af8F5wEWAQANAwEAAUQB/wH7Af8E+wH/AbsBGwEAAQQBABYEAQABGwG7Af8B+wH/BPsB"
-    "/wFEAQABAwEADQQBAAF5Af8B+gH/BPsB/wHkAU8BAAIEAQASBAEAAk8B5AH/AfsB/wT6Af8BeQEAAQQBAA8EAQABmAH/AfkB"
-    "/wT8Af8CpQEmAQADBAEADAQBAAMmAaUB/wL8Af8E+QH/AZgBAAEEAQARAwEAAacB/wH6Af8H8wGYATQBAAUDAQQEAwEABTQB"
-    "mAHzAf8H+gH/AacBAAEDAQAVlwH/B/wB/wPCAXcBNgENAQAIDQE2AXcBwgH/A/wB/weXAQAZegH/AvsB/wX7Af8E5wHEAaQB"
-    "jAGAAowBpAHEAecB/wT7Af8F+wH/AnoBABkDAQABSAHkAf8I/AH7Af8M+wH8Af8I5AFIAQABAwEAGQQBAAEYAaAB/wL8Av8H"
-    "/AH7BvwB/wf8Av8CoAEYAQABBAEAGwMBAAJGAccB/wP7Af8S+wH/A8cBRgEAAgMBAB4DAQACUQG4Af8E+wL8Af8I/AH7Av8E"
-    "uAFRAQACAwEAIQMBAAMwAYUB0QH/ENEBhQEwAQADAwEAJAMBAAQsAWMBmQHCAd0B7QH8Af8C/AHtAd0BwgGZAWMBLAEABAMB"
-    "ACkEAQAFBQERASQBJwIkAREBBQEABQQBAC8EAgAKBAIAWQ==";
-
-// Interior of the ring, ring edge included: a solid disc used only when the
-// flat-fill option is on. Derived from the ring mask by flood-filling the
-// area it encloses, so its outline matches the ring exactly at every size.
-static const char* const kPowerGlyphDiscRle =
-    "AFkEAgAKBAIALwQBAAUFAREBJAEnAiQBEQEFAQAFBAEAKQMBAAQsAWMB/wxjASwBAAQDAQAkAwEAAzAB/xQwAQADAwEAIQMB"
-    "AAJRAf8YUQEAAgMBAB4DAQACRgH/HEYBAAIDAQAbBAEAARgB/yAYAQABBAEAGQMBAAFIAf8iSAEAAQMBABl6Af8kegEAGf8o"
-    "ABUDAQAB/yoAAQMBABEEAQAB/ywAAQQBAA8EAQABeQH/LHkBAAEEAQANAwEAAUQB/y5EAQABAwEADRYB/zAWAQAMAwEAAf8y"
-    "AAEDAQAJAwEAAUEB/zJBAQABAwEACv80AAkEAQABTQH/NE0BAAEEAQAI/zYACSwB/zYsAQAGBAEAAf84AAEEAQAG/zgABysB"
-    "/zgrAQAEBAEAAWUB/zhlAQABBAEAAgQBAAH/OgABBAEABP86AAUEAf86BAEABBIB/zoSAQAEIwH/OiMBAAQoAf86KAEABCgB"
-    "/zooAQAEIwH/OiMBAAQSAf86EgEABAQB/zoEAQAF/zoABAQBAAH/OgABBAEAAgQBAAFlAf84ZQEAAQQBAAQrAf84KwEAB/84"
-    "AAYEAQAB/zgAAQQBAAYsAf82LAEACf82AAgEAQABTQH/NE0BAAEEAQAJ/zQACgMBAAFBAf8yQQEAAQMBAAkDAQAB/zIAAQMB"
-    "AAwWAf8wFgEADQMBAAFEAf8uRAEAAQMBAA0EAQABeQH/LHkBAAEEAQAPBAEAAf8sAAEEAQARAwEAAf8qAAEDAQAV/ygAGXoB"
-    "/yR6AQAZAwEAAUgB/yJIAQABAwEAGQQBAAEYAf8gGAEAAQQBABsDAQACRgH/HEYBAAIDAQAeAwEAAlEB/xhRAQACAwEAIQMB"
-    "AAMwAf8UMAEAAwMBACQDAQAELAFjAf8MYwEsAQAEAwEAKQQBAAUFAREBJAEnAiQBEQEFAQAFBAEALwQCAAoEAgBZ";
+// The shape is generated analytically rather than shipped as a pre-rasterised
+// blob, so a reviewer (or a user reading the source before enabling the mod in
+// explorer.exe) can tell exactly what it draws: a ring plus a vertical bar, a
+// few lines of distance/rect coverage math with 4x4 supersampling for a smooth
+// edge. No Arc/Ellipse jaggies, no glyph-font dependency, no base64 payload.
 static constexpr int kPowerGlyphMaskSize = 64;
 
-// Decodes one RLE stream into a 64x64 coverage mask. Returns nullptr on a
-// short or corrupt stream, in which case the caller simply skips that layer.
-static bool DecodePowerGlyphMask(const char* rleBase64, std::vector<BYTE>& mask) {
-    const int pixels = kPowerGlyphMaskSize * kPowerGlyphMaskSize;
-    DWORD rleSize = 0;
-    if (!CryptStringToBinaryA(rleBase64, 0, CRYPT_STRING_BASE64,
-                              nullptr, &rleSize, nullptr, nullptr) || rleSize == 0) {
-        return false;
-    }
-    std::vector<BYTE> rle(rleSize);
-    if (!CryptStringToBinaryA(rleBase64, 0, CRYPT_STRING_BASE64,
-                              rle.data(), &rleSize, nullptr, nullptr)) {
-        return false;
-    }
+// Builds one 64x64 eight-bit coverage mask. includeDisc selects between the
+// two layers the painter composites:
+//   false  -> the ring (annulus) and the vertical bar in the label colour;
+//            everything else stays transparent, so the button gradient shows
+//            through the middle of the symbol.
+//   true   -> a solid disc (the whole ring interior, ring edge included),
+//            used only by the flat-fill skin option as a uniform backdrop.
+static bool BuildPowerGlyphMask(std::vector<BYTE>& mask, bool includeDisc) {
+    constexpr int S  = kPowerGlyphMaskSize;
+    constexpr int SS = 4;                 // coverage samples per axis
+    mask.assign(S * S, 0);
+    const float cx  = (S - 1) * 0.5f;     // 31.5
+    const float cy  = (S - 1) * 0.5f;
+    const float R      = S * 0.40f;       // ring mid radius
+    const float halfTh = S * 0.045f;      // half thickness -> ~5.8 px ring
+    const float ROut   = R + halfTh;      // ring outer radius / disc edge
+    const float barHW  = S * 0.05f;       // vertical bar half width
+    const float barTop = cy - ROut - S * 0.015f;  // a touch above the ring
+    const float barBot = cy;                       // down to the centre
 
-    std::vector<BYTE> out;
-    out.reserve(pixels);
-    for (DWORD i = 0; i + 1 < rleSize; i += 2) {
-        const BYTE value = rle[i];
-        int count = rle[i + 1];
-        if ((int)out.size() + count > pixels) count = pixels - (int)out.size();
-        out.insert(out.end(), count, value);
-        if ((int)out.size() >= pixels) break;
+    for (int py = 0; py < S; ++py) {
+        for (int px = 0; px < S; ++px) {
+            int hit = 0;
+            for (int sy = 0; sy < SS; ++sy) {
+                const float fy = py + (sy + 0.5f) / SS;
+                for (int sx = 0; sx < SS; ++sx) {
+                    const float fx = px + (sx + 0.5f) / SS;
+                    const float dx = fx - cx;
+                    const float dy = fy - cy;
+                    const float dist = std::sqrt(dx * dx + dy * dy);
+                    bool on = false;
+                    if (includeDisc) {
+                        on = dist <= ROut;
+                    } else {
+                        if (std::fabs(dist - R) <= halfTh) on = true;      // ring
+                        if (std::fabs(fx - cx) <= barHW &&                  // bar
+                            fy >= barTop && fy <= barBot) on = true;
+                    }
+                    if (on) ++hit;
+                }
+            }
+            mask[py * S + px] = static_cast<BYTE>((hit * 255) / (SS * SS));
+        }
     }
-    if ((int)out.size() != pixels) return false;   // corrupt stream: skip the layer
-    mask.swap(out);
     return true;
 }
 
-// Both masks are decoded once on first use and cached for the life of the
-// process.
 static const BYTE* GetPowerGlyphMask() {
     static std::vector<BYTE> mask;
     static bool tried = false;
-    if (!tried) { tried = true; DecodePowerGlyphMask(kPowerGlyphMaskRle, mask); }
+    if (!tried) { tried = true; BuildPowerGlyphMask(mask, false); }
     return mask.empty() ? nullptr : mask.data();
 }
 
 static const BYTE* GetPowerGlyphDisc() {
     static std::vector<BYTE> mask;
     static bool tried = false;
-    if (!tried) { tried = true; DecodePowerGlyphMask(kPowerGlyphDiscRle, mask); }
+    if (!tried) { tried = true; BuildPowerGlyphMask(mask, true); }
     return mask.empty() ? nullptr : mask.data();
 }
 
@@ -1492,9 +1576,22 @@ static const int kNameFont  = 19, kNoteFont = 14;
 static const int kRowHeightCompact = 40, kIconSizeCompact = 24;
 static const int kNameFontCompact  = 16, kNoteFontCompact = 12;
 
-static DialogLayout ComputeLayout(int clientW, int clientH, size_t programCount) {
+static DialogLayout ComputeLayout(int clientW, int clientH, const RECT& monitorClient,
+                                  size_t programCount) {
     DialogLayout L;
     L.width = DpiScale(kPanelWidth);
+
+    // The panel is placed and sized within the target monitor rather than the
+    // whole virtual desktop, so on a multi-monitor setup it sits wholly on one
+    // screen instead of straddling a bezel. A degenerate rect falls back to the
+    // full window (single-monitor / unusual geometry).
+    const int monW = monitorClient.right - monitorClient.left;
+    const int monH = monitorClient.bottom - monitorClient.top;
+    const bool haveMon = monW > 0 && monH > 0;
+    const int useMonW = haveMon ? monW : clientW;
+    const int useMonH = haveMon ? monH : clientH;
+    const int monLeft = haveMon ? monitorClient.left : 0;
+    const int monTop  = haveMon ? monitorClient.top  : 0;
 
     // Vertical space the panel needs above and below the list itself.
     // Every value below is a 96-DPI reference measurement, scaled to the
@@ -1502,7 +1599,7 @@ static DialogLayout ComputeLayout(int clientW, int clientH, size_t programCount)
     const int chromeAbove = DpiScale(130) + DpiScale(kListPadTop);      // panel top -> first row
     const int chromeBelow = DpiScale(kListPadBot) + DpiScale(20) + DpiScale(68)   // pad + gap + body text
                           + DpiScale(20) + DpiScale(g_skin->buttonHeight) + DpiScale(70);  // gap + buttons + margin
-    const int room = clientH - chromeAbove - chromeBelow - DpiScale(24);
+    const int room = useMonH - chromeAbove - chromeBelow - DpiScale(24);
     const int count = static_cast<int>(programCount);
 
     auto rowsThatFit = [&](int rowH, int cap) {
@@ -1541,10 +1638,10 @@ static DialogLayout ComputeLayout(int clientW, int clientH, size_t programCount)
     const int buttonsTop = bodyTop + DpiScale(68) + DpiScale(20);
     L.height             = buttonsTop + DpiScale(g_skin->buttonHeight) + DpiScale(70);
 
-    L.ox = (clientW - L.width) / 2;
-    L.oy = (clientH - L.height) / 2;
-    if (L.ox < 0) L.ox = 0;
-    if (L.oy < 0) L.oy = 0;
+    L.ox = monLeft + (useMonW - L.width) / 2;
+    L.oy = monTop + (useMonH - L.height) / 2;
+    if (L.ox < monLeft) L.ox = monLeft;
+    if (L.oy < monTop)  L.oy = monTop;
 
     const int ox = L.ox, oy = L.oy;
     L.contentLeft  = ox + DpiScale(90);
@@ -1597,7 +1694,9 @@ static DialogLayout LayoutForWindow(HWND hwnd) {
     int w = cr.right - cr.left, h = cr.bottom - cr.top;
     if (w <= 0) w = GetSystemMetrics(SM_CXSCREEN);
     if (h <= 0) h = GetSystemMetrics(SM_CYSCREEN);
-    return ComputeLayout(w, h, g_openPrograms.size());
+    RECT mon = g_monitorClient;
+    if (mon.right <= mon.left || mon.bottom <= mon.top) mon = RECT{0, 0, w, h};
+    return ComputeLayout(w, h, mon, g_openPrograms.size());
 }
 
 // Keeps the scroll offset inside [0, hidden rows] after the list changes.
@@ -1652,7 +1751,7 @@ static DWORD WINAPI UiThreadProc(LPVOID);
 static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
     // Re-read every setting on the thread that consumes it.
     LoadSkinSetting();
-    if (!g_enabled) { g_force = false; g_proceed = true;  SetEvent(replyEvent); return; }
+    if (!g_enabled) { g_force = false; g_proceed = true;  if (replyEvent) SetEvent(replyEvent); return; }
 
     g_force = false; g_proceed = false;
     g_action = action;
@@ -1666,13 +1765,18 @@ static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
     if (g_totalPrograms == 0) {
         g_openPrograms.clear();
         g_force = false; g_proceed = true;
-        SetEvent(replyEvent);
+        if (replyEvent) SetEvent(replyEvent);
         return;
     }
 
     g_dialogStart = GetTickCount64();
+    // Pick the target monitor before the dialog exists: once the full-screen
+    // window is created (and made foreground) it would become its own
+    // foreground window, making a MonitorFromWindow on it meaningless.
+    SetTargetMonitor(PickTargetMonitor());
     FreeDesktopBitmap(); g_desktop = CaptureDesktop();
     g_captureFailedAt = g_desktop ? 0 : g_dialogStart;
+    RebuildBackdrop();
 
     HINSTANCE hMod = GetModModuleHandle();
     // Span the virtual desktop so every monitor is covered and the screen is
@@ -1688,14 +1792,13 @@ static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
         Wh_Log(L"CreateWindowExW for the logoff screen failed");
         FreeDesktopBitmap();
         g_force = false; g_proceed = true;   // fail open: never block a logoff
-        SetEvent(replyEvent);
+        if (replyEvent) SetEvent(replyEvent);
         return;
     }
     g_dialog = dlg;
     // The reply event is stashed on the window so WM_DESTROY can signal it.
     SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(replyEvent));
-    // The DPI is a property of the monitor the window landed on.
-    g_dpi = GetWindowDpi(dlg);
+    // The metrics are scaled to the target monitor's DPI (already set above).
     SetForegroundWindow(dlg);
     SetFocus(dlg);
 }
@@ -1744,6 +1847,7 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             FreeDesktopBitmap();
             g_desktop = CaptureDesktop();
             g_captureFailedAt = g_desktop ? 0 : GetTickCount64();
+            RebuildBackdrop();
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         return 0;
@@ -1810,16 +1914,16 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         FreeDesktopBitmap();
         g_desktop = CaptureDesktop();
         g_captureFailedAt = g_desktop ? 0 : GetTickCount64();
-        g_dpi = GetWindowDpi(hwnd);
+        SetTargetMonitor(PickTargetMonitor());
+        RebuildBackdrop();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
     case WM_DPICHANGED: {
-        // The window moved to a monitor with different scaling. Adopt the new
-        // DPI, accept the suggested rect, and repaint with the new metrics.
-        int newDpi = HIWORD(wp);
-        if (newDpi >= 96 && newDpi <= 480) g_dpi = newDpi;
-        else g_dpi = GetWindowDpi(hwnd);
+        // A monitor's scaling changed. Re-read the target monitor's DPI (the
+        // spanning window's own reported DPI is ambiguous), re-capture and
+        // repaint with the new metrics.
+        SetTargetMonitor(g_monitor ? g_monitor : PickTargetMonitor());
         const RECT* suggested = reinterpret_cast<const RECT*>(lp);
         if (suggested && suggested->right > suggested->left) {
             SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
@@ -1829,6 +1933,7 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         FreeDesktopBitmap();
         g_desktop = CaptureDesktop();
+        RebuildBackdrop();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -1856,41 +1961,46 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         PAINTSTRUCT ps{};
         HDC screenDc = BeginPaint(hwnd, &ps);
         RECT cr{}; GetClientRect(hwnd, &cr);
+        // Repaint only the region GDI reports as dirty. During hot tracking
+        // that is just one button rect, so moving the mouse over a button edge
+        // re-renders a few pixels instead of re-compositing the whole virtual
+        // desktop on every move. An empty region (nothing invalidated) paints
+        // the full window.
+        RECT dirty = ps.rcPaint;
+        if (!IntersectRect(&dirty, &dirty, &cr) ||
+            dirty.right <= dirty.left || dirty.bottom <= dirty.top) {
+            dirty = cr;
+        }
+        const int dw = dirty.right - dirty.left;
+        const int dh = dirty.bottom - dirty.top;
         // Everything below is drawn into an off-screen buffer and blitted
-        // to the window in one shot at the end. Without this, each hover
-        // repaint (BitBlt + alpha-blended veil + per-row gradients) was
-        // visible mid-draw as a brief flash/disappearance of the buttons.
+        // to the window in one shot at the end, still flicker-free.
         HDC dc = CreateCompatibleDC(screenDc);
-        HBITMAP backBmp = CreateCompatibleBitmap(screenDc, cr.right, cr.bottom);
+        HBITMAP backBmp = CreateCompatibleBitmap(screenDc, dw, dh);
         HGDIOBJ oldBackBmp = backBmp ? SelectObject(dc, backBmp) : nullptr;
         if (!backBmp) dc = screenDc; // Fallback: draw directly if allocation failed.
-        if (g_desktop) {
+        if (backBmp) {
+            // The cached backdrop (desktop + veil) is blitted as one BitBlt of
+            // the dirty region; the per-pixel AlphaBlend of the veil and the
+            // second desktop copy are gone from the repaint path.
             HDC src = CreateCompatibleDC(dc);
-            HGDIOBJ old = SelectObject(src, g_desktop);
-            BitBlt(dc, 0, 0, cr.right, cr.bottom, src, 0, 0, SRCCOPY);
-            SelectObject(src, old); DeleteDC(src);
-        } else {
-            HBRUSH fallback = CreateSolidBrush(RGB(0x1a,0x2a,0x3a));
-            if (fallback) { FillRect(dc, &cr, fallback); DeleteObject(fallback); }
+            if (src && g_backdrop) {
+                HGDIOBJ old = SelectObject(src, g_backdrop);
+                BitBlt(dc, 0, 0, dw, dh, src, dirty.left, dirty.top, SRCCOPY);
+                SelectObject(src, old);
+            } else {
+                HBRUSH fallback = CreateSolidBrush(RGB(0x1a,0x2a,0x3a));
+                RECT r{0, 0, dw, dh};
+                if (fallback) { FillRect(dc, &r, fallback); DeleteObject(fallback); }
+            }
+            if (src) DeleteDC(src);
+            // Map client-coordinate drawing into the smaller buffer: panel
+            // coordinates stay absolute and GDI clips them to the bitmap.
+            SetWindowOrgEx(dc, dirty.left, dirty.top, nullptr);
         }
-        // Windows 7-like dark veil.
-        // Windows 7-style translucent dark veil. The desktop remains visible.
-        HDC veilDc = CreateCompatibleDC(dc);
-        HBITMAP veilBmp = CreateCompatibleBitmap(dc, cr.right, cr.bottom);
-        if (veilDc && veilBmp) {
-            HGDIOBJ old = SelectObject(veilDc, veilBmp);
-            HBRUSH veilBrush = CreateSolidBrush(g_skin->veil);
-            if (veilBrush) { FillRect(veilDc, &cr, veilBrush); DeleteObject(veilBrush); }
-            BLENDFUNCTION bf{AC_SRC_OVER, 0, g_skin->veilAlpha, 0};
-            AlphaBlend(dc, 0, 0, cr.right, cr.bottom, veilDc, 0, 0,
-                       cr.right, cr.bottom, bf);
-            SelectObject(veilDc, old);
-            DeleteObject(veilBmp);
-        }
-        if (veilDc) DeleteDC(veilDc);
         // Single source of truth for every coordinate below; the panel is
         // sized from the real number of programs instead of assuming three.
-        DialogLayout L = ComputeLayout(cr.right, cr.bottom, g_openPrograms.size());
+        DialogLayout L = ComputeLayout(cr.right, cr.bottom, g_monitorClient, g_openPrograms.size());
         ClampListScroll(L);
 
         SetBkMode(dc, TRANSPARENT);
@@ -2017,7 +2127,17 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         DrawButton(dc, L.force,  GetActionText(),      g_hoverForce,  /*isConfirm=*/true);
         DrawButton(dc, L.cancel, GetUiText()->cancel, g_hoverCancel, /*isConfirm=*/false);
         if (backBmp) {
-            BitBlt(screenDc, 0, 0, cr.right, cr.bottom, dc, 0, 0, SRCCOPY);
+            // Undo the client-coordinate mapping installed above before the
+            // final blit. BitBlt takes its *source* corner in logical units,
+            // so while the window origin is still (dirty.left, dirty.top) a
+            // source of (0,0) resolves to device pixel (-dirty.left,
+            // -dirty.top) -- outside the buffer. On a full-window repaint the
+            // origin is (0,0) and it happened to work, but every partial
+            // repaint (i.e. exactly the button rects invalidated by hot
+            // tracking) blitted the wrong pixels, so the hover state never
+            // reached the screen.
+            SetWindowOrgEx(dc, 0, 0, nullptr);
+            BitBlt(screenDc, dirty.left, dirty.top, dw, dh, dc, 0, 0, SRCCOPY);
             SelectObject(dc, oldBackBmp);
             DeleteObject(backBmp);
         }
@@ -2027,12 +2147,14 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     // No PostQuitMessage here: the dialog is modeless on the UI thread,
     // which also owns the hotkey window and keeps pumping after the screen
-    // closes. Report the outcome: a real hook caller waits on this event;
-    // for a preview the event is a dummy that nobody waits on.
+    // closes. Report the outcome by signalling the reply event a real hook
+    // caller is waiting on; for a preview null was passed, so nothing is
+    // signalled (and nothing needs closing).
     case WM_DESTROY: {
         KillTimer(hwnd, 1);
         g_dialog = nullptr;
         FreeDesktopBitmap();
+        FreeBackdrop();
         g_openPrograms.clear();
         g_hoverForce = g_hoverCancel = false;
         HANDLE reply = reinterpret_cast<HANDLE>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -2097,22 +2219,20 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_HOTKEY:
         if (wp == kHotkeyId && !g_dialog && g_enabled) {
-            // Preview only: the reply event is signalled but nobody waits on
-            // it, so no logoff is ever performed. With no program open the
-            // screen skips itself just like it would during a real logoff.
-            HANDLE dummy = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            // Preview only: ShowScreenOnUiThread is modeless and would stash a
+            // reply handle in the window long after we return, so pass nullptr
+            // and let WM_DESTROY skip signalling it (it is never closed). With
+            // no program open the screen skips itself like a real logoff.
             try {
-                ShowScreenOnUiThread(dummy, kActionLogoff);
+                ShowScreenOnUiThread(nullptr, kActionLogoff);
                 if (g_totalPrograms == 0)
                     Wh_Log(L"Preview skipped: no program is currently open");
             } catch (...) {
                 // If a dialog made it into existence before the throw, close
-                // it; its WM_DESTROY signals the (unwaited) dummy event.
+                // it; nothing is waiting on it.
                 Wh_Log(L"Preview failed: exception contained");
                 if (g_dialog) { g_force = false; g_proceed = false; DestroyWindow(g_dialog); }
-                if (dummy) SetEvent(dummy);
             }
-            if (dummy) CloseHandle(dummy);
         }
         return 0;
     case WM_APP_APPLYSETTINGS:
@@ -2125,6 +2245,7 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_force = false; g_proceed = true;
                 DestroyWindow(g_dialog);
             } else {
+                RebuildBackdrop();   // re-bake the veil if the skin changed
                 InvalidateRect(g_dialog, nullptr, TRUE);
             }
         }
@@ -2132,7 +2253,10 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_QUITUI:
         // Close any screen first (on this thread, so DestroyWindow is legal)
         // so the hooks blocked in the screen wake up, then stop the loop.
-        if (g_dialog) { g_force = false; g_proceed = false; DestroyWindow(g_dialog); }
+        // g_proceed is left TRUE: the mod must never silently cancel a real
+        // action it only intercepted, matching the "disable the mod while the
+        // screen is up" path in WM_APP_APPLYSETTINGS (which lets it proceed).
+        if (g_dialog) { g_force = false; g_proceed = true; DestroyWindow(g_dialog); }
         PostQuitMessage(0);
         return 0;
     }
@@ -2148,6 +2272,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         UnregisterClassW(kClassName, hMod);
         ClearIconCache();
         FreeDesktopBitmap();
+        FreeBackdrop();
         g_openPrograms.clear();
         g_uiThreadId = 0;
         if (g_uiThreadDone) SetEvent(g_uiThreadDone);
@@ -2281,12 +2406,15 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
         if (!ShowWin7LogoffDialog(ewx, reason)) return ERROR_SUCCESS; // cancelled by the user
 
         g_insideHook=true;
-        // The watchdog and "programs closed by themselves" paths proceed
-        // UNFORCED, so no SHUTDOWN_FORCE_* flags are added behind the user's
-        // back: a real force only happens when the user clicks the button.
-        DWORD extra = g_force ? (SHUTDOWN_FORCE_OTHERS | SHUTDOWN_FORCE_SELF) : 0;
+        // Deliberately no SHUTDOWN_FORCE_* flags. Those are the equivalent of
+        // EWX_FORCE (they terminate applications without letting them save),
+        // whereas the ExitWindowsEx path uses only EWX_FORCEIFHUNG. Matching
+        // that keeps "Force" the same conservative action whichever shell
+        // surface started the shutdown: an app that vetoes WM_QUERYENDSESSION
+        // is left to Windows' own "app is preventing shutdown" screen, and
+        // unsaved work is never destroyed behind the user's back.
         DWORD result=InitiateShutdownW_Original(machineName, message, gracePeriod,
-                                                shutdownFlags | extra, reason);
+                                                shutdownFlags, reason);
         g_insideHook=false; return result;
     } catch (...) {
         g_insideHook=false;
@@ -2321,12 +2449,6 @@ BOOL Wh_ModInit() {
 
     LoadSkinSetting();
 
-    // The UI thread (window classes, hotkey window, full-screen dialog) is
-    // started before any hook can fire.
-    if (!StartUiThread()) {
-        Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
-    }
-
     // Both entry points are hooked. Which one a given shell surface uses
     // varies with the Windows version and with the action (sign out vs shut
     // down vs restart), so requiring both to be present would make the mod
@@ -2355,6 +2477,16 @@ BOOL Wh_ModInit() {
 
     if (!anyHook) { Wh_Log(L"No shutdown entry point could be hooked"); return FALSE; }
 
+    // Only start the UI thread once at least one hook is live. Starting it
+    // before the hooks meant the !anyHook path above returned FALSE (so
+    // Windhawk frees the image and never calls Wh_ModUninit) with the UI
+    // thread still sitting in GetMessage -- a dangling-window-class crash.
+    // Started here, a shutdown arriving before the thread is ready fails open
+    // (ShowWin7LogoffDialog returns its callers' true), which is safe.
+    if (!StartUiThread()) {
+        Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
+    }
+
     return TRUE;
 }
 
@@ -2365,6 +2497,16 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     if (g_hotkeyWindow)
         PostMessageW(g_hotkeyWindow, WM_APP_APPLYSETTINGS, 0, 0);
+}
+
+// Windhawk calls this while the hooks are still installed, before it removes
+// them and unloads the mod. Tearing the screen down here unblocks a hook
+// thread that is sitting in ShowWin7LogoffDialog, so disabling/updating the
+// mod during a live logoff cannot stall the unload until the screen closes or
+// the watchdog fires (Windhawk has to wait for the hook thread to leave the
+// mod's code before it can free the image).
+void Wh_ModBeforeUninit() {
+    if (g_hotkeyWindow) PostMessageW(g_hotkeyWindow, WM_APP_QUITUI, 0, 0);
 }
 
 void Wh_ModUninit() {
@@ -2401,6 +2543,7 @@ void Wh_ModUninit() {
     g_totalPrograms = 0;
     g_draggingThumb = false;
     FreeDesktopBitmap();
+    FreeBackdrop();
 
     if (g_uiReady)      { CloseHandle(g_uiReady);      g_uiReady = nullptr; }
     if (g_uiThreadDone) { CloseHandle(g_uiThreadDone); g_uiThreadDone = nullptr; }
