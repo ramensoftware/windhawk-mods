@@ -410,7 +410,6 @@ Released under GPL-3.0.
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -420,7 +419,6 @@ Released under GPL-3.0.
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::UI;
-using namespace winrt::Windows::UI::Core;
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
@@ -443,6 +441,8 @@ constexpr double kMemoryPercentWidth = 38.0;
 constexpr double kGraphHeight = 12.0;
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 constexpr uint32_t kMaximumTaskbarViewHookAttempts = 3;
+constexpr uint32_t kMaximumUnknownPlacementProbeFailures = 3;
+constexpr auto kGadgetRegistryRescanInterval = std::chrono::seconds(30);
 constexpr wchar_t kDefaultGraphColor[] = L"#78A8FF";
 constexpr wchar_t kDefaultWarningColor[] = L"#FFFFB900";
 constexpr wchar_t kDefaultCriticalColor[] = L"#FFFF6B6B";
@@ -534,14 +534,14 @@ event_token g_timerToken{};
 event_token g_actualThemeChangedToken{};
 std::chrono::steady_clock::time_point g_nextSystemColorCheck{};
 std::chrono::steady_clock::time_point g_nextTaskbarPlacementCheck{};
-[[clang::no_destroy]] IAsyncAction g_placementApplyAction{nullptr};
-bool g_placementApplyQueued = false;
 HWND g_lastFailedPlacementTarget = nullptr;
 bool g_hasFailedPlacementTarget = false;
 std::chrono::steady_clock::time_point g_nextPlacementRetry{};
 uint32_t g_placementFailures = 0;
 bool g_placementIsFallback = false;
 bool g_placementLocationUnknown = false;
+uint32_t g_unknownPlacementProbeFailures = 0;
+bool g_unknownPlacementProbesSuspended = false;
 int g_lastMonitorCount = -1;
 uint64_t g_lastDisplayTopologyFingerprint = 0;
 bool g_hasDisplayTopologyFingerprint = false;
@@ -598,6 +598,18 @@ std::chrono::steady_clock::time_point g_nextGpuIdentityCheck{};
 uint32_t g_consecutivePdhReadFailures = 0;
 bool g_hwInfoInvalidUnitLogged = false;
 std::atomic<bool> g_hwInfoGpuAdapterMismatchLogged{false};
+
+struct HwInfoGadgetRegistryCache {
+    std::optional<int> cpuIndex;
+    std::optional<int> gpuIndex;
+    bool fullScanCompleted = false;
+    std::chrono::steady_clock::time_point nextFullScan{};
+    std::wstring cpuFilter;
+    std::wstring gpuFilter;
+    std::wstring gpuAdapter;
+};
+
+[[clang::no_destroy]] HwInfoGadgetRegistryCache g_hwInfoGadgetRegistryCache;
 
 struct MetricsSnapshot {
     double cpu = 0.0;
@@ -1364,18 +1376,120 @@ std::optional<double> NormalizeRegistryTemperature(
     return NormalizeTemperature(*value, formattedValue);
 }
 
+struct HwInfoGadgetReading {
+    std::wstring sensor;
+    std::wstring label;
+    double value = 0.0;
+};
+
+std::optional<HwInfoGadgetReading> ReadHwInfoGadgetReading(HKEY key,
+                                                           int index) {
+    std::wstring suffix = std::to_wstring(index);
+    auto sensor = ReadRegistryString(key, L"Sensor" + suffix);
+    auto label = ReadRegistryString(key, L"Label" + suffix);
+    auto rawValue = ReadRegistryString(key, L"ValueRaw" + suffix);
+    auto formattedValue = ReadRegistryString(key, L"Value" + suffix);
+    if (!sensor || !label || !rawValue || !formattedValue) {
+        return std::nullopt;
+    }
+
+    auto value = NormalizeRegistryTemperature(*rawValue, *formattedValue);
+    if (!value) {
+        return std::nullopt;
+    }
+    return HwInfoGadgetReading{std::move(*sensor), std::move(*label), *value};
+}
+
 void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                               const ModSettings& settings,
                               const std::optional<std::wstring>& gpuAdapterName,
                               HwInfoTemperatureDiagnostics& diagnostics) {
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\HWiNFO64\\VSB", 0,
-                      KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+    std::wstring gpuAdapter = gpuAdapterName.value_or(L"");
+    if (g_hwInfoGadgetRegistryCache.cpuFilter != settings.cpuTempSensor ||
+        g_hwInfoGadgetRegistryCache.gpuFilter != settings.gpuTempSensor ||
+        g_hwInfoGadgetRegistryCache.gpuAdapter != gpuAdapter) {
+        g_hwInfoGadgetRegistryCache = {};
+        g_hwInfoGadgetRegistryCache.cpuFilter = settings.cpuTempSensor;
+        g_hwInfoGadgetRegistryCache.gpuFilter = settings.gpuTempSensor;
+        g_hwInfoGadgetRegistryCache.gpuAdapter = std::move(gpuAdapter);
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    bool needsCpu = !snapshot.cpuTemp;
+    bool needsGpu = !snapshot.gpuTemp;
+    bool hasCachedCandidate =
+        (needsCpu && g_hwInfoGadgetRegistryCache.cpuIndex) ||
+        (needsGpu && g_hwInfoGadgetRegistryCache.gpuIndex);
+    if (!hasCachedCandidate &&
+        g_hwInfoGadgetRegistryCache.fullScanCompleted &&
+        now < g_hwInfoGadgetRegistryCache.nextFullScan) {
         return;
     }
 
-    int bestCpuScore = snapshot.cpuTemp ? 10000 : -1;
-    int bestGpuScore = snapshot.gpuTemp ? 10000 : -1;
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\HWiNFO64\\VSB", 0,
+                      KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        g_hwInfoGadgetRegistryCache.cpuIndex.reset();
+        g_hwInfoGadgetRegistryCache.gpuIndex.reset();
+        g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
+        g_hwInfoGadgetRegistryCache.nextFullScan =
+            now + kGadgetRegistryRescanInterval;
+        return;
+    }
+
+    auto readCached = [&](std::optional<int>& cachedIndex, bool cpu) {
+        if (!cachedIndex) {
+            return;
+        }
+        auto reading = ReadHwInfoGadgetReading(key, *cachedIndex);
+        if (!reading) {
+            cachedIndex.reset();
+            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
+            return;
+        }
+
+        RecordGpuTemperatureDiagnostic(diagnostics, reading->sensor,
+                                       reading->label, gpuAdapterName);
+        int score = cpu ? CpuTemperatureScore(reading->sensor, reading->label,
+                                              settings.cpuTempSensor)
+                        : GpuTemperatureScore(reading->sensor, reading->label,
+                                              settings.gpuTempSensor,
+                                              gpuAdapterName);
+        if (score < 0) {
+            cachedIndex.reset();
+            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
+            return;
+        }
+
+        if (cpu && !snapshot.cpuTemp) {
+            snapshot.cpuTemp = reading->value;
+            snapshot.cpuTempProvider =
+                TemperatureProvider::HwInfoGadgetRegistry;
+        } else if (!cpu && !snapshot.gpuTemp) {
+            snapshot.gpuTemp = reading->value;
+            snapshot.gpuTempProvider =
+                TemperatureProvider::HwInfoGadgetRegistry;
+        }
+    };
+
+    readCached(g_hwInfoGadgetRegistryCache.cpuIndex, true);
+    readCached(g_hwInfoGadgetRegistryCache.gpuIndex, false);
+    if (snapshot.cpuTemp && snapshot.gpuTemp) {
+        RegCloseKey(key);
+        return;
+    }
+    if (g_hwInfoGadgetRegistryCache.fullScanCompleted &&
+        now < g_hwInfoGadgetRegistryCache.nextFullScan) {
+        RegCloseKey(key);
+        return;
+    }
+
+    int bestCpuScore = -1;
+    int bestGpuScore = -1;
+    std::optional<int> bestCpuIndex;
+    std::optional<int> bestGpuIndex;
+    std::optional<double> bestCpuValue;
+    std::optional<double> bestGpuValue;
     int consecutiveMissing = 0;
     for (int i = 0; i < 1024; i++) {
         std::wstring suffix = std::to_wstring(i);
@@ -1405,9 +1519,8 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
             CpuTemperatureScore(*sensor, *label, settings.cpuTempSensor);
         if (cpuScore > bestCpuScore) {
             bestCpuScore = cpuScore;
-            snapshot.cpuTemp = *value;
-            snapshot.cpuTempProvider =
-                TemperatureProvider::HwInfoGadgetRegistry;
+            bestCpuIndex = i;
+            bestCpuValue = *value;
         }
 
         int gpuScore =
@@ -1415,13 +1528,26 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                                 gpuAdapterName);
         if (gpuScore > bestGpuScore) {
             bestGpuScore = gpuScore;
-            snapshot.gpuTemp = *value;
-            snapshot.gpuTempProvider =
-                TemperatureProvider::HwInfoGadgetRegistry;
+            bestGpuIndex = i;
+            bestGpuValue = *value;
         }
     }
 
     RegCloseKey(key);
+    g_hwInfoGadgetRegistryCache.cpuIndex = bestCpuIndex;
+    g_hwInfoGadgetRegistryCache.gpuIndex = bestGpuIndex;
+    g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
+    g_hwInfoGadgetRegistryCache.nextFullScan =
+        now + kGadgetRegistryRescanInterval;
+
+    if (!snapshot.cpuTemp && bestCpuValue) {
+        snapshot.cpuTemp = *bestCpuValue;
+        snapshot.cpuTempProvider = TemperatureProvider::HwInfoGadgetRegistry;
+    }
+    if (!snapshot.gpuTemp && bestGpuValue) {
+        snapshot.gpuTemp = *bestGpuValue;
+        snapshot.gpuTempProvider = TemperatureProvider::HwInfoGadgetRegistry;
+    }
 }
 
 void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
@@ -2385,19 +2511,12 @@ bool LooksLikeIntegratedGpu(const GpuAdapterInfo& adapter) {
         return true;
     }
 
-    // Some WDDM drivers don't set HybridIntegrated but expose a small firmware
-    // carve-out. Restrict the fallback to familiar integrated-family names so
-    // an older low-memory discrete adapter isn't silently reclassified.
+    // Some WDDM drivers don't set HybridIntegrated for newer integrated parts
+    // such as Radeon 890M or Intel Arc iGPUs. Their small firmware carve-out
+    // plus usable shared memory is a more stable signal than marketing names.
     constexpr uint64_t kMaximumIntegratedCarveout = 512ull * 1024 * 1024;
-    if (adapter.dedicatedVideoMemory > kMaximumIntegratedCarveout ||
-        adapter.sharedSystemMemory == 0) {
-        return false;
-    }
-    std::wstring name = ToLower(adapter.description);
-    return Contains(name, L"uhd graphics") || Contains(name, L"iris") ||
-           Contains(name, L"radeon(tm) graphics") ||
-           Contains(name, L"radeon graphics") || Contains(name, L"vega") ||
-           Contains(name, L"integrated");
+    return adapter.dedicatedVideoMemory <= kMaximumIntegratedCarveout &&
+           adapter.sharedSystemMemory > 0;
 }
 
 bool UseSharedGpuMemory(const GpuAdapterInfo& adapter,
@@ -3314,8 +3433,15 @@ void UpdateWidgetText(bool force = false) {
 
 void EnsureConfiguredTaskbarPlacement();
 
+void UpdateTimerInterval() {
+    if (g_timer) {
+        g_timer.Interval(std::chrono::milliseconds(g_widget ? 250 : 1000));
+    }
+}
+
 void EnsureTimer() {
     if (g_timer) {
+        UpdateTimerInterval();
         return;
     }
     // The Tick delegate lives in this module, so teardown must always know
@@ -3351,6 +3477,17 @@ void EnsureTimer() {
         }
     });
     g_timer.Start();
+}
+
+void StopTimer() {
+    if (g_timer) {
+        g_timer.Stop();
+        g_timer.Tick(g_timerToken);
+        g_timer = nullptr;
+        g_timerToken = {};
+    }
+    g_nextSystemColorCheck = {};
+    g_nextTaskbarPlacementCheck = {};
 }
 
 ColumnDefinition PixelColumn(double width) {
@@ -3486,32 +3623,8 @@ Grid CreateMemoryRow(PCWSTR label,
     return row;
 }
 
-void CancelPendingPlacementApply() {
-    g_placementApplyQueued = false;
-    if (!g_placementApplyAction) {
-        return;
-    }
-
-    try {
-        g_placementApplyAction.Cancel();
-    } catch (...) {
-        HRESULT error = winrt::to_hresult();
-        Wh_Log(L"Cancelling deferred taskbar placement failed: %08X",
-               static_cast<unsigned>(error));
-    }
-    g_placementApplyAction = nullptr;
-}
-
 void RemoveWidget() {
-    CancelPendingPlacementApply();
-    if (g_timer) {
-        g_timer.Stop();
-        g_timer.Tick(g_timerToken);
-        g_timer = nullptr;
-        g_timerToken = {};
-    }
     g_nextSystemColorCheck = {};
-    g_nextTaskbarPlacementCheck = {};
 
     if (g_widget && g_actualThemeChangedToken.value) {
         try {
@@ -3586,6 +3699,7 @@ void RemoveWidget() {
     g_gpuTemperatureAlert = AlertLevel::Normal;
     g_ramAlert = AlertLevel::Normal;
     g_vramAlert = AlertLevel::Normal;
+    UpdateTimerInterval();
 }
 
 bool InjectWidget(FrameworkElement taskbarFrame) {
@@ -3784,11 +3898,11 @@ bool IsTaskbarWindowClass(HWND window, bool* secondary = nullptr) {
     return isPrimary || isSecondary;
 }
 
-bool IsCurrentProcessTaskbarWindow(HWND window) {
+bool IsCurrentProcessTaskbarWindow(HWND window, bool* secondary = nullptr) {
     DWORD processId = 0;
     return window && GetWindowThreadProcessId(window, &processId) != 0 &&
            processId == GetCurrentProcessId() &&
-           IsTaskbarWindowClass(window);
+           IsTaskbarWindowClass(window, secondary);
 }
 
 struct DisplayMonitor {
@@ -3837,45 +3951,24 @@ std::vector<DisplayMonitor> EnumerateDisplayMonitors() {
     return monitors;
 }
 
-uint64_t GetDisplayTopologyFingerprint() {
-    struct FingerprintContext {
-        uint64_t sum = 0;
-        uint64_t mixedXor = 0;
-        uint64_t count = 0;
-    } context;
+uint64_t GetDisplayTopologyFingerprint(
+    const std::vector<DisplayMonitor>& monitors) {
+    uint64_t hash = 1469598103934665603ull;
+    auto mix = [&hash](uint64_t value) {
+        hash ^= value;
+        hash *= 1099511628211ull;
+    };
 
-    EnumDisplayMonitors(
-        nullptr, nullptr,
-        [](HMONITOR monitor, HDC, LPRECT, LPARAM contextValue) -> BOOL {
-            MONITORINFO info{};
-            info.cbSize = sizeof(info);
-            if (!GetMonitorInfoW(monitor, &info)) {
-                return TRUE;
-            }
-
-            uint64_t entryHash = 1469598103934665603ull;
-            auto mix = [&entryHash](uint64_t value) {
-                entryHash ^= value;
-                entryHash *= 1099511628211ull;
-            };
-            mix(reinterpret_cast<uintptr_t>(monitor));
-            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.left)));
-            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.top)));
-            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.right)));
-            mix(static_cast<uint64_t>(static_cast<int64_t>(info.rcMonitor.bottom)));
-            mix((info.dwFlags & MONITORINFOF_PRIMARY) != 0);
-
-            auto* context =
-                reinterpret_cast<FingerprintContext*>(contextValue);
-            context->sum += entryHash;
-            context->mixedXor ^= entryHash * 0x9E3779B185EBCA87ull;
-            context->count++;
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&context));
-
-    return context.sum ^ context.mixedXor ^
-           (context.count * 0xD6E8FEB86659FD93ull);
+    for (const DisplayMonitor& monitor : monitors) {
+        mix(reinterpret_cast<uintptr_t>(monitor.handle));
+        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.left)));
+        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.top)));
+        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.right)));
+        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.bottom)));
+        mix(monitor.primary);
+    }
+    mix(monitors.size());
+    return hash;
 }
 
 HWND FindTaskbarWindowForMonitor(HMONITOR monitor) {
@@ -3903,12 +3996,9 @@ HWND FindPrimaryTaskbarWindow() {
     HWND result = nullptr;
     EnumWindows(
         [](HWND window, LPARAM context) -> BOOL {
-            DWORD processId = 0;
-            WCHAR className[64];
-            if (GetWindowThreadProcessId(window, &processId) &&
-                processId == GetCurrentProcessId() &&
-                GetClassNameW(window, className, std::size(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+            bool secondary = false;
+            if (IsCurrentProcessTaskbarWindow(window, &secondary) &&
+                !secondary) {
                 *reinterpret_cast<HWND*>(context) = window;
                 return FALSE;
             }
@@ -3937,9 +4027,10 @@ HWND FindOnlyTaskbarWindow() {
     return context.count == 1 ? context.window : nullptr;
 }
 
-HWND FindConfiguredTaskbarWindow(bool logFallback = true) {
+HWND FindConfiguredTaskbarWindow(
+    const std::vector<DisplayMonitor>& monitors,
+    bool logFallback = true) {
     int monitorNumber = CurrentSettings()->monitor;
-    auto monitors = EnumerateDisplayMonitors();
     if (monitorNumber <= static_cast<int>(monitors.size())) {
         if (HWND window =
                 FindTaskbarWindowForMonitor(monitors[monitorNumber - 1].handle)) {
@@ -3958,6 +4049,15 @@ HWND FindConfiguredTaskbarWindow(bool logFallback = true) {
     return FindPrimaryTaskbarWindow();
 }
 
+HWND FindConfiguredTaskbarWindow(bool logFallback = true) {
+    return FindConfiguredTaskbarWindow(EnumerateDisplayMonitors(), logFallback);
+}
+
+void ResetUnknownPlacementProbeState() {
+    g_unknownPlacementProbeFailures = 0;
+    g_unknownPlacementProbesSuspended = false;
+}
+
 void RememberTaskbarWindow(HWND window) {
     if (!IsCurrentProcessTaskbarWindow(window)) {
         return;
@@ -3967,6 +4067,7 @@ void RememberTaskbarWindow(HWND window) {
         g_taskbarWindow = window;
         g_taskbarThreadId = threadId;
         g_placementLocationUnknown = false;
+        ResetUnknownPlacementProbeState();
     }
 }
 
@@ -4273,6 +4374,7 @@ void RemoveFromCurrentTaskbar(void*) {
         Wh_Log(L"Removing widget failed: %08X",
                static_cast<unsigned>(error));
     }
+    StopTimer();
     try {
         g_loadedRevokers.reset();
     } catch (...) {
@@ -4288,6 +4390,8 @@ void RemoveFromCurrentTaskbar(void*) {
     g_placementFailures = 0;
     g_placementIsFallback = false;
     g_placementLocationUnknown = false;
+    g_unknownPlacementProbeFailures = 0;
+    g_unknownPlacementProbesSuspended = false;
     g_lastMonitorCount = -1;
     g_lastDisplayTopologyFingerprint = 0;
     g_hasDisplayTopologyFingerprint = false;
@@ -4321,10 +4425,20 @@ void RecordPlacementFailure(HWND targetWindow) {
 void MarkPlacementForRetry(HWND requestedWindow) {
     g_placementIsFallback = true;
     RecordPlacementFailure(requestedWindow);
+    if (g_placementLocationUnknown && !g_unknownPlacementProbesSuspended) {
+        g_unknownPlacementProbeFailures++;
+        if (g_unknownPlacementProbeFailures >=
+            kMaximumUnknownPlacementProbeFailures) {
+            g_unknownPlacementProbesSuspended = true;
+            Wh_Log(L"Monitor lookup failed repeatedly; automatic XAML probes "
+                   L"are paused until taskbar topology or settings change");
+        }
+    }
 }
 
 void CompletePlacement(HWND requestedWindow, HWND actualWindow) {
     g_placementLocationUnknown = false;
+    ResetUnknownPlacementProbeState();
     if (requestedWindow == actualWindow) {
         g_placementIsFallback = false;
         ResetPlacementRetryState();
@@ -4373,6 +4487,7 @@ bool ApplyLoadedFrameFallback(FrameworkElement fallbackFrame,
 struct ApplyOnTaskbarThreadContext {
     FrameworkElement fallbackFrame{nullptr};
     bool refreshExistingWidget = true;
+    bool resetUnknownPlacementProbes = false;
     bool succeeded = false;
 };
 
@@ -4382,8 +4497,9 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     if (g_unloading) {
         return;
     }
-
-    CancelPendingPlacementApply();
+    if (context->resetUnknownPlacementProbes) {
+        ResetUnknownPlacementProbeState();
+    }
 
     // Keep a retry timer even before the first successful injection. All state
     // below is intentionally owned by Explorer's taskbar/XAML UI thread.
@@ -4396,9 +4512,11 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
         return;
     }
 
-    HWND currentWindow = g_placementLocationUnknown
-                             ? nullptr
-                             : FindRememberedTaskbarWindow();
+    HWND currentWindow = g_taskbarWindow.load();
+    if (g_placementLocationUnknown ||
+        !IsCurrentProcessTaskbarWindow(currentWindow)) {
+        currentWindow = nullptr;
+    }
     if (currentWindow == requestedWindow && g_widget) {
         if (context->refreshExistingWidget) {
             RefreshExistingWidget();
@@ -4490,23 +4608,11 @@ void ApplyOnTaskbarUiThread(void* contextValue) {
                static_cast<unsigned>(error));
         MarkPlacementForRetry(nullptr);
     }
-
-    // A failed move can destroy the old widget and its timer before both the
-    // target injection and restoration fail. Keep the retry loop alive on
-    // every non-unload exit path.
-    if (!g_unloading) {
-        try {
-            EnsureTimer();
-        } catch (...) {
-            HRESULT error = winrt::to_hresult();
-            Wh_Log(L"Restoring the taskbar placement timer failed: %08X",
-                   static_cast<unsigned>(error));
-        }
-    }
 }
 
 void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
-                          bool refreshExistingWidget = true) {
+                          bool refreshExistingWidget = true,
+                          bool resetUnknownPlacementProbes = false) {
     if (g_unloading) {
         return;
     }
@@ -4528,48 +4634,9 @@ void ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
     }
 
     ApplyOnTaskbarThreadContext context{fallbackFrame, refreshExistingWidget,
-                                        false};
+                                        resetUnknownPlacementProbes, false};
     if (!RunFromWindowThread(dispatchWindow, ApplyOnTaskbarUiThread, &context)) {
         Wh_Log(L"Dispatching taskbar placement failed");
-    }
-}
-
-void QueueConfiguredTaskbarPlacement() {
-    if (g_unloading || g_placementApplyQueued) {
-        return;
-    }
-
-    if (!g_widget) {
-        // The retry-only timer survives InjectWidget, so this path doesn't
-        // destroy the DispatcherTimer from inside its own Tick callback.
-        ApplyOnTaskbarThread(nullptr, false);
-        return;
-    }
-
-    try {
-        CoreDispatcher dispatcher = g_widget.Dispatcher();
-        if (!dispatcher) {
-            MarkPlacementForRetry(FindConfiguredTaskbarWindow(false));
-            return;
-        }
-
-        g_placementApplyQueued = true;
-        g_placementApplyAction = dispatcher.RunAsync(
-            CoreDispatcherPriority::Normal, [] {
-                bool shouldApply = g_placementApplyQueued;
-                g_placementApplyQueued = false;
-                g_placementApplyAction = nullptr;
-                if (shouldApply && !g_unloading) {
-                    ApplyOnTaskbarThread(nullptr, false);
-                }
-            });
-    } catch (...) {
-        HRESULT error = winrt::to_hresult();
-        g_placementApplyQueued = false;
-        g_placementApplyAction = nullptr;
-        Wh_Log(L"Deferring taskbar placement failed: %08X",
-               static_cast<unsigned>(error));
-        MarkPlacementForRetry(FindConfiguredTaskbarWindow(false));
     }
 }
 
@@ -4578,8 +4645,9 @@ void EnsureConfiguredTaskbarPlacement() {
         return;
     }
 
-    int monitorCount = GetSystemMetrics(SM_CMONITORS);
-    uint64_t topologyFingerprint = GetDisplayTopologyFingerprint();
+    auto monitors = EnumerateDisplayMonitors();
+    int monitorCount = static_cast<int>(monitors.size());
+    uint64_t topologyFingerprint = GetDisplayTopologyFingerprint(monitors);
     bool topologyChanged =
         monitorCount != g_lastMonitorCount ||
         !g_hasDisplayTopologyFingerprint ||
@@ -4589,6 +4657,7 @@ void EnsureConfiguredTaskbarPlacement() {
         g_lastDisplayTopologyFingerprint = topologyFingerprint;
         g_hasDisplayTopologyFingerprint = true;
         ResetPlacementRetryState();
+        ResetUnknownPlacementProbeState();
     }
 
     HWND rememberedWindow = g_taskbarWindow.load();
@@ -4603,8 +4672,12 @@ void EnsureConfiguredTaskbarPlacement() {
         now < g_nextPlacementRetry) {
         return;
     }
+    if (!topologyChanged && g_placementLocationUnknown &&
+        g_unknownPlacementProbesSuspended) {
+        return;
+    }
 
-    HWND targetWindow = FindConfiguredTaskbarWindow(false);
+    HWND targetWindow = FindConfiguredTaskbarWindow(monitors, false);
     if (!targetWindow) {
         MarkPlacementForRetry(nullptr);
         return;
@@ -4615,14 +4688,19 @@ void EnsureConfiguredTaskbarPlacement() {
         return;
     }
 
-    Wh_Log(L"Taskbar topology changed; moving the widget");
-    QueueConfiguredTaskbarPlacement();
+    if (topologyChanged) {
+        Wh_Log(L"Taskbar topology changed; moving the widget");
+    } else {
+        Wh_Log(L"Retrying taskbar placement");
+    }
+    ApplyOnTaskbarThread(nullptr, false);
 }
 
 void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
     if (g_unloading) {
         return;
     }
+    ResetUnknownPlacementProbeState();
     if (!taskbarFrame) {
         ApplyOnTaskbarThread();
         return;
@@ -4866,7 +4944,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
     WakeMetricsWorker();
-    ApplyOnTaskbarThread();
+    ApplyOnTaskbarThread(nullptr, true, true);
 }
 
 void Wh_ModBeforeUninit() {
