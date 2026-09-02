@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.
 // @description:uk-UA Компактний монітор CPU, GPU, RAM і VRAM із 60-секундними графіками для панелі завдань Windows 11.
-// @version         1.4.0
+// @version         1.5.0
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -82,6 +82,23 @@ Unlike the performance placeholders in
 this mod does not alter the clock. It uses the free far-left taskbar area for a
 stable 2x2 dashboard with rolling graphs, capacity bars and temperature alerts.
 
+## Quick start
+
+1. Install and enable the mod. CPU, GPU, RAM and VRAM normally work without any
+   additional software.
+2. Keep **Temperature source** on **Automatic**. If a temperature stays at
+   `--°C`, Windows probably does not expose that sensor; configure HWiNFO as
+   described below.
+3. If the widget overlaps taskbar buttons, enable **Reserve space before the
+   Start button**. If Widgets/weather occupies the same area, increase **Left
+   offset** or disable the conflicting element.
+4. On a multi-monitor system, choose **Taskbar monitor**. Monitor 1 is always
+   the primary display.
+
+The mod is read-only. It does not control clocks, fans or power limits, does not
+collect network/disk activity, and does not send telemetry or make internet
+requests.
+
 ## Metrics
 
 - CPU utilization from the Windows Processor Utility counter, matching the
@@ -149,6 +166,84 @@ written to the Windhawk log only when it changes. Automatic HWiNFO GPU sensor
 selection is also matched to the selected Windows adapter; a one-time diagnostic
 explains when readings exist but no adapter name matches.
 
+## Setting up HWiNFO temperatures
+
+HWiNFO is only needed when Windows cannot expose the desired temperature. Keep
+HWiNFO running; **Sensors-only** mode is sufficient.
+
+### HWiNFO Shared Memory
+
+1. Open HWiNFO **Settings**.
+2. On **General / User Interface**, enable **Shared Memory Support**.
+3. Start or reopen the Sensors window.
+4. Keep this mod on **Automatic**, or select **HWiNFO Shared Memory** to use
+   only that interface.
+
+The free HWiNFO64 edition disables Shared Memory Support after 12 hours of
+continuous operation. This is an HWiNFO limitation, not a mod timer. Re-enable
+or restart it, use Gadget Registry, allow the Windows-native fallback, or use
+HWiNFO64 Pro. The mod does not bypass the limit.
+
+### HWiNFO Gadget Registry
+
+1. Open the HWiNFO Sensors window and **Sensor Settings**.
+2. Open the **HWiNFO Gadget** tab.
+3. Enable **Report to Gadget** for the required CPU and GPU temperature
+   readings.
+4. Run HWiNFO and Explorer/Windhawk as the same Windows user.
+5. Keep this mod on **Automatic**, or select **HWiNFO Gadget Registry**.
+
+If automatic selection chooses the wrong reading, enter a distinctive part of
+the HWiNFO sensor name in the CPU or GPU temperature sensor filter. Leave these
+filters empty unless a mismatch actually occurs.
+
+## Settings guide
+
+- **Widget width** and **Left offset** control the block size and its distance
+  from the far-left taskbar edge.
+- **Taskbar monitor** selects the display. An unavailable display falls back to
+  the primary taskbar and is retried automatically.
+- **Reserve space** prevents left-aligned taskbar buttons from overlapping the
+  widget; **Reserved space gap** adds padding after it.
+- **Update interval** controls collection frequency. One second is recommended.
+  **Graph history** controls how many seconds the CPU/GPU graphs represent.
+- **Adaptive colors** is recommended for automatic light, dark and Windows
+  high-contrast support. Manual text/graph/warning/critical colors are used when
+  it is disabled.
+- Temperature and memory warning/critical values only change alert colors; they
+  do not throttle hardware or close applications.
+- **GPU adapter filter** selects a card by a partial Windows adapter name.
+  Empty selects the adapter with the most dedicated VRAM.
+- **GPU memory type** should normally stay on Automatic. Shared memory is a
+  Windows allocation limit backed by system RAM, while dedicated VRAM is the
+  physical memory of a discrete GPU.
+- **Temperature source** should normally stay on Automatic. The HWiNFO-only,
+  Windows-native and Disabled modes are intended for diagnosis or explicit
+  control.
+- Windows thermal-zone settings only affect the Windows-native CPU fallback.
+  Firmware zones may describe a motherboard, chassis or skin sensor rather than
+  the CPU package.
+
+## Troubleshooting
+
+- **Temperature is `--°C`:** configure HWiNFO Shared Memory or Gadget Registry,
+  verify that HWiNFO is running, and keep Automatic mode enabled.
+- **HWiNFO stopped after about 12 hours:** the free Shared Memory period ended.
+  Re-enable it, use Gadget Registry/Windows-native fallback, or use HWiNFO Pro.
+- **Wrong GPU temperature:** set the GPU adapter filter, then the HWiNFO GPU
+  sensor filter only if necessary.
+- **VRAM is `--` after a driver update:** wait several samples while the mod
+  rebuilds its adapter and counters. If it remains unavailable, reload the mod
+  or restart Explorer and inspect the Windhawk log.
+- **Integrated-GPU memory looks too large:** Automatic mode shows the Windows
+  shared-memory limit. Force Dedicated only to display the reserved carve-out.
+- **Widget is missing, misplaced or overlapping:** verify monitor, width and
+  offset; reserve taskbar space or disable another element using the far-left
+  area.
+
+The Windhawk log records provider changes, adapter selection, counter recovery
+and HWiNFO sensor mismatches without logging every sample.
+
 ## Compatibility and placement
 
 - Windows 11 64-bit. The widget can be placed on the primary or a secondary
@@ -202,8 +297,8 @@ Released under GPL-3.0.
 - reserveSpace: false
   $name: Reserve space before the Start button
   $name:uk-UA: Резервувати місце перед кнопкою Пуск
-  $description: "Usually not needed when Windows 11 taskbar icons are centered."
-  $description:uk-UA: "Для центрованих значків Windows 11 зазвичай не потрібно."
+  $description: "Adds room before the Start button so left-aligned taskbar buttons don't overlap the widget. Usually unnecessary with centered buttons."
+  $description:uk-UA: "Додає місце перед кнопкою Пуск, щоб вирівняні ліворуч кнопки не перекривали блок. Для центрованих значків зазвичай не потрібно."
 
 - reserveGap: 8
   $name: Reserved space gap
@@ -214,14 +309,14 @@ Released under GPL-3.0.
 - updateInterval: 1
   $name: Update interval
   $name:uk-UA: Інтервал оновлення
-  $description: "Metric refresh interval, from 1 to 10 seconds."
-  $description:uk-UA: "Від 1 до 10 секунд."
+  $description: "Metric refresh interval, from 1 to 10 seconds. One second is recommended for quick monitoring; a longer interval reduces wakeups."
+  $description:uk-UA: "Інтервал від 1 до 10 секунд. Для оперативного моніторингу рекомендована 1 секунда; більший інтервал зменшує кількість оновлень."
 
 - historySeconds: 60
   $name: Graph history
   $name:uk-UA: Історія графіків
-  $description: "CPU and GPU history window, from 15 to 180 seconds."
-  $description:uk-UA: "Від 15 до 180 секунд."
+  $description: "CPU and GPU graph window, from 15 to 180 seconds. It is sampled at the configured update interval."
+  $description:uk-UA: "Проміжок історії графіків CPU і GPU від 15 до 180 секунд. Дані додаються із заданим інтервалом оновлення."
 
 - fontSize: 11
   $name: Font size
@@ -232,6 +327,8 @@ Released under GPL-3.0.
 - fontFamily: "Segoe UI Variable Text"
   $name: Font family
   $name:uk-UA: Шрифт
+  $description: "Installed Windows font-family name. The default is tuned for the compact taskbar layout."
+  $description:uk-UA: "Назва встановленого у Windows шрифту. Стандартний шрифт підібраний для компактного блока на панелі."
 
 - textColor: ""
   $name: Text color
@@ -266,8 +363,8 @@ Released under GPL-3.0.
 - textOpacity: 96
   $name: Text opacity
   $name:uk-UA: Прозорість тексту
-  $description: "From 0 to 100 percent."
-  $description:uk-UA: "Від 0 до 100."
+  $description: "From 0 to 100 percent. Metric labels are intentionally slightly dimmer; Windows high-contrast mode keeps important content fully visible."
+  $description:uk-UA: "Від 0 до 100 відсотків. Підписи показуються трохи тьмяніше; у висококонтрастному режимі важливі значення залишаються повністю видимими."
 
 - cpuWarningTemp: 75
   $name: CPU temperature warning
@@ -308,8 +405,8 @@ Released under GPL-3.0.
 - gpuAdapter: ""
   $name: GPU adapter filter
   $name:uk-UA: Відеокарта
-  $description: "Optional partial adapter name. Empty selects the adapter with the most dedicated VRAM."
-  $description:uk-UA: "Необовязкова частина назви. Порожнє значення вибирає адаптер з найбільшим обсягом VRAM."
+  $description: "Optional partial Windows adapter name for multi-GPU systems. Empty selects the adapter with the most dedicated VRAM. GPU usage, VRAM and automatic HWiNFO matching follow this adapter."
+  $description:uk-UA: "Необовязкова частина назви адаптера Windows для систем із кількома GPU. Порожнє значення вибирає адаптер з найбільшим обсягом VRAM. Навантаження, VRAM і автоматичний вибір HWiNFO привязуються до цього адаптера."
 
 - gpuMemoryMode: auto
   $name: GPU memory type
@@ -328,8 +425,8 @@ Released under GPL-3.0.
 - temperatureSource: auto
   $name: Temperature source
   $name:uk-UA: Джерело температури
-  $description: "Automatic tries both HWiNFO interfaces, then Windows D3DKMT for a missing GPU reading and Windows thermal zones for a missing CPU reading."
-  $description:uk-UA: "Автоматичний режим перевіряє обидва інтерфейси HWiNFO, а потім Windows D3DKMT для відсутньої температури GPU та системні термозони Windows для відсутньої температури CPU."
+  $description: "Automatic is recommended: it tries both HWiNFO interfaces, then Windows D3DKMT for a missing GPU reading and Windows thermal zones for a missing CPU reading. HWiNFO is optional but must be running and configured as explained on the Details page."
+  $description:uk-UA: "Рекомендовано Автоматично: режим перевіряє обидва інтерфейси HWiNFO, потім Windows D3DKMT для відсутньої температури GPU та термозони Windows для CPU. HWiNFO необовязковий, але має працювати й бути налаштований за інструкцією на сторінці Деталі."
   $options:
   - auto: Automatic
   - hwinfoAuto: HWiNFO automatic
@@ -366,14 +463,14 @@ Released under GPL-3.0.
 - cpuTempSensor: ""
   $name: CPU temperature sensor filter
   $name:uk-UA: Датчик температури CPU
-  $description: "Optional partial HWiNFO sensor name. Empty automatically selects CPU (Tctl/Tdie), CPU Die, or CPU Package."
-  $description:uk-UA: "Необов'язкова частина назви HWiNFO. Порожнє значення автоматично вибирає CPU (Tctl/Tdie), CPU Die або CPU Package."
+  $description: "Optional partial HWiNFO sensor name. Empty automatically selects CPU (Tctl/Tdie), CPU Die, or CPU Package. Set this only when automatic selection chooses the wrong sensor."
+  $description:uk-UA: "Необов'язкова частина назви датчика HWiNFO. Порожнє значення автоматично вибирає CPU (Tctl/Tdie), CPU Die або CPU Package. Заповнюйте лише коли автоматично вибрано не той датчик."
 
 - gpuTempSensor: ""
   $name: GPU temperature sensor filter
   $name:uk-UA: Датчик температури GPU
-  $description: "Optional partial HWiNFO sensor name. Empty automatically selects GPU Temperature."
-  $description:uk-UA: "Необов'язкова частина назви HWiNFO. Порожнє значення автоматично вибирає GPU Temperature."
+  $description: "Optional partial HWiNFO sensor name. Empty automatically selects GPU Temperature for the selected Windows adapter. Set this only when automatic selection chooses the wrong sensor."
+  $description:uk-UA: "Необов'язкова частина назви датчика HWiNFO. Порожнє значення автоматично вибирає GPU Temperature для вибраного адаптера Windows. Заповнюйте лише коли автоматично вибрано не той датчик."
 */
 // ==/WindhawkModSettings==
 
