@@ -592,7 +592,7 @@ void RemoveLeftHost(MovedClockData& data) {
 void CleanupMovedClockData() {
     auto& movedClocks = MovedClocks();
     for (auto it = movedClocks.begin(); it != movedClocks.end();) {
-        if (!it->clock.get()) {
+        if (!it->clock.get() || !it->taskbarRoot.get()) {
             RemoveLeftHost(*it);
             it = movedClocks.erase(it);
         } else {
@@ -1551,6 +1551,7 @@ bool HookTaskbarView(HMODULE module) {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
             &TaskbarFrame_get_Alignment_Original,
             TaskbarFrame_get_Alignment_Hook,
+            true,
         },
     };
 
@@ -1588,6 +1589,7 @@ bool HookTaskbarViewAndSystemTray(HMODULE module) {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
             &TaskbarFrame_get_Alignment_Original,
             TaskbarFrame_get_Alignment_Hook,
+            true,
         },
         {
             {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
