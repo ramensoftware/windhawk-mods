@@ -28,8 +28,8 @@
     * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
     * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
-* This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2.
-* This mod does not modify any system files. The above optional DLL can be saved anywhere in the file system.
+* This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
+* This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
@@ -41,10 +41,11 @@ This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
 Settings > Advanced settings > More advanced settings > Process inclusion list,
 and make sure that `LogonUI.exe` is in the list.
 
-Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry
-in the global exclusion list or inclusion options in this mod's advanced settings page.
-
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+### Notes for advanced users
+* Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
+* This mod has safety checks before enabling the classic logoff behavior, such as checking if `LogonUI.exe` is added to the global inclusion list properly as stated above, to prevent the logoff sequence from appearing stuck when misconfigured.
+* You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
 */
 // ==/WindhawkModReadme==
 
@@ -72,6 +73,11 @@ in the global exclusion list or inclusion options in this mod's advanced setting
   $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사합니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
 */
 // ==/WindhawkModSettings==
+
+// Source code is published under The GNU General Public License v3.0.
+// Fork: https://github.com/Ingan121/AuthUX/blob/bsdr/LICENSE
+// Upstream: https://github.com/world-windows-federation/AuthUX/blob/main/LICENSE
+// Codes from upstream: logoncontroller.h and wicutil.cpp
 
 #include <windhawk_utils.h>
 #include <string>
