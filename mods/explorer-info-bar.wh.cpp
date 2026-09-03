@@ -128,17 +128,17 @@ When one file is selected, additional details can appear:
     - Verdana: Verdana
     - Consolas: Consolas
 
-- fontSize: 12
+- fontSize: "12"
   $name: Font size
   $description: Choose a safe font size that fits within Explorer's native bottom row.
   $options:
-    - 10: "10"
-    - 11: "11"
-    - 12: "12 (Default)"
-    - 13: "13"
-    - 14: "14"
-    - 15: "15"
-    - 16: "16"
+    - "10": "10"
+    - "11": "11"
+    - "12": "12 (Default)"
+    - "13": "13"
+    - "14": "14"
+    - "15": "15"
+    - "16": "16"
 
 - leftPadding: auto
   $name: Left edge padding
@@ -730,16 +730,19 @@ static void LoadSettings()
     if (settings.fontFamily.empty())
         settings.fontFamily = L"Segoe UI";
 
-    settings.fontSize =
-        std::max(
+    const int parsedFontSize =
+        ParseAutoPixelSetting(
+            GetStringSetting(
+                L"fontSize"
+            ),
             10,
-            std::min(
-                16,
-                Wh_GetIntSetting(
-                    L"fontSize"
-                )
-            )
+            16
         );
+
+    settings.fontSize =
+        parsedFontSize >= 10
+            ? parsedFontSize
+            : 12;
 
     settings.leftPadding =
         ParseAutoPixelSetting(
