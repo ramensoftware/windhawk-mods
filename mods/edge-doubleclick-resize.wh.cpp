@@ -27,6 +27,8 @@ This adds a horizontal counterpart to Windows' existing vertical
 double-click-to-maximize behavior, which only covers the top/bottom
 edges natively.
 
+![demo](https://i.imgur.com/B4HtYLf.gif)
+
 ## Notes
 
 - Applies to all windows (`@include *`).
