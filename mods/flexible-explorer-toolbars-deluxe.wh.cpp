@@ -24,7 +24,7 @@ also would work if you want to retain elements of Windows 11 fluent interface, a
 
 This mod hides the Navigation Bar and instead creates the following optional toolbars, which could be freely moved and ordered together with the Menu Bar, if it is enabled:
 * The Search Bar
-* The Adddress Bar
+* The Address Bar
 * The Breadcrumbs Bar
 * The Up Buton
 
