@@ -179,6 +179,8 @@ If any issues are encountered, please report them to the mod's author.
 #include <string>
 
 #include <unordered_map>
+#include <atomic>
+#include <new>
 using ExitWindowsEx_t = BOOL (WINAPI*)(UINT, DWORD);
 static ExitWindowsEx_t ExitWindowsEx_Original = nullptr;
 // Second entry point. The Start menu power button and several shell surfaces
@@ -204,22 +206,42 @@ static InitiateShutdownW_t InitiateShutdownW_Original = nullptr;
 static HWND g_dialog = nullptr;
 static HBITMAP g_desktop = nullptr;
 static HBITMAP g_backdrop = nullptr;   // cached desktop + veil, rebuilt on change
-static bool g_insideHook = false;
-static UINT g_pendingFlags = 0;
-static DWORD g_pendingReason = 0;
-static bool g_force = false;    // add EWX_FORCEIFHUNG to the real call
-// Whether the logoff/shutdown must continue once the screen closes. This is
-// deliberately separate from g_force: the screen can close by itself because
-// the last program went away, and in that case Windows should carry on
-// normally, without the "force" flag being added behind the user's back.
-static bool g_proceed = false;
-// Which of the three things Windows was asked to do. Everything the screen
-// says is chosen from this, so the wording can never disagree with the
-// action: a restart is a shutdown as far as the logic goes, but telling the
-// user the machine is shutting down when it is coming straight back up would
-// be misleading, so the three are kept apart.
+// thread_local: the nested pump in ShowWin7LogoffDialog lets a shell thread
+// re-enter *Ex_Hook on itself while a screen is up, and independently a
+// second thread/process can call in concurrently. A process-wide flag would
+// let a second thread's hook see the first thread's "already inside" state
+// (skipping its own screen) and would let whichever of two overlapping hooks
+// finishes first clear the flag out from under the other.
+static thread_local bool g_insideHook = false;
+// Which of the three things Windows was asked to do, for the *currently
+// displayed* screen. Only one screen is ever visible at a time (WM_APP_SHOW
+// fast-paths a second concurrent request instead of opening another), so
+// this being process-wide is fine for painting/wording purposes -- unlike
+// the per-request outcome below, nothing here is read back by a hook thread.
 enum ActionKind { kActionLogoff = 0, kActionShutdown = 1, kActionRestart = 2, kActionCount = 3 };
 static ActionKind g_action = kActionLogoff;
+
+// One of these is created (on the stack of the hook thread that issues the
+// request) per shutdown/logoff attempt, and its address is handed to the UI
+// thread as the WM_APP_SHOW lParam. The outcome fields are written only by
+// the UI thread and only up until it signals `reply`; the requesting hook
+// thread reads them only after its wait on `reply` returns. Keeping this
+// per-request rather than in process-wide globals is what stops a second,
+// concurrent request's "screen already up, proceed" fast path from landing
+// between an in-progress screen's WM_DESTROY and the first request's own
+// thread reading the result -- previously a shared g_proceed/g_force meant
+// that race could turn a user's Cancel into a proceed.
+struct ShutdownRequest {
+    HANDLE reply = nullptr;
+    ActionKind action = kActionLogoff;
+    bool force = false;      // add EWX_FORCEIFHUNG to the real call
+    // Whether the logoff/shutdown must continue once the screen closes. This
+    // is deliberately separate from force: the screen can close by itself
+    // because the last program went away, and in that case Windows should
+    // carry on normally, without the "force" flag being added behind the
+    // user's back.
+    bool proceed = false;
+};
 
 // ---------------------------------------------------------------------------
 // Skins
@@ -477,9 +499,15 @@ static HANDLE g_uiReady = nullptr;
 // reason as the UI-thread join.
 static HANDLE g_hooksIdle = nullptr;
 
+// Nest-safe: two overlapping hook invocations on the same thread (the nested
+// pump in ShowWin7LogoffDialog lets ExitWindowsEx_Hook re-enter itself) must
+// not let the inner frame's destructor signal g_hooksIdle while the outer
+// frame is still executing mod code. A counter, rather than a plain
+// reset/set pair, only signals once the last frame unwinds.
+static std::atomic<int> g_hooksInFlight{0};
 struct InFlightHook {
-    InFlightHook()  { ResetEvent(g_hooksIdle); }
-    ~InFlightHook() { SetEvent(g_hooksIdle); }
+    InFlightHook()  { if (g_hooksInFlight.fetch_add(1, std::memory_order_acq_rel) == 0) ResetEvent(g_hooksIdle); }
+    ~InFlightHook() { if (g_hooksInFlight.fetch_sub(1, std::memory_order_acq_rel) == 1) SetEvent(g_hooksIdle); }
 };
 static bool g_hoverForce = false;
 static bool g_hoverCancel = false;
@@ -1081,13 +1109,21 @@ static HICON GetProgramIcon(HWND window, DWORD pid, const wchar_t* exePath) {
 // search, etc.). These are never something the user consciously "closes",
 // so they must never show up in the shutdown list even if EnumWindows sees
 // their window as visible.
+// applicationframehost.exe and systemsettings.exe are deliberately NOT in
+// this list: the former hosts every classic UWP/Store app (Calculator,
+// Photos, Mail, ...) and the latter is Settings itself, so blanket-excluding
+// them dropped a whole class of running programs from the list and the
+// headline count. explorer.exe is excluded here even though it also hosts
+// File Explorer windows -- those are let back in below by resolving each
+// window's *real* owning process instead of trusting the top-level PID, the
+// same way an ApplicationFrameWindow's real owner is resolved.
 static bool IsSystemHostProcess(const wchar_t* exeName) {
     static const wchar_t* const kHosts[] = {
-        L"textinputhost.exe", L"lockapp.exe", L"applicationframehost.exe",
+        L"textinputhost.exe", L"lockapp.exe",
         L"shellexperiencehost.exe", L"startmenuexperiencehost.exe",
         L"searchhost.exe", L"searchui.exe", L"searchapp.exe",
-        L"systemsettings.exe", L"sihost.exe", L"ctfmon.exe",
-        L"dwm.exe", L"taskhostw.exe", L"explorer.exe",
+        L"sihost.exe", L"ctfmon.exe",
+        L"dwm.exe", L"taskhostw.exe",
         L"windowsinternal.composableshell.experiences.textinput.inputapp.exe",
     };
     for (const wchar_t* h : kHosts) if (_wcsicmp(exeName, h) == 0) return true;
@@ -1108,7 +1144,39 @@ static bool IsShellSurfaceClass(HWND w) {
     // The taskbar and its secondary (second-monitor) instances.
     if (_wcsicmp(cls, L"Shell_TrayWnd") == 0) return true;
     if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0) return true;
+    // The desktop itself (Progman, and the WorkerW instances Explorer
+    // creates alongside it). explorer.exe is no longer blanket-excluded by
+    // process name, so without this the desktop would show up as a "program".
+    if (_wcsicmp(cls, L"Progman") == 0) return true;
+    if (_wcsicmp(cls, L"WorkerW") == 0) return true;
     return false;
+}
+
+// A classic UWP/Store app's visible top-level window belongs to
+// ApplicationFrameHost.exe, not to the app itself: the app's own content
+// lives in a child Windows.UI.Core.CoreWindow owned by a different process.
+// Resolving that child's PID gives the entry the app's own name/icon instead
+// of ApplicationFrameHost's, and lets EnumChildWindows-based dedup work per
+// app rather than collapsing every open Store app into one frame-host entry.
+static BOOL CALLBACK FindCoreWindowChild(HWND child, LPARAM lp) {
+    wchar_t cls[64]{};
+    GetClassNameW(child, cls, ARRAYSIZE(cls));
+    if (_wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+        *reinterpret_cast<HWND*>(lp) = child;
+        return FALSE;   // found it, stop enumerating
+    }
+    return TRUE;
+}
+
+static DWORD ResolveRealOwnerPid(HWND w, DWORD framePid, const wchar_t* frameExe) {
+    if (!frameExe || _wcsicmp(frameExe, L"applicationframehost.exe") != 0)
+        return framePid;
+    HWND core = nullptr;
+    EnumChildWindows(w, FindCoreWindowChild, reinterpret_cast<LPARAM>(&core));
+    if (!core) return framePid;
+    DWORD corePid = 0;
+    GetWindowThreadProcessId(core, &corePid);
+    return corePid ? corePid : framePid;
 }
 
 static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
@@ -1147,6 +1215,23 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
             CloseHandle(h);
         }
         if (!exeName.empty() && IsSystemHostProcess(exeName.c_str())) return TRUE;
+        // For a UWP/Store app, swap the frame host's PID/path for the app's
+        // own, so the name, icon and per-process dedup below all reflect the
+        // actual app rather than ApplicationFrameHost.exe.
+        DWORD realPid = ResolveRealOwnerPid(w, pid, exeName.c_str());
+        if (realPid != pid) {
+            wchar_t realPath[MAX_PATH]{}; n = ARRAYSIZE(realPath);
+            HANDLE rh = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, realPid);
+            if (rh) {
+                if (QueryFullProcessImageNameW(rh, 0, realPath, &n)) {
+                    const wchar_t* b = wcsrchr(realPath, L'\\');
+                    exeName = b ? b + 1 : realPath;
+                    wcscpy_s(path, realPath);
+                }
+                CloseHandle(rh);
+            }
+            pid = realPid;
+        }
         // One line per process: a program with several top-level windows
         // (or several invisible worker windows) must not appear twice.
         for (const auto& p : g_openPrograms) if (p.pid == pid) return TRUE;
@@ -1742,18 +1827,25 @@ static void ScrollToThumbPosition(HWND hwnd, int y) {
 
 static DWORD WINAPI UiThreadProc(LPVOID);
 
-// Runs on the UI thread. Creates the dialog; the outcome is reported through
-// g_proceed/g_force when the window is destroyed (WM_DESTROY sets the reply
-// event). It never runs a nested modal loop: the dialog is modeless on this
+// Runs on the UI thread. Creates the dialog; the outcome is written into the
+// request (via GWLP_USERDATA) and reported when the window is destroyed
+// (WM_DESTROY signals its reply event). It never runs a nested modal loop: the dialog is modeless on this
 // thread, so the same loop also keeps the hotkey window alive (the preview
 // hotkey can therefore never fire while a screen is already up) and a quit
 // message posted to the thread is always reached.
-static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
+// req may be null for the preview hotkey path, which is fire-and-forget and
+// has nothing waiting on an outcome.
+static void ShowScreenOnUiThread(ShutdownRequest* req, ActionKind action) {
+    HANDLE replyEvent = req ? req->reply : nullptr;
     // Re-read every setting on the thread that consumes it.
     LoadSkinSetting();
-    if (!g_enabled) { g_force = false; g_proceed = true;  if (replyEvent) SetEvent(replyEvent); return; }
+    if (!g_enabled) {
+        if (req) { req->force = false; req->proceed = true; }
+        if (replyEvent) SetEvent(replyEvent);
+        return;
+    }
 
-    g_force = false; g_proceed = false;
+    if (req) { req->force = false; req->proceed = false; }
     g_action = action;
     g_listScroll = 0; g_draggingThumb = false; // always open at the top of the list
     RefreshOpenPrograms();
@@ -1764,7 +1856,7 @@ static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
     // be awkward and would only delay a logoff that can just go ahead.
     if (g_totalPrograms == 0) {
         g_openPrograms.clear();
-        g_force = false; g_proceed = true;
+        if (req) { req->force = false; req->proceed = true; }
         if (replyEvent) SetEvent(replyEvent);
         return;
     }
@@ -1791,13 +1883,14 @@ static void ShowScreenOnUiThread(HANDLE replyEvent, ActionKind action) {
     if (!dlg) {
         Wh_Log(L"CreateWindowExW for the logoff screen failed");
         FreeDesktopBitmap();
-        g_force = false; g_proceed = true;   // fail open: never block a logoff
+        if (req) { req->force = false; req->proceed = true; }   // fail open: never block a logoff
         if (replyEvent) SetEvent(replyEvent);
         return;
     }
     g_dialog = dlg;
-    // The reply event is stashed on the window so WM_DESTROY can signal it.
-    SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(replyEvent));
+    // The request is stashed on the window so WM_DESTROY (and the other
+    // outcome-setting handlers) can reach it and signal its own reply event.
+    SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(req));
     // The metrics are scaled to the target monitor's DPI (already set above).
     SetForegroundWindow(dlg);
     SetFocus(dlg);
@@ -1819,7 +1912,8 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // while stock Windows would instead show its own "app is preventing
         // shutdown" screen and wait.
         if (GetTickCount64() - g_dialogStart >= 60000) {
-            g_force = false; g_proceed = true;
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = false; req->proceed = true; }
             DestroyWindow(hwnd);
             return 0;
         }
@@ -1828,9 +1922,10 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // empty out while the screen is up. Showing "0 programs still
         // need to close:" would be nonsense, and there is nothing left to
         // wait for either: close the screen and let Windows carry on
-        // normally (g_force stays false -- nothing had to be forced).
+        // normally (force stays false -- nothing had to be forced).
         if (g_totalPrograms == 0) {
-            g_force = false; g_proceed = true;
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = false; req->proceed = true; }
             DestroyWindow(hwnd);
             return 0;
         }
@@ -1844,8 +1939,16 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else InvalidateRect(hwnd, &L.listRegion, FALSE);
         }
         if (!g_desktop && GetTickCount64() - g_captureFailedAt >= 1000) {
+            // CaptureDesktop() grabs whatever GetDC(nullptr) currently shows,
+            // and this window is covering the whole virtual desktop, so
+            // capturing without hiding it first would feed the dimmed
+            // backdrop + panel back into itself, and RebuildBackdrop() would
+            // alpha-blend the veil over that a second time. Hide the window
+            // for the capture only; nothing else about it changes.
+            ShowWindow(hwnd, SW_HIDE);
             FreeDesktopBitmap();
             g_desktop = CaptureDesktop();
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             g_captureFailedAt = g_desktop ? 0 : GetTickCount64();
             RebuildBackdrop();
             InvalidateRect(hwnd, nullptr, FALSE);
@@ -1853,8 +1956,16 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_KEYDOWN:
-        if (wp == VK_ESCAPE) { g_force = false; g_proceed = false; DestroyWindow(hwnd); return 0; }
-        if (wp == VK_RETURN) { g_force = true;  g_proceed = true;  DestroyWindow(hwnd); return 0; }
+        if (wp == VK_ESCAPE) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = false; req->proceed = false; }
+            DestroyWindow(hwnd); return 0;
+        }
+        if (wp == VK_RETURN) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = true; req->proceed = true; }
+            DestroyWindow(hwnd); return 0;
+        }
         // Keyboard access to the part of the list that does not fit.
         if (wp == VK_DOWN)  { ScrollList(hwnd,  1); return 0; }
         if (wp == VK_UP)    { ScrollList(hwnd, -1); return 0; }
@@ -1911,8 +2022,11 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
         SetWindowPos(hwnd, HWND_TOPMOST, vx, vy, vw, vh,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        // Hide around the capture -- see the WM_TIMER retry above for why.
+        ShowWindow(hwnd, SW_HIDE);
         FreeDesktopBitmap();
         g_desktop = CaptureDesktop();
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         g_captureFailedAt = g_desktop ? 0 : GetTickCount64();
         SetTargetMonitor(PickTargetMonitor());
         RebuildBackdrop();
@@ -1931,8 +2045,11 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                          suggested->bottom - suggested->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
         }
+        // Hide around the capture -- see the WM_TIMER retry above for why.
+        ShowWindow(hwnd, SW_HIDE);
         FreeDesktopBitmap();
         g_desktop = CaptureDesktop();
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         RebuildBackdrop();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
@@ -1942,13 +2059,21 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         const int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
         DialogLayout L = LayoutForWindow(hwnd);
         RECT force = L.force, cancel = L.cancel;
-        if (PtInRect(&force, POINT{x,y})) { g_force = true; g_proceed = true; DestroyWindow(hwnd); }
-        else if (PtInRect(&cancel, POINT{x,y})) { g_force = false; g_proceed = false; DestroyWindow(hwnd); }
+        if (PtInRect(&force, POINT{x,y})) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = true; req->proceed = true; }
+            DestroyWindow(hwnd);
+        } else if (PtInRect(&cancel, POINT{x,y})) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+                { req->force = false; req->proceed = false; }
+            DestroyWindow(hwnd);
+        }
         return 0;
     }
     case WM_CLOSE:
         // Alt+F4 / system close == Cancel.
-        g_force = false; g_proceed = false;
+        if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)))
+            { req->force = false; req->proceed = false; }
         DestroyWindow(hwnd);
         return 0;
     case WM_ERASEBKGND:
@@ -2157,8 +2282,12 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         FreeBackdrop();
         g_openPrograms.clear();
         g_hoverForce = g_hoverCancel = false;
-        HANDLE reply = reinterpret_cast<HANDLE>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-        if (reply) SetEvent(reply);
+        // The outcome (force/proceed) was already written into *req by
+        // whichever handler triggered this DestroyWindow; signalling its own
+        // reply event last is what lets that outcome be read back safely by
+        // the one hook thread that owns this specific request.
+        auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (req && req->reply) SetEvent(req->reply);
         return 0;
     }
     }
@@ -2200,29 +2329,32 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // A shutdown hook is asking for the screen. The action (logoff/
         // shutdown/restart) is carried in wParam so it is decided by the hook
         // thread and never read by this thread while another request changes it.
-        HANDLE reply = reinterpret_cast<HANDLE>(lp);
+        // lParam is that hook thread's own ShutdownRequest*, so writing the
+        // outcome here can never be clobbered by any other request.
+        auto* req = reinterpret_cast<ShutdownRequest*>(lp);
         if (g_dialog) {
-            // A screen is already up; let the second caller continue.
-            g_force = false; g_proceed = true;
-            SetEvent(reply);
+            // A screen is already up; let the second caller continue. This
+            // only ever touches *req, never the request whose screen is
+            // currently showing.
+            req->force = false; req->proceed = true;
+            SetEvent(req->reply);
             return 0;
         }
         try {
-            ShowScreenOnUiThread(reply, (ActionKind)wp);
+            ShowScreenOnUiThread(req, (ActionKind)wp);
         } catch (...) {
             Wh_Log(L"Logoff screen failed: exception contained");
-            g_force = false; g_proceed = true;
+            req->force = false; req->proceed = true;
             g_dialog = nullptr; FreeDesktopBitmap(); g_openPrograms.clear();
-            SetEvent(reply);
+            SetEvent(req->reply);
         }
         return 0;
     }
     case WM_HOTKEY:
         if (wp == kHotkeyId && !g_dialog && g_enabled) {
-            // Preview only: ShowScreenOnUiThread is modeless and would stash a
-            // reply handle in the window long after we return, so pass nullptr
-            // and let WM_DESTROY skip signalling it (it is never closed). With
-            // no program open the screen skips itself like a real logoff.
+            // Preview only: pass nullptr for the request, so WM_DESTROY finds
+            // nothing to signal (nothing is waiting on it). With no program
+            // open the screen skips itself like a real logoff.
             try {
                 ShowScreenOnUiThread(nullptr, kActionLogoff);
                 if (g_totalPrograms == 0)
@@ -2231,7 +2363,7 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // If a dialog made it into existence before the throw, close
                 // it; nothing is waiting on it.
                 Wh_Log(L"Preview failed: exception contained");
-                if (g_dialog) { g_force = false; g_proceed = false; DestroyWindow(g_dialog); }
+                if (g_dialog) DestroyWindow(g_dialog);
             }
         }
         return 0;
@@ -2242,7 +2374,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (!g_enabled) {
                 // Turned off while the screen was up: dismiss it and let the
                 // pending action continue unforced, as if never intercepted.
-                g_force = false; g_proceed = true;
+                if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(g_dialog, GWLP_USERDATA)))
+                    { req->force = false; req->proceed = true; }
                 DestroyWindow(g_dialog);
             } else {
                 RebuildBackdrop();   // re-bake the veil if the skin changed
@@ -2250,15 +2383,32 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         return 0;
-    case WM_APP_QUITUI:
+    case WM_APP_QUITUI: {
         // Close any screen first (on this thread, so DestroyWindow is legal)
-        // so the hooks blocked in the screen wake up, then stop the loop.
-        // g_proceed is left TRUE: the mod must never silently cancel a real
-        // action it only intercepted, matching the "disable the mod while the
-        // screen is up" path in WM_APP_APPLYSETTINGS (which lets it proceed).
-        if (g_dialog) { g_force = false; g_proceed = true; DestroyWindow(g_dialog); }
+        // so the hook blocked on it wakes up, then drain and answer any
+        // WM_APP_SHOW still queued behind it before finally stopping the
+        // loop -- otherwise a request that arrived in the same instant would
+        // be discarded along with this window, and its hook thread would
+        // block on `reply` forever (see the bounded wait in
+        // ShowWin7LogoffDialog for the other half of that fix). Both leave
+        // proceed TRUE: the mod must never silently cancel a real action it
+        // only intercepted, matching the "disable the mod while the screen is
+        // up" path in WM_APP_APPLYSETTINGS.
+        if (g_dialog) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(g_dialog, GWLP_USERDATA)))
+                { req->force = false; req->proceed = true; }
+            DestroyWindow(g_dialog);
+        }
+        MSG leftover;
+        while (PeekMessageW(&leftover, nullptr, WM_APP_SHOW, WM_APP_SHOW, PM_REMOVE)) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(leftover.lParam)) {
+                req->force = false; req->proceed = true;
+                if (req->reply) SetEvent(req->reply);
+            }
+        }
         PostQuitMessage(0);
         return 0;
+    }
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
@@ -2325,48 +2475,84 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
 // Hook-side entry: hand the request to the UI thread and block until the
 // screen reports its decision. Returns true when Windows should proceed.
-static bool ShowWin7LogoffDialog(UINT flags, DWORD reason) {
+static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
+    *outForce = false;
     if (g_insideHook || !g_uiThreadId || !g_hotkeyWindow) return true;
 
-    g_pendingFlags = flags;
-    g_pendingReason = reason;
+    // Heap-allocated, not stack: on the (last-resort) timeout/WM_QUIT paths
+    // below, this function gives up on waiting while the UI thread may still
+    // hold this pointer (e.g. in a dialog's GWLP_USERDATA) and could still
+    // write to it or SetEvent() its reply later. A stack object would make
+    // that a use-after-free/invalid-handle; leaking this one small object in
+    // that (should-never-happen) case is the safe trade. The normal path
+    // frees it itself once it is provably done being touched.
+    auto* req = new (std::nothrow) ShutdownRequest();
+    if (!req) return true;   // fail open: never block a logoff
+    req->reply = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!req->reply) { delete req; return true; }   // fail open: never block a logoff
 
     // Which wording the screen uses is decided here, once. EWX_REBOOT is
     // tested first because a restart also carries the shutdown semantics, and
     // EWX_POWEROFF is treated as a shutdown because "Shut down" from the Start
     // menu passes it rather than a bare EWX_SHUTDOWN -- without it the screen
     // would offer to "force log off" while the machine is powering off.
-    g_action = (flags & EWX_REBOOT)                     ? kActionRestart
-             : (flags & (EWX_SHUTDOWN | EWX_POWEROFF))  ? kActionShutdown
-             : kActionLogoff;
+    req->action = (flags & EWX_REBOOT)                     ? kActionRestart
+                : (flags & (EWX_SHUTDOWN | EWX_POWEROFF))  ? kActionShutdown
+                : kActionLogoff;
 
-    HANDLE reply = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!reply) return true;   // fail open: never block a logoff
-
-    if (!PostMessageW(g_hotkeyWindow, WM_APP_SHOW, (WPARAM)g_action,
-                      reinterpret_cast<LPARAM>(reply))) {
-        CloseHandle(reply);
+    if (!PostMessageW(g_hotkeyWindow, WM_APP_SHOW, (WPARAM)req->action,
+                      reinterpret_cast<LPARAM>(req))) {
+        CloseHandle(req->reply);
+        delete req;
         return true;
     }
 
     // Wait for the screen to close. The UI thread always signals the event
     // (every ShowScreenOnUiThread path, WM_DESTROY, and the exception path),
-    // so this cannot deadlock: disable/uninit posts WM_APP_QUITUI, which tears
-    // the dialog down and signals us.
-    MsgWaitForMultipleObjects(1, &reply, FALSE, INFINITE, QS_ALLINPUT);
-    while (WaitForSingleObject(reply, 0) != WAIT_OBJECT_0) {
+    // and Wh_ModBeforeUninit/WM_APP_QUITUI tears the dialog down (or, if it
+    // arrived too late for that, drains and answers the still-queued
+    // WM_APP_SHOW directly) before the UI thread's loop exits -- so this
+    // should never actually hit its bound. The bound exists only as a last
+    // resort against some other, unforeseen way the reply could go
+    // unsignalled: without it, this thread (the shell's own) would block
+    // forever inside ExitWindowsEx/InitiateShutdownW, and Wh_ModUninit would
+    // in turn block forever on g_hooksIdle, hanging the shell on unload.
+    // 65 s clears the screen's own 60 s watchdog with room to spare.
+    constexpr DWORD kWaitBoundMs = 65000;
+    const ULONGLONG deadline = GetTickCount64() + kWaitBoundMs;
+    bool proceed;
+    bool gaveUp = false;
+    for (;;) {
+        ULONGLONG now = GetTickCount64();
+        DWORD remaining = (now >= deadline) ? 0 : (DWORD)(deadline - now);
+        DWORD wait = MsgWaitForMultipleObjects(1, &req->reply, FALSE, remaining, QS_ALLINPUT);
+        if (wait == WAIT_TIMEOUT) {
+            Wh_Log(L"Timed out waiting for the logoff screen to close; proceeding unforced");
+            proceed = true; gaveUp = true;   // fail open
+            break;
+        }
+        if (WaitForSingleObject(req->reply, 0) == WAIT_OBJECT_0) { proceed = req->proceed; *outForce = req->force; break; }
         // Pump any messages sent to this thread (e.g. DWM queries) while the
-        // screen is up, so the shell stays responsive.
+        // screen is up, so the shell stays responsive. A WM_QUIT here belongs
+        // to this thread (e.g. the shell process itself is exiting) and must
+        // not be silently discarded: re-post it and stop waiting so it is
+        // seen by whatever loop this thread returns to.
         MSG m{};
+        bool gotQuit = false;
         while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            if (m.message == WM_QUIT) { gotQuit = true; break; }
             TranslateMessage(&m);
             DispatchMessageW(&m);
         }
-        MsgWaitForMultipleObjects(1, &reply, FALSE, INFINITE, QS_ALLINPUT);
+        if (gotQuit) {
+            PostQuitMessage((int)m.wParam);
+            proceed = true; gaveUp = true;   // fail open
+            break;
+        }
     }
 
-    CloseHandle(reply);
-    return g_proceed;
+    if (!gaveUp) { CloseHandle(req->reply); delete req; }
+    return proceed;
 }
 
 static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
@@ -2374,9 +2560,10 @@ static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
     try {
         if (!ExitWindowsEx_Original) return FALSE;
         if (g_insideHook) return ExitWindowsEx_Original(flags, reason);
-        if (!ShowWin7LogoffDialog(flags, reason)) return TRUE;
+        bool force = false;
+        if (!ShowWin7LogoffDialog(flags, reason, &force)) return TRUE;
         g_insideHook=true;
-        BOOL result=ExitWindowsEx_Original(flags | (g_force ? EWX_FORCEIFHUNG : 0), reason);
+        BOOL result=ExitWindowsEx_Original(flags | (force ? EWX_FORCEIFHUNG : 0), reason);
         g_insideHook=false; return result;
     } catch (...) {
         g_insideHook=false;
@@ -2403,7 +2590,8 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
         UINT ewx = (shutdownFlags & SHUTDOWN_RESTART) ? EWX_REBOOT
                  : (shutdownFlags & SHUTDOWN_POWEROFF) ? EWX_POWEROFF
                  : EWX_SHUTDOWN;
-        if (!ShowWin7LogoffDialog(ewx, reason)) return ERROR_SUCCESS; // cancelled by the user
+        bool force = false;
+        if (!ShowWin7LogoffDialog(ewx, reason, &force)) return ERROR_SUCCESS; // cancelled by the user
 
         g_insideHook=true;
         // Deliberately no SHUTDOWN_FORCE_* flags. Those are the equivalent of
