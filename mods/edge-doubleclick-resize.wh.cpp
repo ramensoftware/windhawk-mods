@@ -89,7 +89,15 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     if (IsZoomed(hWnd) || IsIconic(hWnd))
         return false;
 
-    if (!(GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_THICKFRAME))
+    // Skip child windows: GetWindowRect/rcWork are in screen coordinates,
+    // but SetWindowPos on a child window treats x/y as parent-client
+    // coordinates, so applying screen-space math would fling the child
+    // out of its container.
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (style & WS_CHILD)
+        return false;
+
+    if (!(style & WS_THICKFRAME))
         return false;
 
     RECT wr; // Actual window rect (includes the invisible resize border).
@@ -97,8 +105,8 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
         return false;
 
     RECT vr = wr; // Visible frame bounds.
-    if (!SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                          &vr, sizeof(vr)))) {
+    if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                      &vr, sizeof(vr)))) {
         vr = wr; // Fall back to zero insets if the DWM call fails.
     }
 
@@ -108,6 +116,21 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     int topInset    = vr.top    - wr.top;
     int rightInset  = wr.right  - vr.right;
     int bottomInset = wr.bottom - vr.bottom;
+
+    // DWMWA_EXTENDED_FRAME_BOUNDS is always in physical pixels, while
+    // GetWindowRect is DPI-virtualized for processes that aren't
+    // per-monitor DPI aware. With @include * this mod runs inside such
+    // processes, so on a scaled display the two rects can be in
+    // different coordinate spaces. If the insets are far larger than a
+    // plausible frame width, discard them rather than risk throwing the
+    // window off-screen.
+    const int maxInset =
+        (GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)) * 4;
+    if (leftInset < 0 || topInset < 0 || rightInset < 0 || bottomInset < 0 ||
+        leftInset > maxInset || topInset > maxInset ||
+        rightInset > maxInset || bottomInset > maxInset) {
+        leftInset = topInset = rightInset = bottomInset = 0;
+    }
 
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
