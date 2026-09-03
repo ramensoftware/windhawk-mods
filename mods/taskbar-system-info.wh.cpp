@@ -117,10 +117,10 @@ requests.
 
 Metric collection runs on a worker thread. The taskbar UI thread only renders
 completed snapshots and catches up with every sample that arrived while the UI
-was busy. If a display-driver restart changes an adapter LUID or invalidates the
-active performance counters, the mod refreshes the live adapter list and
-rebuilds the counters automatically. This also covers successful but empty VRAM
-results and uses exponential backoff while a parked GPU stays idle.
+was busy. If a display-driver restart assigns the adapter a new LUID, the mod
+detects it during the normal adapter refresh and rebuilds the GPU performance
+counters once. Hard counter failures use the same bounded recovery path and
+fixed cooldown.
 
 The adapter with the most dedicated VRAM is selected automatically. A partial
 adapter-name filter is available for multi-GPU systems. GPU usage and VRAM are
@@ -159,12 +159,11 @@ use; HWiNFO64 Pro has no such limit. Gadget Registry is a separate HWiNFO
 interface. Configure it under **Sensor Settings > HWiNFO Gadget** by enabling
 **Report to Gadget** for the desired CPU and GPU temperature readings. If the
 selected source is unavailable, temperatures are shown as `--°C`; all other
-metrics continue to work. A single transient provider timeout keeps the last
-good temperature for at most two samples, avoiding a one-tick `--°C` flicker
-without hiding a provider that has actually disappeared. The active provider is
-written to the Windhawk log only when it changes. Automatic HWiNFO GPU sensor
-selection is also matched to the selected Windows adapter; a one-time diagnostic
-explains when readings exist but no adapter name matches.
+  metrics continue to work. The active provider is written to the Windhawk log
+  only when it changes. When Windows adapter identity is available, automatic
+  HWiNFO GPU selection is matched to it. If adapter enumeration has never been
+  available and no adapter filter is set, HWiNFO uses its generic GPU match; on
+  multi-GPU systems, configure the adapter and sensor filters explicitly.
 
 ## Setting up HWiNFO temperatures
 
@@ -232,11 +231,14 @@ filters empty unless a mismatch actually occurs.
   Re-enable it, use Gadget Registry/Windows-native fallback, or use HWiNFO Pro.
 - **Wrong GPU temperature:** set the GPU adapter filter, then the HWiNFO GPU
   sensor filter only if necessary.
-- **VRAM is `--` after a driver update:** wait several samples while the mod
-  rebuilds its adapter and counters. If it remains unavailable, reload the mod
-  or restart Explorer and inspect the Windhawk log.
+- **VRAM is `--` after a driver update:** a changed adapter LUID triggers an
+  automatic counter rebuild. Wait several samples; if it remains unavailable,
+  reload the mod or restart Explorer and inspect the Windhawk log.
 - **Integrated-GPU memory looks too large:** Automatic mode shows the Windows
   shared-memory limit. Force Dedicated only to display the reserved carve-out.
+- **A legacy 512 MB discrete GPU is shown as shared:** force Dedicated VRAM.
+  The automatic memory-shape signal cannot always distinguish it from an
+  integrated carve-out.
 - **Widget is missing, misplaced or overlapping:** verify monitor, width and
   offset; reserve taskbar space or disable another element using the far-left
   area.
@@ -537,17 +539,9 @@ constexpr double kMemoryLabelWidth = 43.0;
 constexpr double kMemoryPercentWidth = 38.0;
 constexpr double kGraphHeight = 12.0;
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
-constexpr uint32_t kMaximumTaskbarViewHookAttempts = 3;
-constexpr uint32_t kMaximumUnknownPlacementProbeFailures = 3;
 constexpr auto kGadgetRegistryRescanInterval = std::chrono::seconds(30);
-constexpr auto kGadgetRegistryPartialRescanInterval =
-    std::chrono::seconds(5);
 constexpr auto kSharedMemoryRescanInterval = std::chrono::seconds(60);
-constexpr auto kSharedMemoryPartialRescanInterval = std::chrono::seconds(5);
-constexpr uint32_t kHwInfoFastPartialRescanLimit = 4;
-constexpr uint32_t kHwInfoCachedReadingFailureLimit = 2;
-constexpr auto kGpuAdapterCacheStaleGrace = std::chrono::minutes(5);
-constexpr uint32_t kGpuAdapterStaleFailureLimit = 5;
+constexpr auto kHwInfoUnavailableRetryInterval = std::chrono::seconds(5);
 constexpr wchar_t kDefaultGraphColor[] = L"#78A8FF";
 constexpr wchar_t kDefaultWarningColor[] = L"#FFFFB900";
 constexpr wchar_t kDefaultCriticalColor[] = L"#FFFF6B6B";
@@ -623,11 +617,10 @@ std::mutex g_settingsMutex;
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_uiTornDown;
 std::atomic<bool> g_taskbarViewDllLoaded;
-std::atomic<uint32_t> g_taskbarViewHookAttempts;
+std::atomic<bool> g_taskbarViewHookAttempted;
 std::atomic<HWND> g_taskbarWindow{nullptr};
 std::atomic<DWORD> g_taskbarThreadId{0};
 std::atomic<bool> g_placementApplyPending{false};
-std::atomic<bool> g_resetUnknownPlacementProbesPending{false};
 std::atomic<bool> g_taskbarUiResourcesRegistered{false};
 std::mutex g_placementRetryWorkerMutex;
 std::atomic<bool> g_stopPlacementRetryWorker{false};
@@ -645,18 +638,12 @@ double g_memoryBarWidth = 120.0;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 event_token g_timerToken{};
 event_token g_actualThemeChangedToken{};
-std::chrono::steady_clock::time_point g_nextSystemColorCheck{};
-std::chrono::steady_clock::time_point g_nextTaskbarPlacementCheck{};
 HWND g_lastFailedPlacementTarget = nullptr;
 bool g_hasFailedPlacementTarget = false;
 std::chrono::steady_clock::time_point g_nextPlacementRetry{};
 uint32_t g_placementFailures = 0;
 bool g_placementIsFallback = false;
 bool g_placementLocationUnknown = false;
-uint32_t g_unknownPlacementProbeFailures = 0;
-bool g_unknownPlacementProbesSuspended = false;
-uint64_t g_lastDisplayTopologyFingerprint = 0;
-bool g_hasDisplayTopologyFingerprint = false;
 [[clang::no_destroy]]
 std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
     std::in_place};
@@ -706,27 +693,14 @@ PDH_HCOUNTER g_sharedVramCounter = nullptr;
 PDH_HCOUNTER g_thermalZoneCounter = nullptr;
 std::chrono::steady_clock::time_point g_nextPdhCounterRetry{};
 std::chrono::steady_clock::time_point g_nextPdhRecovery{};
-std::chrono::steady_clock::time_point g_nextGpuIdentityCheck{};
 uint32_t g_consecutivePdhReadFailures = 0;
-uint32_t g_consecutivePdhEmptySamples = 0;
-uint32_t g_pdhEmptyRecoveries = 0;
-std::chrono::steady_clock::time_point g_nextPdhEmptyRecovery{};
 bool g_hwInfoInvalidUnitLogged = false;
 std::atomic<bool> g_hwInfoGpuAdapterMismatchLogged{false};
-
-struct HwInfoGadgetReadingIdentity {
-    std::wstring sensor;
-    std::wstring label;
-};
 
 struct HwInfoGadgetRegistryCache {
     std::optional<int> cpuIndex;
     std::optional<int> gpuIndex;
-    std::optional<HwInfoGadgetReadingIdentity> cpuIdentity;
-    std::optional<HwInfoGadgetReadingIdentity> gpuIdentity;
-    bool fullScanCompleted = false;
     std::chrono::steady_clock::time_point nextFullScan{};
-    uint32_t consecutivePartialScans = 0;
     std::wstring cpuFilter;
     std::wstring gpuFilter;
     std::wstring gpuAdapter;
@@ -1221,62 +1195,13 @@ static_assert(sizeof(HwInfoSensorPrefix) == 264);
 static_assert(offsetof(HwInfoReadingPrefix, value) == 284);
 static_assert(sizeof(HwInfoReadingPrefix) == 292);
 
-struct HwInfoLayoutKey {
-    uint32_t version = 0;
-    uint32_t revision = 0;
-    uint32_t sensorOffset = 0;
-    uint32_t sensorStride = 0;
-    uint32_t sensorCount = 0;
-    uint32_t readingOffset = 0;
-    uint32_t readingStride = 0;
-    uint32_t readingCount = 0;
-
-    bool operator==(const HwInfoLayoutKey&) const = default;
-};
-
-struct HwInfoReadingIdentity {
-    uint32_t sensorId = 0;
-    uint32_t sensorInstance = 0;
-    uint32_t readingId = 0;
-
-    bool operator==(const HwInfoReadingIdentity&) const = default;
-};
-
-HwInfoLayoutKey GetHwInfoLayoutKey(const HwInfoHeader& header) {
-    return {header.version,       header.revision,     header.sensorOffset,
-            header.sensorStride, header.sensorCount,  header.readingOffset,
-            header.readingStride, header.readingCount};
-}
-
-constexpr std::chrono::seconds GetHwInfoRescanInterval(
-    bool complete,
-    uint32_t& consecutivePartialScans,
-    std::chrono::seconds regularInterval,
-    std::chrono::seconds partialInterval) {
-    if (complete) {
-        consecutivePartialScans = 0;
-        return regularInterval;
-    }
-    if (consecutivePartialScans < kHwInfoFastPartialRescanLimit) {
-        consecutivePartialScans++;
-        return partialInterval;
-    }
-    return regularInterval;
-}
-
 struct HwInfoSharedMemoryCache {
     std::optional<uint32_t> cpuReadingIndex;
     std::optional<uint32_t> gpuReadingIndex;
-    std::optional<HwInfoReadingIdentity> cpuIdentity;
-    std::optional<HwInfoReadingIdentity> gpuIdentity;
     std::chrono::steady_clock::time_point nextFullScan{};
-    uint32_t consecutivePartialScans = 0;
-    uint32_t cpuInvalidSamples = 0;
-    uint32_t gpuInvalidSamples = 0;
     std::wstring cpuFilter;
     std::wstring gpuFilter;
     std::wstring gpuAdapter;
-    std::optional<HwInfoLayoutKey> layout;
 };
 
 struct HwInfoRawTemperatureReading {
@@ -1431,13 +1356,8 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                                 ? memoryInfo.RegionSize - viewOffset
                                 : 0;
         if (mappedSize >= sizeof(HwInfoHeader)) {
-            // HWiNFO updates this mapping in place. Snapshot the range metadata
-            // so every address below uses the same values that passed
-            // validation even when the shared mutex isn't accessible from
-            // Explorer.
             HwInfoHeader header{};
             std::memcpy(&header, view, sizeof(header));
-
             if (header.signature == kHwInfoSignature &&
                 IsRangeValid(mappedSize, header.sensorOffset,
                              header.sensorStride, header.sensorCount,
@@ -1446,39 +1366,20 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                              header.readingStride, header.readingCount,
                              sizeof(HwInfoReadingPrefix))) {
                 const auto* bytes = static_cast<const uint8_t*>(view);
-                HwInfoLayoutKey layout = GetHwInfoLayoutKey(header);
-                bool layoutChanged =
-                    !g_hwInfoSharedMemoryCache.layout ||
-                    *g_hwInfoSharedMemoryCache.layout != layout;
-                if (layoutChanged) {
-                    g_hwInfoSharedMemoryCache.cpuReadingIndex.reset();
-                    g_hwInfoSharedMemoryCache.gpuReadingIndex.reset();
-                    g_hwInfoSharedMemoryCache.cpuIdentity.reset();
-                    g_hwInfoSharedMemoryCache.gpuIdentity.reset();
-                    g_hwInfoSharedMemoryCache.nextFullScan = {};
-                    g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
-                    g_hwInfoSharedMemoryCache.cpuInvalidSamples = 0;
-                    g_hwInfoSharedMemoryCache.gpuInvalidSamples = 0;
-                    g_hwInfoSharedMemoryCache.layout = layout;
-                }
-
                 bool performFullScan =
                     g_hwInfoSharedMemoryCache.nextFullScan ==
                         std::chrono::steady_clock::time_point{} ||
                     now >= g_hwInfoSharedMemoryCache.nextFullScan;
+
                 auto copyCachedReading =
                     [&](std::optional<uint32_t>& cachedIndex,
-                        std::optional<HwInfoReadingIdentity>& cachedIdentity,
                         std::optional<HwInfoRawTemperatureReading>& output) {
                         if (!cachedIndex || performFullScan) {
                             return;
                         }
-                        if (!cachedIdentity ||
-                            *cachedIndex >= header.readingCount) {
+                        if (*cachedIndex >= header.readingCount) {
                             cachedIndex.reset();
-                            cachedIdentity.reset();
                             g_hwInfoSharedMemoryCache.nextFullScan = {};
-                            g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
                             performFullScan = true;
                             return;
                         }
@@ -1495,9 +1396,7 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                                 kHwInfoTemperatureType ||
                             raw.reading.sensorIndex >= header.sensorCount) {
                             cachedIndex.reset();
-                            cachedIdentity.reset();
                             g_hwInfoSharedMemoryCache.nextFullScan = {};
-                            g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
                             performFullScan = true;
                             return;
                         }
@@ -1507,27 +1406,14 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                                 header.sensorStride;
                         std::memcpy(&raw.sensor, sensorAddress,
                                     sizeof(raw.sensor));
-                        HwInfoReadingIdentity identity{
-                            raw.sensor.sensorId, raw.sensor.sensorInstance,
-                            raw.reading.readingId};
-                        if (identity != *cachedIdentity) {
-                            cachedIndex.reset();
-                            cachedIdentity.reset();
-                            g_hwInfoSharedMemoryCache.nextFullScan = {};
-                            g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
-                            performFullScan = true;
-                            return;
-                        }
                         output = raw;
                     };
 
                 copyCachedReading(
                     g_hwInfoSharedMemoryCache.cpuReadingIndex,
-                    g_hwInfoSharedMemoryCache.cpuIdentity,
                     cachedCpuReading);
                 copyCachedReading(
                     g_hwInfoSharedMemoryCache.gpuReadingIndex,
-                    g_hwInfoSharedMemoryCache.gpuIdentity,
                     cachedGpuReading);
 
                 if (performFullScan) {
@@ -1550,15 +1436,13 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                     }
                     fullScanCopied = true;
                 }
+
                 if (!mutexOwned) {
                     HwInfoHeader verificationHeader{};
                     std::memcpy(&verificationHeader, view,
                                 sizeof(verificationHeader));
                     if (std::memcmp(&header, &verificationHeader,
                                     sizeof(header)) != 0) {
-                        // Explorer can occasionally see the mapping without
-                        // access to HWiNFO's mutex. Discard a snapshot whose
-                        // generation changed while the raw records were copied.
                         sensors.clear();
                         readings.clear();
                         cachedCpuReading.reset();
@@ -1634,36 +1518,15 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
 
         g_hwInfoSharedMemoryCache.cpuReadingIndex = bestCpuIndex;
         g_hwInfoSharedMemoryCache.gpuReadingIndex = bestGpuIndex;
-        auto getIdentity =
-            [&](const std::optional<uint32_t>& index)
-            -> std::optional<HwInfoReadingIdentity> {
-            if (!index || *index >= readings.size()) {
-                return std::nullopt;
-            }
-            const HwInfoReadingPrefix& reading = readings[*index];
-            if (reading.sensorIndex >= sensors.size()) {
-                return std::nullopt;
-            }
-            const HwInfoSensorPrefix& sensor = sensors[reading.sensorIndex];
-            return HwInfoReadingIdentity{sensor.sensorId, sensor.sensorInstance,
-                                         reading.readingId};
-        };
-        g_hwInfoSharedMemoryCache.cpuIdentity = getIdentity(bestCpuIndex);
-        g_hwInfoSharedMemoryCache.gpuIdentity = getIdentity(bestGpuIndex);
-        g_hwInfoSharedMemoryCache.cpuInvalidSamples = 0;
-        g_hwInfoSharedMemoryCache.gpuInvalidSamples = 0;
+        bool anyReadingFound = bestCpuIndex || bestGpuIndex;
         g_hwInfoSharedMemoryCache.nextFullScan =
-            now + GetHwInfoRescanInterval(
-                      bestCpuIndex && bestGpuIndex,
-                      g_hwInfoSharedMemoryCache.consecutivePartialScans,
-                      kSharedMemoryRescanInterval,
-                      kSharedMemoryPartialRescanInterval);
+            now + (anyReadingFound
+                       ? kSharedMemoryRescanInterval
+                       : kHwInfoUnavailableRetryInterval);
     } else {
         auto applyCachedReading =
             [&](const std::optional<HwInfoRawTemperatureReading>& raw,
-                std::optional<uint32_t>& cachedIndex,
-                std::optional<HwInfoReadingIdentity>& cachedIdentity,
-                uint32_t& invalidSamples, bool cpu) {
+                std::optional<uint32_t>& cachedIndex, bool cpu) {
                 if (!raw) {
                     return;
                 }
@@ -1688,27 +1551,17 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
                                       gpuAdapterName);
                 if (score < 0) {
                     cachedIndex.reset();
-                    cachedIdentity.reset();
-                    invalidSamples = 0;
                     g_hwInfoSharedMemoryCache.nextFullScan = {};
-                    g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
                     return;
                 }
 
                 auto value = NormalizeHwInfoTemperature(
                     reading.value, reading.unit, std::size(reading.unit));
                 if (!value) {
-                    if (++invalidSamples >=
-                        kHwInfoCachedReadingFailureLimit) {
-                        cachedIndex.reset();
-                        cachedIdentity.reset();
-                        invalidSamples = 0;
-                        g_hwInfoSharedMemoryCache.nextFullScan = {};
-                        g_hwInfoSharedMemoryCache.consecutivePartialScans = 0;
-                    }
+                    cachedIndex.reset();
+                    g_hwInfoSharedMemoryCache.nextFullScan = {};
                     return;
                 }
-                invalidSamples = 0;
                 sawSupportedTemperatureUnit = true;
 
                 if (cpu) {
@@ -1724,12 +1577,10 @@ void ReadHwInfoSharedMemory(MetricsSnapshot& snapshot,
 
         applyCachedReading(cachedCpuReading,
                            g_hwInfoSharedMemoryCache.cpuReadingIndex,
-                           g_hwInfoSharedMemoryCache.cpuIdentity,
-                           g_hwInfoSharedMemoryCache.cpuInvalidSamples, true);
+                           true);
         applyCachedReading(cachedGpuReading,
                            g_hwInfoSharedMemoryCache.gpuReadingIndex,
-                           g_hwInfoSharedMemoryCache.gpuIdentity,
-                           g_hwInfoSharedMemoryCache.gpuInvalidSamples, false);
+                           false);
     }
 
     if (sawTemperatureReading && !sawSupportedTemperatureUnit &&
@@ -1821,59 +1672,30 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     auto now = std::chrono::steady_clock::now();
     bool needsCpu = !snapshot.cpuTemp;
     bool needsGpu = !snapshot.gpuTemp;
-    bool hasCachedCandidate =
-        (needsCpu && g_hwInfoGadgetRegistryCache.cpuIndex) ||
-        (needsGpu && g_hwInfoGadgetRegistryCache.gpuIndex);
-    if (!hasCachedCandidate &&
-        g_hwInfoGadgetRegistryCache.fullScanCompleted &&
-        now < g_hwInfoGadgetRegistryCache.nextFullScan) {
-        return;
-    }
+    bool performFullScan =
+        g_hwInfoGadgetRegistryCache.nextFullScan ==
+            std::chrono::steady_clock::time_point{} ||
+        now >= g_hwInfoGadgetRegistryCache.nextFullScan;
 
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\HWiNFO64\\VSB", 0,
                       KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
         g_hwInfoGadgetRegistryCache.cpuIndex.reset();
         g_hwInfoGadgetRegistryCache.gpuIndex.reset();
-        g_hwInfoGadgetRegistryCache.cpuIdentity.reset();
-        g_hwInfoGadgetRegistryCache.gpuIdentity.reset();
-        g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
         g_hwInfoGadgetRegistryCache.nextFullScan =
-            now + GetHwInfoRescanInterval(
-                      false,
-                      g_hwInfoGadgetRegistryCache.consecutivePartialScans,
-                      kGadgetRegistryRescanInterval,
-                      kGadgetRegistryPartialRescanInterval);
+            now + kHwInfoUnavailableRetryInterval;
         return;
     }
 
     auto readCached =
-        [&](std::optional<int>& cachedIndex,
-            std::optional<HwInfoGadgetReadingIdentity>& cachedIdentity,
-            bool cpu, bool needed) {
-        if (!needed || !cachedIndex) {
-            return;
-        }
-        if (!cachedIdentity) {
-            cachedIndex.reset();
-            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
-            g_hwInfoGadgetRegistryCache.consecutivePartialScans = 0;
+        [&](std::optional<int>& cachedIndex, bool cpu, bool needed) {
+        if (!needed || !cachedIndex || performFullScan) {
             return;
         }
         auto reading = ReadHwInfoGadgetReading(key, *cachedIndex);
         if (!reading) {
             cachedIndex.reset();
-            cachedIdentity.reset();
-            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
-            g_hwInfoGadgetRegistryCache.consecutivePartialScans = 0;
-            return;
-        }
-        if (reading->sensor != cachedIdentity->sensor ||
-            reading->label != cachedIdentity->label) {
-            cachedIndex.reset();
-            cachedIdentity.reset();
-            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
-            g_hwInfoGadgetRegistryCache.consecutivePartialScans = 0;
+            performFullScan = true;
             return;
         }
 
@@ -1886,9 +1708,7 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
                                               gpuAdapterName);
         if (score < 0) {
             cachedIndex.reset();
-            cachedIdentity.reset();
-            g_hwInfoGadgetRegistryCache.fullScanCompleted = false;
-            g_hwInfoGadgetRegistryCache.consecutivePartialScans = 0;
+            performFullScan = true;
             return;
         }
 
@@ -1903,17 +1723,9 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
         }
     };
 
-    readCached(g_hwInfoGadgetRegistryCache.cpuIndex,
-               g_hwInfoGadgetRegistryCache.cpuIdentity, true, needsCpu);
-    readCached(g_hwInfoGadgetRegistryCache.gpuIndex,
-               g_hwInfoGadgetRegistryCache.gpuIdentity, false, needsGpu);
-    if (snapshot.cpuTemp && snapshot.gpuTemp &&
-        now < g_hwInfoGadgetRegistryCache.nextFullScan) {
-        RegCloseKey(key);
-        return;
-    }
-    if (g_hwInfoGadgetRegistryCache.fullScanCompleted &&
-        now < g_hwInfoGadgetRegistryCache.nextFullScan) {
+    readCached(g_hwInfoGadgetRegistryCache.cpuIndex, true, needsCpu);
+    readCached(g_hwInfoGadgetRegistryCache.gpuIndex, false, needsGpu);
+    if (!performFullScan) {
         RegCloseKey(key);
         return;
     }
@@ -1924,8 +1736,6 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
     std::optional<int> bestGpuIndex;
     std::optional<double> bestCpuValue;
     std::optional<double> bestGpuValue;
-    std::optional<HwInfoGadgetReadingIdentity> bestCpuIdentity;
-    std::optional<HwInfoGadgetReadingIdentity> bestGpuIdentity;
     int consecutiveMissing = 0;
     for (int i = 0; i < 1024; i++) {
         std::wstring suffix = std::to_wstring(i);
@@ -1957,7 +1767,6 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
             bestCpuScore = cpuScore;
             bestCpuIndex = i;
             bestCpuValue = *value;
-            bestCpuIdentity = HwInfoGadgetReadingIdentity{*sensor, *label};
         }
 
         int gpuScore =
@@ -1967,22 +1776,17 @@ void ReadHwInfoGadgetRegistry(MetricsSnapshot& snapshot,
             bestGpuScore = gpuScore;
             bestGpuIndex = i;
             bestGpuValue = *value;
-            bestGpuIdentity = HwInfoGadgetReadingIdentity{*sensor, *label};
         }
     }
 
     RegCloseKey(key);
     g_hwInfoGadgetRegistryCache.cpuIndex = bestCpuIndex;
     g_hwInfoGadgetRegistryCache.gpuIndex = bestGpuIndex;
-    g_hwInfoGadgetRegistryCache.cpuIdentity = std::move(bestCpuIdentity);
-    g_hwInfoGadgetRegistryCache.gpuIdentity = std::move(bestGpuIdentity);
-    g_hwInfoGadgetRegistryCache.fullScanCompleted = true;
+    bool anyReadingFound = bestCpuIndex || bestGpuIndex;
     g_hwInfoGadgetRegistryCache.nextFullScan =
-        now + GetHwInfoRescanInterval(
-                  bestCpuIndex && bestGpuIndex,
-                  g_hwInfoGadgetRegistryCache.consecutivePartialScans,
-                  kGadgetRegistryRescanInterval,
-                  kGadgetRegistryPartialRescanInterval);
+        now + (anyReadingFound
+                   ? kGadgetRegistryRescanInterval
+                   : kHwInfoUnavailableRetryInterval);
 
     if (!snapshot.cpuTemp && bestCpuValue) {
         snapshot.cpuTemp = *bestCpuValue;
@@ -2246,13 +2050,12 @@ std::optional<std::wstring> g_cachedGpuAdapterFilter;
 std::optional<GpuAdapterInfo> g_cachedGpuAdapterInfo;
 bool g_cachedGpuAdapterResolved = false;
 std::chrono::steady_clock::time_point g_nextGpuAdapterResolve{};
-std::chrono::steady_clock::time_point g_lastSuccessfulGpuAdapterResolve{};
-uint32_t g_gpuAdapterResolveFailures = 0;
+std::optional<std::wstring> g_lastResolvedGpuAdapterFilter;
+std::optional<LUID> g_lastResolvedGpuAdapterLuid;
+bool g_gpuAdapterIdentityChanged = false;
+bool g_hasResolvedGpuAdapterIdentity = false;
 D3DKMT_HANDLE g_cachedD3dkmtAdapterHandle = 0;
 LUID g_cachedD3dkmtAdapterLuid{};
-uint32_t g_unchangedGpuIdentityChecks = 0;
-uint32_t g_consecutiveD3dkmtFailures = 0;
-std::chrono::steady_clock::time_point g_nextD3dkmtRecovery{};
 
 bool SameLuid(const LUID& left, const LUID& right) {
     return left.HighPart == right.HighPart && left.LowPart == right.LowPart;
@@ -2273,12 +2076,6 @@ void InvalidateGpuAdapterCache() {
     g_cachedGpuAdapterInfo.reset();
     g_cachedGpuAdapterResolved = false;
     g_nextGpuAdapterResolve = {};
-    g_lastSuccessfulGpuAdapterResolve = {};
-    g_gpuAdapterResolveFailures = 0;
-    g_nextGpuIdentityCheck = {};
-    g_unchangedGpuIdentityChecks = 0;
-    g_consecutiveD3dkmtFailures = 0;
-    g_nextD3dkmtRecovery = {};
 }
 
 std::wstring FormatAdapterLuid(const LUID& luid) {
@@ -2468,13 +2265,6 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
     if (g_cachedGpuAdapterFilter &&
         *g_cachedGpuAdapterFilter != filterLower) {
         CloseCachedD3dkmtAdapterHandle();
-        g_cachedGpuAdapterInfo.reset();
-        g_cachedGpuAdapterResolved = false;
-        g_nextGpuAdapterResolve = {};
-        g_lastSuccessfulGpuAdapterResolve = {};
-        g_gpuAdapterResolveFailures = 0;
-        g_nextGpuIdentityCheck = {};
-        g_unchangedGpuIdentityChecks = 0;
     } else {
         previousAdapter = g_cachedGpuAdapterInfo;
     }
@@ -2485,25 +2275,10 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
     g_cachedGpuAdapterResolved = true;
 
     if (!resolvedAdapter) {
-        uint32_t exponent =
-            std::min<uint32_t>(g_gpuAdapterResolveFailures, 6);
-        auto delay = std::min(std::chrono::seconds(5u << exponent),
-                              std::chrono::seconds(300));
-        g_gpuAdapterResolveFailures++;
-        g_nextGpuAdapterResolve = now + delay;
-        bool previousAdapterIsFresh =
-            previousAdapter &&
-            g_lastSuccessfulGpuAdapterResolve !=
-                std::chrono::steady_clock::time_point{} &&
-            now - g_lastSuccessfulGpuAdapterResolve <=
-                kGpuAdapterCacheStaleGrace &&
-            g_gpuAdapterResolveFailures <= kGpuAdapterStaleFailureLimit;
-        if (!previousAdapterIsFresh) {
-            CloseCachedD3dkmtAdapterHandle();
-            previousAdapter.reset();
-        }
-        g_cachedGpuAdapterInfo = previousAdapter;
-        if (!previousAdapter && g_gpuAdapterResolveFailures == 1) {
+        CloseCachedD3dkmtAdapterHandle();
+        g_cachedGpuAdapterInfo.reset();
+        g_nextGpuAdapterResolve = now + std::chrono::seconds(5);
+        if (!previousAdapter) {
             if (filterLower.empty()) {
                 Wh_Log(L"No GPU adapter found; retrying automatically");
             } else {
@@ -2511,7 +2286,7 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
                        filterLower.c_str());
             }
         }
-        return previousAdapter;
+        return std::nullopt;
     }
 
     bool adapterChanged =
@@ -2525,9 +2300,19 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
         !SameLuid(previousAdapter->luidValue, resolvedAdapter->luidValue)) {
         CloseCachedD3dkmtAdapterHandle();
     }
+    if (g_lastResolvedGpuAdapterLuid && g_lastResolvedGpuAdapterFilter &&
+        *g_lastResolvedGpuAdapterFilter == filterLower &&
+        !SameLuid(*g_lastResolvedGpuAdapterLuid,
+                  resolvedAdapter->luidValue)) {
+        // A driver restart can preserve the adapter name while assigning a new
+        // LUID. Existing PDH wildcard counters may keep the old instances, so
+        // request one rebuild when the normal adapter refresh confirms it.
+        g_gpuAdapterIdentityChanged = true;
+    }
+    g_lastResolvedGpuAdapterFilter = filterLower;
+    g_lastResolvedGpuAdapterLuid = resolvedAdapter->luidValue;
+    g_hasResolvedGpuAdapterIdentity = true;
     g_cachedGpuAdapterInfo = std::move(resolvedAdapter);
-    g_lastSuccessfulGpuAdapterResolve = now;
-    g_gpuAdapterResolveFailures = 0;
     g_nextGpuAdapterResolve = now + std::chrono::seconds(60);
 
     if (!adapterChanged) {
@@ -2545,58 +2330,22 @@ std::optional<GpuAdapterInfo> GetGpuAdapterInfo(
     return g_cachedGpuAdapterInfo;
 }
 
-void RecordD3dkmtAdapterFailure() {
-    CloseCachedD3dkmtAdapterHandle();
-    g_consecutiveD3dkmtFailures =
-        std::min(g_consecutiveD3dkmtFailures + 1, 3u);
-    auto now = std::chrono::steady_clock::now();
-    if (g_consecutiveD3dkmtFailures < 3 || now < g_nextD3dkmtRecovery) {
-        return;
-    }
-    g_cachedGpuAdapterResolved = false;
-    g_nextGpuAdapterResolve = {};
-    g_nextD3dkmtRecovery = now + std::chrono::seconds(30);
-    g_consecutiveD3dkmtFailures = 0;
-}
-
 std::optional<std::wstring> ResolveGpuTemperatureAdapterName(
     const ModSettings& settings) {
     auto adapter = GetGpuAdapterInfo(settings.gpuAdapter);
     if (adapter) {
         return adapter->description;
     }
-    if (settings.gpuAdapter.empty()) {
-        // Preserve generic HWiNFO matching on systems where Windows adapter
-        // identity isn't available at all. An explicit filter miss is different
-        // and intentionally returns nullopt so another GPU isn't shown.
+    if (settings.gpuAdapter.empty() && !g_hasResolvedGpuAdapterIdentity) {
+        // Preserve HWiNFO-only operation when Windows adapter enumeration has
+        // never been available. Once an adapter was resolved, a later failure
+        // is treated as transient to avoid selecting another GPU.
         return std::wstring{};
     }
+    // Without a resolved Windows adapter identity, generic HWiNFO matching can
+    // select another GPU on multi-adapter systems. Leave the temperature
+    // unavailable until the short adapter retry succeeds instead.
     return std::nullopt;
-}
-
-bool HasGpuAdapterIdentityChanged(const GpuAdapterInfo& cachedAdapter,
-                                  const std::wstring& adapterFilter) {
-    auto now = std::chrono::steady_clock::now();
-    if (now < g_nextGpuIdentityCheck) {
-        return false;
-    }
-    auto currentAdapter =
-        ResolveCurrentGpuAdapterInfo(ToLower(adapterFilter));
-    if (currentAdapter && currentAdapter->luid != cachedAdapter.luid) {
-        g_unchangedGpuIdentityChecks = 0;
-        g_nextGpuIdentityCheck = {};
-        return true;
-    }
-
-    // A parked or power-gated discrete GPU can temporarily resolve through a
-    // different enumeration path. Back off repeated identity probes while the
-    // cached adapter remains valid instead of re-enumerating every five seconds.
-    uint32_t exponent = std::min<uint32_t>(g_unchangedGpuIdentityChecks, 6);
-    auto delay = std::min(std::chrono::seconds(5u << exponent),
-                          std::chrono::seconds(300));
-    g_unchangedGpuIdentityChecks++;
-    g_nextGpuIdentityCheck = now + delay;
-    return false;
 }
 
 std::optional<D3DKMT_HANDLE> GetD3dkmtAdapterHandle(
@@ -2611,7 +2360,7 @@ std::optional<D3DKMT_HANDLE> GetD3dkmtAdapterHandle(
     openAdapter.AdapterLuid = adapter.luidValue;
     if (g_d3dkmtOpenAdapterFromLuid(&openAdapter) != 0 ||
         !openAdapter.hAdapter) {
-        RecordD3dkmtAdapterFailure();
+        InvalidateGpuAdapterCache();
         return std::nullopt;
     }
     g_cachedD3dkmtAdapterHandle = openAdapter.hAdapter;
@@ -2646,11 +2395,8 @@ void ReadWindowsGpuTemperature(MetricsSnapshot& snapshot,
     LONG status = g_d3dkmtQueryAdapterInfo(&queryInfo);
     if (status != 0) {
         // A driver restart can invalidate both the KMT handle and its LUID.
-        // Re-resolve the adapter after a bounded number of failures.
-        RecordD3dkmtAdapterFailure();
-    } else {
-        g_consecutiveD3dkmtFailures = 0;
-        g_nextD3dkmtRecovery = {};
+        // Drop the cached identity and let the next sample resolve it again.
+        InvalidateGpuAdapterCache();
     }
 
     // The driver reports tenths of a degree Celsius. Zero means unavailable;
@@ -2673,7 +2419,7 @@ void CloseMetricSources();
 
 constexpr auto kPdhCounterRetryInterval = std::chrono::seconds(30);
 constexpr auto kPdhRecoveryRetryDelay = std::chrono::seconds(1);
-constexpr auto kPdhRecoveryCooldown = std::chrono::seconds(30);
+constexpr auto kPdhRecoveryCooldown = std::chrono::seconds(60);
 constexpr uint32_t kPdhReadFailureThreshold = 3;
 
 void ClosePdhQuery() {
@@ -2701,7 +2447,6 @@ void RecreatePdhSources(PCWSTR reason,
     ClosePdhQuery();
     InvalidateGpuAdapterCache();
     g_consecutivePdhReadFailures = 0;
-    g_consecutivePdhEmptySamples = 0;
     g_nextPdhCounterRetry = now + kPdhRecoveryRetryDelay;
     g_nextPdhRecovery = now + kPdhRecoveryCooldown;
 }
@@ -2721,36 +2466,12 @@ void RecordPdhReadFailure(PCWSTR reason,
     RecreatePdhSources(reason, status, now);
 }
 
-void RecoverFromGpuAdapterIdentityChange() {
+void RecoverFromMissingGpuSample(PDH_STATUS status) {
     auto now = std::chrono::steady_clock::now();
     if (now < g_nextPdhRecovery) {
         return;
     }
-    RecreatePdhSources(L"confirmed adapter LUID change", ERROR_SUCCESS, now);
-}
-
-void RecordPdhEmptyAdapterSample(PDH_STATUS status) {
-    g_consecutivePdhReadFailures = 0;
-    g_consecutivePdhEmptySamples =
-        std::min(g_consecutivePdhEmptySamples + 1, 3u);
-    auto now = std::chrono::steady_clock::now();
-    if (g_consecutivePdhEmptySamples < 3 ||
-        now < g_nextPdhEmptyRecovery) {
-        return;
-    }
-
-    uint32_t exponent = std::min<uint32_t>(g_pdhEmptyRecoveries, 4);
-    auto delay = std::min(std::chrono::seconds(30u << exponent),
-                          std::chrono::seconds(300));
     RecreatePdhSources(L"missing adapter VRAM sample", status, now);
-    g_pdhEmptyRecoveries++;
-    g_nextPdhEmptyRecovery = now + delay;
-}
-
-void ResetPdhEmptyAdapterRecovery() {
-    g_consecutivePdhEmptySamples = 0;
-    g_pdhEmptyRecoveries = 0;
-    g_nextPdhEmptyRecovery = {};
 }
 
 void RecordPdhReadSuccess() {
@@ -2959,7 +2680,9 @@ void ReadWindowsThermalZones(MetricsSnapshot& snapshot,
 
 std::optional<double> ReadGpuUsage(
     const std::optional<GpuAdapterInfo>& adapter,
-    PDH_STATUS& readStatus) {
+    PDH_STATUS& readStatus,
+    bool& adapterInstanceFound) {
+    adapterInstanceFound = false;
     std::vector<uint8_t> buffer;
     DWORD itemCount = 0;
     readStatus = ReadPdhArray(g_gpuCounter, buffer, itemCount);
@@ -2985,6 +2708,7 @@ std::optional<double> ReadGpuUsage(
         if (!MatchesGpuAdapter(instance, adapter)) {
             continue;
         }
+        adapterInstanceFound = true;
         size_t luidPosition = instance.find(L"luid_");
         std::wstring engineKey =
             luidPosition == std::wstring::npos ? instance
@@ -3001,8 +2725,7 @@ std::optional<double> ReadGpuUsage(
         return std::clamp(busiestEngine, 0.0, 100.0);
     }
     // A power-gated discrete GPU legitimately has no engine instances while an
-    // integrated adapter is active. Adapter identity recovery is handled from
-    // the memory counter below, so an otherwise healthy array means idle here.
+    // integrated adapter is active, so an otherwise healthy array means idle.
     return 0.0;
 }
 
@@ -3058,47 +2781,12 @@ bool LooksLikeIntegratedGpu(const GpuAdapterInfo& adapter) {
         return true;
     }
 
-    // Some WDDM drivers don't set HybridIntegrated for newer integrated parts
-    // such as Radeon 890M or Intel Arc iGPUs. Require both the characteristic
-    // memory shape and an integrated-family name so an old low-memory discrete
-    // adapter isn't silently switched to the shared-memory pool.
+    // Some WDDM drivers don't set HybridIntegrated. A small hardware carve-out
+    // plus a larger shared pool is the stable signal; the explicit setting is
+    // available for unusual adapters instead of maintaining a GPU name list.
     constexpr uint64_t kMaximumIntegratedCarveout = 512ull * 1024 * 1024;
-    if (adapter.dedicatedVideoMemory > kMaximumIntegratedCarveout ||
-        adapter.sharedSystemMemory == 0) {
-        return false;
-    }
-
-    std::wstring name = NormalizeAdapterIdentity(adapter.description);
-    bool radeonIntegratedModel = false;
-    if (Contains(name, L"radeon") && !Contains(name, L"radeon hd")) {
-        auto tokens = IdentityTokens(name);
-        for (size_t i = 0; i < tokens.size(); i++) {
-            const std::wstring& token = tokens[i];
-            bool hasModelSuffix = token.size() > 1 &&
-                                  (token.back() == L'm' ||
-                                   token.back() == L's') &&
-                                  std::all_of(
-                                      token.begin(), token.end() - 1,
-                                      [](wchar_t character) {
-                                          return std::iswdigit(character) != 0;
-                                      });
-            bool followedByGraphics =
-                HasDigit(token) && i + 1 < tokens.size() &&
-                tokens[i + 1] == L"graphics";
-            if (hasModelSuffix || followedByGraphics) {
-                radeonIntegratedModel = true;
-                break;
-            }
-        }
-    }
-
-    bool intelArc = Contains(name, L"intel") && Contains(name, L"arc");
-    return Contains(name, L"uhd graphics") ||
-           (Contains(name, L"intel") && Contains(name, L"hd graphics")) ||
-           Contains(name, L"iris") ||
-           Contains(name, L"radeon graphics") || Contains(name, L"vega") ||
-           Contains(name, L"integrated") || radeonIntegratedModel ||
-           intelArc;
+    return adapter.dedicatedVideoMemory <= kMaximumIntegratedCarveout &&
+           adapter.sharedSystemMemory > adapter.dedicatedVideoMemory;
 }
 
 bool UseSharedGpuMemory(const GpuAdapterInfo& adapter,
@@ -3144,11 +2832,17 @@ bool ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
     }
 
     auto adapter = GetGpuAdapterInfo(settings.gpuAdapter);
-    bool explicitAdapterMissing = !settings.gpuAdapter.empty() && !adapter;
+    if (std::exchange(g_gpuAdapterIdentityChanged, false)) {
+        RecreatePdhSources(L"confirmed GPU adapter LUID change", ERROR_SUCCESS,
+                           std::chrono::steady_clock::now());
+        return false;
+    }
     PDH_STATUS gpuReadStatus = ERROR_SUCCESS;
-    auto gpuUsage = explicitAdapterMissing
-                        ? std::optional<double>{}
-                        : ReadGpuUsage(adapter, gpuReadStatus);
+    bool gpuAdapterInstanceFound = false;
+    auto gpuUsage = adapter
+                        ? ReadGpuUsage(adapter, gpuReadStatus,
+                                       gpuAdapterInstanceFound)
+                        : std::optional<double>{};
     if (gpuUsage) {
         snapshot.gpu = *gpuUsage;
         snapshot.gpuAvailable = true;
@@ -3179,25 +2873,14 @@ bool ReadPdhMetrics(MetricsSnapshot& snapshot, const ModSettings& settings) {
     bool hardReadFailure =
         (g_gpuCounter && IsHardPdhArrayFailure(gpuReadStatus)) ||
         (vramCounter && IsHardPdhArrayFailure(vramReadStatus));
-    bool adapterSampleMissing = adapter && vramCounter && vramTotalBytes > 0 &&
-                                !vramAvailable &&
-                                IsSoftPdhArrayAbsence(vramReadStatus);
-    bool adapterIdentityChanged =
-        adapterSampleMissing &&
-        HasGpuAdapterIdentityChanged(*adapter, settings.gpuAdapter);
-    if (!adapterSampleMissing) {
-        // A healthy matching sample should make the next future mismatch probe
-        // immediately instead of inheriting an old parked-GPU backoff window.
-        g_unchangedGpuIdentityChecks = 0;
-        g_nextGpuIdentityCheck = {};
-        ResetPdhEmptyAdapterRecovery();
-    }
+    bool adapterSampleMissing = adapter && gpuAdapterInstanceFound &&
+                                 vramCounter && vramTotalBytes > 0 &&
+                                 !vramAvailable &&
+                                 IsSoftPdhArrayAbsence(vramReadStatus);
     if (hardReadFailure) {
         RecordPdhReadFailure(L"counter read");
-    } else if (adapterIdentityChanged) {
-        RecoverFromGpuAdapterIdentityChange();
     } else if (adapterSampleMissing) {
-        RecordPdhEmptyAdapterSample(vramReadStatus);
+        RecoverFromMissingGpuSample(vramReadStatus);
     } else {
         RecordPdhReadSuccess();
     }
@@ -3232,43 +2915,6 @@ PCWSTR TemperatureProviderName(TemperatureProvider provider) {
         default:
             return L"unavailable";
     }
-}
-
-constexpr uint32_t kTemperatureHoldoverSamples = 2;
-
-struct TemperatureHoldover {
-    std::optional<double> value;
-    TemperatureProvider provider = TemperatureProvider::None;
-    std::chrono::steady_clock::time_point capturedAt{};
-    uint32_t missedSamples = 0;
-};
-
-void ApplyTemperatureHoldover(std::optional<double>& value,
-                              TemperatureProvider& provider,
-                              TemperatureHoldover& holdover,
-                              const ModSettings& settings) {
-    auto now = std::chrono::steady_clock::now();
-    if (value) {
-        holdover.value = value;
-        holdover.provider = provider;
-        holdover.capturedAt = now;
-        holdover.missedSamples = 0;
-        return;
-    }
-
-    auto maximumAge = std::chrono::seconds(
-        settings.updateInterval * kTemperatureHoldoverSamples + 1);
-    if (settings.temperatureSource != TemperatureSource::Disabled &&
-        holdover.value &&
-        holdover.missedSamples < kTemperatureHoldoverSamples &&
-        now - holdover.capturedAt <= maximumAge) {
-        value = holdover.value;
-        provider = holdover.provider;
-        holdover.missedSamples++;
-        return;
-    }
-
-    holdover = {};
 }
 
 void PublishMetrics(MetricsSnapshot snapshot) {
@@ -3308,8 +2954,6 @@ void MetricsWorkerProc() {
     bool providersLogged = false;
     TemperatureProvider lastCpuProvider = TemperatureProvider::None;
     TemperatureProvider lastGpuProvider = TemperatureProvider::None;
-    TemperatureHoldover cpuTemperatureHoldover;
-    TemperatureHoldover gpuTemperatureHoldover;
     while (!g_stopMetricsWorker) {
         auto settings = CurrentSettings();
         DWORD waitMilliseconds =
@@ -3339,10 +2983,7 @@ void MetricsWorkerProc() {
             settings = CurrentSettings();
             ReadCpuUsage();
             InvalidateGpuAdapterCache();
-            ResetPdhEmptyAdapterRecovery();
             EnsurePdhQuery(*settings);
-            cpuTemperatureHoldover = {};
-            gpuTemperatureHoldover = {};
             continue;
         } else {
             waitFailureLogged = false;
@@ -3353,12 +2994,6 @@ void MetricsWorkerProc() {
         if (!snapshot) {
             continue;
         }
-        ApplyTemperatureHoldover(snapshot->cpuTemp,
-                                 snapshot->cpuTempProvider,
-                                 cpuTemperatureHoldover, *settings);
-        ApplyTemperatureHoldover(snapshot->gpuTemp,
-                                 snapshot->gpuTempProvider,
-                                 gpuTemperatureHoldover, *settings);
         if (!providersLogged ||
             snapshot->cpuTempProvider != lastCpuProvider ||
             snapshot->gpuTempProvider != lastGpuProvider) {
@@ -4074,6 +3709,7 @@ void UpdateWidgetText(bool force = false) {
         UpdateSparkline(g_cpuGraph, g_cpuHistory, historyCapacity);
         UpdateSparkline(g_gpuGraph, g_gpuHistory, historyCapacity);
         g_lastRenderedMetricsSequence = metricsSequence;
+        UpdateTimerInterval();
     }
     UpdateMemoryBar(g_ramFill, snapshot.ram, snapshot.ramAvailable, g_ramAlert);
     UpdateMemoryBar(g_vramFill, snapshot.vram, snapshot.vramAvailable,
@@ -4086,7 +3722,9 @@ void UpdateTimerInterval() {
     if (!g_timer) {
         return;
     }
-    auto interval = std::chrono::milliseconds(g_widget ? 250 : 1000);
+    auto interval = g_widget && !g_lastRenderedMetricsSequence
+                        ? std::chrono::milliseconds(250)
+                        : std::chrono::milliseconds(1000);
     if (g_timer.Interval() != interval) {
         g_timer.Interval(interval);
     }
@@ -4105,27 +3743,17 @@ void EnsureTimer() {
     g_timer = DispatcherTimer();
     g_taskbarUiResourcesRegistered = true;
     UpdateTimerInterval();
-    auto now = std::chrono::steady_clock::now();
-    g_nextSystemColorCheck = now + std::chrono::seconds(1);
-    g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
     g_timerToken = g_timer.Tick([](IInspectable const&, IInspectable const&) {
         try {
             if (g_unloading) {
                 return;
             }
             bool force = false;
-            auto now = std::chrono::steady_clock::now();
-            if (g_widget && now >= g_nextSystemColorCheck) {
-                g_nextSystemColorCheck = now + std::chrono::seconds(1);
-                if (SystemColorsChanged()) {
-                    RefreshThemeBrushes(*CurrentSettings());
-                    force = true;
-                }
+            if (g_widget && SystemColorsChanged()) {
+                RefreshThemeBrushes(*CurrentSettings());
+                force = true;
             }
-            if (now >= g_nextTaskbarPlacementCheck) {
-                g_nextTaskbarPlacementCheck = now + std::chrono::seconds(1);
-                EnsureConfiguredTaskbarPlacement();
-            }
+            EnsureConfiguredTaskbarPlacement();
             UpdateWidgetText(force);
         } catch (...) {
             HRESULT error = winrt::to_hresult();
@@ -4155,8 +3783,6 @@ bool StopTimer() {
         g_timer = nullptr;
         g_timerToken = {};
     }
-    g_nextSystemColorCheck = {};
-    g_nextTaskbarPlacementCheck = {};
     return true;
 }
 
@@ -4294,8 +3920,6 @@ Grid CreateMemoryRow(PCWSTR label,
 }
 
 bool RemoveWidget() {
-    g_nextSystemColorCheck = {};
-
     if (g_widget && g_actualThemeChangedToken.value) {
         try {
             g_widget.ActualThemeChanged(g_actualThemeChangedToken);
@@ -4508,25 +4132,20 @@ using RunFromWindowThreadProc = void (*)(void*);
 
 struct WindowThreadCallbackContext {
     RunFromWindowThreadProc callback;
-    std::shared_ptr<void> context;
+    void* context;
     std::atomic<bool> invoked{false};
-
-    WindowThreadCallbackContext(RunFromWindowThreadProc callbackValue,
-                                std::shared_ptr<void> contextValue)
-        : callback(callbackValue), context(std::move(contextValue)) {}
 };
 
-std::mutex g_windowThreadDispatchMutex;
 std::mutex g_windowThreadCallbackRegistryMutex;
 [[clang::no_destroy]]
-std::optional<std::unordered_map<
-    ULONG_PTR, std::shared_ptr<WindowThreadCallbackContext>>>
+std::optional<
+    std::unordered_map<ULONG_PTR, WindowThreadCallbackContext*>>
     g_windowThreadCallbackRegistry{std::in_place};
 std::atomic<ULONG_PTR> g_nextWindowThreadCallbackToken{1};
 
 bool RunFromWindowThread(HWND window,
                          RunFromWindowThreadProc callback,
-                         std::shared_ptr<void> context) {
+                         void* context) {
     static const UINT message =
         RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
@@ -4534,24 +4153,24 @@ bool RunFromWindowThread(HWND window,
         return false;
     }
     if (threadId == GetCurrentThreadId()) {
-        callback(context.get());
+        callback(context);
         return true;
     }
 
-    std::lock_guard dispatchLock(g_windowThreadDispatchMutex);
-    std::shared_ptr<WindowThreadCallbackContext> callbackContext;
+    WindowThreadCallbackContext callbackContext{callback, context};
     ULONG_PTR callbackToken = 0;
     try {
-        callbackContext = std::make_shared<WindowThreadCallbackContext>(
-            callback, std::move(context));
         std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
+        if (!g_windowThreadCallbackRegistry) {
+            return false;
+        }
         do {
             callbackToken = g_nextWindowThreadCallbackToken.fetch_add(
                 1, std::memory_order_relaxed);
         } while (!callbackToken ||
                  g_windowThreadCallbackRegistry->contains(callbackToken));
         g_windowThreadCallbackRegistry->emplace(callbackToken,
-                                                 callbackContext);
+                                                 &callbackContext);
     } catch (...) {
         Wh_Log(L"Preparing taskbar thread dispatch failed: %08X",
                static_cast<unsigned>(winrt::to_hresult()));
@@ -4565,32 +4184,24 @@ bool RunFromWindowThread(HWND window,
                 const auto* messageData =
                     reinterpret_cast<const CWPSTRUCT*>(lParam);
                 if (messageData->message == message) {
-                    std::shared_ptr<WindowThreadCallbackContext>
-                        callbackContext;
+                    WindowThreadCallbackContext* callbackContext = nullptr;
                     {
                         std::lock_guard lock(
                             g_windowThreadCallbackRegistryMutex);
-                        auto callbackEntry =
-                            g_windowThreadCallbackRegistry->find(
+                        if (g_windowThreadCallbackRegistry) {
+                            auto entry = g_windowThreadCallbackRegistry->find(
                                 static_cast<ULONG_PTR>(messageData->lParam));
-                        if (callbackEntry !=
-                            g_windowThreadCallbackRegistry->end()) {
-                            callbackContext = callbackEntry->second;
-                            g_windowThreadCallbackRegistry->erase(
-                                callbackEntry);
+                            if (entry !=
+                                g_windowThreadCallbackRegistry->end()) {
+                                callbackContext = entry->second;
+                                g_windowThreadCallbackRegistry->erase(entry);
+                            }
                         }
                     }
                     if (callbackContext) {
-                        try {
-                            callbackContext->callback(
-                                callbackContext->context.get());
-                        } catch (...) {
-                            Wh_Log(
-                                L"Unhandled taskbar dispatch callback error: %08X",
-                                static_cast<unsigned>(winrt::to_hresult()));
-                        }
-                        callbackContext->invoked.store(
-                            true, std::memory_order_release);
+                        callbackContext->callback(callbackContext->context);
+                        callbackContext->invoked.store(true,
+                                                       std::memory_order_release);
                     }
                 }
             }
@@ -4598,8 +4209,8 @@ bool RunFromWindowThread(HWND window,
         },
         nullptr, threadId);
     if (!hook) {
-        {
-            std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
+        std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
+        if (g_windowThreadCallbackRegistry) {
             g_windowThreadCallbackRegistry->erase(callbackToken);
         }
         Wh_Log(L"SetWindowsHookEx failed for taskbar thread %u: %u", threadId,
@@ -4608,35 +4219,37 @@ bool RunFromWindowThread(HWND window,
     }
 
     SendMessageW(window, message, 0, static_cast<LPARAM>(callbackToken));
-    DWORD unhookAttempts = 0;
-    while (true) {
+    bool unhooked = false;
+    DWORD unhookError = ERROR_SUCCESS;
+    for (int attempt = 0; attempt < 3; attempt++) {
         if (UnhookWindowsHookEx(hook)) {
+            unhooked = true;
             break;
         }
-        DWORD unhookError = GetLastError();
+        unhookError = GetLastError();
         if (unhookError == ERROR_INVALID_HOOK_HANDLE) {
-            Wh_Log(L"Taskbar thread hook was already removed for thread %u",
-                   threadId);
+            unhooked = true;
             break;
         }
-        unhookAttempts++;
-        if (unhookAttempts == 1 || unhookAttempts % 100 == 0) {
-            Wh_Log(L"UnhookWindowsHookEx failed for taskbar thread %u: %u; "
-                   L"retrying",
-                   threadId, unhookError);
+        if (attempt < 2) {
+            Sleep(10);
         }
-        Sleep(10);
     }
     {
         std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
-        g_windowThreadCallbackRegistry->erase(callbackToken);
+        if (g_windowThreadCallbackRegistry) {
+            g_windowThreadCallbackRegistry->erase(callbackToken);
+        }
     }
-    bool invoked =
-        callbackContext->invoked.load(std::memory_order_acquire);
+    if (!unhooked) {
+        Wh_Log(L"UnhookWindowsHookEx failed for taskbar thread %u: %u",
+               threadId, unhookError);
+    }
+    bool invoked = callbackContext.invoked.load(std::memory_order_acquire);
     if (!invoked) {
         Wh_Log(L"Taskbar thread dispatch failed for thread %u", threadId);
     }
-    return invoked;
+    return invoked && unhooked;
 }
 
 bool IsTaskbarWindowClass(HWND window, bool* secondary = nullptr) {
@@ -4706,26 +4319,6 @@ std::vector<DisplayMonitor> EnumerateDisplayMonitors() {
                    reinterpret_cast<uintptr_t>(right.handle);
         });
     return monitors;
-}
-
-uint64_t GetDisplayTopologyFingerprint(
-    const std::vector<DisplayMonitor>& monitors) {
-    uint64_t hash = 1469598103934665603ull;
-    auto mix = [&hash](uint64_t value) {
-        hash ^= value;
-        hash *= 1099511628211ull;
-    };
-
-    for (const DisplayMonitor& monitor : monitors) {
-        mix(reinterpret_cast<uintptr_t>(monitor.handle));
-        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.left)));
-        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.top)));
-        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.right)));
-        mix(static_cast<uint64_t>(static_cast<int64_t>(monitor.bounds.bottom)));
-        mix(monitor.primary);
-    }
-    mix(monitors.size());
-    return hash;
 }
 
 HWND FindTaskbarWindowForMonitor(HMONITOR monitor) {
@@ -4810,11 +4403,6 @@ HWND FindConfiguredTaskbarWindow(bool logFallback = true) {
     return FindConfiguredTaskbarWindow(EnumerateDisplayMonitors(), logFallback);
 }
 
-void ResetUnknownPlacementProbeState() {
-    g_unknownPlacementProbeFailures = 0;
-    g_unknownPlacementProbesSuspended = false;
-}
-
 void RememberTaskbarWindow(HWND window) {
     if (!IsCurrentProcessTaskbarWindow(window)) {
         return;
@@ -4824,7 +4412,6 @@ void RememberTaskbarWindow(HWND window) {
         g_taskbarWindow = window;
         g_taskbarThreadId = threadId;
         g_placementLocationUnknown = false;
-        ResetUnknownPlacementProbeState();
     }
 }
 
@@ -4900,26 +4487,6 @@ RefCountBase_Decref_t RefCountBase_Decref_Original = nullptr;
 void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
-bool IsReadableMemoryRange(const void* address, size_t size) {
-    if (!address || size == 0) {
-        return false;
-    }
-
-    MEMORY_BASIC_INFORMATION memory{};
-    if (!VirtualQuery(address, &memory, sizeof(memory)) ||
-        memory.State != MEM_COMMIT ||
-        (memory.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
-        return false;
-    }
-
-    uintptr_t start = reinterpret_cast<uintptr_t>(address);
-    uintptr_t regionStart =
-        reinterpret_cast<uintptr_t>(memory.BaseAddress);
-    uintptr_t regionEnd = regionStart + memory.RegionSize;
-    return start >= regionStart && start <= regionEnd &&
-           size <= regionEnd - start;
-}
-
 XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
     bool isSecondary = false;
     if (!IsCurrentProcessTaskbarWindow(taskbarWindow) ||
@@ -4959,10 +4526,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 
     void* taskBandForSite = taskBand;
     for (int i = 0;; i++) {
-        if (!IsReadableMemoryRange(taskBandForSite, sizeof(void*))) {
-            Wh_Log(L"Taskband site scan reached unreadable memory");
-            return nullptr;
-        }
         if (*reinterpret_cast<void**>(taskBandForSite) == expectedVftable) {
             break;
         }
@@ -4991,8 +4554,7 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 #if defined(_M_X64)
     const BYTE* code =
         reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
-    if (IsReadableMemoryRange(code, 8) && code[0] == 0x48 &&
-        code[1] == 0x83 && code[2] == 0xEC &&
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
         code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
         code[7] <= 0x7F) {
         elementOffset = code[7];
@@ -5003,8 +4565,7 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 #elif defined(_M_ARM64)
     const DWORD* code =
         reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
-    if (IsReadableMemoryRange(code, sizeof(DWORD) * 4) &&
-        code[0] == 0xD503237F &&
+    if (code[0] == 0xD503237F &&
         (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
         code[2] == 0x910003FD &&
         (code[3] & 0xFFF00FE0) == 0xF8400C00) {
@@ -5019,11 +4580,6 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 
     auto* elementAddress =
         static_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset;
-    if (!IsReadableMemoryRange(elementAddress, sizeof(::IUnknown*))) {
-        Wh_Log(L"Taskbar XAML element address is unreadable");
-        return nullptr;
-    }
-
     auto* elementUnknown =
         *reinterpret_cast<::IUnknown**>(elementAddress);
     if (!elementUnknown) {
@@ -5083,10 +4639,10 @@ void ApplyToTaskbarWindow(void* contextValue) {
 bool ApplyWidgetToTaskbarWindow(
     HWND taskbarWindow,
     FrameworkElement taskbarFrame = nullptr) {
-    auto context = std::make_shared<ApplyWidgetContext>(
-        ApplyWidgetContext{taskbarWindow, taskbarFrame, false});
-    return RunFromWindowThread(taskbarWindow, ApplyToTaskbarWindow, context) &&
-           context->succeeded;
+    ApplyWidgetContext context{taskbarWindow, taskbarFrame, false};
+    return RunFromWindowThread(taskbarWindow, ApplyToTaskbarWindow,
+                               &context) &&
+           context.succeeded;
 }
 
 struct TaskbarProbeContext {
@@ -5106,12 +4662,11 @@ void ProbeTaskbarWindow(void* contextValue) {
 }
 
 FrameworkElement FindReadyTaskbarFrame(HWND window) {
-    auto context = std::make_shared<TaskbarProbeContext>(
-        TaskbarProbeContext{window, nullptr});
-    if (!RunFromWindowThread(window, ProbeTaskbarWindow, context)) {
+    TaskbarProbeContext context{window, nullptr};
+    if (!RunFromWindowThread(window, ProbeTaskbarWindow, &context)) {
         return nullptr;
     }
-    return context->frame;
+    return context.frame;
 }
 
 struct RemoveWidgetForMoveContext {
@@ -5163,12 +4718,7 @@ void RemoveFromCurrentTaskbar(void* contextValue) {
         g_placementFailures = 0;
         g_placementIsFallback = false;
         g_placementLocationUnknown = false;
-        g_unknownPlacementProbeFailures = 0;
-        g_unknownPlacementProbesSuspended = false;
-        g_lastDisplayTopologyFingerprint = 0;
-        g_hasDisplayTopologyFingerprint = false;
         g_placementApplyPending = false;
-        g_resetUnknownPlacementProbesPending = false;
         g_taskbarUiResourcesRegistered = false;
     }
     if (context) {
@@ -5215,21 +4765,11 @@ void RecordPlacementFallback(HWND targetWindow) {
 void MarkPlacementForRetry(HWND requestedWindow) {
     g_placementIsFallback = true;
     RecordPlacementFailure(requestedWindow);
-    if (g_placementLocationUnknown && !g_unknownPlacementProbesSuspended) {
-        g_unknownPlacementProbeFailures++;
-        if (g_unknownPlacementProbeFailures >=
-            kMaximumUnknownPlacementProbeFailures) {
-            g_unknownPlacementProbesSuspended = true;
-            Wh_Log(L"Monitor lookup failed repeatedly; automatic XAML probes "
-                   L"are paused until taskbar topology or settings change");
-        }
-    }
 }
 
 void CompletePlacement(HWND requestedWindow, HWND actualWindow) {
     g_placementApplyPending = false;
     g_placementLocationUnknown = false;
-    ResetUnknownPlacementProbeState();
     if (requestedWindow == actualWindow) {
         g_placementIsFallback = false;
         ResetPlacementRetryState();
@@ -5279,7 +4819,6 @@ struct ApplyOnTaskbarThreadContext {
     FrameworkElement fallbackFrame{nullptr};
     HWND requestedWindow = nullptr;
     bool refreshExistingWidget = true;
-    bool resetUnknownPlacementProbes = false;
     bool succeeded = false;
 };
 
@@ -5289,13 +4828,6 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     if (g_unloading) {
         return;
     }
-    bool resetUnknownPlacementProbesPending =
-        g_resetUnknownPlacementProbesPending.exchange(false);
-    if (context->resetUnknownPlacementProbes ||
-        resetUnknownPlacementProbesPending) {
-        ResetUnknownPlacementProbeState();
-    }
-
     // Keep a retry timer even before the first successful injection. All state
     // below is intentionally owned by Explorer's taskbar/XAML UI thread.
     EnsureTimer();
@@ -5368,10 +4900,10 @@ void ApplyOnTaskbarUiThreadImpl(void* contextValue) {
     }
     bool widgetRemovedForMove = false;
     if (removalWindow && g_widget && currentWindow != targetWindow) {
-        auto removeContext = std::make_shared<RemoveWidgetForMoveContext>();
+        RemoveWidgetForMoveContext removeContext;
         if (!RunFromWindowThread(removalWindow, RemoveWidgetForMove,
-                                 removeContext) ||
-            !removeContext->succeeded) {
+                                 &removeContext) ||
+            !removeContext.succeeded) {
             Wh_Log(L"Removing widget from the previous monitor failed");
             MarkPlacementForRetry(requestedWindow);
             return;
@@ -5419,15 +4951,11 @@ void ApplyOnTaskbarUiThread(void* contextValue) {
 
 bool ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
                           bool refreshExistingWidget = true,
-                          bool resetUnknownPlacementProbes = false,
                           HWND requestedWindow = nullptr) {
     if (g_unloading) {
         return false;
     }
 
-    if (resetUnknownPlacementProbes) {
-        g_resetUnknownPlacementProbesPending = true;
-    }
     g_placementApplyPending = true;
     constexpr int kMaximumDispatchAttempts = 3;
     for (int attempt = 0; attempt < kMaximumDispatchAttempts; attempt++) {
@@ -5460,13 +4988,11 @@ bool ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
             }
             attemptedThreadIds[attemptedThreadCount++] = dispatchThreadId;
 
-            auto context = std::make_shared<ApplyOnTaskbarThreadContext>(
-                ApplyOnTaskbarThreadContext{
-                    fallbackFrame, requestedWindow, refreshExistingWidget,
-                    resetUnknownPlacementProbes, false});
+            ApplyOnTaskbarThreadContext context{
+                fallbackFrame, requestedWindow, refreshExistingWidget, false};
             if (RunFromWindowThread(dispatchWindow, ApplyOnTaskbarUiThread,
-                                    context)) {
-                return true;
+                                    &context)) {
+                return context.succeeded;
             }
         }
         if (attempt + 1 < kMaximumDispatchAttempts) {
@@ -5578,37 +5104,20 @@ void EnsureConfiguredTaskbarPlacement() {
         return;
     }
 
-    auto monitors = EnumerateDisplayMonitors();
-    uint64_t topologyFingerprint = GetDisplayTopologyFingerprint(monitors);
-    bool topologyChanged =
-        !g_hasDisplayTopologyFingerprint ||
-        topologyFingerprint != g_lastDisplayTopologyFingerprint;
-    if (topologyChanged) {
-        g_lastDisplayTopologyFingerprint = topologyFingerprint;
-        g_hasDisplayTopologyFingerprint = true;
-        ResetPlacementRetryState();
-        ResetUnknownPlacementProbeState();
-    }
-
     HWND rememberedWindow = g_taskbarWindow.load();
     bool placementApplyPending = g_placementApplyPending.load();
-    if (!placementApplyPending && !topologyChanged &&
-        !g_placementIsFallback &&
+    if (!placementApplyPending && !g_placementIsFallback &&
         g_placementFailures == 0 && g_widget &&
         IsCurrentProcessTaskbarWindow(rememberedWindow)) {
         return;
     }
 
     auto now = std::chrono::steady_clock::now();
-    if (!topologyChanged && g_placementFailures != 0 &&
-        now < g_nextPlacementRetry) {
-        return;
-    }
-    if (!topologyChanged && g_placementLocationUnknown &&
-        g_unknownPlacementProbesSuspended) {
+    if (g_placementFailures != 0 && now < g_nextPlacementRetry) {
         return;
     }
 
+    auto monitors = EnumerateDisplayMonitors();
     HWND targetWindow = FindConfiguredTaskbarWindow(monitors, false);
     if (!targetWindow) {
         MarkPlacementForRetry(nullptr);
@@ -5621,19 +5130,15 @@ void EnsureConfiguredTaskbarPlacement() {
         return;
     }
 
-    if (topologyChanged) {
-        Wh_Log(L"Taskbar topology changed; moving the widget");
-    } else {
-        Wh_Log(L"Retrying taskbar placement");
-    }
-    ApplyOnTaskbarThread(nullptr, false, false, targetWindow);
+    Wh_Log(L"Retrying taskbar placement");
+    ApplyOnTaskbarThread(nullptr, false, targetWindow);
 }
 
 void ApplyLoadedTaskbarFrame(FrameworkElement taskbarFrame) {
     if (g_unloading) {
         return;
     }
-    ResetUnknownPlacementProbeState();
+    ResetPlacementRetryState();
     if (!taskbarFrame) {
         ApplyOnTaskbarThread();
         return;
@@ -5759,23 +5264,23 @@ HMODULE GetTaskbarViewModule() {
     return module;
 }
 
-bool TryHookTaskbarViewSymbols(HMODULE module, bool applyImmediately) {
-    if (!module || g_taskbarViewDllLoaded) {
-        return static_cast<bool>(g_taskbarViewDllLoaded);
-    }
-
-    if (g_taskbarViewHookAttempts >= kMaximumTaskbarViewHookAttempts ||
-        g_taskbarViewDllLoaded.exchange(true)) {
-        return static_cast<bool>(g_taskbarViewDllLoaded);
-    }
-
-    uint32_t attempt = ++g_taskbarViewHookAttempts;
-    if (!HookTaskbarViewSymbols(module)) {
-        Wh_Log(L"Taskbar.View symbol hook failed (attempt %u/%u)", attempt,
-               kMaximumTaskbarViewHookAttempts);
-        g_taskbarViewDllLoaded = false;
+bool HandleLoadedModuleIfTaskbarView(HMODULE module,
+                                     LPCWSTR fileName,
+                                     bool applyImmediately) {
+    if (!module || GetTaskbarViewModule() != module) {
         return false;
     }
+    if (g_taskbarViewHookAttempted.exchange(true)) {
+        return static_cast<bool>(g_taskbarViewDllLoaded);
+    }
+
+    Wh_Log(L"Taskbar view module loaded: %s",
+           fileName ? fileName : L"<already loaded>");
+    if (!HookTaskbarViewSymbols(module)) {
+        Wh_Log(L"Taskbar.View symbol hook failed");
+        return false;
+    }
+    g_taskbarViewDllLoaded = true;
     if (applyImmediately) {
         Wh_ApplyHookOperations();
     }
@@ -5789,12 +5294,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
                                    HANDLE file,
                                    DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
-    if (!g_taskbarViewDllLoaded &&
-        g_taskbarViewHookAttempts < kMaximumTaskbarViewHookAttempts) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModule()) {
-            TryHookTaskbarViewSymbols(taskbarViewModule, true);
-        }
+    DWORD lastError = GetLastError();
+    if (module && !g_taskbarViewHookAttempted) {
+        HandleLoadedModuleIfTaskbarView(module, fileName, true);
     }
+    SetLastError(lastError);
     return module;
 }
 
@@ -5806,9 +5310,12 @@ void CloseMetricSources() {
     g_nextPdhCounterRetry = {};
     g_nextPdhRecovery = {};
     g_consecutivePdhReadFailures = 0;
-    g_consecutivePdhEmptySamples = 0;
-    g_pdhEmptyRecoveries = 0;
-    g_nextPdhEmptyRecovery = {};
+    g_lastResolvedGpuAdapterFilter.reset();
+    g_lastResolvedGpuAdapterLuid.reset();
+    g_gpuAdapterIdentityChanged = false;
+    g_hasResolvedGpuAdapterIdentity = false;
+    g_hwInfoInvalidUnitLogged = false;
+    g_hwInfoGpuAdapterMismatchLogged = false;
 }
 
 bool TearDownTaskbarUi() {
@@ -5818,38 +5325,29 @@ bool TearDownTaskbarUi() {
         g_taskbarThreadId = 0;
         return true;
     }
-    constexpr int kMaximumTeardownAttempts = 3;
-    for (int attempt = 0; attempt < kMaximumTeardownAttempts; attempt++) {
-        DWORD attemptedThreadIds[3]{};
-        size_t attemptedThreadCount = 0;
-        HWND rememberedWindow = FindRememberedTaskbarWindow();
-        HWND candidates[] = {rememberedWindow,
-                             FindAnyWindowOnTaskbarThread(rememberedWindow),
-                             FindPrimaryTaskbarWindow()};
-        for (size_t i = 0; i < std::size(candidates); i++) {
-            HWND window = candidates[i];
-            if (!window ||
-                std::find(candidates, candidates + i, window) !=
-                    candidates + i) {
-                continue;
-            }
-            DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-            if (!threadId ||
-                std::find(attemptedThreadIds,
-                          attemptedThreadIds + attemptedThreadCount,
-                          threadId) !=
-                    attemptedThreadIds + attemptedThreadCount) {
-                continue;
-            }
-            attemptedThreadIds[attemptedThreadCount++] = threadId;
-            auto context = std::make_shared<RemoveTaskbarUiContext>();
-            if (RunFromWindowThread(window, RemoveFromCurrentTaskbar,
-                                    context)) {
-                return context->succeeded;
-            }
+    DWORD attemptedThreadIds[3]{};
+    size_t attemptedThreadCount = 0;
+    HWND rememberedWindow = FindRememberedTaskbarWindow();
+    HWND candidates[] = {rememberedWindow,
+                         FindAnyWindowOnTaskbarThread(rememberedWindow),
+                         FindPrimaryTaskbarWindow()};
+    for (size_t i = 0; i < std::size(candidates); i++) {
+        HWND window = candidates[i];
+        if (!window || std::find(candidates, candidates + i, window) !=
+                           candidates + i) {
+            continue;
         }
-        if (attempt + 1 < kMaximumTeardownAttempts) {
-            Sleep(25);
+        DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+        if (!threadId ||
+            std::find(attemptedThreadIds,
+                      attemptedThreadIds + attemptedThreadCount,
+                      threadId) != attemptedThreadIds + attemptedThreadCount) {
+            continue;
+        }
+        attemptedThreadIds[attemptedThreadCount++] = threadId;
+        RemoveTaskbarUiContext context;
+        if (RunFromWindowThread(window, RemoveFromCurrentTaskbar, &context)) {
+            return context.succeeded;
         }
     }
     return false;
@@ -5888,7 +5386,7 @@ BOOL Wh_ModInit() {
     }
 
     if (HMODULE module = GetTaskbarViewModule()) {
-        if (!TryHookTaskbarViewSymbols(module, false)) {
+        if (!HandleLoadedModuleIfTaskbarView(module, nullptr, false)) {
             Wh_Log(L"Taskbar.View symbols unavailable");
             return FALSE;
         }
@@ -5913,9 +5411,9 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
-    if (!g_taskbarViewDllLoaded) {
+    if (!g_taskbarViewHookAttempted) {
         if (HMODULE module = GetTaskbarViewModule()) {
-            TryHookTaskbarViewSymbols(module, true);
+            HandleLoadedModuleIfTaskbarView(module, nullptr, true);
         }
     }
     if (!ApplyOnTaskbarThread()) {
@@ -5927,7 +5425,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
     WakeMetricsWorker();
-    if (!ApplyOnTaskbarThread(nullptr, true, true)) {
+    if (!ApplyOnTaskbarThread(nullptr, true)) {
         StartPlacementRetryWorker();
     }
 }
