@@ -1756,7 +1756,7 @@ namespace CustomBSDR {
     // interface functions
     void Start(LogonUIState state);
     void Hide();
-    void Stop();
+    void Stop(bool ignoreIsCanceling = false);
     void AddApplication(IShutdownBlockingApp* app);
     void RemoveApplication(UINT appId);
     int GetScaleFactor();
@@ -1828,6 +1828,7 @@ namespace CustomBSDR {
     bool isHighContrast = false;
     bool isOnSecureDesktop = true;
     bool isCanceling = false;
+    bool unloadCancelHandled = false;
 
     // app list data stuff
     struct AppTile {
@@ -3537,6 +3538,19 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                 );
 
                 if (result == WAIT_OBJECT_0) { // hStopEvent
+                    if (g_isExiting.load()) {
+                        bool wasCanceled;
+                        {
+                            std::lock_guard lock(g_resolvedMutex);
+                            wasCanceled = g_resolvedValue == BlockedShutdownResolution_Cancel;
+                        }
+
+                        if (wasCanceled) {
+                            Cancel(true);
+                            unloadCancelHandled = true;
+                        }
+                    }
+
                     if (hBgWndLocal && IsWindow(hBgWndLocal)) {
                         SendMessageW(hBgWndLocal, WM_CLOSE, 0, BSDR_CLOSE);
                     } else {
@@ -3598,6 +3612,19 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
         failed = true;
         ret = GetLastError();
         Wh_Log(L"RegisterClassExW failed, GLE=%d", ret);
+    }
+
+    if (g_isExiting.load() && !unloadCancelHandled) {
+        bool wasCanceled;
+        {
+            std::lock_guard lock(g_resolvedMutex);
+            wasCanceled = g_resolvedValue == BlockedShutdownResolution_Cancel;
+        }
+
+        if (wasCanceled) {
+            Cancel(true);
+            unloadCancelHandled = true;
+        }
     }
 
     spWICFactory.Reset();
@@ -3723,10 +3750,10 @@ void CustomBSDR::Hide() {
     }
 }
 
-void CustomBSDR::Stop() {
+void CustomBSDR::Stop(bool ignoreIsCanceling) {
     std::lock_guard lock(cancelMutex);
 
-    if (!isCanceling && hStopEvent) {
+    if ((ignoreIsCanceling || !isCanceling) && hStopEvent) {
         SetEvent(hStopEvent);
     }
 }
@@ -4320,9 +4347,8 @@ void Wh_ModBeforeUninit() {
             }
 
             Resolve(BlockedShutdownResolution_Cancel);
-            Cancel(true);
         }
-        Stop();
+        Stop(true);
 
         WaitForSingleObject(hThreadLocal, INFINITE);
         CloseHandle(hThreadLocal);
