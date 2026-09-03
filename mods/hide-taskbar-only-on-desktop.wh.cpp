@@ -2,10 +2,11 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         3.6.0
+// @version         3.5.5
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -ldwmapi
 // ==/WindhawkMod==
 
@@ -17,9 +18,11 @@ Hides each selected taskbar when its own display has no visible,
 non-minimized application window, and shows it again when an application or
 relevant Windows shell interaction requires it.
 
-The mod is implemented as a Windhawk tool in a dedicated `windhawk.exe` process
-instead of being injected into `explorer.exe`. This avoids one worker copy
-per Explorer process and keeps the state-management code outside the shell.
+The mod uses a dedicated `windhawk.exe` process as its state manager instead of
+running the full state-management logic inside `explorer.exe`. A small
+Explorer-side hook is used only to prevent the specific secondary-taskbar
+`SW_SHOWNA` transition that Explorer can issue after this mod has hidden that
+taskbar.
 
 ### Behavior
 
@@ -97,8 +100,8 @@ already recreated a taskbar, restarting Explorer may still be required.
 
 ### Process and state model
 
-The mod runs as a dedicated Windhawk tool process. A single worker thread
-owns the mutable runtime state and settings. Window-state WinEvents request
+The mod runs its mutable state and settings in a dedicated Windhawk tool process.
+A minimal Explorer-side hook handles one shell visibility operation. Window-state WinEvents request
 an immediate reconciliation, while a periodic safety poll handles missed
 or unusual transitions.
 
@@ -260,6 +263,127 @@ SRWLOCK g_cursorHoverSnapshotLock = SRWLOCK_INIT;
 
 constexpr wchar_t kHiddenByModProperty[] =
     L"Windhawk.HideTaskbarOnlyOnDesktop.HiddenByMod";
+
+// Explorer-side protection for the secondary-taskbar shell transition.
+// The dedicated tool process remains authoritative for taskbar state. Explorer
+// only consults the per-window property and blocks SW_SHOWNA for an explicitly
+// hidden secondary taskbar.
+using ShowWindow_t = BOOL (WINAPI*)(HWND, int);
+
+ShowWindow_t g_explorerShowWindowOriginal = nullptr;
+void* g_explorerShowWindowTarget = nullptr;
+bool g_isExplorerProcess = false;
+
+bool IsExplorerSecondaryTaskbar(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    WCHAR className[128] = {};
+
+    if (
+        GetClassNameW(
+            hwnd,
+            className,
+            ARRAYSIZE(className)
+        ) == 0
+    ) {
+        return false;
+    }
+
+    return wcscmp(
+        className,
+        L"Shell_SecondaryTrayWnd"
+    ) == 0;
+}
+
+bool IsSecondaryTaskbarHiddenByMod(HWND hwnd) {
+    return
+        IsExplorerSecondaryTaskbar(hwnd) &&
+        GetPropW(
+            hwnd,
+            kHiddenByModProperty
+        ) != nullptr;
+}
+
+BOOL WINAPI ExplorerShowWindowHook(
+    HWND hwnd,
+    int nCmdShow
+) {
+    if (
+        nCmdShow == SW_SHOWNA &&
+        IsSecondaryTaskbarHiddenByMod(hwnd)
+    ) {
+        return FALSE;
+    }
+
+    return g_explorerShowWindowOriginal(
+        hwnd,
+        nCmdShow
+    );
+}
+
+bool InstallExplorerVisibilityHook() {
+    HMODULE user32 =
+        GetModuleHandleW(L"user32.dll");
+
+    if (!user32) {
+        Wh_Log(
+            L"GetModuleHandleW(user32.dll) failed: %lu",
+            GetLastError()
+        );
+        return false;
+    }
+
+    g_explorerShowWindowTarget =
+        reinterpret_cast<void*>(
+            GetProcAddress(
+                user32,
+                "ShowWindow"
+            )
+        );
+
+    if (!g_explorerShowWindowTarget) {
+        Wh_Log(
+            L"GetProcAddress(ShowWindow) failed: %lu",
+            GetLastError()
+        );
+        return false;
+    }
+
+    if (
+        Wh_SetFunctionHook(
+            g_explorerShowWindowTarget,
+            reinterpret_cast<void*>(ExplorerShowWindowHook),
+            reinterpret_cast<void**>(&g_explorerShowWindowOriginal)
+        ) == FALSE
+    ) {
+        Wh_Log(
+            L"Failed to hook Explorer ShowWindow"
+        );
+        g_explorerShowWindowTarget = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
+void UninstallExplorerVisibilityHook() {
+    if (g_explorerShowWindowTarget) {
+        if (
+            Wh_RemoveFunctionHook(
+                g_explorerShowWindowTarget
+            ) == FALSE
+        ) {
+            Wh_Log(
+                L"Failed to remove Explorer ShowWindow hook"
+            );
+        }
+
+        g_explorerShowWindowTarget = nullptr;
+        g_explorerShowWindowOriginal = nullptr;
+    }
+}
 
 HWND g_workerMessageWindow = nullptr;
 ATOM g_workerWindowClassAtom = 0;
@@ -3008,8 +3132,43 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
+    WCHAR modulePath[MAX_PATH] = {};
+    DWORD moduleLength =
+        GetModuleFileNameW(
+            nullptr,
+            modulePath,
+            ARRAYSIZE(modulePath)
+        );
+
+    if (
+        moduleLength == 0 ||
+        moduleLength >= ARRAYSIZE(modulePath)
+    ) {
+        Wh_Log(
+            L"GetModuleFileNameW failed: %lu",
+            GetLastError()
+        );
+        return FALSE;
+    }
+
+    const WCHAR* moduleName =
+        wcsrchr(modulePath, L'\\');
+
+    moduleName = moduleName
+        ? moduleName + 1
+        : modulePath;
+
+    g_isExplorerProcess =
+        _wcsicmp(moduleName, L"explorer.exe") == 0;
+
     if (isExcluded) {
         return FALSE;
+    }
+
+    if (g_isExplorerProcess) {
+        return InstallExplorerVisibilityHook()
+            ? TRUE
+            : FALSE;
     }
 
     if (isCurrentToolModProcess) {
@@ -3348,7 +3507,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isToolModProcessLauncher || g_isExplorerProcess) {
         return;
     }
 
@@ -3356,6 +3515,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isExplorerProcess) {
+        UninstallExplorerVisibilityHook();
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         StopLauncherWatchdog();
         return;
