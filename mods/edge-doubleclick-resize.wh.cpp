@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              edge-doubleclick-resize
-// @name            Double-Click Edge to Maximize Width/Height
-// @description     Double-click the left/right window edge to maximize width, the top/bottom edge to maximize height
-// @description:ar-SA دبل كليك على حافة النافذة اليسرى/اليمنى يكبر العرض، والعلوية/السفلية يكبر الطول
+// @name            Double-Click Window Edge to Maximize Width
+// @description     Double-click the left/right window edge to maximize the width (a corner maximizes both axes); the top/bottom edge keeps Windows' built-in vertical maximize
+// @description:ar-SA دبل كليك على الحافة اليسرى/اليمنى للنافذة يكبر العرض (الزاوية تكبر الاثنين معاً)؛ الحافة العلوية/السفلية تبقى على سلوك ويندوز الأصلي للتكبير العمودي
 // @version         1.0
 // @author          Hamid
 // @github          https://github.com/nh4700-ai
@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Double-Click Edge to Maximize Width/Height
+# Double-Click Window Edge to Maximize Width
 
 Double-click on a window's border to resize it along one axis, without
 affecting the other:
@@ -61,6 +61,18 @@ DefWindowProcW_t DefWindowProcW_Original;
 
 using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_Original;
+
+using DefDlgProcW_t = decltype(&DefDlgProcW);
+DefDlgProcW_t DefDlgProcW_Original;
+
+using DefDlgProcA_t = decltype(&DefDlgProcA);
+DefDlgProcA_t DefDlgProcA_Original;
+
+using DefFrameProcW_t = decltype(&DefFrameProcW);
+DefFrameProcW_t DefFrameProcW_Original;
+
+using DefFrameProcA_t = decltype(&DefFrameProcA);
+DefFrameProcA_t DefFrameProcA_Original;
 
 // Shared logic: inspects the hit-test code and resizes width and/or
 // height depending on which edge was double-clicked. Returns true if
@@ -176,10 +188,55 @@ LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     return DefWindowProcA_Original(hWnd, Msg, wParam, lParam);
 }
 
+// Resizable dialogs (options/find/preferences windows, etc.) route
+// unhandled messages through DefDlgProc instead of DefWindowProc.
+LRESULT WINAPI DefDlgProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_NCLBUTTONDBLCLK) {
+        if (HandleEdgeDoubleClick(hWnd, wParam))
+            return 0;
+    }
+    return DefDlgProcW_Original(hWnd, Msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefDlgProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_NCLBUTTONDBLCLK) {
+        if (HandleEdgeDoubleClick(hWnd, wParam))
+            return 0;
+    }
+    return DefDlgProcA_Original(hWnd, Msg, wParam, lParam);
+}
+
+// MDI frame windows route unhandled messages through DefFrameProc.
+// MDI children are WS_CHILD and already filtered out in
+// HandleEdgeDoubleClick, so DefMDIChildProc doesn't need a hook.
+LRESULT WINAPI DefFrameProcW_Hook(HWND hWnd, HWND hMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_NCLBUTTONDBLCLK) {
+        if (HandleEdgeDoubleClick(hWnd, wParam))
+            return 0;
+    }
+    return DefFrameProcW_Original(hWnd, hMDIClient, Msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefFrameProcA_Hook(HWND hWnd, HWND hMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_NCLBUTTONDBLCLK) {
+        if (HandleEdgeDoubleClick(hWnd, wParam))
+            return 0;
+    }
+    return DefFrameProcA_Original(hWnd, hMDIClient, Msg, wParam, lParam);
+}
+
 BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook,
                                     &DefWindowProcW_Original);
     WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook,
                                     &DefWindowProcA_Original);
+    WindhawkUtils::SetFunctionHook(DefDlgProcW, DefDlgProcW_Hook,
+                                    &DefDlgProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefDlgProcA, DefDlgProcA_Hook,
+                                    &DefDlgProcA_Original);
+    WindhawkUtils::SetFunctionHook(DefFrameProcW, DefFrameProcW_Hook,
+                                    &DefFrameProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook,
+                                    &DefFrameProcA_Original);
     return TRUE;
 }
