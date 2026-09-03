@@ -1,56 +1,107 @@
 // ==WindhawkMod==
 // @id              edge-doubleclick-resize
 // @name            Double-Click Edge to Maximize Width/Height
-// @description     دبل كليك على حافة النافذة اليسرى/اليمنى يكبر العرض، والعلوية/السفلية يكبر الطول
+// @description     Double-click the left/right window edge to maximize width, the top/bottom edge to maximize height
+// @description:ar-SA دبل كليك على حافة النافذة اليسرى/اليمنى يكبر العرض، والعلوية/السفلية يكبر الطول
 // @version         1.0
 // @author          Hamid
 // @github          https://github.com/nh4700-ai
 // @include         *
-// @compilerOptions -luser32 -lgdi32 -ldwmapi
+// @compilerOptions -ldwmapi
+// @license          MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Double-Click Edge to Maximize Width/Height
 
-دبل كليك على أي حافة من حواف النافذة:
-- الحافة اليسرى أو اليمنى -> يكبّر العرض بالكامل (يبقى الطول كما هو).
-- الحافة العلوية أو السفلية -> يكبّر الطول بالكامل (يبقى العرض كما هو).
-- الزاوية -> يكبّر الاثنين معاً.
+Double-click on a window's border to resize it along one axis, without
+affecting the other:
 
-يشتغل على كل النوافذ (مطبق عالمياً عبر @include *).
+- Left or right edge -> maximizes the width (height stays unchanged).
+- Top or bottom edge -> handled by Windows' own built-in vertical
+  maximize/restore toggle (unchanged by this mod).
+- A corner -> maximizes both width and height together.
+
+This adds a horizontal counterpart to Windows' existing vertical
+double-click-to-maximize behavior, which only covers the top/bottom
+edges natively.
+
+## Notes
+
+- Applies to all windows (`@include *`).
+- Only affects resizable windows that are not already maximized or
+  minimized.
+- Apps that implement their own non-client hit testing and never
+  forward `WM_NCLBUTTONDBLCLK` to the default window procedure
+  (e.g. many Chromium/Electron, WinUI, and Qt frameless windows) are
+  not affected by this mod, since there's no reliable hook point for
+  those. This is a limitation of the approach, not a bug.
+- Uses the work area (excludes the taskbar) rather than the full
+  monitor bounds.
+
+---
+
+## دبل كليك على حافة النافذة لتكبير العرض أو الطول
+
+- الحافة اليسرى أو اليمنى -> يكبّر العرض بالكامل (يبقى الطول كما هو).
+- الحافة العلوية أو السفلية -> يُترك سلوك ويندوز الأصلي (تكبير/استعادة الطول) كما هو.
+- الزاوية -> يكبّر الاثنين معاً.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <windhawk_utils.h>
 
-using DefWindowProcW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
+using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_Original;
 
-using DefWindowProcA_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
+using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_Original;
 
-// المنطق المشترك: يفحص hit-test code، ويكبر العرض و/أو الطول حسب الحافة
+// Shared logic: inspects the hit-test code and resizes width and/or
+// height depending on which edge was double-clicked. Returns true if
+// the message was handled (caller should suppress default processing).
 bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     int hit = (int)wParam;
 
+    // Leave pure top/bottom hits to the default window procedure so
+    // Windows' built-in vertical maximize/restore toggle keeps working
+    // exactly as it did before this mod was installed. Only left/right
+    // edges and corners are handled here.
+    if (hit == HTTOP || hit == HTBOTTOM)
+        return false;
+
     bool onLeft   = (hit == HTLEFT   || hit == HTTOPLEFT    || hit == HTBOTTOMLEFT);
     bool onRight  = (hit == HTRIGHT  || hit == HTTOPRIGHT   || hit == HTBOTTOMRIGHT);
-    bool onTop    = (hit == HTTOP    || hit == HTTOPLEFT    || hit == HTTOPRIGHT);
-    bool onBottom = (hit == HTBOTTOM || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT);
+    bool onTop    = (hit == HTTOPLEFT  || hit == HTTOPRIGHT);
+    bool onBottom = (hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT);
 
     if (!(onLeft || onRight || onTop || onBottom))
-        return false; // مو حافة، خلي المعالجة الافتراضية تكمل
+        return false; // Not an edge/corner we handle.
 
-    RECT wr; // الحدود الحقيقية للنافذة (تشمل الحافة غير المرئية)
+    // Skip maximized/minimized windows, and windows that aren't
+    // actually resizable (custom-chrome apps can report border hit
+    // codes even when the default frame wouldn't).
+    if (IsZoomed(hWnd) || IsIconic(hWnd))
+        return false;
+
+    if (!(GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_THICKFRAME))
+        return false;
+
+    RECT wr; // Actual window rect (includes the invisible resize border).
     if (!GetWindowRect(hWnd, &wr))
         return false;
 
-    RECT vr = wr; // الحدود المرئية الفعلية
-    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &vr, sizeof(vr));
+    RECT vr = wr; // Visible frame bounds.
+    if (!SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                          &vr, sizeof(vr)))) {
+        vr = wr; // Fall back to zero insets if the DWM call fails.
+    }
 
-    // مقدار الحافة غير المرئية على كل جهة (الفرق بين الحقيقي والمرئي)
+    // Invisible border thickness on each side (difference between the
+    // real and visible bounds).
     int leftInset   = vr.left   - wr.left;
     int topInset    = vr.top    - wr.top;
     int rightInset  = wr.right  - vr.right;
@@ -67,7 +118,8 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     int newH = wr.bottom - wr.top;
 
     if (onLeft || onRight) {
-        // نخلي الحدود المرئية تلامس حافة الشاشة تماماً، مع تعويض الهامش غير المرئي
+        // Align the visible edges with the screen edges exactly,
+        // compensating for the invisible border.
         newX = mi.rcWork.left - leftInset;
         newW = (mi.rcWork.right + rightInset) - newX;
     }
@@ -80,7 +132,7 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
                  SWP_NOZORDER | SWP_NOACTIVATE);
 
-    return true; // تمت معالجتها، لا داعي لاستدعاء الدالة الأصلية
+    return true; // Handled; caller should not call the original proc.
 }
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
@@ -100,9 +152,9 @@ LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 }
 
 BOOL Wh_ModInit() {
-    Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook,
-                        (void**)&DefWindowProcW_Original);
-    Wh_SetFunctionHook((void*)DefWindowProcA, (void*)DefWindowProcA_Hook,
-                        (void**)&DefWindowProcA_Original);
+    WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook,
+                                    &DefWindowProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook,
+                                    &DefWindowProcA_Original);
     return TRUE;
 }
