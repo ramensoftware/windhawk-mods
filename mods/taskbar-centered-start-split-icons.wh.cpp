@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Centered Start button with position-split taskbar icons
+# Taskbar Start Button Centered Origin
 
 Pins the Windows/Start button to the exact horizontal center of the primary
 monitor, regardless of how many taskbar icons are present. Running-app
@@ -140,10 +140,11 @@ then classified the same way as a pinned-but-not-running one instead.
   removes taskbar buttons rather than just repositioning them). As a
   further safeguard, the very first such probe of a session is held back
   until a real (non-sentinel) click has been seen passing through the same
-  interception point, and any single miss after that latches this mod's
-  probing off entirely on that path (see `Wh_Log` for which) - so a
-  running app's icon may briefly show on its default side, rather than by
-  window position, until you click any taskbar button once. That gate
+  interception point, and three misses on a path that has never once
+  succeeded latch this mod's probing off entirely on that path (see
+  `Wh_Log` for which) - so a running app's icon may briefly show on its
+  default side, rather than by window position, until you click any
+  taskbar button once. That gate
   only covers *before* interception is ever confirmed working, though: if
   a future Windows update breaks interception in a way that still lets a
   probe reach the taskbar's real click handler afterward, the probe's
@@ -743,7 +744,10 @@ TaskListButton_get_IsRunning_t TaskListButton_get_IsRunning_Original;
 // ResolveHwndFromTaskListButton skip the whole click-sentinel chain
 // (TryGetItemFromContainer/IsMultiWindow/ITaskGroup::IsRunning and friends)
 // for a pinned-but-not-running button, rather than paying that chain's
-// full cost every retry only to reach the same answer. Optional (see
+// full cost every retry only to reach the same answer. Adapted from
+// taskbar-labels.wh.cpp's TaskListButton_IsRunning, down to the
+// element.as<IUnknown>() form used to get the ABI pointer (that mod is
+// GPL-3.0, same as this one). Optional (see
 // HookTaskbarViewDllSymbols); defaults to "assume running" - i.e. don't
 // skip anything - both when the symbol hasn't resolved at all, and when a
 // resolved call still fails (the failed call leaves isRunning at its
@@ -797,19 +801,33 @@ thread_local void* g_clickSentinel_TaskGroup;
 // Latched per path (item vs. group), not one shared flag, since the two
 // paths reach CTaskListWnd::HandleClick through different internal call
 // chains and a Windows update could break just one. This latch only ever
-// applies pre-confirmation (see NoteUnconfirmedClickSentinelMiss) - with
-// zero evidence yet that interception works, a single miss is reason
-// enough to stop risking real clicks; the asymmetry (a false latch costs
-// position tracking, a false negative activates/minimizes windows the
-// user didn't touch) favors failing closed immediately rather than
-// tolerating more misses.
+// applies pre-confirmation (see NoteUnconfirmedClickSentinelMiss).
+//
+// The threshold is deliberately NOT 1, even though the asymmetry here
+// (a false latch costs position tracking, a false negative
+// activates/minimizes windows the user didn't touch) argues for failing
+// closed early. By the time any probe runs at all,
+// g_realTaskbarClickObserved is already true - and that flag is set
+// inside CTaskListWnd_HandleClick_Hook itself, so the interception point
+// is provably installed and provably reached by real clicks. A miss
+// after that isn't strong evidence of a broken hook; it's most likely
+// the same transient this file already calls "usually innocent" for the
+// post-confirmation case (the window closed mid-probe, or a taskbar
+// rebuild caught the item mid-teardown), and the first probes of a
+// session are exactly when those transients are most likely, since
+// buttons are still realizing. Latching on one of those would silently
+// disable position tracking for the rest of the session - every running
+// app piling onto one side of Start - recoverable only by reloading the
+// mod. Three bounds the worst case at three stray clicks per path,
+// still well short of a runaway, while making an accidental permanent
+// latch on startup churn much less likely.
 std::atomic<bool> g_clickSentinelItemConfirmed;
 std::atomic<bool> g_clickSentinelItemBroken;
 std::atomic<int> g_clickSentinelItemMisses;
 std::atomic<bool> g_clickSentinelGroupConfirmed;
 std::atomic<bool> g_clickSentinelGroupBroken;
 std::atomic<int> g_clickSentinelGroupMisses;
-constexpr int kClickSentinelMissesBeforeBroken = 1;
+constexpr int kClickSentinelMissesBeforeBroken = 3;
 
 // Which path's probe is in flight on this thread - lets
 // CTaskListWnd_HandleClick_Hook below credit the right path's *Confirmed
@@ -848,6 +866,16 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
             Wh_Log(L"Click-sentinel interception confirmed working (%s path)",
                    g_clickSentinelProbingGroup ? L"group" : L"item");
         }
+        // Clears this path's accumulated misses: a capture proves the
+        // interception point works, so whatever missed earlier was a
+        // transient rather than evidence against it. Belt-and-suspenders
+        // as the code stands, since NoteUnconfirmedClickSentinelMiss
+        // already stops counting once Confirmed is set (which just
+        // happened above) - but it keeps "counts consecutive unconfirmed
+        // misses" true of the counter on its own, rather than only of
+        // these two flags read together.
+        (g_clickSentinelProbingGroup ? g_clickSentinelGroupMisses
+                                     : g_clickSentinelItemMisses) = 0;
         return S_OK;
     }
 
@@ -865,12 +893,13 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
 }
 
 // Called right after a real ReportClicked probe comes back with no
-// capture. Latches "broken" on the first pre-confirmation miss (see
-// kClickSentinelMissesBeforeBroken's own comment for why); a no-longer-
-// pre-confirmation miss (the confirmed check below) is a no-op instead of
-// ever latching, since a miss after interception has already proven
-// itself once is far more likely innocent (window closed mid-probe, etc.)
-// than evidence of a break.
+// capture. Latches "broken" once a path accumulates
+// kClickSentinelMissesBeforeBroken misses without ever having captured
+// (see that constant's own comment for the threshold's reasoning); a
+// no-longer-pre-confirmation miss (the confirmed check below) is a no-op
+// instead of ever latching, since a miss after interception has already
+// proven itself once is far more likely innocent (window closed
+// mid-probe, etc.) than evidence of a break.
 void NoteUnconfirmedClickSentinelMiss(bool isGroupPath) {
     std::atomic<bool>& confirmed =
         isGroupPath ? g_clickSentinelGroupConfirmed : g_clickSentinelItemConfirmed;
@@ -1252,17 +1281,13 @@ std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 
 // Set by TaskListButton::UpdateVisualStates' hook and the ArrangeOverride
 // hook's count-change check to make the next resolve pass ignore a
-// negatively-cached entry's backoff - but only up to
-// kMaxForcedRetryFailures consecutive failures each. Uncapped, this would
-// be a real bug: a RUNNING app's button can fail to resolve for reasons
-// that don't bail out early (ReportClicked failing internally, a task item
-// mid-teardown, GetTaskItemsArray coming back empty), and forcing every
-// retry unconditionally would dispatch a real ReportClicked on both paths
-// every forced pass, indefinitely - exactly the runaway-real-clicks
-// scenario the backoff schedule exists to bound. Capping it keeps the
-// "pinned app just launched" fast path intact (that case is still failing
-// 0 times when the fast path first fires) while letting the normal
-// backoff schedule take back over for an entry that keeps failing.
+// negatively-cached entry's backoff - capped at kMaxForcedRetryFailures
+// failures each. The cap is load-bearing: a running app's button can keep
+// failing for reasons that never bail out early, and forcing every retry
+// would dispatch a real ReportClicked on both paths every forced pass,
+// indefinitely - the runaway the backoff schedule exists to bound. It
+// still leaves the "pinned app just launched" fast path intact, since
+// that case has 0 failures when the fast path first fires.
 std::atomic<bool> g_forceResolveUnresolved;
 constexpr int kMaxForcedRetryFailures = 3;
 
@@ -1278,23 +1303,18 @@ constexpr int kMaxForcedRetryFailures = 3;
 // doesn't get skipped.
 bool g_anyButtonNeedsRecheck = true;
 
-// Caps the per-entry backoff retry itself (not just the force-bypass
-// above) - without this, a button whose interception path is genuinely,
-// permanently broken (e.g. a future Windows update routes it through a
-// different internal handler while the rest of the taskbar still reaches
-// CTaskListWnd::HandleClick, so the click-sentinel latch itself never
-// trips) would keep dispatching a real ReportClicked on this entry every
-// ResolveBackoffMs interval, forever. A button that gets pruned and
-// recreated gets a fresh cache entry (and so a fresh consecutiveFailures
-// count) - an identity change alone does NOT reset it, since
-// ResolveAndCacheButtonHwnd seeds failures from the existing entry
-// regardless of identity, only clearing it on an actual successful
-// resolve. Only counts a genuinely dispatched-
-// and-missed click (see ResolveAndCacheButtonHwnd) - a bail-out before
-// ever dispatching one doesn't risk anything and must not count toward
-// this. NextResolveDelayMs must treat a terminal entry exactly like a
-// resolved one (idle cadence, not the backoff schedule) - see its own
-// comment for the busy-loop that requires.
+// Terminal cap on per-entry retries (distinct from the force-bypass cap
+// above) - without it, a button whose interception path is permanently
+// broken would keep dispatching a real ReportClicked every
+// ResolveBackoffMs interval, forever. Only a genuinely dispatched-and-
+// missed click counts toward it (see ResolveAndCacheButtonHwnd); a
+// bail-out before dispatching risks nothing and must not count. A pruned
+// and recreated button gets a fresh entry and so a fresh count, but an
+// identity change alone does NOT reset it - ResolveAndCacheButtonHwnd
+// seeds failures from the existing entry regardless of identity, clearing
+// them only on a successful resolve. NextResolveDelayMs must treat a
+// terminal entry exactly like a resolved one - see its own comment for
+// the busy-loop that requires.
 constexpr int kMaxResolveFailures = 8;
 
 // The HWNDs g_buttonHwndCache currently resolves to, rebuilt at the end of
@@ -1309,12 +1329,9 @@ std::unordered_set<HWND> g_resolvedHwnds;
 // Runs the resolution chain and updates the cache. Deliberately ONLY ever
 // called from the resolve timer, never from GetButtonHwnd or an active
 // Arrange pass - running the click-sentinel technique while a button is
-// mid-insertion/removal in an ItemsRepeater reaches STATUS_STOWED_EXCEPTION
-// and crashes explorer.exe (confirmed via crash-dump analysis), the same
-// underlying condition as the nested-Arrange-traversal crash noted above:
-// a window moving across monitors while Windows' "show taskbar apps on"
-// setting isn't "All taskbars" structurally adds/removes taskbar buttons
-// mid-pass.
+// mid-insertion/removal in an ItemsRepeater crashes explorer.exe with
+// STATUS_STOWED_EXCEPTION (confirmed via crash-dump analysis), under the
+// same condition described at g_inTaskbarArrangeOverride above.
 bool ResolveAndCacheButtonHwnd(FrameworkElement element,
                                const std::wstring& identity) {
     void* key = winrt::get_abi(element);
@@ -1391,10 +1408,15 @@ struct WindowClassification {
 // it was minimized instead.
 std::unordered_map<HWND, WindowClassification> g_lastKnownWindowClassification;
 
-WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
+// mi is the primary monitor's info, resolved once per plan recompute by
+// RecomputeLayoutPlan and threaded down rather than looked up here - this
+// runs once per resolved task list button per pass, and every call would
+// otherwise repeat the same MonitorFromWindow/GetMonitorInfo pair for the
+// same monitor. Null if that lookup failed, handled exactly like the
+// per-call failure it replaced: fall back to the default side.
+WindowClassification ClassifyByWindowPositionCached(HWND hwnd,
+                                                    const MONITORINFO* mi) {
     RECT wr;
-    HMONITOR mon = MonitorFromWindow(g_hTaskbarWnd, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO mi{.cbSize = sizeof(mi)};
 
     if (IsIconic(hwnd)) {
         auto it = g_lastKnownWindowClassification.find(hwnd);
@@ -1407,7 +1429,7 @@ WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
         // reports the restored position while minimized (unlike
         // GetWindowRect).
         WINDOWPLACEMENT wp{.length = sizeof(wp)};
-        if (!GetWindowPlacement(hwnd, &wp) || !GetMonitorInfo(mon, &mi)) {
+        if (!mi || !GetWindowPlacement(hwnd, &wp)) {
             return {ResolveUnresolvedAppsDefaultSide()};
         }
         wr = wp.rcNormalPosition;
@@ -1415,15 +1437,15 @@ WindowClassification ClassifyByWindowPositionCached(HWND hwnd) {
         // rcWork), while screenCenterX below is computed from rcMonitor -
         // a left-docked appbar shifts these apart, so this offset keeps a
         // boundary window from classifying to the wrong side.
-        LONG workOffsetX = mi.rcWork.left - mi.rcMonitor.left;
+        LONG workOffsetX = mi->rcWork.left - mi->rcMonitor.left;
         wr.left += workOffsetX;
         wr.right += workOffsetX;
-    } else if (!GetWindowRect(hwnd, &wr) || !GetMonitorInfo(mon, &mi)) {
+    } else if (!mi || !GetWindowRect(hwnd, &wr)) {
         return {ResolveUnresolvedAppsDefaultSide()};
     }
 
     double windowCenterX = (wr.left + wr.right) / 2.0;
-    double screenCenterX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2.0;
+    double screenCenterX = (mi->rcMonitor.left + mi->rcMonitor.right) / 2.0;
 
     WindowClassification result;
     result.side = windowCenterX < screenCenterX ? Side::Left : Side::Right;
@@ -1480,7 +1502,8 @@ struct ButtonClassification {
 // window position, then the configured default. Skips the accessible-name
 // lookup entirely when leftApps/rightApps are both empty (the default) -
 // this runs for every task-list button on every ArrangeOverride pass.
-ButtonClassification ClassifyTaskListButton(FrameworkElement element) {
+ButtonClassification ClassifyTaskListButton(FrameworkElement element,
+                                            const MONITORINFO* mi) {
     if (!g_settings.leftApps.empty() || !g_settings.rightApps.empty()) {
         std::wstring name = GetButtonAccessibleName(element);
         if (ContainsAnyFragment(name, g_settings.leftApps)) {
@@ -1493,7 +1516,7 @@ ButtonClassification ClassifyTaskListButton(FrameworkElement element) {
 
     HWND hwnd = GetButtonHwnd(element);
     if (hwnd) {
-        WindowClassification wc = ClassifyByWindowPositionCached(hwnd);
+        WindowClassification wc = ClassifyByWindowPositionCached(hwnd, mi);
         return {wc.side, wc.distanceFromCenter, true};
     }
 
@@ -1780,12 +1803,14 @@ void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
                          double startCenterX,
                          double leftBoundLocal,
                          double rightBoundLocal,
+                         const MONITORINFO* mi,
                          std::unordered_map<void*, double>& outPlan,
                          std::unordered_map<void*, double>& outWidths) {
     std::vector<TaskListPlanEntry> entries;
     for (int i = 0; i < (int)children.size(); i++) {
         if (IsTaskListButton(children[i])) {
-            entries.push_back({children[i], ClassifyTaskListButton(children[i]),
+            entries.push_back({children[i],
+                               ClassifyTaskListButton(children[i], mi),
                                FullFootprintWidth(children[i]), i});
         }
     }
@@ -1966,6 +1991,10 @@ LRESULT CALLBACK TaskbarWndSubclassProc(HWND hWnd,
 // ApplyLoadedSettings couldn't hand off to the taskbar thread earlier.
 void ApplyPendingSettingsIfAny();
 
+// Minimum gap between FindCurrentProcessTaskbarWnd attempts while the
+// taskbar window is still unresolved - see EnsureTaskbarWnd.
+constexpr ULONGLONG kTaskbarWndEnumRetryMs = 1000;
+
 // Resolves g_hTaskbarWnd and installs the taskbar-window subclass,
 // self-healing on every ArrangeOverride pass rather than a one-shot
 // Wh_ModAfterInit lookup. Two independent reasons both parts need to keep
@@ -2002,6 +2031,23 @@ HWND EnsureTaskbarWnd() {
             // background worker thread.
             return nullptr;
         }
+        // FindCurrentProcessTaskbarWnd runs an EnumWindows over every
+        // top-level window on the desktop. While g_hTaskbarWnd is
+        // unresolved this branch is reached on every ArrangeOverride pass
+        // - and a secondary taskbar's own passes can fire before
+        // Shell_TrayWnd resolves - so the retry is throttled rather than
+        // enumerating the whole desktop at layout frequency. Costs
+        // nothing once resolved, since the branch is skipped entirely
+        // then. atomic because this function also runs on
+        // Wh_ModAfterInit's thread, not just the taskbar's.
+        static std::atomic<ULONGLONG> lastEnumTick;
+        ULONGLONG nowTick = GetTickCount64();
+        ULONGLONG lastTick = lastEnumTick.load();
+        if (lastTick != 0 && nowTick - lastTick < kTaskbarWndEnumRetryMs) {
+            return nullptr;
+        }
+        lastEnumTick.store(nowTick);
+
         hTaskbarWnd = FindCurrentProcessTaskbarWnd();
         if (!hTaskbarWnd) {
             return nullptr;
@@ -2581,10 +2627,20 @@ void RecomputeLayoutPlan() {
                    kTrayMarginPx)
                 : GetTaskbarWidthLocal();
 
+        // Resolved once here and threaded down rather than per button -
+        // every task list button's classification needs the same primary
+        // monitor's rect. See ClassifyByWindowPositionCached.
+        MONITORINFO monitorInfo{.cbSize = sizeof(monitorInfo)};
+        bool monitorInfoValid = GetMonitorInfo(
+            MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTOPRIMARY),
+            &monitorInfo);
+
         // Task list buttons last - see PlanTaskListButtons for the
         // single-O(n)-pass reasoning.
         PlanTaskListButtons(children, startCenterX, leftBoundLocal,
-                            rightBoundLocal, newPlan, newTaskListWidths);
+                            rightBoundLocal,
+                            monitorInfoValid ? &monitorInfo : nullptr, newPlan,
+                            newTaskListWidths);
 
         g_lastArrangedX = std::move(newPlan);
         g_lastArrangedTaskListWidth = std::move(newTaskListWidths);
@@ -2887,6 +2943,24 @@ void InvalidateTaskbarLayout() {
 // touched from that thread.
 std::unordered_map<HWND, LONG> g_lastPolledCenterX;
 
+// Poll cadence, switched between adaptively - see the tail of
+// DragFollowPollTimerProc. Fast enough during an actual drag to keep
+// icons following live, slow enough at rest that an idle desktop isn't
+// paying for a sub-second timer in the shell process.
+constexpr UINT kDragFollowPollActiveMs = 150;
+constexpr UINT kDragFollowPollIdleMs = 1000;
+// How long the fast cadence persists after the last detected change.
+// Covers the gap between two drags of the same window (and a drag that
+// pauses mid-move) without dropping to the idle rate in between.
+constexpr ULONGLONG kDragFollowActiveWindowMs = 2000;
+
+// Both worker-thread-exclusive, like g_lastPolledCenterX itself.
+UINT g_dragFollowPollCurrentMs;
+ULONGLONG g_lastDragFollowChangeTick;
+
+// Defined just below DragFollowPollTimerProc, which calls it.
+void SetDragFollowPollInterval(UINT intervalMs);
+
 void CALLBACK DragFollowPollTimerProc(HWND hwnd,
                                       UINT uMsg,
                                       UINT_PTR idEvent,
@@ -2957,10 +3031,49 @@ void CALLBACK DragFollowPollTimerProc(HWND hwnd,
         }
     }
 
+    ULONGLONG now = GetTickCount64();
     if (anyChanged) {
         g_dragFollowInvalidateCount++;
+        g_lastDragFollowChangeTick = now;
         InvalidateTaskbarLayout();
     }
+
+    // Adaptive cadence: poll fast only while something is actually
+    // moving. A drag produces a change on nearly every tick, so this
+    // holds the fast rate for the whole drag plus
+    // kDragFollowActiveWindowMs after it settles, then drops to the idle
+    // rate - which is where an ordinary desktop sits essentially all of
+    // the time. A fixed fast rate would instead keep explorer.exe waking
+    // ~7x/second for the entire time the mod is enabled, including with
+    // nothing tracked at all, with the click-sentinel path latched off,
+    // and with the user away from the machine; a constant sub-second
+    // timer in the shell process is a real cost to impose for that.
+    // Nothing is missed at the idle rate - it still does the same
+    // GetWindowRect comparison per tracked window, so a new drag is
+    // picked up within one idle interval and snaps straight back to the
+    // fast rate for the rest of it.
+    UINT wanted = (now - g_lastDragFollowChangeTick < kDragFollowActiveWindowMs)
+                      ? kDragFollowPollActiveMs
+                      : kDragFollowPollIdleMs;
+    if (wanted != g_dragFollowPollCurrentMs) {
+        SetDragFollowPollInterval(wanted);
+    }
+}
+
+// Switches the drag-follow poll to a new interval. Only ever called from
+// the dedicated worker thread, which owns this timer - from
+// BackgroundWorkerThreadProc at startup, and from DragFollowPollTimerProc
+// itself (killing and re-arming a thread-owned timer from inside its own
+// callback is fine, and ButtonHwndResolveTimerProc already does the same).
+// A thread-owned SetTimer mints a fresh id, so g_dragFollowPollTimerId has
+// to be updated alongside or teardown would kill the wrong one.
+void SetDragFollowPollInterval(UINT intervalMs) {
+    if (g_dragFollowPollTimerId) {
+        KillTimer(nullptr, g_dragFollowPollTimerId);
+    }
+    g_dragFollowPollTimerId =
+        SetTimer(nullptr, 0, intervalMs, DragFollowPollTimerProc);
+    g_dragFollowPollCurrentMs = intervalMs;
 }
 
 // ============================================================================
@@ -3079,33 +3192,23 @@ using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
 // Fires on every visual-state transition of a taskbar button, including a
-// pinned app's running/not-running change - replaces the old, desktop-wide
-// EVENT_OBJECT_SHOW WinEventHook (removed) as the fast nudge for
-// "something just changed, go re-check", scoped to this taskbar's own
-// buttons instead of every top-level window process-wide.
-// Optional (see the hooks table below) - if a future Windows build renames
-// this, resolution falls back to ResolveBackoffMs' own capped-backoff
-// schedule with no fast path, the same fallback already relied on for a
-// launch that reaches this hook through a path it doesn't expect.
+// pinned app's running/not-running change - the fast "something changed,
+// go re-check" nudge, scoped to this taskbar's own buttons (it replaced a
+// desktop-wide EVENT_OBJECT_SHOW WinEventHook). Optional: if a future
+// Windows build renames it, resolution falls back to ResolveBackoffMs'
+// capped-backoff schedule with no fast path.
 //
-// Unconditionally re-arms the resolve timer with a small delay rather than
-// gating on elapsed time - this fires for every visual-state transition of
-// every taskbar button, not just running/not-running (hover, press,
-// focus, badges...), so a leading-edge throttle can silently drop the one
-// call that actually mattered if it lands within the throttle window of
-// an irrelevant one, with nothing left to re-arm afterward.
-// ArmButtonHwndResolveTimer's own KillTimer/SetTimer re-arm makes this a
-// lossless trailing-edge debounce for free: each call resets the pending
-// timer's countdown, so a burst of calls collapses into exactly one
-// resolve pass, 150ms after the burst actually goes quiet - matching the
-// same trailing-timer idea drag-follow already uses, without needing a
-// second timer variable. g_anyButtonNeedsRecheck skips this entirely once
-// nothing could benefit - in practice that's rarer than it sounds, since a
-// pinned-but-not-running button (present on essentially every real
-// Windows 11 taskbar by default) never advances past 0
-// consecutiveFailures and so keeps the flag true indefinitely; the skip
-// still matters for a taskbar with no pinned-not-running apps, and every
-// hover sweep that doesn't skip is a cheap pass regardless.
+// Re-arms unconditionally rather than gating on elapsed time. This also
+// fires for hover, press, focus and badge transitions, so a leading-edge
+// throttle could silently drop the one call that mattered when it landed
+// behind an irrelevant one, with nothing left to re-arm. Arming instead
+// gives a lossless trailing-edge debounce for free, since
+// ArmButtonHwndResolveTimer's own KillTimer/SetTimer resets the pending
+// countdown: a burst collapses into one pass 150ms after it goes quiet.
+// g_anyButtonNeedsRecheck skips the nudge when nothing could benefit,
+// though one pinned-but-not-running button keeps it true indefinitely -
+// so on a typical taskbar the skip rarely fires, and the pass it would
+// have avoided is cheap anyway.
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
 
@@ -3283,10 +3386,6 @@ void CALLBACK ButtonHwndResolveTimerProc(HWND hwnd,
                                          UINT_PTR idEvent,
                                          DWORD dwTime);
 
-// How often DragFollowPollTimerProc polls g_resolvedHwnds - see its own
-// comment for why this replaced a WinEventHook.
-constexpr UINT kDragFollowPollMs = 150;
-
 DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     // Forces this thread's message queue into existence before SetTimer
     // runs below, so the timers this thread owns have somewhere to
@@ -3303,9 +3402,14 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     g_buttonHwndResolveTimerId =
         SetTimer(nullptr, 0, 100, ButtonHwndResolveTimerProc);
 
-    // Runs for as long as this thread does - see DragFollowPollTimerProc.
-    g_dragFollowPollTimerId =
-        SetTimer(nullptr, 0, kDragFollowPollMs, DragFollowPollTimerProc);
+    // Runs for as long as this thread does, switching between the fast
+    // and idle cadences on its own - see DragFollowPollTimerProc's tail.
+    // Starts fast, with the active window seeded from now, so a drag in
+    // the first couple of seconds after the mod loads is followed live
+    // rather than waiting out an idle interval first; it settles to the
+    // idle rate on its own if nothing moves.
+    g_lastDragFollowChangeTick = GetTickCount64();
+    SetDragFollowPollInterval(kDragFollowPollActiveMs);
 
     // WM_APP (posted by StopBackgroundWorkerThread) is this thread's
     // shutdown signal.
@@ -3330,6 +3434,11 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     if (g_dragFollowPollTimerId) {
         KillTimer(nullptr, g_dragFollowPollTimerId);
         g_dragFollowPollTimerId = 0;
+        // A live trackWindowPositions toggle can start this thread again
+        // later; SetDragFollowPollInterval sets this unconditionally on
+        // the way back up, but leaving a stale cadence behind here would
+        // be misleading to read.
+        g_dragFollowPollCurrentMs = 0;
     }
 
     return 0;
@@ -3449,27 +3558,19 @@ ULONGLONG ResolveBackoffMs(int consecutiveFailures) {
 DWORD NextResolveDelayMs() {
     ULONGLONG now = GetTickCount64();
     bool anyPending = false;
-    // True for a resolved entry, a terminal one (consecutiveFailures at
-    // kMaxResolveFailures), or a confirmed-not-running/awaiting-first-
-    // click one (ButtonHwndCacheEntry::notRunning/awaitingFirstClick) -
-    // in every case, only the slow idle-rebind cadence below still
-    // applies to it, not the fast backoff-0 cadence. This must exactly
-    // match ResolvePendingButtonHwnds' own backoffElapsed check for the
-    // TERMINAL case specifically - backoffElapsed has no branch of its
-    // own for a terminal entry, it just structurally evaluates false
-    // forever once consecutiveFailures reaches kMaxResolveFailures, so
-    // NextResolveDelayMs has to independently know to stop chasing it:
-    // without this, a terminal entry's fixed, no-longer-advancing dueAt
-    // falls further into the past every tick, pinning pendingDelay at 0
+    // True for an entry that only the slow idle-rebind cadence still
+    // applies to: resolved, terminal (consecutiveFailures at
+    // kMaxResolveFailures), or confirmed-not-running/awaiting-first-click
+    // (see ButtonHwndCacheEntry). The terminal case is load-bearing -
+    // ResolvePendingButtonHwnds' backoffElapsed check structurally
+    // evaluates false forever once the cap is reached, so if this didn't
+    // independently stop chasing such an entry, its fixed dueAt would
+    // fall further into the past every tick and pin the delay at 0
     // (SetTimer's 10ms floor) forever. notRunning/awaitingFirstClick
-    // entries are
-    // different: backoffElapsed has no special case for them either, but
-    // unlike a terminal entry it naturally evaluates true for them too
-    // once enough time passes (their consecutiveFailures never advances
-    // past 0), so they're never excluded from a real re-resolve - they
-    // just get one at the slower idle cadence instead of every 2s, since
-    // that's what a confirmed-not-running or still-unconfirmed button
-    // needs, not a permanent exclusion the way a terminal entry does.
+    // entries are only slowed, not excluded: their consecutiveFailures
+    // never advances, so backoffElapsed does come true for them again in
+    // time, which is what a not-running or still-unconfirmed button
+    // wants.
     bool anyIdleWorthy = false;
     ULONGLONG earliestDue = 0;
 
