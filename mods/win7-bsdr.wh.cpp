@@ -2807,6 +2807,18 @@ void CustomBSDR::Cancel(bool noExitProcess) {
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
+        hTitleText = nullptr;
+        hAppList = nullptr;
+        hAppListScroll = nullptr;
+        hScrollBar = nullptr;
+        hWarningText = nullptr;
+        hForceButton = nullptr;
+        hCancelButton = nullptr;
+        hDescText = nullptr;
+        hYesButton = nullptr;
+        hNoButton = nullptr;
+        hHoverButton = nullptr;
+
         // Verify if all expected controls are there
         hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
         hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
@@ -3394,11 +3406,6 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             pendingApps->clear();
         }
 
-        {
-            std::lock_guard lock(cancelMutex);
-            isCanceling = false;
-        }
-
         if (bgBitmap) {
             DeleteObject(bgBitmap);
             bgBitmap = nullptr;
@@ -3436,29 +3443,6 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             hDescFont = nullptr;
         }
 
-        hTitleText = nullptr;
-        hAppList = nullptr;
-        hAppListScroll = nullptr;
-        hScrollBar = nullptr;
-        hWarningText = nullptr;
-        hForceButton = nullptr;
-        hCancelButton = nullptr;
-        hDescText = nullptr;
-        hYesButton = nullptr;
-        hNoButton = nullptr;
-        hHoverButton = nullptr;
-
-        dlgInitFailed = false;
-        bgOffsetX = 0;
-        bgOffsetY = 0;
-        bgWidth = 0;
-        bgHeight = 0;
-        scrollPos = 0;
-        totalContentHeight = 0;
-        minHeight = 0;
-        paintedFirstFrame = false;
-        isOnSecureDesktop = true;
-
         return 0;
     }
     case WM_DESTROY:
@@ -3472,6 +3456,17 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     bool failed = false;
     bool unloadCancelHandled = false;
     int ret = 0;
+
+    dlgInitFailed = false;
+    bgOffsetX = 0;
+    bgOffsetY = 0;
+    bgWidth = 0;
+    bgHeight = 0;
+    scrollPos = 0;
+    totalContentHeight = 0;
+    minHeight = 0;
+    paintedFirstFrame = false;
+    isOnSecureDesktop = true;
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
     // but the Windhawk mod can force this phase of session end to run in the default desktop
@@ -3709,6 +3704,11 @@ void CustomBSDR::Start(LogonUIState state) {
         std::lock_guard lock(g_resolvedMutex);
         g_resolvedValue = BlockedShutdownResolution_None;
         g_wasClicked = false;
+    }
+
+    {
+        std::lock_guard lock(cancelMutex);
+        isCanceling = false;
     }
 
     if (!ResetEvent(hStopEvent)) {
