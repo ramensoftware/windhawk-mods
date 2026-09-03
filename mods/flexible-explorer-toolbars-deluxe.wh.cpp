@@ -6,7 +6,7 @@
 // @author Anixx
 // @github https://github.com/Anixx
 // @include explorer.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -luuid -lshlwapi
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,15 +41,15 @@ By default, only the Search Bar is shown; the Location (breadcrumb) bar and the 
 * To make the toolbars to have the 3D borders, install this mod: [Separators around File Explorer toolbars](https://windhawk.net/mods/explorer-toolbars-separators).
 * To fix the appearance of the default text in the search bar under dark Classic theme, install this mod: [Classic Theme Explorer Search Fix](https://windhawk.net/mods/classic-theme-explorer-search-fix).
 
-[screnshot](https://i.imgur.com/7lJxsAT.png)
+![screenshot](https://i.imgur.com/7lJxsAT.png)
 
-[screnshot](https://i.imgur.com/OV8NRKJ.png)
+![screenshot](https://i.imgur.com/OV8NRKJ.png)
 
-[screnshot](https://i.imgur.com/OEthKme.png)
+![screenshot](https://i.imgur.com/OEthKme.png)
 
-[screnshot](https://i.imgur.com/JXKEXL1.png)
+![screenshot](https://i.imgur.com/JXKEXL1.png)
 
-[screnshot](https://i.imgur.com/QFFmczo.png)
+![screenshot](https://i.imgur.com/QFFmczo.png)
 
 */
 // ==/WindhawkModReadme==
@@ -62,7 +62,6 @@ By default, only the Search Bar is shown; the Location (breadcrumb) bar and the 
 #include <shlobj.h>
 #include <shtypes.h>
 #include <shlguid.h>
-#include <olectl.h>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -474,15 +473,6 @@ std::wstring GetFriendlyPathFromPidl(LPITEMIDLIST pidl)
     return out;
 }
 
-std::wstring GetFriendlyPathFromCab(HWND cab)
-{
-    LPITEMIDLIST pidl = GetPidlForCab(cab);
-    if (!pidl) return L"";
-    std::wstring s = GetFriendlyPathFromPidl(pidl);
-    ILFree(pidl);
-    return s;
-}
-
 HWND FindEditInAddressBand(HWND addrBand)
 {
     if (!addrBand) return NULL;
@@ -553,7 +543,7 @@ void UpdateAddressBandForCab(HWND cab)
 
     COMBOBOXEXITEMW cbei = {0};
     cbei.mask = CBEIF_IMAGE | CBEIF_SELECTEDIMAGE;
-    if (needText) cbei.mask |= CBEIF_TEXT;
+    cbei.mask |= CBEIF_TEXT;
     cbei.iItem = -1;
     cbei.pszText = (LPWSTR)curPath.c_str();
     cbei.cchTextMax = (int)curPath.size();
@@ -940,7 +930,6 @@ void ShowOffscreenForClick(HWND ch) {
 void HideAfterOffscreenClick(HWND ch) { if (ch && IsWindow(ch)) ShowWindow(ch, SW_HIDE); }
 
 void CaptureAddressCombo(HWND cab, HWND mr, HWND combo) {
-    HWND root = (HWND)GetPropW(cab, L"FlexTbAddrRoot");
     ShowWindow(combo, SW_HIDE);
     SetParent(combo, mr);
     SetPropW(combo, L"FlexTbFlag", (HANDLE)(INT_PTR)(CF_MOVED | CF_ADDRESSBAR));
