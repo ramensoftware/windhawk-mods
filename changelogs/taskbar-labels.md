@@ -1,3 +1,8 @@
+## 1.4.4 ([Sep 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b0553682078854d14adffff2ed5cda1dc4774748/mods/taskbar-labels.wh.cpp))
+
+* Fixed compatibility with the latest Windows 11 update. You might need to restart explorer after updating the to the newer version of the mod.
+* Fixed a crash in some cases when a progress indicator is shown.
+
 ## 1.4.3 ([Jun 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78dcd1fcb93e34b86e3d571072734618cf09c93c/mods/taskbar-labels.wh.cpp))
 
 * Fixed label handling with "Show labels, combine taskbar buttons" mode and zero taskbar item width (Windows adaptive width).

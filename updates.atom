@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-02T22:59:01.000Z</updated>
+    <updated>2026-09-03T18:13:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#b0553682078854d14adffff2ed5cda1dc4774748</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-09-03T18:13:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with the latest Windows 11 update. You might need to restart explorer after updating the to the newer version of the mod.</li>
+<li>Fixed a crash in some cases when a progress indicator is shown.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Open Real File Location 1.1.0]]></title>
         <id>https://windhawk.net/mods/start-menu-open-real-file-location#436ad54c3756f16628555963ccb46bba481ed8f1</id>
@@ -723,19 +737,6 @@ starts.</p>]]></content>
 <li>Fixed taskbar alignment not affecting the Start menu in some cases when the taskbar is only shown on the primary monitor.</li>
 <li>Fixed invisible taskbar if after switching the primary taskbar with a double/middle click that taskbar is gone, e.g. if the monitor is detached.</li>
 <li>Fixed the taskbar remaining on the secondary monitor when the mod is disabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar: no minimize on click 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-no-minimize#0406877a8b83b629d25289ca25b1370f7906118e</id>
-        <link href="https://windhawk.net/mods/taskbar-no-minimize"/>
-        <updated>2026-08-29T14:05:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to minimize on double-click.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
