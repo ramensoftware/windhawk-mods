@@ -30,6 +30,8 @@ the clock stays in its native position to avoid covering those buttons.
 
 Windows 11's modern taskbar is required.
 
+## Acknowledgements
+
 This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization) by [m417z](https://github.com/m417z).
 */
 // ==/WindhawkModReadme==
@@ -591,30 +593,18 @@ void RemoveLeftHost(MovedClockData& data) {
     data.leftHost = nullptr;
 }
 
-void CleanupMovedClockData() {
-    auto& movedClocks = MovedClocks();
-    for (auto it = movedClocks.begin(); it != movedClocks.end();) {
-        if (!it->clock.get() || !it->taskbarRoot.get()) {
-            RemoveLeftHost(*it);
-            it = movedClocks.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-bool RestoreClock(FrameworkElement clock) {
-    CleanupMovedClockData();
-
-    auto& movedClocks = MovedClocks();
-    for (auto it = movedClocks.begin(); it != movedClocks.end(); ++it) {
-        auto movedClock = it->clock.get();
-        if (!movedClock || movedClock != clock) {
-            continue;
-        }
-
-        auto originalParent = it->originalParent.get();
+void RestoreMovedClockData(MovedClockData& data) {
+    auto movedClock = data.clock.get();
+    if (movedClock) {
+        auto originalParent = data.originalParent.get();
         auto element = movedClock.as<UIElement>();
+        // A not-yet-attached host can own the clock even when GetParent is null.
+        if (data.leftHost) {
+            uint32_t index = 0;
+            if (data.leftHost.Children().IndexOf(element, index)) {
+                data.leftHost.Children().RemoveAt(index);
+            }
+        }
         auto currentParent = Media::VisualTreeHelper::GetParent(movedClock)
                                  .try_as<Controls::Panel>();
 
@@ -627,22 +617,14 @@ bool RestoreClock(FrameworkElement clock) {
             }
         }
 
-        RemoveLeftHost(*it);
-
-        Controls::Grid::SetColumn(movedClock, it->originalColumn);
-        Controls::Grid::SetColumnSpan(movedClock, it->originalColumnSpan);
-        Controls::Grid::SetRow(movedClock, it->originalRow);
-        Controls::Grid::SetRowSpan(movedClock, it->originalRowSpan);
-        movedClock.HorizontalAlignment(it->originalHorizontalAlignment);
-        movedClock.VerticalAlignment(it->originalVerticalAlignment);
-        movedClock.Margin(it->originalMargin);
-
+        // Reattach before restoring properties or removing the host, so a
+        // property failure can't strand the clock inside a discarded host.
         currentParent = Media::VisualTreeHelper::GetParent(movedClock)
                             .try_as<Controls::Panel>();
         if (originalParent && !currentParent) {
             auto children = originalParent.Children();
             uint32_t index =
-                std::min<uint32_t>(it->originalIndex, children.Size());
+                std::min<uint32_t>(data.originalIndex, children.Size());
             if (index < children.Size()) {
                 children.InsertAt(index, element);
             } else {
@@ -650,8 +632,43 @@ bool RestoreClock(FrameworkElement clock) {
             }
         }
 
-        movedClocks.erase(it);
+        Controls::Grid::SetColumn(movedClock, data.originalColumn);
+        Controls::Grid::SetColumnSpan(movedClock, data.originalColumnSpan);
+        Controls::Grid::SetRow(movedClock, data.originalRow);
+        Controls::Grid::SetRowSpan(movedClock, data.originalRowSpan);
+        movedClock.HorizontalAlignment(data.originalHorizontalAlignment);
+        movedClock.VerticalAlignment(data.originalVerticalAlignment);
+        movedClock.Margin(data.originalMargin);
+    }
+
+    RemoveLeftHost(data);
+    if (movedClock) {
         Wh_Log(L"Clock restored from the left host");
+    }
+}
+
+void CleanupMovedClockData() {
+    auto& movedClocks = MovedClocks();
+    for (auto it = movedClocks.begin(); it != movedClocks.end();) {
+        if (!it->clock.get() || !it->taskbarRoot.get()) {
+            RestoreMovedClockData(*it);
+            it = movedClocks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool RestoreClock(FrameworkElement clock) {
+    auto& movedClocks = MovedClocks();
+    for (auto it = movedClocks.begin(); it != movedClocks.end(); ++it) {
+        auto movedClock = it->clock.get();
+        if (!movedClock || movedClock != clock) {
+            continue;
+        }
+
+        RestoreMovedClockData(*it);
+        movedClocks.erase(it);
         return true;
     }
 
@@ -1169,24 +1186,23 @@ void RestoreAllMovedClocksOnTaskbarThread() {
 
     auto& movedClocks = MovedClocks();
     while (!movedClocks.empty()) {
-        auto clock = movedClocks.front().clock.get();
-        if (!clock) {
-            CleanupMovedClockData();
-            continue;
-        }
+        // Own this record before calling XAML; cleanup must never act on a
+        // different entry that happens to become the vector's front later.
+        auto data = std::move(movedClocks.front());
+        movedClocks.erase(movedClocks.begin());
 
         try {
-            if (!RestoreClock(clock)) {
-                RemoveLeftHost(movedClocks.front());
-                movedClocks.erase(movedClocks.begin());
-            }
+            RestoreMovedClockData(data);
         } catch (...) {
             Wh_Log(L"Clock restore failed: %08X", winrt::to_hresult());
             try {
-                RemoveLeftHost(movedClocks.front());
+                if (data.leftHost) {
+                    data.leftHost.Children().Clear();
+                }
+                RemoveLeftHost(data);
             } catch (...) {
+                Wh_Log(L"Clock host cleanup failed: %08X", winrt::to_hresult());
             }
-            movedClocks.erase(movedClocks.begin());
         }
     }
 }
