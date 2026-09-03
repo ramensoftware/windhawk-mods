@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         3.5.5
+// @version         4.0.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -16,100 +16,147 @@
 
 Hides each selected taskbar when its own display has no visible,
 non-minimized application window, and shows it again when an application or
-relevant Windows shell interaction requires it.
+relevant Windows shell interaction requires the taskbar.
 
-The mod uses a dedicated `windhawk.exe` process as its state manager instead of
-running the full state-management logic inside `explorer.exe`. A small
-Explorer-side hook is used only to prevent the specific secondary-taskbar
-`SW_SHOWNA` transition that Explorer can issue after this mod has hidden that
-taskbar.
+Each display is evaluated independently. An application being open on one
+display does not prevent the taskbar on another selected display from hiding.
 
 ### Behavior
 
 - Each display is evaluated independently.
 - A selected taskbar is hidden only while its display has no visible,
   non-minimized application window.
-- Maximized windows use Windows' monitor assignment. Normal windows that
-  span displays count on every display they actually intersect.
-- Bottom-edge hover reveal is selectable per display. The reveal zone uses
-  the taskbar's actual height and DPI. Hover reveal is intentionally limited
-  to bottom-docked taskbars; non-bottom-docked taskbars are not affected by
-  the hover logic.
-- The configured post-hover delay applies only to hover reveal.
-- Start/taskbar menus, tray overflow, notification/quick-settings surfaces,
-  and Alt+Tab are treated as transient shell interactions.
+- Maximized windows use Windows' monitor assignment. Normal windows that span
+  displays count on every display they actually intersect.
+- Bottom-edge hover reveal can be configured per display. The reveal zone is
+  based on the taskbar's actual height and display DPI plus the configured
+  extra margin.
+- Hover reveal is limited to bottom-docked taskbars.
+- The configured post-hover delay applies only to hover dismissal.
+- Relevant Windows shell surfaces, including Start, taskbar popups/overflow,
+  notification/quick-settings surfaces, and Alt+Tab, are treated as transient
+  shell UI rather than ordinary application windows.
 - Clearing the "Taskbars to hide on desktop" selection means hide nothing.
+- Windows' native taskbar auto-hide setting is left unchanged.
 
+### Why this is a separate behavior
 
-### Robustness
+This mod is focused on a specific visibility rule:
 
-- The tool re-discovers primary and secondary taskbars during every reconciliation,
-  so Explorer taskbar recreation is picked up automatically.
-- A hidden top-level worker window reacts to `TaskbarCreated`, display-configuration,
-  settings, and theme changes instead of waiting for the next safety-poll tick.
-- Selected `DISPLAYn` entries are bound to the display's monitor device identity
-  during the current Windows session, so a dock/reconnect that renumbers
-  `DISPLAYn` can keep the selection attached to the same physical display.
-- A display-topology signature resets stale hover state after monitor geometry or
-  display-set changes.
-- Native Windows auto-hide state is sampled once per reconciliation and reused
-  for the rest of that reconciliation.
-- Cursor movement near the bottom edge is handled by a dedicated lightweight
-  cursor-sampling thread. It samples only cursor position and posts a refresh
-  when the configured hover-zone state changes, keeping input detection separate
-  from the worker's full window scan.
-- Known taskbar/XAML popup classes are treated as shell surfaces; generic
-  `Windows.UI.Core.CoreWindow` windows are no longer rejected solely because of
-  their class name, which avoids misclassifying visible UWP application windows.
-- The mod records which taskbars it actually hid, so reconciliation does not
-  restore taskbars that were hidden by another mechanism.
-- The launcher watchdog restores only taskbars marked by this mod after an
-  unexpected tool-process exit.
+> **Hide a selected taskbar whenever its display is showing only the desktop.**
 
-### How this differs from related taskbar mods
+An ordinary non-maximized application keeps the taskbar visible on its display,
+while a display with no visible application can have its selected taskbar
+hidden.
 
-This mod overlaps with existing per-monitor taskbar mods in that each display
-is evaluated independently. The key behavioral difference from
-**`taskbar-auto-hide-when-maximized`** is the predicate used for hiding: this
-mod keeps a selected taskbar visible whenever its display has any visible,
-non-minimized application window, and hides it only when that display has no
-such window. It is therefore not limited to maximized, snapped, fullscreen,
-or taskbar-intersecting application states.
+Compared with **`taskbar-auto-hide-when-maximized`**, the distinction is the
+predicate and the interaction model. That mod is centered around window-state
+modes such as maximized/intersected behavior; this mod is centered around
+whether an application is present on each display and directly controls the
+taskbar window.
 
-**`taskbar-auto-hide-per-monitor`** provides explicit per-monitor control over
-Windows' native auto-hide. This mod instead derives visibility from application
-presence and directly controls the taskbar window.
+Compared with mods that configure Windows' native taskbar auto-hide, this mod
+does not enable or rewrite that setting. It directly hides the taskbar and
+leaves the normal desktop work area unchanged.
 
-**`taskbar-auto-hide-custom-activation-area`** changes the activation area for
-Windows' native auto-hide. This mod supplies its own bottom-edge hover reveal
-while leaving the normal desktop work area unchanged.
+### Per-display configuration
 
-**`taskbar-fade`** is a broader taskbar customization/fading mod with a Smart
-Idle option. This mod is specifically focused on desktop-only visibility and
-its associated per-display application-state rule.
+Users can independently choose:
 
-A key implementation difference is the **work-area behavior**: the mod uses
-`ShowWindow(SW_HIDE)` and does not change the Windows desktop work area.
+- Which displays should hide their taskbar on desktop-only displays.
+- Which displays should allow bottom-edge hover reveal.
 
-The launcher keeps a lightweight watchdog for the dedicated tool process. If the
-tool exits unexpectedly while a taskbar hidden by this mod is still marked, the
-watchdog re-shows those currently discoverable taskbars. It does not restore
-taskbars hidden by other mechanisms. A normal mod unload also restores only
-windows marked as hidden by this mod. If Explorer itself is unresponsive or has
-already recreated a taskbar, restarting Explorer may still be required.
+Selections use Windows display device names such as `\\.\DISPLAY1`. These
+identifiers may differ from the display numbers shown in Windows Display
+Settings.
 
-### Process and state model
+The mod tracks monitor/device identity during the current session so a
+reconnected display that receives a different `DISPLAYn` number can keep its
+selection when the same monitor identity is detected.
 
-The mod runs its mutable state and settings in a dedicated Windhawk tool process.
-A minimal Explorer-side hook handles one shell visibility operation. Window-state WinEvents request
-an immediate reconciliation, while a periodic safety poll handles missed
-or unusual transitions.
+### Hover reveal
 
-Each safety poll performs one display enumeration and one top-level-window
-enumeration. The result is reused for every taskbar. Cursor movement near the
-bottom edge is handled by a dedicated cursor-sampling thread that posts only
-lightweight state-transition refreshes. Hover dismissal uses a one-shot worker
-timer rather than a fast full-state polling loop.
+For a bottom-docked taskbar, moving the pointer into the configured
+bottom-edge zone reveals a taskbar hidden by the mod.
+
+After leaving the zone, the taskbar remains visible for the configured delay
+before returning to its normal desktop/application state.
+
+The hover zone uses the taskbar's current height and display DPI together with
+the configured extra margin. Top- and side-docked taskbars are not affected by
+hover reveal.
+
+### Windows shell interactions
+
+The mod distinguishes known shell surfaces from normal application windows.
+This includes taskbar popup/overflow windows, relevant XAML shell hosts,
+Start/notification/quick-settings surfaces hosted by Windows shell processes,
+and known Alt+Tab window classes.
+
+These surfaces can keep the relevant taskbar visible while the user is
+interacting with the shell.
+
+### Explorer integration and recovery
+
+The main state manager runs in a dedicated `windhawk.exe` process. A small
+Explorer-side hook is used only to stop a specific `SW_SHOWNA` operation from
+re-showing a secondary taskbar immediately after the mod hid it.
+
+The taskbar marker stores the owning tool-process ID rather than a constant
+value. The Explorer-side hook verifies that the owning process is still alive.
+If the owner has exited, the stale marker is removed and the normal Explorer
+operation is allowed to continue.
+
+The mod also records which taskbars it actually hid, so it does not restore
+taskbars hidden by unrelated mechanisms.
+
+### Multi-monitor behavior
+
+Consider two displays:
+
+1. Display 1 has an application open.
+2. Display 2 shows only the desktop.
+3. A selected taskbar on display 1 stays visible.
+4. A selected taskbar on display 2 hides.
+5. Hovering the configured bottom edge of display 2 reveals its taskbar.
+6. Leaving the hover zone starts the configured dismissal delay.
+7. Opening an application on display 2 keeps its taskbar visible.
+
+Applications that span multiple displays count on every display they intersect.
+Maximized windows use the monitor assignment provided by Windows.
+
+### Display and taskbar changes
+
+Taskbars are rediscovered during reconciliation so Explorer taskbar recreation
+does not leave the mod tied to an old window handle.
+
+The state is refreshed for relevant taskbar, display, settings, theme, window,
+and shell visibility changes, with a periodic safety poll for missed
+transitions.
+
+A display-topology signature resets transient hover state when monitor
+geometry or the connected display set changes.
+
+### Limitations
+
+- Hover reveal is supported only for bottom-docked taskbars.
+- Display selection currently exposes `DISPLAY1` through `DISPLAY16`.
+- `DISPLAYn` identifiers may differ from the numbering shown in Windows Display
+  Settings and may change after display configuration changes.
+- The mod does not modify Windows' native taskbar auto-hide setting.
+- The mod is focused specifically on desktop-only taskbar visibility rather
+  than being a general-purpose taskbar customization framework.
+
+### Goal
+
+The goal is a specific taskbar visibility rule:
+
+> **Hide the taskbar when its display is showing only the desktop.**
+
+The mod combines that per-display application-state rule with independent
+display selection, shell-interaction handling, taskbar recreation recovery,
+and configurable bottom-edge hover reveal.
+
 */
 // ==/WindhawkModReadme==
 
@@ -159,7 +206,8 @@ timer rather than a fast full-state polling loop.
   $description: >-
     Select one or more displays using the Windows `\\.\DISPLAYn` device number.
     These numbers may differ from the display numbers shown in Windows Display
-    Settings. Choose All displays to hide every connected display. Use Add to
+    Settings. Choose All displays to hide every connected display. Only
+    bottom-docked taskbars participate in desktop-based hiding. Use Add to
     select multiple displays. When a physical display is reconnected and Windows
     renumbers DISPLAYn, the mod keeps the selection bound to the same detected
     monitor device when possible.
@@ -187,6 +235,7 @@ timer rather than a fast full-state polling loop.
 #include <windows.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <windhawk_utils.h>
 #include <wchar.h>
 
 
@@ -235,7 +284,7 @@ struct MonitorSelectionBinding {
 
 struct WindowScanResult {
     bool applicationOnMonitor[kMaxMonitorNumbers];
-    bool taskbarPopupOnMonitor[kMaxMonitorNumbers];
+    bool shellSurfaceOnMonitor[kMaxMonitorNumbers];
 };
 
 HWINEVENTHOOK g_foregroundHook = nullptr;
@@ -267,12 +316,33 @@ constexpr wchar_t kHiddenByModProperty[] =
 // Explorer-side protection for the secondary-taskbar shell transition.
 // The dedicated tool process remains authoritative for taskbar state. Explorer
 // only consults the per-window property and blocks SW_SHOWNA for an explicitly
-// hidden secondary taskbar.
-using ShowWindow_t = BOOL (WINAPI*)(HWND, int);
-
+// hidden secondary taskbar while its owning tool process is still alive.
+using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t g_explorerShowWindowOriginal = nullptr;
-void* g_explorerShowWindowTarget = nullptr;
 bool g_isExplorerProcess = false;
+
+DWORD g_hiddenTaskbarOwnerPid = 0;
+HANDLE g_hiddenTaskbarOwnerProcess = nullptr;
+SRWLOCK g_hiddenTaskbarOwnerCacheLock = SRWLOCK_INIT;
+
+void ResetHiddenTaskbarOwnerCache() {
+    AcquireSRWLockExclusive(
+        &g_hiddenTaskbarOwnerCacheLock
+    );
+
+    if (g_hiddenTaskbarOwnerProcess) {
+        CloseHandle(
+            g_hiddenTaskbarOwnerProcess
+        );
+        g_hiddenTaskbarOwnerProcess = nullptr;
+    }
+
+    g_hiddenTaskbarOwnerPid = 0;
+
+    ReleaseSRWLockExclusive(
+        &g_hiddenTaskbarOwnerCacheLock
+    );
+}
 
 bool IsExplorerSecondaryTaskbar(HWND hwnd) {
     if (!hwnd) {
@@ -298,12 +368,82 @@ bool IsExplorerSecondaryTaskbar(HWND hwnd) {
 }
 
 bool IsSecondaryTaskbarHiddenByMod(HWND hwnd) {
-    return
-        IsExplorerSecondaryTaskbar(hwnd) &&
+    if (!IsExplorerSecondaryTaskbar(hwnd)) {
+        return false;
+    }
+
+    HANDLE marker =
         GetPropW(
             hwnd,
             kHiddenByModProperty
-        ) != nullptr;
+        );
+
+    if (!marker) {
+        return false;
+    }
+
+    DWORD ownerPid =
+        static_cast<DWORD>(
+            reinterpret_cast<ULONG_PTR>(marker)
+        );
+
+    if (!ownerPid) {
+        RemovePropW(
+            hwnd,
+            kHiddenByModProperty
+        );
+        return false;
+    }
+
+    AcquireSRWLockExclusive(
+        &g_hiddenTaskbarOwnerCacheLock
+    );
+
+    if (ownerPid != g_hiddenTaskbarOwnerPid) {
+        if (g_hiddenTaskbarOwnerProcess) {
+            CloseHandle(
+                g_hiddenTaskbarOwnerProcess
+            );
+            g_hiddenTaskbarOwnerProcess = nullptr;
+        }
+
+        g_hiddenTaskbarOwnerPid = ownerPid;
+        g_hiddenTaskbarOwnerProcess =
+            OpenProcess(
+                SYNCHRONIZE,
+                FALSE,
+                ownerPid
+            );
+    }
+
+    bool ownerAlive =
+        g_hiddenTaskbarOwnerProcess &&
+        WaitForSingleObject(
+            g_hiddenTaskbarOwnerProcess,
+            0
+        ) == WAIT_TIMEOUT;
+
+    if (!ownerAlive) {
+        RemovePropW(
+            hwnd,
+            kHiddenByModProperty
+        );
+
+        if (g_hiddenTaskbarOwnerProcess) {
+            CloseHandle(
+                g_hiddenTaskbarOwnerProcess
+            );
+            g_hiddenTaskbarOwnerProcess = nullptr;
+        }
+
+        g_hiddenTaskbarOwnerPid = 0;
+    }
+
+    ReleaseSRWLockExclusive(
+        &g_hiddenTaskbarOwnerCacheLock
+    );
+
+    return ownerAlive;
 }
 
 BOOL WINAPI ExplorerShowWindowHook(
@@ -324,65 +464,20 @@ BOOL WINAPI ExplorerShowWindowHook(
 }
 
 bool InstallExplorerVisibilityHook() {
-    HMODULE user32 =
-        GetModuleHandleW(L"user32.dll");
-
-    if (!user32) {
-        Wh_Log(
-            L"GetModuleHandleW(user32.dll) failed: %lu",
-            GetLastError()
-        );
-        return false;
-    }
-
-    g_explorerShowWindowTarget =
-        reinterpret_cast<void*>(
-            GetProcAddress(
-                user32,
-                "ShowWindow"
-            )
-        );
-
-    if (!g_explorerShowWindowTarget) {
-        Wh_Log(
-            L"GetProcAddress(ShowWindow) failed: %lu",
-            GetLastError()
-        );
-        return false;
-    }
-
     if (
-        Wh_SetFunctionHook(
-            g_explorerShowWindowTarget,
-            reinterpret_cast<void*>(ExplorerShowWindowHook),
-            reinterpret_cast<void**>(&g_explorerShowWindowOriginal)
-        ) == FALSE
+        !WindhawkUtils::SetFunctionHook(
+            ShowWindow,
+            ExplorerShowWindowHook,
+            &g_explorerShowWindowOriginal
+        )
     ) {
         Wh_Log(
             L"Failed to hook Explorer ShowWindow"
         );
-        g_explorerShowWindowTarget = nullptr;
         return false;
     }
 
     return true;
-}
-
-void UninstallExplorerVisibilityHook() {
-    if (g_explorerShowWindowTarget) {
-        if (
-            Wh_RemoveFunctionHook(
-                g_explorerShowWindowTarget
-            ) == FALSE
-        ) {
-            Wh_Log(
-                L"Failed to remove Explorer ShowWindow hook"
-            );
-        }
-
-        g_explorerShowWindowTarget = nullptr;
-        g_explorerShowWindowOriginal = nullptr;
-    }
 }
 
 HWND g_workerMessageWindow = nullptr;
@@ -408,6 +503,12 @@ void LoadSettings();
 void WhTool_ModUninit();
 void ArmHoverExpireTimer();
 void CancelHoverExpireTimer();
+void RestoreAllTaskbars();
+bool WaitForThreadWithTimeout(
+    HANDLE thread,
+    DWORD timeoutMs,
+    const wchar_t* threadName
+);
 
 bool IsShellChromeClass(
     const WCHAR* className
@@ -914,49 +1015,233 @@ bool ShouldRevealOnHover(
     );
 }
 
+bool GetWindowProcessImageName(
+    DWORD pid,
+    wchar_t* output,
+    size_t outputCount
+) {
+    if (!pid || !output || outputCount == 0) {
+        return false;
+    }
+
+    output[0] = L'\0';
+
+    HANDLE process =
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION,
+            FALSE,
+            pid
+        );
+
+    if (!process) {
+        return false;
+    }
+
+    DWORD size =
+        static_cast<DWORD>(
+            outputCount
+        );
+
+    BOOL result =
+        QueryFullProcessImageNameW(
+            process,
+            0,
+            output,
+            &size
+        );
+
+    CloseHandle(process);
+
+    return result && output[0] != L'\0';
+}
+
+bool IsKnownShellProcess(DWORD pid) {
+    wchar_t imagePath[MAX_PATH] = {};
+
+    if (!GetWindowProcessImageName(
+            pid,
+            imagePath,
+            ARRAYSIZE(imagePath)
+        )) {
+        return false;
+    }
+
+    const wchar_t* baseName =
+        wcsrchr(
+            imagePath,
+            L'\\'
+        );
+
+    baseName =
+        baseName
+            ? baseName + 1
+            : imagePath;
+
+    return
+        _wcsicmp(
+            baseName,
+            L"StartMenuExperienceHost.exe"
+        ) == 0 ||
+        _wcsicmp(
+            baseName,
+            L"ShellExperienceHost.exe"
+        ) == 0 ||
+        _wcsicmp(
+            baseName,
+            L"ShellHost.exe"
+        ) == 0;
+}
+
+bool IsExplorerProcess(DWORD pid) {
+    wchar_t imagePath[MAX_PATH] = {};
+
+    if (!GetWindowProcessImageName(
+            pid,
+            imagePath,
+            ARRAYSIZE(imagePath)
+        )) {
+        return false;
+    }
+
+    const wchar_t* baseName =
+        wcsrchr(
+            imagePath,
+            L'\\'
+        );
+
+    baseName =
+        baseName
+            ? baseName + 1
+            : imagePath;
+
+    return _wcsicmp(
+        baseName,
+        L"explorer.exe"
+    ) == 0;
+}
+
+bool IsTaskbarPopupClass(
+    const WCHAR* className
+) {
+    if (!className) {
+        return false;
+    }
+
+    static const WCHAR* kClasses[] = {
+        L"#32768",
+        L"#32771",
+        L"Xaml_WindowedPopupClass",
+        L"TopLevelWindowForOverflowXamlIsland",
+        L"NotifyIconOverflowWindow",
+        L"TaskbarOverflowWnd",
+    };
+
+    for (const WCHAR* shellClass : kClasses) {
+        if (wcscmp(className, shellClass) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsAltTabClass(
+    const WCHAR* className
+) {
+    if (!className) {
+        return false;
+    }
+
+    static const WCHAR* kClasses[] = {
+        L"MultitaskingViewFrame",
+        L"TaskSwitcherWnd",
+        L"TaskSwitcherOverlayWnd",
+        L"ForegroundStaging",
+    };
+
+    for (const WCHAR* shellClass : kClasses) {
+        if (wcscmp(className, shellClass) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsShellSurfaceWindow(
+    HWND hwnd,
+    const WCHAR* className
+) {
+    if (
+        !hwnd ||
+        !className ||
+        !IsWindowVisible(hwnd)
+    ) {
+        return false;
+    }
+
+    DWORD pid = 0;
+
+    GetWindowThreadProcessId(
+        hwnd,
+        &pid
+    );
+
+    if (IsTaskbarPopupClass(className)) {
+        return true;
+    }
+
+    if (
+        IsAltTabClass(className) &&
+        (
+            IsExplorerProcess(pid) ||
+            IsKnownShellProcess(pid)
+        )
+    ) {
+        return true;
+    }
+
+    // Windows 11 uses XAML host windows for several shell surfaces,
+    // including Start and Alt+Tab variants. Limit this class to Explorer
+    // and the known Windows shell processes.
+    if (
+        wcscmp(
+            className,
+            L"XamlExplorerHostIslandWindow"
+        ) == 0 &&
+        (
+            IsExplorerProcess(pid) ||
+            IsKnownShellProcess(pid)
+        )
+    ) {
+        return true;
+    }
+
+    // Start, notification center and quick settings can expose
+    // Windows.UI.Core.CoreWindow instances from their dedicated
+    // Windows shell processes.
+    if (
+        wcscmp(
+            className,
+            L"Windows.UI.Core.CoreWindow"
+        ) == 0 &&
+        IsKnownShellProcess(pid)
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
 bool IsTransientShellWindow(
     HWND hwnd,
     const WCHAR* className
 ) {
-    if (!hwnd || !className) {
-        return false;
-    }
-
-    // Classic shell popup/menu windows.
-    if (
-        wcscmp(className, L"#32768") == 0 ||
-        wcscmp(className, L"#32771") == 0
-    ) {
-        return true;
-    }
-
-    // Common Windows shell/XAML popup hosts.
-    if (
-        wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
-        wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
-        wcscmp(
-            className,
-            L"NotifyIconOverflowWindow"
-        ) == 0 ||
-        wcscmp(
-            className,
-            L"TaskbarOverflowWnd"
-        ) == 0
-    ) {
-        return true;
-    }
-
-    LONG_PTR exStyle =
-        GetWindowLongPtrW(
-            hwnd,
-            GWL_EXSTYLE
-        );
-
-    // Do not let no-activate transient surfaces make a display look
-    // application-active.
-    return (exStyle & WS_EX_NOACTIVATE) != 0;
+    return IsShellSurfaceWindow(
+        hwnd,
+        className
+    );
 }
-
 
 bool IsApplicationWindowCandidate(
     HWND hwnd,
@@ -978,7 +1263,10 @@ bool IsApplicationWindowCandidate(
         );
 
     if (
-        GetWindow(hwnd, GW_OWNER) != nullptr &&
+        GetWindow(
+            hwnd,
+            GW_OWNER
+        ) != nullptr &&
         !(exStyle & WS_EX_APPWINDOW)
     ) {
         return false;
@@ -1021,86 +1309,16 @@ bool IsApplicationWindowCandidate(
         return false;
     }
 
-    /*
-     * Background title-less helper surfaces are ignored. A title-less
-     * application becomes covered by the foreground-window path.
-     */
+    // Background title-less helper surfaces are ignored. A title-less
+    // application becomes covered by the foreground-window path.
     return
         (exStyle & WS_EX_APPWINDOW) != 0 ||
         GetWindowTextLengthW(hwnd) > 0;
 }
 
-bool IsTaskbarPopupClass(
-    const WCHAR* className
-) {
-    if (!className) {
-        return false;
-    }
-
-    return
-        wcscmp(className, L"#32768") == 0 ||
-        wcscmp(className, L"Xaml_WindowedPopupClass") == 0 ||
-        wcscmp(
-            className,
-            L"TopLevelWindowForOverflowXamlIsland"
-        ) == 0 ||
-        wcscmp(
-            className,
-            L"NotifyIconOverflowWindow"
-        ) == 0 ||
-        wcscmp(
-            className,
-            L"TaskbarOverflowWnd"
-        ) == 0;
-}
-
-bool IsExplorerShellPopup(
-    HWND hwnd,
-    const WCHAR* className,
-    DWORD explorerPid
-) {
-    if (
-        !hwnd ||
-        !className ||
-        !IsWindowVisible(hwnd) ||
-        !IsTaskbarPopupClass(className)
-    ) {
-        return false;
-    }
-
-    DWORD pid = 0;
-
-    GetWindowThreadProcessId(
-        hwnd,
-        &pid
-    );
-
-    if (
-        explorerPid != 0 &&
-        pid == explorerPid
-    ) {
-        return true;
-    }
-
-    HWND shellWindow = GetShellWindow();
-    DWORD shellPid = 0;
-
-    if (shellWindow) {
-        GetWindowThreadProcessId(
-            shellWindow,
-            &shellPid
-        );
-    }
-
-    return
-        shellPid != 0 &&
-        pid == shellPid;
-}
-
 struct ScanContext {
     const MonitorList* monitors;
     WindowScanResult* result;
-    DWORD explorerPid;
 };
 
 BOOL CALLBACK ScanWindowsWithMonitorsProc(
@@ -1130,10 +1348,9 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(
         return TRUE;
     }
 
-    if (IsExplorerShellPopup(
+    if (IsShellSurfaceWindow(
             hwnd,
-            className,
-            context->explorerPid
+            className
         )) {
         RECT popupRect = {};
 
@@ -1153,7 +1370,7 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(
                         &popupRect,
                         &context->monitors->entries[i].rect
                     )) {
-                    context->result->taskbarPopupOnMonitor[i] = true;
+                    context->result->shellSurfaceOnMonitor[i] = true;
                 }
             }
         }
@@ -1239,24 +1456,9 @@ void ScanWindowsOnce(
 ) {
     result = {};
 
-    DWORD explorerPid = 0;
-    HWND primaryTaskbar =
-        FindWindowW(
-            L"Shell_TrayWnd",
-            nullptr
-        );
-
-    if (primaryTaskbar) {
-        GetWindowThreadProcessId(
-            primaryTaskbar,
-            &explorerPid
-        );
-    }
-
     ScanContext context = {
         &monitors,
-        &result,
-        explorerPid
+        &result
     };
 
     EnumWindows(
@@ -1500,7 +1702,11 @@ void SetTaskbarState(
     if (!SetPropW(
             state.hwnd,
             kHiddenByModProperty,
-            reinterpret_cast<HANDLE>(1)
+            reinterpret_cast<HANDLE>(
+                static_cast<ULONG_PTR>(
+                    GetCurrentProcessId()
+                )
+            )
         )) {
         Wh_Log(
             L"SetPropW failed for taskbar 0x%p: %lu",
@@ -1523,15 +1729,6 @@ void SetTaskbarState(
         );
         state.hiddenByMod = false;
     }
-}
-
-bool IsTaskbarHiddenByMod(
-    const TaskbarMonitorState& state
-) {
-    return
-        state.hwnd &&
-        state.hiddenByMod &&
-        !IsWindowVisible(state.hwnd);
 }
 
 void ApplyBaseTaskbarState() {
@@ -1914,38 +2111,23 @@ void UpdateTaskbarState() {
     }
 
     HWND cursorTaskbar = nullptr;
-    bool cursorTaskbarHiddenByMod = false;
+    bool cursorHoverConfigured = false;
 
     for (size_t i = 0; i < g_taskbarStateCount; ++i) {
         if (
-            g_taskbarStates[i].monitor ==
-                cursorMonitor
-        ) {
-            cursorTaskbar =
-                g_taskbarStates[i].hwnd;
-            cursorTaskbarHiddenByMod =
-                IsTaskbarHiddenByMod(g_taskbarStates[i]);
-            break;
-        }
-    }
-
-    bool cursorHoverConfigured = false;
-
-    for (
-        size_t i = 0;
-        i < g_taskbarStateCount;
-        ++i
-    ) {
-        if (
-            g_taskbarStates[i].monitor ==
+            g_taskbarStates[i].monitor !=
             cursorMonitor
         ) {
-            cursorHoverConfigured =
-                ShouldRevealOnHover(
-                    g_taskbarStates[i]
-                );
-            break;
+            continue;
         }
+
+        cursorTaskbar =
+            g_taskbarStates[i].hwnd;
+        cursorHoverConfigured =
+            ShouldRevealOnHover(
+                g_taskbarStates[i]
+            );
+        break;
     }
 
     const bool cursorInHoverZone =
@@ -1958,62 +2140,27 @@ void UpdateTaskbarState() {
         );
 
     const bool hovering =
-        cursorInHoverZone &&
-        (
-            cursorTaskbarHiddenByMod ||
-            (g_hoverActive && g_hoverMonitor == cursorMonitor)
-        );
+        cursorInHoverZone;
 
-    // Keep the taskbar visible for an open shell context menu/overflow
-    // surface even after the cursor leaves the popup. Popup state was collected
-    // during the main EnumWindows pass above, so no second full enumeration is
-    // needed here.
-    bool popupPresent = false;
-
-    for (size_t monitorIndex = 0;
-         monitorIndex < monitors.count;
-         ++monitorIndex) {
-        if (scan.taskbarPopupOnMonitor[monitorIndex]) {
-            popupPresent = true;
-            break;
-        }
-    }
-
-    if (popupPresent) {
-        g_hoverActive = false;
-        g_hoverMonitor = nullptr;
-        g_hoverDeadline = 0;
-        CancelHoverExpireTimer();
-
-        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-            TaskbarMonitorState& state =
-                g_taskbarStates[i];
-
-            bool popupOnThisMonitor = false;
-
-            for (size_t monitorIndex = 0;
-                 monitorIndex < monitors.count;
-                 ++monitorIndex) {
+    auto shellSurfaceOnMonitor =
+        [&](HMONITOR monitor) {
+            for (
+                size_t monitorIndex = 0;
+                monitorIndex < monitors.count;
+                ++monitorIndex
+            ) {
                 if (
                     monitors.entries[monitorIndex].monitor ==
-                        state.monitor &&
-                    scan.taskbarPopupOnMonitor[monitorIndex]
+                    monitor
                 ) {
-                    popupOnThisMonitor = true;
-                    break;
+                    return scan.shellSurfaceOnMonitor[
+                        monitorIndex
+                    ];
                 }
             }
 
-            SetTaskbarState(
-                state,
-                popupOnThisMonitor ||
-                !state.desktopOnly ||
-                !ShouldHideTaskbar(state)
-            );
-        }
-
-        return;
-    }
+            return false;
+        };
 
     if (hovering) {
         g_hoverActive = true;
@@ -2028,6 +2175,7 @@ void UpdateTaskbarState() {
             SetTaskbarState(
                 state,
                 state.monitor == g_hoverMonitor ||
+                shellSurfaceOnMonitor(state.monitor) ||
                 !state.desktopOnly ||
                 !ShouldHideTaskbar(state)
             );
@@ -2037,19 +2185,6 @@ void UpdateTaskbarState() {
     }
 
     if (g_hoverActive) {
-        if (
-            !g_hoverMonitor ||
-            cursorMonitor != g_hoverMonitor
-        ) {
-            g_hoverActive = false;
-            g_hoverMonitor = nullptr;
-            g_hoverDeadline = 0;
-            CancelHoverExpireTimer();
-
-            ApplyBaseTaskbarState();
-                return;
-        }
-
         const ULONGLONG now =
             GetTickCount64();
 
@@ -2069,12 +2204,13 @@ void UpdateTaskbarState() {
                 SetTaskbarState(
                     state,
                     state.monitor == g_hoverMonitor ||
+                    shellSurfaceOnMonitor(state.monitor) ||
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state)
                 );
             }
 
-                return;
+            return;
         }
 
         g_hoverActive = false;
@@ -2087,7 +2223,17 @@ void UpdateTaskbarState() {
         return;
     }
 
-    ApplyBaseTaskbarState();
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        TaskbarMonitorState& state =
+            g_taskbarStates[i];
+
+        SetTaskbarState(
+            state,
+            shellSurfaceOnMonitor(state.monitor) ||
+            !state.desktopOnly ||
+            !ShouldHideTaskbar(state)
+        );
+    }
 }
 
 void ArmHoverExpireTimer() {
@@ -2232,15 +2378,43 @@ void PostRefresh() {
     }
 }
 
+bool HasEnabledHoverSnapshot() {
+    AcquireSRWLockShared(
+        &g_cursorHoverSnapshotLock
+    );
+
+    bool result =
+        g_cursorHoverSnapshotCount != 0;
+
+    ReleaseSRWLockShared(
+        &g_cursorHoverSnapshotLock
+    );
+
+    return result;
+}
+
 DWORD WINAPI CursorSamplingThread(LPVOID) {
     bool lastHoverZone = false;
     HMONITOR lastMonitor = nullptr;
+    int cursorPositionFailures = 0;
 
     for (;;) {
+        const bool hoverTrackingActive =
+            HasEnabledHoverSnapshot();
+
+        DWORD waitMs =
+            hoverTrackingActive
+                ? 25
+                : 100;
+
+        if (cursorPositionFailures >= 3) {
+            waitMs = 1000;
+        }
+
         DWORD waitResult =
             WaitForSingleObject(
                 g_cursorStopEvent,
-                25
+                waitMs
             );
 
         if (waitResult == WAIT_OBJECT_0) {
@@ -2250,8 +2424,11 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
         POINT pt = {};
 
         if (!GetCursorPos(&pt)) {
+            ++cursorPositionFailures;
             continue;
         }
+
+        cursorPositionFailures = 0;
 
         HMONITOR monitor =
             MonitorFromPoint(
@@ -2517,6 +2694,12 @@ DWORD WINAPI WorkerThread(
         PM_NOREMOVE
     );
 
+    if (g_workerReadyEvent) {
+        SetEvent(
+            g_workerReadyEvent
+        );
+    }
+
     if (!CreateWorkerMessageWindow()) {
         Wh_Log(
             L"CreateWorkerMessageWindow failed; continuing with WinEvent/safety-poll handling"
@@ -2558,12 +2741,6 @@ DWORD WINAPI WorkerThread(
 
     EnsureTaskbarShowHook();
     UpdateTaskbarState();
-
-    if (g_workerReadyEvent) {
-        SetEvent(
-            g_workerReadyEvent
-        );
-    }
 
     UINT_PTR timerId =
         SetTimer(
@@ -2698,14 +2875,13 @@ void LoadSettings() {
         i < kMaxMonitorNumbers;
         ++i
     ) {
-        PCWSTR value =
-            Wh_GetStringSetting(
+        auto value =
+            WindhawkUtils::StringSetting::make(
                 L"hideOnMonitors[%d]",
                 static_cast<int>(i)
             );
 
-        if (!value || !*value) {
-            Wh_FreeStringSetting(value);
+        if (!*value) {
             break;
         }
 
@@ -2739,7 +2915,6 @@ void LoadSettings() {
             }
         }
 
-        Wh_FreeStringSetting(value);
     }
 
     // Empty selection intentionally means "hide nothing".
@@ -2751,14 +2926,13 @@ void LoadSettings() {
         i < kMaxMonitorNumbers;
         ++i
     ) {
-        PCWSTR value =
-            Wh_GetStringSetting(
+        auto value =
+            WindhawkUtils::StringSetting::make(
                 L"hoverRevealOnMonitors[%d]",
                 static_cast<int>(i)
             );
 
-        if (!value || !*value) {
-            Wh_FreeStringSetting(value);
+        if (!*value) {
             break;
         }
 
@@ -2792,7 +2966,6 @@ void LoadSettings() {
             }
         }
 
-        Wh_FreeStringSetting(value);
     }
 }
 
@@ -2834,10 +3007,35 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    WaitForSingleObject(
-        g_workerReadyEvent,
-        INFINITE
-    );
+    DWORD readyResult =
+        WaitForSingleObject(
+            g_workerReadyEvent,
+            5000
+        );
+
+    if (readyResult != WAIT_OBJECT_0) {
+        Wh_Log(
+            L"Worker startup wait failed: %lu",
+            readyResult == WAIT_TIMEOUT
+                ? ERROR_TIMEOUT
+                : GetLastError()
+        );
+
+        RestoreAllTaskbars();
+
+        if (!WaitForThreadWithTimeout(
+                g_workerThread,
+                5000,
+                L"worker"
+            )) {
+            ExitProcess(1);
+        }
+
+        SafeCloseHandle(g_workerThread);
+        SafeCloseHandle(g_workerReadyEvent);
+
+        return FALSE;
+    }
 
     g_cursorStopEvent =
         CreateEventW(
@@ -2902,7 +3100,7 @@ void RestoreAllTaskbars() {
 
         /*
          * Teardown/recovery is intentionally asynchronous. This path can run
-         * from the launcher watchdog, where blocking on Explorer's UI thread
+         * during tool shutdown, where blocking on Explorer's UI thread
          * could otherwise hang Windhawk itself.
          */
         ShowWindowAsync(
@@ -3000,21 +3198,6 @@ void WhTool_ModUninit() {
     SafeCloseHandle(g_cursorStopEvent);
 
     if (g_workerThread) {
-        DWORD readyResult =
-            WaitForSingleObject(
-                g_workerReadyEvent,
-                1000
-            );
-
-        if (readyResult != WAIT_OBJECT_0) {
-            Wh_Log(
-                L"Worker ready wait during shutdown did not complete: %lu",
-                readyResult == WAIT_TIMEOUT
-                    ? ERROR_TIMEOUT
-                    : GetLastError()
-            );
-        }
-
         if (!PostThreadMessageW(
                 g_workerThreadId,
                 WM_QUIT,
@@ -3050,90 +3233,14 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// The launcher below is the documented Windhawk tool-mod boilerplate.
+// Explorer is a special target for this hybrid mod. The standard tool-mod
+// launcher is kept below as the documented Windhawk boilerplate; the Explorer
+// branch wraps around it without changing the tool-process logic.
 
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-HANDLE g_launcherWatchdogThread = nullptr;
-HANDLE g_launcherWatchdogStopEvent = nullptr;
-HANDLE g_toolModChildProcess = nullptr;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
-
-BOOL Wh_ModInit() {
-    DWORD sessionId;
-
-    if (
-        ProcessIdToSessionId(
-            GetCurrentProcessId(),
-            &sessionId
-        ) &&
-        sessionId == 0
-    ) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-
-    int argc;
-
-    LPWSTR* argv =
-        CommandLineToArgvW(
-            GetCommandLine(),
-            &argc
-        );
-
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (
-            wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0
-        ) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (
-            wcscmp(argv[i], L"-tool-mod") == 0
-        ) {
-            isToolModProcess = true;
-
-            if (
-                wcscmp(
-                    argv[i + 1],
-                    WH_MOD_ID
-                ) == 0
-            ) {
-                isCurrentToolModProcess = true;
-            }
-
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
+bool IsCurrentProcessExplorer() {
     WCHAR modulePath[MAX_PATH] = {};
-    DWORD moduleLength =
+
+    DWORD length =
         GetModuleFileNameW(
             nullptr,
             modulePath,
@@ -3141,54 +3248,100 @@ BOOL Wh_ModInit() {
         );
 
     if (
-        moduleLength == 0 ||
-        moduleLength >= ARRAYSIZE(modulePath)
+        length == 0 ||
+        length >= ARRAYSIZE(modulePath)
     ) {
-        Wh_Log(
-            L"GetModuleFileNameW failed: %lu",
-            GetLastError()
-        );
-        return FALSE;
+        return false;
     }
 
     const WCHAR* moduleName =
-        wcsrchr(modulePath, L'\\');
+        wcsrchr(
+            modulePath,
+            L'\\'
+        );
 
-    moduleName = moduleName
-        ? moduleName + 1
-        : modulePath;
+    moduleName =
+        moduleName
+            ? moduleName + 1
+            : modulePath;
 
-    g_isExplorerProcess =
-        _wcsicmp(moduleName, L"explorer.exe") == 0;
+    return _wcsicmp(
+        moduleName,
+        L"explorer.exe"
+    ) == 0;
+}
 
-    if (isExcluded) {
+#define Wh_ModInit WindhawkToolModLauncher_Wh_ModInit
+#define Wh_ModAfterInit WindhawkToolModLauncher_Wh_ModAfterInit
+#define Wh_ModSettingsChanged WindhawkToolModLauncher_Wh_ModSettingsChanged
+#define Wh_ModUninit WindhawkToolModLauncher_Wh_ModUninit
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
-    if (g_isExplorerProcess) {
-        return InstallExplorerVisibilityHook()
-            ? TRUE
-            : FALSE;
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
     }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutex(
-                nullptr,
-                TRUE,
-                L"windhawk-tool-mod_" WH_MOD_ID
-            );
-
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(
-                L"Tool mod already running (%s)",
-                WH_MOD_ID
-            );
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -3197,29 +3350,14 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(
-                nullptr
-            );
-
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)(
-                (BYTE*)dosHeader +
-                dosHeader->e_lfanew
-            );
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD entryPointRVA =
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        void* entryPoint =
-            (BYTE*)dosHeader +
-            entryPointRVA;
-
-        Wh_SetFunctionHook(
-            entryPoint,
-            (void*)EntryPoint_Hook,
-            nullptr
-        );
-
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -3231,202 +3369,48 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-bool IsAnotherToolModInstanceRunning() {
-    HANDLE mutex =
-        OpenMutexW(
-            SYNCHRONIZE,
-            FALSE,
-            L"windhawk-tool-mod_" WH_MOD_ID
-        );
-
-    if (!mutex) {
-        return false;
-    }
-
-    DWORD result =
-        WaitForSingleObject(
-            mutex,
-            0
-        );
-
-    if (
-        result == WAIT_OBJECT_0 ||
-        result == WAIT_ABANDONED
-    ) {
-        ReleaseMutex(mutex);
-        CloseHandle(mutex);
-        return false;
-    }
-
-    if (result == WAIT_TIMEOUT) {
-        CloseHandle(mutex);
-        return true;
-    }
-
-    Wh_Log(
-        L"Could not determine tool-process mutex owner: %lu",
-        GetLastError()
-    );
-
-    CloseHandle(mutex);
-
-    // When ownership cannot be determined, do not disturb a potentially
-    // running tool instance.
-    return true;
-}
-
-DWORD WINAPI ToolModWatchdogThread(LPVOID) {
-    HANDLE waitHandles[2] = {
-        g_launcherWatchdogStopEvent,
-        g_toolModChildProcess
-    };
-
-    DWORD result =
-        WaitForMultipleObjects(
-            ARRAYSIZE(waitHandles),
-            waitHandles,
-            FALSE,
-            INFINITE
-        );
-
-    if (result == WAIT_OBJECT_0 + 1) {
-        /*
-         * The dedicated tool process ended. Whether it crashed, was killed,
-         * or completed a normal shutdown, make sure Explorer taskbars are not
-         * left hidden.
-         */
-        if (IsAnotherToolModInstanceRunning()) {
-            Wh_Log(
-                L"Tool process exited, but another tool instance is still running; not restoring taskbars"
-            );
-        } else {
-            Wh_Log(
-                L"Tool process exited; restoring taskbars hidden by this mod"
-            );
-            RestoreAllTaskbars();
-        }
-    }
-
-    return 0;
-}
-
-void StopLauncherWatchdog() {
-    if (g_launcherWatchdogStopEvent) {
-        SetEvent(
-            g_launcherWatchdogStopEvent
-        );
-    }
-
-    if (g_launcherWatchdogThread) {
-        WaitForSingleObject(
-            g_launcherWatchdogThread,
-            INFINITE
-        );
-        CloseHandle(
-            g_launcherWatchdogThread
-        );
-        g_launcherWatchdogThread = nullptr;
-    }
-
-    if (g_launcherWatchdogStopEvent) {
-        CloseHandle(
-            g_launcherWatchdogStopEvent
-        );
-        g_launcherWatchdogStopEvent = nullptr;
-    }
-
-    if (g_toolModChildProcess) {
-        CloseHandle(
-            g_toolModChildProcess
-        );
-        g_toolModChildProcess = nullptr;
-    }
-}
-
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-
-    switch (
-        GetModuleFileName(
-            nullptr,
-            currentProcessPath,
-            ARRAYSIZE(currentProcessPath)
-        )
-    ) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
-            Wh_Log(
-                L"GetModuleFileName failed"
-            );
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[
-        MAX_PATH +
-        2 +
-        (
-            sizeof(
-                L" -tool-mod \"" WH_MOD_ID "\""
-            ) / sizeof(WCHAR)
-        ) -
-        1
-    ];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    swprintf_s(
-        commandLine,
-        L"\"%s\" -tool-mod \"%s\"",
-        currentProcessPath,
-        WH_MOD_ID
-    );
-
-    HMODULE kernelModule =
-        GetModuleHandle(
-            L"kernelbase.dll"
-        );
-
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule =
-            GetModuleHandle(
-                L"kernel32.dll"
-            );
-
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
-            Wh_Log(
-                L"No kernelbase.dll/kernel32.dll"
-            );
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        WINBOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken
-    );
-
+        PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(
-            kernelModule,
-            "CreateProcessInternalW"
-        );
-
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(
-            L"No CreateProcessInternalW"
-        );
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
@@ -3434,80 +3418,20 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-
     PROCESS_INFORMATION pi;
-
-    if (
-        !pCreateProcessInternalW(
-            nullptr,
-            currentProcessPath,
-            commandLine,
-            nullptr,
-            nullptr,
-            FALSE,
-            NORMAL_PRIORITY_CLASS,
-            nullptr,
-            nullptr,
-            &si,
-            &pi,
-            nullptr
-        )
-    ) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    g_toolModChildProcess = pi.hProcess;
-
-    g_launcherWatchdogStopEvent =
-        CreateEventW(
-            nullptr,
-            TRUE,
-            FALSE,
-            nullptr
-        );
-
-    if (!g_launcherWatchdogStopEvent) {
-        Wh_Log(
-            L"CreateEvent for launcher watchdog failed: %lu",
-            GetLastError()
-        );
-        CloseHandle(pi.hProcess);
-        g_toolModChildProcess = nullptr;
-        CloseHandle(pi.hThread);
-        return;
-    }
-
-    g_launcherWatchdogThread =
-        CreateThread(
-            nullptr,
-            0,
-            ToolModWatchdogThread,
-            nullptr,
-            0,
-            nullptr
-        );
-
-    if (!g_launcherWatchdogThread) {
-        Wh_Log(
-            L"CreateThread for launcher watchdog failed: %lu",
-            GetLastError()
-        );
-        CloseHandle(
-            g_launcherWatchdogStopEvent
-        );
-        g_launcherWatchdogStopEvent = nullptr;
-        CloseHandle(pi.hProcess);
-        g_toolModChildProcess = nullptr;
-        CloseHandle(pi.hThread);
-        return;
-    }
-
+    CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher || g_isExplorerProcess) {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
@@ -3515,16 +3439,52 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isExplorerProcess) {
-        UninstallExplorerVisibilityHook();
-        return;
-    }
-
     if (g_isToolModProcessLauncher) {
-        StopLauncherWatchdog();
         return;
     }
 
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
+#undef Wh_ModInit
+#undef Wh_ModAfterInit
+#undef Wh_ModSettingsChanged
+#undef Wh_ModUninit
+
+BOOL Wh_ModInit() {
+    if (IsCurrentProcessExplorer()) {
+        g_isExplorerProcess = true;
+        return InstallExplorerVisibilityHook()
+            ? TRUE
+            : FALSE;
+    }
+
+    return WindhawkToolModLauncher_Wh_ModInit();
+}
+
+void Wh_ModAfterInit() {
+    if (g_isExplorerProcess) {
+        return;
+    }
+
+    WindhawkToolModLauncher_Wh_ModAfterInit();
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isExplorerProcess) {
+        return;
+    }
+
+    WindhawkToolModLauncher_Wh_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isExplorerProcess) {
+        ResetHiddenTaskbarOwnerCache();
+        return;
+    }
+
+    WindhawkToolModLauncher_Wh_ModUninit();
+}
+
