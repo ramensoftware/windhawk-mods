@@ -211,6 +211,10 @@ typedef struct {
     DLGITEMTEMPLATEEX<5>   item11;
 } DLGTEMPLATEEX;
 
+#define CTL_STATIC { 0xffff, 0x82 }
+#define CTL_SCROLLBAR { 0xffff, 0x84 }
+#define CTL_BUTTON { 0xffff, 0x80 }
+
 static constexpr DLGTEMPLATEEX RES_DIALOG = {
     .dlgVer      = 1,
     .signature   = 0xffff,
@@ -236,7 +240,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
         0, 20, 266, 14,
         IDC_BSDR_TITLE,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"The following programs need to close:",
         0
     },
@@ -245,7 +249,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_OWNERDRAW | WS_CHILD | WS_VISIBLE,
         0, 46, 266, 1,
         IDC_BSDR_SEPARATOR_TOP,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"",
         0
     },
@@ -254,7 +258,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_USERITEM | WS_CHILD | WS_VISIBLE,
         0, 52, 256, 85,
         IDC_BSDR_APPLIST,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"",
         0
     },
@@ -263,7 +267,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SBS_VERT | WS_CHILD | WS_VISIBLE,
         256, 52, 10, 85,
         IDC_BSDR_SCROLLBAR,
-        { 0xffff, 0x84 }, // SCROLLBAR
+        CTL_SCROLLBAR,
         L"",
         0
     },
@@ -272,7 +276,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_OWNERDRAW | WS_CHILD | WS_VISIBLE,
         0, 143, 266, 1,
         IDC_BSDR_SEPARATOR_BOTTOM,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"",
         0
     },
@@ -281,7 +285,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
         0, 152, 266, 30,
         IDC_BSDR_DESC,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"To close the program that is preventing Windows from\nshutting down, click Cancel, and then close the program.",
         0
     },
@@ -290,7 +294,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP,
         193, 191, 70, 13,
         IDCANCEL,
-        { 0xffff, 0x80 }, // BUTTON
+        CTL_BUTTON,
         L"&Cancel",
         0
     },
@@ -299,7 +303,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         115, 191, 70, 13,
         IDC_BSDR_FORCE_BTN,
-        { 0xffff, 0x80 }, // BUTTON
+        CTL_BUTTON,
         L"&Force shut down",
         0
     },
@@ -308,7 +312,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         SS_LEFT | WS_CHILD | WS_VISIBLE | WS_GROUP,
         0, 152, 266, 30,
         IDC_BSDR_WARNING,
-        { 0xffff, 0x82 }, // STATIC
+        CTL_STATIC,
         L"If you force shut down you may lose work that you haven't saved.\nDo you still want to force shutdown?",
         0
     },
@@ -317,7 +321,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP,
         193, 191, 70, 13,
         IDNO,
-        { 0xffff, 0x80 }, // BUTTON
+        CTL_BUTTON,
         L"&No",
         0
     },
@@ -326,7 +330,7 @@ static constexpr DLGTEMPLATEEX RES_DIALOG = {
         BS_OWNERDRAW | WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         115, 191, 70, 13,
         IDYES,
-        { 0xffff, 0x80 }, // BUTTON
+        CTL_BUTTON,
         L"&Yes",
         0
     }
@@ -2457,7 +2461,8 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
     // so deduplicate it
     RemoveAppTileControls(tile.appId, true);
 
-    HSTRING caption, blockReason;
+    HSTRING caption = nullptr;
+    HSTRING blockReason = nullptr;
     std::wstring titleText;
     std::wstring blockReasonText;
 
@@ -2816,14 +2821,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             dlgInitFailed = true;
             return FALSE;
         }
-        dlgInitFailed = false;
-
-        std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
-        {
-            std::lock_guard lock(pendingAppsMutex);
-            CustomBSDR::hDlg = hWndDlg;
-            pendingAppsLocal.swap(*pendingApps);
-        }
 
         // Hide title bar
         SetWindowLongW(hWndDlg, GWL_STYLE, GetWindowLongW(hWndDlg, GWL_STYLE) & ~WS_CAPTION);
@@ -2839,87 +2836,100 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SetWindowTheme(hScrollBar, L" ", L"");
         }
 
-        if (hAppList) {
-            hAppListScroll = CreateWindowExW(0, L"STATIC", nullptr, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, 100, 100, hAppList, nullptr, nullptr, nullptr);
-            SetWindowSubclass(hAppList, AppListSubclassProc, 0, 0);
-            SetWindowSubclass(hAppListScroll, AppListSubclassProc, 0, 0);
+        hAppListScroll = CreateWindowExW(0, L"STATIC", nullptr, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, 100, 100, hAppList, nullptr, nullptr, nullptr);
+        if (!hAppListScroll) {
+            Wh_Log(L"CreateWindowExW hAppListScroll failed, GLE=%d", GetLastError());
+            dlgInitFailed = true;
+            return FALSE;
+        }
+        dlgInitFailed = false;
 
-            // Calculate the height of the app list container then resize it, also moving the controls below it
-            // Note: Win10+ LogonUI is per-monitor scaled by manifest, and we're only showing the dialog on the primary monitor,
-            // so handling per-monitor DPI is not much trouble. Screenshotting works fine
-            // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
-            // during logoff phase either so it's low priority
-            // Note 2: when a window exactly covers the whole virtual screen, it uses the primary monitor's DPI regardless of proportions,
-            // which is good for us because the dialog is only shown on the primary monitor
-            // Even a 1px offset disables that behavior and makes the window use DPI of the monitor the window is primarily in
-            // This behavior is the same for per-monitor V1, V2, and also MonitorFromWindow/MonitorFromRect
-            int dpi = GetDpiForWindow(hWndDlg);
+        SetWindowSubclass(hAppList, AppListSubclassProc, 0, 0);
+        SetWindowSubclass(hAppListScroll, AppListSubclassProc, 0, 0);
 
-            int itemHeight = MulDiv(83, dpi, 96);
-            int itemHeightNoReason = MulDiv(62, dpi, 96);
+        // Set CustomBSDR::hDlg and clear pendingApps after possible dialog init fail point
+        std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
+        {
+            std::lock_guard lock(pendingAppsMutex);
+            CustomBSDR::hDlg = hWndDlg;
+            pendingAppsLocal.swap(*pendingApps);
+        }
 
-            int totalItemsHeight = 0;
-            for (auto& app : pendingAppsLocal) {
-                BOOLEAN isBlocking = FALSE;
-                HSTRING blockReason;
-                if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
+        // Calculate the height of the app list container then resize it, also moving the controls below it
+        // Note: Win10+ LogonUI is per-monitor scaled by manifest, and we're only showing the dialog on the primary monitor,
+        // so handling per-monitor DPI is not much trouble. Screenshotting works fine
+        // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
+        // during logoff phase either so it's low priority
+        // Note 2: when a window exactly covers the whole virtual screen, it uses the primary monitor's DPI regardless of proportions,
+        // which is good for us because the dialog is only shown on the primary monitor
+        // Even a 1px offset disables that behavior and makes the window use DPI of the monitor the window is primarily in
+        // This behavior is the same for per-monitor V1, V2, and also MonitorFromWindow/MonitorFromRect
+        int dpi = GetDpiForWindow(hWndDlg);
+
+        int itemHeight = MulDiv(83, dpi, 96);
+        int itemHeightNoReason = MulDiv(62, dpi, 96);
+
+        int totalItemsHeight = 0;
+        for (auto& app : pendingAppsLocal) {
+            BOOLEAN isBlocking = FALSE;
+            HSTRING blockReason = nullptr;
+            if (SUCCEEDED(app->get_IsBlocking(&isBlocking)) && isBlocking) {
+                totalItemsHeight += itemHeight;
+            } else if (SUCCEEDED(app->get_BlockReason(&blockReason))) {
+                const wchar_t* reasonStr = WindowsGetStringRawBuffer(blockReason, nullptr);
+                if (reasonStr && wcslen(reasonStr) > 0) {
                     totalItemsHeight += itemHeight;
-                } else if (SUCCEEDED(app->get_BlockReason(&blockReason))) {
-                    const wchar_t* reasonStr = WindowsGetStringRawBuffer(blockReason, nullptr);
-                    if (reasonStr && wcslen(reasonStr) > 0) {
-                        totalItemsHeight += itemHeight;
-                    } else {
-                        totalItemsHeight += itemHeightNoReason;
-                    }
-                    WindowsDeleteString(blockReason);
                 } else {
                     totalItemsHeight += itemHeightNoReason;
                 }
+                WindowsDeleteString(blockReason);
+            } else {
+                totalItemsHeight += itemHeightNoReason;
             }
-
-            RECT rcAppList, rcScrollBar;
-            GetWindowRect(hAppList, &rcAppList);
-            GetWindowRect(hScrollBar, &rcScrollBar);
-            int currentWidth = rcAppList.right - rcAppList.left;
-            int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
-
-            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-            minHeight = rcAppList.bottom - rcAppList.top;
-            int maxHeight = screenHeight - MulDiv(335, dpi, 96);
-
-            if (maxHeight < minHeight)
-                maxHeight = minHeight;
-
-            int newHeight = totalItemsHeight;
-            if (newHeight < minHeight)
-                newHeight = minHeight;
-            if (newHeight > maxHeight)
-                newHeight = maxHeight;
-
-            int heightDiff = newHeight - minHeight;
-
-            SetWindowPos(hAppList, nullptr, 0, 0, currentWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
-            SetWindowPos(hAppListScroll, nullptr, 0, 0, currentWidth, totalItemsHeight, SWP_NOMOVE | SWP_NOZORDER);
-            SetWindowPos(hScrollBar, nullptr, 0, 0, scrollBarWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
-
-            for (HWND hwndSibling = GetWindow(hScrollBar, GW_HWNDNEXT); hwndSibling; hwndSibling = GetWindow(hwndSibling, GW_HWNDNEXT)) {
-                RECT rcSibling;
-                GetWindowRect(hwndSibling, &rcSibling);
-                MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcSibling, 2);
-                OffsetRect(&rcSibling, 0, heightDiff);
-                SetWindowPos(hwndSibling, nullptr, rcSibling.left, rcSibling.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            }
-
-            RECT rcTitle, rcNo;
-            GetWindowRect(hTitleText, &rcTitle);
-            MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcTitle, 2);
-            GetWindowRect(hNoButton, &rcNo);
-            MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcNo, 2);
-            int topPadding = rcTitle.top;
-            int dialogWidth = rcTitle.right;
-            int newDialogHeight = rcNo.bottom + topPadding - 1;
-            SetWindowPos(hWndDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
         }
+
+        RECT rcAppList, rcScrollBar;
+        GetWindowRect(hAppList, &rcAppList);
+        GetWindowRect(hScrollBar, &rcScrollBar);
+        int currentWidth = rcAppList.right - rcAppList.left;
+        int scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        minHeight = rcAppList.bottom - rcAppList.top;
+        int maxHeight = screenHeight - MulDiv(335, dpi, 96);
+
+        if (maxHeight < minHeight)
+            maxHeight = minHeight;
+
+        int newHeight = totalItemsHeight;
+        if (newHeight < minHeight)
+            newHeight = minHeight;
+        if (newHeight > maxHeight)
+            newHeight = maxHeight;
+
+        int heightDiff = newHeight - minHeight;
+
+        SetWindowPos(hAppList, nullptr, 0, 0, currentWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hAppListScroll, nullptr, 0, 0, currentWidth, totalItemsHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hScrollBar, nullptr, 0, 0, scrollBarWidth, newHeight, SWP_NOMOVE | SWP_NOZORDER);
+
+        for (HWND hwndSibling = GetWindow(hScrollBar, GW_HWNDNEXT); hwndSibling; hwndSibling = GetWindow(hwndSibling, GW_HWNDNEXT)) {
+            RECT rcSibling;
+            GetWindowRect(hwndSibling, &rcSibling);
+            MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcSibling, 2);
+            OffsetRect(&rcSibling, 0, heightDiff);
+            SetWindowPos(hwndSibling, nullptr, rcSibling.left, rcSibling.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        }
+
+        RECT rcTitle, rcNo;
+        GetWindowRect(hTitleText, &rcTitle);
+        MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcTitle, 2);
+        GetWindowRect(hNoButton, &rcNo);
+        MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcNo, 2);
+        int topPadding = rcTitle.top;
+        int dialogWidth = rcTitle.right;
+        int newDialogHeight = rcNo.bottom + topPadding - 1;
+        SetWindowPos(hWndDlg, nullptr, 0, 0, dialogWidth, newDialogHeight, SWP_NOMOVE | SWP_NOZORDER);
 
         SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
 
@@ -3760,7 +3770,9 @@ void CustomBSDR::Stop(bool ignoreIsCanceling) {
     std::lock_guard lock(cancelMutex);
 
     if ((ignoreIsCanceling || !isCanceling) && hStopEvent) {
-        SetEvent(hStopEvent);
+        if (!SetEvent(hStopEvent)) {
+            Wh_Log(L"SetEvent(hStopEvent) failed, GLE=%u", GetLastError());
+        }
     }
 }
 #pragma endregion CustomBSDR.cpp
@@ -3805,15 +3817,19 @@ long __fastcall BlockedShutdownUXImpl_AddApplication_hook(void* thisPtr, IShutdo
 
     UINT appId = 0;
     BOOLEAN isBlocking = FALSE;
-    HSTRING caption = nullptr, blockReason = nullptr;
+    HSTRING caption = nullptr;
+    HSTRING blockReason = nullptr;
+
     blockingApp->get_Id(&appId);
     blockingApp->get_IsBlocking(&isBlocking);
     HRESULT hrCaption = blockingApp->get_Caption(&caption);
     HRESULT hrReason = blockingApp->get_BlockReason(&blockReason);
+
     Wh_Log(L"BlockedShutdownUXImpl::AddApplication, AppId=%u, IsBlocking=%d, Caption=%s, BlockReason=%s",
         appId, isBlocking,
         SUCCEEDED(hrCaption) ? WindowsGetStringRawBuffer(caption, nullptr) : L"<failed>",
         SUCCEEDED(hrReason) ? WindowsGetStringRawBuffer(blockReason, nullptr) : L"<failed>");
+
     WindowsDeleteString(blockReason);
     WindowsDeleteString(caption);
 
