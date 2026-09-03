@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         3.5.0
+// @version         3.6.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -51,9 +51,10 @@ per Explorer process and keeps the state-management code outside the shell.
   display-set changes.
 - Native Windows auto-hide state is sampled once per reconciliation and reused
   for the rest of that reconciliation.
-- Cursor movement near the bottom edge is handled through a lightweight
-  low-level mouse hook instead of a dedicated 25 ms sampler
-  thread.
+- Cursor movement near the bottom edge is handled by a dedicated lightweight
+  cursor-sampling thread. It samples only cursor position and posts a refresh
+  when the configured hover-zone state changes, keeping input detection separate
+  from the worker's full window scan.
 - Known taskbar/XAML popup classes are treated as shell surfaces; generic
   `Windows.UI.Core.CoreWindow` windows are no longer rejected solely because of
   their class name, which avoids misclassifying visible UWP application windows.
@@ -103,9 +104,9 @@ or unusual transitions.
 
 Each safety poll performs one display enumeration and one top-level-window
 enumeration. The result is reused for every taskbar. Cursor movement near the
-bottom edge is handled by a cursor `EVENT_OBJECT_LOCATIONCHANGE` WinEvent that
-posts only lightweight state-transition refreshes. Hover dismissal uses a
-one-shot worker timer rather than a fast full-state polling loop.
+bottom edge is handled by a dedicated cursor-sampling thread that posts only
+lightweight state-transition refreshes. Hover dismissal uses a one-shot worker
+timer rather than a fast full-state polling loop.
 */
 // ==/WindhawkModReadme==
 
@@ -156,7 +157,9 @@ one-shot worker timer rather than a fast full-state polling loop.
     Select one or more displays using the Windows `\\.\DISPLAYn` device number.
     These numbers may differ from the display numbers shown in Windows Display
     Settings. Choose All displays to hide every connected display. Use Add to
-    select multiple displays.
+    select multiple displays. When a physical display is reconnected and Windows
+    renumbers DISPLAYn, the mod keeps the selection bound to the same detected
+    monitor device when possible.
   $options:
   - all: All displays
   - monitor1: DISPLAY1
@@ -235,17 +238,25 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
-HHOOK g_mouseHook = nullptr;
 HWINEVENTHOOK g_taskbarShowHook = nullptr;
 DWORD g_taskbarShowHookProcessId = 0;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
 HANDLE g_workerReadyEvent = nullptr;
+HANDLE g_cursorThread = nullptr;
+HANDLE g_cursorStopEvent = nullptr;
 
-HMONITOR g_lastCursorTriggerMonitor = nullptr;
-bool g_lastCursorInTriggerBand = false;
-bool g_lastCursorInExactHoverZone = false;
+struct CursorHoverSnapshot {
+    HMONITOR monitor;
+    RECT monitorRect;
+    int hotZonePx;
+    bool enabled;
+};
+
+CursorHoverSnapshot g_cursorHoverSnapshots[kMaxTaskbars] = {};
+size_t g_cursorHoverSnapshotCount = 0;
+SRWLOCK g_cursorHoverSnapshotLock = SRWLOCK_INIT;
 
 constexpr wchar_t kHiddenByModProperty[] =
     L"Windhawk.HideTaskbarOnlyOnDesktop.HiddenByMod";
@@ -616,6 +627,12 @@ BOOL CALLBACK CollectMonitorProc(
         ARRAYSIZE(entry.deviceName),
         info.szDevice,
         _TRUNCATE
+    );
+
+    GetStableMonitorDeviceId(
+        entry.deviceName,
+        entry.stableDeviceId,
+        ARRAYSIZE(entry.stableDeviceId)
     );
 
     return TRUE;
@@ -1568,13 +1585,126 @@ bool IsCursorNearBottomEdge(
     );
 }
 
+void UpdateCursorHoverSnapshot() {
+    CursorHoverSnapshot snapshots[kMaxTaskbars] = {};
+    size_t snapshotCount = 0;
+
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (snapshotCount >= kMaxTaskbars) {
+            break;
+        }
+
+        const TaskbarMonitorState& state =
+            g_taskbarStates[i];
+
+        CursorHoverSnapshot& snapshot =
+            snapshots[snapshotCount++];
+
+        snapshot.monitor = state.monitor;
+        snapshot.enabled =
+            ShouldRevealOnHover(state) &&
+            IsBottomDockedTaskbar(
+                state.hwnd,
+                state.monitor
+            );
+
+        MONITORINFO mi = {};
+        mi.cbSize = sizeof(mi);
+
+        if (
+            !snapshot.monitor ||
+            !GetMonitorInfoW(
+                snapshot.monitor,
+                &mi
+            )
+        ) {
+            snapshot.enabled = false;
+            continue;
+        }
+
+        snapshot.monitorRect = mi.rcMonitor;
+
+        UINT dpi =
+            GetDpiForWindow(state.hwnd);
+
+        if (dpi == 0) {
+            dpi = 96;
+        }
+
+        snapshot.hotZonePx =
+            GetHoverZonePx(
+                state.hwnd,
+                dpi
+            );
+
+        if (snapshot.hotZonePx < 1) {
+            snapshot.hotZonePx = 1;
+        }
+    }
+
+    AcquireSRWLockExclusive(
+        &g_cursorHoverSnapshotLock
+    );
+
+    for (size_t i = 0; i < snapshotCount; ++i) {
+        g_cursorHoverSnapshots[i] =
+            snapshots[i];
+    }
+
+    g_cursorHoverSnapshotCount = snapshotCount;
+
+    ReleaseSRWLockExclusive(
+        &g_cursorHoverSnapshotLock
+    );
+}
+
+bool IsCursorInConfiguredHoverZoneAtSnapshot(
+    POINT pt,
+    HMONITOR cursorMonitor
+) {
+    if (!cursorMonitor) {
+        return false;
+    }
+
+    AcquireSRWLockShared(
+        &g_cursorHoverSnapshotLock
+    );
+
+    bool result = false;
+
+    for (
+        size_t i = 0;
+        i < g_cursorHoverSnapshotCount;
+        ++i
+    ) {
+        const CursorHoverSnapshot& snapshot =
+            g_cursorHoverSnapshots[i];
+
+        if (
+            !snapshot.enabled ||
+            snapshot.monitor != cursorMonitor
+        ) {
+            continue;
+        }
+
+        result =
+            pt.y >=
+                snapshot.monitorRect.bottom -
+                snapshot.hotZonePx &&
+            pt.y < snapshot.monitorRect.bottom;
+        break;
+    }
+
+    ReleaseSRWLockShared(
+        &g_cursorHoverSnapshotLock
+    );
+
+    return result;
+}
+
 void UpdateTaskbarState() {
     MonitorList monitors =
         GetCurrentMonitors();
-
-    BindConfiguredMonitorSelections(
-        monitors
-    );
 
     ULONGLONG topologySignature =
         HashDisplayTopology(monitors);
@@ -1584,6 +1714,11 @@ void UpdateTaskbarState() {
         topologySignature != g_displayTopologySignature
     ) {
         ClearStableMonitorDeviceIdCache();
+
+        // Rebuild the monitor list after clearing the cache so every current
+        // monitor gets a fresh stable device identity before selection binding.
+        monitors = GetCurrentMonitors();
+        topologySignature = HashDisplayTopology(monitors);
 
         // A display add/remove, arrangement change, or geometry/DPI transition
         // can invalidate the current hover monitor. Reconcile from the base
@@ -1596,9 +1731,15 @@ void UpdateTaskbarState() {
 
     g_displayTopologySignature = topologySignature;
 
+    BindConfiguredMonitorSelections(
+        monitors
+    );
+
     RefreshTaskbarMonitorStates(
         monitors
     );
+
+    UpdateCursorHoverSnapshot();
 
     // ABM_GETSTATE reports the native auto-hide setting globally. Sample it
     // once per reconciliation and reuse the result for every taskbar.
@@ -1923,36 +2064,10 @@ bool IsCursorInConfiguredHoverZone() {
             MONITOR_DEFAULTTONEAREST
         );
 
-    if (!cursorMonitor) {
-        return false;
-    }
-
-    TaskbarMonitorState* cursorState = nullptr;
-
-    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-        if (
-            g_taskbarStates[i].monitor ==
-            cursorMonitor
-        ) {
-            cursorState =
-                &g_taskbarStates[i];
-            break;
-        }
-    }
-
-    if (
-        !cursorState ||
-        !ShouldRevealOnHover(*cursorState)
-    ) {
-        return false;
-    }
-
-    return
-        cursorState->hwnd &&
-        IsCursorNearBottomEdge(
-            cursorState->hwnd,
-            cursorMonitor
-        );
+    return IsCursorInConfiguredHoverZoneAtPoint(
+        pt,
+        cursorMonitor
+    );
 }
 
 
@@ -1993,93 +2108,52 @@ void PostRefresh() {
     }
 }
 
-bool IsCursorInBottomTriggerBand(POINT pt, HMONITOR monitor) {
-    if (!monitor) {
-        return false;
-    }
+DWORD WINAPI CursorSamplingThread(LPVOID) {
+    bool lastHoverZone = false;
+    HMONITOR lastMonitor = nullptr;
 
-    MONITORINFO mi = {};
-    mi.cbSize = sizeof(mi);
+    for (;;) {
+        DWORD waitResult =
+            WaitForSingleObject(
+                g_cursorStopEvent,
+                25
+            );
 
-    if (!GetMonitorInfoW(monitor, &mi)) {
-        return false;
-    }
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
 
-    // This is only a lightweight trigger band. The worker performs the exact
-    // taskbar-height/DPI hover-zone check before changing visibility. Keeping
-    // this callback lightweight avoids putting window scanning on the cursor
-    // movement event path.
-    constexpr LONG kCursorTriggerBandPx = 256;
+        POINT pt = {};
 
-    return
-        pt.y >= mi.rcMonitor.bottom - kCursorTriggerBandPx &&
-        pt.y < mi.rcMonitor.bottom;
-}
+        if (!GetCursorPos(&pt)) {
+            continue;
+        }
 
+        HMONITOR monitor =
+            MonitorFromPoint(
+                pt,
+                MONITOR_DEFAULTTONEAREST
+            );
 
-LRESULT CALLBACK LowLevelMouseProc(
-    int nCode,
-    WPARAM wParam,
-    LPARAM lParam
-) {
-    if (nCode == HC_ACTION && wParam == WM_MOUSEMOVE) {
-        const MSLLHOOKSTRUCT* mouse =
-            reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+        const bool hoverZone =
+            IsCursorInConfiguredHoverZoneAtSnapshot(
+                pt,
+                monitor
+            );
 
-        if (mouse) {
-            HMONITOR monitor =
-                MonitorFromPoint(
-                    mouse->pt,
-                    MONITOR_DEFAULTTONEAREST
-                );
+        const bool changed =
+            hoverZone != lastHoverZone ||
+            (hoverZone && monitor != lastMonitor);
 
-            const bool inBand =
-                IsCursorInBottomTriggerBand(
-                    mouse->pt,
-                    monitor
-                );
+        lastHoverZone = hoverZone;
+        lastMonitor = monitor;
 
-            const bool exactHoverZone =
-                inBand &&
-                IsCursorInConfiguredHoverZoneAtPoint(
-                    mouse->pt,
-                    monitor
-                );
-
-            const bool monitorChanged =
-                inBand && monitor != g_lastCursorTriggerMonitor;
-
-            const bool bandChanged =
-                inBand != g_lastCursorInTriggerBand;
-
-            const bool exactZoneChanged =
-                exactHoverZone != g_lastCursorInExactHoverZone;
-
-            g_lastCursorTriggerMonitor = monitor;
-            g_lastCursorInTriggerBand = inBand;
-            g_lastCursorInExactHoverZone = exactHoverZone;
-
-            // The broad trigger band prevents refreshes for normal mouse
-            // movement. A separate exact-zone edge catches the moment the
-            // cursor actually reaches the configured taskbar reveal area,
-            // avoiding the old 1-second safety-poll latency. This only changes
-            // the reveal trigger; the existing hover-dismiss delay is untouched.
-            if (
-                monitorChanged ||
-                bandChanged ||
-                exactZoneChanged
-            ) {
-                PostRefresh();
-            }
+        if (changed) {
+            PostRefresh();
         }
     }
 
-    return CallNextHookEx(
-        g_mouseHook,
-        nCode,
-        wParam,
-        lParam
-    );
+    return 0;
 }
 
 void CALLBACK WinEventProc(
@@ -2325,12 +2399,6 @@ DWORD WINAPI WorkerThread(
         );
     }
 
-    if (g_workerReadyEvent) {
-        SetEvent(
-            g_workerReadyEvent
-        );
-    }
-
     g_foregroundHook =
         SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
@@ -2364,24 +2432,14 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
-    g_mouseHook =
-        SetWindowsHookExW(
-            WH_MOUSE_LL,
-            LowLevelMouseProc,
-            GetModuleHandleW(nullptr),
-            0
-        );
-
-    if (!g_mouseHook) {
-        Wh_Log(L"SetWindowsHookExW(WH_MOUSE_LL) failed: %lu", GetLastError());
-    }
-
-    g_lastCursorTriggerMonitor = nullptr;
-    g_lastCursorInTriggerBand = false;
-    g_lastCursorInExactHoverZone = false;
-
     EnsureTaskbarShowHook();
     UpdateTaskbarState();
+
+    if (g_workerReadyEvent) {
+        SetEvent(
+            g_workerReadyEvent
+        );
+    }
 
     UINT_PTR timerId =
         SetTimer(
@@ -2405,7 +2463,7 @@ DWORD WINAPI WorkerThread(
         }
 
         if (msg.message == WM_TIMER) {
-            if (msg.hwnd == g_workerMessageWindow) {
+            if (msg.hwnd && msg.hwnd == g_workerMessageWindow) {
                 DispatchMessageW(&msg);
                 continue;
             }
@@ -2459,10 +2517,6 @@ DWORD WINAPI WorkerThread(
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
-    if (g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
-    }
     SafeUnhookWinEvent(g_taskbarShowHook);
     g_taskbarShowHookProcessId = 0;
 
@@ -2661,6 +2715,40 @@ BOOL WhTool_ModInit() {
         INFINITE
     );
 
+    g_cursorStopEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr
+        );
+
+    if (!g_cursorStopEvent) {
+        Wh_Log(
+            L"CreateEvent for cursor sampler failed: %lu",
+            GetLastError()
+        );
+        return TRUE;
+    }
+
+    g_cursorThread =
+        CreateThread(
+            nullptr,
+            0,
+            CursorSamplingThread,
+            nullptr,
+            0,
+            nullptr
+        );
+
+    if (!g_cursorThread) {
+        Wh_Log(
+            L"CreateThread for cursor sampler failed: %lu",
+            GetLastError()
+        );
+        SafeCloseHandle(g_cursorStopEvent);
+    }
+
     return TRUE;
 }
 
@@ -2767,6 +2855,25 @@ bool WaitForThreadWithTimeout(
 
 void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
+
+    if (g_cursorStopEvent) {
+        SetEvent(g_cursorStopEvent);
+    }
+
+    if (g_cursorThread) {
+        if (!WaitForThreadWithTimeout(
+                g_cursorThread,
+                3000,
+                L"cursor sampler"
+            )) {
+            RestoreAllTaskbars();
+            ExitProcess(1);
+        }
+
+        SafeCloseHandle(g_cursorThread);
+    }
+
+    SafeCloseHandle(g_cursorStopEvent);
 
     if (g_workerThread) {
         DWORD readyResult =
