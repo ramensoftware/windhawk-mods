@@ -86,6 +86,150 @@ std::atomic<bool> g_extentThreadMismatchLogged;
 std::atomic<int> g_lastTaskbarCenteredAlignment{-1};
 std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
+// BEGIN ALIGNMENT REGISTRY WATCH
+// Observe setting changes without polling. Only the taskbar-thread callback
+// below can update the alignment cache and invoke the existing placement code.
+struct AlignmentRegistryWatch {
+    HKEY key{};
+    HANDLE event{};
+    PTP_WAIT wait{};
+    SRWLOCK lock = SRWLOCK_INIT;
+    bool stopping = true;
+};
+AlignmentRegistryWatch g_alignmentRegistryWatch;
+std::atomic<bool> g_alignmentRegistryWatchActive;
+
+constexpr wchar_t kAlignmentWatchKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+
+void ApplyRegistryAlignmentSynchronously();
+
+bool RegistryAlignmentNeedsUpdate() {
+    DWORD value = MAXDWORD;
+    DWORD size = sizeof(value);
+    LSTATUS status = RegGetValueW(
+        g_alignmentRegistryWatch.key, nullptr, L"TaskbarAl",
+        RRF_RT_REG_DWORD, nullptr, &value, &size);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"[alignment-watch] setting read failed: %ld", status);
+        return false;
+    }
+    // Other values under Explorer\Advanced can change when Settings opens.
+    // Ignore them: neither placement work nor normal logging is needed.
+    int cached = g_lastTaskbarCenteredAlignment;
+    return cached != (value != 0 ? 1 : 0);
+}
+
+void CALLBACK AlignmentRegistryWatchCallback(PTP_CALLBACK_INSTANCE,
+                                             void*,
+                                             PTP_WAIT wait,
+                                             TP_WAIT_RESULT) {
+    auto& watch = g_alignmentRegistryWatch;
+    AcquireSRWLockExclusive(&watch.lock);
+    if (watch.stopping) {
+        ReleaseSRWLockExclusive(&watch.lock);
+        return;
+    }
+
+    // Keep collecting registry changes while the taskbar handles this one.
+    LSTATUS status = RegNotifyChangeKeyValue(
+        watch.key, FALSE,
+        REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_THREAD_AGNOSTIC,
+        watch.event, TRUE);
+    bool needsUpdate = RegistryAlignmentNeedsUpdate();
+    ReleaseSRWLockExclusive(&watch.lock);
+
+    // Never hold the watch lock across a synchronous call into the UI thread.
+    if (needsUpdate && g_callbacksEnabled) {
+        ApplyRegistryAlignmentSynchronously();
+    }
+
+    AcquireSRWLockExclusive(&watch.lock);
+    if (status != ERROR_SUCCESS) {
+        g_alignmentRegistryWatchActive = false;
+        Wh_Log(L"[alignment-watch] re-arm failed: %ld; using old trigger",
+               status);
+    } else if (!watch.stopping) {
+        // Re-arm the threadpool wait only after the UI call finishes. Rapid
+        // changes coalesce instead of running concurrent placement callbacks.
+        SetThreadpoolWait(wait, watch.event, nullptr);
+    }
+    ReleaseSRWLockExclusive(&watch.lock);
+}
+
+void StopAlignmentRegistryWatch() {
+    auto& watch = g_alignmentRegistryWatch;
+    AcquireSRWLockExclusive(&watch.lock);
+    watch.stopping = true;
+    if (watch.wait) {
+        SetThreadpoolWait(watch.wait, nullptr, nullptr);
+    }
+    ReleaseSRWLockExclusive(&watch.lock);
+
+    if (watch.wait) {
+        // Drain before XAML cleanup or DLL unload, with no lock held.
+        WaitForThreadpoolWaitCallbacks(watch.wait, TRUE);
+        CloseThreadpoolWait(watch.wait);
+        watch.wait = nullptr;
+    }
+    g_alignmentRegistryWatchActive = false;
+    if (watch.key) {
+        RegCloseKey(watch.key);
+        watch.key = nullptr;
+    }
+    if (watch.event) {
+        CloseHandle(watch.event);
+        watch.event = nullptr;
+    }
+}
+
+void StartAlignmentRegistryWatch() {
+    auto& watch = g_alignmentRegistryWatch;
+    if (watch.wait) {
+        return;
+    }
+
+    LSTATUS status = RegOpenKeyExW(HKEY_CURRENT_USER, kAlignmentWatchKey, 0,
+                                  KEY_QUERY_VALUE | KEY_NOTIFY, &watch.key);
+    if (status == ERROR_SUCCESS) {
+        watch.event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!watch.event) {
+            status = GetLastError();
+        }
+    }
+    if (status == ERROR_SUCCESS) {
+        watch.wait = CreateThreadpoolWait(AlignmentRegistryWatchCallback,
+                                          nullptr, nullptr);
+        if (!watch.wait) {
+            status = GetLastError();
+        }
+    }
+    if (status == ERROR_SUCCESS) {
+        status = RegNotifyChangeKeyValue(
+            watch.key, FALSE,
+            REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_THREAD_AGNOSTIC,
+            watch.event, TRUE);
+    }
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"[alignment-watch] start failed: %ld; using old trigger",
+               status);
+        StopAlignmentRegistryWatch();
+        return;
+    }
+
+    g_alignmentRegistryWatchActive = true;
+    // The existing initialization has finished before this watch starts.
+    // Catch an alignment change that may have happened during initialization.
+    if (RegistryAlignmentNeedsUpdate() && g_callbacksEnabled) {
+        ApplyRegistryAlignmentSynchronously();
+    }
+    AcquireSRWLockExclusive(&watch.lock);
+    watch.stopping = false;
+    SetThreadpoolWait(watch.wait, watch.event, nullptr);
+    ReleaseSRWLockExclusive(&watch.lock);
+}
+// END ALIGNMENT REGISTRY WATCH
+
 [[clang::no_destroy]] std::optional<std::vector<DeferredClockData>>
     g_deferredClocks{std::in_place};
 [[clang::no_destroy]] std::optional<std::vector<MovedClockData>>
@@ -505,6 +649,7 @@ bool RestoreClock(FrameworkElement clock) {
         }
 
         movedClocks.erase(it);
+        Wh_Log(L"Clock restored from the left host");
         return true;
     }
 
@@ -528,7 +673,6 @@ bool MoveClock(FrameworkElement content) {
 
     if (!TaskbarUsesCenteredAlignment()) {
         RestoreClock(clock);
-        Wh_Log(L"Clock relocation skipped for a left-aligned taskbar");
         return false;
     }
 
@@ -694,25 +838,21 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
         GetLayoutReservedClockWidthForTaskbarFrame(pThis);
     TaskbarFrame_SystemTrayExtent_Original(pThis,
                                            value + layoutReservedWidth);
-
-    if (layoutReservedWidth > 0) {
-        Wh_Log(L"SystemTrayExtent normalized: %.1f + %.1f",
-               value, layoutReservedWidth);
-    }
 }
 
 HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
     HRESULT result = TaskbarFrame_get_Alignment_Original(pThis, alignment);
 
     try {
-        if (SUCCEEDED(result) && alignment) {
+        // The registry watch is authoritative while active. Keep this hook
+        // as a fallback without letting a stale getter overwrite its cache.
+        if (!g_alignmentRegistryWatchActive && g_callbacksEnabled &&
+            SUCCEEDED(result) && alignment) {
             int centeredAlignment = *alignment != 0 ? 1 : 0;
             int previousAlignment =
                 g_lastTaskbarCenteredAlignment.exchange(centeredAlignment);
             if (g_callbacksEnabled && previousAlignment >= 0 &&
                 previousAlignment != centeredAlignment) {
-                Wh_Log(L"Taskbar alignment changed; clock placement will be "
-                       L"updated");
                 QueueKnownClockPlacementUpdate();
             }
         }
@@ -1113,6 +1253,45 @@ bool RunOnTaskbarThread(RunFromWindowThreadProc procedure, void* parameter,
     return false;
 }
 
+// BEGIN REGISTRY ALIGNMENT DISPATCH
+void ApplyRegistryAlignmentCallback(void*) {
+    if (!g_callbacksEnabled) {
+        return;
+    }
+
+    // Read the latest value on the UI thread, not the value from a possibly
+    // older notification. Quick back-and-forth switches cannot apply stale data.
+    DWORD value = MAXDWORD;
+    DWORD size = sizeof(value);
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER, kAlignmentWatchKey, L"TaskbarAl",
+        RRF_RT_REG_DWORD, nullptr, &value, &size);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"[alignment-watch] UI alignment read failed: %ld", status);
+        return;
+    }
+
+    int alignment = value != 0 ? 1 : 0;
+    int previous = g_lastTaskbarCenteredAlignment.exchange(alignment);
+    if (previous == alignment) {
+        return;
+    }
+    UpdateKnownClocksCallback(nullptr);
+}
+
+void ApplyRegistryAlignmentSynchronously() {
+    try {
+        if (g_callbacksEnabled) {
+            RunOnTaskbarThread(ApplyRegistryAlignmentCallback, nullptr,
+                              L"Alignment notification");
+        }
+    } catch (...) {
+        Wh_Log(L"[alignment-watch] UI dispatch failed: %08X",
+               winrt::to_hresult());
+    }
+}
+// END REGISTRY ALIGNMENT DISPATCH
+
 void UpdateKnownClocksSynchronously() {
     RunOnTaskbarThread(UpdateKnownClocksCallback, nullptr,
                        L"Clock placement update");
@@ -1160,8 +1339,6 @@ bool CleanupTaskbarStateSynchronously(bool releaseContainers) {
                     .get();
             }
 
-            Wh_Log(L"Clock layout cleanup completed through the XAML "
-                   L"dispatcher fallback");
             return true;
         } catch (...) {
             Wh_Log(L"Clock dispatcher cleanup failed: %08X",
@@ -1570,10 +1747,12 @@ void Wh_ModAfterInit() {
     if (g_systemTrayHooked) {
         RefreshTaskbarClock();
     }
+    StartAlignmentRegistryWatch();
 }
 
 void Wh_ModBeforeUninit() {
     g_callbacksEnabled = false;
+    StopAlignmentRegistryWatch();
     // Revoke all mod-owned XAML delegates and release their containers while
     // the mod code and hooks are still present. The synchronous taskbar-thread
     // call must finish before Windhawk can continue unloading this DLL.
@@ -1582,6 +1761,7 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     g_callbacksEnabled = false;
+    StopAlignmentRegistryWatch();
     // Normally Wh_ModBeforeUninit already released both containers. Retry only
     // if taskbar discovery failed during that earlier cleanup.
     if (g_deferredClocks || g_movedClocks) {
