@@ -1746,6 +1746,7 @@ bool g_wasClicked = false;
 bool g_rejectNextResolved = false;
 
 void Resolve(BlockedShutdownResolution resolution, bool noInvoke = false) {
+    Wh_Log(L"Resolving with %d, noInvoke=%d", resolution, noInvoke);
     Microsoft::WRL::ComPtr<ResolvedHandler> resolvedLocal;
     {
         std::lock_guard lock(g_resolvedMutex);
@@ -2763,6 +2764,7 @@ void CustomBSDR::UpdateAppListLayout() {
 }
 
 void CustomBSDR::Cancel(bool noExitProcess) {
+    Wh_Log(L"Canceling... noExitProcess=%d, isOnSecureDesktop=%d", noExitProcess, isOnSecureDesktop);
     if (!isOnSecureDesktop) {
         // If BSDR is forced to show on the default desktop with the Windhawk mod, LogonUI.exe won't exit for some reason on cancel,
         // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
@@ -3354,6 +3356,8 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             // Deny Alt+F4 or other external window closes (like Windows 7)
             return 0;
         }
+
+        Wh_Log(L"BSDR window closing...");
 
         HWND hDlgLocal = nullptr;
         {
