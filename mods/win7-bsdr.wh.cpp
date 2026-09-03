@@ -1828,7 +1828,6 @@ namespace CustomBSDR {
     bool isHighContrast = false;
     bool isOnSecureDesktop = true;
     bool isCanceling = false;
-    bool unloadCancelHandled = false;
 
     // app list data stuff
     struct AppTile {
@@ -3451,6 +3450,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
 DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     bool failed = false;
+    bool unloadCancelHandled = false;
     int ret = 0;
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
