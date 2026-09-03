@@ -2,8 +2,8 @@
 // @id              move-window-to-desktop
 // @name            Move Window to Virtual Desktop
 // @name:zh-CN       移动窗口到虚拟桌面
-// @description     Adds a "Move to desktop" submenu to the window title bar right-click menu, supporting instant window migration and new desktop creation.
-// @description:zh-CN 在窗口标题栏右键系统菜单中添加“移动到桌面”子菜单，支持窗口在桌面间快速转移与一键新建桌面迁移。
+// @description     Adds a "Move to desktop" submenu to the window title bar and taskbar thumbnail right-click menus, supporting instant window migration and new desktop creation.
+// @description:zh-CN 在窗口标题栏以及任务栏缩略图预览右键菜单中添加“移动到桌面”子菜单，支持窗口在桌面间快速转移与一键新建桌面迁移。
 // @version         1.0.0
 // @author          heartacker
 // @github          https://github.com/heartacker
@@ -18,7 +18,7 @@
 /*
 # Move Window to Virtual Desktop (移动窗口到虚拟桌面)
 
-在 Windows 任意常规应用程序窗口的标题栏右键（或按快捷键 `Alt + Space` 调出的系统上下文菜单）中，添加 **“移动到桌面” (Move to Desktop)** 功能菜单。
+在 Windows 任意常规应用程序窗口的标题栏右键、任务栏悬停缩略图预览右键（或按快捷键 `Alt + Space` 调出的系统上下文菜单）中，添加 **“移动到桌面” (Move to Desktop)** 功能菜单。
 
 ## 功能特性 (Features)
 - 📌 **当前桌面状态标识**：自动检测当前活动窗口所属的虚拟桌面，并在菜单对应项上打勾显示（✔ 且置灰禁用重复点击）。
@@ -505,9 +505,14 @@ void PopulateMoveToDesktopMenu(HWND hWnd, HMENU hSysMenu) {
     int count = GetMenuItemCount(hSysMenu);
     for (int i = count - 1; i >= 0; i--) {
         MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_SUBMENU;
+        mii.fMask = MIIM_ID | MIIM_SUBMENU | MIIM_STRING;
+        WCHAR buf[128] = { 0 };
+        mii.dwTypeData = buf;
+        mii.cch = ARRAYSIZE(buf);
         if (GetMenuItemInfoW(hSysMenu, i, TRUE, &mii)) {
-            if (mii.wID == IDM_VIRTUAL_DESKTOP_BASE) {
+            if (mii.wID == IDM_VIRTUAL_DESKTOP_BASE ||
+                (mii.hSubMenu && mii.dwTypeData && wcsstr(mii.dwTypeData, L"桌面") != nullptr) ||
+                (mii.hSubMenu && mii.dwTypeData && wcsstr(mii.dwTypeData, L"Desktop") != nullptr)) {
                 RemoveMenu(hSysMenu, i, MF_BYPOSITION);
             }
         }
@@ -544,7 +549,12 @@ void PopulateMoveToDesktopMenu(HWND hWnd, HMENU hSysMenu) {
         AppendMenuW(hSubMenu, MF_STRING, IDM_VIRTUAL_DESKTOP_NEW, L"+ 新建桌面并移动");
     }
 
-    AppendMenuW(hSysMenu, MF_POPUP, (UINT_PTR)hSubMenu, g_settings.submenuText.c_str());
+    MENUITEMINFOW mii = { sizeof(mii) };
+    mii.fMask = MIIM_ID | MIIM_SUBMENU | MIIM_STRING;
+    mii.wID = IDM_VIRTUAL_DESKTOP_BASE;
+    mii.hSubMenu = hSubMenu;
+    mii.dwTypeData = const_cast<LPWSTR>(g_settings.submenuText.c_str());
+    InsertMenuItemW(hSysMenu, -1, TRUE, &mii);
 }
 
 void HandleMenuCommand(HWND hWnd, WPARAM wParam) {
@@ -580,7 +590,12 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
     if (hWnd) {
         PopulateMoveToDesktopMenu(hWnd, hMenu);
     }
-    return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    BOOL ret = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    if ((uFlags & TPM_RETURNCMD) && (UINT)ret >= IDM_VIRTUAL_DESKTOP_BASE && (UINT)ret <= IDM_VIRTUAL_DESKTOP_NEW) {
+        HandleMenuCommand(hWnd ? hWnd : g_currentMenuWnd, ret);
+        return 0;
+    }
+    return ret;
 }
 
 using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
@@ -589,7 +604,12 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     if (hWnd) {
         PopulateMoveToDesktopMenu(hWnd, hMenu);
     }
-    return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
+    BOOL ret = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
+    if ((uFlags & TPM_RETURNCMD) && (UINT)ret >= IDM_VIRTUAL_DESKTOP_BASE && (UINT)ret <= IDM_VIRTUAL_DESKTOP_NEW) {
+        HandleMenuCommand(hWnd ? hWnd : g_currentMenuWnd, ret);
+        return 0;
+    }
+    return ret;
 }
 
 using DefWindowProcW_t = decltype(&DefWindowProcW);
