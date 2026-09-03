@@ -484,7 +484,9 @@ async function runReadyForReviewer({
     return 'this pull request is a draft. Mark it as ready for review first.';
   }
 
-  if (currentFlowLabels.includes(WAITING_FOR_REVIEWER)) {
+  // Only the settled state is refused, so that repeating the command repairs a
+  // pull request that was left with an extra flow label.
+  if (currentFlowLabels.length === 1 && currentFlowLabels[0] === WAITING_FOR_REVIEWER) {
     return 'this pull request is already waiting for a human reviewer.';
   }
 

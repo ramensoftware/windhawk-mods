@@ -8,6 +8,11 @@ on:
 env:
   PYTHONUTF8: '1'
 
+# The pull request labels are read on top of the checked out code.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -35,10 +40,27 @@ jobs:
           # injection.
           escape_json: false
 
+      # The event payload carries the labels from the moment the event fired,
+      # so a re-run would still see the old ones. Reading them here is what
+      # lets a re-run of a failed run pick up a label that was just added.
+      - name: Get the pull request labels
+        id: pr-labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo 'labels<<LABELS_EOF'
+            gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --json labels --jq '[.labels[].name]'
+            echo 'LABELS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Validate the changes
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ steps.pr-labels.outputs.labels }}
           ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
           MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
           ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
