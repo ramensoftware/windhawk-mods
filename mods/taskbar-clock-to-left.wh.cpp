@@ -29,6 +29,8 @@ the clock stays in its native position to avoid covering those buttons.
 ![Taskbar Clock to Left](https://i.imgur.com/Wew0LZh.png)
 
 Windows 11's modern taskbar is required.
+
+This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization) by [m417z](https://github.com/m417z).
 */
 // ==/WindhawkModReadme==
 
