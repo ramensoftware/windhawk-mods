@@ -628,8 +628,7 @@ std::atomic<HWND> g_taskbarWindow{nullptr};
 std::atomic<DWORD> g_taskbarThreadId{0};
 std::atomic<bool> g_placementApplyPending{false};
 std::atomic<bool> g_resetUnknownPlacementProbesPending{false};
-std::atomic<bool> g_taskbarCallbackCleanupFailed{false};
-std::atomic<bool> g_modulePinnedAfterFailedTeardown{false};
+std::atomic<bool> g_taskbarUiResourcesRegistered{false};
 std::mutex g_placementRetryWorkerMutex;
 std::atomic<bool> g_stopPlacementRetryWorker{false};
 std::atomic<bool> g_placementRetryWorkerRunning{false};
@@ -1264,31 +1263,6 @@ constexpr std::chrono::seconds GetHwInfoRescanInterval(
     }
     return regularInterval;
 }
-
-constexpr bool HwInfoPartialRescanBackoffIsBounded() {
-    uint32_t partialScans = 0;
-    for (uint32_t i = 0; i < kHwInfoFastPartialRescanLimit; i++) {
-        if (GetHwInfoRescanInterval(false, partialScans,
-                                    std::chrono::seconds(60),
-                                    std::chrono::seconds(5)) !=
-            std::chrono::seconds(5)) {
-            return false;
-        }
-    }
-    if (GetHwInfoRescanInterval(false, partialScans,
-                                std::chrono::seconds(60),
-                                std::chrono::seconds(5)) !=
-        std::chrono::seconds(60)) {
-        return false;
-    }
-    return GetHwInfoRescanInterval(true, partialScans,
-                                   std::chrono::seconds(60),
-                                   std::chrono::seconds(5)) ==
-               std::chrono::seconds(60) &&
-           partialScans == 0;
-}
-
-static_assert(HwInfoPartialRescanBackoffIsBounded());
 
 struct HwInfoSharedMemoryCache {
     std::optional<uint32_t> cpuReadingIndex;
@@ -3095,16 +3069,24 @@ bool LooksLikeIntegratedGpu(const GpuAdapterInfo& adapter) {
     }
 
     std::wstring name = NormalizeAdapterIdentity(adapter.description);
-    bool radeonMobileModel = false;
+    bool radeonIntegratedModel = false;
     if (Contains(name, L"radeon") && !Contains(name, L"radeon hd")) {
-        for (const std::wstring& token : IdentityTokens(name)) {
-            if (token.size() != 4 || token.back() != L'm') {
-                continue;
-            }
-            radeonMobileModel = std::all_of(
-                token.begin(), token.end() - 1,
-                [](wchar_t character) { return std::iswdigit(character) != 0; });
-            if (radeonMobileModel) {
+        auto tokens = IdentityTokens(name);
+        for (size_t i = 0; i < tokens.size(); i++) {
+            const std::wstring& token = tokens[i];
+            bool hasModelSuffix = token.size() > 1 &&
+                                  (token.back() == L'm' ||
+                                   token.back() == L's') &&
+                                  std::all_of(
+                                      token.begin(), token.end() - 1,
+                                      [](wchar_t character) {
+                                          return std::iswdigit(character) != 0;
+                                      });
+            bool followedByGraphics =
+                HasDigit(token) && i + 1 < tokens.size() &&
+                tokens[i + 1] == L"graphics";
+            if (hasModelSuffix || followedByGraphics) {
+                radeonIntegratedModel = true;
                 break;
             }
         }
@@ -3115,7 +3097,7 @@ bool LooksLikeIntegratedGpu(const GpuAdapterInfo& adapter) {
            (Contains(name, L"intel") && Contains(name, L"hd graphics")) ||
            Contains(name, L"iris") ||
            Contains(name, L"radeon graphics") || Contains(name, L"vega") ||
-           Contains(name, L"integrated") || radeonMobileModel ||
+           Contains(name, L"integrated") || radeonIntegratedModel ||
            intelArc;
 }
 
@@ -3628,11 +3610,6 @@ constexpr ThemeOpacityValues ResolveThemeOpacities(bool highContrast,
                                     0.18, 0.76};
 }
 
-static_assert(ResolveThemeOpacities(true, 20).label == 1.0);
-static_assert(ResolveThemeOpacities(true, 20).track == 0.45);
-static_assert(ResolveThemeOpacities(false, 100).label > 0.61 &&
-              ResolveThemeOpacities(false, 100).label < 0.63);
-
 void ApplyThemeOpacities(const ModSettings& settings) {
     bool highContrast = settings.adaptiveColors && g_cachedHighContrast;
     ThemeOpacityValues opacities =
@@ -3759,58 +3736,25 @@ size_t HistoryCapacity(const ModSettings& settings) {
     return std::max<size_t>(2, static_cast<size_t>(intervals) + 1);
 }
 
-template <typename History>
-constexpr void AppendHistory(History& history,
-                             double value,
-                             size_t capacity) {
+void AppendHistory(std::deque<double>& history,
+                   double value,
+                   size_t capacity) {
     history.push_back(std::clamp(value, 0.0, 100.0));
     while (history.size() > capacity) {
         history.pop_front();
     }
 }
 
-template <typename History>
-constexpr void ApplyHistorySample(History& history,
-                                  bool available,
-                                  double value,
-                                  size_t capacity) {
+void ApplyHistorySample(std::deque<double>& history,
+                        bool available,
+                        double value,
+                        size_t capacity) {
     if (!available) {
         history.clear();
         return;
     }
     AppendHistory(history, value, capacity);
 }
-
-struct HistoryTestBuffer {
-    double values[4]{};
-    size_t count = 0;
-
-    constexpr size_t size() const {
-        return count;
-    }
-    constexpr void clear() {
-        count = 0;
-    }
-    constexpr void push_back(double value) {
-        values[count++] = value;
-    }
-    constexpr void pop_front() {
-        for (size_t i = 1; i < count; i++) {
-            values[i - 1] = values[i];
-        }
-        count--;
-    }
-};
-
-constexpr bool HistoryGapResetIsDeterministic() {
-    HistoryTestBuffer history;
-    ApplyHistorySample(history, true, 10.0, 4);
-    ApplyHistorySample(history, false, 0.0, 4);
-    ApplyHistorySample(history, true, 20.0, 4);
-    return history.size() == 1 && history.values[0] == 20.0;
-}
-
-static_assert(HistoryGapResetIsDeterministic());
 
 void UpdateSparkline(XamlPolyline graph,
                      const std::deque<double>& history,
@@ -3984,9 +3928,6 @@ void ApplyWidgetSettings() {
     }
     auto settingsSnapshot = CurrentSettings();
     const ModSettings& settings = *settingsSnapshot;
-    ThemeOpacityValues opacities = ResolveThemeOpacities(
-        settings.adaptiveColors && g_cachedHighContrast,
-        settings.textOpacity);
     RefreshThemeBrushes(settings);
     if (g_historyInterval != settings.updateInterval ||
         g_historyWindow != settings.historySeconds) {
@@ -4020,19 +3961,16 @@ void ApplyWidgetSettings() {
             graph.StrokeStartLineCap(PenLineCap::Round);
             graph.StrokeEndLineCap(PenLineCap::Round);
             graph.StrokeLineJoin(PenLineJoin::Round);
-            graph.Opacity(opacities.graph);
         }
     }
     for (XamlRectangle track : {g_ramTrack, g_vramTrack}) {
         if (track) {
             track.Fill(g_graphBrush);
-            track.Opacity(opacities.track);
         }
     }
     for (XamlRectangle fill : {g_ramFill, g_vramFill}) {
         if (fill) {
             fill.Fill(g_graphBrush);
-            fill.Opacity(opacities.fill);
         }
     }
 
@@ -4165,6 +4103,7 @@ void EnsureTimer() {
         g_taskbarThreadId = GetCurrentThreadId();
     }
     g_timer = DispatcherTimer();
+    g_taskbarUiResourcesRegistered = true;
     UpdateTimerInterval();
     auto now = std::chrono::steady_clock::now();
     g_nextSystemColorCheck = now + std::chrono::seconds(1);
@@ -4198,28 +4137,27 @@ void EnsureTimer() {
 }
 
 bool StopTimer() {
-    bool succeeded = true;
     if (g_timer) {
         try {
             g_timer.Stop();
         } catch (...) {
             Wh_Log(L"Stopping taskbar timer failed: %08X",
                    static_cast<unsigned>(winrt::to_hresult()));
-            succeeded = false;
+            return false;
         }
         try {
             g_timer.Tick(g_timerToken);
         } catch (...) {
             Wh_Log(L"Removing taskbar timer handler failed: %08X",
                    static_cast<unsigned>(winrt::to_hresult()));
-            succeeded = false;
+            return false;
         }
         g_timer = nullptr;
         g_timerToken = {};
     }
     g_nextSystemColorCheck = {};
     g_nextTaskbarPlacementCheck = {};
-    return succeeded;
+    return true;
 }
 
 ColumnDefinition PixelColumn(double width) {
@@ -4356,7 +4294,6 @@ Grid CreateMemoryRow(PCWSTR label,
 }
 
 bool RemoveWidget() {
-    bool callbacksRevoked = true;
     g_nextSystemColorCheck = {};
 
     if (g_widget && g_actualThemeChangedToken.value) {
@@ -4366,7 +4303,7 @@ bool RemoveWidget() {
             HRESULT error = winrt::to_hresult();
             Wh_Log(L"Removing taskbar theme handler failed: %08X",
                    static_cast<unsigned>(error));
-            callbacksRevoked = false;
+            return false;
         }
     }
     g_actualThemeChangedToken = {};
@@ -4434,7 +4371,7 @@ bool RemoveWidget() {
     g_ramAlert = AlertLevel::Normal;
     g_vramAlert = AlertLevel::Normal;
     UpdateTimerInterval();
-    return callbacksRevoked;
+    return true;
 }
 
 bool InjectWidget(FrameworkElement taskbarFrame) {
@@ -4476,7 +4413,10 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
     // it alive so an injection started by its Tick callback doesn't tear down
     // and recreate the very timer that's currently dispatching the callback.
     if (g_widget || g_rootGrid || g_taskItemsRepeater) {
-        RemoveWidget();
+        if (!RemoveWidget()) {
+            Wh_Log(L"Removing the previous widget before reinjection failed");
+            return false;
+        }
     }
 
     Grid widget;
@@ -4531,6 +4471,7 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
     widget.Children().Append(leftPanel);
     widget.Children().Append(rightPanel);
     root.Children().Append(widget);
+    g_taskbarUiResourcesRegistered = true;
 
     g_rootGrid = root;
     g_widget = widget;
@@ -4578,8 +4519,9 @@ struct WindowThreadCallbackContext {
 std::mutex g_windowThreadDispatchMutex;
 std::mutex g_windowThreadCallbackRegistryMutex;
 [[clang::no_destroy]]
-std::unordered_map<ULONG_PTR, std::shared_ptr<WindowThreadCallbackContext>>
-    g_windowThreadCallbackRegistry;
+std::optional<std::unordered_map<
+    ULONG_PTR, std::shared_ptr<WindowThreadCallbackContext>>>
+    g_windowThreadCallbackRegistry{std::in_place};
 std::atomic<ULONG_PTR> g_nextWindowThreadCallbackToken{1};
 
 bool RunFromWindowThread(HWND window,
@@ -4588,7 +4530,7 @@ bool RunFromWindowThread(HWND window,
     static const UINT message =
         RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId || g_taskbarCallbackCleanupFailed) {
+    if (!threadId) {
         return false;
     }
     if (threadId == GetCurrentThreadId()) {
@@ -4597,10 +4539,6 @@ bool RunFromWindowThread(HWND window,
     }
 
     std::lock_guard dispatchLock(g_windowThreadDispatchMutex);
-    if (g_taskbarCallbackCleanupFailed) {
-        return false;
-    }
-
     std::shared_ptr<WindowThreadCallbackContext> callbackContext;
     ULONG_PTR callbackToken = 0;
     try {
@@ -4611,9 +4549,9 @@ bool RunFromWindowThread(HWND window,
             callbackToken = g_nextWindowThreadCallbackToken.fetch_add(
                 1, std::memory_order_relaxed);
         } while (!callbackToken ||
-                 g_windowThreadCallbackRegistry.contains(callbackToken));
-        g_windowThreadCallbackRegistry.emplace(callbackToken,
-                                                callbackContext);
+                 g_windowThreadCallbackRegistry->contains(callbackToken));
+        g_windowThreadCallbackRegistry->emplace(callbackToken,
+                                                 callbackContext);
     } catch (...) {
         Wh_Log(L"Preparing taskbar thread dispatch failed: %08X",
                static_cast<unsigned>(winrt::to_hresult()));
@@ -4633,12 +4571,12 @@ bool RunFromWindowThread(HWND window,
                         std::lock_guard lock(
                             g_windowThreadCallbackRegistryMutex);
                         auto callbackEntry =
-                            g_windowThreadCallbackRegistry.find(
+                            g_windowThreadCallbackRegistry->find(
                                 static_cast<ULONG_PTR>(messageData->lParam));
                         if (callbackEntry !=
-                            g_windowThreadCallbackRegistry.end()) {
+                            g_windowThreadCallbackRegistry->end()) {
                             callbackContext = callbackEntry->second;
-                            g_windowThreadCallbackRegistry.erase(
+                            g_windowThreadCallbackRegistry->erase(
                                 callbackEntry);
                         }
                     }
@@ -4662,34 +4600,43 @@ bool RunFromWindowThread(HWND window,
     if (!hook) {
         {
             std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
-            g_windowThreadCallbackRegistry.erase(callbackToken);
+            g_windowThreadCallbackRegistry->erase(callbackToken);
         }
         Wh_Log(L"SetWindowsHookEx failed for taskbar thread %u: %u", threadId,
                GetLastError());
         return false;
     }
 
-    DWORD_PTR messageResult = 0;
-    BOOL messageCompleted = SendMessageTimeoutW(
-        window, message, 0, static_cast<LPARAM>(callbackToken),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &messageResult);
-    BOOL hookRemoved = UnhookWindowsHookEx(hook);
-    if (!hookRemoved) {
-        g_taskbarCallbackCleanupFailed = true;
-        Wh_Log(L"UnhookWindowsHookEx failed for taskbar thread %u: %u",
-               threadId, GetLastError());
+    SendMessageW(window, message, 0, static_cast<LPARAM>(callbackToken));
+    DWORD unhookAttempts = 0;
+    while (true) {
+        if (UnhookWindowsHookEx(hook)) {
+            break;
+        }
+        DWORD unhookError = GetLastError();
+        if (unhookError == ERROR_INVALID_HOOK_HANDLE) {
+            Wh_Log(L"Taskbar thread hook was already removed for thread %u",
+                   threadId);
+            break;
+        }
+        unhookAttempts++;
+        if (unhookAttempts == 1 || unhookAttempts % 100 == 0) {
+            Wh_Log(L"UnhookWindowsHookEx failed for taskbar thread %u: %u; "
+                   L"retrying",
+                   threadId, unhookError);
+        }
+        Sleep(10);
     }
     {
         std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
-        g_windowThreadCallbackRegistry.erase(callbackToken);
+        g_windowThreadCallbackRegistry->erase(callbackToken);
     }
     bool invoked =
         callbackContext->invoked.load(std::memory_order_acquire);
-    if (!messageCompleted || !invoked) {
-        Wh_Log(L"Taskbar thread dispatch timed out or failed for thread %u",
-               threadId);
+    if (!invoked) {
+        Wh_Log(L"Taskbar thread dispatch failed for thread %u", threadId);
     }
-    return invoked && hookRemoved;
+    return invoked;
 }
 
 bool IsTaskbarWindowClass(HWND window, bool* secondary = nullptr) {
@@ -5175,8 +5122,7 @@ void RemoveWidgetForMove(void* contextValue) {
     auto* context =
         reinterpret_cast<RemoveWidgetForMoveContext*>(contextValue);
     try {
-        RemoveWidget();
-        context->succeeded = true;
+        context->succeeded = RemoveWidget();
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         Wh_Log(L"Removing widget before monitor switch failed: %08X",
@@ -5208,22 +5154,22 @@ void RemoveFromCurrentTaskbar(void* contextValue) {
                static_cast<unsigned>(error));
         succeeded = false;
     }
-    g_taskbarWindow = nullptr;
-    g_taskbarThreadId = 0;
-    g_lastFailedPlacementTarget = nullptr;
-    g_hasFailedPlacementTarget = false;
-    g_nextPlacementRetry = {};
-    g_placementFailures = 0;
-    g_placementIsFallback = false;
-    g_placementLocationUnknown = false;
-    g_unknownPlacementProbeFailures = 0;
-    g_unknownPlacementProbesSuspended = false;
-    g_lastDisplayTopologyFingerprint = 0;
-    g_hasDisplayTopologyFingerprint = false;
-    g_placementApplyPending = false;
-    g_resetUnknownPlacementProbesPending = false;
-    if (!succeeded) {
-        g_taskbarCallbackCleanupFailed = true;
+    if (succeeded) {
+        g_taskbarWindow = nullptr;
+        g_taskbarThreadId = 0;
+        g_lastFailedPlacementTarget = nullptr;
+        g_hasFailedPlacementTarget = false;
+        g_nextPlacementRetry = {};
+        g_placementFailures = 0;
+        g_placementIsFallback = false;
+        g_placementLocationUnknown = false;
+        g_unknownPlacementProbeFailures = 0;
+        g_unknownPlacementProbesSuspended = false;
+        g_lastDisplayTopologyFingerprint = 0;
+        g_hasDisplayTopologyFingerprint = false;
+        g_placementApplyPending = false;
+        g_resetUnknownPlacementProbesPending = false;
+        g_taskbarUiResourcesRegistered = false;
     }
     if (context) {
         context->succeeded = succeeded;
@@ -5475,7 +5421,7 @@ bool ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
                           bool refreshExistingWidget = true,
                           bool resetUnknownPlacementProbes = false,
                           HWND requestedWindow = nullptr) {
-    if (g_unloading || g_taskbarCallbackCleanupFailed) {
+    if (g_unloading) {
         return false;
     }
 
@@ -5533,7 +5479,7 @@ bool ApplyOnTaskbarThread(FrameworkElement fallbackFrame = nullptr,
 
 void StartPlacementRetryWorker() {
     std::lock_guard lock(g_placementRetryWorkerMutex);
-    if (g_unloading || g_taskbarCallbackCleanupFailed) {
+    if (g_unloading) {
         return;
     }
     if (g_placementRetryWorker && g_placementRetryWorker->joinable()) {
@@ -5567,7 +5513,6 @@ void StartPlacementRetryWorker() {
             bool slowBackoffLogged = false;
             while (true) {
                 if (g_stopPlacementRetryWorker || g_unloading ||
-                    g_taskbarCallbackCleanupFailed ||
                     !g_placementApplyPending) {
                     break;
                 }
@@ -5620,11 +5565,7 @@ void StopPlacementRetryWorker() {
         g_placementRetryWakeEvent = nullptr;
     }
     if (worker && worker->joinable()) {
-        if (worker->get_id() == std::this_thread::get_id()) {
-            worker->detach();
-        } else {
-            worker->join();
-        }
+        worker->join();
     }
     if (wakeEvent) {
         CloseHandle(wakeEvent);
@@ -5725,6 +5666,7 @@ TaskbarFrame_Constructor_t TaskbarFrame_Constructor_Original = nullptr;
 
 void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
     void* result = TaskbarFrame_Constructor_Original(pThis);
+    g_taskbarThreadId = GetCurrentThreadId();
     if (g_unloading || !g_loadedRevokers) {
         return result;
     }
@@ -5761,6 +5703,7 @@ void* WINAPI TaskbarFrame_Constructor_Hook(void* pThis) {
                                static_cast<unsigned>(error));
                     }
                 });
+            g_taskbarUiResourcesRegistered = true;
         } catch (...) {
             g_loadedRevokers->erase(revoker);
             throw;
@@ -5869,8 +5812,11 @@ void CloseMetricSources() {
 }
 
 bool TearDownTaskbarUi() {
-    if (g_taskbarCallbackCleanupFailed) {
-        return false;
+    if (!g_taskbarUiResourcesRegistered) {
+        g_loadedRevokers.reset();
+        g_taskbarWindow = nullptr;
+        g_taskbarThreadId = 0;
+        return true;
     }
     constexpr int kMaximumTeardownAttempts = 3;
     for (int attempt = 0; attempt < kMaximumTeardownAttempts; attempt++) {
@@ -5909,34 +5855,18 @@ bool TearDownTaskbarUi() {
     return false;
 }
 
-bool PinModuleAfterFailedTaskbarTeardown() {
-    if (g_modulePinnedAfterFailedTeardown) {
-        return true;
-    }
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&PinModuleAfterFailedTaskbarTeardown),
-            &module)) {
-        return false;
-    }
-    g_modulePinnedAfterFailedTeardown = true;
-    return true;
-}
-
 }  // namespace
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-    if (g_modulePinnedAfterFailedTeardown) {
-        Wh_Log(L"The previous taskbar callbacks could not be revoked safely; "
-               L"restart Explorer before enabling the mod again");
-        return FALSE;
-    }
     g_unloading = false;
-    g_taskbarCallbackCleanupFailed = false;
+    g_taskbarUiResourcesRegistered = false;
     g_uiTornDown = false;
+    g_loadedRevokers.emplace();
+    {
+        std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
+        g_windowThreadCallbackRegistry.emplace();
+    }
     if (HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll")) {
         g_d3dkmtEnumAdapters2 = reinterpret_cast<D3DKMTEnumAdapters2_t>(
             GetProcAddress(gdi32, "D3DKMTEnumAdapters2"));
@@ -6021,15 +5951,12 @@ void Wh_ModUninit() {
         g_uiTornDown = TearDownTaskbarUi();
         if (!g_uiTornDown) {
             Wh_Log(L"Taskbar UI teardown retry failed");
-            if (PinModuleAfterFailedTaskbarTeardown()) {
-                Wh_Log(L"Keeping the mod image loaded because taskbar callbacks "
-                       L"could not be revoked safely");
-            } else {
-                Wh_Log(L"Keeping taskbar callbacks safe failed: %u",
-                       GetLastError());
-            }
         }
     }
     StopMetricsWorker();
     CloseMetricSources();
+    {
+        std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
+        g_windowThreadCallbackRegistry.reset();
+    }
 }
