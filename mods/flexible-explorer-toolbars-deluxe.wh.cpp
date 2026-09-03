@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id flexible-explorer-toolbars-deluxe
 // @name Flexible Explorer Toolbars Deluxe
-// @description Makes Search Bar, Breadcrumb Bar and others into movable toolbars
+// @description Makes Search Bar, Address Bar, Breadcrumb Bar and others into movable toolbars
 // @version 1.5
 // @author Anixx
 // @github https://github.com/Anixx
@@ -109,6 +109,8 @@ struct TbGuard {
 
 std::unordered_map<HWND, TbGuard> g_guards;
 std::unordered_map<HWND, WindhawkUtils::WH_SUBCLASSPROC> g_hooks;
+std::unordered_map<HWND, std::wstring> g_lastAddrPath;
+std::unordered_map<HWND, IWebBrowser2*> g_browserCache;
 
 thread_local bool g_inApply = false;
 thread_local bool g_inSync = false;
@@ -383,17 +385,33 @@ void BeginAddressBarCapture(HWND cab);
 bool TryCaptureFromRoot(HWND cab);
 void ForceRebarRecalc(HWND rb);
 
-// === адресная строка ===
+// === адресная строка: кэш браузера + путь ===
 
-std::wstring GetFriendlyPathFromCab(HWND cab)
-{
-    std::wstring result;
-    if (!cab) return result;
+void ReleaseBrowserCache(HWND cab) {
+    Lock L;
+    auto it = g_browserCache.find(cab);
+    if (it!= g_browserCache.end()) {
+        if (it->second) it->second->Release();
+        g_browserCache.erase(it);
+    }
+    g_lastAddrPath.erase(cab);
+}
 
+IWebBrowser2* GetOrCreateBrowserForCab(HWND cab) {
+    if (!cab) return nullptr;
+    {
+        Lock L;
+        auto it = g_browserCache.find(cab);
+        if (it!= g_browserCache.end() && it->second) {
+            it->second->AddRef();
+            return it->second;
+        }
+    }
     IShellWindows* pSW = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_ALL, IID_IShellWindows, (void**)&pSW)) ||!pSW)
-        return result;
+        return nullptr;
 
+    IWebBrowser2* found = nullptr;
     long cnt = 0;
     pSW->get_Count(&cnt);
     for (long i = 0; i < cnt; i++) {
@@ -401,145 +419,87 @@ std::wstring GetFriendlyPathFromCab(HWND cab)
         IDispatch* pDisp = nullptr;
         if (FAILED(pSW->Item(vi, &pDisp)) ||!pDisp) { VariantClear(&vi); continue; }
         VariantClear(&vi);
-
         IWebBrowser2* pWB = nullptr;
         if (FAILED(pDisp->QueryInterface(IID_IWebBrowser2, (void**)&pWB)) ||!pWB) { pDisp->Release(); continue; }
         pDisp->Release();
-
         SHANDLE_PTR hWnd = 0;
         pWB->get_HWND(&hWnd);
         if ((HWND)hWnd!= cab) { pWB->Release(); continue; }
-
-        IServiceProvider* pSP = nullptr;
-        if (SUCCEEDED(pWB->QueryInterface(IID_IServiceProvider, (void**)&pSP)) && pSP) {
-            IShellBrowser* pSB = nullptr;
-            if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser, IID_IShellBrowser, (void**)&pSB)) && pSB) {
-                IShellView* pSV = nullptr;
-                if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV) {
-                    IFolderView* pFV = nullptr;
-                    if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView, (void**)&pFV)) && pFV) {
-                        IPersistFolder2* pPF2 = nullptr;
-                        if (SUCCEEDED(pFV->GetFolder(IID_PPV_ARGS(&pPF2))) && pPF2) {
-                            LPITEMIDLIST pidl = nullptr;
-                            if (SUCCEEDED(pPF2->GetCurFolder(&pidl)) && pidl) {
-                                // 1. Пытаемся получить человеко-читаемый путь: "Этот компьютер\..."
-                                PWSTR pszEdit = nullptr;
-                                if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEEDITING, &pszEdit)) && pszEdit) {
-                                    result = pszEdit;
-                                    CoTaskMemFree(pszEdit);
-                                }
-                                // 2. Если пусто - пробуем обычный display путь
-                                if (result.empty()) {
-                                    PWSTR pszDisp = nullptr;
-                                    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEPARSING, &pszDisp)) && pszDisp) {
-                                        // Проверяем, это файловый путь?
-                                        if (PathFileExistsW(pszDisp)) {
-                                            result = pszDisp;
-                                        } else {
-                                            // Для виртуальных - пробуем NORMALDISPLAY рекурсивно? оставляем EDITING fallback уже был
-                                            // Если все равно CLSID - конвертим в friendly через SHGetNameFromIDList EDITING уже сделали,
-                                            // значит это реально CLSID путь - оставляем как есть, но попробуем получить display name родителя
-                                            // Для "Этот компьютер" EDITING должен был сработать, так что сюда попадаем редко
-                                            PWSTR pszNormal = nullptr;
-                                            if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_NORMALDISPLAY, &pszNormal)) && pszNormal) {
-                                                // если это не CLSID - используем
-                                                if (wcsstr(pszNormal, L"::{") == nullptr) {
-                                                    // попробуем построить полный путь через родителя? проще отдать EDITING
-                                                }
-                                                CoTaskMemFree(pszNormal);
-                                            }
-                                        }
-                                        CoTaskMemFree(pszDisp);
-                                    }
-                                }
-                                // Если до сих пор пусто и это файловый путь - берем FILESYSPATH
-                                if (result.empty()) {
-                                    PWSTR pszPath = nullptr;
-                                    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_FILESYSPATH, &pszPath)) && pszPath) {
-                                        result = pszPath;
-                                        CoTaskMemFree(pszPath);
-                                    }
-                                }
-                                CoTaskMemFree(pidl);
-                            }
-                            pPF2->Release();
-                        }
-                        pFV->Release();
-                    }
-                    pSV->Release();
-                }
-                pSB->Release();
-            }
-            pSP->Release();
-        }
-
-        // Fallback: LocationURL -> Path
-        if (result.empty()) {
-            BSTR bUrl = nullptr;
-            if (SUCCEEDED(pWB->get_LocationURL(&bUrl)) && bUrl) {
-                if (wcslen(bUrl) > 0) {
-                    if (wcsncmp(bUrl, L"file:///", 8) == 0) {
-                        WCHAR path[4096] = L"";
-                        DWORD cch = 4096;
-                        if (SUCCEEDED(PathCreateFromUrlW(bUrl, path, &cch, 0))) {
-                            result = path;
-                        } else {
-                            // ручная конвертация
-                            WCHAR tmp[4096];
-                            wcsncpy(tmp, bUrl + 8, 4095);
-                            tmp[4095]=0;
-                            // UrlUnescape требует mutable buffer
-                            WCHAR tmp2[4096];
-                            DWORD cch2 = 4096;
-                            WCHAR mutableBuf[4096];
-                            wcsncpy(mutableBuf, tmp, 4095);
-                            if (SUCCEEDED(UrlUnescapeW(mutableBuf, tmp2, &cch2, 0))) {
-                                for (WCHAR* p=tmp2; *p; ++p) if (*p==L'/') *p=L'\\';
-                                result = tmp2;
-                            } else {
-                                for (WCHAR* p=tmp; *p; ++p) if (*p==L'/') *p=L'\\';
-                                result = tmp;
-                            }
-                        }
-                    } else {
-                        // не файловая система - пытаемся unescape
-                        WCHAR mutableUrl[4096];
-                        wcsncpy(mutableUrl, bUrl, 4095);
-                        mutableUrl[4095]=0;
-                        WCHAR unesc[4096];
-                        DWORD len = 4096;
-                        if (SUCCEEDED(UrlUnescapeW(mutableUrl, unesc, &len, 0))) result = unesc;
-                        else result = bUrl;
-                    }
-                }
-                SysFreeString(bUrl);
-            }
-            if (result.empty()) {
-                BSTR bName = nullptr;
-                if (SUCCEEDED(pWB->get_LocationName(&bName)) && bName) {
-                    result = bName;
-                    SysFreeString(bName);
-                }
-            }
-        }
-        pWB->Release();
+        found = pWB;
         break;
     }
     pSW->Release();
+
+    if (found) {
+        Lock L;
+        found->AddRef();
+        g_browserCache[cab] = found;
+    }
+    return found;
+}
+
+LPITEMIDLIST GetPidlForCab(HWND cab)
+{
+    if (!cab) return nullptr;
+    IWebBrowser2* pWB = GetOrCreateBrowserForCab(cab);
+    if (!pWB) return nullptr;
+
+    LPITEMIDLIST result = nullptr;
+    IServiceProvider* pSP = nullptr;
+    if (SUCCEEDED(pWB->QueryInterface(IID_IServiceProvider, (void**)&pSP)) && pSP) {
+        IShellBrowser* pSB = nullptr;
+        if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser, IID_IShellBrowser, (void**)&pSB)) && pSB) {
+            IShellView* pSV = nullptr;
+            if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV) {
+                IFolderView* pFV = nullptr;
+                if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView, (void**)&pFV)) && pFV) {
+                    IPersistFolder2* pPF2 = nullptr;
+                    if (SUCCEEDED(pFV->GetFolder(IID_PPV_ARGS(&pPF2))) && pPF2) {
+                        LPITEMIDLIST pidl = nullptr;
+                        if (SUCCEEDED(pPF2->GetCurFolder(&pidl)) && pidl) {
+                            result = ILClone(pidl);
+                            CoTaskMemFree(pidl);
+                        }
+                        pPF2->Release();
+                    }
+                    pFV->Release();
+                }
+                pSV->Release();
+            }
+            pSB->Release();
+        }
+        pSP->Release();
+    }
+    pWB->Release();
     return result;
+}
+
+std::wstring GetFriendlyPathFromPidl(LPITEMIDLIST pidl)
+{
+    std::wstring out;
+    if (!pidl) return out;
+    PWSTR psz = nullptr;
+    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEEDITING, &psz)) && psz) {
+        out = psz;
+        CoTaskMemFree(psz);
+        return out;
+    }
+    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_FILESYSPATH, &psz)) && psz) {
+        out = psz;
+        CoTaskMemFree(psz);
+        return out;
+    }
+    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEPARSING, &psz)) && psz) {
+        out = psz;
+        CoTaskMemFree(psz);
+    }
+    return out;
 }
 
 HWND FindEditInAddressBand(HWND addrBand)
 {
     if (!addrBand) return NULL;
     HWND innerCombo = FindWindowExW(addrBand, NULL, L"ComboBox", NULL);
-    if (!innerCombo) {
-        HWND comboEx = FindWindowExW(addrBand, NULL, L"ComboBoxEx32", NULL);
-        if (comboEx) innerCombo = FindWindowExW(comboEx, NULL, L"ComboBox", NULL);
-        else innerCombo = addrBand; // иногда сам addrBand и есть ComboBoxEx32
-        if (!innerCombo) innerCombo = addrBand;
-        innerCombo = FindWindowExW(innerCombo, NULL, L"ComboBox", NULL);
-    }
     if (!innerCombo) return NULL;
     return FindWindowExW(innerCombo, NULL, L"Edit", NULL);
 }
@@ -558,18 +518,54 @@ void UpdateAddressBandForCab(HWND cab)
     if (!edit ||!IsWindow(edit)) return;
     if (GetFocus() == edit) return;
 
-    std::wstring curPath = GetFriendlyPathFromCab(cab);
-    if (curPath.empty()) return;
+    LPITEMIDLIST pidl = GetPidlForCab(cab);
+    if (!pidl) return;
+    std::wstring curPath = GetFriendlyPathFromPidl(pidl);
+    if (curPath.empty()) { ILFree(pidl); return; }
 
-    WCHAR curTxt[4096] = L"";
-    GetWindowTextW(edit, curTxt, 4096);
-    if (curTxt == curPath) return;
+    {
+        Lock L;
+        auto it = g_lastAddrPath.find(cab);
+        if (it!= g_lastAddrPath.end() && it->second == curPath) {
+            ILFree(pidl);
+            return;
+        }
+    }
+
+    SHFILEINFO sfiSys = {};
+    HIMAGELIST hSysSmall = (HIMAGELIST)SHGetFileInfoW(L"C:\\", 0, &sfiSys, sizeof(sfiSys), SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+    SHFILEINFO sfiPidl = {};
+    SHGetFileInfoW((LPCWSTR)pidl, 0, &sfiPidl, sizeof(sfiPidl), SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
 
     g_inAddressUpdate = true;
-    SetWindowTextW(edit, curPath.c_str());
-    SetWindowTextW(addr, curPath.c_str());
-    SendMessageW(GetParent(edit), CB_SETCURSEL, (WPARAM)-1, 0);
+
+    if (hSysSmall) {
+        HIMAGELIST hCur = (HIMAGELIST)SendMessageW(addr, CBEM_GETIMAGELIST, 0, 0);
+        if (hCur!= hSysSmall) {
+            SendMessageW(addr, CBEM_SETIMAGELIST, 0, (LPARAM)hSysSmall);
+        }
+    }
+
+    COMBOBOXEXITEMW cbei = {0};
+    cbei.mask = CBEIF_IMAGE | CBEIF_SELECTEDIMAGE | CBEIF_TEXT;
+    cbei.iItem = -1;
+    cbei.pszText = (LPWSTR)curPath.c_str();
+    cbei.cchTextMax = (int)curPath.size();
+    cbei.iImage = sfiPidl.iIcon;
+    cbei.iSelectedImage = sfiPidl.iIcon;
+
+    if (sfiPidl.iIcon < 0) {
+        cbei.mask &= ~(CBEIF_IMAGE | CBEIF_SELECTEDIMAGE);
+    }
+
+    SendMessageW(addr, CBEM_SETITEMW, 0, (LPARAM)&cbei);
+
     g_inAddressUpdate = false;
+    {
+        Lock L;
+        g_lastAddrPath[cab] = curPath;
+    }
+    ILFree(pidl);
 }
 
 int GetIdealToolbarHeight(HWND hwndRef) {
@@ -589,59 +585,72 @@ void CacheGoodSize(HWND ch) {
 
 void SaveTypedAddress(LPCWSTR rawPath) {
     if (!rawPath ||!*rawPath) return;
-    WCHAR tmp[4096];
-    wcsncpy(tmp, rawPath, 4095);
-    tmp[4095] = 0;
-    WCHAR* s = tmp;
-    while (*s == L' ' || *s == L'\t' || *s == L'\r' || *s == L'\n') s++;
-    size_t len = wcslen(s);
-    while (len > 0 && (s[len-1] == L' ' || s[len-1] == L'\t' || s[len-1] == L'\r' || s[len-1] == L'\n')) {
-        s[len-1] = 0;
-        len--;
-    }
-    if (len < 2) return;
-    if (len < 3 && s[1]!= L':') return;
+
+    std::wstring path(rawPath);
+    size_t first = path.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos) return;
+    size_t last = path.find_last_not_of(L" \t\r\n");
+    path = path.substr(first, last - first + 1);
+
+    if (path.length() < 2) return;
+    if (path.length() < 3 && path[1]!= L':') return;
+
     HKEY hKey = NULL;
     LONG lr = RegCreateKeyExW(HKEY_CURRENT_USER,
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\TypedPaths",
         0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &hKey, NULL);
     if (lr!= ERROR_SUCCESS ||!hKey) return;
-    wchar_t existing[50][4096];
-    int count = 0;
+
+    std::vector<std::wstring> existing;
+    existing.reserve(32);
+
     for (int i = 1; i <= 50; i++) {
         WCHAR name[32];
         swprintf(name, 32, L"url%d", i);
-        DWORD type = 0, cb = sizeof(existing[0]);
-        WCHAR data[4096];
-        cb = sizeof(data);
-        if (RegQueryValueExW(hKey, name, NULL, &type, (BYTE*)data, &cb) == ERROR_SUCCESS) {
-            if (type == REG_SZ || type == REG_EXPAND_SZ) {
-                wcsncpy(existing[count], data, 4095);
-                existing[count][4095] = 0;
-                count++;
-            } else break;
-        } else break;
-    }
-    for (int i = 0; i < count; i++) {
-        if (_wcsicmp(existing[i], s) == 0) {
-            WCHAR tmpMove[4096];
-            wcsncpy(tmpMove, existing[i], 4095);
-            for (int j = i; j > 0; j--) wcsncpy(existing[j], existing[j-1], 4095);
-            wcsncpy(existing[0], tmpMove, 4095);
-            goto write;
+        DWORD type = 0, cb = 0;
+        LONG q = RegQueryValueExW(hKey, name, NULL, &type, NULL, &cb);
+        if (q == ERROR_FILE_NOT_FOUND) break;
+        if (q == ERROR_MORE_DATA) {
+            // will read with dynamic buffer below
+        } else if (q!= ERROR_SUCCESS) {
+            continue;
         }
+        if (type!= REG_SZ && type!= REG_EXPAND_SZ) continue;
+        if (cb == 0) continue;
+        if (cb > 32768 * sizeof(WCHAR)) continue;
+
+        std::vector<BYTE> buf(cb + sizeof(WCHAR));
+        DWORD cb2 = (DWORD)buf.size();
+        DWORD type2 = 0;
+        LONG q2 = RegQueryValueExW(hKey, name, NULL, &type2, buf.data(), &cb2);
+        if (q2!= ERROR_SUCCESS) continue;
+        if (type2!= REG_SZ && type2!= REG_EXPAND_SZ) continue;
+
+        LPCWSTR str = (LPCWSTR)buf.data();
+        size_t len = wcsnlen(str, (cb2 / sizeof(WCHAR)) + 1);
+        if (len == 0) continue;
+        existing.emplace_back(str, len);
+        if ((int)existing.size() >= 50) break;
     }
-    if (count >= 25) count = 24;
-    for (int j = count; j > 0; j--) wcsncpy(existing[j], existing[j-1], 4095);
-    wcsncpy(existing[0], s, 4095);
-    count++;
-write:
-    for (int i = 0; i < count && i < 25; i++) {
+
+    auto it = std::find_if(existing.begin(), existing.end(),
+        [&](const std::wstring& s){ return _wcsicmp(s.c_str(), path.c_str()) == 0; });
+
+    if (it!= existing.end()) {
+        std::wstring tmp = *it;
+        existing.erase(it);
+        existing.insert(existing.begin(), tmp);
+    } else {
+        if ((int)existing.size() >= 25) existing.resize(24);
+        existing.insert(existing.begin(), path);
+    }
+
+    for (size_t i = 0; i < existing.size() && i < 25; i++) {
         WCHAR name[32];
-        swprintf(name, 32, L"url%d", i+1);
-        RegSetValueExW(hKey, name, 0, REG_SZ, (BYTE*)existing[i], (DWORD)((wcslen(existing[i]) + 1) * sizeof(WCHAR)));
+        swprintf(name, 32, L"url%zu", i+1);
+        RegSetValueExW(hKey, name, 0, REG_SZ, (BYTE*)existing[i].c_str(), (DWORD)((existing[i].size()+1)*sizeof(WCHAR)));
     }
-    for (int i = count + 1; i <= 50; i++) {
+    for (int i = (int)existing.size() + 1; i <= 50; i++) {
         WCHAR name[32];
         swprintf(name, 32, L"url%d", i);
         RegDeleteValueW(hKey, name);
@@ -651,40 +660,24 @@ write:
 
 void NavigateCabinet(HWND cab, LPCWSTR rawPath) {
     if (!cab ||!IsWindow(cab) ||!rawPath ||!*rawPath) return;
-    WCHAR path[4096];
-    wcsncpy(path, rawPath, 4095);
-    path[4095] = 0;
-    for (WCHAR* p = path; *p; ++p) if (*p == L'\r' || *p == L'\n') *p = 0;
-    WCHAR* s = path;
-    while (*s == L' ' || *s == L'\t') s++;
-    size_t len = wcslen(s);
-    while (len > 0 && (s[len - 1] == L' ' || s[len - 1] == L'\t')) { s[len - 1] = 0; len--; }
-    if (!*s) return;
-    SaveTypedAddress(s);
-    IShellWindows* pSW = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_ALL, IID_IShellWindows, (void**)&pSW)) ||!pSW) return;
-    long cnt = 0;
-    pSW->get_Count(&cnt);
-    for (long i = 0; i < cnt; i++) {
-        VARIANT vi; VariantInit(&vi); vi.vt = VT_I4; vi.lVal = i;
-        IDispatch* pDisp = nullptr;
-        if (FAILED(pSW->Item(vi, &pDisp)) ||!pDisp) { VariantClear(&vi); continue; }
-        VariantClear(&vi);
-        IWebBrowser2* pWB = nullptr;
-        if (FAILED(pDisp->QueryInterface(IID_IWebBrowser2, (void**)&pWB)) ||!pWB) { pDisp->Release(); continue; }
-        pDisp->Release();
-        SHANDLE_PTR hWnd = 0;
-        pWB->get_HWND(&hWnd);
-        if ((HWND)hWnd!= cab) { pWB->Release(); continue; }
-        VARIANT vPath, vEmpty; VariantInit(&vPath); VariantInit(&vEmpty);
-        vPath.vt = VT_BSTR; vPath.bstrVal = SysAllocString(s);
-        pWB->Navigate2(&vPath, &vEmpty, &vEmpty, &vEmpty, &vEmpty);
-        VariantClear(&vPath);
-        pWB->Release();
-        break;
-    }
-    pSW->Release();
-    PostMessage(cab, g_msgUpdateAddress, 0, 0);
+    std::wstring raw(rawPath);
+    raw.erase(std::remove(raw.begin(), raw.end(), L'\r'), raw.end());
+    raw.erase(std::remove(raw.begin(), raw.end(), L'\n'), raw.end());
+    size_t first = raw.find_first_not_of(L" \t");
+    if (first == std::wstring::npos) return;
+    size_t last = raw.find_last_not_of(L" \t");
+    raw = raw.substr(first, last - first + 1);
+    if (raw.empty()) return;
+
+    SaveTypedAddress(raw.c_str());
+
+    IWebBrowser2* pWB = GetOrCreateBrowserForCab(cab);
+    if (!pWB) return;
+    VARIANT vPath, vEmpty; VariantInit(&vPath); VariantInit(&vEmpty);
+    vPath.vt = VT_BSTR; vPath.bstrVal = SysAllocString(raw.c_str());
+    pWB->Navigate2(&vPath, &vEmpty, &vEmpty, &vEmpty, &vEmpty);
+    VariantClear(&vPath);
+    pWB->Release();
 }
 
 LRESULT CALLBACK AddressEdit_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
@@ -810,9 +803,9 @@ std::wstring GetLocalStr(UINT id, LPCWSTR def) {
 void SyncMenu(HMENU m, HWND rb) {
     LoadSettings();
     if (!HasId(m, CMD_TOGGLE_SEARCHBAND)) {
-        InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_UPBUTTON, GetLocalStr(STR_ID_UPBUTTON, L"Up").c_str());
+        InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_UPBUTTON, GetLocalStr(STR_ID_UPBUTTON, L"Up Button").c_str());
         InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_ADDRESSBAND, GetLocalStr(STR_ID_ADDRESSBAR, L"Address Bar").c_str());
-        InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_BREADCRUMB, GetLocalStr(STR_ID_BREADCRUMB, L"Address").c_str());
+        InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_BREADCRUMB, GetLocalStr(STR_ID_BREADCRUMB, L"Location").c_str());
         InsertMenuW(m, 0, MF_BYPOSITION | MF_STRING, CMD_TOGGLE_SEARCHBAND, GetLocalStr(STR_ID_SEARCHBAR, L"Search Bar").c_str());
     }
     CheckMenuItem(m, CMD_TOGGLE_SEARCHBAND, MF_BYCOMMAND | (g_set.s? MF_CHECKED : MF_UNCHECKED));
@@ -988,7 +981,6 @@ void ForceRebarRecalc(HWND rb) {
     SendMessage(rb, WM_SIZE, 0, MAKELPARAM(rc.right, rc.bottom));
     SetWindowPos(rb, NULL, 0, 0, rc.right, rc.bottom, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOSENDCHANGING);
     g_inRecalc = false;
-    if (HWND cab = GetCabinet(rb)) PostMessage(cab, WM_SIZE, SIZE_RESTORED, MAKELPARAM(rc.right, rc.bottom));
 }
 
 bool TryCaptureFromRoot(HWND cab) {
@@ -1162,23 +1154,19 @@ LRESULT CALLBACK ParentRb_Proc(HWND hh, UINT mm, WPARAM ww, LPARAM ll, DWORD_PTR
 }
 
 LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
-    if (m == WM_NCDESTROY) { { Lock L; g_hooks.erase(h); } return DefSubclassProc(h, m, w, l); }
-    if (m == g_msgUpdateAddress) {
-        UpdateAddressBandForCab(h);
-        SetTimer(h, 0xF00D, 200, NULL);
-        return 0;
-    }
-    if (m == WM_TIMER && w == 0xF00D) {
+    if (m == WM_NCDESTROY) {
         KillTimer(h, 0xF00D);
+        ReleaseBrowserCache(h);
+        { Lock L; g_hooks.erase(h); }
+        return DefSubclassProc(h, m, w, l);
+    }
+    if (m == g_msgUpdateAddress) {
         UpdateAddressBandForCab(h);
         return 0;
     }
     if (m == WM_SETTEXT && GetPropW(h, L"FlexTbMoved")) {
         LRESULT res = DefSubclassProc(h, m, w, l);
         PostMessage(h, g_msgUpdateAddress, 0, 0);
-        BOOL active = (GetForegroundWindow() == h);
-        SendMessage(h, WM_NCACTIVATE,!active, 0);
-        SendMessage(h, WM_NCACTIVATE, active, 0);
         return res;
     }
     if (m == WM_CLOSE || m == WM_DESTROY) {
@@ -1199,7 +1187,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
             if (mr && IsWindow(mr)) {
                 HWND bc = GetBandChild(mr, CF_BREADCRUMB);
                 if (bc && IsWindow(bc) &&!GetPropW(bc, L"FlexTbIsHidden")) RefreshBreadcrumb(h, bc);
-                PostMessage(h, g_msgUpdateAddress, 0, 0);
             }
         }
         return 0;
@@ -1208,7 +1195,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if (m == WM_SIZE && (w == SIZE_RESTORED || w == SIZE_MAXIMIZED) &&!IsIconic(h)) {
         LRESULT res = DefSubclassProc(h, m, w, l);
         if (GetPropW(h, L"FlexTbWasMinimized")) { RemovePropW(h, L"FlexTbWasMinimized"); PostMessage(h, g_msgFixBreadcrumb, 0, 0); }
-        PostMessage(h, g_msgUpdateAddress, 0, 0);
         return res;
     }
     if (m == g_msgSyncSettings) {
@@ -1218,7 +1204,7 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
             ToggleBand(h, BandType::Breadcrumb, g_set.b);
             ToggleBand(h, BandType::UpButton, g_set.u);
             ToggleBand(h, BandType::AddressBar, g_set.a);
-            PostMessage(h, g_msgUpdateAddress, 0, 0);
+            if (g_set.a) PostMessage(h, g_msgUpdateAddress, 0, 0);
         }
         return 0;
     }
@@ -1240,16 +1226,12 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
                     SetWindowPos(inner, NULL, 0, 0, rc.right, 200, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
                 }
             }
-            PostMessage(h, g_msgUpdateAddress, 0, 0);
         } else SendMessage(ch, TB_AUTOSIZE, 0, 0);
         InvalidateRect(ch, NULL, TRUE);
         return 0;
     }
     if (m == g_msgDoMove) {
-        if (GetPropW(h, L"FlexTbMoved")) {
-            PostMessage(h, g_msgUpdateAddress, 0, 0);
-            return 1;
-        }
+        if (GetPropW(h, L"FlexTbMoved")) return 1;
         HWND st = FindByClass(h, L"ShellTabWindowClass");
         if (!st) return 0;
         HWND ww = FindByClass(st, L"WorkerW");
@@ -1301,7 +1283,6 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
                 WCHAR c2[256] = L"";
                 if (b.type == CF_UPBUTTON) wcsncpy(c2, L"UpButtonToolbar", 256);
                 else if (b.type == CF_BREADCRUMB) wcsncpy(c2, L"BreadcrumbToolbar", 256);
-                else if (b.type == CF_ADDRESSBAR) wcsncpy(c2, L"AddressBarToolbar", 256);
                 else GetClassName(b.c, c2, 256);
                 BandState bs;
                 bool hasSv = LoadBandState(c2, bs);
@@ -1334,19 +1315,11 @@ LRESULT CALLBACK Cab_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
         if (!g_set.u) ToggleBand(h, BandType::UpButton, false);
         if (g_set.a) ToggleBand(h, BandType::AddressBar, true);
         SaveBandPositions(mRb, false);
-        PostMessage(h, g_msgUpdateAddress, 0, 0);
+        if (g_set.a) PostMessage(h, g_msgUpdateAddress, 0, 0);
         return 0;
     }
     if (m == WM_ACTIVATE || m == WM_SETFOCUS) {
         if (!GetPropW(h, L"FlexTbMoved")) PostMessage(h, g_msgDoMove, 0, 0);
-        else {
-            PostMessage(h, g_msgUpdateAddress, 0, 0);
-            if (g_set.a) {
-                HWND mr = (HWND)GetPropW(h, L"FlexTbRb");
-                if (mr && IsWindow(mr) &&!GetBandChild(mr, CF_ADDRESSBAR) &&!GetHiddenBand(h, BandType::AddressBar) &&!GetPropW(h, L"FlexTbAddrCapturing"))
-                    BeginAddressBarCapture(h);
-            }
-        }
     }
     return DefSubclassProc(h, m, w, l);
 }
@@ -1441,7 +1414,7 @@ HWND WINAPI Hook_CWExW(DWORD s, LPCWSTR c, LPCWSTR wn, DWORD st, int X, int Y, i
         if (!wcscmp(c, L"ComboBoxEx32")) {
             if (HWND cab = GetCabinet(hw)) {
                 if (GetPropW(cab, L"FlexTbAddrCapturing")) PostMessage(cab, g_msgTryCapture, 0, 0);
-                else PostMessage(cab, g_msgUpdateAddress, 0, 0);
+                else if (g_set.a) PostMessage(cab, g_msgUpdateAddress, 0, 0);
             }
         }
     }
@@ -1459,6 +1432,16 @@ NTSTATUS NTAPI Hook_NtSet(HANDLE k, PUNICODE_STRING v, ULONG ti, ULONG t, PVOID 
         if (match) return 0;
     }
     return origNtSet(k, v, ti, t, d, ds);
+}
+
+BOOL CALLBACK EnumKillTimer_Proc(HWND w, LPARAM) {
+    DWORD pid=0; GetWindowThreadProcessId(w,&pid);
+    if(pid==GetCurrentProcessId()){
+        WCHAR c[64]; if(GetClassName(w,c,64)&&!wcscmp(c,L"CabinetWClass")){
+            KillTimer(w,0xF00D);
+        }
+    }
+    return TRUE;
 }
 
 BOOL Wh_ModInit() {
@@ -1489,6 +1472,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    EnumWindows(EnumKillTimer_Proc,0);
+    {
+        Lock L;
+        for (auto& kv : g_browserCache) if(kv.second) kv.second->Release();
+        g_browserCache.clear();
+        g_lastAddrPath.clear();
+    }
     std::vector<std::pair<HWND, WindhawkUtils::WH_SUBCLASSPROC>> hooksToClean;
     { Lock l; for (auto& pair : g_hooks) hooksToClean.push_back(pair); g_hooks.clear(); }
     for (auto& pair : hooksToClean) if (IsWindow(pair.first)) WindhawkUtils::RemoveWindowSubclassFromAnyThread(pair.first, pair.second);
