@@ -1166,8 +1166,7 @@ bool HasStartButtonHoverSymbols() {
 }
 
 bool HasThumbnailRemovalSymbols() {
-    return HasActiveHoverFlyoutLifecycleSymbols() &&
-           TransitionToFlyoutVisiblePendingState_Original &&
+    return TransitionToFlyoutVisiblePendingState_Original &&
            TransitionToFlyoutDismissPendingState_Original &&
            MouseHoverTime_Original &&
            HoverUIItemsCollectionSetTargetItem_Original &&
@@ -1357,6 +1356,7 @@ bool ResolveTaskbarSymbols(HMODULE module) {
     if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                     ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Failed to resolve Taskbar.dll symbols");
+        g_taskbarModuleHandled.store(false);
         return false;
     }
 
@@ -1521,6 +1521,7 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             taskbarViewHooks,
             ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"Failed to resolve Taskbar.View symbols");
+        g_taskbarViewModuleHandled.store(false);
         return false;
     }
 
@@ -1578,69 +1579,21 @@ void ApplyQueuedTaskbarHooks() {
     }
 }
 
-enum class TaskbarModuleType {
-    none,
-    taskbar,
-    taskbarView,
-};
-
-PCWSTR GetFileNamePart(PCWSTR path) {
-    if (!path) {
-        return nullptr;
-    }
-
-    PCWSTR fileName = path;
-    for (PCWSTR character = path; *character; character++) {
-        if (*character == L'\\' || *character == L'/') {
-            fileName = character + 1;
-        }
-    }
-
-    return fileName;
-}
-
-TaskbarModuleType GetTaskbarModuleType(PCWSTR path) {
-    PCWSTR fileName = GetFileNamePart(path);
-    if (!fileName) {
-        return TaskbarModuleType::none;
-    }
-
-    if (_wcsicmp(fileName, L"Taskbar.dll") == 0) {
-        return TaskbarModuleType::taskbar;
-    }
-
-    if (_wcsicmp(fileName, L"Taskbar.View.dll") == 0 ||
-        _wcsicmp(fileName, L"ExplorerExtensions.dll") == 0) {
-        return TaskbarModuleType::taskbarView;
-    }
-
-    return TaskbarModuleType::none;
-}
-
-void HandleLoadedModule(
-    HMODULE module,
-    TaskbarModuleType moduleType) {
+void HandleLoadedModule(HMODULE module) {
     if (!module ||
         !g_initialized.load(std::memory_order_acquire)) {
         return;
     }
 
     bool hooksQueued = false;
-    switch (moduleType) {
-        case TaskbarModuleType::taskbar:
-            if (GetTaskbarModuleHandle() == module) {
-                hooksQueued = ResolveTaskbarSymbols(module);
-            }
-            break;
+    if (!g_taskbarModuleHandled.load() &&
+        GetTaskbarModuleHandle() == module) {
+        hooksQueued = ResolveTaskbarSymbols(module);
+    }
 
-        case TaskbarModuleType::taskbarView:
-            if (GetTaskbarViewModuleHandle() == module) {
-                hooksQueued = ResolveTaskbarViewSymbols(module);
-            }
-            break;
-
-        case TaskbarModuleType::none:
-            break;
+    if (!g_taskbarViewModuleHandled.load() &&
+        GetTaskbarViewModuleHandle() == module) {
+        hooksQueued = ResolveTaskbarViewSymbols(module) || hooksQueued;
     }
 
     if (hooksQueued) {
@@ -1656,7 +1609,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
     DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
     if (!(flags & NONEXECUTABLE_LIBRARY_LOAD_FLAGS)) {
-        HandleLoadedModule(module, GetTaskbarModuleType(fileName));
+        HandleLoadedModule(module);
     }
     return module;
 }
@@ -1830,14 +1783,23 @@ BOOL Wh_ModInit() {
 
     if (!IsSupportedWindowsBuild()) {
         Wh_Log(L"The Windows 11 24H2 taskbar isn't available on this build");
-        return TRUE;
+        return FALSE;
     }
 
     if (!HookLoadLibraryExW()) {
         return FALSE;
     }
 
-    ResolveLoadedTaskbarSymbols();
+    HMODULE taskbarModule = GetTaskbarModuleHandle();
+    if (taskbarModule && !ResolveTaskbarSymbols(taskbarModule)) {
+        return FALSE;
+    }
+
+    HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
+    if (taskbarViewModule &&
+        !ResolveTaskbarViewSymbols(taskbarViewModule)) {
+        return FALSE;
+    }
 
     g_initialized.store(true, std::memory_order_release);
     Wh_Log(L"Initialized");
