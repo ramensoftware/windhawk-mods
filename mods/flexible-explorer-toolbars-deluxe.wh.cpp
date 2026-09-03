@@ -517,9 +517,12 @@ void UpdateAddressBandForCab(HWND cab)
         }
     }
 
-    WCHAR curTxt[4096] = L"";
-    GetWindowTextW(edit, curTxt, 4096);
-    bool needText = wcscmp(curTxt, curPath.c_str())!= 0;
+    int curTxtLen = GetWindowTextLengthW(edit);
+    std::wstring curTxt;
+    curTxt.resize(curTxtLen + 1);
+    GetWindowTextW(edit, curTxt.data(), curTxtLen + 1);
+    curTxt.resize(curTxtLen);
+    bool needText = wcscmp(curTxt.c_str(), curPath.c_str())!= 0;
     if (!needText) {
         Lock L;
         g_lastPathCache[cab] = curPath;
@@ -664,14 +667,17 @@ void NavigateCabinet(HWND cab, LPCWSTR rawPath) {
 LRESULT CALLBACK AddressEdit_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if (m == WM_NCDESTROY) { Lock L; g_hooks.erase(h); return DefSubclassProc(h, m, w, l); }
     if (m == WM_KEYDOWN && w == VK_RETURN) {
-        WCHAR txt[4096] = L"";
-        GetWindowTextW(h, txt, 4096);
+        int txtLen = GetWindowTextLengthW(h);
+        std::wstring txt;
+        txt.resize(txtLen + 1);
+        GetWindowTextW(h, txt.data(), txtLen + 1);
+        txt.resize(txtLen);
         HWND comboBox = GetParent(h);
         HWND comboEx = GetParent(comboBox);
         HWND rebar = GetParent(comboEx);
         if (!rebar) rebar = (HWND)GetPropW(comboEx, L"FlexTbReBar");
         HWND cab = GetCabinet(rebar? rebar : comboEx);
-        NavigateCabinet(cab, txt);
+        NavigateCabinet(cab, txt.c_str());
         return 0;
     }
     if (m == WM_CHAR && w == 13) return 0;
@@ -694,13 +700,16 @@ LRESULT CALLBACK InnerCombo_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) 
     if (m == WM_KEYDOWN && w == VK_RETURN) {
         HWND edit = FindWindowExW(h, NULL, L"Edit", NULL);
         if (edit && IsWindow(edit)) {
-            WCHAR txt[4096] = L"";
-            GetWindowTextW(edit, txt, 4096);
+            int txtLen = GetWindowTextLengthW(edit);
+            std::wstring txt;
+            txt.resize(txtLen + 1);
+            GetWindowTextW(edit, txt.data(), txtLen + 1);
+            txt.resize(txtLen);
             HWND comboEx = GetParent(h);
             HWND rebar = GetParent(comboEx);
             if (!rebar) rebar = (HWND)GetPropW(comboEx, L"FlexTbReBar");
             HWND cab = GetCabinet(rebar? rebar : comboEx);
-            NavigateCabinet(cab, txt);
+            NavigateCabinet(cab, txt.c_str());
             return 0;
         }
     }
