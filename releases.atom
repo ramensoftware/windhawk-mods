@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-02T17:36:02.000Z</updated>
+    <updated>2026-09-03T20:39:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Blocked Shutdown UX & Logoff Sequence 1.0]]></title>
+        <id>https://windhawk.net/mods/win7-bsdr#b71ad7e072474d28c82dc126b48917cb26fa3c44</id>
+        <link href="https://windhawk.net/mods/win7-bsdr"/>
+        <updated>2026-09-03T20:39:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7blockedshutdownuxlogoffsequence">Windows 7 Blocked Shutdown UX &amp; Logoff Sequence</h1>
+<ul>
+<li>This mod brings back the old blocked shutdown screen from Windows 7, which appears when you try to shut down or restart the computer while programs prevent shutdown.</li>
+<li>The blocked shutdown UX part is a direct port of my <a href="https://github.com/Ingan121/AuthUX/tree/bsdr">AuthUX BSDR fork</a>.<ul>
+<li>This mod's UX part has no effect if AuthUX BSDR is installed.</li></ul></li>
+<li>This mod also optionally restores Windows 7's logoff sequence, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.<ul>
+<li>This part is compatible with AuthUX BSDR as well.</li></ul></li>
+<li>(Optional) Loading resources from an external DLL is supported for localization. This requires one of the following:<ul>
+<li><code>winsrv.dll</code> and <code>winsrv.dll.mui</code> from Windows 7. Put <code>winsrv.dll</code> in some folder, create a folder named after your locale (e.g. <code>en-US</code>), and put <code>winsrv.dll.mui</code> there.</li>
+<li><code>AuthUX.dll</code> from a build of AuthUX that supports BSDR.</li>
+<li>Set the DLL path in the mod settings afterwards. You may also point this directly to <code>winsrv.dll.mui</code> instead of setting up the directory structure mentioned above.</li>
+<li>Warning: <strong>never, ever replace <code>C:\Windows\System32\winsrv.dll</code> (or mui) with the Windows 7 version</strong>; this will brick your Windows installation!</li>
+<li>This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.</li></ul></li>
+<li>This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.</li>
+<li>This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.</li>
+<li>Known issues<ul>
+<li>If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.</li>
+<li>Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.</li></ul></li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png" alt="Screenshot" /></p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>LogonUI.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>LogonUI.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<h3 id="notesforadvancedusers">Notes for advanced users</h3>
+<ul>
+<li>Please make sure <code>LogonUI.exe</code> isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.</li>
+<li>This mod has safety checks before enabling the classic logoff behavior, such as checking if <code>LogonUI.exe</code> is added to the global inclusion list properly as stated above, to prevent the logoff sequence from appearing stuck when misconfigured.</li>
+<li>You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Window Title Format 1.0]]></title>
         <id>https://windhawk.net/mods/chromium-window-title-format#6dc728a85328d84fdaddb6b4339cd9347accc66e</id>
@@ -1171,34 +1212,6 @@ and deleted by the cleanup pass of a later load or unload.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Search on Active Display 1.1.0]]></title>
-        <id>https://windhawk.net/mods/search-active-display#782f5af4ee10ffeefc60227ec7bc30c32c884236</id>
-        <link href="https://windhawk.net/mods/search-active-display"/>
-        <updated>2026-08-22T15:37:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="searchonactivedisplay">Search on Active Display</h1>
-<p>Opens the Windows Search (Win+S) on the monitor where the mouse cursor is
-located, or on a specific monitor of choice.</p>
-<p>Works for both Win+S shortcut and taskbar search icon click.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks MonitorFromWindow and MonitorFromRect inside SearchHost.exe.
-When SearchHost queries which monitor its CoreWindow is on, the mod returns
-the target monitor (where the cursor is, or a fixed monitor). It also
-physically repositions the CoreWindow to the correct monitor coordinates
-so the DWM compositor renders it there.</p>
-<h2 id="selectingamonitor">Selecting a monitor</h2>
-<p>Set the <strong>Monitor</strong> setting to 0 to follow the mouse cursor, or to a
-specific monitor number (1, 2, 3…). You can also use a monitor interface
-name for stable identification across reboots.</p>
-<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
-<ul>
-<li>Windows 11 22H2 and 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>ereinaimer</name>
-            <uri>https://github.com/ereinaimer</uri>
         </author>
     </entry>
 </feed>

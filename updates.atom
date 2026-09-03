@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-03T18:13:58.000Z</updated>
+    <updated>2026-09-03T20:39:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Blocked Shutdown UX & Logoff Sequence 1.0]]></title>
+        <id>https://windhawk.net/mods/win7-bsdr#b71ad7e072474d28c82dc126b48917cb26fa3c44</id>
+        <link href="https://windhawk.net/mods/win7-bsdr"/>
+        <updated>2026-09-03T20:39:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7blockedshutdownuxlogoffsequence">Windows 7 Blocked Shutdown UX &amp; Logoff Sequence</h1>
+<ul>
+<li>This mod brings back the old blocked shutdown screen from Windows 7, which appears when you try to shut down or restart the computer while programs prevent shutdown.</li>
+<li>The blocked shutdown UX part is a direct port of my <a href="https://github.com/Ingan121/AuthUX/tree/bsdr">AuthUX BSDR fork</a>.<ul>
+<li>This mod's UX part has no effect if AuthUX BSDR is installed.</li></ul></li>
+<li>This mod also optionally restores Windows 7's logoff sequence, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.<ul>
+<li>This part is compatible with AuthUX BSDR as well.</li></ul></li>
+<li>(Optional) Loading resources from an external DLL is supported for localization. This requires one of the following:<ul>
+<li><code>winsrv.dll</code> and <code>winsrv.dll.mui</code> from Windows 7. Put <code>winsrv.dll</code> in some folder, create a folder named after your locale (e.g. <code>en-US</code>), and put <code>winsrv.dll.mui</code> there.</li>
+<li><code>AuthUX.dll</code> from a build of AuthUX that supports BSDR.</li>
+<li>Set the DLL path in the mod settings afterwards. You may also point this directly to <code>winsrv.dll.mui</code> instead of setting up the directory structure mentioned above.</li>
+<li>Warning: <strong>never, ever replace <code>C:\Windows\System32\winsrv.dll</code> (or mui) with the Windows 7 version</strong>; this will brick your Windows installation!</li>
+<li>This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.</li></ul></li>
+<li>This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.</li>
+<li>This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.</li>
+<li>Known issues<ul>
+<li>If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.</li>
+<li>Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.</li></ul></li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png" alt="Screenshot" /></p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>LogonUI.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>LogonUI.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<h3 id="notesforadvancedusers">Notes for advanced users</h3>
+<ul>
+<li>Please make sure <code>LogonUI.exe</code> isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.</li>
+<li>This mod has safety checks before enabling the classic logoff behavior, such as checking if <code>LogonUI.exe</code> is added to the global inclusion list properly as stated above, to prevent the logoff sequence from appearing stuck when misconfigured.</li>
+<li>You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic Display Control Panel Restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-display-control-panel-restorer#a795492b19b39da1c02b8e61d2f387d67a24ecd8</id>
+        <link href="https://windhawk.net/mods/win7-display-control-panel-restorer"/>
+        <updated>2026-09-03T20:39:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a memory issue</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.4]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#b0553682078854d14adffff2ed5cda1dc4774748</id>
@@ -708,39 +762,6 @@ starts.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 3.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#f2eedecca227cd1f5c0d9fd3e95822dddd00fb8f</id>
-        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
-        <updated>2026-08-29T18:07:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the Speech Recognition link</li>
-<li>Improved the virtualization and integration of the restored applets to match the classic Windows behavior</li>
-<li>Added a setting to attempt to block the redirect to Settings and unhide legacy applets</li>
-<li>Enhanced the virtual applet fallback</li>
-<li>Applied minor fixes </li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#9455e7ee79a80d6d65829456b0c7e0738dcfe720</id>
-        <link href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor"/>
-        <updated>2026-08-29T16:18:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed taskbar alignment not affecting the Start menu in some cases when the taskbar is only shown on the primary monitor.</li>
-<li>Fixed invisible taskbar if after switching the primary taskbar with a double/middle click that taskbar is gone, e.g. if the monitor is detached.</li>
-<li>Fixed the taskbar remaining on the secondary monitor when the mod is disabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
