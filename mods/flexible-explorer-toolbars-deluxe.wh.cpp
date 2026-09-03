@@ -628,12 +628,13 @@ void SaveTypedAddress(LPCWSTR rawPath) {
         existing.insert(existing.begin(), s);
     }
 
-    for (int i = 0; i < (int)existing.size() && i < 25; i++) {
+    int writeCount = std::min((int)existing.size(), 25);
+    for (int i = 0; i < writeCount; i++) {
         WCHAR name[32];
         swprintf(name, 32, L"url%d", i+1);
         RegSetValueExW(hKey, name, 0, REG_SZ, (BYTE*)existing[i].c_str(), (DWORD)((existing[i].length() + 1) * sizeof(WCHAR)));
     }
-    for (int i = (int)existing.size() + 1; i <= 50; i++) {
+    for (int i = writeCount + 1; i <= 50; i++) {
         WCHAR name[32];
         swprintf(name, 32, L"url%d", i);
         RegDeleteValueW(hKey, name);
@@ -653,14 +654,16 @@ void NavigateCabinet(HWND cab, LPCWSTR rawPath) {
     if (end <= start) return;
     std::wstring s = pathStr.substr(start, end-start);
     if (s.empty()) return;
-    SaveTypedAddress(s.c_str());
     IWebBrowser2* pWB = GetBrowserForCab(cab);
     if (!pWB) return;
     VARIANT vPath, vEmpty; VariantInit(&vPath); VariantInit(&vEmpty);
     vPath.vt = VT_BSTR; vPath.bstrVal = SysAllocString(s.c_str());
-    pWB->Navigate2(&vPath, &vEmpty, &vEmpty, &vEmpty, &vEmpty);
+    HRESULT hr = pWB->Navigate2(&vPath, &vEmpty, &vEmpty, &vEmpty, &vEmpty);
     VariantClear(&vPath);
     pWB->Release();
+    if (SUCCEEDED(hr)) {
+        SaveTypedAddress(s.c_str());
+    }
     PostMessage(cab, g_msgUpdateAddress, 0, 0);
 }
 
