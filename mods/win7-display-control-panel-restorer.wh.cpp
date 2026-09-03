@@ -2,7 +2,7 @@
 // @id              win7-display-control-panel-restorer
 // @name            Classic Display Control Panel Restorer
 // @description     This mod restores the classic Display and Screen Resolution Control Panel pages on Windows 10 and 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -8516,27 +8516,48 @@ int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
                 const int length = LoadStringWOriginal(
                     reinterpret_cast<HINSTANCE>(localized), id, buffer, 0);
                 if (length > 0 && buffer) {
-                    wchar_t* raw = *reinterpret_cast<wchar_t**>(buffer);
-                    if (raw && (wcsstr(raw, L"displaysettings") ||
-                                wcsstr(raw, L"Display settings") ||
-                                wcsstr(raw, L"Impostazioni schermo"))) {
-                        const wchar_t* cleaned = GetWidePointerString(id);
-                        if (cleaned) {
-                            *reinterpret_cast<wchar_t**>(buffer) =
-                                const_cast<wchar_t*>(cleaned);
-                            return static_cast<int>(wcslen(cleaned));
+                    const wchar_t* raw = *reinterpret_cast<wchar_t**>(buffer);
+                    if (raw) {
+                        // BUGFIX (0xC0000005 on first Display hub load): the
+                        // cchBufferMax == 0 form returns a pointer straight
+                        // into the RT_STRING table (WORD length + exactly
+                        // that many wchar_ts, no terminator). wcsstr on
+                        // `raw` scanned past the end of this entry into
+                        // neighbouring strings and, in the worst case, off
+                        // the end of the mapped image. `length` is the only
+                        // valid bound.
+                        const std::wstring text(
+                            raw, static_cast<size_t>(length));
+                        if (text.find(L"displaysettings") !=
+                                std::wstring::npos ||
+                            text.find(L"Display settings") !=
+                                std::wstring::npos ||
+                            text.find(L"Impostazioni schermo") !=
+                                std::wstring::npos) {
+                            const wchar_t* cleaned = GetWidePointerString(id);
+                            if (cleaned) {
+                                *reinterpret_cast<wchar_t**>(buffer) =
+                                    const_cast<wchar_t*>(cleaned);
+                                return static_cast<int>(wcslen(cleaned));
+                            }
                         }
                     }
                     return length;
                 }
             }
-            // Last-resort hand-reconstructed string: guarantees the page
-            // never renders empty labels even if the private module could
-            // not be built. The pointer is stable by the leaked-copy policy.
-            if (const wchar_t* pointer = GetWidePointerString(id)) {
-                *reinterpret_cast<wchar_t**>(buffer) =
-                    const_cast<wchar_t*>(pointer);
-                return static_cast<int>(wcslen(pointer));
+            // Last-resort hand-reconstructed string, pointer form only: the
+            // buffered form (bufferChars != 0) is already fully answered by
+            // the branches above and otherwise falls through to the
+            // original LoadStringW at the bottom of this function. Writing
+            // through `buffer` as a wchar_t** here would only be valid for
+            // the bufferChars == 0 pointer form anyway, so scope it
+            // explicitly instead of relying on that never happening.
+            if (bufferChars == 0 && buffer) {
+                if (const wchar_t* pointer = GetWidePointerString(id)) {
+                    *reinterpret_cast<wchar_t**>(buffer) =
+                        const_cast<wchar_t*>(pointer);
+                    return static_cast<int>(wcslen(pointer));
+                }
             }
         }
     } catch (...) {
@@ -13222,7 +13243,7 @@ static bool GetCachedResolutionModes(HWND hwnd,
 // the last ActionButton event (see g_resolutionActionButton). Everything is
 // best-effort: without the optional SetContentString symbol or a captured
 // button the caption simply keeps the provider's behavior.
-static void UpdateResolutionCaptionFromSlider(HWND hwnd) {
+static void UpdateResolutionCaptionFromSlider(HWND hwnd, WPARAM scrollWParam) {
     if (!DirectUiElementSetContentString) return;
     void* button = g_resolutionActionButton;
     if (!button) return;
@@ -13235,8 +13256,21 @@ static void UpdateResolutionCaptionFromSlider(HWND hwnd) {
         static_cast<int>(SendMessageW(trackbar, TBM_GETRANGEMAX, 0, 0));
     const int ticks = rangeMax - rangeMin + 1;
     if (ticks < 2) return;
-    const int tick =
-        static_cast<int>(SendMessageW(trackbar, TBM_GETPOS, 0, 0)) - rangeMin;
+    // While the user is actively dragging the thumb with the mouse
+    // (TB_THUMBTRACK), TBM_GETPOS keeps reporting the position from before
+    // the drag started - it only catches up once the mouse button is
+    // released. The live in-drag position is carried directly in
+    // HIWORD(scrollWParam) by the WM_HSCROLL/WM_VSCROLL notification, which
+    // is why the caption used to look "stuck" until release. Use that value
+    // for TB_THUMBTRACK and fall back to TBM_GETPOS for every other
+    // notification code (line/page/keyboard moves, end of drag).
+    const int notifyCode = LOWORD(scrollWParam);
+    const int rawPos = (notifyCode == TB_THUMBTRACK)
+                           ? static_cast<int>(static_cast<short>(
+                                 HIWORD(scrollWParam)))
+                           : static_cast<int>(
+                                 SendMessageW(trackbar, TBM_GETPOS, 0, 0));
+    const int tick = rawPos - rangeMin;
     if (tick < 0 || tick >= ticks) return;
 
     std::vector<DisplayModePair> modes;
@@ -13724,7 +13758,7 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
             case WM_VSCROLL:
                 // Windows 7 behavior: the combobox opener's caption follows
                 // the slider selection immediately, before Apply.
-                UpdateResolutionCaptionFromSlider(hwnd);
+                UpdateResolutionCaptionFromSlider(hwnd, wParam);
                 InvalidateRect(hwnd, nullptr, FALSE);
                 break;
             case WM_NCDESTROY:
