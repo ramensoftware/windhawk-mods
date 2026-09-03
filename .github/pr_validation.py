@@ -28,6 +28,17 @@ DISALLOWED_AUTHORS = [
 ]
 
 
+# A reviewer adds this label to a pull request once they've confirmed that the
+# X (Twitter) account and the GitHub account belong to the same person.
+TWITTER_VERIFIED_LABEL = 'twitter-verified'
+
+
+@cache
+def get_pr_labels() -> set[str]:
+    """Labels that are on the pull request, as passed in by the workflow."""
+    return set(json.loads(os.environ.get('PR_LABELS', '[]')))
+
+
 ALLOWED_AUTHOR_NAME_CHANGES = {
     'anixx': 'Anixx',
     'kawapure': 'Isabella Lulamoon (kawapure)',
@@ -72,6 +83,20 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
     'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
     'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
 }
+
+
+# RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
+# Anything else, whitespace included, has to be percent-encoded.
+URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
+
+# Scheme, dotted host, optional port, optional path/query/fragment.
+URL_PATTERN = (
+    r'https?://'
+    r'[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?'
+    r'(\.[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?)+'
+    r'(:[0-9]+)?'
+    rf'([/?#][{URL_ALLOWED_CHARS}]*)?'
+)
 
 
 def add_warning(file: Path, line: int, message: str):
@@ -288,9 +313,27 @@ class PropertyValidator:
         return self
 
     def validate_url_format(self) -> 'PropertyValidator':
-        """Validate URL starts with http:// or https://."""
+        """Validate value is a well-formed http(s) URL."""
         if not re.match(r'https?://', self.value):
             self.warn('@@ must start with "http://" or "https://"')
+            return self
+
+        disallowed = set(re.findall(f'[^{URL_ALLOWED_CHARS}]', self.value))
+        if disallowed:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(disallowed))
+            self.warn(
+                f'@@ contains characters which are not allowed in a URL ({chars}),'
+                ' they must be percent-encoded'
+            )
+        elif not re.fullmatch(URL_PATTERN, self.value):
+            self.warn(f'@@ is not a valid URL: "{self.value}"')
+
+        return self
+
+    def validate_no_tabs(self) -> 'PropertyValidator':
+        """Validate value contains no tab characters."""
+        if '\t' in self.value:
+            self.warn('@@ must not contain tab characters')
         return self
 
 
@@ -341,6 +384,19 @@ class ModMetadataValidator:
         if warn_if_missing:
             self.ctx.warn(f'Missing {at(key_name)}')
         return None
+
+    def property_variants(self, key_name: str) -> list[PropertyValidator]:
+        """Get validators for the given key and all of its language variants."""
+        return [
+            PropertyValidator(
+                self.ctx,
+                key_name if language is None else f'{key_name}:{language}',
+                value,
+                line_number,
+            )
+            for (key, language), (value, line_number) in self.properties.items()
+            if key == key_name
+        ]
 
     def validate_all(self) -> int:
         """Run all validations and return warning count."""
@@ -423,8 +479,10 @@ class ModMetadataValidator:
             '@@ must contain only lowercase letters, numbers and dashes',
         )
 
-        if len(prop.value) < 8 or len(prop.value) > 50:
-            prop.warn('@@ must be between 8 and 50 characters')
+        min_len = 6
+        max_len = 48
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_version(self):
         """Validate version format."""
@@ -447,6 +505,9 @@ class ModMetadataValidator:
 
     def validate_author(self):
         """Validate author name against existing records."""
+        for variant in self.property_variants('author'):
+            variant.validate_no_tabs()
+
         prop = self.property('author', warn_if_missing=True)
         if not prop:
             return
@@ -476,6 +537,11 @@ class ModMetadataValidator:
                         f'Author name "{prop.value}" is already used by {other_github}.'
                     )
                     break
+
+        min_len = 3
+        max_len = 28
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_twitter(self):
         """Validate Twitter handle."""
@@ -511,16 +577,20 @@ class ModMetadataValidator:
                     )
                     break
             else:
-                # Not used by anyone else, still requires manual verification
-                prop.warn(
-                    '@@ requires manual verification\n\n'
-                    'To verify your X (Twitter) account, please send me'
-                    ' (https://x.com/m417z) a direct message with the following'
-                    ' content:\n\n'
-                    'I attest that I\'m the sole owner of both this Twitter account'
-                    f' ({prop.value}) and the following GitHub account:'
-                    f' {self.github_url}'
-                )
+                # Not used by anyone else, so it takes a manual check that the
+                # same person owns both accounts.
+                if TWITTER_VERIFIED_LABEL not in get_pr_labels():
+                    prop.warn(
+                        '@@ requires manual verification\n\n'
+                        'To verify your X (Twitter) account, please send me'
+                        ' (https://x.com/m417z) a direct message with the following'
+                        ' content:\n\n'
+                        'I attest that I\'m the sole owner of both this Twitter account'
+                        f' ({prop.value}) and the following GitHub account:'
+                        f' {self.github_url}'
+                    )
+
+        prop.validate_url_format()
 
         if not re.match(r'https://(x|twitter)\.com/', prop.value):
             prop.warn('@@ must start with https://x.com/ or https://twitter.com/')
@@ -596,12 +666,17 @@ class ModMetadataValidator:
 
     def validate_name(self):
         """Validate name exists and is unique."""
+        for variant in self.property_variants('name'):
+            variant.validate_no_tabs()
+
         prop = self.property('name', warn_if_missing=True)
         if not prop:
             return
 
-        if len(prop.value) < 8 or len(prop.value) > 80:
-            prop.warn('@@ must be between 8 and 80 characters')
+        min_len = 6
+        max_len = 68
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
         # Check for duplicate names across existing mods
         filename_mod_id = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
@@ -616,12 +691,17 @@ class ModMetadataValidator:
 
     def validate_description(self):
         """Validate description exists."""
+        for variant in self.property_variants('description'):
+            variant.validate_no_tabs()
+
         prop = self.property('description', warn_if_missing=True)
         if not prop:
             return
 
-        if len(prop.value) < 30 or len(prop.value) > 250:
-            prop.warn('@@ must be between 30 and 250 characters')
+        min_len = 30
+        max_len = 250
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_architecture(self):
         """Validate architecture values."""
@@ -997,7 +1077,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source_lines = mod_source.splitlines()
+    # Split on newlines only; splitlines() would also split on vertical tab,
+    # form feed and similar, hiding them from the control character check.
+    mod_source_lines = mod_source.split('\n')
 
     # Words to check (pattern, description)
     keyword_patterns = [
@@ -1031,12 +1113,24 @@ def validate_specific_keywords(path: Path, mod_source: str):
             or (unicodedata.category(c) == 'Zs' and c != ' ')
         ]
         if hidden_ws:
-            chars = ', '.join(f'U+{ord(c):04X}' for c in set(hidden_ws))
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(hidden_ws)))
             warnings += add_warning(
                 path,
                 line_num,
                 f'Line contains {len(hidden_ws)} non-standard whitespace characters'
                 f' ({chars}), requires manual inspection',
+            )
+
+        control_chars = [
+            c for c in line if unicodedata.category(c) == 'Cc' and c != '\t'
+        ]
+        if control_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(control_chars)))
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line contains {len(control_chars)} control characters ({chars}),'
+                ' which are not allowed',
             )
 
     return warnings

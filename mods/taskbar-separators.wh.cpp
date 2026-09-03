@@ -2,7 +2,7 @@
 // @id              taskbar-separators
 // @name            Taskbar Separators
 // @description     Add customizable visual separators between Windows 11 taskbar application buttons.
-// @version         1.2.0
+// @version         1.3.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
@@ -21,7 +21,9 @@
 // Taskbar hook and UI-thread infrastructure includes code and patterns adapted
 // from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
 // Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
-
+//
+// App-name targeting and before/after separator placement are based on
+// a contribution from mileso in GitHub PR #2.
 // ==WindhawkModReadme==
 /*
 
@@ -34,7 +36,7 @@ Unlike placeholder applications or pinned shortcuts, these separators are
 visual, non-clickable elements. They do not launch programs or occupy normal
 application slots.
 
-Current release: **1.2.0**.
+Current release: **1.3.0**.
 
 ## Preview
 ![Taskbar Separators
@@ -44,6 +46,8 @@ preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/im
 ## Features
 
 - Add multiple separators at configurable taskbar positions
+- Target separators by taskbar position or application name
+- App-name separators follow applications when taskbar icons are reordered
 - Optional separator before the first application button
 - Live position and appearance updates
 - Nine configurable visual styles:
@@ -61,8 +65,19 @@ variable-width buttons
 - Supports mixed multi-monitor layouts, such as labels on one taskbar and
 icon-only buttons on another
 
-## What's new in 1.2.0
+## What's new in 1.3.0
+- Added separator targeting by application name, based on a contribution from
+  `mileso` in PR #2
+- App-name separators now follow their application when taskbar icons are
+reordered
+- Added `+` for before-target placement and `-` for after-target placement
+- Added `+-` and `-+` for placing separators on both sides of a target
+- Prefix syntax works with both numeric positions and application names
+- Improved application-name matching for Windows taskbar items
+- Improved separator setting parsing and whitespace handling
+- Fixed before-first placement for first-position targets
 
+## What's new in 1.2.0
 - Added support for Windows taskbar labels and uncombined application buttons
 - Added accurate separator positioning for variable-width taskbar buttons
 - Added support for mixed layouts across multiple monitors, such as labels on
@@ -74,22 +89,51 @@ entries
 information for reliable placement
 - Refined internal margin tracking and cleanup
 
+
 ## Getting started
 
 1. Open the mod's **Settings** tab.
-2. Add separator positions to the **Separators** list.
-3. A position of `3` places a separator after the third application button.
+2. Add taskbar positions or application names to the **Separators** list.
+3. For example, `3` places a separator after the third application button,
+   while `+Notepad` places one before Notepad.
 4. Select a style and adjust its appearance.
 5. Use **Divider gap** to reserve additional physical space around configured
 separators.
 
 ## Position behavior
 
-Numbered positions place separators after application buttons:
+Separators can target either a taskbar position or a specific application.
 
-- Position `1` places a separator after the first application button
-- Position `2` places a separator after the second application button
-- Position `3` places a separator after the third application button
+Placement prefixes:
+
+- `+` = before
+- `-` = after
+- `+-` or `-+` = before and after
+
+Examples:
+
+- `+2` places a separator before the second application button
+- `-3` places a separator after the third application button
+- `+-3` places separators before and after the third application button
+- `+Notepad` places a separator before Notepad
+- `-Notepad` places a separator after Notepad
+- `+-Notepad` places separators before and after Notepad
+
+Positions follow the current visual order of taskbar application buttons.
+Opening, closing, pinning, unpinning, or rearranging applications can change
+which icons appear beside a configured numbered separator.
+
+Application-name separators are matched against the taskbar button's accessible
+name (`AutomationProperties.Name`), with tooltip text used as a fallback. The
+accessible name is localized and can include additional status text such as
+running-window counts or pinned state.
+
+Matching is case-insensitive and uses whole-word matching. If more than one
+taskbar button matches a name, the first matching application button is used;
+use a more specific name to disambiguate.
+
+Application-name separators follow the matching application when its taskbar
+icon is reordered. Numbered separators remain tied to visual taskbar positions.
 
 Enable **Separator before first app** to place a separator before the first
 application button.
@@ -97,9 +141,6 @@ application button.
 Start, Search, Widgets, Task View, and other system buttons are not counted as
 application buttons.
 
-Positions follow the current visual order of taskbar application buttons.
-Opening, closing, pinning, unpinning, or rearranging applications can change
-which icons appear beside a configured separator.
 
 ## Divider gap
 
@@ -209,9 +250,21 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
   $name: Separator before first app
   $description: Show a separator before the first taskbar application button.
 - separators:
-  - 3
+  - '3'
   $name: Separators
-  $description: Application button positions after which to place dividers.
+  $description: |
+    Place dividers by taskbar position or app name.
+
+    + = before
+    - = after
+    +- or -+ = both
+
+    Examples:
+    +-3 = before and after the 3rd icon
+    +-Notepad = before and after Notepad
+    +2 = before the 2nd icon
+
+    App-name dividers follow the app when it is moved.
 - cornerRadius: 2
   $name: Corner radius
   $description: Rounded style corner radius in pixels, from 0 to 12.
@@ -235,9 +288,11 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 #undef GetCurrentTime
 
+#include <Windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -247,9 +302,12 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cwchar>
+#include <cwctype>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -298,6 +356,8 @@ enum class DividerStyle {
 struct SeparatorSettings {
     size_t settingsIndex = 0;
     int position = 3;
+    std::wstring appName;
+    bool before = false;
 };
 
 struct Settings {
@@ -434,6 +494,101 @@ struct TrackedTaskbarState {
     int nativeSettlingStableFrames = 0;
     AnimationClock::time_point nativeSettlingStarted{};
 };
+
+struct TaskbarAppDetails {
+    std::wstring displayName;
+};
+
+bool IsWordBoundary(wchar_t ch) {
+    return std::iswspace(ch) || ch == L'-' || ch == L'(' || ch == L')' ||
+           ch == L'[' || ch == L']' || ch == L',' || ch == L'.' || ch == L':' ||
+           ch == L'/' || ch == L'\\';
+}
+
+bool ContainsWholeIgnoreCase(std::wstring_view source,
+                             std::wstring_view target) {
+    if (source.empty() || target.empty() || target.size() > source.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i + target.size() <= source.size(); ++i) {
+        if (CompareStringOrdinal(source.data() + i,
+                                 static_cast<int>(target.size()), target.data(),
+                                 static_cast<int>(target.size()),
+                                 TRUE) != CSTR_EQUAL) {
+            continue;
+        }
+
+        bool leftBoundary = i == 0 || IsWordBoundary(source[i - 1]);
+
+        size_t end = i + target.size();
+
+        bool rightBoundary =
+            end == source.size() || IsWordBoundary(source[end]);
+
+        if (leftBoundary && rightBoundary) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsMatch(const TaskbarAppDetails& details,
+             std::wstring_view searchPattern) {
+    if (searchPattern.empty() || details.displayName.empty()) {
+        return false;
+    }
+
+    return ContainsWholeIgnoreCase(details.displayName, searchPattern);
+}
+
+std::wstring TrimWhitespace(std::wstring name) {
+    while (!name.empty() && std::iswspace(name.front())) {
+        name.erase(name.begin());
+    }
+
+    while (!name.empty() && std::iswspace(name.back())) {
+        name.pop_back();
+    }
+
+    return name;
+}
+
+// --- Taskbar Button Details Extractor ---
+TaskbarAppDetails GetTaskbarButtonDetails(FrameworkElement const& button) {
+    TaskbarAppDetails details;
+
+    if (!button) {
+        return details;
+    }
+
+    try {
+        auto autoName =
+            winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(
+                button);
+
+        if (!autoName.empty()) {
+            details.displayName = autoName.c_str();
+        }
+    } catch (...) {
+    }
+
+    if (details.displayName.empty()) {
+        try {
+            auto tooltipObject = Controls::ToolTipService::GetToolTip(button);
+
+            if (auto tooltipText = tooltipObject.try_as<winrt::hstring>()) {
+                details.displayName = tooltipText->c_str();
+            }
+        } catch (...) {
+        }
+    }
+
+    details.displayName = TrimWhitespace(details.displayName);
+
+    return details;
+}
 
 using TrackedTaskbarCollection = std::vector<TrackedTaskbarState>;
 
@@ -591,19 +746,96 @@ void LoadSettings() {
     settings.separatorBeforeFirstApp =
         Wh_GetIntSetting(L"separatorBeforeFirstApp") != 0;
 
-    auto appendSeparator = [&](size_t settingsIndex, int position) {
+    int settingsIndexOffset = 0;
+    auto appendSeparator = [&](size_t settingsIndex, PCWSTR positionStr) {
+        if (!positionStr) {
+            return;
+        }
+
+        std::wstring value = positionStr;
+
+        // Trim leading/trailing whitespace.
+        while (!value.empty() && std::iswspace(value.front())) {
+            value.erase(value.begin());
+        }
+
+        while (!value.empty() && std::iswspace(value.back())) {
+            value.pop_back();
+        }
+
+        if (value.empty()) {
+            return;
+        }
+
         SeparatorSettings separator;
-        separator.settingsIndex = settingsIndex;
-        separator.position = position;
+        separator.settingsIndex = settingsIndex + settingsIndexOffset;
+        separator.before = false;
+
+        bool beforeAndAfter = false;
+
+        // Placement prefixes:
+        // +target   = before
+        // -target   = after
+        // +-target  = before and after
+        // -+target  = before and after
+        if (value.rfind(L"+-", 0) == 0 || value.rfind(L"-+", 0) == 0) {
+            separator.before = true;
+            beforeAndAfter = true;
+            value.erase(0, 2);
+        } else if (value[0] == L'+') {
+            separator.before = true;
+            value.erase(0, 1);
+        } else if (value[0] == L'-') {
+            separator.before = false;
+            value.erase(0, 1);
+        }
+
+        // Trim again after removing a prefix.
+        while (!value.empty() && std::iswspace(value.front())) {
+            value.erase(value.begin());
+        }
+
+        while (!value.empty() && std::iswspace(value.back())) {
+            value.pop_back();
+        }
+
+        if (value.empty()) {
+            return;
+        }
+
+        errno = 0;
+        wchar_t* end = nullptr;
+        long long numericPosition = std::wcstoll(value.c_str(), &end, 10);
+        bool isNumeric = end && end != value.c_str() && *end == L'\0';
+
+        if (isNumeric) {
+            if (errno == ERANGE || numericPosition <= 0 ||
+                numericPosition > std::numeric_limits<int>::max()) {
+                return;
+            }
+
+            separator.position = static_cast<int>(numericPosition);
+        } else {
+            separator.appName = value;
+        }
+
         settings.separators.push_back(separator);
+
+        if (beforeAndAfter) {
+            SeparatorSettings afterSeparator = separator;
+            afterSeparator.before = false;
+            afterSeparator.settingsIndex++;
+
+            settingsIndexOffset++;
+
+            settings.separators.push_back(afterSeparator);
+        }
     };
 
     for (int index = 0; index < 128; index++) {
-        int position = Wh_GetIntSetting(L"separators[%d]", index);
-        if (position <= 0) {
-            continue;
-        }
-        appendSeparator(static_cast<size_t>(index), position);
+        PCWSTR positionStr = Wh_GetStringSetting(L"separators[%d]", index);
+        appendSeparator(static_cast<size_t>(index), positionStr);
+        Wh_FreeStringSetting(positionStr);
     }
 
     {
@@ -617,6 +849,13 @@ void LoadSettings() {
 Settings GetSettingsSnapshot() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return g_settings;
+}
+
+bool HasAppNameSeparators(Settings const& settings) {
+    return std::any_of(settings.separators.begin(), settings.separators.end(),
+                       [](SeparatorSettings const& separator) {
+                           return !separator.appName.empty();
+                       });
 }
 
 bool ColorsEqual(winrt::Windows::UI::Color const& left,
@@ -1784,7 +2023,9 @@ void OnAnimationRendering(size_t taskbarId,
                 // final order before we reassign gaps and divider geometry.
                 // Don't keep a TrackedTaskbarState reference across this call:
                 // reconciliation can prune/reallocate the tracked-taskbar list.
-                ReconcileTaskbarRepeater(repeater, false);
+                Settings settings = GetSettingsSnapshot();
+                ReconcileTaskbarRepeater(repeater,
+                                         HasAppNameSeparators(settings));
             }
         } catch (...) {
         }
@@ -3400,21 +3641,75 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 bool beforeFirst = false;
             };
 
+            std::vector<TaskbarAppDetails> appDetails;
+            if (HasAppNameSeparators(settings)) {
+                appDetails.reserve(appButtons.size());
+                for (auto const& button : appButtons) {
+                    try {
+                        appDetails.push_back(GetTaskbarButtonDetails(button));
+                    } catch (...) {
+                        appDetails.emplace_back();
+                    }
+                }
+            }
+
             std::vector<ActiveSeparator> activeSeparators;
             std::vector<int> usedPositions;
+            bool beforeFirstUsed = false;
+
             if (settings.separatorBeforeFirstApp) {
                 activeSeparators.push_back(
                     {SeparatorSettings{}, GetBeforeFirstDividerName(), true});
+                beforeFirstUsed = true;
             }
-            for (auto const& separator : settings.separators) {
-                if (std::find(usedPositions.begin(), usedPositions.end(),
-                              separator.position) != usedPositions.end()) {
+
+            for (const auto& separator : settings.separators) {
+                int position = separator.position;
+
+                if (!separator.appName.empty()) {
+                    position = -1;
+
+                    for (size_t i = 0; i < appDetails.size(); ++i) {
+                        if (IsMatch(appDetails[i], separator.appName)) {
+                            position = static_cast<int>(i + 1);
+                            break;
+                        }
+                    }
+                }
+
+                if (position <= 0) {
                     continue;
                 }
 
-                usedPositions.push_back(separator.position);
+                SeparatorSettings resolvedSeparator = separator;
+
+                if (separator.before) {
+                    if (position == 1) {
+                        if (!beforeFirstUsed) {
+                            activeSeparators.push_back(
+                                {resolvedSeparator,
+                                 GetDividerName(separator.settingsIndex),
+                                 true});
+                            beforeFirstUsed = true;
+                        }
+
+                        continue;
+                    }
+
+                    position--;
+                }
+
+                if (std::find(usedPositions.begin(), usedPositions.end(),
+                              position) != usedPositions.end()) {
+                    continue;
+                }
+
+                resolvedSeparator.position = position;
+
+                usedPositions.push_back(position);
+
                 activeSeparators.push_back(
-                    {separator, GetDividerName(separator.settingsIndex),
+                    {resolvedSeparator, GetDividerName(separator.settingsIndex),
                      false});
             }
 
