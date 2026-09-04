@@ -667,8 +667,10 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case VK_HOME: block = g_settings.DisableWinHome; break;
                 case VK_OEM_COMMA: block = g_settings.DisableWinComma; break;
                 case VK_PAUSE: block = g_settings.DisableWinPause; break;
-                case VK_OEM_PLUS: block = g_settings.DisableWinPlus; break;
-                case VK_OEM_MINUS: block = g_settings.DisableWinMinus; break;
+                case VK_OEM_PLUS:
+                case VK_ADD: block = g_settings.DisableWinPlus; break;
+                case VK_OEM_MINUS:
+                case VK_SUBTRACT: block = g_settings.DisableWinMinus; break;
                 case VK_ESCAPE: block = g_settings.DisableWinEsc; break;
                 case VK_SPACE: block = g_settings.DisableWinSpace; break;
                 case VK_OEM_PERIOD: block = g_settings.DisableWinPeriod; break;
@@ -877,7 +879,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                     {
                         g_winKeyUsed = false;
                     }
-                    else
+                    else if (!isInjected)
                     {
                         g_winKeyUsed = true;
                     }
@@ -1231,11 +1233,11 @@ void Wh_ModUninit()
     {
         // 1. Signal any pending prompt dialog from a prior settings change to close.
         // Thread join must not depend on IsMainExplorer() — handle existence is the
-        // correct gate. Loop is bounded to 5 s to prevent an infinite hang if the
-        // dialog never opens (e.g. TaskDialogIndirect fails).
+        // correct gate. Re-post WM_CLOSE until the thread exits; TDF_ALLOW_DIALOG_CANCELLATION
+        // ensures the dialog always closes.
         if (g_restartExplorerPromptThread)
         {
-            for (int i = 0; i < 50 && WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT; i++)
+            while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
             {
                 if (HWND promptWindow = g_restartExplorerPromptWindow.load())
                 {
