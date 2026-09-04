@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
-// @name           Windows 7 Network Flyout Recreation
+// @name           Windows 7 Network Flyout Recreation 
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 including the Network Sharing Center Control Panel page
-// @version        4.0.0
+// @version        5.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
+// @include        RetroBar.exe
 // @architecture   x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi
 // ==/WindhawkMod==
@@ -29,7 +30,7 @@ Screenshot of the restored Control Panel Network Sharing Center:
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/controlpanelpage.png)
 
-The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
+The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
 
 
 ## Features
@@ -41,21 +42,25 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Native Network Menus**: “Status” opens the native Wi‑Fi connection status dialog, while “Properties” opens the native Wireless Network Properties dialog for saved Wi‑Fi profiles when available, with safe fallbacks for unsupported cases.
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
-- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian or auto-detect
-- **DPI aware**: Opens at the correct DPI on high-DPI and mixed-DPI setups. If the flyout is moved to another monitor while it is open, close and reopen it to recalculate the DPI.
+- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian, Turkish or auto-detect
+- **DPI aware**: Opens at the correct DPI on high-DPI and mixed-DPI setups, using the monitor that hosts the network tray icon. If the flyout is moved to another monitor while it is open, close and reopen it to recalculate the DPI.
+- **Icon-relative placement**: The flyout appears next to the network tray icon on any taskbar edge (bottom, top, left or right) and follows the icon if you drag it to another slot.
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
+- **High Contrast support**: The flyout and the native controls automatically switch to system colors when a Windows High Contrast theme is active, ensuring readability with any HC scheme (HC#1, HC#2, etc.). Switching into or out of High Contrast is applied immediately without requiring the flyout to be reopened.
 - **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
 - **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
 - **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
 - **Restored classic network map**: Restores the Windows 7-style visual map in the Network and Sharing Center, with PC/network/Internet icons, connection lines, and Home/Public/Work location icons.
+- **RetroBar support**: When [RetroBar](https://github.com/dremin/RetroBar) is used as the taskbar (running with Explorer as the shell), clicking its network tray icon opens this classic flyout instead of the modern one.
 
 ## Requirements
 - **Windows 10** with the native taskbar
 - **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) or similar mods)
 - The network icon must be visible in the main system tray (overflow menu not supported)
+- **[RetroBar](https://github.com/dremin/RetroBar)** is also supported: when the classic taskbar is in use, clicking its network tray icon opens this flyout instead of the modern one. RetroBar must run with Explorer as the shell (the recommended, default RetroBar setup); the flyout is then driven by the RetroBar process itself.
 
-**Note:** This mod is unlikely to work with some taskbar mods (e.g. Retrobar because they don't use the ToolbarWindow32) or heavily customized and unstable configurations.
+**Note:** Some heavily customized and unstable taskbar configurations may still not be supported.
 
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
@@ -74,14 +79,14 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **sebastian08dm08-cpu** - Testing on Windows 10 1809
 - **Kichura** - Visual analysis
 
-If you encounter issues, please report them to the author of the mod.
+If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - language: auto
   $name: Language
-  $description: User interface language, follows your system language by default
+  $description: This setting determines the user interface language. It follows the system language by default.
   $options:
     - auto: Auto-detect
     - en: English
@@ -94,36 +99,91 @@ If you encounter issues, please report them to the author of the mod.
     - pl: Polski
     - nl: Nederlands
     - ro: Română
+    - tr: Türkçe
 - interceptNativeFlyout: true
   $name: Intercept system network flyout
-  $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
+  $description: This setting enables interception of the system network flyout. When the network icon in the tray is clicked, it shows this classic flyout instead of the Windows one. It requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
 - privacyMode: false
   $name: Privacy mode
-  $description: Hide real network names so all networks are shown as "Network 1", "Network 2", etc.
+  $description: This setting enables privacy mode. It hides real network names so all networks are shown as "Network 1", "Network 2", etc.
 - refreshInterval: 3000
   $name: Auto-refresh interval (milliseconds)
-  $description: How often to refresh the network list automatically. Set to 0 to disable auto-refresh. Minimum 1000 ms if enabled.
+  $description: This setting controls how often the network list is automatically refreshed. Set it to 0 to disable auto-refresh. The minimum is 1000 ms if enabled.
 - enableHotkey: false
   $name: Enable Ctrl+H hotkey
-  $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts.
+  $description: This setting enables the Ctrl+H hotkey. It can be pressed from anywhere to toggle the network flyout. It is disabled by default to avoid conflicts with browser and editor shortcuts.
 - useRoundedCorners: true
   $name: Rounded corners
-  $description: Give the flyout window rounded corners, matching the look of the original Windows 7 flyout. Enabled by default since Windows 7 itself used rounded corners. Disable this for a more strictly classic/square theme look.
+  $description: This setting gives the flyout window rounded corners, matching the look of the original Windows 7 flyout. It is enabled by default since Windows 7 itself used rounded corners. Disable it for a more strictly classic/square theme look.
 - restoreClassicNetworkCenterLinks: true
   $name: Restore Windows 7 Network Center layout
-  $description: This setting replaces the layout of the current Network and Sharing Center page in the Control Panel with an accurate recreation of the Windows 7 one, featuring the classic links "Connect to a network" and "HomeGroup" along with the visual network map with PC, network, and Internet icons.
+  $description: This setting replaces the layout of the current Network and Sharing Center page in the Control Panel with an accurate recreation of the Windows 7 one. It features the classic links "Connect to a network" and "HomeGroup" along with the visual network map with PC, network, and Internet icons.
 - useNetworkLocationIcons: true
   $name: Network location icons (Home / Public / Work)
-  $description: Show the classic Windows 7 network location icon in the flyout header based on the active network profile (house = Home, bench = Public, buildings = Work). Disable to restore the original generic network icon.
+  $description: This setting shows the classic Windows 7 network location icon in the flyout header based on the active network profile (house = Home, bench = Public, buildings = Work). Disable it to restore the original generic network icon.
 - theme: light
   $name: Theme
-  $description: Select the network flyout's theme
+  $description: This setting allows to select the network flyout's theme.
   $options:
     - light: Light (Classic Windows 7)
     - dark: Dark (Custom)
 */
 // ==/WindhawkModSettings==
 // ## Changelog
+// - 5.0.0: Added High Contrast theme support. When a Windows High Contrast
+//   theme is active, the flyout, the notification popup, the connect button,
+//   the password dialog, and the native controls all switch to system colors
+//   (COLOR_WINDOW, COLOR_WINDOWTEXT, COLOR_BTNFACE, COLOR_HOTLIGHT, etc.)
+//   instead of the custom light/dark palette. Switching into or out of High
+//   Contrast (e.g. Left Alt + Left Shift + Print Screen) is handled
+//   immediately via WM_SETTINGCHANGE/SPI_SETHIGHCONTRAST without requiring
+//   the flyout to be reopened. Implementation inspired by the Action Center
+//   Recreation mod's High Contrast support.
+// - 5.0.0: RetroBar click reliability. A single physical click on a
+//   notify-icon v4 icon delivers two activation callbacks (WM_LBUTTONUP and
+//   then NIN_SELECT; a double-click adds WM_LBUTTONDBLCLK), so the RetroBar
+//   path toggled the flyout open and immediately closed again, making it
+//   seem unresponsive until several clicks landed. The RetroBar toggle is
+//   now debounced with the same CLICK_DEBOUNCE_MS window the Explorer-side
+//   click path already uses, collapsing each gesture into exactly one
+//   toggle.
+// - 5.0.0: Added RetroBar support. The mod is now also injected into
+//   RetroBar.exe. In a RetroBar configuration RetroBar/ManagedShell forwards
+//   tray icon clicks with SendNotifyMessageW toward the icon owner windows in
+//   explorer.exe (it does not own a ToolbarWindow32), so tray interception can
+//   no longer rely on subclassing the Explorer notification toolbar. The mod
+//   now hooks SendNotifyMessageW inside RetroBar.exe, identifies the network
+//   notify icon by scanning Explorer's notification toolbar cross-process
+//   (the same read-only TBBUTTON/TRAYDATA enumeration ManagedShell itself
+//   performs, matched against pnidui.dll's address range in the Explorer
+//   process), swallows the native left-press/select callbacks that would open
+//   the modern flyout and shows this flyout instead, anchored at the click
+//   point. Hover/leave/right-click callbacks are passed through untouched so
+//   RetroBar's own tooltip and the native tray context menu keep working. The
+//   mod previously treated RetroBar's same-named "Shell_TrayWnd" window as an
+//   unsupported decoy and refused it; that check now keeps scanning until it
+//   finds the Shell_TrayWnd owned by the current process, so the Explorer
+//   instance and the RetroBar instance can coexist.
+// - 5.0.0: Fixed a rare conflict with the Action Center recreation mod: on a
+//   double-click over the tray network icon, the second press is delivered as
+//   WM_LBUTTONDBLCLK and the pointer can drift a few pixels onto a
+//   neighbouring tray icon (e.g. the Action Center flag). That press and its
+//   button-up could leak to Explorer, which routed them to the icon under the
+//   pointer, so the Action Center flyout opened instead of this one. The mod
+//   now owns the whole double-click gesture (gesture lock anchored to the
+//   last swallowed network click) and also swallows stray button-ups over the
+//   network icon so Explorer never sees an unmatched mouse pair.
+// - 5.0.0: Added RAII guards (critical section, screen DC) around
+//   multi-exit-path code and try/catch hardening on the tray subclass, the
+//   flyout paint routine, the async connect worker and the toggle paths, so
+//   an unexpected exception can never unwind into explorer.exe.
+// - 5.0.0: Added the Turkish translation
+// - 5.0.0: The tray network icon can be dragged/reordered again. The flyout
+//   now opens next to that icon on any taskbar edge instead of a fixed corner.
+// - 5.0.0: Restored the official 4.0.0 flyout outer size (WINDOW_WIDTH x
+//   WINDOW_HEIGHT). Icon-relative placement no longer adds WS_BORDER /
+//   WS_THICKFRAME on top of the 300x405 client, which made 5.0.0 wider.
+// - 5.0.0: Minor UI enhancements
 // - 4.0.0: Enhanced the Network Sharing center Control Panel page
 // - 4.0.0: Native network context menu actions now open the native Wi-Fi status
 //   and saved-profile Wireless Network Properties dialogs when available, with
@@ -185,6 +245,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <uxtheme.h>
 #include <dwmapi.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <strsafe.h>
@@ -276,6 +337,7 @@ void LoadSettings() {
     else if (_wcsicmp(lang.get(), L"pl") == 0) raw_language = 8;
     else if (_wcsicmp(lang.get(), L"nl") == 0) raw_language = 9;
     else if (_wcsicmp(lang.get(), L"ro") == 0) raw_language = 10;
+    else if (_wcsicmp(lang.get(), L"tr") == 0) raw_language = 11;
 
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
@@ -297,6 +359,40 @@ void LoadSettings() {
     }
 }
 
+// ----------------------------------------------------------------------------
+// High Contrast support
+// When a High Contrast theme is active, the flyout abandons its custom
+// light/dark palettes and follows the system colors, matching the behaviour
+// of the classic Windows 7 UI and the Action Center Recreation mod.
+// The state is cached with a short TTL so the paint path does not pay a
+// SystemParametersInfo call on every redraw. A dedicated WM_SETTINGCHANGE/
+// SPI_SETHIGHCONTRAST handler force-refreshes the cache and invalidates
+// any open flyout, so switching into/out of High Contrast is immediate.
+// ----------------------------------------------------------------------------
+static bool g_cachedHighContrast = false;
+static DWORD g_lastHCCheckTick = 0;
+
+static bool IsHighContrastActive() {
+    DWORD now = GetTickCount();
+    if (now - g_lastHCCheckTick > 2000) {
+        HIGHCONTRASTW hc = { sizeof(hc) };
+        g_cachedHighContrast =
+            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+        g_lastHCCheckTick = now;
+    }
+    return g_cachedHighContrast;
+}
+
+// Forces an immediate, non-cached re-check of High Contrast state.
+static void RefreshHighContrastNow() {
+    HIGHCONTRASTW hc = { sizeof(hc) };
+    g_cachedHighContrast =
+        (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+         (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+    g_lastHCCheckTick = GetTickCount();
+}
+
 // Global network count defined early for RecalcDpiMetrics
 int g_NetworkCount = 0;
 
@@ -309,6 +405,8 @@ void ApplyNativeControlsTheme();
 void FreeSystemIcons();
 void LoadSystemIcons();
 static int GetNetworkCountSafe();
+static BOOL GetNetworkIconScreenRect(RECT* outRect);
+static UINT GetDpiForScreenRect(const RECT* rc);
 
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
@@ -348,6 +446,17 @@ void RecalcDpiMetrics(UINT dpi) {
 #define WM_SHOW_FLYOUT      (WM_USER + 102)
 #define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
 #define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
+// wParam values carried by WM_TOGGLE_FLYOUT_REQUEST. A value of 0 keeps the
+// historical blind "toggle" behaviour (used by the hotkey and the Explorer
+// path); the explicit show/hide values are used by the RetroBar path, which
+// captures the flyout's real visibility on its own (WPF/UI) thread at click
+// time and posts a concrete open or close command. That makes two rapid
+// physical clicks deterministic (open, then close) regardless of how long the
+// first open's WLAN/COM work takes, because the decision is never a
+// read-then-toggle race on the flyout thread.
+#define FLYOUT_CMD_TOGGLE 0
+#define FLYOUT_CMD_SHOW   1
+#define FLYOUT_CMD_HIDE   2
 #define WM_UPDATE_REFRESH_TIMER  (WM_USER + 112)
 #define WM_UPDATE_HOTKEY       (WM_USER + 113)
 
@@ -2063,48 +2172,62 @@ void Uninit() {
 
 // -------------------------------------------------------
 // Theme color helper functions
+// When High Contrast is active, all colors are taken from the system palette
+// so the flyout follows the user's chosen HC scheme (HC#1 white-on-black,
+// HC#2 black-on-white, etc.) without any custom override.
 // -------------------------------------------------------
 COLORREF GetHeaderBgColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOW);
     return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
 
 COLORREF GetContentBgColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOW);
     return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
 
 COLORREF GetFooterBgColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_BTNFACE);
     return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(241, 245, 253);
 }
 
 COLORREF GetTextColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
     return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(0, 0, 0);
 }
 
 COLORREF GetSecondaryTextColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_GRAYTEXT);
     return (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(110, 110, 110);
 }
 
 COLORREF GetLinkColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_HOTLIGHT);
     return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
 }
 
 COLORREF GetRowSelectedColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_HIGHLIGHT);
     return (g_Settings.theme == 1) ? RGB(40, 40, 50) : RGB(228, 241, 252);
 }
 
 COLORREF GetRowHoverColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_HIGHLIGHT);
     return (g_Settings.theme == 1) ? RGB(35, 35, 45) : RGB(242, 247, 253);
 }
 
 COLORREF GetRowSelectedBorderColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWFRAME);
     return (g_Settings.theme == 1) ? RGB(60, 80, 120) : RGB(174, 212, 243);
 }
 
 COLORREF GetRowHoverBorderColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWFRAME);
     return (g_Settings.theme == 1) ? RGB(50, 70, 100) : RGB(216, 231, 248);
 }
 
 COLORREF GetNetworkNameColor() {
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
     return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
 }
 
@@ -2155,6 +2278,18 @@ typedef struct {
 // -------------------------------------------------------
 // Windows version detection
 // -------------------------------------------------------
+// Defined next to InstallTrayInterceptionInternal(), its primary use site;
+// forward-declared here (and reused by FindPrimaryTrayToolbar() further
+// down) because DetectWindowsVersion() runs very early during Wh_ModInit
+// and its diagnostic log benefits from the same RetroBar/ManagedShell
+// detection. See the definition's comment for the full rationale.
+static BOOL IsWindowOwnedByCurrentProcess(HWND hWnd);
+// Enumerates to the Shell_TrayWnd owned by the current process, skipping
+// same-named decoy windows created by shell replacements (RetroBar).
+// Defined near InstallTrayInterceptionInternal(); forward-declared because
+// FindPrimaryTrayToolbar() (which uses it) lives earlier in the file.
+static HWND FindCurrentProcessTrayWnd();
+
 static bool g_isWin11 = false;
 static void DetectWindowsVersion() {
     OSVERSIONINFOEXW osvi = {};
@@ -2181,6 +2316,13 @@ static void DetectWindowsVersion() {
             Wh_Log(L"Win11: SysPager found but no ToolbarWindow32 - partial legacy taskbar");
         } else if (hNotify) {
             Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager - modern taskbar only");
+        } else if (hTray && !IsWindowOwnedByCurrentProcess(hTray)) {
+            // ManagedShell-based shell replacements (e.g. RetroBar) create
+            // their own hidden window using the same "Shell_TrayWnd" class
+            // name; distinguish that from a real (if unusual) Explorer state
+            // purely for log clarity, no behavior change either way.
+            Wh_Log(L"Win11: Shell_TrayWnd found but owned by another process "
+                   L"(likely RetroBar or another shell replacement) - not Explorer's taskbar");
         } else if (hTray) {
             Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd - unusual configuration");
         } else {
@@ -2211,6 +2353,11 @@ static void DetectWindowsVersion() {
 static ModContext g_Ctx        = {0};
 static BOOL       g_Initialized = FALSE;
 static BOOL       g_IsExplorerHost = FALSE;
+// TRUE when the mod is loaded inside RetroBar.exe. RetroBar renders the
+// notification area itself (WPF) instead of using Explorer's
+// ToolbarWindow32, so it cannot be subclassed; see the RetroBarTray
+// namespace below for the SendNotifyMessageW-based interception.
+static BOOL       g_IsRetroBarHost = FALSE;
 HWND g_hWndFlyout          = NULL;
 HWND g_hWndButtonConnect   = NULL;
 HWND g_hWndCheckboxConnect = NULL;
@@ -2225,11 +2372,15 @@ int g_ButtonConnectIsOwnerDraw = -1;
 static BOOL g_IsHoveringConnectButton = FALSE;
 
 void ApplyNativeControlsTheme() {
-    LPCWSTR themeName = (g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer";
+    // In High Contrast mode, use "" (empty string) as the theme name so
+    // native controls fall back to the system color palette instead of
+    // picking up the visual-styles dark/light theme.
+    BOOL hc = IsHighContrastActive();
+    LPCWSTR themeName = hc ? L"" : ((g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer");
     
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         SetWindowTheme(g_hWndFlyout, themeName, NULL);
-        BOOL useDark = (g_Settings.theme == 1);
+        BOOL useDark = hc ? FALSE : (g_Settings.theme == 1);
         DwmSetWindowAttribute(g_hWndFlyout, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
         SetWindowPos(g_hWndFlyout, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
@@ -2238,11 +2389,7 @@ void ApplyNativeControlsTheme() {
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
         SetWindowTheme(g_hWndCheckboxConnect, themeName, NULL);
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
-        if (g_Settings.theme == 1) {
-            SetWindowTheme(g_hWndButtonConnect, L"DarkMode_Explorer", NULL);
-        } else {
-            SetWindowTheme(g_hWndButtonConnect, L"Explorer", NULL);
-        }
+        SetWindowTheme(g_hWndButtonConnect, hc ? L"" : ((g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer"), NULL);
     }
 }
 
@@ -2350,6 +2497,47 @@ struct WlanMemoryDeleter {
 };
 template <typename T>
 using WlanMemoryPtr = std::unique_ptr<T, WlanMemoryDeleter>;
+
+// ----------------------------------------------------------------------------
+// Small RAII helpers (5.0.0)
+// ----------------------------------------------------------------------------
+
+// CRITICAL_SECTION guard with an explicit unlock() for the spots where the
+// lock must be dropped before continuing (e.g. before ShowWindow, whose
+// activation change must not run under the lock). Using the guard means the
+// many early-return paths in ToggleFlyoutWindow can no longer forget to
+// leave the lock, and the lock is released even if an exception unwinds.
+struct CsGuard {
+    CRITICAL_SECTION& cs_;
+    BOOL owned_;
+    explicit CsGuard(CRITICAL_SECTION& cs) : cs_(cs), owned_(TRUE) {
+        EnterCriticalSection(&cs_);
+    }
+    ~CsGuard() {
+        if (owned_) LeaveCriticalSection(&cs_);
+    }
+    CsGuard(const CsGuard&) = delete;
+    CsGuard& operator=(const CsGuard&) = delete;
+    void unlock() {
+        if (owned_) {
+            LeaveCriticalSection(&cs_);
+            owned_ = FALSE;
+        }
+    }
+};
+
+// GetDC/ReleaseDC guard.
+struct DcGuard {
+    HWND hwnd_ = NULL;
+    HDC hdc_ = NULL;
+    explicit DcGuard(HWND hwnd) : hwnd_(hwnd), hdc_(GetDC(hwnd)) {}
+    ~DcGuard() {
+        if (hdc_) ReleaseDC(hwnd_, hdc_);
+    }
+    DcGuard(const DcGuard&) = delete;
+    DcGuard& operator=(const DcGuard&) = delete;
+    operator HDC() const { return hdc_; }
+};
 
 static WinHandle g_hConnectMutex;
 static HMODULE g_hGdiPlus = NULL;
@@ -2996,6 +3184,53 @@ static const LocalePack g_Locales[] = {
         L"Remediere probleme",
         L"Deschide Centrul de rețea și partajare",
     }},
+    { 0x041F, {
+        L"Şu anda bağlı:",
+        L"İnternet erişimi",
+        L"Kablosuz Ağ Bağlantısı",
+        L"Bağlandı",
+        L"Ağ ve Paylaşım Merkezini Aç",
+        L"Bağlan",
+        L"Bağlantıyı Kes",
+        L"Bağlan",
+        L"Bağlantıyı Kes",
+        L"Durum",
+        L"\u00D6zellikler",
+        L"Bağlı değil",
+        L"Bağlantılar kullanılabilir",
+        L"Otomatik bağlan",
+        L"Bir Ağa Bağlan",
+        L"Ağ güvenlik anahtarını girin",
+        L"Güvenlik anahtarı:",
+        L"Karakterleri gizle",
+        L"Tamam",
+        L"İptal",
+        L"Bağlantı Başarısız",
+        L"Ağ güvenlik anahtarı doğru değil. Lütfen tekrar deneyin.",
+        L"%s ağına bağlanılamadı",
+        L"Ağ %d",
+        L"Güvenlik türü:",
+        L"Sinyal gücü:",
+        L"Radyo türü:",
+        L"Mükemmel",
+        L"İyi",
+        L"Orta",
+        L"Zayıf",
+        L"Sinyal yok",
+        L"Bağlanıyor...",
+        L"Bağlantı kesiliyor...",
+        L"Durum: Bağlandı",
+        L"Durum: Bağlanıyor...",
+        L"Durum: Bağlı değil",
+        L"Hata",
+        L"Ağ profili kaydedilemedi (kod: %lu)",
+        L"Bağlantı hatası (kod: %lu)",
+        L"Bağlantı zaman aşımına uğradı",
+        L"Bağlantı denemesi zaman aşımına uğradı. Ağ, kapsama alanı dışında olabilir.",
+        L"Lütfen bir ağ güvenlik anahtarı girin.",
+        L"Sorunları gider",
+        L"Ağ ve Paylaşım Merkezini Aç",
+    }},
 };
 
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -3025,6 +3260,7 @@ void DetermineLocale() {
         case 8: g_CurrentLocalePack = FindLocalePack(0x0415); break;
         case 9: g_CurrentLocalePack = FindLocalePack(0x0413); break;
         case 10: g_CurrentLocalePack = FindLocalePack(0x0418); break;
+        case 11: g_CurrentLocalePack = FindLocalePack(0x041F); break;
         default: {
             LANGID userLangId = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(userLangId);
@@ -3056,6 +3292,8 @@ void CheckConnectionTimeouts(void);
 BOOL SafeToAccessUI(void);
 void SafeCleanup(void);
 void ToggleFlyoutWindow(void);
+void ShowFlyoutWindow(void);
+void HideFlyoutWindow(void);
 void InitTooltip(HWND hwnd);
 void UpdateTooltipForRow(HWND hwnd, int index);
 BOOL GetRowRect(int index, RECT* rcRow);
@@ -4265,22 +4503,82 @@ BOOL SafeToAccessUI() {
 }
 
 void PositionWindowNearTray(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    // Official 4.0.0 sizes the flyout's OUTER rectangle to WINDOW_WIDTH x
+    // WINDOW_HEIGHT. 5.0.0 used AdjustWindowRectEx here, so the client stayed
+    // at 300x405 and the chrome (WS_BORDER / WS_THICKFRAME) was added on top,
+    // making the window visibly wider than the published 4.0.0 build.
+    int winW = WINDOW_WIDTH;
+    int winH = WINDOW_HEIGHT;
+
     APPBARDATA abd = { sizeof(APPBARDATA) };
     SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-    RECT rcWork;
-    // Use the monitor where the taskbar is located for multi-monitor setups
-    HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+
+    RECT rcIcon = {};
+    BOOL haveIcon = GetNetworkIconScreenRect(&rcIcon);
+
+    HMONITOR hMon = NULL;
+    if (haveIcon)
+        hMon = MonitorFromRect(&rcIcon, MONITOR_DEFAULTTONEAREST);
+    if (!hMon)
+        hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+
     MONITORINFO mi = { sizeof(mi) };
+    RECT rcWork;
     if (hMon && GetMonitorInfoW(hMon, &mi))
         rcWork = mi.rcWork;
     else
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-    int x = rcWork.right - WINDOW_WIDTH - 8;
-    int y = rcWork.bottom - WINDOW_HEIGHT - 8;
-    if (abd.uEdge == ABE_TOP)   y = abd.rc.bottom + 8;
-    else if (abd.uEdge == ABE_LEFT)  x = abd.rc.right + 8;
-    else if (abd.uEdge == ABE_RIGHT) x = abd.rc.left - WINDOW_WIDTH - 8;
-    SetWindowPos(hwnd, HWND_TOPMOST, x, y, WINDOW_WIDTH, WINDOW_HEIGHT, SWP_SHOWWINDOW);
+
+    const int gap = 8;
+    UINT edge = abd.uEdge;
+    // Prefer geometry over ABM_GETTASKBARPOS so auto-hide and mixed-DPI
+    // taskbars still place the flyout on the correct side of the icon.
+    if (haveIcon) {
+        if (rcIcon.top >= rcWork.bottom - 2)        edge = ABE_BOTTOM;
+        else if (rcIcon.bottom <= rcWork.top + 2)   edge = ABE_TOP;
+        else if (rcIcon.left >= rcWork.right - 2)   edge = ABE_RIGHT;
+        else if (rcIcon.right <= rcWork.left + 2)   edge = ABE_LEFT;
+    }
+
+    int x, y;
+    if (haveIcon) {
+        int iconCx = rcIcon.left + (rcIcon.right - rcIcon.left) / 2;
+        int iconCy = rcIcon.top  + (rcIcon.bottom - rcIcon.top) / 2;
+        switch (edge) {
+        case ABE_TOP:
+            x = iconCx - winW / 2;
+            y = rcIcon.bottom + gap;
+            break;
+        case ABE_LEFT:
+            x = rcIcon.right + gap;
+            y = iconCy - winH / 2;
+            break;
+        case ABE_RIGHT:
+            x = rcIcon.left - winW - gap;
+            y = iconCy - winH / 2;
+            break;
+        case ABE_BOTTOM:
+        default:
+            x = iconCx - winW / 2;
+            y = rcIcon.top - winH - gap;
+            break;
+        }
+    } else {
+        x = rcWork.right - winW - gap;
+        y = rcWork.bottom - winH - gap;
+        if (edge == ABE_TOP)        y = abd.rc.bottom + gap;
+        else if (edge == ABE_LEFT)  x = abd.rc.right + gap;
+        else if (edge == ABE_RIGHT) x = abd.rc.left - winW - gap;
+    }
+
+    if (x + winW > rcWork.right)  x = rcWork.right - winW;
+    if (y + winH > rcWork.bottom) y = rcWork.bottom - winH;
+    if (x < rcWork.left) x = rcWork.left;
+    if (y < rcWork.top)  y = rcWork.top;
+
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, winW, winH, SWP_NOACTIVATE);
 }
 
 // -------------------------------------------------------
@@ -4855,32 +5153,7 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
         
         InitRefreshButtonRect();
         RecalcArrowRect();
-        
-        RECT rcWork;
-        // Use the near monitor instead of primary for multi-monitor setups
-        HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi = { sizeof(mi) };
-        if (hMon && GetMonitorInfoW(hMon, &mi))
-            rcWork = mi.rcWork;
-        else
-            SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-        APPBARDATA abd = { sizeof(APPBARDATA) };
-        SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-        
-        int x = rcWork.right - WINDOW_WIDTH - 8;
-        int y = rcWork.bottom - WINDOW_HEIGHT - 8;
-        if (abd.uEdge == ABE_TOP)   y = abd.rc.bottom + 8;
-        else if (abd.uEdge == ABE_LEFT)  x = abd.rc.right + 8;
-        else if (abd.uEdge == ABE_RIGHT) x = abd.rc.left - WINDOW_WIDTH - 8;
-        
-        RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
-        DWORD dwExStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        DWORD dwStyle   = GetWindowLongW(hwnd, GWL_STYLE);
-        AdjustWindowRectEx(&rcClient, dwStyle, FALSE, dwExStyle);
-        int winW = rcClient.right - rcClient.left;
-        int winH = rcClient.bottom - rcClient.top;
-        
-        SetWindowPos(hwnd, NULL, x, y, winW, winH, SWP_NOZORDER | SWP_NOACTIVATE);
+        PositionWindowNearTray(hwnd);
     }
 }
 
@@ -4946,13 +5219,13 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     switch (uMsg) {
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
-        COLORREF bg = (g_Settings.theme == 1) ? RGB(20, 20, 20) : GetSysColor(COLOR_BTNFACE);
+        COLORREF bg = IsHighContrastActive() ? GetSysColor(COLOR_BTNFACE) : (g_Settings.theme == 1) ? RGB(20, 20, 20) : GetSysColor(COLOR_BTNFACE);
         HBRUSH hBr = CreateSolidBrush(bg);
         RECT rc;
         GetClientRect(hwnd, &rc);
         FillRect(hdc, &rc, hBr);
         DeleteObject(hBr);
-        if (g_Settings.theme == 1) {
+        if (g_Settings.theme == 1 && !IsHighContrastActive()) {
             HPEN hPen = CreatePen(PS_SOLID, 1, RGB(75, 75, 85)); 
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -5042,7 +5315,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             WS_CHILD|WS_VISIBLE, ScaleDpi(15), ScaleDpi(53), ScaleDpi(125), ScaleDpi(18), hwnd, NULL, cs->hInstance, NULL);
         SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
-        BOOL bDarkPwd = (g_Settings.theme == 1);
+        BOOL bDarkPwd = (g_Settings.theme == 1) && !IsHighContrastActive();
         DWORD dwEditExStyle = bDarkPwd ? 0 : WS_EX_CLIENTEDGE;
         
         HWND hEdit = CreateWindowExW(dwEditExStyle, WC_EDITW, L"",
@@ -5087,7 +5360,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
         if (!pdis) break;
         if (pdis->CtlID != IDOK && pdis->CtlID != IDCANCEL) break;
-        if (g_Settings.theme != 1) break;
+        if (g_Settings.theme != 1 && !IsHighContrastActive()) break;
         BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
         BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
         BOOL isFocused  = (pdis->itemState & ODS_FOCUS) != 0;
@@ -5148,6 +5421,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
+        if (IsHighContrastActive()) {
+            SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+            SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+            SetBkMode(hdc, OPAQUE);
+            return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
+        }
         if (hwndCtrl == GetDlgItem(hwnd, 102) || hwndCtrl == GetDlgItem(hwnd, 103)) {
             if (g_Settings.theme == 1) {
                 SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
@@ -5193,6 +5472,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     }
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
+        if (IsHighContrastActive()) {
+            SetBkColor(hdc, GetSysColor(COLOR_WINDOW));
+            SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+            SetBkMode(hdc, OPAQUE);
+            return (INT_PTR)GetSysColorBrush(COLOR_WINDOW);
+        }
         if (g_Settings.theme == 1) {
             SetBkColor(hdc, RGB(40, 40, 50));
             SetTextColor(hdc, RGB(255, 255, 255));
@@ -5505,19 +5790,41 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
 }
 
 static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
-    AsyncConnectContext* ctx = (AsyncConnectContext*)pParam;
-    if (!ctx) return 1;
-    
+    AsyncConnectContext* rawCtx = (AsyncConnectContext*)pParam;
+    if (!rawCtx) return 1;
+    AsyncConnectContext* ctx = rawCtx;
+
+    // 5.0.0 RAII: the password is wiped and the context freed on EVERY exit
+    // path (the old code repeated the manual cleanup three times and a
+    // missed path would leak the plaintext password in memory).
+    struct CtxGuard {
+        AsyncConnectContext* ctx_;
+        explicit CtxGuard(AsyncConnectContext* c) : ctx_(c) {}
+        ~CtxGuard() {
+            SecureZeroMemory(ctx_->password, sizeof(ctx_->password));
+            free(ctx_);
+        }
+    } ctxGuard(ctx);
+
+    // 5.0.0 RAII: always release the connect mutex once acquired.
+    struct MutexGuard {
+        HANDLE h_;
+        explicit MutexGuard(HANDLE h) : h_(h) {}
+        ~MutexGuard() { if (h_) ReleaseMutex(h_); }
+    } mutexGuard(NULL);
+
     DWORD waitResult = WaitForSingleObject(g_hConnectMutex.get(), 10000);
     if (waitResult != WAIT_OBJECT_0) {
         Wh_Log(L"AsyncConnectThreadProc: Could not acquire mutex (timeout or error %lu)", waitResult);
         if (ctx->hWndNotify) {
             PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_TIMEOUT);
         }
-        SecureZeroMemory(ctx->password, sizeof(ctx->password));
-        free(ctx);
         return 1;
     }
+    mutexGuard.h_ = g_hConnectMutex.get();
+
+    try {  // 5.0.0: worker must not leak exceptions into the thread start
+
     DWORD dwResult = ERROR_SUCCESS;
     DWORD dwReason = 0;
     
@@ -5542,9 +5849,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
             if (ctx->hWndNotify) {
                 PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)dwResult);
             }
-            ReleaseMutex(g_hConnectMutex.get());
-            SecureZeroMemory(ctx->password, sizeof(ctx->password));
-            free(ctx);
             return 1;
         }
         ctx->hasProfile = TRUE; 
@@ -5576,9 +5880,15 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, (dwResult == ERROR_SUCCESS), (LPARAM)dwResult);
     }
     
-    ReleaseMutex(g_hConnectMutex.get());
-    SecureZeroMemory(ctx->password, sizeof(ctx->password));
-    free(ctx);
+    } catch (...) {
+        // 5.0.0: report failure instead of letting the exception kill the
+        // thread with the mutex held; guards above still clean everything up.
+        Wh_Log(L"AsyncConnectThreadProc: unexpected exception during connect");
+        if (ctx->hWndNotify) {
+            PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_GEN_FAILURE);
+        }
+        return 1;
+    }
     return 0;
 }
 
@@ -6227,6 +6537,190 @@ typedef struct {
 static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
 static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
+}
+
+// Click-vs-drag tracking for the tray network icon.
+// Never SetCapture on the tray toolbar: that freezes Explorer's taskbar.
+// A click is swallowed so the native flyout does not open. A drag past the
+// system threshold is handed to Explorer by replaying LBUTTONDOWN through
+// DefSubclassProc (not through our subclass), so icon reorder works.
+static POINT s_iconLBtnDownPt = {};
+static BOOL  s_iconLBtnDown = FALSE;
+static BOOL  s_iconDragging = FALSE;
+static HWND  s_iconDragToolbar = NULL;
+static BOOL  s_flyoutWasVisibleOnDown = FALSE;
+static RECT  s_lastNetworkIconScreenRect = {};
+static BOOL  s_haveLastNetworkIconRect = FALSE;
+
+static void ResetNetworkIconDragState() {
+    s_iconLBtnDown = FALSE;
+    s_iconDragging = FALSE;
+    s_iconDragToolbar = NULL;
+}
+
+// --- Double-click gesture lock (5.0.0) -------------------------------------
+// Windows delivers the second press of a double-click as WM_LBUTTONDBLCLK,
+// and the pointer can drift a few pixels between the two presses, so the
+// second press can hit-test onto a NEIGHBOURING tray icon (e.g. the Action
+// Center flag). If that press leaks through to Explorer, the shell routes it
+// and its button-up to whichever icon is under the pointer, and the wrong
+// flyout opens (Action Center instead of the network flyout). To prevent
+// that, remember every click we swallowed on the network icon; a following
+// press within the system double-click window of that click belongs to THIS
+// gesture even if it hit-tests elsewhere, so it is claimed and swallowed
+// together with its button-up.
+static DWORD s_lastNetworkClickTick = 0;
+static POINT s_lastNetworkClickPt = {};
+
+static BOOL IsWithinDoubleClickOfLastNetworkClick(POINT pt) {
+    if (!s_lastNetworkClickTick) return FALSE;
+    DWORD dwDoubleClick = GetDoubleClickTime();
+    DWORD dwWindow = (dwDoubleClick > CLICK_DEBOUNCE_MS) ? dwDoubleClick
+                                                         : (DWORD)CLICK_DEBOUNCE_MS;
+    DWORD now = GetTickCount();
+    if (now - s_lastNetworkClickTick > dwWindow) return FALSE;
+    // Windows' own double-click rect is SM_CXDOUBLECLK wide, anchored to the
+    // first press; add the drag threshold as slack so a press that clearly
+    // started as a system double-click but slipped off the icon edge is still
+    // claimed. This stays far smaller than a tray icon, so a deliberate click
+    // on a neighbouring icon is never stolen.
+    int slackX = GetSystemMetrics(SM_CXDOUBLECLK) / 2 + GetSystemMetrics(SM_CXDRAG);
+    int slackY = GetSystemMetrics(SM_CYDOUBLECLK) / 2 + GetSystemMetrics(SM_CYDRAG);
+    return (abs(pt.x - s_lastNetworkClickPt.x) <= slackX &&
+            abs(pt.y - s_lastNetworkClickPt.y) <= slackY);
+}
+
+static HWND FindPrimaryTrayToolbar() {
+    if (G_hSubclassedToolbar && IsWindow(G_hSubclassedToolbar))
+        return G_hSubclassedToolbar;
+    // Inside RetroBar.exe there is no Explorer toolbar in this process; the
+    // flyout is anchored from the click point instead (see RetroBarTray).
+    if (g_IsRetroBarHost) return NULL;
+    // FindWindowW may return RetroBar's same-named decoy window; enumerate
+    // to the Shell_TrayWnd owned by THIS (explorer) process.
+    HWND hTray = FindCurrentProcessTrayWnd();
+    if (!hTray) return NULL;
+    HWND hNotify   = FindWindowExW(hTray,    NULL, L"TrayNotifyWnd",    NULL);
+    HWND hSysPager = hNotify ? FindWindowExW(hNotify, NULL, L"SysPager", NULL) : NULL;
+    return hSysPager ? FindWindowExW(hSysPager, NULL, L"ToolbarWindow32", NULL) : NULL;
+}
+
+static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId);
+
+static void EnsureToolbarCache(HWND hToolbar) {
+    if (!hToolbar) return;
+    int currentCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    if (currentCount != g_ToolbarCache.buttonCount)
+        g_ToolbarCache.valid = FALSE;
+    if (!g_ToolbarCache.valid) {
+        int detectedId = -1;
+        DetectNetworkButtonId(hToolbar, &detectedId);
+        g_ToolbarCache.networkId = detectedId;
+        g_ToolbarCache.buttonCount = currentCount;
+        g_ToolbarCache.valid = (detectedId != -1);
+    }
+}
+
+static BOOL QueryToolbarNetworkIconRect(HWND hToolbar, RECT* outRect) {
+    if (!hToolbar || !outRect) return FALSE;
+    EnsureToolbarCache(hToolbar);
+    if (g_ToolbarCache.networkId == -1) return FALSE;
+    // PositionWindowNearTray can run on the hotkey thread. Don't use a
+    // blocking SendMessage here: if the toolbar thread is waiting on us
+    // we would deadlock explorer.exe.
+    DWORD_PTR idx = (DWORD_PTR)-1;
+    if (!SendMessageTimeoutW(hToolbar, TB_COMMANDTOINDEX, (WPARAM)g_ToolbarCache.networkId, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &idx) || (int)idx < 0)
+        return FALSE;
+    RECT rc = {};
+    DWORD_PTR gotRect = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_GETITEMRECT, idx, (LPARAM)&rc,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &gotRect) || !gotRect)
+        return FALSE;
+    if (IsRectEmpty(&rc)) return FALSE;
+    MapWindowPoints(hToolbar, NULL, (POINT*)&rc, 2);
+    *outRect = rc;
+    s_lastNetworkIconScreenRect = rc;
+    s_haveLastNetworkIconRect = TRUE;
+    return TRUE;
+}
+
+// Anchor rect captured by the RetroBar SendNotifyMessageW hook (the click
+// point on the RetroBar-drawn icon). RetroBar has no ToolbarWindow32 in this
+// process, so GetNetworkIconScreenRect() uses this instead; see the
+// RetroBarTray namespace.
+static RECT  s_retrobarNetworkAnchor = {};
+static BOOL  s_haveRetrobarAnchor = FALSE;
+static CRITICAL_SECTION g_retrobarAnchorLock;
+static BOOL  g_retrobarAnchorLockInit = FALSE;
+
+void SetRetroBarNetworkAnchor(POINT clickPt) {
+    if (!g_retrobarAnchorLockInit) {
+        InitializeCriticalSection(&g_retrobarAnchorLock);
+        g_retrobarAnchorLockInit = TRUE;
+    }
+    // A small rect centered on the click point is enough for
+    // PositionWindowNearTray: it only needs a representative point and the
+    // monitor to resolve the correct taskbar edge and DPI.
+    const int half = ScaleDpi(8);
+    EnterCriticalSection(&g_retrobarAnchorLock);
+    s_retrobarNetworkAnchor.left   = clickPt.x - half;
+    s_retrobarNetworkAnchor.right  = clickPt.x + half;
+    s_retrobarNetworkAnchor.top    = clickPt.y - half;
+    s_retrobarNetworkAnchor.bottom = clickPt.y + half;
+    s_haveRetrobarAnchor = TRUE;
+    LeaveCriticalSection(&g_retrobarAnchorLock);
+}
+
+static BOOL GetRetroBarNetworkAnchorRect(RECT* outRect) {
+    if (!outRect || !g_IsRetroBarHost || !s_haveRetrobarAnchor) return FALSE;
+    EnterCriticalSection(&g_retrobarAnchorLock);
+    *outRect = s_retrobarNetworkAnchor;
+    BOOL valid = s_haveRetrobarAnchor && !IsRectEmpty(&s_retrobarNetworkAnchor);
+    LeaveCriticalSection(&g_retrobarAnchorLock);
+    return valid;
+}
+
+static BOOL GetNetworkIconScreenRect(RECT* outRect) {
+    if (!outRect) return FALSE;
+    SetRectEmpty(outRect);
+    // RetroBar: prefer the anchor captured from the actual icon click.
+    if (g_IsRetroBarHost && GetRetroBarNetworkAnchorRect(outRect))
+        return TRUE;
+    HWND hToolbar = FindPrimaryTrayToolbar();
+    if (hToolbar && QueryToolbarNetworkIconRect(hToolbar, outRect))
+        return TRUE;
+    if (s_haveLastNetworkIconRect) {
+        *outRect = s_lastNetworkIconScreenRect;
+        return TRUE;
+    }
+    // RetroBar fallback (e.g. flyout opened via the hotkey before any click):
+    // keep using the last known anchor rather than the corner default.
+    if (g_IsRetroBarHost && GetRetroBarNetworkAnchorRect(outRect))
+        return TRUE;
+    return FALSE;
+}
+
+static UINT GetDpiForScreenRect(const RECT* rc) {
+    if (!rc) return 96;
+    HMONITOR hMon = MonitorFromRect(rc, MONITOR_DEFAULTTONEAREST);
+    using GetDpiForMonitor_t = HRESULT (WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    static GetDpiForMonitor_t pGetDpiForMonitor = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+        if (!hShcore)
+            hShcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (hShcore)
+            pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+    }
+    if (pGetDpiForMonitor && hMon) {
+        UINT dpiX = 96, dpiY = 96;
+        if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY)) && dpiX >= 96)
+            return dpiX;
+    }
+    return 96;
 }
 
 // Cache netcenter.dll base+size for caller-module range checking (DrawTextW_Hook)
@@ -7079,7 +7573,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         if (!SafeToAccessUI()) break;
         PAINTSTRUCT ps;
         HDC hdcReal = BeginPaint(hwnd, &ps);
-
+        if (!hdcReal) break;  // 5.0.0: BeginPaint failed, nothing to paint
+        // 5.0.0: the whole frame is painted under try/catch. A C++ exception
+        // in any drawing helper (std::bad_alloc etc.) must never unwind
+        // through Explorer's message dispatch: log it, skip the frame, and
+        // still pair BeginPaint with EndPaint below.
+        try {
         if (!g_hdcMemPaint || g_memPaintWidth != WINDOW_WIDTH || g_memPaintHeight != WINDOW_HEIGHT) {
             if (g_hdcMemPaint) { DeleteDC(g_hdcMemPaint); g_hdcMemPaint = NULL; }
             if (g_hbmMemPaint) { DeleteObject(g_hbmMemPaint); g_hbmMemPaint = NULL; }
@@ -7114,13 +7613,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // Separator line between connection info and the WiFi list header label.
         // Drawn ABOVE the "Wireless Network Connection" label.
         int separatorY = showWifiList ? (WIFI_LABEL_Y - ScaleDpi(4)) : HEADER_HEIGHT;
-        HPEN hPenSep = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
+        HPEN hPenSep = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_GRAYTEXT) : (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, separatorY, NULL); LineTo(hdc, WINDOW_WIDTH, separatorY);
         SelectObject(hdc, hOldPen); DeleteObject(hPenSep);
         
-        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
-        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(80,80,85)  : RGB(255,255,255));
+        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
+        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_BTNHIGHLIGHT) : (g_Settings.theme == 1) ? RGB(80,80,85)  : RGB(255,255,255));
         SelectObject(hdc, hPenBevelDark);
         MoveToEx(hdc, 0, LIST_Y_END,     NULL); LineTo(hdc, WINDOW_WIDTH, LIST_Y_END);
         SelectObject(hdc, hPenBevelLight);
@@ -7157,7 +7656,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             
             DrawTextWithWrap(hdc, displayName, ScaleDpi(56), ScaleDpi(36), WINDOW_WIDTH - ScaleDpi(70), ScaleDpi(18));
             SelectObject(hdc, g_hFontNormal);
-            SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(200, 200, 200) : RGB(0, 0, 0));
+            SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : (g_Settings.theme == 1) ? RGB(200, 200, 200) : RGB(0, 0, 0));
             TextOutW(hdc, ScaleDpi(56), ScaleDpi(52), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
         } else {
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
@@ -7240,8 +7739,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
             if (g_IsHoveringRefresh && !drewRefreshHoverImage) {
                 RECT rcBtn = g_rcRefreshButton;
-                COLORREF refreshHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
-                COLORREF refreshHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
+                COLORREF refreshHoverBg = IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHT) : (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
+                COLORREF refreshHoverBorder = IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
                 HBRUSH hBrBg = CreateSolidBrush(refreshHoverBg);
                 HPEN   hPenBorder = CreatePen(PS_SOLID, 1, refreshHoverBorder);
                 HPEN   hOldPen = (HPEN)SelectObject(hdc, hPenBorder);
@@ -7313,8 +7812,8 @@ int wifiLabelY = separatorY + ScaleDpi(7);
 TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
             
             if (g_IsHoveringArrow) {
-                COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
-                COLORREF arrowHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
+                COLORREF arrowHoverBg = IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHT) : (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
+                COLORREF arrowHoverBorder = IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
                 HBRUSH hBrA  = CreateSolidBrush(arrowHoverBg);
                 HPEN   hPenA = CreatePen(PS_SOLID, 1, arrowHoverBorder);
                 HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
@@ -7328,7 +7827,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             if (g_Settings.theme == 1) {
                 // Dark theme: use Marlett font character (manual style)
                 SelectObject(hdc, g_hFontArrow);
-                SetTextColor(hdc, RGB(180, 180, 180));
+                SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : RGB(180, 180, 180));
                 LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
                 RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
                 DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
@@ -7409,7 +7908,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
                         SelectObject(hdc, g_hFontBold);
-                        SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+                        SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHTTEXT) : (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
                         RECT rcStatus;
                         rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
                         rcStatus.left   = rcRow.left + 80;
@@ -7460,20 +7959,26 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         
         if (g_bShowCheckboxLabel) {
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(255,255,255) : RGB(0,0,0));
+            SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : (g_Settings.theme == 1) ? RGB(255,255,255) : RGB(0,0,0));
             HFONT hOldFontChk = (HFONT)SelectObject(hdc, g_hFontCheckbox);
             DrawTextW(hdc, LOC(STR_CHK_CONNECT_AUTO), -1, &g_rcCheckboxLabel, DT_LEFT|DT_VCENTER|DT_SINGLELINE);
             SelectObject(hdc, hOldFontChk);
         }
         BitBlt(hdcReal, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, hdc, 0, 0, SRCCOPY);
         SelectObject(hdc, hOldBmp);
+        } catch (...) {
+            // Best-effort recovery only: a mid-paint exception may leak a GDI
+            // object for this single frame, but the flyout (and explorer.exe)
+            // survives and the next frame repaints cleanly.
+            Wh_Log(L"FlyoutWndProc: exception during WM_PAINT, frame skipped");
+        }
         EndPaint(hwnd, &ps);
         break;
     }
     case WM_DRAWITEM: {
         LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
         if (!pdis || pdis->CtlID != IDC_CONN_BUTTON) break;
-        if (g_Settings.theme != 1) break;
+        if (g_Settings.theme != 1 && !IsHighContrastActive()) break;
         BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
         BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
         BOOL isHovering = g_IsHoveringConnectButton && !isPressed && !isDisabled;
@@ -7485,8 +7990,13 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         if (w <= 0 || h <= 0) break;
         WCHAR szText[64];
         int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
+        bool hc = IsHighContrastActive();
         COLORREF bgColor;
-        if (isDisabled) {
+        if (hc) {
+            bgColor = isPressed ? GetSysColor(COLOR_BTNSHADOW) :
+                      isHovering ? GetSysColor(COLOR_HIGHLIGHT) :
+                      GetSysColor(COLOR_BTNFACE);
+        } else if (isDisabled) {
             bgColor = RGB(50, 50, 58);
         } else if (isPressed) {
             bgColor = RGB(35, 35, 45);
@@ -7496,10 +8006,10 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             bgColor = RGB(60, 60, 72);
         }
         
-        COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
-        COLORREF darkColor = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
-        COLORREF textColor = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
-        COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0,0,0);
+        COLORREF lightColor = hc ? GetSysColor(COLOR_BTNHIGHLIGHT) : (isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100)));
+        COLORREF darkColor  = hc ? GetSysColor(COLOR_BTNSHADOW) : (isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32)));
+        COLORREF textColor  = hc ? GetSysColor(hc && isHovering ? COLOR_HIGHLIGHTTEXT : COLOR_BTNTEXT) : (isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255));
+        COLORREF hoverBorder = hc ? GetSysColor(COLOR_WINDOWFRAME) : (isHovering ? RGB(90, 90, 120) : RGB(0,0,0));
         
         HDC hdcMem = CreateCompatibleDC(hdcReal);
         HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
@@ -7789,6 +8299,16 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         }
         break;
     }
+    case WM_SETTINGCHANGE:
+        // High Contrast toggled while the flyout is open (e.g. Left Alt +
+        // Left Shift + Print Screen). Force-refresh the HC cache and
+        // repaint immediately so the new system palette takes effect
+        // without waiting for the 2 s TTL to expire on the next timer tick.
+        if (wParam == SPI_SETHIGHCONTRAST) {
+            RefreshHighContrastNow();
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
+        break;
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) {
             if (!g_inPasswordPrompt) {
@@ -7852,9 +8372,101 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     Wh_Log(L"[Discovery] Network button NOT found via pnidui.dll range");
 }
 
+static BOOL IsCachedNetworkButton(HWND hToolbar, int btnIdx) {
+    if (btnIdx < 0) return FALSE;
+    TBBUTTON tb = {0};
+    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb))
+        return FALSE;
+    EnsureToolbarCache(hToolbar);
+    return (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId);
+}
+
+static void HandleNetworkIconClick() {
+    static DWORD lastClickTime = 0;
+    DWORD currentTime = GetTickCount();
+    if (currentTime - lastClickTime <= CLICK_DEBOUNCE_MS)
+        return;
+    lastClickTime = currentTime;
+    if (s_flyoutWasVisibleOnDown) {
+        if (g_hWndFlyout && IsWindow(g_hWndFlyout))
+            ShowWindow(g_hWndFlyout, SW_HIDE);
+        ClearKeyboardFocus();
+        return;
+    }
+    // Never run ToggleFlyoutWindow on the tray/UI thread: WLAN/COM work
+    // there freezes the taskbar. Always bounce to the hotkey/flyout thread.
+    DWORD tid = g_dwFlyoutOwnerThreadId ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
+    if (tid)
+        PostThreadMessageW(tid, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
+    else {
+        // 5.0.0: this fallback runs on the tray/UI thread; guard it so an
+        // exception can never unwind into Explorer's window procedure.
+        try {
+            ToggleFlyoutWindow();
+        } catch (...) {
+            Wh_Log(L"HandleNetworkIconClick: exception while toggling flyout, ignored");
+        }
+    }
+}
+
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
-        if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
+      // 5.0.0: nothing in this subclass may throw into Explorer's window
+      // procedure (an unwinding exception on the taskbar thread would kill
+      // explorer.exe), so the whole interception is wrapped.
+      try {
+        // Explorer is reordering the icon: do not swallow anything.
+        if (s_iconDragging) {
+            if (msg == WM_LBUTTONUP || msg == WM_RBUTTONDOWN)
+                ResetNetworkIconDragState();
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
+
+        if (s_iconLBtnDown && hWnd == s_iconDragToolbar) {
+            if (msg == WM_MOUSEMOVE && (wParam & MK_LBUTTON)) {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                int dragX = GetSystemMetrics(SM_CXDRAG);
+                int dragY = GetSystemMetrics(SM_CYDRAG);
+                if (abs(pt.x - s_iconLBtnDownPt.x) > dragX ||
+                    abs(pt.y - s_iconLBtnDownPt.y) > dragY) {
+                    // Hand the gesture to Explorer so the icon can be moved.
+                    s_iconDragging = TRUE;
+                    s_iconLBtnDown = FALSE;
+                    DefSubclassProc(hWnd, WM_LBUTTONDOWN, MK_LBUTTON,
+                                    MAKELPARAM(s_iconLBtnDownPt.x, s_iconLBtnDownPt.y));
+                    return DefSubclassProc(hWnd, WM_MOUSEMOVE, wParam, lParam);
+                }
+                return 0;
+            }
+            if (msg == WM_LBUTTONUP) {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                LRESULT btnIdx = SendMessageW(hWnd, TB_HITTEST, 0, (LPARAM)&pt);
+                BOOL onNetwork = IsCachedNetworkButton(hWnd, (int)btnIdx);
+                ResetNetworkIconDragState();
+                if (onNetwork) {
+                    // Anchor the completed click so the second press of a
+                    // double-click is claimed by the gesture lock below even
+                    // if the pointer drifted onto a neighbouring icon.
+                    s_lastNetworkClickTick = GetTickCount();
+                    s_lastNetworkClickPt = s_iconLBtnDownPt;
+                    HandleNetworkIconClick();
+                }
+                return 0;
+            }
+            if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+                // 5.0.0: WM_LBUTTONDBLCLK is included here. A double-click's
+                // second press can arrive while down-state from the first
+                // press is still tracked (its button-up was never delivered
+                // to us, e.g. after a capture change or a menu). Resetting on
+                // both messages keeps the state coherent and re-arms a fresh
+                // press below.
+                ResetNetworkIconDragState();
+                // Fall through and treat this as a fresh press.
+            }
+        }
+
+        if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE ||
+            msg == WM_LBUTTONUP) {
             POINT pt;
             if (msg == WM_MOUSEACTIVATE) {
                 DWORD dwPos = GetMessagePos();
@@ -7866,69 +8478,555 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 pt.y = GET_Y_LPARAM(lParam);
             }
             LRESULT btnIdx = SendMessageW(hWnd, TB_HITTEST, 0, (LPARAM)&pt);
-            if (btnIdx >= 0) {
-                TBBUTTON tb = {0};
-                if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
-                    int currentCount = (int)SendMessageW(hWnd, TB_BUTTONCOUNT, 0, 0);
-                    if (currentCount != g_ToolbarCache.buttonCount) {
-                        g_ToolbarCache.valid = FALSE;
-                    }
-                    if (!g_ToolbarCache.valid) {
-                        int detectedId = -1;
-                        DetectNetworkButtonId(hWnd, &detectedId);
-                        g_ToolbarCache.networkId = detectedId;
-                        g_ToolbarCache.buttonCount = currentCount;
-                        g_ToolbarCache.valid = (detectedId != -1);
-                    }
-                    if (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId) {
-                        // Record flyout visibility at button-DOWN time, before
-                        // WM_ACTIVATE can hide it. This prevents the race where
-                        // the flyout deactivates and hides itself, then the
-                        // button-UP handler sees it as hidden and reopens it.
-                        static BOOL s_flyoutWasVisibleOnDown = FALSE;
-                        if (msg == WM_LBUTTONDOWN) {
-                            s_flyoutWasVisibleOnDown = (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
-                        }
-                        if (msg == WM_LBUTTONUP) {
-                            static DWORD lastClickTime = 0;
-                            DWORD currentTime = GetTickCount();
-                            if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
-                                lastClickTime = currentTime;
-                                if (s_flyoutWasVisibleOnDown) {
-                                    // Flyout was open when user pressed -> close it
-                                    if (g_hWndFlyout && IsWindow(g_hWndFlyout))
-                                        ShowWindow(g_hWndFlyout, SW_HIDE);
-                                    ClearKeyboardFocus();
-                                } else {
-                                    // Flyout was closed -> open it
-                                    ToggleFlyoutWindow();
-                                }
-                            }
-                        }
-                        if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
-                        return 0;
+            BOOL directlyOnNetwork = IsCachedNetworkButton(hWnd, (int)btnIdx);
+            BOOL onNetwork = directlyOnNetwork;
+            if (!onNetwork &&
+                (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) &&
+                IsWithinDoubleClickOfLastNetworkClick(pt)) {
+                // 5.0.0 gesture lock: this press sits inside the system
+                // double-click window of the network click we just swallowed,
+                // so it is the second half of a double-click on the network
+                // icon even though it hit-tests onto a neighbour (drift).
+                // Claiming it here keeps both the press and its button-up
+                // away from Explorer, which would otherwise open the
+                // neighbour's flyout (e.g. the Action Center).
+                onNetwork = TRUE;
+                Wh_Log(L"Tray: claimed drifted double-click press for the network icon");
+            }
+            if (onNetwork) {
+                if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+                    // Record flyout visibility at button-DOWN time, before
+                    // WM_ACTIVATE can hide it. This prevents the race where
+                    // the flyout deactivates and hides itself, then the
+                    // button-UP handler sees it as hidden and reopens it.
+                    // 5.0.0: WM_LBUTTONDBLCLK records down-state too (it
+                    // previously only got swallowed), so the button-up that
+                    // follows a double-click is consumed by the tracked
+                    // branch above instead of leaking to Explorer as a stray
+                    // WM_LBUTTONUP.
+                    s_flyoutWasVisibleOnDown = (g_hWndFlyout && IsWindow(g_hWndFlyout) &&
+                                                IsWindowVisible(g_hWndFlyout));
+                    s_iconLBtnDownPt = pt;
+                    s_iconLBtnDown = TRUE;
+                    s_iconDragging = FALSE;
+                    s_iconDragToolbar = hWnd;
+                    RECT rcIcon = {};
+                    if (directlyOnNetwork &&
+                        SendMessageW(hWnd, TB_GETITEMRECT, (WPARAM)btnIdx, (LPARAM)&rcIcon) &&
+                        !IsRectEmpty(&rcIcon)) {
+                        MapWindowPoints(hWnd, NULL, (POINT*)&rcIcon, 2);
+                        s_lastNetworkIconScreenRect = rcIcon;
+                        s_haveLastNetworkIconRect = TRUE;
                     }
                 }
+                if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
+                // DOWN, DBLCLK and stray UPs over the network icon are all
+                // swallowed: Explorer must never see a mouse message pair
+                // over the network icon, or its native handler (or, after
+                // tray churn, a stale shell mapping to a neighbouring icon)
+                // can act on it and open the wrong flyout.
+                return 0;
             }
         }
+      } catch (...) {
+        // Never let an exception escape into the taskbar. Defer the message
+        // to Explorer rather than risking a bad state.
+        Wh_Log(L"ToolbarWndProc: unexpected exception (msg=%u), deferring to Explorer", msg);
+      }
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
-static bool IsExplorerProcess() {
+// ===========================================================================
+// RetroBar (ManagedShell) tray interception
+// ===========================================================================
+// RetroBar draws the notification area itself (WPF) and has no
+// ToolbarWindow32 in its process, so the Explorer-side toolbar subclass
+// cannot intercept its icon clicks. Instead, when RetroBar runs with
+// Explorer as the shell (its default/recommended setup) it enumerates
+// Explorer's notification toolbar read-only, cross-process, exactly like
+// ManagedShell's ExplorerTrayService does, and - on click - forwards the
+// interaction to the icon owner window (which lives in explorer.exe) with
+// SendNotifyMessageW:
+//
+//   SendNotifyMessageW(hIconWnd, nid.uCallbackMessage,
+//                      wParam = MAKELPARAM(cursorX, cursorY) (v4 icons),
+//                      lParam = mouseMsg | (nid.uID << 16)  (v4 icons))
+//
+// Hooking SendNotifyMessageW inside RetroBar.exe lets the mod:
+//   * identify the network icon up-front by scanning Explorer's toolbar
+//     cross-process and matching the owner window against pnidui.dll's
+//     address range inside the Explorer process (the same heuristic the
+//     Explorer-side code uses in-process);
+//   * swallow the left-press / select / double-click callbacks that would
+//     make explorer.exe open the modern network flyout;
+//   * toggle this classic flyout instead, anchored at the click point.
+// Hover/leave/right-click messages are passed through untouched, so
+// RetroBar's own tooltip and the native tray context menu keep working.
+namespace RetroBarTray {
+
+// Layout of the per-icon data Explorer's toolbar stores in TBBUTTON.dwData.
+// Only the leading HWND is needed to identify the icon; the remainder is
+// declared so ReadProcessMemory can fetch a fixed, correctly aligned block.
+#pragma pack(push, 8)
+struct RemoteTrayData {
+    HWND  hwnd;
+    UINT  uID;
+    UINT  uCallbackMessage;
+    DWORD dwState;
+    DWORD uVersion;
+    HICON hIcon;
+};
+#pragma pack(pop)
+
+static HWND    s_networkHwnd = NULL;
+static UINT    s_networkCallbackMsg = 0;
+static UINT    s_networkUid = 0;
+static BOOL    s_hookInstalled = FALSE;
+static DWORD   s_lastScanTick = 0;
+
+using SendNotifyMessageW_t = decltype(&SendNotifyMessageW);
+static SendNotifyMessageW_t SendNotifyMessageW_Orig = nullptr;
+
+// Read a fixed-size structure from another process with the same robust
+// pattern ManagedShell uses (OpenProcess -> VirtualAllocEx ->
+// SendMessage(toolbar) -> ReadProcessMemory). Returns TRUE on success.
+static BOOL ReadRemoteToolbarButton(HANDLE hProcess, HWND hToolbar,
+                                    int index, TBBUTTON* outTb,
+                                    RemoteTrayData* outData) {
+    ZeroMemory(outTb, sizeof(*outTb));
+    ZeroMemory(outData, sizeof(*outData));
+
+    SIZE_T tbSize = sizeof(TBBUTTON);
+    LPVOID remoteTb = VirtualAllocEx(hProcess, NULL, tbSize, MEM_COMMIT, PAGE_READWRITE);
+    if (!remoteTb) return FALSE;
+
+    BOOL ok = FALSE;
+    LRESULT r = SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)index, (LPARAM)remoteTb);
+    if (r) {
+        SIZE_T read = 0;
+        if (ReadProcessMemory(hProcess, remoteTb, outTb, tbSize, &read) && read >= sizeof(DWORD_PTR)) {
+            if (outTb->dwData) {
+                SIZE_T dataRead = 0;
+                ok = ReadProcessMemory(hProcess, (LPCVOID)outTb->dwData,
+                                       outData, sizeof(*outData), &dataRead) &&
+                     dataRead >= sizeof(HWND);
+            }
+        }
+    }
+    VirtualFreeEx(hProcess, remoteTb, 0, MEM_RELEASE);
+    return ok;
+}
+
+// Resolves a module's address range inside another process (used to verify
+// the network icon owner is backed by pnidui.dll inside explorer).
+static BOOL GetRemoteModuleRange(DWORD pid, PCWSTR moduleName,
+                                 BYTE** outBase, SIZE_T* outSize) {
+    if (outBase) *outBase = NULL;
+    if (outSize) *outSize = 0;
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (hSnap == INVALID_HANDLE_VALUE) return FALSE;
+    BOOL found = FALSE;
+    MODULEENTRY32W me = {};
+    me.dwSize = sizeof(me);
+    if (Module32FirstW(hSnap, &me)) {
+        do {
+            if (_wcsicmp(me.szModule, moduleName) == 0) {
+                if (outBase) *outBase = reinterpret_cast<BYTE*>(me.modBaseAddr);
+                if (outSize) *outSize = (SIZE_T)me.modBaseSize;
+                found = TRUE;
+                break;
+            }
+        } while (Module32NextW(hSnap, &me));
+    }
+    CloseHandle(hSnap);
+    return found;
+}
+
+// Cross-process mirror of the Explorer-side IsNetworkButton(): the network
+// icon owner window uses an "ATL:<hex>" class name whose hexadecimal suffix
+// is the vftable pointer of the pnidui.dll notify object, so it must fall
+// inside pnidui.dll's address range in the Explorer process.
+static BOOL IsRemoteNetworkIconWindow(HWND hIconWnd, BYTE* pniduiBase, SIZE_T pniduiSize) {
+    if (!hIconWnd || !IsWindow(hIconWnd) || !pniduiBase) return FALSE;
+    WCHAR cls[256] = {};
+    if (!GetClassNameW(hIconWnd, cls, ARRAYSIZE(cls))) return FALSE;
+    if (wcsncmp(cls, L"ATL:", 4) != 0) return FALSE;
+    const WCHAR* p = cls + 4;
+    ULONG_PTR addr = 0;
+    while (*p) {
+        WCHAR c = *p;
+        int digit;
+        if      (c >= L'0' && c <= L'9') digit = c - L'0';
+        else if (c >= L'A' && c <= L'F') digit = 10 + (c - L'A');
+        else if (c >= L'a' && c <= L'f') digit = 10 + (c - L'a');
+        else break;
+        addr = (addr << 4) | digit;
+        ++p;
+    }
+    return (addr >= (ULONG_PTR)pniduiBase &&
+            addr <  (ULONG_PTR)(pniduiBase + pniduiSize));
+}
+
+// Enumerate Explorer's notification toolbar in its own process and cache the
+// network icon's owner window / callback message / id. Read-only: no window
+// is subclassed and no message that changes state is sent.
+static BOOL ScanExplorerForNetworkIcon() {
+    // Explorer's taskbar may be shadowed by RetroBar's same-named decoy;
+    // pick the Shell_TrayWnd owned by an explorer.exe process.
+    struct FindExplorerTrayCtx { DWORD pid; HWND h; };
+    FindExplorerTrayCtx enumCtx = { 0, NULL };
+    EnumWindows([](HWND h, LPARAM lp) -> BOOL {
+        FindExplorerTrayCtx* e = reinterpret_cast<FindExplorerTrayCtx*>(lp);
+        WCHAR cls[64] = {};
+        if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"Shell_TrayWnd") == 0) {
+            WCHAR exe[MAX_PATH] = {};
+            DWORD pid = 0;
+            GetWindowThreadProcessId(h, &pid);
+            HANDLE hp = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hp) {
+                DWORD sz = MAX_PATH;
+                if (QueryFullProcessImageNameW(hp, 0, exe, &sz)) {
+                    WCHAR* name = wcsrchr(exe, L'\\');
+                    name = name ? name + 1 : exe;
+                    if (_wcsicmp(name, L"explorer.exe") == 0) { e->pid = pid; e->h = h; }
+                }
+                CloseHandle(hp);
+            }
+            if (e->h) return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&enumCtx));
+    HWND hTray = enumCtx.h;
+    if (!hTray) {
+        Wh_Log(L"[RetroBar] Explorer Shell_TrayWnd not found yet");
+        return FALSE;
+    }
+
+    HWND hNotify   = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
+    HWND hSysPager = hNotify ? FindWindowExW(hNotify, NULL, L"SysPager", NULL) : NULL;
+    HWND hToolbar  = hSysPager ? FindWindowExW(hSysPager, NULL, L"ToolbarWindow32", NULL) : NULL;
+    if (!hToolbar) {
+        Wh_Log(L"[RetroBar] Explorer ToolbarWindow32 not found");
+        return FALSE;
+    }
+
+    DWORD explorerPid = 0;
+    GetWindowThreadProcessId(hToolbar, &explorerPid);
+    HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ |
+                                  PROCESS_VM_WRITE | PROCESS_QUERY_LIMITED_INFORMATION,
+                                  FALSE, explorerPid);
+    if (!hProcess) {
+        Wh_Log(L"[RetroBar] OpenProcess(explorer, pid=%lu) failed: %lu", explorerPid, GetLastError());
+        return FALSE;
+    }
+
+    BYTE* pniduiBase = NULL;
+    SIZE_T pniduiSize = 0;
+    if (!GetRemoteModuleRange(explorerPid, L"pnidui.dll", &pniduiBase, &pniduiSize)) {
+        // On Windows 10 the network flyout icons live in pnidui.dll loaded
+        // inside explorer; ExplorerPatcher loads it there too. Missing it
+        // means we cannot safely distinguish the network icon from any other
+        // ATL-based tray icon, so skip this scan and retry later.
+        CloseHandle(hProcess);
+        Wh_Log(L"[RetroBar] pnidui.dll not found in explorer process");
+        return FALSE;
+    }
+
+    int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    BOOL found = FALSE;
+    for (int i = 0; i < count; i++) {
+        TBBUTTON tb = {};
+        RemoteTrayData data = {};
+        if (!ReadRemoteToolbarButton(hProcess, hToolbar, i, &tb, &data))
+            continue;
+        if (tb.fsState & TBSTATE_HIDDEN) continue;
+        if (tb.fsStyle & TBSTYLE_SEP) continue;
+        if (!data.hwnd) continue;
+        if (pniduiBase && !IsRemoteNetworkIconWindow(data.hwnd, pniduiBase, pniduiSize))
+            continue;
+        // When pnidui couldn't be resolved remotely we keep the
+        // ATL-class heuristic as the sole guard; IsRemoteNetworkIconWindow
+        // returns FALSE without a base, so reaching here requires the base.
+        s_networkHwnd = data.hwnd;
+        s_networkCallbackMsg = data.uCallbackMessage;
+        s_networkUid = data.uID;
+        found = TRUE;
+        Wh_Log(L"[RetroBar] Network icon found: hwnd=0x%p cbMsg=0x%x uid=%u ver=%u",
+               data.hwnd, data.uCallbackMessage, data.uID, data.uVersion);
+        break;
+    }
+    CloseHandle(hProcess);
+    if (!found)
+        Wh_Log(L"[RetroBar] Network icon not found in Explorer toolbar (%d buttons)", count);
+    return found;
+}
+
+static void EnsureIconScanned(BOOL force) {
+    DWORD now = GetTickCount();
+    BOOL haveValid = (s_networkHwnd && IsWindow(s_networkHwnd));
+    // While a valid icon is cached, throttle re-scans (each scan enumerates
+    // windows and reads another process's memory). Re-scan immediately when
+    // the cached owner window is gone (Explorer restart), when forced, or
+    // at a slow cadence otherwise.
+    if (haveValid && !force && (now - s_lastScanTick < 5000))
+        return;
+    if (!haveValid && !force && (now - s_lastScanTick < 1500))
+        return;
+    s_lastScanTick = now;
+    if (s_networkHwnd && !IsWindow(s_networkHwnd))
+        s_networkHwnd = NULL;
+    ScanExplorerForNetworkIcon();
+}
+
+// Visibility of our flyout captured on the RetroBar UI thread at the moment
+// the tray icon's button-DOWN arrives. Reading it here (instead of on the
+// flyout thread at processing time) removes the open/close race: the desired
+// end state is decided while the gesture is happening, before WM_ACTIVATE or
+// a still-in-progress first open can change what IsWindowVisible() reports.
+static BOOL s_flyoutVisibleAtIconDown = FALSE;
+
+static BOOL IsOurFlyoutCurrentlyVisible() {
+    return (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
+               ? TRUE
+               : FALSE;
+}
+
+// Ask the dedicated hotkey/flyout thread (never RetroBar's WPF UI thread,
+// where WLAN/COM work would freeze the taskbar) to put the flyout in a
+// concrete state. `show` is TRUE to open / FALSE to close. Posting an
+// explicit command - rather than a blind "toggle" - is what makes two rapid
+// physical clicks deterministic (open, then close): even if the first open is
+// still running its WLAN/COM work when the second click lands, the second
+// command is an unambiguous close, not a read-then-flip that can reopen.
+static void RequestSetFlyoutVisible(POINT clickPt, BOOL show) {
+    SetRetroBarNetworkAnchor(clickPt);
+    DWORD tid = g_dwFlyoutOwnerThreadId ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
+    WPARAM cmd = show ? FLYOUT_CMD_SHOW : FLYOUT_CMD_HIDE;
+    if (tid) {
+        PostThreadMessageW(tid, WM_TOGGLE_FLYOUT_REQUEST, cmd, 0);
+    } else {
+        // Degenerate fallback (no owner/hotkey thread yet): run inline, but
+        // never let an exception unwind into RetroBar's WPF code.
+        try {
+            if (show) ShowFlyoutWindow();
+            else      HideFlyoutWindow();
+        } catch (...) {
+            Wh_Log(L"[RetroBar] exception while setting flyout visibility, ignored");
+        }
+    }
+}
+
+static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
+                                            WPARAM wParam, LPARAM lParam) {
+    // Fast path: the vast majority of SendNotifyMessageW calls are not tray
+    // callbacks.
+    if (hWnd && Msg && Msg == s_networkCallbackMsg && s_networkHwnd == hWnd) {
+        WORD lowEvent = LOWORD(lParam);
+        // For a notify-icon v4 icon ManagedShell delivers the activation as
+        // NIN_SELECT (mouse) / NIN_KEYSELECT (keyboard) - exactly ONE per
+        // physical click - and *also* echoes the legacy WM_LBUTTONDOWN/UP/
+        // DBLCLK messages. Acting on the echoes as well is what used to fire
+        // two toggles per click; we therefore swallow the echoes but act only
+        // on the NIN_*SELECT activation. WM_CONTEXTMENU / WM_RBUTTONUP
+        // (native tray menu) and WM_MOUSE*/WM_MOUSEHOVER/NIN_POPUP*
+        // (RetroBar tooltip) are passed through untouched.
+#ifndef NIN_SELECT
+#define NIN_SELECT (WM_USER + 0)
+#endif
+#ifndef NIN_KEYSELECT
+#define NIN_KEYSELECT (WM_USER + 3)
+#endif
+        BOOL swallowActivation = (lowEvent == WM_LBUTTONDOWN ||
+                                  lowEvent == WM_LBUTTONUP ||
+                                  lowEvent == WM_LBUTTONDBLCLK ||
+                                  lowEvent == NIN_SELECT ||
+                                  lowEvent == NIN_KEYSELECT);
+        if (swallowActivation && g_Settings.interceptNativeFlyout) {
+            try {
+                // Record the flyout's real state at button-DOWN time, before
+                // any WM_ACTIVATE / open can change it. This mirrors the
+                // Explorer-side s_flyoutWasVisibleOnDown handling.
+                if (lowEvent == WM_LBUTTONDOWN || lowEvent == WM_LBUTTONDBLCLK)
+                    s_flyoutVisibleAtIconDown = IsOurFlyoutCurrentlyVisible();
+
+                POINT pt = { GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam) };
+                // v3 icons pass the id in wParam and no coordinates; use the
+                // cursor position in that case.
+                if (pt.x == 0 && pt.y == 0)
+                    GetCursorPos(&pt);
+                EnsureIconScanned(FALSE);
+
+                // Act on the single v4 activation edge. For the mouse the
+                // desired state is the opposite of what was visible at DOWN;
+                // for the keyboard there is no DOWN, so use live visibility.
+                if (lowEvent == NIN_SELECT) {
+                    RequestSetFlyoutVisible(pt, !s_flyoutVisibleAtIconDown);
+                } else if (lowEvent == NIN_KEYSELECT) {
+                    RequestSetFlyoutVisible(pt, !IsOurFlyoutCurrentlyVisible());
+                }
+            } catch (...) {
+                // Never let an exception unwind into RetroBar's WPF code.
+                Wh_Log(L"[RetroBar] exception in tray activation hook, ignored");
+            }
+            return TRUE; // swallow: explorer.exe must not open the modern flyout
+        }
+    }
+    // Opportunistically keep the network icon cache fresh without scanning
+    // on every unrelated message (throttled inside EnsureIconScanned).
+    if (Msg >= WM_USER && Msg < 0xC000)
+        EnsureIconScanned(FALSE);
+    return SendNotifyMessageW_Orig ? SendNotifyMessageW_Orig(hWnd, Msg, wParam, lParam)
+                                   : TRUE;
+}
+
+static BOOL IsInterceptionInstalled() {
+    return s_hookInstalled;
+}
+
+static void ClearCachedIcon() {
+    s_networkHwnd = NULL;
+    s_networkCallbackMsg = 0;
+    s_networkUid = 0;
+    s_lastScanTick = 0;
+}
+
+static BOOL InstallInterception() {
+    if (s_hookInstalled) return TRUE;
+    // Seed the icon cache before hooking so the very first click is caught.
+    EnsureIconScanned(TRUE);
+    if (WindhawkUtils::SetFunctionHook(SendNotifyMessageW, SendNotifyMessageW_Hook,
+                                       &SendNotifyMessageW_Orig)) {
+        s_hookInstalled = TRUE;
+        Wh_Log(L"[RetroBar] SendNotifyMessageW hook installed");
+        return TRUE;
+    }
+    Wh_Log(L"[RetroBar] Failed to hook SendNotifyMessageW");
+    return FALSE;
+}
+
+static void RemoveInterception() {
+    if (s_hookInstalled) {
+        // Wh_RemoveFunctionHook registers the removal; Windhawk applies it
+        // as part of the unload hook operations. It intentionally does not
+        // free the trampoline in-place, so SendNotifyMessageW_Orig is not
+        // reset (the mod image is being unmapped anyway).
+        Wh_RemoveFunctionHook(reinterpret_cast<void*>(&SendNotifyMessageW));
+        s_hookInstalled = FALSE;
+    }
+    s_networkHwnd = NULL;
+    s_networkCallbackMsg = 0;
+    s_networkUid = 0;
+}
+
+// Called periodically from the hotkey thread's message loop to (re)scan when
+// the icon is missing (Explorer restart, taskbar created late, etc.).
+static void TickRefresh() {
+    if (!s_hookInstalled) {
+        InstallInterception();
+        return;
+    }
+    if (!s_networkHwnd || !IsWindow(s_networkHwnd))
+        EnsureIconScanned(TRUE);
+}
+
+} // namespace RetroBarTray
+
+static bool IsHostProcessNamed(const WCHAR* exeName) {
     WCHAR exePath[MAX_PATH] = {};
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
     WCHAR* name = wcsrchr(exePath, L'\\');
     name = name ? name + 1 : exePath;
-    return _wcsicmp(name, L"explorer.exe") == 0;
+    return _wcsicmp(name, exeName) == 0;
+}
+
+static bool IsExplorerProcess() {
+    return IsHostProcessNamed(L"explorer.exe");
+}
+
+static bool IsRetroBarProcess() {
+    return IsHostProcessNamed(L"retrobar.exe");
+}
+
+// Shell replacements built on the ManagedShell library (e.g. RetroBar)
+// create their own hidden top-level windows using the exact same window
+// class names Explorer uses ("Shell_TrayWnd", "TrayNotifyWnd") so they can
+// intercept the shell tray protocol themselves; the actual notify icons are
+// then owned/drawn by that process (WPF), not by a native
+// SysPager/ToolbarWindow32. FindWindowW(..., NULL) searches all top-level
+// windows system-wide, so on a machine running such a shell replacement it
+// can return that decoy window instead of Explorer's own taskbar. Since this
+// function only runs inside explorer.exe (see IsExplorerProcess() above),
+// any Shell_TrayWnd not owned by *this* process is foreign and must not be
+// treated as Explorer's taskbar - walking into it would silently look for
+// children that don't exist there (or, worse, that mean something else).
+// This check only rejects that foreign-window case; a normal Explorer
+// taskbar is completely unaffected.
+static BOOL IsWindowOwnedByCurrentProcess(HWND hWnd) {
+    if (!hWnd) return FALSE;
+    DWORD dwPid = 0;
+    GetWindowThreadProcessId(hWnd, &dwPid);
+    return dwPid == GetCurrentProcessId();
+}
+
+struct FindOwnedTrayData {
+    DWORD pid;
+    HWND  hWnd;
+};
+
+// ManagedShell-based shell replacements (RetroBar) create their own hidden
+// top-level window using the exact same "Shell_TrayWnd" class name, and
+// FindWindowW returns whichever instance sits first in the top-most Z order.
+// Enumerate every top-level window of that class and keep the one owned by
+// THIS process: inside explorer.exe that is always Explorer's own taskbar,
+// never RetroBar's decoy. This makes the Explorer-side tray interception work
+// even while RetroBar is running, whereas FindWindowW could previously hand
+// back the foreign window and make the mod log "not supported".
+static BOOL CALLBACK FindOwnedTrayWndEnumProc(HWND hWnd, LPARAM lParam) {
+    FindOwnedTrayData* data = reinterpret_cast<FindOwnedTrayData*>(lParam);
+    WCHAR cls[64] = {};
+    if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"Shell_TrayWnd") == 0) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == data->pid) {
+            data->hWnd = hWnd;
+            return FALSE; // stop: prefer the current process's own taskbar
+        }
+    }
+    return TRUE;
+}
+
+static HWND FindCurrentProcessTrayWnd() {
+    FindOwnedTrayData data = { GetCurrentProcessId(), NULL };
+    EnumWindows(FindOwnedTrayWndEnumProc, reinterpret_cast<LPARAM>(&data));
+    return data.hWnd;
 }
 
 static BOOL InstallTrayInterceptionInternal() {
+    // RetroBar renders the notification area itself and has no
+    // ToolbarWindow32 to subclass; its tray interception lives in the
+    // RetroBarTray namespace (SendNotifyMessageW hook).
+    if (g_IsRetroBarHost) {
+        return RetroBarTray::InstallInterception();
+    }
     if (!IsExplorerProcess()) return TRUE;
     InitPniduiInfo();
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    // FindWindowW can return RetroBar's same-named decoy window; enumerate
+    // to the Shell_TrayWnd owned by THIS (explorer) process instead.
+    HWND hTray = FindCurrentProcessTrayWnd();
+    if (!hTray) {
+        // Fall back to the classic lookup so the "not ready yet" logging
+        // path stays accurate on systems without any shell replacement.
+        hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    }
     if (!hTray) {
         Wh_Log(L"Shell_TrayWnd not found");
+        return FALSE;
+    }
+    if (!IsWindowOwnedByCurrentProcess(hTray)) {
+        // No taskbar window owned by explorer.exe is present yet (e.g. the
+        // shell is still starting). Treated as "not ready, retry later".
+        Wh_Log(L"Shell_TrayWnd not owned by explorer.exe yet - retrying later");
         return FALSE;
     }
     HWND hNotify  = FindWindowExW(hTray,    NULL, L"TrayNotifyWnd",   NULL);
@@ -7958,6 +9056,11 @@ BOOL InstallTrayInterception() {
 }
 
 void RemoveTrayInterception() {
+    if (g_IsRetroBarHost) {
+        RetroBarTray::RemoveInterception();
+        return;
+    }
+    ResetNetworkIconDragState();
     if (G_hSubclassedToolbar) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
         G_hSubclassedToolbar = nullptr;
@@ -7977,12 +9080,18 @@ void ToggleFlyoutWindow() {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
         return;
     }
-    EnterCriticalSection(&g_Ctx.csLock);
+    // 5.0.0: CsGuard replaces the manual Enter/LeaveCriticalSection pair.
+    // Every early return below used to have to remember to leave the lock;
+    // the guard releases it on all paths (including exceptions), and the two
+    // spots that must drop the lock before continuing call unlock().
+    CsGuard csGuard(g_Ctx.csLock);
     if (!g_Ctx.isUninitializing) {
         if (!g_hWndFlyout || !IsWindow(g_hWndFlyout)) {
-            HDC hScreenDC = GetDC(NULL);
-            UINT dpi = hScreenDC ? (UINT)GetDeviceCaps(hScreenDC, LOGPIXELSX) : 96;
-            if (hScreenDC) ReleaseDC(NULL, hScreenDC);
+            UINT dpi = 96;
+            {
+                DcGuard dcScreen(NULL);
+                if (dcScreen) dpi = (UINT)GetDeviceCaps(dcScreen, LOGPIXELSX);
+            }
             RecalcDpiMetrics(dpi);
             HINSTANCE hInst = HINST_THISCOMPONENT;
             WNDCLASSW wc = {0};
@@ -8000,7 +9109,6 @@ void ToggleFlyoutWindow() {
                     g_flyoutClassRegistered = true;
                 } else {
                     Wh_Log(L"ToggleFlyoutWindow: RegisterClassW failed (%lu)", GetLastError());
-                    LeaveCriticalSection(&g_Ctx.csLock);
                     return;
                 }
             }
@@ -8014,7 +9122,6 @@ void ToggleFlyoutWindow() {
                 NULL, NULL, hInst, NULL);
             if (!g_hWndFlyout) {
                 Wh_Log(L"ToggleFlyoutWindow: CreateWindowExW failed (%lu)", GetLastError());
-                LeaveCriticalSection(&g_Ctx.csLock);
                 return;
             }
             g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
@@ -8023,7 +9130,7 @@ void ToggleFlyoutWindow() {
             ClearKeyboardFocus();
             // Hiding can synchronously transfer activation. Do not let the
             // recipient of that activation block behind csLock.
-            LeaveCriticalSection(&g_Ctx.csLock);
+            csGuard.unlock();
             ShowWindow(g_hWndFlyout, SW_HIDE);
         } else {
             if (!g_Ctx.hWlanClient) {
@@ -8040,7 +9147,10 @@ void ToggleFlyoutWindow() {
             DetermineLocale();
             LoadSettings();
             ApplyNativeControlsTheme();
-            UINT dpi = GetDpiForWindow(g_hWndFlyout);
+            RECT rcIconForDpi = {};
+            UINT dpi = GetNetworkIconScreenRect(&rcIconForDpi)
+                ? GetDpiForScreenRect(&rcIconForDpi)
+                : GetDpiForWindow(g_hWndFlyout);
             if (dpi < 96) dpi = 96;
             if (dpi != g_dpi) RecalcDpiMetrics(dpi);
             g_SelectedRowIndex = g_HoveredRowIndex = -1;
@@ -8051,7 +9161,7 @@ void ToggleFlyoutWindow() {
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
             
-            LeaveCriticalSection(&g_Ctx.csLock);
+            csGuard.unlock();
             
             // This runs before ShowWindow below, so the window isn't
             // IsWindowVisible() yet - force detection here instead of
@@ -8070,8 +9180,57 @@ void ToggleFlyoutWindow() {
             SetForegroundWindow(g_hWndFlyout);
             InvalidateRect(g_hWndFlyout,NULL,TRUE);
         }
-    } else {
-        LeaveCriticalSection(&g_Ctx.csLock);
+    }
+    // (5.0.0) the CsGuard releases the lock here on the remaining paths.
+}
+
+// Explicit, idempotent "show" used by the RetroBar path. Unlike a blind
+// ToggleFlyoutWindow(), this never re-hides a flyout that is already coming
+// up, which is what made two fast clicks reopen it instead of opening once
+// and closing on the second click. Safe to call from any thread: if the
+// flyout lives on another thread the request is marshalled there; if no
+// owner thread exists yet, it bounces to the hotkey thread.
+void ShowFlyoutWindow(void) {
+    DWORD dwCurrentThreadId = GetCurrentThreadId();
+    BOOL flyoutAlreadyExists = (g_hWndFlyout && IsWindow(g_hWndFlyout));
+    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
+    if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
+        PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST,
+                           FLYOUT_CMD_SHOW, 0);
+        return;
+    }
+    CsGuard csGuard(g_Ctx.csLock);
+    if (g_Ctx.isUninitializing)
+        return;
+    // Already up (or coming up)? Nothing to do - idempotent.
+    if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
+        return;
+    // Otherwise run exactly the normal show path of the toggle. Temporarily
+    // drop any visibility state so ToggleFlyoutWindow takes its show branch.
+    csGuard.unlock();
+    ToggleFlyoutWindow();
+}
+
+// Explicit "hide" used by the RetroBar path. Marries up with ShowFlyoutWindow
+// so a pair of rapid clicks deterministically produces open-then-close.
+void HideFlyoutWindow(void) {
+    DWORD dwCurrentThreadId = GetCurrentThreadId();
+    BOOL flyoutAlreadyExists = (g_hWndFlyout && IsWindow(g_hWndFlyout));
+    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
+    if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
+        PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST,
+                           FLYOUT_CMD_HIDE, 0);
+        return;
+    }
+    CsGuard csGuard(g_Ctx.csLock);
+    if (g_Ctx.isUninitializing)
+        return;
+    if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout)) {
+        ClearKeyboardFocus();
+        // Hiding can synchronously transfer activation; drop the lock so the
+        // recipient of that activation can never block behind csLock.
+        csGuard.unlock();
+        ShowWindow(g_hWndFlyout, SW_HIDE);
     }
 }
 
@@ -8110,27 +9269,69 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     // Center icon when the page was opened via Win+R / the native context
     // menu without the flyout.
     RefreshNetworkData(/*forceDetection=*/TRUE);
-    auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
+    // Only one host should own the global Ctrl+H hotkey. Explorer is always
+    // running in every supported RetroBar configuration, so leave the
+    // hotkey to the explorer.exe instance and skip registration here.
+    const BOOL hotkeyOwnedByThisHost = !g_IsRetroBarHost;
+    auto UpdateHotkeyRegistration = [&hotkeyOwnedByThisHost](BOOL shouldRegister) {
+        if (!hotkeyOwnedByThisHost) return;
         UnregisterHotKey(NULL, HOTKEY_ID);
         if (shouldRegister) RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H');
     };
-    
+
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-    BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL);
-    UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
+    BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL) ||
+                             (g_IsRetroBarHost && RetroBarTray::IsInterceptionInstalled());
+    // Explorer: one-shot retry until the toolbar exists, then stop.
+    // RetroBar: keep the timer running so the network icon is re-scanned
+    // periodically (Explorer restarting or its taskbar coming up late would
+    // otherwise leave the hook without a valid icon to match).
+    UINT_PTR trayRetryTimer = trayAlreadyHooked
+        ? (g_IsRetroBarHost ? SetTimer(NULL, 0, 3000, NULL) : 0)
+        : SetTimer(NULL, 0, 1500, NULL);
     MSG msg = {0};
     while (GetMessageW(&msg, NULL, 0, 0)) {
         if (trayRetryTimer && msg.message == WM_TIMER && msg.wParam == trayRetryTimer) {
-            if (ctx->isUninitializing || InstallTrayInterceptionInternal()) {
+            if (g_IsRetroBarHost) {
+                RetroBarTray::TickRefresh();
+            } else if (ctx->isUninitializing || InstallTrayInterceptionInternal()) {
                 KillTimer(NULL, trayRetryTimer);
                 trayRetryTimer = 0;
             }
         }
-        if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing)
-            ToggleFlyoutWindow();
-        if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
-            ToggleFlyoutWindow();
+        if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing) {
+            // 5.0.0: never let a toggle exception terminate this thread (the
+            // flyout would stop responding to the hotkey and tray clicks).
+            try {
+                ToggleFlyoutWindow();
+            } catch (...) {
+                Wh_Log(L"HotkeyThreadProc: exception while toggling flyout, ignored");
+            }
+        }
+        if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing) {
+            // The RetroBar path posts an explicit show/hide (see
+            // FLYOUT_CMD_*) computed from the flyout's real visibility at
+            // click time; the hotkey and the Explorer path post a blind
+            // toggle (wParam == FLYOUT_CMD_TOGGLE).
+            try {
+                if (msg.wParam == FLYOUT_CMD_SHOW)
+                    ShowFlyoutWindow();
+                else if (msg.wParam == FLYOUT_CMD_HIDE)
+                    HideFlyoutWindow();
+                else
+                    ToggleFlyoutWindow();
+            } catch (...) {
+                Wh_Log(L"HotkeyThreadProc: exception while toggling flyout, ignored");
+            }
+        }
+        // High Contrast toggled while the flyout is not yet open:
+        // refresh the cache so the next paint uses the correct palette.
+        if (msg.message == WM_SETTINGCHANGE && msg.wParam == SPI_SETHIGHCONTRAST) {
+            RefreshHighContrastNow();
+            if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
+                InvalidateRect(g_hWndFlyout, NULL, TRUE);
+        }
         if (msg.message == WM_UPDATE_HOTKEY && !ctx->isUninitializing)
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == WM_UPDATE_REFRESH_TIMER && !ctx->isUninitializing) {
@@ -8145,6 +9346,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             }
         }
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
+            if (g_IsRetroBarHost) {
+                // Explorer (re)started its taskbar: drop the cached network
+                // icon and let the periodic timer re-scan and re-hook.
+                RetroBarTray::ClearCachedIcon();
+                RetroBarTray::TickRefresh();
+                TranslateMessage(&msg); DispatchMessageW(&msg);
+                continue;
+            }
             InvalidateToolbarCache();
             g_pniduiBase = NULL;
             g_pniduiEnd  = NULL;
@@ -8396,6 +9605,15 @@ static const LangPack kLang[] = {
      L"Vizualizare hart\u0103 re\u021Bea",
      L"Vizualiza\u021Bi o hart\u0103 a re\u021Belei \u0219i dispozitivelor conectate.",
      L"Vizualizare hart\u0103 complet\u0103", L"Re\u021Bea", L"Internet"},
+    {0x1f, L"Bir A\u011fa Ba\u011flan",
+     L"Kullan\u0131labilir bir kablosuz, VPN veya \u00e7evirmeli a\u011fa ba\u011flan\u0131n.",
+     L"Ev Grubu ve Payla\u015f\u0131m Se\u00e7eneklerini Se\u00e7in",
+     L"Ev grubu ayarlar\u0131n\u0131z\u0131 ve a\u011f payla\u015f\u0131m tercihlerinizi g\u00f6r\u00fcnt\u00fcleyin veya de\u011fi\u015ftirin.",
+     L"Geli\u015fmi\u015f Payla\u015f\u0131m Ayarlar\u0131",
+     L"Geli\u015fmi\u015f a\u011f payla\u015f\u0131m ayarlar\u0131n\u0131 yap\u0131land\u0131r\u0131n.",
+     L"A\u011f Haritas\u0131n\u0131 G\u00f6r\u00fcnt\u00fcle",
+     L"A\u011f\u0131n\u0131z\u0131n ve ba\u011fl\u0131 ayg\u0131tlar\u0131n haritas\u0131n\u0131 g\u00f6r\u00fcn.",
+     L"Tam haritay\u0131 g\u00f6r\u00fcnt\u00fcle", L"A\u011f", L"\u0130nternet"},
 };
 
 static const LangPack* GetLang() {
@@ -8411,6 +9629,7 @@ static const LangPack* GetLang() {
         case 8: ui = 0x15; break;  // Polish
         case 9: ui = 0x13; break;  // Dutch
         case 10: ui = 0x18; break; // Romanian
+        case 11: ui = 0x1f; break; // Turkish
         default: ui = PRIMARYLANGID(GetUserDefaultUILanguage()); break;
     }
     for (const auto& p : kLang)
@@ -8675,6 +9894,94 @@ static std::wstring GetConnectedNetworkName() {
 // that point in the file) needs to check it.
 extern thread_local bool g_ncForceFreshConnectivity;
 
+// ---------------------------------------------------------------------------
+// Conservative shell/CLSID validation
+// ---------------------------------------------------------------------------
+// A stale HKCR\\CLSID entry is not enough: modern Windows can retain the
+// registration after the underlying Control Panel applet or shell handler has
+// been removed.  Validate both the registry entry and the shell parsing name
+// before emitting a clickable link.  This follows the defensive approach used
+// by legacy Control Panel restoration mods: never expose a link that cannot be
+// resolved by the current system.
+static bool RegistryClsidExists(PCWSTR clsid) {
+    if (!clsid || !clsid[0])
+        return false;
+
+    WCHAR keyName[160] = {0};
+    if (FAILED(StringCchPrintfW(keyName, ARRAYSIZE(keyName),
+                                L"CLSID\\%s", clsid))) {
+        return false;
+    }
+
+    HKEY hKey = NULL;
+    LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, keyName, 0,
+                                   KEY_READ, &hKey);
+    if (status != ERROR_SUCCESS)
+        return false;
+
+    RegCloseKey(hKey);
+    return true;
+}
+
+static bool ShellClsidIsUsable(PCWSTR clsid) {
+    if (!RegistryClsidExists(clsid))
+        return false;
+
+    WCHAR parsingName[192] = {0};
+    if (FAILED(StringCchPrintfW(parsingName, ARRAYSIZE(parsingName),
+                                L"shell:::%s", clsid))) {
+        return false;
+    }
+
+    // SHParseDisplayName is stronger than a registry-only test: it verifies
+    // that the current shell can actually resolve the namespace object.
+    LPITEMIDLIST pidl = NULL;
+    HRESULT hr = SHParseDisplayName(parsingName, NULL, &pidl, 0, NULL);
+    if (pidl)
+        CoTaskMemFree(pidl);
+    return SUCCEEDED(hr);
+}
+
+static bool HomeGroupAppletIsUsable() {
+    static const WCHAR kHomeGroupClsid[] =
+        L"{67CA7650-96E6-4FDD-BB43-A8E774F73A57}";
+
+    // hgcpl.dll is the actual HomeGroup Control Panel applet.  Its CLSID can
+    // survive as a stale registration after HomeGroup was removed.
+    if (!ShellClsidIsUsable(kHomeGroupClsid))
+        return false;
+
+    WCHAR systemDir[MAX_PATH] = {0};
+    UINT systemDirLen = GetSystemDirectoryW(systemDir, ARRAYSIZE(systemDir));
+    if (systemDirLen == 0 || systemDirLen >= ARRAYSIZE(systemDir))
+        return false;
+
+    WCHAR homeGroupDll[MAX_PATH] = {0};
+    if (FAILED(StringCchPrintfW(homeGroupDll, ARRAYSIZE(homeGroupDll),
+                                L"%s\\hgcpl.dll", systemDir))) {
+        return false;
+    }
+
+    return GetFileAttributesW(homeGroupDll) != INVALID_FILE_ATTRIBUTES;
+}
+
+static PCWSTR GetNetworkMapShellParams() {
+    static const WCHAR kModernNetworkClsid[] =
+        L"{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}";
+    static const WCHAR kLegacyNetworkClsid[] =
+        L"{208D2C60-3AEA-1069-A2D7-08002B30309D}";
+
+    // Prefer the modern Network folder, but retain the Windows 7 alias as a
+    // real fallback for systems where only the legacy registration exists.
+    if (ShellClsidIsUsable(kModernNetworkClsid))
+        return L"/e,::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}";
+    if (ShellClsidIsUsable(kLegacyNetworkClsid))
+        return L"/e,::{208D2C60-3AEA-1069-A2D7-08002B30309D}";
+
+    Wh_Log(L"[NetMap] No usable Network-folder CLSID was found; link omitted");
+    return nullptr;
+}
+
 static std::wstring NetworkMapVisual() {
     // DirectUI's valid endellipsis layout is left-aligned. In privacy mode,
     // two leading spaces visually center the short "PC" label beneath its icon
@@ -8701,23 +10008,30 @@ static std::wstring NetworkMapVisual() {
     isOnline = s_cachedConnected;
 
     // Windows 7's "View full map" link. The original Network Map feature
-    // was removed from modern Windows, therefore open the useful native
-    // Network shell folder (CLSID 208D2C60-3AEA-1069-A2D7-08002B30309D).
+    // was removed from modern Windows, therefore open the native Network
+    // shell folder. F02C1A0D is the Network-folder CLSID that remains usable
+    // on Windows 7, 10 and 11; 208D2C60 is the older Network Places alias
+    // and can fail on modern builds.
     const wchar_t* fullMapText = GetLang()->fullMap;
     std::wstring xml;
 
     // Put the link in its own, full-width top row. This lets it stay at the
     // upper right without reserving horizontal space in the PC->Network->
     // Internet flow layout (which must remain on one line).
-    xml += L"<element layoutpos=\"top\" layout=\"borderlayout()\" ";
-    xml += L"padding=\"rect(0rp,0rp,10rp,0rp)\">";
-    xml += L"<NavigateButton layoutpos=\"right\" layout=\"flowlayout()\" ";
-    xml += L"shellexecute=\"%SystemRoot%\\explorer.exe\" ";
-    xml += L"shellexecuteparams=\"shell:::{208D2C60-3AEA-1069-A2D7-08002B30309D}\">";
-    xml += L"<button sheet=\"cp_style\" class=\"cp_content_link\" cursor=\"hand\" ";
-    xml += L"active=\"mouse\" content=\"" + Esc(fullMapText) + L"\"/>";
-    xml += L"</NavigateButton>";
-    xml += L"</element>";
+    // Do not emit a clickable link when neither Network CLSID resolves.
+    // That is preferable to showing a link which opens an Explorer error.
+    PCWSTR fullMapParams = GetNetworkMapShellParams();
+    if (fullMapParams) {
+        xml += L"<element layoutpos=\"top\" layout=\"borderlayout()\" ";
+        xml += L"padding=\"rect(0rp,0rp,10rp,0rp)\">";
+        xml += L"<NavigateButton layoutpos=\"right\" layout=\"flowlayout()\" ";
+        xml += L"shellexecute=\"%SystemRoot%\\explorer.exe\" ";
+        xml += L"shellexecuteparams=\"" + std::wstring(fullMapParams) + L"\">";
+        xml += L"<button sheet=\"cp_style\" class=\"cp_content_link\" cursor=\"hand\" ";
+        xml += L"active=\"mouse\" content=\"" + Esc(fullMapText) + L"\"/>";
+        xml += L"</NavigateButton>";
+        xml += L"</element>";
+    }
 
     // Move the complete network-map group 10% to the left.
     // 96rp - 10% = 86.4rp; use 86rp so it remains DPI-scalable.
@@ -8908,31 +10222,40 @@ static std::wstring Patch(const std::wstring& in) {
 
     const LangPack* L = GetLang();
     std::wstring mid;
-    if (g_addConnect)
-        mid += Link(L->cTitle, L->cDesc, L"%SystemRoot%\\explorer.exe",
-                    L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", 22);
-if (g_addHomegroup) {
-    // Check if HomeGroup exists on the system (removed in Windows 10 1803+)
-    HKEY hKey;
-    bool homeGroupExists = (RegOpenKeyExW(
-        HKEY_CLASSES_ROOT,
-        L"CLSID\\{67CA7650-96E6-4FDD-BB43-A8E774F73A57}",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS);
-    if (homeGroupExists) {
-        RegCloseKey(hKey);
-        // Windows 7 / Windows 10 pre-1803: use HomeGroup
-        mid += Link(L->hTitle, L->hDesc, L"%SystemRoot%\\explorer.exe",
-                    L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 27);
-    } else {
-        // Windows 10 1803+ / Windows 11: fallback to Advanced Sharing Settings
-        // Use the already-populated LangPack fallback strings. This doesn't change the
-        // fallback behavior; it only prevents the Advanced Sharing row from rendering
-        // blank when HomeGroup is unavailable.
-            mid += Link(L->hFallbackTitle, L->hFallbackDesc,
-            L"%SystemRoot%\\system32\\control.exe",
-            L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
+    if (g_addConnect) {
+        static const WCHAR kNetworkConnectionsClsid[] =
+            L"{7007ACC7-3202-11D1-AAD2-00805FC1270E}";
+        if (ShellClsidIsUsable(kNetworkConnectionsClsid)) {
+            mid += Link(L->cTitle, L->cDesc, L"%SystemRoot%\\explorer.exe",
+                        L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", 22);
+        } else {
+            Wh_Log(L"[NetCenter] Network Connections CLSID is unavailable; link omitted");
+        }
     }
-}
+    if (g_addHomegroup) {
+        if (HomeGroupAppletIsUsable()) {
+            // This is the HomeGroup Settings Control Panel CLSID. Launch it
+            // through Explorer's shell namespace syntax; using control.exe
+            // here makes NavigateButton pass the canonical Control Panel path
+            // as a file name on some builds.
+            mid += Link(L->hTitle, L->hDesc,
+                        L"%SystemRoot%\\explorer.exe",
+                        L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 27);
+        } else {
+            // Only use the fallback when its own Network Center CLSID exists;
+            // otherwise omit the custom row instead of creating another dead
+            // link on a heavily stripped/restored Control Panel.
+            static const WCHAR kNetworkCenterClsid[] =
+                L"{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}";
+            if (ShellClsidIsUsable(kNetworkCenterClsid)) {
+                mid += Link(L->hFallbackTitle, L->hFallbackDesc,
+                            L"%SystemRoot%\\system32\\control.exe",
+                            L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
+            } else {
+                Wh_Log(L"[NetCenter] HomeGroup and Network Center CLSIDs are unavailable; link omitted");
+            }
+        }
+    }
     xml.insert(insertAt, createBlock + mid + diagBlock);
     return xml;
 }
@@ -10203,12 +11526,14 @@ BOOL Wh_ModInit() {
     }
 
     g_IsExplorerHost = IsExplorerProcess();
-    if (!g_IsExplorerHost) {
+    g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
+    if (!g_IsExplorerHost && !g_IsRetroBarHost) {
         g_Initialized = TRUE;
         return TRUE;
     }
 
-    DarkContextMenu::Init();
+    if (g_IsExplorerHost)
+        DarkContextMenu::Init();
     g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
@@ -10237,7 +11562,10 @@ BOOL Wh_ModInit() {
         ShutdownGdiPlusRendering();
         FreeSystemIcons();
         FreeGlobalFonts();
-        DarkContextMenu::Uninit();
+        if (g_IsExplorerHost)
+            DarkContextMenu::Uninit();
+        if (g_retrobarAnchorLockInit)
+            DeleteCriticalSection(&g_retrobarAnchorLock);
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -10253,7 +11581,10 @@ void Wh_ModSettingsChanged() {
     DetermineLocale();
     Win7NetworkCenterLinks::SettingsChanged();
 
-    if (!g_IsExplorerHost)
+    // Neither explorer.exe nor RetroBar.exe hosts the Control Panel
+    // Network Center page, but both hosts run the flyout; other hosts
+    // (control.exe) only need the page hooks handled above.
+    if (!g_IsExplorerHost && !g_IsRetroBarHost)
         return;
 
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
@@ -10303,7 +11634,7 @@ void Wh_ModUninit() {
         Win7NetworkCenterLinks::g_ncRefreshThread = NULL;
     }
 
-    if (!g_IsExplorerHost) {
+    if (!g_IsExplorerHost && !g_IsRetroBarHost) {
         // control.exe can create only the in-memory Network Center icons.
         // Marshal the subclass removal + COM Unadvise/Release to the STA
         // thread that owns them (this callback can run on an arbitrary
@@ -10340,7 +11671,14 @@ void Wh_ModUninit() {
     Win7NetworkCenterLinks::TeardownNetCenterHost();
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
-    DarkContextMenu::Uninit();
+    // DarkContextMenu only hooks menus that the mod itself uses in the
+    // Explorer host; in RetroBar it was never initialized.
+    if (g_IsExplorerHost)
+        DarkContextMenu::Uninit();
+    if (g_retrobarAnchorLockInit) {
+        DeleteCriticalSection(&g_retrobarAnchorLock);
+        g_retrobarAnchorLockInit = FALSE;
+    }
     if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
         if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
             Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
