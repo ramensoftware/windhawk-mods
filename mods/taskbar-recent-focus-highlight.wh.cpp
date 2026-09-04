@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.1
+// @version         0.9.2
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -64,9 +64,9 @@ clear highlights without unloading the mod.
 
 - Works with Windows 11 Taskbar Styler: the side bar stays visible on hover,
   and preview plate tints are restored when the highlight is cleared.
-- Icon matching prefers the process path from the taskband. Name matching is
-  a fallback and is based on English taskbar labels (`N running`, `pinned`),
-  so it can be weaker on a non-English Windows.
+- Icon matching uses the process path / AppUserModelID from the taskband
+  (not the localized button label). If that resolve is unavailable, the icon
+  is left unhighlighted rather than guessed from its name.
 - Multi-monitor: the same rank is applied on every taskbar that shows that
   app.
 */
@@ -300,7 +300,9 @@ clear highlights without unloading the mod.
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -512,9 +514,6 @@ GUID g_currentDesktopId{};
 bool g_haveCurrentDesktop = false;
 PendingFocus g_pendingFocus;
 
-// process key (UPPER path) -> last seen AutomationProperties.Name of its button
-std::unordered_map<std::wstring, std::wstring> g_keyToAutomationName;
-
 std::atomic<ULONGLONG> g_windowConfirmSeq{0};
 
 // Public IVirtualDesktopManager (fallback when registry current-desktop fails).
@@ -561,7 +560,6 @@ std::vector<winrt::weak_ref<FrameworkElement>> g_trackedThumbViews;
 
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-std::atomic<bool> g_taskbarDllHooked{false};
 // After decay / empty ranks, force-clear overlays on next button touch if
 // RequestApplyVisuals couldn't run (sleep/wake, no dispatcher yet).
 std::atomic<bool> g_pendingOverlaySweep{false};
@@ -570,6 +568,13 @@ std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread{nullptr};
 std::atomic<HWND> g_hookThreadHwnd{nullptr};
 std::atomic<DWORD> g_hookThreadId{0};
+HANDLE g_hookThreadReadyEvent = nullptr;
+
+void SignalHookThreadReady() {
+    if (g_hookThreadReadyEvent) {
+        SetEvent(g_hookThreadReadyEvent);
+    }
+}
 
 HWND HookThreadWindow() {
     return g_hookThreadHwnd.load(std::memory_order_acquire);
@@ -593,11 +598,14 @@ winrt::weak_ref<FrameworkElement> g_dispatcherAnchor;
 // Agile CoreDispatcher list — captured on the UI thread when we first see a
 // button/thumb/panel. CollectUiDispatchers must not weak.get() XAML objects
 // off the UI thread (last-ref ~FrameworkElement would run on the wrong thread).
+// no_destroy: process teardown must not ~CoreDispatcher after XAML is gone.
 std::mutex g_dispatchersMutex;
-std::vector<winrt::Windows::UI::Core::CoreDispatcher> g_uiDispatchers;
+[[clang::no_destroy]] std::optional<
+    std::vector<winrt::Windows::UI::Core::CoreDispatcher>>
+    g_uiDispatchers{std::in_place};
 
 void RememberUiDispatcher(FrameworkElement el) {
-    if (!el) {
+    if (!el || g_unloading.load()) {
         return;
     }
     try {
@@ -606,31 +614,29 @@ void RememberUiDispatcher(FrameworkElement el) {
             return;
         }
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
-        for (const auto& existing : g_uiDispatchers) {
+        if (!g_uiDispatchers) {
+            return;
+        }
+        for (const auto& existing : *g_uiDispatchers) {
             if (existing == dispatcher) {
                 return;
             }
         }
-        g_uiDispatchers.push_back(dispatcher);
+        g_uiDispatchers->push_back(dispatcher);
     } catch (...) {
     }
 }
 
 constexpr UINT WM_APP_FOREGROUND_CHANGED = WM_APP + 1;
-constexpr UINT WM_APP_REQUEST_APPLY = WM_APP + 2;
-constexpr UINT WM_APP_REQUEST_PREVIEW_APPLY = WM_APP + 3;
-constexpr UINT WM_APP_DESKTOP_SWITCHED = WM_APP + 4;
-constexpr UINT WM_APP_SHUTDOWN = WM_APP + 5;
-constexpr UINT WM_APP_REQUEST_APPLY_DEBOUNCED = WM_APP + 6;
+constexpr UINT WM_APP_DESKTOP_SWITCHED = WM_APP + 2;
+constexpr UINT WM_APP_SHUTDOWN = WM_APP + 3;
+constexpr UINT WM_APP_REQUEST_APPLY_DEBOUNCED = WM_APP + 4;
 
-// Identity scores. Only exact identity (and name-cache) may bind the same
-// rank to many buttons (secondary taskbar / Never Combine). Score 900 is
-// same filename, different folder — 1:1 so two python.exe installs stay
-// distinct.
+// Identity scores. Only exact identity may bind the same rank to many buttons
+// (secondary taskbar / Never Combine). Score 900 is same filename, different
+// folder — 1:1 so two python.exe installs stay distinct.
 constexpr int kScoreExactIdentity = 1000;
 constexpr int kScoreSameFileDifferentPath = 900;
-constexpr int kScoreNameCache = 96;
-constexpr int kScoreMinBind = 70;
 constexpr UINT_PTR kMinFocusTimerId = 1;
 constexpr UINT_PTR kDecayTimerId = 2;
 constexpr UINT_PTR kPreviewMinFocusTimerId = 3;
@@ -834,6 +840,9 @@ bool DropPendingIfWrongDesktopLocked() {
 }
 
 void OnVirtualDesktopSwitched() {
+    if (g_unloading.load()) {
+        return;
+    }
     ClearButtonRunningGrace();
     RefreshCurrentDesktopId();
     bool droppedPending = false;
@@ -921,7 +930,7 @@ std::wstring ToUpper(std::wstring s) {
     return s;
 }
 
-// Keep A–Z / 0–9 only, uppercased — for fuzzy exe ↔ automation-name match.
+// Keep A–Z / 0–9 only, uppercased — preview unique-title compare.
 std::wstring AlnumUpper(std::wstring_view s) {
     std::wstring out;
     out.reserve(s.size());
@@ -994,14 +1003,6 @@ std::wstring FileNameFromPath(const std::wstring& path) {
         return path;
     }
     return path.substr(pos + 1);
-}
-
-std::wstring StripExtension(std::wstring name) {
-    size_t pos = name.find_last_of(L'.');
-    if (pos != std::wstring::npos && pos > 0) {
-        name.resize(pos);
-    }
-    return name;
 }
 
 bool IsOwnExplorerProcess(DWORD processId) {
@@ -1325,7 +1326,7 @@ bool ResolveAppIdentity(HWND hWnd,
     std::wstring displayName = fileName;
     if (IsUwpHostFileName(fileNameUpper)) {
         // Prefer "Settings" over WINDOWS.IMMERSIVECONTROLPANEL for logs /
-        // exclude / fuzzy. Key remains APPID:… .
+        // exclude. Key remains APPID:… .
         if (!title.empty() && title.size() <= 80 &&
             title.find(L'\\') == std::wstring::npos &&
             title.find(L'/') == std::wstring::npos) {
@@ -1435,38 +1436,6 @@ bool PathAppearsOnTaskbar(const std::wstring& keyOrPath,
     return false;
 }
 
-// Same process path, two taskbar icons (TOTALCMD64 → Total Commander + Lister).
-bool PathHasSplitTaskbarButtons(const std::wstring& pathUpper) {
-    if (pathUpper.empty()) {
-        return false;
-    }
-    const std::wstring fileUpper = ToUpper(FileNameFromPath(pathUpper));
-    std::wstring firstClass;
-    bool sawLister = false;
-    bool sawOther = false;
-    std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (const auto& e : g_buttonPathCache) {
-        if (e.pathUpper.empty()) {
-            continue;
-        }
-        if (e.pathUpper != pathUpper &&
-            ToUpper(FileNameFromPath(e.pathUpper)) != fileUpper) {
-            continue;
-        }
-        if (e.classUpper.find(L"LISTER") != std::wstring::npos) {
-            sawLister = true;
-        } else if (!e.classUpper.empty()) {
-            sawOther = true;
-        }
-        if (firstClass.empty()) {
-            firstClass = e.classUpper;
-        } else if (!e.classUpper.empty() && e.classUpper != firstClass) {
-            return true;
-        }
-    }
-    return sawLister && sawOther;
-}
-
 void RecomputeRanksForDesktopLocked(DesktopRecencyState& desk) {
     desk.rankedApps.clear();
 
@@ -1489,18 +1458,7 @@ void RecomputeRanksForDesktopLocked(DesktopRecencyState& desk) {
         }
         if (IsTickDecayed(info.lastConfirmedFocusTick, decayMs, now)) {
             Wh_Log(L"Decayed: %s", info.displayName.c_str());
-            const std::wstring decayedKey = it->first;
             it = desk.appFocusMap.erase(it);
-            bool stillUsed = false;
-            for (const auto& [oid, other] : g_desktopMaps) {
-                if (other.appFocusMap.contains(decayedKey)) {
-                    stillUsed = true;
-                    break;
-                }
-            }
-            if (!stillUsed) {
-                g_keyToAutomationName.erase(decayedKey);
-            }
             continue;
         }
         // Tray-only / no taskbar button: keep optional history but never rank.
@@ -1799,7 +1757,6 @@ int RankSizeBoost(int rankZeroBased) {
 
 // Defined with option-C resolve stack (button → process path).
 std::wstring EnsureButtonPathCached(FrameworkElement button, bool force);
-std::wstring GetCachedButtonPath(FrameworkElement button);
 struct ButtonIdentity {
     std::wstring pathUpper;
     std::wstring appIdUpper;
@@ -1879,47 +1836,6 @@ std::wstring GetButtonAutomationAppId(FrameworkElement button) {
     } catch (...) {
         return {};
     }
-}
-
-bool IsVisualStateActive(FrameworkElement root) {
-    if (!root) {
-        return false;
-    }
-
-    try {
-        auto groups = VisualStateManager::GetVisualStateGroups(root);
-        for (auto group : groups) {
-            auto current = group.CurrentState();
-            if (!current) {
-                continue;
-            }
-            std::wstring name(current.Name().c_str());
-            // "InactivePointerOver".find("Active") is a hit — that made every
-            // hovered running button look focused (TC stole Lister's glow).
-            if (name.rfind(L"Inactive", 0) == 0) {
-                continue;
-            }
-            if (name.rfind(L"Active", 0) == 0) {
-                return true;
-            }
-        }
-    } catch (...) {
-    }
-
-    // Also check children that host state groups (IconPanel).
-    try {
-        int n = Media::VisualTreeHelper::GetChildrenCount(root);
-        for (int i = 0; i < n; i++) {
-            auto child = Media::VisualTreeHelper::GetChild(root, i)
-                             .try_as<FrameworkElement>();
-            if (child && IsVisualStateActive(child)) {
-                return true;
-            }
-        }
-    } catch (...) {
-    }
-
-    return false;
 }
 
 // Taskbar names look like "App - 2 running windows pinned" — strip that noise.
@@ -2020,143 +1936,7 @@ std::wstring ExtractBracketedPath(const std::wstring& s) {
     return inner;
 }
 
-// Strip marketing suffixes so WINDOWSTERMINAL ≈ TERMINALPREVIEW → TERMINAL.
-std::wstring StripProductNoise(std::wstring alnumUpper) {
-    static const wchar_t* kNoise[] = {L"PREVIEW", L"BETA",   L"PORTABLE",
-                                      L"CANARY",  L"INSIDER", L"NIGHTLY"};
-    for (auto noise : kNoise) {
-        for (;;) {
-            auto pos = alnumUpper.find(noise);
-            if (pos == std::wstring::npos) {
-                break;
-            }
-            alnumUpper.erase(pos, wcslen(noise));
-        }
-    }
-    return alnumUpper;
-}
-
-// True if every char of `needle` appears in order inside `haystack`
-// (not necessarily contiguous). TOTALCMD64 ⊂ TOTALCOMMANDER64BIT.
-bool IsSubsequence(const std::wstring& needle, const std::wstring& haystack) {
-    if (needle.empty()) {
-        return false;
-    }
-    size_t j = 0;
-    for (size_t i = 0; i < haystack.size() && j < needle.size(); ++i) {
-        if (haystack[i] == needle[j]) {
-            ++j;
-        }
-    }
-    return j == needle.size();
-}
-
-// Initials of title words: "Total Commander 64 bit" → TC64B
-std::wstring InitialsAlnum(const std::wstring& automationName) {
-    std::wstring title = NormalizeAutomationName(automationName);
-    std::wstring out;
-    bool atWord = true;
-    for (wchar_t ch : title) {
-        if (ch == L' ' || ch == L'-' || ch == L'_' || ch == L'.') {
-            atWord = true;
-            continue;
-        }
-        if (atWord) {
-            if ((ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
-                (ch >= L'0' && ch <= L'9')) {
-                if (ch >= L'a' && ch <= L'z') {
-                    ch = static_cast<wchar_t>(ch - L'a' + L'A');
-                }
-                out.push_back(ch);
-            }
-            atWord = false;
-        }
-    }
-    return out;
-}
-
-// Higher = better. 0 = no match.
-// Important: VSCodium must NOT match "Visual Studio Code" (initials VSC alone
-// used to fire). Prefer longer/more specific matches; callers assign 1:1.
-int ScoreExeToAutomationName(const std::wstring& displayName,
-                             const std::wstring& automationName) {
-    if (displayName.empty() || automationName.empty()) {
-        return 0;
-    }
-
-    std::wstring exeAlnum = AlnumUpper(StripExtension(displayName));
-    std::wstring autoAlnum = AlnumUpper(NormalizeAutomationName(automationName));
-    if (exeAlnum.empty() || autoAlnum.empty()) {
-        return 0;
-    }
-
-    if (exeAlnum == autoAlnum) {
-        return 100;
-    }
-
-    // Contiguous containment (CODE ⊂ VISUALSTUDIOCODE, STEAM ⊂ STEAM…).
-    if (exeAlnum.size() >= 4 &&
-        autoAlnum.find(exeAlnum) != std::wstring::npos) {
-        return 92;
-    }
-    if (autoAlnum.size() >= 4 &&
-        exeAlnum.find(autoAlnum) != std::wstring::npos) {
-        // Prefer when title is a large part of the exe (STEAM vs STEAMWEBHELPER).
-        int cover = static_cast<int>(autoAlnum.size() * 100 / exeAlnum.size());
-        return 80 + (std::min)(12, cover / 10);
-    }
-
-    std::wstring exeN = StripProductNoise(exeAlnum);
-    std::wstring autoN = StripProductNoise(autoAlnum);
-    if (!exeN.empty() && exeN == autoN) {
-        return 90;
-    }
-    if (exeN.size() >= 5 && autoN.find(exeN) != std::wstring::npos) {
-        return 88;
-    }
-    if (autoN.size() >= 5 && exeN.find(autoN) != std::wstring::npos) {
-        return 84;
-    }
-
-    // Subsequence: TOTALCMD64 ⊂ TOTALCOMMANDER64BIT (not short initials).
-    std::wstring exeLetters;
-    for (wchar_t c : exeN) {
-        if (c < L'0' || c > L'9') {
-            exeLetters.push_back(c);
-        }
-    }
-    if (exeN.size() >= 5 && IsSubsequence(exeN, autoN)) {
-        return 72;
-    }
-    if (exeLetters.size() >= 5 && IsSubsequence(exeLetters, autoN)) {
-        return 70;
-    }
-
-    // Initials only when they are a *substantial* prefix of the exe.
-    // VSC vs VSCODIUM (3/8) → reject; avoids VS Code button stealing VSCodium.
-    // TC64 vs TOTALCMD64 — initials may be TC64B; require prefix of exe length
-    // and initials covering ≥ half the exe stem.
-    std::wstring initials = InitialsAlnum(automationName);
-    if (initials.size() >= 3) {
-        if (exeN.rfind(initials, 0) == 0 &&
-            initials.size() * 2 >= exeN.size()) {
-            return 55;
-        }
-        // Exe is essentially the initials (rare).
-        if (exeN == initials) {
-            return 95;
-        }
-    }
-
-    return 0;
-}
-
-bool ExeMatchesAutomationName(const std::wstring& displayName,
-                              const std::wstring& automationName) {
-    return ScoreExeToAutomationName(displayName, automationName) > 0;
-}
-
-// Window title ↔ taskbar button title (both normalized).
+// Window title ↔ thumbnail card title (preview unique-title fallback only).
 int ScoreTitleToAutomationName(const std::wstring& windowTitle,
                                const std::wstring& automationName) {
     if (windowTitle.empty() || automationName.empty()) {
@@ -2202,65 +1982,9 @@ int ScoreTitleToAutomationName(const std::wstring& windowTitle,
     return 0;
 }
 
-// True if this button's automation name is a legitimate label for the rank.
-// Class-qualified ranks (TLISTER) must not bind to "Total Commander".
-bool AutomationNameFitsRank(const AppFocusInfo& info,
-                            const std::wstring& autoName) {
-    if (autoName.empty()) {
-        return false;
-    }
-    const std::wstring cls = !info.classUpper.empty()
-                                 ? info.classUpper
-                                 : ClassFromAppKey(info.key);
-    if (!cls.empty() && cls.find(L"LISTER") != std::wstring::npos) {
-        return AlnumUpper(NormalizeAutomationName(autoName)).find(L"LISTER") !=
-               std::wstring::npos;
-    }
-    return ExeMatchesAutomationName(info.displayName, autoName);
-}
-
-void StoreAutomationNameIfFits(const AppFocusInfo& info,
-                               const std::wstring& autoName) {
-    if (!AutomationNameFitsRank(info, autoName)) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_keyToAutomationName[info.key] = autoName;
-}
-
-void StoreAutomationName(const AppFocusInfo& info,
-                         const std::wstring& autoName) {
-    if (info.key.empty() || autoName.empty()) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_keyToAutomationName[info.key] = autoName;
-}
-
-// Trusted writes only: path/exe binds, or Active-button associate (Windhawk
-// button for VSCodium.exe). Name-equals is then enough, except we refuse
-// a non-fitting name when this exe has two icons (TC vs Lister).
-bool CacheEntryValid(const AppFocusInfo& info,
-                     const std::wstring& cachedAutoName,
-                     const std::wstring& buttonAutoName) {
-    if (cachedAutoName.empty() || buttonAutoName.empty()) {
-        return false;
-    }
-    const bool nameEquals =
-        _wcsicmp(cachedAutoName.c_str(), buttonAutoName.c_str()) == 0 ||
-        _wcsicmp(NormalizeAutomationName(cachedAutoName).c_str(),
-                 NormalizeAutomationName(buttonAutoName).c_str()) == 0;
-    if (!nameEquals) {
-        return false;
-    }
-    if (AutomationNameFitsRank(info, buttonAutoName)) {
-        return true;
-    }
-    const std::wstring path = PathFromAppKey(info.key);
-    return !PathHasSplitTaskbarButtons(path);
-}
-
-// Score this button against one ranked app. Higher is better; 0 = no match.
+// Score this button against one ranked app. Path / AUMID / HWND only — no
+// automation-name fuzzy. 0 = no match. 1000 may bind the same rank to many
+// buttons (secondary taskbar). 900 is 1:1 (same file, different folder).
 int ScoreButtonForRank(FrameworkElement button,
                        const AppFocusInfo& info,
                        bool requireRunning) {
@@ -2276,9 +2000,6 @@ int ScoreButtonForRank(FrameworkElement button,
     const std::wstring rankCls = !info.classUpper.empty()
                                      ? info.classUpper
                                      : ClassFromAppKey(info.key);
-    const std::wstring rankAppId = !info.appIdUpper.empty()
-                                       ? info.appIdUpper
-                                       : AppIdFromAppKey(info.key);
 
     auto hwndOnButton = [&](HWND h) -> bool {
         if (!h) {
@@ -2293,7 +2014,6 @@ int ScoreButtonForRank(FrameworkElement button,
             }
         }
         if (ident.sampleHwnd && SamePidAndClass(h, ident.sampleHwnd)) {
-            // ApplicationFrameHost hosts many apps; PID+class is not identity.
             if (!IsAppIdKey(info.key) && !IsUwpHostPath(ident.pathUpper)) {
                 return true;
             }
@@ -2313,8 +2033,6 @@ int ScoreButtonForRank(FrameworkElement button,
         if (!want.empty() && got == want) {
             return kScoreExactIdentity;
         }
-        // Hosted UWP ranks are AUMID-only. Do not fuzzy "WINDOWS.IMMERSIVE…"
-        // onto Windows Security, or reuse a name-cache replica.
         return 0;
     }
 
@@ -2323,87 +2041,28 @@ int ScoreButtonForRank(FrameworkElement button,
     const bool exactPath =
         !ident.pathUpper.empty() &&
         (ident.pathUpper == info.key || ident.pathUpper == pathKey);
+    if (exactPath) {
+        if (!rankCls.empty() && !ident.classUpper.empty() &&
+            ident.classUpper != rankCls) {
+            // Same exe, different window class (e.g. two icons from one
+            // process). Not a replica.
+            return 0;
+        }
+        return kScoreExactIdentity;
+    }
+
     const bool sameFileName =
         !ident.pathUpper.empty() && !info.displayName.empty() &&
         ToUpper(FileNameFromPath(ident.pathUpper)) ==
             ToUpper(info.displayName);
-    // Both sides resolved, folders differ: not a replica (portable python).
-    const bool pathConflict =
-        sameFileName && !exactPath && !pathKey.empty() &&
-        ident.pathUpper != pathKey && ident.pathUpper != info.key;
-    const bool pathOk = exactPath || (sameFileName && !pathConflict);
-    const bool split = PathHasSplitTaskbarButtons(
-        !pathKey.empty() ? pathKey : ident.pathUpper);
-
-    // Path cache hit: skip fuzzy names (VS Code vs VSCodium stay distinct
-    // via full path). Fuzzy runs only when path is missing or this exe has
-    // two taskbar icons (TOTALCMD64 → Commander + Lister).
-    if (pathOk) {
-        if (!split) {
-            return exactPath ? kScoreExactIdentity
-                             : kScoreSameFileDifferentPath;
-        }
-        if (!rankCls.empty() && ident.classUpper == rankCls) {
-            return kScoreExactIdentity;
-        }
-        if (!rankCls.empty() && !ident.classUpper.empty() &&
-            ident.classUpper != rankCls) {
-            // other half of a split pair
-        } else if (rankCls.empty() || ident.classUpper.empty()) {
-            return kScoreSameFileDifferentPath;
-        }
+    if (sameFileName && !pathKey.empty() && ident.pathUpper != pathKey &&
+        ident.pathUpper != info.key) {
+        return kScoreSameFileDifferentPath;
     }
-
-    const bool identityConflict =
-        pathConflict ||
-        (split && !rankCls.empty() && !ident.classUpper.empty() &&
-         ident.classUpper != rankCls);
-
-    std::wstring autoName = GetButtonAutomationName(button);
-    if (autoName.empty()) {
-        return 0;
-    }
-
-    // Name fallback when path cache missed: "Lister" button vs TLister focus.
-    if (!rankCls.empty() &&
-        rankCls.find(L"LISTER") != std::wstring::npos) {
-        std::wstring n = AlnumUpper(NormalizeAutomationName(autoName));
-        if (n.find(L"LISTER") != std::wstring::npos) {
-            return kScoreExactIdentity;
-        }
-    }
-
-    int score = 0;
-    if (!identityConflict) {
-        score = ScoreExeToAutomationName(info.displayName, autoName);
-    }
-
-    // Do not score last window/tab title against taskbar buttons.
-    // Terminal tabs (and VSCodium editing a Windhawk mod) rename the HWND
-    // to the document — that is preview identity, not which icon to glow.
-
-    {
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        auto it = g_keyToAutomationName.find(info.key);
-        if (!identityConflict && it != g_keyToAutomationName.end() &&
-            !it->second.empty()) {
-            if (CacheEntryValid(info, it->second, autoName)) {
-                score = (std::max)(score, kScoreNameCache);
-            } else if (_wcsicmp(it->second.c_str(), autoName.c_str()) == 0 ||
-                       _wcsicmp(NormalizeAutomationName(it->second).c_str(),
-                                NormalizeAutomationName(autoName).c_str()) ==
-                           0) {
-                Wh_Log(L"Dropping bad cache: %s was \"%s\" (exe/class mismatch)",
-                       info.displayName.c_str(), it->second.c_str());
-                g_keyToAutomationName.erase(it);
-            }
-        }
-    }
-    return score;
+    return 0;
 }
 
-// Best rank for a single button (1-based), or 0. Prefer highest score.
-// requireRunning uses ButtonCountsAsRunning (short Alt-Tab grace).
+// Best rank for a single button (1-based), or 0.
 int FindRankForButton(FrameworkElement button,
                       const std::vector<AppFocusInfo>& ranks,
                       bool requireRunning = true) {
@@ -2420,136 +2079,10 @@ int FindRankForButton(FrameworkElement button,
             bestRank = static_cast<int>(i) + 1;
         }
     }
-    // Minimum confidence: reject weak initials-only if ever reintroduced.
-    if (bestScore < kScoreMinBind) {
+    if (bestScore < kScoreSameFileDifferentPath) {
         return 0;
     }
-
-    if (bestRank > 0) {
-        StoreAutomationNameIfFits(
-            ranks[static_cast<size_t>(bestRank - 1)],
-            GetButtonAutomationName(button));
-    }
     return bestRank;
-}
-
-void AssociateActiveButtonWithKey(const std::wstring& key) {
-    if (key.empty()) {
-        return;
-    }
-
-    std::wstring displayName;
-    std::wstring windowTitle;
-    {
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        auto& map = CurrentDeskLocked().appFocusMap;
-        auto it = map.find(key);
-        if (it != map.end()) {
-            displayName = it->second.displayName;
-            windowTitle = it->second.lastWindowTitle;
-        }
-    }
-    if (displayName.empty()) {
-        displayName = FileNameFromPath(key);
-    }
-
-    std::vector<winrt::weak_ref<FrameworkElement>> buttons;
-    {
-        std::lock_guard<std::mutex> lock(g_buttonsMutex);
-        buttons = g_trackedButtons;
-    }
-
-    // Prefer active button; fall back to best-scoring running button for this
-    // app (Windhawk / TC sometimes fail IsVisualStateActive timing).
-    int bestScore = 0;
-    std::wstring bestName;
-
-    for (auto& weak : buttons) {
-        FrameworkElement button = nullptr;
-        try {
-            button = weak.get();
-        } catch (...) {
-            continue;
-        }
-        if (!button || !TaskListButton_IsRunning(button)) {
-            continue;
-        }
-
-        std::wstring autoName = GetButtonAutomationName(button);
-        if (autoName.empty()) {
-            continue;
-        }
-
-        int score = ScoreExeToAutomationName(displayName, autoName);
-        // Identity from path cache (Terminal, VSCodium) beats a window
-        // title that happens to mention another app ("Discord icon…").
-        const ButtonIdentity ident = GetCachedButtonIdentity(button);
-        const std::wstring rankPath = PathFromAppKey(key);
-        if (IsAppIdKey(key)) {
-            const std::wstring want = AppIdFromAppKey(key);
-            std::wstring got = ident.appIdUpper.empty() ? ident.autoIdUpper
-                                                        : ident.appIdUpper;
-            if (!want.empty() && CanonicalAppId(got) == want) {
-                score = (std::max)(score, 1000);
-            } else if (!want.empty()) {
-                continue;
-            }
-        } else if (!ident.pathUpper.empty() && !rankPath.empty() &&
-                   ident.pathUpper == rankPath) {
-            score = (std::max)(score, 1000);
-        } else if (!ident.pathUpper.empty() &&
-                   ToUpper(FileNameFromPath(ident.pathUpper)) ==
-                       ToUpper(displayName)) {
-            score = (std::max)(score, 900);
-        }
-        const bool active = IsVisualStateActive(button);
-        if (active) {
-            score += 5;
-            // Real Active* only (Inactive* is not Active). Windhawk's button
-            // is named "Windhawk" while the process is VSCodium.exe.
-            if (score < 70) {
-                score = 70;
-            }
-        }
-
-        if (score > bestScore) {
-            bestScore = score;
-            bestName = autoName;
-        }
-
-        if (active && score < 70) {
-            Wh_Log(L"Skip associate: active \"%s\" weak match for %s (score=%d)",
-                   autoName.c_str(), displayName.c_str(), score);
-        }
-    }
-
-    AppFocusInfo assocInfo;
-    {
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        auto& map = CurrentDeskLocked().appFocusMap;
-        auto it = map.find(key);
-        if (it != map.end()) {
-            assocInfo = it->second;
-        }
-    }
-    if (assocInfo.key.empty()) {
-        assocInfo.key = key;
-        assocInfo.displayName = displayName;
-    }
-
-    if (bestScore >= kScoreMinBind && !bestName.empty()) {
-        // Always remember the Active button, even when the label is the host
-        // ("Windhawk") and the process is VSCodium.exe. Scoring trusts this
-        // cache; other write sites still use StoreAutomationNameIfFits.
-        StoreAutomationName(assocInfo, bestName);
-        Wh_Log(L"Associated %s -> \"%s\" (score=%d, fits=%d, title=\"%s\")",
-               displayName.c_str(), bestName.c_str(), bestScore,
-               AutomationNameFitsRank(assocInfo, bestName) ? 1 : 0,
-               windowTitle.c_str());
-    } else {
-        Wh_Log(L"Associate failed for %s (bestScore=%d, title=\"%s\")",
-               displayName.c_str(), bestScore, windowTitle.c_str());
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3562,38 +3095,19 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
     }
     RememberUiDispatcher(iconPanel);
 
-    const TaskbarEdge edge = DetectTaskbarEdge(iconPanel);
-    bool alreadyWatched = false;
-    bool edgeChanged = false;
-    TaskbarEdge previousEdge = TaskbarEdge::Bottom;
     {
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
         for (auto& w : g_layoutWatches) {
             try {
-                if (w.panel.get() != iconPanel) {
-                    continue;
+                if (w.panel.get() == iconPanel) {
+                    return;
                 }
-                alreadyWatched = true;
-                if (w.haveEdge && w.lastEdge != edge) {
-                    edgeChanged = true;
-                    previousEdge = w.lastEdge;
-                }
-                w.lastEdge = edge;
-                w.haveEdge = true;
-                break;
             } catch (...) {
             }
         }
     }
-    if (alreadyWatched) {
-        if (edgeChanged) {
-            Wh_Log(L"Taskbar edge %s -> %s (%.0fx%.0f)",
-                   TaskbarEdgeName(previousEdge), TaskbarEdgeName(edge),
-                   iconPanel.ActualWidth(), iconPanel.ActualHeight());
-            HealRunningIndicatorAfterRelayout(iconPanel);
-        }
-        return;
-    }
+
+    const TaskbarEdge edge = DetectTaskbarEdge(iconPanel);
 
     IconPanelLayoutWatch watch;
     watch.panel = winrt::make_weak(iconPanel);
@@ -4199,12 +3713,9 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
             if (b != button) {
                 continue;
             }
-            const ULONGLONG debounceMs = e.pathUpper.empty() ? 250 : 2000;
-            if (!force && e.resolveAttempted &&
-                (now - e.lastResolveTick) < debounceMs) {
+            if (!force && e.resolveAttempted) {
                 return e.pathUpper;
             }
-            // fall through to re-resolve below using this entry
             break;
         }
     }
@@ -4342,11 +3853,6 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
                GetButtonAutomationName(button).c_str());
     }
     return pathUpper;
-}
-
-// Lookup only (no resolve).
-std::wstring GetCachedButtonPath(FrameworkElement button) {
-    return GetCachedButtonIdentity(button).pathUpper;
 }
 
 ButtonIdentity GetCachedButtonIdentity(FrameworkElement button) {
@@ -4556,8 +4062,7 @@ void ApplyAllHighlights_UIThread() {
         }
     }
 
-    // Prefer process-path cache (option C), then fuzzy name scores.
-    // 1:1 assignment, highest score wins.
+    // Path / AUMID / HWND only. 1:1 except exact identity replicas.
     struct Cand {
         int score;
         size_t rankIdx;
@@ -4566,11 +4071,10 @@ void ApplyAllHighlights_UIThread() {
     std::vector<Cand> cands;
     std::vector<std::wstring> buttonPaths(live.size());
     for (size_t bi = 0; bi < live.size(); ++bi) {
-        // Resolve once if missing (cheap if cached).
         buttonPaths[bi] = EnsureButtonPathCached(live[bi], /*force=*/false);
         for (size_t ri = 0; ri < ranks.size(); ++ri) {
             int s = ScoreButtonForRank(live[bi], ranks[ri], true);
-            if (s >= kScoreMinBind) {
+            if (s >= kScoreSameFileDifferentPath) {
                 cands.push_back({s, ri, bi});
             }
         }
@@ -4582,9 +4086,6 @@ void ApplyAllHighlights_UIThread() {
     std::vector<bool> rankTaken(ranks.size(), false);
     std::vector<bool> buttonTaken(live.size(), false);
 
-    // Replicas of one identity may share a rank (secondary taskbar / Never
-    // Combine). Only exact identity (1000: path / HWND / AUMID). Name-cache
-    // 96 is 1:1 — it used to copy Settings' rank onto Windows Security.
     for (const auto& c : cands) {
         if (buttonTaken[c.buttonIdx]) {
             continue;
@@ -4602,13 +4103,6 @@ void ApplyAllHighlights_UIThread() {
             continue;
         }
 
-        std::wstring autoName = GetButtonAutomationName(live[c.buttonIdx]);
-        if (c.score >= kScoreExactIdentity) {
-            StoreAutomationName(ranks[c.rankIdx], autoName);
-        } else {
-            StoreAutomationNameIfFits(ranks[c.rankIdx], autoName);
-        }
-        // Successful bind ⇒ this process has a taskbar presence.
         {
             std::lock_guard<std::mutex> lock(g_stateMutex);
             auto it = CurrentDeskLocked().appFocusMap.find(ranks[c.rankIdx].key);
@@ -4619,7 +4113,7 @@ void ApplyAllHighlights_UIThread() {
         if (SettingsSnap()->glowDebugLog) {
             Wh_Log(L"  bind rank %zu %s -> \"%s\" (score=%d path=%s)",
                    c.rankIdx + 1, ranks[c.rankIdx].displayName.c_str(),
-                   autoName.c_str(), c.score,
+                   GetButtonAutomationName(live[c.buttonIdx]).c_str(), c.score,
                    buttonPaths[c.buttonIdx].empty()
                        ? L"?"
                        : buttonPaths[c.buttonIdx].c_str());
@@ -4642,75 +4136,27 @@ void ApplyAllHighlights_UIThread() {
                live.size());
     }
 
-    // Second pass: unmatched ranks — pick best free button with lower bar
-    // (uses window title). Helps Windhawk and odd product names.
     std::vector<std::wstring> demoteKeys;
     for (size_t ri = 0; ri < ranks.size(); ++ri) {
         if (rankTaken[ri]) {
             continue;
         }
-        int bestScore = 0;
-        size_t bestBi = SIZE_MAX;
-        for (size_t bi = 0; bi < live.size(); ++bi) {
-            if (buttonTaken[bi]) {
-                continue;
-            }
-            int s = ScoreButtonForRank(live[bi], ranks[ri], true);
-            if (s > bestScore) {
-                bestScore = s;
-                bestBi = bi;
+        if (SettingsSnap()->glowDebugLog) {
+            Wh_Log(L"  UNMATCHED rank %zu: %s (title=\"%s\")", ri + 1,
+                   ranks[ri].displayName.c_str(),
+                   ranks[ri].lastWindowTitle.c_str());
+        }
+        size_t resolvedButtons = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_buttonPathMutex);
+            for (const auto& e : g_buttonPathCache) {
+                if (!e.pathUpper.empty()) {
+                    ++resolvedButtons;
+                }
             }
         }
-        std::wstring autoName = (bestBi != SIZE_MAX)
-                                    ? GetButtonAutomationName(live[bestBi])
-                                    : std::wstring{};
-        if (bestBi != SIZE_MAX && bestScore >= kScoreMinBind &&
-            AutomationNameFitsRank(ranks[ri], autoName)) {
-            rankTaken[ri] = true;
-            buttonTaken[bestBi] = true;
-            buttonRank[bestBi] = static_cast<int>(ri) + 1;
-            StoreAutomationNameIfFits(ranks[ri], autoName);
-            {
-                std::lock_guard<std::mutex> lock(g_stateMutex);
-                auto& map = CurrentDeskLocked().appFocusMap;
-                auto it = map.find(ranks[ri].key);
-                if (it != map.end()) {
-                    it->second.seenOnTaskbar = true;
-                }
-            }
-            if (SettingsSnap()->glowDebugLog) {
-                Wh_Log(L"  bind rank %zu %s -> \"%s\" (score=%d, fallback)",
-                       ri + 1, ranks[ri].displayName.c_str(), autoName.c_str(),
-                       bestScore);
-            }
-            SetCachedPaintRank(live[bestBi], buttonRank[bestBi]);
-            ApplyButtonHighlight(live[bestBi], buttonRank[bestBi]);
-        } else {
-            if (SettingsSnap()->glowDebugLog) {
-                Wh_Log(L"  UNMATCHED rank %zu: %s (bestScore=%d title=\"%s\")",
-                       ri + 1, ranks[ri].displayName.c_str(), bestScore,
-                       ranks[ri].lastWindowTitle.c_str());
-                if (bestBi != SIZE_MAX) {
-                    Wh_Log(L"    closest button was \"%s\"",
-                           GetButtonAutomationName(live[bestBi]).c_str());
-                }
-            }
-            // Tray-only / no button: drop from ranks so it stops occupying a
-            // slot (e.g. HA Desktop Widget). Only demote once we already know
-            // several real taskbar paths (avoid false demote at explorer start).
-            size_t resolvedButtons = 0;
-            {
-                std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-                for (const auto& e : g_buttonPathCache) {
-                    if (!e.pathUpper.empty()) {
-                        ++resolvedButtons;
-                    }
-                }
-            }
-            if (SettingsSnap()->requireTaskbarButton && bestScore == 0 &&
-                resolvedButtons >= 2) {
-                demoteKeys.push_back(ranks[ri].key);
-            }
+        if (SettingsSnap()->requireTaskbarButton && resolvedButtons >= 2) {
+            demoteKeys.push_back(ranks[ri].key);
         }
     }
     // Demote after the loop so rank list stays stable while matching.
@@ -6226,7 +5672,10 @@ std::atomic<bool> g_loggedNoDispatcherAnchor{false};
 
 std::vector<winrt::Windows::UI::Core::CoreDispatcher> CollectUiDispatchers() {
     std::lock_guard<std::mutex> lock(g_dispatchersMutex);
-    return g_uiDispatchers;
+    if (!g_uiDispatchers) {
+        return {};
+    }
+    return *g_uiDispatchers;
 }
 
 // Uninit: run handler at High, then wait for a Low sentinel so earlier
@@ -6285,6 +5734,9 @@ bool RunOnEachUiDispatcherAndWait(
 }
 
 bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler) {
+    if (g_unloading.load()) {
+        return false;
+    }
     auto dispatchers = CollectUiDispatchers();
 
     if (dispatchers.empty()) {
@@ -6318,7 +5770,9 @@ bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler) {
 }
 
 void RequestApplyVisuals() {
-    // Prefer UI-thread apply; also keep logging from caller context.
+    if (g_unloading.load()) {
+        return;
+    }
     if (!RunOnUiThread([]() { ApplyAllHighlights_UIThread(); })) {
         // Buttons not tracked yet — will apply on next UpdateVisualStates.
         // Avoid rank dump spam at startup (preview + app both request apply).
@@ -6332,11 +5786,6 @@ void RequestApplyVisuals() {
             }
         }
     }
-}
-
-void ApplyVisualHighlights() {
-    // Legacy entry used by timers / focus path.
-    RequestApplyVisuals();
 }
 
 // ---------------------------------------------------------------------------
@@ -6378,9 +5827,6 @@ void RefreshButtonHighlight(FrameworkElement button) {
             SetCachedPaintRank(button, 0);
             ClearButtonHighlight(button);
             return;
-        }
-        if (TaskListButton_IsRunning(button) && IsVisualStateActive(button)) {
-            StoreAutomationNameIfFits(ranks[0], GetButtonAutomationName(button));
         }
         rank = FindRankForButton(button, ranks, /*requireRunning=*/true);
         SetCachedPaintRank(button, rank);
@@ -6740,8 +6186,11 @@ void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module =
-        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE module = GetModuleHandle(L"taskbar.dll");
+    if (!module) {
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (!module) {
         Wh_Log(L"Could not load taskbar.dll — path cache unavailable");
         return false;
@@ -6832,7 +6281,6 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    g_taskbarDllHooked = true;
     g_taskbandResolveReady = true;
     g_previewHooksReady =
         TaskItemThumbnail_TaskItemThumbnail_Original != nullptr ||
@@ -7123,33 +6571,16 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         RequestApplyPreviewVisuals();
     }
 
-    // Learn button mapping on UI thread, then apply. Drop tray-only apps that
-    // never show a TaskListButton (HA widget, etc.).
+    // Resolve button paths on the UI thread, then apply. Drop tray-only apps
+    // that never show a TaskListButton.
     RunOnUiThread([key = pending.key, displayName = pending.displayName,
                    desktopId = pending.desktopId]() {
-        AssociateActiveButtonWithKey(key);
-
         auto live = CollectLiveButtonsOnThisDispatcher();
         for (auto& b : live) {
             EnsureButtonPathCached(b, /*force=*/false);
         }
 
-        bool hasNameCache = false;
-        {
-            std::lock_guard<std::mutex> lock(g_stateMutex);
-            hasNameCache = g_keyToAutomationName.contains(key);
-        }
-        bool exeNameOnAButton = false;
-        for (auto& b : live) {
-            if (ScoreExeToAutomationName(displayName,
-                                         GetButtonAutomationName(b)) >=
-                kScoreMinBind) {
-                exeNameOnAButton = true;
-                break;
-            }
-        }
-        const bool appears = PathAppearsOnTaskbar(key, displayName) ||
-                             hasNameCache || exeNameOnAButton;
+        const bool appears = PathAppearsOnTaskbar(key, displayName);
 
         size_t resolvedButtons = 0;
         {
@@ -7178,7 +6609,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                     it->second.lastConfirmedFocusTick = 0;
                     it->second.seenOnTaskbar = false;
                 } else {
-                    // Path cache not ready — keep the rank, name-match later.
+                    // Path cache not ready — keep the rank until buttons exist.
                     it->second.seenOnTaskbar = true;
                 }
             }
@@ -7384,6 +6815,9 @@ void HandleForegroundChanged(HWND hWnd) {
 }
 
 void OnDecayTimer() {
+    if (g_unloading.load()) {
+        return;
+    }
     size_t before = 0;
     size_t after = 0;
     size_t windowsBefore = 0;
@@ -7460,12 +6894,6 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
         case WM_APP_DESKTOP_SWITCHED:
             OnVirtualDesktopSwitched();
             return 0;
-        case WM_APP_REQUEST_APPLY:
-            RequestApplyVisuals();
-            return 0;
-        case WM_APP_REQUEST_PREVIEW_APPLY:
-            RequestApplyPreviewVisuals();
-            return 0;
         case WM_APP_SHUTDOWN:
             PostQuitMessage(0);
             return 0;
@@ -7509,6 +6937,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         Wh_Log(L"GetModuleHandleExW failed for message-window class: %u",
                GetLastError());
         g_hookThreadId.store(0, std::memory_order_release);
+        SignalHookThreadReady();
         return 1;
     }
 
@@ -7520,12 +6949,10 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     };
     ATOM atom = RegisterClassExW(&wc);
     if (!atom) {
-        const DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClassExW failed: %u", err);
-            g_hookThreadId.store(0, std::memory_order_release);
-            return 1;
-        }
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+        g_hookThreadId.store(0, std::memory_order_release);
+        SignalHookThreadReady();
+        return 1;
     }
 
     HWND hwnd =
@@ -7535,9 +6962,11 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         Wh_Log(L"Failed to create message window: %u", GetLastError());
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
         g_hookThreadId.store(0, std::memory_order_release);
+        SignalHookThreadReady();
         return 1;
     }
     g_hookThreadHwnd.store(hwnd, std::memory_order_release);
+    SignalHookThreadReady();
 
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(coHr) && coHr != RPC_E_CHANGED_MODE) {
@@ -7610,10 +7039,22 @@ void StartWinEventHookThread() {
     if (g_winEventHookThread) {
         return;
     }
+    if (!g_hookThreadReadyEvent) {
+        g_hookThreadReadyEvent =
+            CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_hookThreadReadyEvent) {
+            Wh_Log(L"CreateEventW failed for hook-thread ready: %u",
+                   GetLastError());
+            return;
+        }
+    } else {
+        ResetEvent(g_hookThreadReadyEvent);
+    }
     HANDLE hThread =
         CreateThread(nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
     if (hThread) {
         g_winEventHookThread = hThread;
+        WaitForSingleObject(g_hookThreadReadyEvent, INFINITE);
         Wh_Log(L"WinEvent hook thread started");
     } else {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
@@ -7640,6 +7081,10 @@ void StopWinEventHookThread() {
     }
     const DWORD w = WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
+    if (g_hookThreadReadyEvent) {
+        CloseHandle(g_hookThreadReadyEvent);
+        g_hookThreadReadyEvent = nullptr;
+    }
     if (w != WAIT_OBJECT_0) {
         Wh_Log(L"ERROR: focus thread wait failed (%u)", w);
     } else {
@@ -7881,14 +7326,14 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.1");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.2");
 
     g_unloading = false;
     LoadSettings();
 
-    // Identity resolve (taskband) — optional; fuzzy names remain as fallback.
+    // Identity resolve (taskband) — optional; no path cache means no icon glow.
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"Warning: taskbar.dll identity hooks failed — fuzzy match only");
+        Wh_Log(L"Warning: taskbar.dll identity hooks failed — no icon path cache");
     }
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
@@ -7945,8 +7390,9 @@ void Wh_ModUninit() {
     g_taskbandResolveReady = false;
     g_previewHooksReady = false;
 
-    // Clear visuals and revoke SizeChanged on each dispatcher, then drain
-    // already-queued Normal work (those lambdas no-op on g_unloading).
+    // Stop the worker first so it cannot TryRunAsync after the UI drain.
+    StopWinEventHookThread();
+
     if (!RunOnEachUiDispatcherAndWait([]() {
             ClearAllHighlights_UIThread();
             ClearAllThumbnailHighlights_UIThread();
@@ -7962,15 +7408,12 @@ void Wh_ModUninit() {
         }
     }
 
-    StopWinEventHookThread();
-
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         g_desktopMaps.clear();
         g_currentDesktopId = {};
         g_haveCurrentDesktop = false;
         g_pendingFocus = {};
-        g_keyToAutomationName.clear();
     }
     ReleaseVdm();
     {
@@ -7992,7 +7435,7 @@ void Wh_ModUninit() {
     }
     {
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
-        g_uiDispatchers.clear();
+        g_uiDispatchers.reset();
     }
 }
 
@@ -8008,7 +7451,6 @@ void Wh_ModSettingsChanged() {
                  it != desk.appFocusMap.end();) {
                 std::wstring displayUpper = ToUpper(it->second.displayName);
                 if (IsExcludedKey(it->first, displayUpper)) {
-                    g_keyToAutomationName.erase(it->first);
                     it = desk.appFocusMap.erase(it);
                 } else {
                     ++it;
