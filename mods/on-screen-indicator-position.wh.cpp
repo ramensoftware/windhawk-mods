@@ -96,8 +96,8 @@ both target the same function and work out the origin handling.
 - position: topRight
   $name: Position
   $description: >-
-    Where on the screen the indicator appears. Anything left on Same as the main
-    position below follows this one.
+    Where on the screen the indicator appears. Anything left on "Same as the main
+    position" below follows this one.
   $options:
   - windowsDefault: Windows default (only apply the offsets)
   - topLeft: Top left
@@ -453,7 +453,10 @@ char WINAPI ShowCameraAccessEnabledAsync_Hook(void* pThis, bool value) {
 
 // This one takes a message alongside the state on current builds and took only
 // the state on older ones. Declared with the extra parameter for both, since the
-// build that doesn't take it never reads the register it arrives in.
+// build that doesn't take it never reads the register it arrives in. That holds
+// because the mod is x86-64 only and the caller does the cleaning up. On a
+// 32-bit stdcall build the callee pops its own arguments and the same mismatch
+// would walk the stack.
 using ShowMicrophoneMutedAsync_t = char(WINAPI*)(void* pThis,
                                                  int value,
                                                  void* text);
@@ -478,7 +481,7 @@ WinrtRect* WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              WinrtRect* retval,
                                              const WinrtRect* rect) {
-    Wh_Log(L">");
+    Wh_Log(L"> indicator=%d", (int)g_currentIndicator.load());
 
     // Read the offsets once so the placement below uses one consistent pair.
     int offsetSettingX = g_settings.offsetX.load();
@@ -712,11 +715,15 @@ BOOL Wh_ModInit() {
 
     for (const void* recorder : kindRecorders) {
         if (!recorder) {
-            Wh_Log(
-                L"An indicator entry point didn't resolve, so the position "
-                L"per indicator settings are ignored and everything uses "
-                L"the main position");
             g_kindUnreliable = true;
+            // Only worth saying to someone who has an override set. With the
+            // shipped defaults there is nothing being ignored to complain about.
+            if (anyPerIndicator) {
+                Wh_Log(
+                    L"An indicator entry point didn't resolve, so the position "
+                    L"per indicator settings are ignored and everything uses "
+                    L"the main position");
+            }
             break;
         }
     }
