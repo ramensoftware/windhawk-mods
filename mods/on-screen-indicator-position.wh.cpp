@@ -331,6 +331,16 @@ void LogKindUnreliable() {
         L"the main position");
 }
 
+// Set when either half of the hide pair didn't resolve, which leaves the skip
+// setting with nothing to do.
+std::atomic<bool> g_hideAnimationUnavailable{false};
+
+void LogHideAnimationUnavailable() {
+    Wh_Log(
+        L"The hide entry points didn't resolve, so the slide out animation "
+        L"is left alone");
+}
+
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
     if (g_kindUnreliable.load()) {
@@ -502,7 +512,12 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
 // animation and nothing outside this control is touched.
 using ConfirmatorHostControl_Hide_t = void(WINAPI*)(void* pThis);
 ConfirmatorHostControl_Hide_t ConfirmatorHostControl_Hide_Original;
-ConfirmatorHostControl_Hide_t ConfirmatorHostControl_HideWithoutAnimation_Original;
+
+// Same shape as the one above today, declared separately so a drift in one doesn't
+// quietly redefine the other.
+using ConfirmatorHostControl_HideWithoutAnimation_t = void(WINAPI*)(void* pThis);
+ConfirmatorHostControl_HideWithoutAnimation_t
+    ConfirmatorHostControl_HideWithoutAnimation_Original;
 void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     if (g_settings.skipHideAnimation.load() &&
         ConfirmatorHostControl_HideWithoutAnimation_Original) {
@@ -566,10 +581,20 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
         pThis, retval, &shiftedRect);
 
-    if (result) {
-        PlaceInArea(shiftedRect, CurrentPosition(), offsetSettingX,
-                    offsetSettingY, result);
+    // Someone who only wants the animation setting gets here with nothing to
+    // place, and the edge clamp inside PlaceInArea would still be free to move the
+    // indicator off the spot Windows picked. The shift above stays either way,
+    // since the original needs it.
+    Position position = CurrentPosition();
+    bool anyPlacement = position != Position::windowsDefault || offsetSettingX ||
+                        offsetSettingY;
 
+    if (result && anyPlacement) {
+        PlaceInArea(shiftedRect, position, offsetSettingX, offsetSettingY,
+                    result);
+    }
+
+    if (result) {
         // Shift the result back.
         result->X += offsetX;
         result->Y += offsetY;
@@ -774,6 +799,14 @@ BOOL Wh_ModInit() {
         (void*)ShowTextAsync_Original,
     };
 
+    if (!ConfirmatorHostControl_Hide_Original ||
+        !ConfirmatorHostControl_HideWithoutAnimation_Original) {
+        g_hideAnimationUnavailable = true;
+        if (g_settings.skipHideAnimation) {
+            LogHideAnimationUnavailable();
+        }
+    }
+
     for (const void* recorder : kindRecorders) {
         if (!recorder) {
             g_kindUnreliable = true;
@@ -812,5 +845,9 @@ void Wh_ModSettingsChanged() {
     // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
         LogKindUnreliable();
+    }
+
+    if (g_hideAnimationUnavailable && g_settings.skipHideAnimation) {
+        LogHideAnimationUnavailable();
     }
 }
