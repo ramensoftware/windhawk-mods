@@ -87,6 +87,9 @@ a monitor by number or by interface name. The two work together.
 * With two indicators set to different spots you can catch the previous one
   flashing at the new spot for a frame before the new one draws. That's the
   confirmator reusing its frame, the placement hook can't do anything about it.
+  Skipping the slide out makes it easier to catch rather than harder, since what
+  lands at the new spot is the tail end of the previous indicator instead of an
+  empty frame.
 * Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
 
 ## Credits
