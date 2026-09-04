@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-04T19:26:37.000Z</updated>
+    <updated>2026-09-04T19:29:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Info Bar+ 1.2.0]]></title>
+        <id>https://windhawk.net/mods/explorer-info-bar#2d25f22950c8994476d69ab5728ab2105d476537</id>
+        <link href="https://windhawk.net/mods/explorer-info-bar"/>
+        <updated>2026-09-04T19:29:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds configurable font family, font size, left padding, and spacing between info sections.</li>
+<li>Adds solid and directional gradient fills for Flat panes and Soft cards.</li>
+<li>Expands single-file details for photos and RAW files with dimensions, camera and lens information, plus optional ISO, aperture, shutter speed, and focal length.</li>
+<li>Expands video and audio details with duration, video resolution, and optional frame rate, sample rate, and channel information.</li>
+<li>Adds separate Off / Standard / Extended detail controls for photos, media files, and other file types.</li>
+<li>Adds optional Windows file type and modified date/time details for other files.</li>
+<li>Enables single-file details by default.</li>
+<li>Improves metadata caching and refresh behavior.</li>
+<li>Reduces unnecessary filesystem access when resolving file type descriptions.</li>
+<li>Improves metadata shutdown/cancellation and settings refresh behavior.</li>
+<li>Fixes custom left-padding and section-spacing values not always applying correctly.</li>
+<li>Fixes stale single-file metadata remaining visible after deselecting a file.</li>
+<li>Fixes leftover file-detail content when switching from a file with longer metadata to one with shorter metadata.</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.5]]></title>
         <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#9547257f6e615dc30a528040b02b9def90181b7b</id>
@@ -727,22 +752,6 @@ and Manual management (Alt+R).</p>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Count Badges 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-count-badges#e51f6803f01ce956396f9577566cd0d7d28d5aa0</id>
-        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
-        <updated>2026-08-30T17:49:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added top and bottom dot positions.</li>
-<li>Top and bottom dots are displayed horizontally; left and right remain vertical.</li>
-<li>Bottom dots replace the native Windows running indicator and show from one running window.</li>
-<li>Added version history to the mod details documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
