@@ -7,7 +7,7 @@
 // @github          https://github.com/mario0318
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshcore -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -65,11 +65,11 @@ ever on screen at a time, so this is the same desktop photographed twice:
 **Seconds on screen** changes how long the indicator waits before hiding itself.
 Leave it at 0 and Windows decides, same as before.
 
-**Skip the slide in animation** and **Skip the slide out animation** do what they
-say. The indicator appears and disappears in place instead of sliding. They are
-separate settings since you might want one and not the other. Neither one touches
-anything outside the indicator, so other mods and the rest of the shell animate
-exactly as they did.
+**Skip the slide out animation** makes the indicator disappear instead of sliding
+away, which is the half of it you tend to notice, since that is what keeps it
+hanging around. Windows has its own no animation path for hiding and the mod asks
+for that one, so nothing outside the indicator is affected and the sliding in is
+left alone.
 
 ## Choosing a monitor
 
@@ -83,8 +83,7 @@ a monitor by number or by interface name. The two work together.
 * The slide-in animation direction is chosen by Windows from the built-in
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
-  like, then let this mod do the actual placement, or skip the animation
-  altogether with the setting above.
+  like, then let this mod do the actual placement.
 * Offsets are given at 100% scaling and scaled to whichever monitor the
   indicator appears on, so the same value moves the same distance on a display
   running at 150%.
@@ -138,10 +137,6 @@ both target the same function and work out the origin handling.
   $description: >-
     How long the indicator stays on screen. Leave it at 0 to keep the timing
     Windows uses. Anything from 1 to 60 seconds works.
-- skipShowAnimation: false
-  $name: Skip the slide in animation
-  $description: >-
-    The indicator appears in place instead of sliding in.
 - skipHideAnimation: false
   $name: Skip the slide out animation
   $description: >-
@@ -250,11 +245,6 @@ both target the same function and work out the origin handling.
 
 #include <shellscalingapi.h>
 
-// winbase.h defines GetCurrentTime, which collides with the WinRT headers.
-#undef GetCurrentTime
-#include <winrt/base.h>
-#include <winrt/Windows.Foundation.h>
-
 #include <atomic>
 
 enum class Position {
@@ -311,7 +301,6 @@ struct {
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
     std::atomic<int> durationSeconds;
-    std::atomic<bool> skipShowAnimation;
     std::atomic<bool> skipHideAnimation;
     // Position::windowsDefault means "no override", so the main position is used.
     // It is never offered as a per-indicator choice, which leaves it free to be
@@ -569,36 +558,6 @@ BOOL WINAPI SetThreadpoolTimerEx_Hook(PTP_TIMER timer,
     return SetThreadpoolTimerEx_Original(timer, dueTime, period, windowLength);
 }
 
-// The two values AnimateConfirmator is called with. 0 arrives as the indicator is
-// shown and 1 as it is hidden, which is what the log said on 26200 and is all the
-// stripped pdb will support, since it carries no enumerator names.
-constexpr int kAnimationShow = 0;
-
-// Handed back in place of the animation the caller was going to await. It is
-// already complete, so the await returns at once and nothing is animated.
-winrt::Windows::Foundation::IAsyncAction CompletedAction() {
-    co_return;
-}
-
-// IAsyncAction is returned by value and isn't trivially copyable, so it comes back
-// through a hidden pointer, the same shape GetPositionRect's Rect uses. The
-// interface is one COM pointer, so detaching the completed action into that slot
-// hands the caller an object it owns and will release.
-using AnimateConfirmator_t = void*(WINAPI*)(void* pThis,
-                                            void* retval,
-                                            int animation);
-AnimateConfirmator_t AnimateConfirmator_Original;
-void* WINAPI AnimateConfirmator_Hook(void* pThis,
-                                     void* retval,
-                                     int animation) {
-    if (animation == kAnimationShow && g_settings.skipShowAnimation.load()) {
-        *(void**)retval = winrt::detach_abi(CompletedAction());
-        return retval;
-    }
-
-    return AnimateConfirmator_Original(pThis, retval, animation);
-}
-
 // The control hides itself two ways and Windows picks the animated one. Handing the
 // call to the other is the whole feature, so nothing has to be torn out of the
 // animation and nothing outside this control is touched.
@@ -731,7 +690,6 @@ void LoadSettings() {
     int seconds = Wh_GetIntSetting(L"durationSeconds");
     g_settings.durationSeconds = (seconds >= 1 && seconds <= 60) ? seconds : 0;
 
-    g_settings.skipShowAnimation = Wh_GetIntSetting(L"skipShowAnimation");
     g_settings.skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation");
 
     static const PCWSTR kIndicatorSettings[] = {
@@ -767,8 +725,7 @@ BOOL Wh_ModInit() {
 
     if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
         !g_settings.offsetX && !g_settings.offsetY &&
-        !g_settings.durationSeconds && !g_settings.skipShowAnimation &&
-        !g_settings.skipHideAnimation) {
+        !g_settings.durationSeconds && !g_settings.skipHideAnimation) {
         Wh_Log(L"Nothing to do");
         return FALSE;
     }
@@ -837,12 +794,6 @@ BOOL Wh_ModInit() {
              LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::HWConfirmatorUI::MicrophoneMuteState))"},
             &ShowMicrophoneMutedAsync_Original,
             ShowMicrophoneMutedAsync_Hook,
-            true,  // optional
-        },
-        {
-            {LR"(private: struct winrt::Windows::Foundation::IAsyncAction __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::AnimateConfirmator(enum winrt::HWConfirmatorUI::ConfirmatorAnimation))"},
-            &AnimateConfirmator_Original,
-            AnimateConfirmator_Hook,
             true,  // optional
         },
         {
