@@ -1,3 +1,7 @@
+## 1.3.9 ([Sep 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c34a28655b833d318fb47fc08d8ec2c5ef939b8c/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed compatibility with older Windows 11 versions such as 23H2 and 24H2. The most noticeable problem was that the taskbar could be cut off when using a custom height.
+
 ## 1.3.8 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7934234cb1abdc0a80161c7a8cbade322549e6cb/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed tray layout changing for specific taskbar height values: 24, 32, and 72.
