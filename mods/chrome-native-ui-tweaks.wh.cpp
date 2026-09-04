@@ -214,6 +214,8 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 - Tested with **Google Chrome 152.0.7977.76 x64**.
 - The mod relies on Chrome's internal native UI symbols, so Chrome updates can occasionally require compatibility adjustments.
 - After a Chrome update, Windhawk may need to download and resolve new `chrome.dll` symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Chrome continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status on hover and displays short balloon messages when preparation starts and finishes. Keep that Chrome instance open until the status says the symbols are ready, then restart Chrome once to activate the mod.
+- A full fresh-symbol fallback can be large. In a Chrome 152.0.7977.76 test with the local PDB and Windhawk symbol cache removed, the resulting uncompressed `chrome.dll.pdb` was **5.59 GB (5.21 GiB)** and total preparation took **139.5 seconds** on a **75 Mbit/s** connection and an **Intel Core i7-8700K**. The download finished after roughly two minutes and symbol analysis took roughly another 20 seconds. Symbol-server delivery is compressed, so the network transfer is much smaller than the final PDB. Times vary with connection, CPU, and Chrome build.
+- Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in `uninitializing` until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.
 - Chrome processes launched with `--remote-debugging-pipe` (for example, Playwright/CDP automation sessions) are intentionally skipped so auxiliary browser instances don't pay the native UI symbol-resolution cost.
 - The optional Windows folder icon is a fixed Windows raster icon. It doesn't follow Chrome's theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.
 - The older **Chrome UI Tweaks** mod overlaps with this mod's menu spacing and corner-radius options. If both mods are used on a Chrome version where they work, configure those overlapping menu options in only one mod to avoid conflicting results.
@@ -234,7 +236,6 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -359,12 +360,13 @@ using ViewPreferredSizeChangedFn = void (*)(void*);
 
 using GetLayoutConstantFn = int (*)(int);
 
-// gfx::Size is returned through a hidden sret buffer on Win64:
+using ToolbarActionViewCtorFn = void (*)(void*, void*, void*);
+
+// gfx::Size is returned through a hidden sret buffer for this Win64 C++
+// instance method:
 // RCX = this
 // RDX = result buffer
 // R8  = const views::SizeBounds&
-using ToolbarActionViewCtorFn = void (*)(void*, void*, void*);
-
 using ToolbarActionViewCalculatePreferredSizeFn = GfxSizeOpaque* (*)(const void*, GfxSizeOpaque*, const void*);
 
 using ToolbarActionViewDeletingDtorFn = void* (*)(void*, unsigned int);
@@ -563,7 +565,7 @@ struct TabTitleInfo {
 
 static std::mutex g_tabObjectsMutex;
 static std::unordered_map<void*, TabTitleInfo> g_tabTitles;
-static std::unordered_set<void*> g_tabCloseButtons;
+static std::unordered_map<void*, DWORD> g_tabCloseButtons;
 
 static std::mutex g_extensionViewsMutex;
 static std::unordered_map<void*, DWORD> g_extensionViews;
@@ -1301,13 +1303,12 @@ static void TabCloseButtonCtorHook(void* self, void* pressedCallback, void* mous
 
   std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
 
-  g_tabCloseButtons.insert(self);
+  g_tabCloseButtons[self] = GetCurrentThreadId();
 }
 
 static void TabCloseButtonDtorHook(void* self) {
-  if (g_tabCloseHooksReady.load(std::memory_order_relaxed)) {
+  {
     std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
-
     g_tabCloseButtons.erase(self);
   }
 
@@ -1613,10 +1614,11 @@ struct AddressBarApplyParams {
 };
 
 static void WINAPI ApplyAddressBarFontOnCurrentThread(void* parameter) {
-  if (!g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
-
   const auto* params = static_cast<const AddressBarApplyParams*>(parameter);
   bool teardown = params && params->teardown;
+
+  if (!teardown && !g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
+
   DWORD threadId = GetCurrentThreadId();
 
   if (!teardown) {
@@ -1675,7 +1677,7 @@ static void WINAPI ApplyAddressBarFontOnCurrentThread(void* parameter) {
 }
 
 static void ApplyFontToExistingAddressBars(bool teardown = false) {
-  if (!g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
+  if (!teardown && !g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
 
   std::vector<DWORD> threadIds;
 
@@ -1874,6 +1876,7 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
 
   if (!teardown) {
     std::vector<std::pair<void*, const FontListOpaque*>> titles;
+    std::vector<void*> closeButtons;
 
     {
       std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
@@ -1881,6 +1884,12 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
       for (const auto& [title, info] : g_tabTitles) {
         if (info.threadId == threadId) {
           titles.push_back({title, GetOwnedFontList(info.originalFontStorage)});
+        }
+      }
+
+      for (const auto& [closeButton, closeButtonThreadId] : g_tabCloseButtons) {
+        if (closeButtonThreadId == threadId) {
+          closeButtons.push_back(closeButton);
         }
       }
     }
@@ -1897,6 +1906,14 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
       }
     }
 
+    // A close-button-only symbol set still needs a live relayout path even if
+    // TabTitle tracking isn't available. InvalidateLayout propagates to parents.
+    if (g_ViewInvalidateLayout) {
+      for (void* closeButton : closeButtons) {
+        g_ViewInvalidateLayout(closeButton, false);
+      }
+    }
+
     return;
   }
 
@@ -1906,6 +1923,7 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
   };
 
   std::vector<TeardownEntry> titles;
+  std::vector<void*> closeButtons;
 
   {
     std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
@@ -1918,13 +1936,24 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
         ++it;
       }
     }
+
+    for (auto it = g_tabCloseButtons.begin(); it != g_tabCloseButtons.end();) {
+      if (it->second == threadId) {
+        closeButtons.push_back(it->first);
+        it = g_tabCloseButtons.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   for (auto& entry : titles) {
     const FontListOpaque* originalFont = GetOwnedFontList(entry.originalFontStorage);
 
-    if (g_tabFontHooksReady.load(std::memory_order_relaxed) && originalFont &&
-        g_LabelSetFontList) {
+    // Teardown already knows these objects were tracked while the required
+    // symbols were available. Don't depend on runtime ready flags that a
+    // resolver/abandon path can clear independently.
+    if (originalFont && g_LabelSetFontList) {
       g_LabelSetFontList(entry.title, originalFont);
     }
 
@@ -1936,8 +1965,15 @@ static void WINAPI ApplyTabTweaksOnCurrentThread(void* parameter) {
                                 L"Tab title original FontList");
   }
 
-  Wh_Log(L"Restored and released %llu tab title fonts on UI thread %lu",
-         static_cast<unsigned long long>(titles.size()), threadId);
+  if (g_ViewInvalidateLayout) {
+    for (void* closeButton : closeButtons) {
+      g_ViewInvalidateLayout(closeButton, false);
+    }
+  }
+
+  Wh_Log(L"Restored/released %llu tab title fonts and invalidated %llu close buttons on UI thread %lu",
+         static_cast<unsigned long long>(titles.size()),
+         static_cast<unsigned long long>(closeButtons.size()), threadId);
 }
 
 static void ApplyTweaksToExistingTabs(bool teardown = false) {
@@ -1948,6 +1984,10 @@ static void ApplyTweaksToExistingTabs(bool teardown = false) {
 
     for (const auto& [title, info] : g_tabTitles) {
       threadIds.push_back(info.threadId);
+    }
+
+    for (const auto& [closeButton, threadId] : g_tabCloseButtons) {
+      threadIds.push_back(threadId);
     }
   }
 
@@ -2569,7 +2609,7 @@ static DWORD WINAPI ChromeSymbolResolutionThreadProc(void* param) {
 
   ULONGLONG elapsed = GetTickCount64() - startedAt;
 
-  Wh_Log(L"Chrome symbol resolution finished in %llu ms: %ls", elapsed,
+  Wh_Log(L"Chrome symbol preparation finished in %llu ms: %ls", elapsed,
          success ? L"success" : L"FAILED");
 
   SetEvent(g_symbolResolutionDoneEvent);
