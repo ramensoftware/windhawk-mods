@@ -40,8 +40,8 @@ More themes can be found and contributed from:
 
 ## Process model
 
-The bar runs in its own Explorer tool process (`explorer.exe -tool-mod windhawk-topbar`).
-A mutex keeps one bar alive. XAML Islands require a real Explorer host.
+The bar runs inside the main Explorer process (`explorer.exe`). It creates its own window
+and thread, but does not spawn a separate process. XAML Islands require a real Explorer host.
 
 ## Styling
 
@@ -85,7 +85,7 @@ and strips island root backgrounds.
 - Audio device switching uses undocumented `IPolicyConfig`.
 - Bluetooth pairing opens Settings (needs consent UI).
 - Brightness needs a WMI-capable panel or a DDC/CI monitor.
-- Task list refreshes on a 700ms timer.
+- Task list refreshes on a 5‑second timer.
 */
 // ==/WindhawkModReadme==
 
@@ -700,7 +700,7 @@ void CollectMatchingElements(DependencyObject const& node,
 
 // Flyout and context menu content lives in separate popup trees, not under the
 // main root, so name-only matches are also checked against them.
-std::vector<FrameworkElement> g_detachedStyleRoots;
+[[clang::no_destroy]] std::vector<FrameworkElement> g_detachedStyleRoots;
 
 std::vector<FrameworkElement> ResolveGeneralTarget(const std::wstring& target) {
     std::vector<FrameworkElement> results;
@@ -1683,7 +1683,7 @@ FrameworkElement BuildTaskButtonContent(HWND hwnd, const std::wstring& title) {
 // A single pending click is enough: Tapped arms a short timer that performs the
 // single-click action; DoubleTapped cancels it and performs the double-click
 // action instead, so a double-click never also fires the single-click behaviour.
-DispatcherTimer g_taskClickTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_taskClickTimer{nullptr};
 HWND g_pendingClickHwnd;
 
 void SchedulePendingSingleClick(HWND hwnd) {
@@ -1960,7 +1960,7 @@ std::wstring DeviceId(IMMDevice* device) {
 // CoCreateInstance + Activate each time is enough latency to make scrolling
 // feel sticky. Dropped whenever a call fails, which covers the default endpoint
 // changing underneath us.
-winrt::com_ptr<IAudioEndpointVolume> g_cachedEndpointVolume;
+[[clang::no_destroy]] winrt::com_ptr<IAudioEndpointVolume> g_cachedEndpointVolume;
 
 void InvalidateEndpointCache() {
     g_cachedEndpointVolume = nullptr;
@@ -2235,7 +2235,7 @@ static const IID kIID_IWbemLocator = {
 enum class Backend { Unknown, Wmi, Ddc, None };
 Backend g_backend = Backend::Unknown;
 
-winrt::com_ptr<IWbemServices> g_cachedWmiServices;
+[[clang::no_destroy]] winrt::com_ptr<IWbemServices> g_cachedWmiServices;
 
 winrt::com_ptr<IWbemServices> ConnectWmi() {
     if (g_cachedWmiServices) {
@@ -3424,7 +3424,7 @@ struct Item {
     RECT bounds{};
 };
 
-winrt::com_ptr<IUIAutomation> g_automation;
+[[clang::no_destroy]] winrt::com_ptr<IUIAutomation> g_automation;
 
 // Declared by hand: whether CLSID_CUIAutomation is exported as a symbol depends
 // on which UUID import library is linked, and this mod links none of them.
@@ -3623,11 +3623,11 @@ constexpr double kTileCorner = 6.0;
 constexpr double kRowCorner = 6.0;
 constexpr double kPanelWidth = 340.0;
 
-wuxc::Button g_displayButton{nullptr};
-wuxc::Button g_soundButton{nullptr};
-wuxc::Button g_wifiButton{nullptr};
-wuxc::Button g_bluetoothButton{nullptr};
-wuxc::Button g_trayButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_displayButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_soundButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_wifiButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_bluetoothButton{nullptr};
+[[clang::no_destroy]] wuxc::Button g_trayButton{nullptr};
 
 // Helper to toggle a flyout open/closed.
 void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
@@ -3639,19 +3639,19 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
     }
 }
 
-wuxc::Flyout g_displayFlyout{nullptr};
-wuxc::Flyout g_soundFlyout{nullptr};
-wuxc::Flyout g_wifiFlyout{nullptr};
-wuxc::Flyout g_bluetoothFlyout{nullptr};
-wuxc::Flyout g_trayFlyout{nullptr};
-DispatcherTimer g_volumeRevertTimer{nullptr};
-DispatcherTimer g_brightnessRevertTimer{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_displayFlyout{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_soundFlyout{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_wifiFlyout{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_bluetoothFlyout{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_trayFlyout{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_volumeRevertTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_brightnessRevertTimer{nullptr};
 
-wuxc::StackPanel g_displayPanel{nullptr};
-wuxc::StackPanel g_soundPanel{nullptr};
-wuxc::StackPanel g_wifiPanel{nullptr};
-wuxc::StackPanel g_bluetoothPanel{nullptr};
-wuxc::StackPanel g_trayPanel{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_displayPanel{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_soundPanel{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_wifiPanel{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_bluetoothPanel{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
 
 // Set while a panel is writing its own controls, so the ValueChanged /Toggled
 // handlers that XAML raises during construction don't get mistaken for the user
@@ -4248,7 +4248,7 @@ void RefreshSoundButtonIcon() {
 // dispatcher, and the transport buttons do the same in reverse.
 // ----------------------------------------------------------------------------
 
-wuxc::StackPanel g_mediaContainer{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_mediaContainer{nullptr};
 
 #if TOPBAR_HAS_MEDIA_CONTROL
 
@@ -4569,7 +4569,7 @@ void StartWifiScan() {
         wifi::RequestScan();
         // The driver reports results over the next few seconds; this is the
         // interval Windows' own flyout waits before redrawing.
-        Sleep(4000);
+        WaitForSingleObject(g_stopEvent, 4000);
         auto networks = wifi::EnumerateNetworks();
         RunOnUiThread([networks = std::move(networks)]() mutable {
             g_wifiNetworks = std::move(networks);
@@ -4584,7 +4584,7 @@ void ConnectToWifi(const wifi::Network& network, const std::wstring& password) {
         bool ok = wifi::Connect(network, password);
         // Association takes a moment; re-read afterwards so the row shows the
         // real outcome rather than an optimistic "Connected".
-        Sleep(ok ? 2500 : 300);
+        WaitForSingleObject(g_stopEvent, ok ? 2500 : 300);
 
         auto networks = wifi::EnumerateNetworks();
         bool connected = false;
@@ -4761,7 +4761,7 @@ void PopulateWifiPanel() {
         bool on = sender.template as<wuxc::ToggleSwitch>().IsOn();
         RunInBackground([on] {
             wifi::SetRadio(on);
-            Sleep(600);
+            WaitForSingleObject(g_stopEvent, 600);
             auto networks = on ? wifi::EnumerateNetworks() : std::vector<wifi::Network>{};
             RunOnUiThread([networks = std::move(networks)]() mutable {
                 g_wifiNetworks = std::move(networks);
@@ -4838,7 +4838,7 @@ void PopulateWifiPanel() {
             if (captured.connected) {
                 RunInBackground([] {
                     wifi::Disconnect();
-                    Sleep(800);
+                    WaitForSingleObject(g_stopEvent, 800);
                     auto networks = wifi::EnumerateNetworks();
                     RunOnUiThread([networks = std::move(networks)]() mutable {
                         g_wifiNetworks = std::move(networks);
@@ -5049,7 +5049,7 @@ void PopulateBluetoothPanel() {
             
             RunInBackground([captured, connect] {
                 bluetooth::SetConnected(captured.address, connect);
-                Sleep(1200);
+                WaitForSingleObject(g_stopEvent, 1200);
                 auto devices = bluetooth::Enumerate(false);
                 RunOnUiThread([devices = std::move(devices)]() mutable {
                     g_bluetoothDevices = std::move(devices);
@@ -6343,6 +6343,11 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             windowClass.hInstance, nullptr);
         if (!g_topBarHwnd) {
             Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+            // Clean up the window class registration
+            if (g_modModule) {
+                UnregisterClass(kWindowClassName, g_modModule);
+                g_modModule = nullptr;
+            }
             return 1;
         }
 
@@ -6363,6 +6368,11 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                    static_cast<unsigned int>(ex.code().value), ex.message().c_str());
             DestroyWindow(g_topBarHwnd);
             g_topBarHwnd = nullptr;
+            // Clean up window class
+            if (g_modModule) {
+                UnregisterClass(kWindowClassName, g_modModule);
+                g_modModule = nullptr;
+            }
             return 1;
         }
 
@@ -6450,6 +6460,12 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 TranslateMessage(&message);
                 DispatchMessage(&message);
             }
+        }
+
+        // The topbar has been closed. Stop the foreground hook first (same thread).
+        if (g_foregroundHook) {
+            UnhookWinEvent(g_foregroundHook);
+            g_foregroundHook = nullptr;
         }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
@@ -6663,34 +6679,12 @@ void WhTool_ModSettingsChanged() {
 void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
 
-    if (g_foregroundHook) {
-        UnhookWinEvent(g_foregroundHook);
-        g_foregroundHook = nullptr;
-    }
-
-    // Signal the stop event so the UI thread can exit early if it's still sleeping.
+    // Signal the stop event so background workers can exit early.
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
 
-    // If the window exists, ask it to close (this posts WM_QUIT eventually).
-    if (g_topBarHwnd) {
-        PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
-    }
-
-    // Also post a quit message to the thread even if the window isn't there yet.
-    if (g_topBarThreadId) {
-        PostThreadMessage(g_topBarThreadId, WM_QUIT, 0, 0);
-    }
-
-    // Wait for the UI thread to finish **unconditionally**.
-    if (g_topBarThread) {
-        WaitForSingleObject(g_topBarThread, INFINITE);
-        CloseHandle(g_topBarThread);
-        g_topBarThread = nullptr;
-    }
-
-    // Join all background threads (now they are owned, not detached).
+    // Join all background threads **before** the UI thread, to avoid races.
     std::vector<std::thread> threads;
     {
         std::lock_guard<std::mutex> lock(g_backgroundMutex);
@@ -6700,6 +6694,20 @@ void WhTool_ModUninit() {
         if (t.joinable()) {
             t.join();
         }
+    }
+
+    // Now stop the UI thread.
+    if (g_topBarHwnd) {
+        PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
+    }
+    if (g_topBarThreadId) {
+        PostThreadMessage(g_topBarThreadId, WM_QUIT, 0, 0);
+    }
+
+    if (g_topBarThread) {
+        WaitForSingleObject(g_topBarThread, INFINITE);
+        CloseHandle(g_topBarThread);
+        g_topBarThread = nullptr;
     }
 
     // Close the stop event handle
