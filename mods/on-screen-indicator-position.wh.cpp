@@ -454,9 +454,9 @@ char WINAPI ShowCameraAccessEnabledAsync_Hook(void* pThis, bool value) {
 // This one takes a message alongside the state on current builds and took only
 // the state on older ones. Declared with the extra parameter for both, since the
 // build that doesn't take it never reads the register it arrives in. That holds
-// because the mod is x86-64 only and the caller does the cleaning up. On a
-// 32-bit stdcall build the callee pops its own arguments and the same mismatch
-// would walk the stack.
+// because the mod is 64-bit only, x64 and arm64 both, where arguments go in
+// registers and the caller does the cleaning up. On a 32-bit stdcall build the
+// callee pops its own arguments and the same mismatch would walk the stack.
 using ShowMicrophoneMutedAsync_t = char(WINAPI*)(void* pThis,
                                                  int value,
                                                  void* text);
@@ -749,4 +749,13 @@ void Wh_ModSettingsChanged() {
     // Every hook is installed either way now, so nothing here needs a reload and
     // a change takes effect on the next indicator.
     LoadSettings();
+
+    // Turning on the first override no longer re-runs Wh_ModInit, so this is the
+    // only place the person it concerns can still be told.
+    if (g_kindUnreliable && AnyPerIndicator()) {
+        Wh_Log(
+            L"An indicator entry point didn't resolve, so the position "
+            L"per indicator settings are ignored and everything uses "
+            L"the main position");
+    }
 }
