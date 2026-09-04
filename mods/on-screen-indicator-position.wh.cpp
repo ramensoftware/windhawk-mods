@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers, and skip the slide out animation
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
 // @version         1.3.0
 // @author          mario0318
 // @github          https://github.com/mario0318
@@ -60,14 +60,6 @@ ever on screen at a time, so this is the same desktop photographed twice:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
-## The slide out
-
-**Skip the slide out animation** makes the indicator disappear instead of sliding
-away, which is the half of it you tend to notice, since that is what keeps it
-hanging around. Windows has its own no animation path for hiding and the mod asks
-for that one, so nothing outside the indicator is affected and the sliding in is
-left alone.
-
 ## Choosing a monitor
 
 This mod only changes where the indicator sits on a screen, not which screen it
@@ -77,6 +69,9 @@ a monitor by number or by interface name. The two work together.
 
 ## Notes
 
+* **Skip the slide out animation** has the indicator disappear rather than slide
+  away. Windows has its own no animation path for hiding and the mod asks for that
+  one, so the sliding in and everything outside the indicator are left alone.
 * The slide-in animation direction is chosen by Windows from the built-in
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
@@ -134,8 +129,7 @@ both target the same function and work out the origin handling.
     the same number moves it the same distance on any display.
 - skipHideAnimation: false
   $name: Skip the slide out animation
-  $description: >-
-    The indicator disappears instead of sliding away.
+  $description: The indicator disappears instead of sliding away.
 - perIndicator:
   - volume: same
     $name: Volume
@@ -510,6 +504,13 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
     return ShowMicrophoneMutedAsync_Original(pThis, value, text);
 }
 
+using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
+ShowTextAsync_t ShowTextAsync_Original;
+char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
+    g_currentIndicator.store(Indicator::text);
+    return ShowTextAsync_Original(pThis, text, value);
+}
+
 // The control hides itself two ways and Windows picks the animated one. Handing the
 // call to the other is the whole feature, so nothing has to be torn out of the
 // animation and nothing outside this control is touched.
@@ -528,13 +529,6 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     }
 
     return ConfirmatorHostControl_Hide_Original(pThis);
-}
-
-using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
-ShowTextAsync_t ShowTextAsync_Original;
-char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
-    g_currentIndicator.store(Indicator::text);
-    return ShowTextAsync_Original(pThis, text, value);
 }
 
 using HardwareConfirmatorHost_GetPositionRect_t =
@@ -584,10 +578,11 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
         pThis, retval, &shiftedRect);
 
-    // Someone who only wants the animation setting gets here with nothing to
-    // place, and the edge clamp inside PlaceInArea would still be free to move the
-    // indicator off the spot Windows picked. The shift above stays either way,
-    // since the original needs it.
+    // Nothing to place happens for a kind left on the main position while that is
+    // on Windows default, and for someone who only wanted the animation setting.
+    // The edge clamp inside PlaceInArea would still be free to move the indicator
+    // off the spot Windows picked, so it is skipped rather than run with nothing to
+    // do. The shift above stays either way, since the original needs it.
     Position position = CurrentPosition();
     bool anyPlacement = position != Position::windowsDefault || offsetSettingX ||
                         offsetSettingY;
@@ -772,11 +767,12 @@ BOOL Wh_ModInit() {
         },
     };
 
-    // All nine go in every time. The eight that record which kind is being shown
-    // are coroutine ramps that store a value and tail-call the original, so
+    // The whole set goes in every time. The eight that record which kind is being
+    // shown are coroutine ramps that store a value and tail-call the original, so
     // patching them when no kind has a spot of its own costs nothing worth
     // measuring, and installing the same set every time keeps the symbol cache
-    // from being resolved again the first time someone turns an override on.
+    // from being resolved again the first time someone turns an override on. The
+    // same goes for the hide pair and the animation setting.
     if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
                      ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
