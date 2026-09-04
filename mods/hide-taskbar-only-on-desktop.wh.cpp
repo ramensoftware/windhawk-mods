@@ -12,11 +12,12 @@
 
 // ==WindhawkModReadme==
 /*
+
 # Hide Taskbar Only on Desktop
 
-Hides selected taskbars only while their own display is showing the desktop.
-When an application window is present on that display, the taskbar remains
-visible. Displays are evaluated independently.
+This Windhawk mod hides selected taskbars when their corresponding display is showing only the desktop, and shows them again when an application or relevant Windows shell interaction requires the taskbar.
+
+Each display is evaluated independently. An application being open on one display does not prevent the taskbar on another selected display from hiding when that display is showing only the desktop.
 
 ## Demo
 
@@ -24,164 +25,193 @@ visible. Displays are evaluated independently.
 
 ![Multiple Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif)
 
-Each selected display is evaluated independently. An application can keep one display's taskbar visible while another display remains in the desktop-only state.
-
 ### Single Display
 
 ![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
 
-The taskbar hides when the display returns to the desktop and can be revealed by moving the cursor into the configured bottom-edge area.
+## How It Works
 
-## Behavior
+For each selected display, the mod determines whether there is a visible, non-minimized application window associated with that display.
 
-- A selected taskbar hides only when its display has no visible, non-minimized
-  application window.
-- Maximized windows use Windows' monitor assignment. Normal windows spanning
-  displays count on every display they intersect.
-- Bottom-edge hover reveal can be enabled independently per display.
-- The hover zone is based on the current taskbar height and display DPI, plus
-  the configured extra margin.
-- The hover reveal feature is limited to bottom-docked taskbars.
-- The configured post-hover delay applies to hover dismissal.
-- Relevant Windows shell surfaces such as Start, taskbar popups/overflow,
-  notification/Quick Settings, and supported Alt+Tab surfaces are treated as
-  shell UI rather than normal application windows.
-- Clearing the taskbar selection means no taskbar is hidden.
-- Windows' native taskbar auto-hide setting is not changed.
+When no relevant application window is present, the selected taskbar on that display can be hidden.
 
-## Why this is different from `taskbar-auto-hide-when-maximized`
+When an application becomes active on the display, or when a relevant Windows shell interaction requires the taskbar, it is shown again.
 
-These mods answer different visibility questions.
+The taskbar is hidden directly rather than enabling Windows' native taskbar auto-hide mode. The mod therefore does not intentionally change the Windows desktop work area when hiding the taskbar.
 
-`taskbar-auto-hide-when-maximized` is based on the state of application
-windows, with modes such as `intersected`, `maximized`, and `never`. This mod is
-based on a different predicate: **is this display currently showing only the
-desktop?**
+## Difference from Existing Taskbar Auto-Hide Mods
 
-That means a normal, non-maximized application keeps the selected taskbar
-visible here. The taskbar hides only after the last visible, non-minimized
-application on that display is gone. A maximized window is not required for the
-taskbar to stay visible. Conversely, a completely idle display can hide its
-taskbar even while another display is actively being used.
+This mod shares some concepts with existing taskbar auto-hide projects, but it is focused on a different user-visible behavior and implementation model.
 
-The distinction is therefore the user-visible policy, not merely the mechanism
-used internally:
+**`taskbar-auto-hide-when-maximized`** primarily provides visibility modes based on application-window state, such as maximized or intersected windows. This mod uses a desktop-only predicate: a selected taskbar remains visible whenever its display has a visible, non-minimized application window and hides only when that display has no such application window.
 
-| Scenario | This mod | `taskbar-auto-hide-when-maximized` |
-| --- | --- | --- |
-| Desktop only on a selected display | Hide taskbar | Depends on its selected window-state mode |
-| One normal, non-maximized app visible | Keep taskbar visible | Depends on mode/window state |
-| One display has an app, another is idle | Evaluate each display separately | Uses its own monitor/window-state policy |
-| Goal | Desktop-only taskbar visibility | Auto-hide driven by maximized/intersection state |
+This means the behavior is not limited to maximized, snapped, fullscreen, or taskbar-intersecting windows.
 
-This mod also deliberately leaves Windows' native auto-hide preference alone
-and implements the desktop-only rule directly, including its explicit
-per-display selection and configurable hover-dismiss behavior.
+**`taskbar-auto-hide-per-monitor`** provides per-monitor control over Windows' native taskbar auto-hide behavior. This mod also allows displays to be configured independently, but it directly controls the taskbar window instead of changing Windows' native auto-hide state.
 
-The project remains standalone because its primary purpose is this specific
-desktop-only policy. The existing mod is still the better choice for users who
-want taskbar auto-hide tied to maximized/intersected window state.
+**`taskbar-auto-hide-custom-activation-area`** changes the activation area used by Windows' native taskbar auto-hide behavior. This mod instead performs its own desktop/application-state detection and provides its own configurable bottom-edge hover area.
 
-## Per-display configuration
+The work-area behavior is also different. The mod directly hides the taskbar window without intentionally modifying the Windows desktop work area.
 
-You can independently choose:
+The combination of desktop-only visibility, independent per-display selection, direct taskbar control, custom hover reveal, and shell-interaction handling is the intended focus of this mod.
 
-- Which displays should hide their taskbar when desktop-only.
-- Which displays should allow bottom-edge hover reveal.
+## Per-Display Configuration
 
-Selections use logical display numbers (Display 1, Display 2, and so on) based on
-the currently connected monitors. Windows may internally name the same monitor
-with device identifiers such as `\\.\DISPLAY25`; those internal identifiers are
-not exposed as the selection number.
+The mod supports independent configuration for each display.
 
-The mod tracks monitor identity during the current session so a reconnected
-display that receives a different `DISPLAYn` number can retain its selection
-when the same monitor identity is detected.
+Users can configure:
 
-## Hover reveal
+- Which displays should use desktop-based taskbar hiding
+- Which displays should allow hover reveal
 
-When a selected, bottom-docked taskbar is hidden by the mod, moving the pointer
-into its configured bottom-edge zone reveals it. After leaving the zone, the
-taskbar remains visible for the configured dismissal delay before returning to
-its normal desktop/application state.
+Display selection can target:
 
-Hover tracking is adaptive: it samples more frequently when a configured hover
-zone can matter, uses a slower idle interval otherwise, and backs off further
-when cursor queries repeatedly fail (for example on the secure desktop).
+- All displays
+- Individual displays
 
-## Windows shell interactions
+Display selections use the mod's display-selection entries and stable monitor/device identity tracking. Windows device names such as `\\.\DISPLAY1` are used internally to identify monitors, but these identifiers may differ from the display numbers shown in Windows Display Settings.
 
-The mod distinguishes relevant shell surfaces from ordinary application
-windows. It uses both window classes and the owning process for supported
-Windows shell components, including taskbar popup/overflow surfaces,
-Start/notification/Quick Settings hosts, relevant XAML shell hosts, and known
-Alt+Tab window classes. These surfaces can keep the relevant taskbar visible
-while the user is interacting with the shell.
+The mod tracks monitor/device identity so that a selected display can remain associated with the same detected physical monitor when Windows temporarily changes `DISPLAYn` ordering during the current session.
 
-## Explorer integration and crash recovery
+## Hover Reveal
 
-The main state manager runs in a dedicated `windhawk.exe` process. A small
-Explorer-side hook exists only to prevent the specific secondary-taskbar
-`SW_SHOWNA` transition that caused a visible re-show after the mod had hidden
-the taskbar. It does not alter Explorer's general taskbar behavior.
+For bottom-docked taskbars, the mod provides a configurable bottom-edge hover area.
 
-Each taskbar hidden by the mod is marked with the PID of the owning tool
-process. Explorer caches and checks that process's liveness. If a stale marker
-is detected, the marker is removed and the taskbar is restored through the
-original Explorer `ShowWindow` path. Explorer also performs a stale-marker
-sweep when the Explorer-side component initializes, covering both the primary
-and secondary taskbars.
+When the cursor enters the configured area of a selected display, a taskbar hidden by the mod is revealed.
 
-This means a normal unload restores taskbars, while stale state left by an
-unexpected tool-process termination can be cleaned up without requiring an
-Explorer restart. Taskbars that were never hidden by this mod are not restored
-by the cleanup path.
+When the cursor leaves the hover area, the taskbar remains visible for the configured delay before being hidden again.
 
-## Multi-monitor behavior
+The hover area is calculated using the taskbar's current height and display DPI together with the configured additional margin.
 
-Example with two displays:
+Hover reveal applies only to bottom-docked taskbars. Taskbars docked to the top or sides are not affected by this feature.
 
-1. Display 1 has an application open.
-2. Display 2 shows only the desktop.
-3. The selected taskbar on display 1 stays visible.
+The hover-dismiss delay applies only to hover-based hiding. Other state changes, such as a display becoming desktop-only again, are handled independently.
+
+Cursor tracking uses a dedicated lightweight sampling thread. It uses faster sampling when hover tracking is active and backs off when hover tracking is not needed. The sampler also backs off after repeated cursor-position failures.
+
+## Windows Shell Interactions
+
+The mod accounts for relevant Windows shell surfaces so that the taskbar does not disappear unnecessarily while the user is interacting with Windows.
+
+This includes supported situations involving:
+
+- Start menu
+- Taskbar menus and popups
+- Tray and notification overflow
+- Notification and Quick Settings surfaces
+- Alt+Tab and related task-switching UI
+
+Known shell window classes and the relevant Windows shell processes are considered when identifying these surfaces.
+
+Shell interaction detection is handled separately from the normal application-window check.
+
+## Explorer Integration
+
+The mod includes a small Explorer-side protection for a specific taskbar visibility transition.
+
+When a secondary taskbar has been hidden by the mod, Windows Explorer may independently attempt to show that taskbar using `ShowWindow(..., SW_SHOWNA)`.
+
+The mod blocks that specific transition only while the taskbar is still owned by a running instance of the mod's dedicated tool process.
+
+The protection is intentionally narrow:
+
+- It applies only to the secondary taskbar.
+- It applies only to a taskbar marked as hidden by this mod.
+- It applies only to the `SW_SHOWNA` transition.
+- Other Explorer `ShowWindow` calls are passed through normally.
+
+This prevents a brief secondary-taskbar flash while leaving unrelated Explorer window behavior unchanged.
+
+### Failure Recovery
+
+The taskbar ownership marker contains the process ID of the dedicated tool process that hid the taskbar.
+
+If that process is no longer running, the Explorer-side check removes the stale marker and restores the taskbar through Explorer's normal `ShowWindow` path.
+
+This prevents an unexpected tool-process termination from leaving a taskbar hidden or permanently blocking Explorer from restoring it.
+
+Stale hidden-taskbar state is also checked during Explorer initialization for both primary and secondary taskbars.
+
+## Multi-Monitor Example
+
+Consider a system with two displays:
+
+1. An application is open on display 1.
+2. Display 2 is showing only the desktop.
+3. The selected taskbar on display 1 remains visible.
 4. The selected taskbar on display 2 hides.
-5. Moving to the configured bottom edge of display 2 reveals its taskbar.
-6. Leaving the hover zone starts the configured dismissal delay.
-7. Opening an application on display 2 keeps its taskbar visible.
+5. Moving the cursor into display 2's configured bottom-edge area reveals its taskbar.
+6. After leaving the hover area, the taskbar hides again after the configured delay.
+7. Opening an application on display 2 causes its taskbar to remain visible.
 
-Applications spanning multiple displays count on every display they intersect.
-Maximized windows use Windows' monitor assignment.
+The same logic is applied independently to each selected display.
 
-## Display and taskbar changes
+Applications that span multiple displays are considered for every display they intersect, while maximized windows use the monitor assignment provided by Windows.
 
-Taskbars are rediscovered during reconciliation, so Explorer taskbar recreation
-does not leave the mod tied to an old window handle. State is refreshed for
-relevant taskbar, display, settings, theme, window, and shell visibility
-changes, with a periodic safety poll for missed transitions.
+## Explorer and Display Changes
 
-A display-topology signature resets transient hover state when monitor geometry
-or the connected display set changes.
+The mod refreshes its taskbar and display state when relevant shell or display configuration changes occur.
+
+This allows taskbar state to be rebuilt when:
+
+- Taskbars are recreated
+- Explorer-related state changes
+- The display topology changes
+- Monitors are added or removed
+- Display configuration changes
+- Settings are changed
+
+Taskbars are rediscovered rather than assuming that their window handles remain unchanged.
+
+Display identity is tracked using monitor/device information rather than relying solely on the current `DISPLAYn` ordering.
+
+## Taskbar Ownership
+
+The mod tracks whether a taskbar was actually hidden by the mod.
+
+This prevents the mod from unnecessarily restoring or changing taskbar visibility that it did not cause itself.
+
+Ownership is also associated with the dedicated tool process so that stale ownership can be detected after an unexpected process termination.
+
+When the owning tool process is no longer running, stale ownership can be cleared and the affected taskbar can recover through Explorer's normal visibility path.
+
+## Performance
+
+The full application and display scan runs in the dedicated tool process rather than inside Explorer.
+
+The mod uses:
+
+- A dedicated worker thread for state management
+- A lightweight cursor-sampling thread for hover detection
+- Event-driven refreshes for relevant window and shell changes
+- A periodic safety poll for missed or unusual transitions
+- A one-shot timer for hover dismissal
+
+The Explorer-side hook performs only the narrow visibility check required for secondary-taskbar flash prevention.
+
+Cursor sampling backs off when hover tracking is not needed and also backs off after repeated cursor-position failures.
+
+The periodic safety poll provides a recovery path for missed or unusual transitions. The current implementation uses a fixed short polling interval; this may be optimized further in a future revision.
 
 ## Limitations
 
 - Hover reveal is supported only for bottom-docked taskbars.
-- Display selection currently exposes Display 1 through Display 16.
-- `DISPLAYn` identifiers may differ from the numbering shown in Windows Display
-  Settings and can change after display configuration changes.
-- A taskbar docked to the top or side is not hidden by the desktop-only rule.
-- A display selection that no longer matches any connected display remains
-  configured until the user changes the setting.
-- The mod does not modify Windows' native taskbar auto-hide setting.
+- Windows display device names such as `\\.\DISPLAY1` may differ from the display numbering shown in Windows Display Settings.
+- Display device names can change after display configuration changes.
+- The current display-selection configuration supports up to 16 display entries.
+- The mod intentionally keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior.
+- Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may require updates for future Windows versions.
+- The mod is designed specifically around Windows' Explorer/taskbar behavior and is not intended to be a general-purpose taskbar customization framework.
 
 ## Goal
 
-The goal is a specific visibility rule:
+The goal is not to replace Windows' native taskbar auto-hide or provide a general-purpose taskbar customization framework.
+
+The goal is a specific behavior:
 
 > **Hide the taskbar when its display is showing only the desktop.**
 
-The mod combines that per-display application-state rule with independent
-display selection, shell-interaction handling, taskbar recreation recovery,
-and configurable bottom-edge hover reveal.
+The mod combines independent per-display application-state detection with configurable display selection, stable monitor identity tracking, shell-interaction handling, direct taskbar control, and a configurable bottom-edge hover-reveal area.
 */
 // ==/WindhawkModReadme==
 
