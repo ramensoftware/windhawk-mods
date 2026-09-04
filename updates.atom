@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-04T19:29:54.000Z</updated>
+    <updated>2026-09-04T19:32:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.2.7]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#c27674120c8e769a26898d151ce4b3a48d0497c0</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-09-04T19:32:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hook the microphone entry point with the signature it has on current builds, so an unresolved hook stops taking the per indicator positions down with it.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Info Bar+ 1.2.0]]></title>
         <id>https://windhawk.net/mods/explorer-info-bar#2d25f22950c8994476d69ab5728ab2105d476537</id>
@@ -702,56 +715,6 @@ works with click-through disabled.</li>
         <author>
             <name>Farael Hanafi</name>
             <uri>https://github.com/Eliasilyz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM 1.13.19]]></title>
-        <id>https://windhawk.net/mods/multiwm#128aed34e3f45734daf90ba9c1ef8923c42f61e4</id>
-        <link href="https://windhawk.net/mods/multiwm"/>
-        <updated>2026-08-30T17:51:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="multiwm">MultiWM</h1>
-<p>MultiWM is a continuation of the original <a href="https://windhawk.net/mods/tiling-helper">Tiling Helper</a> by <a href="https://github.com/u2x1">U2X1</a>.</p>
-<p>A lightweight, low-cortisol window manager for Windows 11 with true per-virtual-desktop layouts - 
-including floating - and simple, predictable controls. </p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif" alt="GIF" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li><em>Windhawk 2.0 (or higher) users can change the target process (<code>explorer.exe</code> -> <code>windhawk.exe</code>) for better stability and workspace preservation across Explorer restarts.</em></li>
-<li><em>MultiWM's virtual-desktop notification integration is based on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp">Taskbar Desktop Indicator by Simon Benedict</a> (MIT).</em></li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>First-class floating</strong> - use Floating as a whole-workspace layout 
-or float individual windows while retaining useful geometry.</li>
-<li><strong>Automatic or Manual management</strong> - let MultiWM continuously discover 
-and migrate windows, or keep explicitly tiled groups under your control.</li>
-<li><strong>True virtual-desktop layouts</strong> - uses Windows' existing virtual desktops 
-instead of implementing a separate desktop system.</li>
-<li><strong>Event-driven</strong> - changes are signaled through native events rather than 
-continuous polling.</li>
-</ul>
-<h2 id="layouts">Layouts</h2>
-<ul>
-<li>Floating</li>
-<li>Master + Stack (vertical or horizontal)</li>
-<li>Binary Space Partitioning (BSP)</li>
-<li>Columns / Rows</li>
-<li>Monocle</li>
-</ul>
-<h2 id="gettingstarted">Getting Started</h2>
-<p>Move a tiled window to <strong>float it</strong> or <strong>swap it with the window underneath</strong>. </p>
-<p>By default, hotkeys are available for tiling (Alt+T), changing layouts (Alt+L), setting the master window (Alt+M),
-moving windows through the logical order (Alt+, / .), floating a window (Alt+F), and switching between Automatic
-and Manual management (Alt+R).</p>
-<p>A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.</p>
-<h2 id="alsocheckout">Also check out</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/virtual-desktop-helper">Virtual Desktop Helper by u2x1</a></li>
-<li><a href="https://windhawk.net/mods/taskbar-desktop-indicator">Taskbar Desktop Indicator by Simon Benedict</a></li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>

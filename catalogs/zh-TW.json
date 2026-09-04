@@ -9825,7 +9825,7 @@
           6
         ],
         "ratingUsers": 7,
-        "updated": 1787994198000,
+        "updated": 1788550365000,
         "users": 112
       },
       "metadata": {
@@ -9840,7 +9840,7 @@
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.2.6"
+        "version": "1.2.7"
       }
     },
     "one-hair": {

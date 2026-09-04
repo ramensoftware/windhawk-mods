@@ -1,3 +1,7 @@
+## 1.2.7 ([Sep 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c27674120c8e769a26898d151ce4b3a48d0497c0/mods/on-screen-indicator-position.wh.cpp))
+
+* Hook the microphone entry point with the signature it has on current builds, so an unresolved hook stops taking the per indicator positions down with it.
+
 ## 1.2.6 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3a64981cd805fadceec72d0b4db1aecadadc3408/mods/on-screen-indicator-position.wh.cpp))
 
 * A position per indicator kind, with everything defaulting to the main position
