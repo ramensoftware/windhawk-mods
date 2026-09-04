@@ -1221,12 +1221,15 @@ void Wh_ModUninit()
         StopHookThread();
     }
 
-    if (g_isExplorer && IsMainExplorer())
+    if (g_isExplorer)
     {
-        // 1. Signal any pending prompt dialog from a prior settings change to close
+        // 1. Signal any pending prompt dialog from a prior settings change to close.
+        // Thread join must not depend on IsMainExplorer() — handle existence is the
+        // correct gate. Loop is bounded to 5 s to prevent an infinite hang if the
+        // dialog never opens (e.g. TaskDialogIndirect fails).
         if (g_restartExplorerPromptThread)
         {
-            while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
+            for (int i = 0; i < 50 && WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT; i++)
             {
                 if (HWND promptWindow = g_restartExplorerPromptWindow.load())
                 {
@@ -1237,25 +1240,28 @@ void Wh_ModUninit()
             g_restartExplorerPromptThread = nullptr;
         }
 
-        // 2. If standard shortcuts were disabled, prompt user on unload to restore them
-        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
+        if (IsMainExplorer())
         {
-            PromptForExplorerRestart();
-        }
-
-        // 3. Safe bounded wait (30s) matching official simple-window-switcher pattern
-        if (g_restartExplorerPromptThread)
-        {
-            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
+            // 2. If standard shortcuts were disabled, prompt user on unload to restore them
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
             {
-                if (HWND promptWindow = g_restartExplorerPromptWindow.load())
-                {
-                    PostMessage(promptWindow, WM_CLOSE, 0, 0);
-                }
-                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+                PromptForExplorerRestart();
             }
-            CloseHandle(g_restartExplorerPromptThread);
-            g_restartExplorerPromptThread = nullptr;
+
+            // 3. Safe bounded wait (30s) matching official simple-window-switcher pattern
+            if (g_restartExplorerPromptThread)
+            {
+                if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
+                {
+                    if (HWND promptWindow = g_restartExplorerPromptWindow.load())
+                    {
+                        PostMessage(promptWindow, WM_CLOSE, 0, 0);
+                    }
+                    WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+                }
+                CloseHandle(g_restartExplorerPromptThread);
+                g_restartExplorerPromptThread = nullptr;
+            }
         }
     }
 }
