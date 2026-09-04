@@ -4,6 +4,7 @@
 // @description     A feature-rich top taskbar hosted by a dedicated Explorer tool process
 // @version         1.0.0
 // @author          WasiXGamer
+// @github          https://github.com/wasixgamer
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32
