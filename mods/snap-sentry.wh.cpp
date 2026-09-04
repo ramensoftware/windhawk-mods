@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.17.3
+// @version         0.18.8
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -27,6 +27,8 @@ notification.
 ## Clipboard modes
 
 * **Image** copies the picture so it stays pasteable even after the file is deleted.
+  For a multi-page or animated image only the first frame is copied, so the file is
+  kept rather than deleted.
 * **File** copies the file for pasting into File Explorer. Deletion is disabled.
 * **Path** copies the full path as text. You can pick plain text, a quoted path, a
   file link, or a Markdown image link, which is handy for pasting a screenshot
@@ -57,9 +59,11 @@ While the popup is turned on, SnapSentry leaves two things on your machine so th
 notification buttons work, a SnapSentry shortcut in your Start Menu programs
 folder and one registry entry. Turning the popup off or disabling the mod removes
 both again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. If you have turned its notifications off, it takes that as a
-cue to stay quiet: it still copies to the clipboard but shows no dialog and never
-auto deletes.
+to a standard dialog. If you have turned its notifications off, it takes
+that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
+and never auto deletes. A multi-page or animated image is kept rather than
+deleted, because only its first frame can go on the clipboard, and afterwards a
+short notice says so, when the notification is available.
 
 ## Privacy
 
@@ -104,7 +108,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
@@ -308,12 +312,39 @@ static void LoadSettings() {
     if (s.folder.empty()) {
         s.folder = DefaultScreenshotsFolder();
     } else {
-        // Expand things like %USERPROFILE% so a pasted path with env vars resolves.
-        WCHAR expanded[MAX_PATH * 2];
-        DWORD n = ExpandEnvironmentStringsW(s.folder.c_str(), expanded,
-                                            ARRAYSIZE(expanded));
-        if (n > 0 && n <= ARRAYSIZE(expanded)) {
-            s.folder = expanded;
+        // Expand things like %USERPROFILE% so a pasted path with env vars
+        // resolves. The two-call form avoids a length cliff: the first call
+        // with no buffer returns the size actually needed, so a long expansion
+        // isn't silently left unexpanded.
+        DWORD need = ExpandEnvironmentStringsW(s.folder.c_str(), nullptr, 0);
+        if (need > 0) {
+            std::wstring expanded(need, L'\0');
+            DWORD got = ExpandEnvironmentStringsW(s.folder.c_str(),
+                                                  expanded.data(), need);
+            if (got > 0 && got <= need) {
+                expanded.resize(got - 1);  // Drop the terminator counted in got.
+                s.folder = std::move(expanded);
+            }
+        }
+    }
+    // Canonicalize once: this also turns '/' into '\' and resolves '.' and '..',
+    // so nothing downstream has to cope with a path the shell parser rejects.
+    // Skipped when empty (DefaultScreenshotsFolder() can return "" when neither
+    // known folder resolves): GetFullPathNameW treats "" as a relative path and
+    // resolves it against the current directory instead of leaving it empty,
+    // which would defeat WatchThread's empty-folder idle check. Two-call form
+    // for the same reason as above: a long path shouldn't silently skip
+    // normalization.
+    if (!s.folder.empty()) {
+        DWORD need = GetFullPathNameW(s.folder.c_str(), 0, nullptr, nullptr);
+        if (need > 0) {
+            std::wstring full(need, L'\0');
+            DWORD got =
+                GetFullPathNameW(s.folder.c_str(), need, full.data(), nullptr);
+            if (got > 0 && got < need) {
+                full.resize(got);
+                s.folder = std::move(full);
+            }
         }
     }
 
@@ -552,35 +583,29 @@ static bool ClipboardFile(const std::wstring& path) {
     return ok;
 }
 
-// Fills a DIB pixel region from a top-down 32bpp BGRA source, writing the rows
-// bottom-up as DIB clipboard formats expect.
-static void WriteBottomUp(BYTE* dest, const BYTE* topDown, UINT width,
-                          UINT height) {
-    size_t stride = (size_t)width * 4;
-    for (UINT y = 0; y < height; y++) {
-        memcpy(dest + (size_t)y * stride,
-               topDown + (size_t)(height - 1 - y) * stride, stride);
-    }
-}
+// Result of an image copy. CopiedFirstFrameOnly means a multi-page or animated
+// image was copied but only its first frame reached the clipboard, so the caller
+// must keep the source file (the rest isn't on the clipboard).
+enum class ImageCopy { Failed, Copied, CopiedFirstFrameOnly };
 
 // Decodes any WIC-supported image into a self-contained CF_DIBV5 payload, which is
 // what makes the copied image survive deletion of the source file. Windows
 // synthesizes CF_DIB and CF_BITMAP from CF_DIBV5 on demand, so publishing those too
 // would just be another full-size copy of the bitmap (it runs in a 32-bit process).
-static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
-    multiFrame = false;  // Assigned for real once the frame count is known below.
+static ImageCopy ClipboardImage(const std::wstring& path) {
     IWICImagingFactory* factory = nullptr;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
-        return false;
+        return ImageCopy::Failed;
     }
 
     IWICBitmapDecoder* decoder = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
     IWICFormatConverter* converter = nullptr;
-    BYTE* topDown = nullptr;
+    IWICBitmapFlipRotator* flipper = nullptr;
     HGLOBAL hV5 = nullptr;
     bool ok = false;
+    bool multiFrame = false;
 
     do {
         if (FAILED(factory->CreateDecoderFromFilename(
@@ -611,18 +636,11 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
 
         size_t stride = (size_t)width * 4;
         size_t pixels = stride * height;
-        topDown = (BYTE*)malloc(pixels);
-        if (!topDown ||
-            FAILED(converter->CopyPixels(nullptr, (UINT)stride, (UINT)pixels,
-                                         topDown))) {
-            break;
-        }
 
         hV5 = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pixels);
         if (!hV5) {
             break;
         }
-
         BYTE* v5 = (BYTE*)GlobalLock(hV5);
         if (!v5) {
             break;
@@ -641,7 +659,19 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
         bv5->bV5BlueMask = 0x000000FF;
         bv5->bV5AlphaMask = 0xFF000000;
         bv5->bV5CSType = LCS_WINDOWS_COLOR_SPACE;
-        WriteBottomUp(v5 + sizeof(BITMAPV5HEADER), topDown, width, height);
+
+        // A DIB stores rows bottom-up, but the converter yields them top-down.
+        // Flipping vertically and copying straight into the DIB buffer avoids a
+        // second full-size scratch copy (peak stays 1x the bitmap, which matters
+        // for a large TIFF in a 32-bit process) and drops the manual row copy.
+        if (FAILED(factory->CreateBitmapFlipRotator(&flipper)) ||
+            FAILED(flipper->Initialize(converter,
+                                       WICBitmapTransformFlipVertical)) ||
+            FAILED(flipper->CopyPixels(nullptr, (UINT)stride, (UINT)pixels,
+                                       v5 + sizeof(BITMAPV5HEADER)))) {
+            GlobalUnlock(hV5);
+            break;
+        }
         GlobalUnlock(hV5);
 
         if (!OpenClipboard(nullptr)) {
@@ -659,7 +689,9 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
     if (hV5) {
         GlobalFree(hV5);
     }
-    free(topDown);
+    if (flipper) {
+        flipper->Release();
+    }
     if (converter) {
         converter->Release();
     }
@@ -670,7 +702,10 @@ static bool ClipboardImage(const std::wstring& path, bool& multiFrame) {
         decoder->Release();
     }
     factory->Release();
-    return ok;
+    if (!ok) {
+        return ImageCopy::Failed;
+    }
+    return multiFrame ? ImageCopy::CopiedFirstFrameOnly : ImageCopy::Copied;
 }
 
 // ============================================================================
@@ -1110,38 +1145,25 @@ static std::wstring XmlEscape(const std::wstring& in) {
     return out;
 }
 
-// Builds and shows the toast, then waits up to s.delaySeconds for a button
-// click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
-// or an explicit dismissal. Returns false -- meaning "use the dialog instead"
-// -- if registration hasn't succeeded or any WinRT step fails, so the mod stays
-// usable even where toast notifications don't work.
-static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+// Builds the notifier and the toast object for a given XML payload: the
+// activation factory, the per-AUMID notifier, the current notification
+// setting, and the constructed toast document. Both toast paths need this
+// exact chain. Returns false if any step fails or notifications are off;
+// settingReadable reports whether get_Setting itself succeeded, so a caller
+// that needs to tell "notifications are off" apart from "couldn't find out"
+// doesn't have to infer it from setting alone.
+static bool BuildToast(const std::wstring& xml,
+                       ABI::Windows::UI::Notifications::NotificationSetting& setting,
+                       bool& settingReadable,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Data::Xml::Dom;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
     using Microsoft::WRL::Wrappers::HStringReference;
 
-    if (!g_toastRegistered.load()) {
-        return false;
-    }
-
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
-    ULONGLONG toastId = GetTickCount64();
-    std::wstring id = std::to_wstring(toastId);
-    std::wstring xml =
-        L"<toast scenario=\"reminder\" duration=\"long\" "
-        L"activationType=\"background\" launch=\"body|" + id + L"\">"
-        L"<visual><binding template=\"ToastGeneric\">"
-        L"<text>Screenshot saved</text><text>" +
-        XmlEscape(name) +
-        L"</text><text placement=\"attribution\">SnapSentry</text>"
-        L"</binding></visual><actions>"
-        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
-        L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
-        L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
-        L"</actions></toast>";
-
+    settingReadable = false;
     ComPtr<IToastNotificationManagerStatics> toastStatics;
     if (FAILED(RoGetActivationFactory(
             HStringReference(
@@ -1150,27 +1172,15 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             IID_PPV_ARGS(&toastStatics)))) {
         return false;
     }
-    ComPtr<IToastNotifier> notifier;
     if (FAILED(toastStatics->CreateToastNotifierWithId(
             HStringReference(kAppUserModelId).Get(), &notifier))) {
         return false;
     }
 
-    // Show() reports success even when notifications are switched off for us, and
-    // then nothing is ever delivered and no answer can arrive. Ask first. If we
-    // genuinely can't tell why, fall back to the dialog; but if notifications are
-    // switched off (system-wide, by policy, or for this app), the user has said
-    // "stop popping things up", so don't substitute a modal dialog on every
-    // screenshot. Do the configured clipboard copy and never delete, since the user
-    // was never actually prompted.
-    NotificationSetting setting = NotificationSetting_Enabled;
-    if (FAILED(notifier->get_Setting(&setting))) {
-        return false;  // Can't tell: fall back to the dialog.
-    }
-    if (setting != NotificationSetting_Enabled) {
-        Wh_Log(L"Notifications off (setting=%d); copy only, no dialog", (int)setting);
-        action = ACTION_COPY_ONLY;
-        return true;
+    setting = NotificationSetting_Enabled;
+    settingReadable = SUCCEEDED(notifier->get_Setting(&setting));
+    if (!settingReadable || setting != NotificationSetting_Enabled) {
+        return false;
     }
 
     ComPtr<IInspectable> docInspectable;
@@ -1193,9 +1203,65 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             IID_PPV_ARGS(&toastFactory)))) {
         return false;
     }
-    ComPtr<IToastNotification> toast;
-    if (FAILED(toastFactory->CreateToastNotification(doc.Get(), &toast))) {
+    return SUCCEEDED(toastFactory->CreateToastNotification(doc.Get(), &toast));
+}
+
+// Returns the final path segment: what should appear on screen instead of the
+// full path.
+static std::wstring BaseName(const std::wstring& path) {
+    return path.substr(path.find_last_of(L"\\/") + 1);
+}
+
+// Builds and shows the toast, then waits up to s.delaySeconds for a button
+// click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
+// or an explicit dismissal. Returns false, meaning "use the dialog instead",
+// if registration hasn't succeeded or any WinRT step fails, so the mod stays
+// usable even where toast notifications don't work.
+static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+    using namespace ABI::Windows::UI::Notifications;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+
+    if (!g_toastRegistered.load()) {
         return false;
+    }
+
+    std::wstring name = BaseName(path);
+    ULONGLONG toastId = GetTickCount64();
+    std::wstring id = std::to_wstring(toastId);
+    std::wstring xml =
+        L"<toast scenario=\"reminder\" duration=\"long\" "
+        L"activationType=\"background\" launch=\"body|" + id + L"\">"
+        L"<visual><binding template=\"ToastGeneric\">"
+        L"<text>Screenshot saved</text><text>" +
+        XmlEscape(name) +
+        L"</text><text placement=\"attribution\">SnapSentry</text>"
+        L"</binding></visual><actions>"
+        L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
+        L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
+        L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
+        L"</actions></toast>";
+
+    // Show() reports success even when notifications are switched off for us, and
+    // then nothing is ever delivered and no answer can arrive. BuildToast asks
+    // first, so we can tell the two failure shapes apart. If we genuinely can't
+    // tell why it failed, fall back to the dialog; but if notifications are
+    // switched off (system-wide, by policy, or for this app), the user has said
+    // "stop popping things up", so don't substitute a modal dialog on every
+    // screenshot. Do the configured clipboard copy and never delete, since the
+    // user was never actually prompted.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    bool settingReadable = false;
+    ComPtr<IToastNotifier> notifier;
+    ComPtr<IToastNotification> toast;
+    if (!BuildToast(xml, setting, settingReadable, notifier, toast)) {
+        if (settingReadable && setting != NotificationSetting_Enabled) {
+            Wh_Log(L"Notifications off (setting=%d); copy only, no dialog",
+                   (int)setting);
+            action = ACTION_COPY_ONLY;
+            return true;
+        }
+        return false;  // Can't tell: fall back to the dialog.
     }
 
     ResetEvent(g_toastActionEvent);
@@ -1374,7 +1440,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
         return ACTION_KEEP;  // Don't put up UI during teardown.
     }
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    std::wstring name = BaseName(path);
     DialogState state;
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
@@ -1452,6 +1518,48 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
         return action;
     }
     return AskAction(path, s);
+}
+
+// Fire-and-forget informational toast, shown when a multi-frame or animated image
+// was copied (first frame only) and therefore kept instead of deleted, so an
+// explicit "Copy + delete" or a countdown auto-action isn't a silent no-op. Unlike
+// the action toast this adds no listeners and does not wait, so it never parks the
+// worker. Purely informational, so there is nothing to fall back to: if it can't be
+// shown (registration gone, notifications off), the caller's log line stands alone.
+static void ShowKeptToast(const std::wstring& name) {
+    using namespace ABI::Windows::UI::Notifications;
+    using Microsoft::WRL::ComPtr;
+
+    if (!g_toastRegistered.load()) {
+        return;
+    }
+    // Don't put up UI during teardown: the registration this toast needs is about
+    // to be removed, and a notification that outlives the mod would leave exactly
+    // the residue the mod exists to avoid.
+    if (WaitStop(0)) {
+        return;
+    }
+    std::wstring xml =
+        L"<toast duration=\"short\" activationType=\"background\">"
+        L"<visual><binding template=\"ToastGeneric\">"
+        L"<text>Kept the file</text><text>" +
+        XmlEscape(name) +
+        L" is a multi-page or animated image, so only its first frame was copied "
+        L"and the file was kept.</text>"
+        L"<text placement=\"attribution\">SnapSentry</text>"
+        L"</binding></visual></toast>";
+
+    // Respect the user's notification choice; nothing to substitute for an
+    // informational message if they've turned notifications off. BuildToast
+    // covers that check along with the rest of the chain.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    bool settingReadable = false;
+    ComPtr<IToastNotifier> notifier;
+    ComPtr<IToastNotification> toast;
+    if (!BuildToast(xml, setting, settingReadable, notifier, toast)) {
+        return;
+    }
+    notifier->Show(toast.Get());
 }
 
 // ============================================================================
@@ -1609,9 +1717,11 @@ static void ProcessOne(std::wstring path) {
     bool forceImage = (action == ACTION_COPY_DELETE);
 
     bool copied;
-    bool multiFrame = false;  // Set by ClipboardImage when only frame 0 was copied.
+    bool multiFrame = false;  // True when only frame 0 of a multi-frame image copied.
     if (forceImage || s.mode == L"image") {
-        copied = ClipboardImage(path, multiFrame);
+        ImageCopy r = ClipboardImage(path);
+        copied = (r != ImageCopy::Failed);
+        multiFrame = (r == ImageCopy::CopiedFirstFrameOnly);
     } else if (s.mode == L"file") {
         copied = ClipboardFile(path);
     } else if (s.mode == L"path") {
@@ -1637,11 +1747,16 @@ static void ProcessOne(std::wstring path) {
         (forceImage || (s.deleteFile && !payloadReferencesFile));
     // A multi-page or animated image copied only part of itself (frame 0), so
     // deleting the file would lose the rest. Keep it, the same treatment file/path
-    // payloads get. The keep is recorded in the log; a user-facing notification is
-    // a separately tested follow-up, so it isn't surfaced on screen here.
+    // payloads get.
     if (deleteRequested && multiFrame) {
         Wh_Log(L"Multi-frame image: copied the first frame only, keeping the file%s",
                s.logDetails ? (L": " + path).c_str() : L"");
+        // A popup was in play (an explicit Copy + delete, or letting the countdown
+        // run), so tell the user the file was kept instead of deleted, otherwise the
+        // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
+        if (s.popup) {
+            ShowKeptToast(BaseName(path));
+        }
     }
     bool wantsDelete = deleteRequested && !multiFrame;
     if (!wantsDelete) {
@@ -1686,7 +1801,7 @@ static bool SeenRecently(const std::wstring& name, ULONGLONG now) {
 }
 
 static void ReleaseInflight(const std::wstring& path) {
-    std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    std::wstring name = BaseName(path);
     ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
     g_inflight.erase(name);
@@ -1704,16 +1819,48 @@ static bool g_toastRegApplied = false;
 // one moment nothing would otherwise reclaim them.
 static bool g_toastRegSynced = false;
 
+// Clears anything SnapSentry left in Action Center, such as a kept-file
+// notice. Must run while the AUMID is still registered: ClearWithId needs it
+// to resolve which app's history to clear. Idempotent, so it is safe to call
+// on both the unload path and the popup-off path.
+static void ClearToastHistory() {
+    using namespace ABI::Windows::UI::Notifications;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+    ComPtr<IToastNotificationManagerStatics> statics;
+    ComPtr<IToastNotificationManagerStatics2> statics2;
+    ComPtr<IToastNotificationHistory> history;
+    HRESULT hr = E_FAIL;
+    if (SUCCEEDED(RoGetActivationFactory(
+            HStringReference(
+                RuntimeClass_Windows_UI_Notifications_ToastNotificationManager)
+                .Get(),
+            IID_PPV_ARGS(&statics))) &&
+        SUCCEEDED(statics.As(&statics2)) &&
+        SUCCEEDED(statics2->get_History(&history))) {
+        hr = history->ClearWithId(HStringReference(kAppUserModelId).Get());
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"ClearToastHistory failed (0x%08lx); a kept-file notice may "
+               L"outlive the mod",
+               hr);
+    }
+}
+
 // The shortcut and the registry key exist for one reason, to let a toast button
 // activate us, so they follow the settings instead of being written
 // unconditionally at startup. With processing or the popup off there is no
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
 static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
-    // Reclaim the per-AUMID notification key on unload before the early return
-    // below: with the popup already off at unload the requested state matches and
-    // we would otherwise return without ever clearing it, stranding the key.
+    // Clear Action Center and reclaim the per-AUMID notification key on unload,
+    // unconditionally and before the early return below: with the popup already
+    // off at unload the requested state matches, and we would otherwise return
+    // without ever running either. The AUMID registration is still intact here,
+    // which ClearToastHistory needs; RemoveNotificationSettings only touches the
+    // separate per-app notification-settings key, not the AUMID itself.
     if (unloading) {
+        ClearToastHistory();
         RemoveNotificationSettings();
     }
     // Skip only when nothing needs to change: the state matches and, when the popup
@@ -1740,6 +1887,16 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
         g_toastRegistered = aumidOk && clsidOk && SUCCEEDED(regHr);
         if (g_toastRegistered.load()) {
             Wh_Log(L"Toast notifications ready");
+            // Reclaim anything an unclean exit left in Action Center: Windows
+            // persists it across reboots, and the popup-off first pass below is
+            // the only other place that clears it, so with the popup on nothing
+            // would. The AUMID is registered by this point, so the clear
+            // resolves. Once a session is enough.
+            static bool clearedStaleHistory = false;
+            if (!clearedStaleHistory) {
+                clearedStaleHistory = true;
+                ClearToastHistory();
+            }
             PrewarmToast();  // Avoid a slow first popup.
         } else {
             Wh_Log(
@@ -1755,6 +1912,14 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
     if (g_toastActivatorCookie) {
         CoRevokeClassObject(g_toastActivatorCookie);
         g_toastActivatorCookie = 0;
+    }
+    // Unload already cleared it above, while the notification key was still
+    // there; repeating it here would run after RemoveNotificationSettings and
+    // could fail for that reason alone. Skip it when nothing was ever
+    // registered (the default popup-off first pass), since there is then no
+    // AUMID for ClearWithId to resolve and the failure means nothing.
+    if (!unloading && g_toastRegApplied) {
+        ClearToastHistory();
     }
     RemoveAumidRegistration();
     RemoveClsidRegistration();
@@ -1848,11 +2013,23 @@ static bool JustCreated(const std::wstring& path) {
     return true;
 }
 
+// Joins a child name to a folder without doubling the separator, which also
+// keeps a watched drive root such as D:\ correct. A doubled separator is not a
+// form the shell parser accepts, and the composed path feeds the clipboard
+// payloads and the delete alike.
+static std::wstring JoinChild(const std::wstring& dir, const std::wstring& name) {
+    if (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) {
+        return dir + name;
+    }
+    return dir + L'\\' + name;
+}
+
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
         return;
     }
-    if (!JustCreated(folder + L"\\" + name)) {
+    std::wstring path = JoinChild(folder, name);
+    if (!JustCreated(path)) {
         return;
     }
     ULONGLONG now = GetTickCount64();
@@ -1864,7 +2041,7 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     bool added = !SeenRecently(name, now) && g_preexisting.count(name) == 0 &&
                  g_inflight.insert(name).second;
     if (added) {
-        g_queue.push_back(folder + L"\\" + name);
+        g_queue.push_back(std::move(path));
     }
     bool logDetails = g_settings.logDetails;
     LeaveCriticalSection(&g_lock);
@@ -1917,7 +2094,7 @@ static void ParseNotifications(const std::wstring& folder, const BYTE* buffer,
 static void SnapshotExistingNames(const std::wstring& folder) {
     std::set<std::wstring> names;
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &fd);
+    HANDLE h = FindFirstFileW(JoinChild(folder, L"*").c_str(), &fd);
     if (h != INVALID_HANDLE_VALUE) {
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -1939,7 +2116,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
     }
     HANDLE readyWaits[] = {g_stopEvent, g_reloadEvent, ov.hEvent};
 
-    int openFailures = 0;
+    int watchFailures = 0;  // consecutive open OR notification failures, for backoff
     while (!WaitStop(0)) {
         Settings s = SnapshotSettings();
         if (s.folder.empty()) {
@@ -1959,15 +2136,19 @@ static DWORD WINAPI WatchThread(LPVOID) {
             // The folder may appear later (Pictures\Screenshots isn't created until
             // the first Win+PrintScreen). Back off from 2s to 30s after a few tries
             // so a Snipping-Tool-only machine isn't polled twice a second forever.
-            DWORD wait = openFailures < 5 ? 2000 : 30000;
-            if (openFailures < 1000000) {
-                openFailures++;
+            DWORD wait = watchFailures < 5 ? 2000 : 30000;
+            if (watchFailures < 1000000) {
+                watchFailures++;
             }
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
             WaitForMultipleObjects(2, idle, FALSE, wait);
             continue;
         }
-        openFailures = 0;
+
+        // Opening the handle isn't proof the watch works, so watchFailures is not
+        // reset here. It resets only when a notification actually arrives (below), so
+        // a path where the handle opens but ReadDirectoryChangesW never delivers still
+        // escalates its backoff instead of respinning every 2s.
 
         // Snapshot existing names before arming notifications so downloads or
         // sync churn on pre-existing files never look like new screenshots.
@@ -2012,6 +2193,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
                 Wh_Log(L"Change buffer overflow; some screenshots may be skipped");
                 continue;
             }
+            watchFailures = 0;  // A notification arrived: the watch works; clear backoff.
             ParseNotifications(s.folder, buffer, bytes);
         }
         CloseHandle(dir);
@@ -2019,10 +2201,15 @@ static DWORD WINAPI WatchThread(LPVOID) {
             // The inner loop ended on an error, not a reload: the handle opened but
             // change notifications don't work on this path (some network redirectors
             // and virtual/sync filesystems return ERROR_INVALID_FUNCTION), or the
-            // volume went away. Back off like the open-failure path so a persistently
-            // failing watch can't peg a core re-opening and re-enumerating in a spin.
+            // volume went away. Back off with the same 2s->30s escalation as the
+            // open-failure path (watchFailures counts both), so a persistently failing
+            // watch can't peg a core re-opening and re-enumerating in a spin.
+            DWORD wait = watchFailures < 5 ? 2000 : 30000;
+            if (watchFailures < 1000000) {
+                watchFailures++;
+            }
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
-            WaitForMultipleObjects(2, idle, FALSE, 2000);
+            WaitForMultipleObjects(2, idle, FALSE, wait);
         }
     }
 
