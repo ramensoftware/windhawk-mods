@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
+// @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
 // @version        5.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
