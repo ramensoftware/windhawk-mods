@@ -68,6 +68,7 @@ struct TrayEntry {
     BYTE prevSupported = 0;
     BYTE prevValid = 0;
     bool pending = false;
+    DWORD threadId = 0;
 };
 static std::vector<TrayEntry> g_entries;
 static CRITICAL_SECTION g_cs;
@@ -101,7 +102,6 @@ inline bool IsReadablePointer(void* ptr, SIZE_T size) {
     if (VirtualQuery(ptr, &mbi, sizeof(mbi))==0) return false;
     if (mbi.State!= MEM_COMMIT) return false;
     if (mbi.Protect & (PAGE_GUARD|PAGE_NOACCESS)) return false;
-    // check if range stays inside same region
     SIZE_T offset = (BYTE*)ptr - (BYTE*)mbi.BaseAddress;
     return offset + size <= mbi.RegionSize;
 }
@@ -120,14 +120,19 @@ inline bool GetTrayFlagsPointers(LONG_PTR lp, BYTE** ppSup, BYTE** ppValid) {
 static void RestoreEntry(TrayEntry &e) {
     if (!e.pending ||!e.lpTrayNotify) return;
     BYTE *pSup=nullptr,*pValid=nullptr;
-    if (!GetTrayFlagsPointers(e.lpTrayNotify, &pSup, &pValid)) return;
+    if (!GetTrayFlagsPointers(e.lpTrayNotify, &pSup, &pValid)) {
+        e.pending = false;
+        e.lpTrayNotify = 0;
+        e.threadId = 0;
+        return;
+    }
     *pSup = e.prevSupported;
     *pValid = e.prevValid;
     e.pending = false;
     e.lpTrayNotify = 0;
+    e.threadId = 0;
 }
 
-// WindhawkUtils subclass proc = 5 args, no uId
 LRESULT CALLBACK NewTrayToolbarProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRef)
 {
     if (uMsg == g_wmPrivRestore) {
@@ -178,10 +183,14 @@ LRESULT CALLBACK NewTrayToolbarProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             e->prevValid = curValid;
                             e->lpTrayNotify = lp;
                             e->pending = true;
+                            e->threadId = GetCurrentThreadId();
                         }
                         *pSup = 1;
                         *pValid = 1;
                         LeaveCriticalSection(&g_cs);
+                        // Expire if SM_CXSMICON never arrives - prevents indefinite pending
+                        // and wrong metric being handed to unrelated code later
+                        PostMessageW(hWnd, g_wmPrivRestore, 0, 0);
                     }
                 }
             }
@@ -189,6 +198,10 @@ LRESULT CALLBACK NewTrayToolbarProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         return res;
     }
     if (uMsg == TB_SETPADDING) {
+        // Only affect real tray toolbars
+        if (!FindTrayNotifyForToolbar(hWnd)) {
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
         lParam &= ~0xFFFF;
         lParam |= ((g_padding / 2 * 2) & 0xFFFF);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -198,6 +211,8 @@ LRESULT CALLBACK NewTrayToolbarProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
 static void SubclassToolbar(HWND hTB) {
     if (!hTB ||!IsWindowInCurrentProcess(hTB)) return;
+    // Strict check: only tray toolbar
+    if (!FindTrayNotifyForToolbar(hTB)) return;
     EnterCriticalSection(&g_cs);
     bool already = FindEntryByTb(hTB)!=nullptr;
     LeaveCriticalSection(&g_cs);
@@ -249,49 +264,40 @@ HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD st, 
     wchar_t winCls[64];
     if (!GetClassNameW(h, winCls, 64)) return h;
     if (wcscmp(winCls, L"ToolbarWindow32")==0) {
-        HWND p = par;
-        while (p) {
-            wchar_t b[64];
-            if (!GetClassNameW(p, b, 64)) break;
-            if (wcscmp(b, L"TrayNotifyWnd")==0 || wcscmp(b, L"SysPager")==0 ||
-                wcscmp(b, L"Shell_TrayWnd")==0 || wcscmp(b, L"Shell_SecondaryTrayWnd")==0) {
-                SubclassToolbar(h);
-                break;
-            }
-            p = GetParent(p);
+        // Restrict to tray subtree only - this was the bug:
+        // previously Shell_TrayWnd/Shell_SecondaryTrayWnd matched deskband toolbars
+        if (FindTrayNotifyForToolbar(h)) {
+            SubclassToolbar(h);
         }
     }
     return h;
 }
 
 static int HandleMetricsResult(int r) {
+    DWORD curTid = GetCurrentThreadId();
+    bool anyRestored = false;
     EnterCriticalSection(&g_cs);
     for (auto &e : g_entries) {
-        if (e.pending) RestoreEntry(e);
+        if (e.pending && e.threadId == curTid) {
+            RestoreEntry(e);
+            anyRestored = true;
+        }
     }
     LeaveCriticalSection(&g_cs);
-    return (r + g_padding) / 2;
+    return anyRestored? (r + g_padding) / 2 : r;
 }
 
 int WINAPI GetSystemMetrics_Hook(int nIndex) {
     int r = GetSystemMetrics_Orig(nIndex);
     if (nIndex==SM_CXSMICON && g_padding!=0 && IsFromExplorer()) {
-        bool hasPending=false;
-        EnterCriticalSection(&g_cs);
-        for (auto &e : g_entries) if (e.pending) { hasPending=true; break; }
-        LeaveCriticalSection(&g_cs);
-        if (hasPending) return HandleMetricsResult(r);
+        return HandleMetricsResult(r);
     }
     return r;
 }
 int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
     int r = GetSystemMetricsForDpi_Orig? GetSystemMetricsForDpi_Orig(nIndex, dpi) : GetSystemMetrics_Orig(nIndex);
     if (nIndex==SM_CXSMICON && g_padding!=0 && IsFromExplorer()) {
-        bool hasPending=false;
-        EnterCriticalSection(&g_cs);
-        for (auto &e : g_entries) if (e.pending) { hasPending=true; break; }
-        LeaveCriticalSection(&g_cs);
-        if (hasPending) return HandleMetricsResult(r);
+        return HandleMetricsResult(r);
     }
     return r;
 }
