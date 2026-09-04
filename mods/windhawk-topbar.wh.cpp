@@ -15,9 +15,10 @@
 
 ![TopBar screenshot](https://i.imgur.com/bryjzKr.png)
 
-
 Adds a **second, fully independent taskbar docked to the top of the screen**, hosted by a
 dedicated Explorer tool process.
+
+[![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
 
 ## Themes
 
@@ -389,6 +390,9 @@ HMODULE g_modModule = nullptr;
 
 HWND g_topBarHwnd;
 HWND g_islandHwnd;
+wuxc::Grid g_wallpaperLayer{nullptr};  // Store the wallpaper layer for updates
+std::wstring g_lastWallpaperPath;       // For change detection
+DispatcherTimer g_wallpaperTimer{nullptr}; // Polling timer
 int g_barHeightPx = 40;
 double g_dpiScale = 1.0;
 
@@ -5534,6 +5538,7 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element) {
 // Gets the current desktop wallpaper and returns an ImageBrush from it.
 // Returns an empty brush if wallpaper is missing or fails to load.
 wuxm::ImageBrush GetWallpaperBrush() {
+    
     wuxm::ImageBrush brush;
 
     wchar_t wallpaperPath[MAX_PATH] = {0};
@@ -5555,6 +5560,21 @@ wuxm::ImageBrush GetWallpaperBrush() {
         }
     }
     return brush;
+}
+
+// Checks if the wallpaper has changed and updates the background
+void UpdateWallpaperIfChanged() {
+    if (!g_wallpaperLayer) return;
+
+    wchar_t wallpaperPath[MAX_PATH] = {0};
+    if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
+        std::wstring currentPath = wallpaperPath;
+        if (currentPath != g_lastWallpaperPath) {
+            g_lastWallpaperPath = currentPath;
+            g_wallpaperLayer.Background(GetWallpaperBrush());
+            Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
+        }
+    }
 }
 // Wheel over the Display and Sound buttons adjusts brightness and volume in
 // place. Both read through the cached fast path so a fast scroll doesn't queue
@@ -5720,6 +5740,8 @@ FrameworkElement BuildTopBarContent() {
         wallpaperLayer.VerticalAlignment(VerticalAlignment::Stretch);
         wallpaperLayer.Opacity(1); // Slightly transparent so the top bar tint shows
         barRoot.Children().Append(wallpaperLayer);
+        g_wallpaperLayer = wallpaperLayer; // Save reference
+        g_wallpaperLayer = wallpaperLayer; // Save reference for updates
     }
     // Interactive content grid (This is TopBarRoot and gets the blur)
     wuxc::Grid root;
@@ -6243,6 +6265,15 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             // like; the panels rebuild themselves when next opened, so only the
             // clock needs touching here.
             UpdateClockText();
+
+            // Reload the wallpaper when Windows tells us the wallpaper changed.
+            // The lParam will be "Wallpaper" (case-sensitive? usually it's "Wallpaper").
+            if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"Wallpaper") == 0) {
+                if (g_wallpaperLayer) {
+                    g_wallpaperLayer.Background(GetWallpaperBrush());
+                    Wh_Log(L"TopBar: Wallpaper background updated.");
+                }
+            }
             return 0;
 
         case WM_HOTKEY:
@@ -6440,6 +6471,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         });
         g_taskListTimer.Start();
 
+        // Start wallpaper polling timer (every 2 seconds)
+        g_wallpaperTimer = DispatcherTimer();
+        g_wallpaperTimer.Interval(std::chrono::seconds(2));
+        g_wallpaperTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try {
+                UpdateWallpaperIfChanged();
+            } catch (...) {
+            }
+        });
+        g_wallpaperTimer.Start();
+
         RefreshTaskList(true);
 
         // PreTranslateMessage is what gives the island keyboard input -- without it
@@ -6470,6 +6512,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
+        if (g_wallpaperTimer) g_wallpaperTimer.Stop();
         if (g_taskListTimer) g_taskListTimer.Stop();
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Stop();
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
@@ -6479,7 +6522,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
-        if (g_taskListTimer) g_taskListTimer = nullptr;
+        if (g_wallpaperTimer) g_wallpaperTimer = nullptr;
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
         if (g_taskClickTimer) g_taskClickTimer = nullptr;
@@ -6723,7 +6766,8 @@ void WhTool_ModUninit() {
 // ============================================================================
 
 BOOL Wh_ModInit() {
-    return WhTool_ModInit();
+    WhTool_ModInit();
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
