@@ -124,35 +124,28 @@ both target the same function and work out the origin handling.
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves right,
-    negative moves left. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator sideways. A positive number moves it right, a negative one
+    moves it left. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves down,
-    negative moves up. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator up or down. A positive number moves it down, a negative one
+    moves it up. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
 - durationSeconds: 0
   $name: Seconds on screen
   $description: >-
-    How long the indicator stays before it hides itself. 0 keeps whatever Windows
-    uses. Anything from 1 to 60 is accepted.
+    How long the indicator stays on screen. Leave it at 0 to keep the timing
+    Windows uses. Anything from 1 to 60 seconds works.
 - skipShowAnimation: false
   $name: Skip the slide in animation
   $description: >-
-    The indicator appears where it is going to sit instead of sliding in. The
-    slide out is a separate setting below.
+    The indicator appears in place instead of sliding in.
 - skipHideAnimation: false
   $name: Skip the slide out animation
   $description: >-
-    The indicator disappears at once instead of sliding away. Windows has its own
-    no animation path for this and the mod just asks for that one, so nothing
-    outside the indicator is affected.
+    The indicator disappears instead of sliding away.
 - perIndicator:
   - volume: same
     $name: Volume
@@ -247,8 +240,9 @@ both target the same function and work out the origin handling.
     - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give an individual indicator its own spot. Anything left on Same as the main
-    position follows the Position setting above. The offsets apply to all of them.
+    Give one kind of indicator a spot of its own. Anything left on "Same as the
+    main position" follows the Position setting above. The offsets apply to all
+    of them either way.
 */
 // ==/WindhawkModSettings==
 
