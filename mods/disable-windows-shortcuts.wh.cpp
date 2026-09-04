@@ -291,8 +291,6 @@ For **Special Shortcuts** and **Direct Shortcuts** to be blocked, you **must** a
 #include <windows.h>
 #include <atomic>
 #include <commctrl.h>
-#include <algorithm>
-#include <string>
 
 bool g_isExplorer = false;
 bool g_isDWM = false;
@@ -457,22 +455,22 @@ void LoadSettings()
     g_settings.DisableWinU = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinU");
     g_settings.DisableWinSlash = Wh_GetIntSetting(L"SpecialShortcuts.DisableWinSlash");
 
-    // Direct Shortcuts (No Explorer Restart Required - with backward-compatible fallback)
-    g_settings.DisableWinKey = Wh_GetIntSetting(L"DirectShortcuts.DisableWinKey") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinKey");
-    g_settings.DisableCtrlEsc = Wh_GetIntSetting(L"DirectShortcuts.DisableCtrlEsc") || Wh_GetIntSetting(L"StandardShortcuts.DisableCtrlEsc");
-    g_settings.DisableAltShift = Wh_GetIntSetting(L"DirectShortcuts.DisableAltShift") || Wh_GetIntSetting(L"StandardShortcuts.DisableAltShift");
-    g_settings.DisableWinSpace = Wh_GetIntSetting(L"DirectShortcuts.DisableWinSpace") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinSpace");
-    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"DirectShortcuts.DisableOfficeHotkeys") || Wh_GetIntSetting(L"StandardShortcuts.DisableOfficeHotkeys");
-    g_settings.DisableWinTab = Wh_GetIntSetting(L"DirectShortcuts.DisableWinTab") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinTab");
-    g_settings.DisableWinUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinUp") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinUp");
-    g_settings.DisableWinDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinDown") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinDown");
-    g_settings.DisableWinLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinLeft") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinLeft");
-    g_settings.DisableWinRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinRight") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinRight");
-    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftUp") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftUp");
-    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftDown") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftDown");
-    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftLeft") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftLeft");
-    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftRight") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftRight");
-    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"DirectShortcuts.DisableWinCtrlShiftB") || Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlShiftB");
+    // Direct Shortcuts (No Explorer Restart Required)
+    g_settings.DisableWinKey = Wh_GetIntSetting(L"DirectShortcuts.DisableWinKey");
+    g_settings.DisableCtrlEsc = Wh_GetIntSetting(L"DirectShortcuts.DisableCtrlEsc");
+    g_settings.DisableAltShift = Wh_GetIntSetting(L"DirectShortcuts.DisableAltShift");
+    g_settings.DisableWinSpace = Wh_GetIntSetting(L"DirectShortcuts.DisableWinSpace");
+    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"DirectShortcuts.DisableOfficeHotkeys");
+    g_settings.DisableWinTab = Wh_GetIntSetting(L"DirectShortcuts.DisableWinTab");
+    g_settings.DisableWinUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinUp");
+    g_settings.DisableWinDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinDown");
+    g_settings.DisableWinLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinLeft");
+    g_settings.DisableWinRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinRight");
+    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftUp");
+    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftDown");
+    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftLeft");
+    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"DirectShortcuts.DisableWinShiftRight");
+    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"DirectShortcuts.DisableWinCtrlShiftB");
 
     // Standard Shortcuts (Requires Explorer Restart)
     g_settings.DisableWinB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinB");
@@ -983,6 +981,12 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
 
+            if (isUp && vkCode < 256 && g_suppressedKeys[vkCode])
+            {
+                g_suppressedKeys[vkCode] = false;
+                return 1; // Suppress the matching modifier UP event
+            }
+
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
         }
 
@@ -1082,6 +1086,12 @@ void StartHookThread()
 {
     if (g_hookThreadRunning) return;
     
+    if (g_hookThread)
+    {
+        CloseHandle(g_hookThread);
+        g_hookThread = NULL;
+    }
+
     g_hookThreadRunning = true;
     DWORD threadId = 0;
     g_hookThread = CreateThread(NULL, 0, HookThread, NULL, 0, &threadId);
@@ -1147,67 +1157,15 @@ bool IsMainExplorer()
     return true;
 }
 
-bool IsExplorerUptimeLarge()
+bool IsExplorerMidSession()
 {
-    FILETIME creationTime, exitTime, kernelTime, userTime;
-    if (GetProcessTimes(GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime))
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTaskbar)
     {
-        ULARGE_INTEGER creation;
-        creation.LowPart = creationTime.dwLowDateTime;
-        creation.HighPart = creationTime.dwHighDateTime;
-        
-        FILETIME systemTime;
-        GetSystemTimeAsFileTime(&systemTime);
-        ULARGE_INTEGER current;
-        current.LowPart = systemTime.dwLowDateTime;
-        current.HighPart = systemTime.dwHighDateTime;
-        
-        // 15 seconds = 150,000,000 intervals of 100ns (distinguishes fresh boot from mid-session re-enable)
-        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 150000000ULL)
-            return true;
+        DWORD trayPid = 0;
+        GetWindowThreadProcessId(hTaskbar, &trayPid);
+        return (trayPid == GetCurrentProcessId());
     }
-    return false;
-}
-
-bool ProbeIsHotkeyRegistered(UINT fsModifiers, UINT vk)
-{
-    const int kProbeHotkeyId = 0xBEEF;
-    if (RegisterHotKey(NULL, kProbeHotkeyId, fsModifiers, vk))
-    {
-        UnregisterHotKey(NULL, kProbeHotkeyId);
-        return false; // Hotkey is free: Explorer does not hold it
-    }
-    return true; // Hotkey is registered by Explorer or another process
-}
-
-bool AreAnyDisabledExplorerHotkeysRegistered()
-{
-    if (g_settings.DisableWinE && ProbeIsHotkeyRegistered(MOD_WIN, 'E')) return true;
-    if (g_settings.DisableWinR && ProbeIsHotkeyRegistered(MOD_WIN, 'R')) return true;
-    if (g_settings.DisableWinD && ProbeIsHotkeyRegistered(MOD_WIN, 'D')) return true;
-    if (g_settings.DisableWinI && ProbeIsHotkeyRegistered(MOD_WIN, 'I')) return true;
-    if (g_settings.DisableWinS && ProbeIsHotkeyRegistered(MOD_WIN, 'S')) return true;
-    if (g_settings.DisableWinV && ProbeIsHotkeyRegistered(MOD_WIN, 'V')) return true;
-    if (g_settings.DisableWinX && ProbeIsHotkeyRegistered(MOD_WIN, 'X')) return true;
-    if (g_settings.DisableWinB && ProbeIsHotkeyRegistered(MOD_WIN, 'B')) return true;
-    if (g_settings.DisableWinG && ProbeIsHotkeyRegistered(MOD_WIN, 'G')) return true;
-    if (g_settings.DisableWinH && ProbeIsHotkeyRegistered(MOD_WIN, 'H')) return true;
-    if (g_settings.DisableWinM && ProbeIsHotkeyRegistered(MOD_WIN, 'M')) return true;
-    if (g_settings.DisableWinZ && ProbeIsHotkeyRegistered(MOD_WIN, 'Z')) return true;
-    if (g_settings.DisableWinShiftS && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'S')) return true;
-    if (g_settings.DisableWinShiftR && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'R')) return true;
-    if (g_settings.DisableWinShiftC && ProbeIsHotkeyRegistered(MOD_WIN | MOD_SHIFT, 'C')) return true;
-    if (g_settings.DisableWinCtrlD && ProbeIsHotkeyRegistered(MOD_WIN | MOD_CONTROL, 'D')) return true;
-    if (g_settings.DisableWinCtrlQ && ProbeIsHotkeyRegistered(MOD_WIN | MOD_CONTROL, 'Q')) return true;
-    if (g_settings.DisableWinAltD && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'D')) return true;
-    if (g_settings.DisableWinAltG && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'G')) return true;
-    if (g_settings.DisableWinAltR && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'R')) return true;
-    if (g_settings.DisableWinAltB && ProbeIsHotkeyRegistered(MOD_WIN | MOD_ALT, 'B')) return true;
-
-    // Fallback probe for general Explorer registration state
-    if (ProbeIsHotkeyRegistered(MOD_WIN, 'R') || ProbeIsHotkeyRegistered(MOD_WIN, 'E'))
-        return true;
-
     return false;
 }
 
@@ -1217,13 +1175,13 @@ bool AreAnyDisabledExplorerHotkeysRegistered()
 
 BOOL Wh_ModInit()
 {
-    WCHAR exeName[MAX_PATH];
-    GetModuleFileNameW(NULL, exeName, MAX_PATH);
-    std::wstring exeStr(exeName);
-    std::transform(exeStr.begin(), exeStr.end(), exeStr.begin(), ::towlower);
+    WCHAR exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, ARRAYSIZE(exePath));
+    PCWSTR exeName = wcsrchr(exePath, L'\\');
+    exeName = exeName ? exeName + 1 : exePath;
 
-    g_isExplorer = (exeStr.find(L"explorer.exe") != std::wstring::npos);
-    g_isDWM = (exeStr.find(L"dwm.exe") != std::wstring::npos);
+    g_isExplorer = (_wcsicmp(exeName, L"explorer.exe") == 0);
+    g_isDWM = (_wcsicmp(exeName, L"dwm.exe") == 0);
 
     LoadSettings();
 
@@ -1243,8 +1201,8 @@ BOOL Wh_ModInit()
                 Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
         }
 
-        // Prompt ONLY if Explorer is running mid-session (>15s) AND standard shortcuts are disabled AND Explorer holds them
-        if (IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && IsExplorerUptimeLarge() && HasAnyStandardShortcutsDisabled() && AreAnyDisabledExplorerHotkeysRegistered())
+        // Prompt if Explorer is running mid-session and standard shortcuts are disabled
+        if (IsExplorerMidSession() && !GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
         {
             PromptForExplorerRestart();
         }
@@ -1266,14 +1224,15 @@ void Wh_ModUninit()
     if (g_isExplorer && IsMainExplorer())
     {
         // 1. Signal any pending prompt dialog from a prior settings change to close
-        if (HWND promptWindow = g_restartExplorerPromptWindow.load())
-        {
-            PostMessage(promptWindow, WM_CLOSE, 0, 0);
-        }
-
         if (g_restartExplorerPromptThread)
         {
-            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
+            {
+                if (HWND promptWindow = g_restartExplorerPromptWindow.load())
+                {
+                    PostMessage(promptWindow, WM_CLOSE, 0, 0);
+                }
+            }
             CloseHandle(g_restartExplorerPromptThread);
             g_restartExplorerPromptThread = nullptr;
         }
