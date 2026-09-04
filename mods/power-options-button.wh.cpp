@@ -2,7 +2,7 @@
 // @id              power-options-button
 // @name            Power Options Button
 // @description     Tray icon to switch between Windows power plans with the mouse wheel.
-// @version         1.0.13
+// @version         1.0.14
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @license         MIT
@@ -338,22 +338,6 @@ bool FindNewPowerSchemeAfterSnapshot(const PowerSchemeSnapshot* before, GUID* ne
     return false;
 }
 
-bool ContainsTextInsensitive(PCWSTR text, PCWSTR search) {
-    if (!text || !search || !search[0]) {
-        return false;
-    }
-
-    size_t searchLen = wcslen(search);
-
-    for (PCWSTR p = text; *p; p++) {
-        if (_wcsnicmp(p, search, searchLen) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void GuidToStringNoBraces(const GUID& guid, WCHAR* buffer, size_t bufferCount) {
     StringCchPrintfW(
         buffer,
@@ -371,6 +355,72 @@ void GuidToStringNoBraces(const GUID& guid, WCHAR* buffer, size_t bufferCount) {
         guid.Data4[6],
         guid.Data4[7]
     );
+}
+
+bool ReadPowerSchemeRawFriendlyNameFromRegistry(
+    const GUID& guid,
+    WCHAR* name,
+    DWORD nameCount
+) {
+    if (!name || nameCount == 0) {
+        return false;
+    }
+
+    name[0] = L'\0';
+
+    WCHAR guidText[64] = {};
+    GuidToStringNoBraces(guid, guidText, ARRAYSIZE(guidText));
+
+    WCHAR keyPath[256] = {};
+    HRESULT hr = StringCchPrintfW(
+        keyPath,
+        ARRAYSIZE(keyPath),
+        L"SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\%s",
+        guidText
+    );
+
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    DWORD type = 0;
+    DWORD sizeBytes = nameCount * sizeof(WCHAR);
+    DWORD flags =
+        RRF_RT_REG_SZ |
+        RRF_RT_REG_EXPAND_SZ |
+        RRF_NOEXPAND |
+        RRF_ZEROONFAILURE |
+        RRF_SUBKEY_WOW6464KEY;
+
+    LONG result = RegGetValueW(
+        HKEY_LOCAL_MACHINE,
+        keyPath,
+        L"FriendlyName",
+        flags,
+        &type,
+        name,
+        &sizeBytes
+    );
+
+    if (result != ERROR_SUCCESS) {
+        name[0] = L'\0';
+        sizeBytes = nameCount * sizeof(WCHAR);
+
+        result = RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            keyPath,
+            L"FriendlyName",
+            RRF_RT_REG_SZ |
+                RRF_RT_REG_EXPAND_SZ |
+                RRF_NOEXPAND |
+                RRF_ZEROONFAILURE,
+            &type,
+            name,
+            &sizeBytes
+        );
+    }
+
+    return result == ERROR_SUCCESS && name[0];
 }
 
 bool IsRunningUnderWow64() {
@@ -627,6 +677,35 @@ void RefreshUltimatePerformanceAvailability() {
     g_ultimateRuntimeGuid = GUID_ULTIMATE_PERFORMANCE;
     StringCchCopyW(g_ultimateRuntimeName, ARRAYSIZE(g_ultimateRuntimeName), L"Ultimate Performance");
 
+    // powercfg /duplicatescheme creates a new runtime GUID. The duplicated
+    // Ultimate Performance scheme keeps the same raw FriendlyName MUI
+    // reference as the built-in Ultimate Performance template. Compare that
+    // reference instead of matching localized display-name keywords.
+    WCHAR rawReferenceName[256] = {};
+    bool haveRawReferenceName = ReadPowerSchemeRawFriendlyNameFromRegistry(
+        GUID_ULTIMATE_PERFORMANCE,
+        rawReferenceName,
+        ARRAYSIZE(rawReferenceName)
+    );
+
+    // Secondary language-independent fallback. PowerReadFriendlyName resolves
+    // the MUI resource into the current Windows display language. Use an exact
+    // comparison only; never use substring matching here.
+    WCHAR localizedReferenceName[128] = {};
+    bool haveLocalizedReferenceName = ReadPowerSchemeFriendlyName(
+        GUID_ULTIMATE_PERFORMANCE,
+        localizedReferenceName,
+        ARRAYSIZE(localizedReferenceName)
+    );
+
+    if (!haveRawReferenceName) {
+        Wh_Log(L"Ultimate Performance raw FriendlyName reference is unavailable.");
+    }
+
+    if (!haveLocalizedReferenceName) {
+        Wh_Log(L"Ultimate Performance localized FriendlyName reference is unavailable.");
+    }
+
     for (ULONG index = 0;; index++) {
         GUID schemeGuid = {};
         DWORD size = sizeof(schemeGuid);
@@ -653,9 +732,31 @@ void RefreshUltimatePerformanceAvailability() {
         WCHAR friendlyName[128] = {};
         ReadPowerSchemeFriendlyName(schemeGuid, friendlyName, ARRAYSIZE(friendlyName));
 
-        if (GuidEquals(schemeGuid, GUID_ULTIMATE_PERFORMANCE) ||
-            ContainsTextInsensitive(friendlyName, L"Ultimate") ||
-            ContainsTextInsensitive(friendlyName, L"Ultimativ")) {
+        bool isUltimate = GuidEquals(schemeGuid, GUID_ULTIMATE_PERFORMANCE);
+        PCWSTR detectionMethod = isUltimate ? L"template GUID" : nullptr;
+
+        if (!isUltimate && haveRawReferenceName) {
+            WCHAR rawFriendlyName[256] = {};
+
+            if (ReadPowerSchemeRawFriendlyNameFromRegistry(
+                    schemeGuid,
+                    rawFriendlyName,
+                    ARRAYSIZE(rawFriendlyName)) &&
+                _wcsicmp(rawFriendlyName, rawReferenceName) == 0) {
+                isUltimate = true;
+                detectionMethod = L"raw FriendlyName reference";
+            }
+        }
+
+        if (!isUltimate &&
+            haveLocalizedReferenceName &&
+            friendlyName[0] &&
+            _wcsicmp(friendlyName, localizedReferenceName) == 0) {
+            isUltimate = true;
+            detectionMethod = L"localized FriendlyName";
+        }
+
+        if (isUltimate) {
             g_ultimateAvailable = true;
             g_ultimateRuntimeGuid = schemeGuid;
 
@@ -671,7 +772,8 @@ void RefreshUltimatePerformanceAvailability() {
             GuidToStringNoBraces(g_ultimateRuntimeGuid, guidText, ARRAYSIZE(guidText));
 
             Wh_Log(
-                L"Ultimate Performance detected. Name: %s, GUID: %s",
+                L"Ultimate Performance detected via %s. Name: %s, GUID: %s",
+                detectionMethod ? detectionMethod : L"unknown method",
                 g_ultimateRuntimeName,
                 guidText
             );
@@ -907,9 +1009,7 @@ bool SetPowerPlanByIndex(int index) {
         result
     );
 
-        StartPowercfgFallbackWorker(index);
-        return false;
-
+    StartPowercfgFallbackWorker(index);
     return false;
 }
 
