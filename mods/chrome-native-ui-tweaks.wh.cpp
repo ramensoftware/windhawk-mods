@@ -14,11 +14,12 @@
 // ==WindhawkModSettings==
 /*
 - bookmarks:
-  - fontSize: "12"
+  - fontSize: "default"
     $name: "Font size"
-    $description: "Bookmark bar font size. Chrome default is 12."
+    $description: "Bookmark bar font size. Chrome default is usually 12."
     $options:
-    - "12": "12 (Chrome default)"
+    - "default": "Chrome default (usually 12)"
+    - "12": "12"
     - "13": "13"
     - "14": "14"
     - "15": "15"
@@ -43,9 +44,9 @@
 - addressBar:
   - fontSize: "default"
     $name: "Font size"
-    $description: "Font size for URL and search text in the address bar. Chrome default leaves the original omnibox font unchanged."
+    $description: "Font size for URL and search text in the address bar. Chrome default is usually 14 and restores the original omnibox font unchanged."
     $options:
-    - "default": "Chrome default"
+    - "default": "Chrome default (usually 14)"
     - "14": "14"
     - "15": "15"
     - "16": "16"
@@ -60,11 +61,12 @@
   $name: "Address bar"
 
 - tabs:
-  - fontSize: "12"
+  - fontSize: "default"
     $name: "Title font size"
-    $description: "Font size for titles in the horizontal tab strip. Chrome default is 12."
+    $description: "Font size for titles in the horizontal tab strip. Chrome default is usually 12."
     $options:
-    - "12": "12 (Chrome default)"
+    - "default": "Chrome default (usually 12)"
+    - "12": "12"
     - "13": "13"
     - "14": "14"
     - "15": "15"
@@ -110,11 +112,12 @@
   $name: "Extensions"
 
 - menus:
-  - fontSize: "12"
+  - fontSize: "default"
     $name: "Font size"
-    $description: "Menu font size. Chrome default is 12."
+    $description: "Menu font size. Chrome default is usually 12."
     $options:
-    - "12": "12 (Chrome default)"
+    - "default": "Chrome default (usually 12)"
+    - "12": "12"
     - "13": "13"
     - "14": "14"
     - "15": "15"
@@ -239,7 +242,6 @@ static constexpr PCWSTR kChromeSymbolServer = L"https://chromium-browser-symsrv.
 static constexpr DWORD kChromeSymbolStartupWaitMs = 5000;
 static constexpr wchar_t kChromeWidgetWindowClassPrefix[] = L"Chrome_WidgetWin_";
 
-static constexpr int kChromeDefaultFontSize = 12;
 static constexpr int kChromeDefaultTabPreTitlePadding = 8;
 static constexpr int kChromeDefaultExtensionButtonWidth = 34;
 
@@ -479,10 +481,10 @@ static HANDLE g_symbolResolutionDoneEvent;
 static HANDLE g_symbolNotificationThread;
 static HANDLE g_symbolNotificationStopEvent;
 
-static std::atomic_int g_bookmarkFontSize = 12;
+static std::atomic_int g_bookmarkFontSize = -1;
 static std::atomic_int g_addressBarFontSize = -1;
-static std::atomic_int g_menuFontSize = 12;
-static std::atomic_int g_tabFontSize = 12;
+static std::atomic_int g_menuFontSize = -1;
+static std::atomic_int g_tabFontSize = -1;
 
 static std::atomic_int g_tabPreTitlePadding = kChromeDefaultTabPreTitlePadding;
 
@@ -571,23 +573,20 @@ static std::unordered_map<void*, DWORD> g_extensionContainers;
 // Settings
 // -----------------------------------------------------------------------------
 
-static int ReadFontSizeSetting(PCWSTR name, int fallback) {
-  auto value = WindhawkUtils::StringSetting::make(name);
-  int result = *value.get() ? _wtoi(value.get()) : fallback;
-
-  if (result < 12 || result > 24) result = fallback;
-
-  return result;
-}
-
-static int ReadOptionalFontSizeSetting(PCWSTR name) {
+// Windhawk settings metadata is static, while Chrome's actual default font
+// sizes are only known after the native UI objects exist. If Windhawk gains a
+// runtime settings-metadata/read-only-value API, the "Chrome default" labels
+// could show the detected size instead of the static "usually" hint below.
+// Numeric options are absolute target sizes; -1 means restore Chrome's exact
+// original FontList for that object.
+static int ReadFontSizeSetting(PCWSTR name) {
   auto value = WindhawkUtils::StringSetting::make(name);
 
   if (!*value.get() || wcscmp(value.get(), L"default") == 0) return -1;
 
   int result = _wtoi(value.get());
 
-  return result >= 14 && result <= 24 ? result : -1;
+  return result >= 12 && result <= 24 ? result : -1;
 }
 
 static bool ReadWindowsFolderIconSetting() {
@@ -635,19 +634,19 @@ static int ReadExtensionButtonWidthSetting() {
 }
 
 static void LoadSettings() {
-  int bookmarkFontSize = ReadFontSizeSetting(L"bookmarks.fontSize", 12);
+  int bookmarkFontSize = ReadFontSizeSetting(L"bookmarks.fontSize");
 
   bool useWindowsFolderIcon = ReadWindowsFolderIconSetting();
 
-  int addressBarFontSize = ReadOptionalFontSizeSetting(L"addressBar.fontSize");
+  int addressBarFontSize = ReadFontSizeSetting(L"addressBar.fontSize");
 
-  int menuFontSize = ReadFontSizeSetting(L"menus.fontSize", 12);
+  int menuFontSize = ReadFontSizeSetting(L"menus.fontSize");
 
   int menuVerticalSpacing = ReadMenuSpacingSetting();
 
   int menuCornerRadius = ReadMenuCornerRadiusSetting();
 
-  int tabFontSize = ReadFontSizeSetting(L"tabs.fontSize", 12);
+  int tabFontSize = ReadFontSizeSetting(L"tabs.fontSize");
 
   bool tabCloseButtonsHidden = Wh_GetIntSetting(L"tabs.hideCloseButtons") != 0;
 
@@ -675,7 +674,11 @@ static void LoadSettings() {
 
   g_extensionButtonWidth.store(extensionButtonWidth, std::memory_order_relaxed);
 
-  Wh_Log(L"Bookmark bar font size: %d", bookmarkFontSize);
+  if (bookmarkFontSize < 0) {
+    Wh_Log(L"Bookmark bar font size: Chrome default");
+  } else {
+    Wh_Log(L"Bookmark bar font size: %d", bookmarkFontSize);
+  }
 
   Wh_Log(L"Bookmark folder icon: %ls", useWindowsFolderIcon ? L"Windows system" : L"Chrome default");
 
@@ -685,7 +688,11 @@ static void LoadSettings() {
     Wh_Log(L"Address bar font size: %d", addressBarFontSize);
   }
 
-  Wh_Log(L"Menu font size: %d", menuFontSize);
+  if (menuFontSize < 0) {
+    Wh_Log(L"Menu font size: Chrome default");
+  } else {
+    Wh_Log(L"Menu font size: %d", menuFontSize);
+  }
 
   if (menuVerticalSpacing < 0) {
     Wh_Log(L"Menu vertical spacing: Chrome default");
@@ -699,7 +706,11 @@ static void LoadSettings() {
     Wh_Log(L"Menu corner radius: %d", menuCornerRadius);
   }
 
-  Wh_Log(L"Tab title font size: %d", tabFontSize);
+  if (tabFontSize < 0) {
+    Wh_Log(L"Tab title font size: Chrome default");
+  } else {
+    Wh_Log(L"Tab title font size: %d", tabFontSize);
+  }
 
   Wh_Log(L"Tab close buttons: %ls", tabCloseButtonsHidden ? L"Hidden" : L"Chrome default");
 
@@ -789,9 +800,9 @@ static bool SetLabelFontForTargetSize(void* label,
                                       const wchar_t* description) {
   if (!label || !originalFont || !g_LabelSetFontList) return false;
 
-  // 12 is the UI option for "Chrome default", not a forced absolute size.
-  // Restore the exact FontList that Chrome originally chose for this object.
-  if (targetSize == kChromeDefaultFontSize) {
+  // "Chrome default" restores the exact FontList that Chrome originally chose
+  // for this object. Numeric settings are absolute target sizes.
+  if (targetSize < 0) {
     g_LabelSetFontList(label, originalFont);
     return true;
   }
@@ -995,7 +1006,7 @@ static void LabelButtonLabelCtorHook(void* self, const void* text, int textConte
   const FontListOpaque* ownedOriginalFont = GetOwnedFontList(originalFontStorage);
   int targetSize = g_bookmarkFontSize.load(std::memory_order_relaxed);
 
-  if (targetSize != kChromeDefaultFontSize &&
+  if (targetSize >= 0 &&
       !SetLabelFontForTargetSize(self, ownedOriginalFont, targetSize, L"Bookmark")) {
     Wh_Log(L"Bookmark exact font sizing unavailable; leaving Chrome's original font");
   }
@@ -1041,7 +1052,7 @@ static const FontListOpaque* TypographyGetFontHook(const void* self, int context
 
   int targetSize = g_bookmarkFontSize.load(std::memory_order_relaxed);
 
-  if (targetSize == kChromeDefaultFontSize || !g_FontListCopyCtor ||
+  if (targetSize < 0 || !g_FontListCopyCtor ||
       !g_FontListGetFontSize || !g_FontListDeriveWithSizeDelta || !g_FontListDtor ||
       targetSize == g_FontListGetFontSize(originalFont)) {
     return originalFont;
@@ -1171,7 +1182,7 @@ static FontListOpaque* MenuItemGetFontListHook(const void* self, FontListOpaque*
 
   FontListOpaque* originalResult = g_MenuItemGetFontListOriginal(self, result);
 
-  if (targetSize == kChromeDefaultFontSize || !originalResult ||
+  if (targetSize < 0 || !originalResult ||
       !g_FontListCopyCtor || !g_FontListGetFontSize ||
       !g_FontListDeriveWithSizeDelta || !g_FontListDtor) {
     return originalResult;
@@ -1250,7 +1261,7 @@ static void TabTitleCtorHook(void* self) {
   const FontListOpaque* ownedOriginalFont = GetOwnedFontList(originalFontStorage);
   int targetSize = g_tabFontSize.load(std::memory_order_relaxed);
 
-  if (targetSize != kChromeDefaultFontSize &&
+  if (targetSize >= 0 &&
       !SetLabelFontForTargetSize(self, ownedOriginalFont, targetSize, L"Tab title")) {
     Wh_Log(L"Tab title exact font sizing unavailable; leaving Chrome's original font");
   }
@@ -2886,13 +2897,13 @@ void Wh_ModBeforeUninit() {
     symbolResolutionDoneEvent = g_symbolResolutionDoneEvent;
   }
 
-  g_bookmarkFontSize.store(kChromeDefaultFontSize, std::memory_order_relaxed);
+  g_bookmarkFontSize.store(-1, std::memory_order_relaxed);
   g_useWindowsFolderIcon.store(false, std::memory_order_relaxed);
   g_addressBarFontSize.store(-1, std::memory_order_relaxed);
-  g_menuFontSize.store(kChromeDefaultFontSize, std::memory_order_relaxed);
+  g_menuFontSize.store(-1, std::memory_order_relaxed);
   g_menuVerticalSpacing.store(-1, std::memory_order_relaxed);
   g_menuCornerRadius.store(-1, std::memory_order_relaxed);
-  g_tabFontSize.store(kChromeDefaultFontSize, std::memory_order_relaxed);
+  g_tabFontSize.store(-1, std::memory_order_relaxed);
   g_tabCloseButtonsHidden.store(false, std::memory_order_relaxed);
   g_tabPreTitlePadding.store(kChromeDefaultTabPreTitlePadding, std::memory_order_relaxed);
   g_extensionButtonWidth.store(kChromeDefaultExtensionButtonWidth, std::memory_order_relaxed);
