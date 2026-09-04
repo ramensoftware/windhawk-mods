@@ -2950,8 +2950,10 @@ std::unordered_map<HWND, LONG> g_lastPolledCenterX;
 constexpr UINT kDragFollowPollActiveMs = 150;
 constexpr UINT kDragFollowPollIdleMs = 1000;
 // How long the fast cadence persists after the last detected change.
-// Covers the gap between two drags of the same window (and a drag that
-// pauses mid-move) without dropping to the idle rate in between.
+// Bridges short gaps - a brief pause mid-drag, or the moment between two
+// drags of the same window - so those don't drop to the idle rate and
+// straight back. A pause longer than this does fall back to idle, which
+// costs up to one idle interval before the fast rate resumes.
 constexpr ULONGLONG kDragFollowActiveWindowMs = 2000;
 
 // Both worker-thread-exclusive, like g_lastPolledCenterX itself.
@@ -3068,11 +3070,28 @@ void CALLBACK DragFollowPollTimerProc(HWND hwnd,
 // A thread-owned SetTimer mints a fresh id, so g_dragFollowPollTimerId has
 // to be updated alongside or teardown would kill the wrong one.
 void SetDragFollowPollInterval(UINT intervalMs) {
+    // Arm the replacement BEFORE killing the old one. Killing first and
+    // then failing to re-arm would leave no timer at all, and since this
+    // function's only repeat caller is the poll callback itself, nothing
+    // would ever run to try again - drag-follow would be silently and
+    // permanently dead for the session. Keeping the old timer on failure
+    // means the poll keeps running at the previous cadence and simply
+    // retries this switch on its next tick. The two timers overlap for
+    // the instant between these calls, which at worst costs one extra
+    // poll pass.
+    UINT_PTR newTimerId =
+        SetTimer(nullptr, 0, intervalMs, DragFollowPollTimerProc);
+    if (!newTimerId) {
+        Wh_Log(L"SetDragFollowPollInterval: SetTimer failed, error=%lu - "
+               L"keeping the current %u ms cadence",
+               GetLastError(), g_dragFollowPollCurrentMs);
+        return;
+    }
+
     if (g_dragFollowPollTimerId) {
         KillTimer(nullptr, g_dragFollowPollTimerId);
     }
-    g_dragFollowPollTimerId =
-        SetTimer(nullptr, 0, intervalMs, DragFollowPollTimerProc);
+    g_dragFollowPollTimerId = newTimerId;
     g_dragFollowPollCurrentMs = intervalMs;
 }
 
