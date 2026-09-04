@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
-// @version         1.2.6
+// @version         1.2.7
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -446,11 +446,16 @@ char WINAPI ShowCameraAccessEnabledAsync_Hook(void* pThis, bool value) {
     return ShowCameraAccessEnabledAsync_Original(pThis, value);
 }
 
-using ShowMicrophoneMutedAsync_t = char(WINAPI*)(void* pThis, int value);
+// This one takes a message alongside the state on current builds and took only
+// the state on older ones. Declared with the extra parameter for both, since the
+// build that doesn't take it never reads the register it arrives in.
+using ShowMicrophoneMutedAsync_t = char(WINAPI*)(void* pThis,
+                                                 int value,
+                                                 void* text);
 ShowMicrophoneMutedAsync_t ShowMicrophoneMutedAsync_Original;
-char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value) {
+char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
     g_currentIndicator.store(Indicator::microphone);
-    return ShowMicrophoneMutedAsync_Original(pThis, value);
+    return ShowMicrophoneMutedAsync_Original(pThis, value, text);
 }
 
 using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
@@ -660,7 +665,9 @@ BOOL Wh_ModInit() {
             true,  // optional
         },
         {
-            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState))",
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState,struct winrt::hstring))",
+             LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::HWConfirmatorUI::MicrophoneMuteState,struct winrt::hstring))",
+             LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState))",
              LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowMicrophoneMutedAsync(enum winrt::HWConfirmatorUI::MicrophoneMuteState))"},
             &ShowMicrophoneMutedAsync_Original,
             ShowMicrophoneMutedAsync_Hook,
