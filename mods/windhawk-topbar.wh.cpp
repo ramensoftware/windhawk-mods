@@ -6724,7 +6724,8 @@ void WhTool_ModUninit() {
 // ============================================================================
 
 BOOL Wh_ModInit() {
-    return WhTool_ModInit();
+    WhTool_ModInit();
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
