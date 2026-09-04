@@ -60,10 +60,7 @@ ever on screen at a time, so this is the same desktop photographed twice:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
-## How long it stays, and the sliding
-
-**Seconds on screen** changes how long the indicator waits before hiding itself.
-Leave it at 0 and Windows decides, same as before.
+## The slide out
 
 **Skip the slide out animation** makes the indicator disappear instead of sliding
 away, which is the half of it you tend to notice, since that is what keeps it
@@ -132,11 +129,6 @@ both target the same function and work out the origin handling.
     Nudge the indicator up or down. A positive number moves it down, a negative one
     moves it up. It stops at the edge of the screen rather than going off it, and
     the same number moves it the same distance on any display.
-- durationSeconds: 0
-  $name: Seconds on screen
-  $description: >-
-    How long the indicator stays on screen. Leave it at 0 to keep the timing
-    Windows uses. Anything from 1 to 60 seconds works.
 - skipHideAnimation: false
   $name: Skip the slide out animation
   $description: >-
@@ -300,7 +292,6 @@ struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
-    std::atomic<int> durationSeconds;
     std::atomic<bool> skipHideAnimation;
     // Position::windowsDefault means "no override", so the main position is used.
     // It is never offered as a per-indicator choice, which leaves it free to be
@@ -485,79 +476,6 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
     return ShowMicrophoneMutedAsync_Original(pThis, value, text);
 }
 
-// The indicator hides itself off a threadpool timer, so rewriting the due time of
-// the one the confirmator sets is what changes how long it stays. SetThreadpoolTimer
-// is used all over explorer, so the setting is checked first and the caller second,
-// and a call from anywhere else is left alone.
-bool IsCallerTheConfirmator(void* returnAddress) {
-    HMODULE module;
-    return GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                             (PCWSTR)returnAddress, &module) &&
-           module == g_hardwareConfirmatorModule;
-}
-
-// Only a relative due time within a plausible range is touched. A relative time is
-// negative, and the confirmator's own countdown sits comfortably inside these
-// bounds, which keeps any other timer the DLL might set out of it.
-bool AdjustDueTime(void* returnAddress, PFILETIME due, FILETIME* adjusted) {
-    int seconds = g_settings.durationSeconds.load();
-    if (!seconds || !due) {
-        return false;
-    }
-
-    LARGE_INTEGER original;
-    original.LowPart = due->dwLowDateTime;
-    original.HighPart = (LONG)due->dwHighDateTime;
-    if (original.QuadPart >= 0) {
-        return false;  // An absolute time, not a countdown.
-    }
-
-    LONGLONG ms = -original.QuadPart / 10000;
-    if (ms < 250 || ms > 60000) {
-        return false;
-    }
-
-    if (!IsCallerTheConfirmator(returnAddress)) {
-        return false;
-    }
-
-    LARGE_INTEGER replacement;
-    replacement.QuadPart = -((LONGLONG)seconds * 10000000);
-    adjusted->dwLowDateTime = replacement.LowPart;
-    adjusted->dwHighDateTime = (DWORD)replacement.HighPart;
-    Wh_Log(L"Indicator timeout %lldms -> %dms", ms, seconds * 1000);
-    return true;
-}
-
-using SetThreadpoolTimer_t = decltype(&SetThreadpoolTimer);
-SetThreadpoolTimer_t SetThreadpoolTimer_Original;
-void WINAPI SetThreadpoolTimer_Hook(PTP_TIMER timer,
-                                    PFILETIME dueTime,
-                                    DWORD period,
-                                    DWORD windowLength) {
-    FILETIME adjusted;
-    if (AdjustDueTime(__builtin_return_address(0), dueTime, &adjusted)) {
-        dueTime = &adjusted;
-    }
-
-    return SetThreadpoolTimer_Original(timer, dueTime, period, windowLength);
-}
-
-using SetThreadpoolTimerEx_t = decltype(&SetThreadpoolTimerEx);
-SetThreadpoolTimerEx_t SetThreadpoolTimerEx_Original;
-BOOL WINAPI SetThreadpoolTimerEx_Hook(PTP_TIMER timer,
-                                      PFILETIME dueTime,
-                                      DWORD period,
-                                      DWORD windowLength) {
-    FILETIME adjusted;
-    if (AdjustDueTime(__builtin_return_address(0), dueTime, &adjusted)) {
-        dueTime = &adjusted;
-    }
-
-    return SetThreadpoolTimerEx_Original(timer, dueTime, period, windowLength);
-}
-
 // The control hides itself two ways and Windows picks the animated one. Handing the
 // call to the other is the whole feature, so nothing has to be torn out of the
 // animation and nothing outside this control is touched.
@@ -685,11 +603,6 @@ void LoadSettings() {
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
 
-    // Out of range is treated as off rather than clamped, since a number nobody
-    // meant is more likely a typo than a request for a minute of indicator.
-    int seconds = Wh_GetIntSetting(L"durationSeconds");
-    g_settings.durationSeconds = (seconds >= 1 && seconds <= 60) ? seconds : 0;
-
     g_settings.skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation");
 
     static const PCWSTR kIndicatorSettings[] = {
@@ -725,7 +638,7 @@ BOOL Wh_ModInit() {
 
     if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
         !g_settings.offsetX && !g_settings.offsetY &&
-        !g_settings.durationSeconds && !g_settings.skipHideAnimation) {
+        !g_settings.skipHideAnimation) {
         Wh_Log(L"Nothing to do");
         return FALSE;
     }
@@ -854,15 +767,6 @@ BOOL Wh_ModInit() {
             break;
         }
     }
-
-    // Installed whichever way the setting is set, since the hook reads it per call
-    // and returns immediately when there is nothing to change. Making the install
-    // conditional would only bring back a reload on the settings change.
-    WindhawkUtils::SetFunctionHook(SetThreadpoolTimer, SetThreadpoolTimer_Hook,
-                                   &SetThreadpoolTimer_Original);
-    WindhawkUtils::SetFunctionHook(SetThreadpoolTimerEx,
-                                   SetThreadpoolTimerEx_Hook,
-                                   &SetThreadpoolTimerEx_Original);
 
     return TRUE;
 }
