@@ -25,6 +25,21 @@ Unlike mods that restore the classic status bar or focus only on metadata, Explo
 
 ![Explorer Info Bar+ preview](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png)
 
+
+**Current release: 1.2.0**
+## What's new in 1.2
+
+- Expanded single-file details for photos, RAW files, video, audio, and other file types
+- Standard and Extended detail levels so you can control how much metadata is shown
+- Photo/RAW metadata including camera, lens, ISO, aperture, shutter speed, and focal length when available
+- Video and audio details including duration, resolution, frame rate, sample rate, and channels when available
+- Font family and font size controls
+- Adjustable left padding and spacing between sections
+- Solid or four-direction gradient fills for Flat panes and Soft cards
+- Automatic theme-derived colors or fully custom text and panel colors
+- Optional hiding of Explorer's native bottom-right view buttons
+
+
 ## Features
 
 - Drive free-space information
@@ -55,6 +70,8 @@ Unlike mods that restore the classic status bar or focus only on metadata, Explo
 - Optional hiding of Explorer's native bottom-right view buttons
 - Works with File Explorer's native status area rather than replacing Explorer itself
 
+![Explorer Info Bar+ features](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-features.png)
+
 ## Compatibility / Why this mod is separate
 
 Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic `msctls_statusbar32`-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and photo/RAW and video/audio metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.
@@ -67,22 +84,20 @@ Explorer Info Bar+ paints over the native status-row text, including output from
 
 Typical information shown by the mod:
 
-```text
 Drive D: 150.7GB free
 Content: 15 folders / 25 files (77.2MB)
 Selected: 2 folders / 4 files (571KB)
-```
+
 
 When one file is selected, additional details can appear:
 
-```text
 .jpg  ·  4032×3024  ·  Nikon Z8  ·  NIKKOR Z 24-70mm f/2.8 S
 .cr3  ·  4498×6742  ·  EOS R  ·  ISO 400  ·  f/1.4  ·  1/125s  ·  85mm
 .mp4  ·  3840×2160  ·  01:49:19  ·  24 fps
 .mp3  ·  00:03:47  ·  44.1 kHz  ·  Stereo
 .doc
 .pdf
-```
+
 */
 // ==/WindhawkModReadme==
 
@@ -145,28 +160,28 @@ When one file is selected, additional details can appear:
   $description: Horizontal spacing from Explorer's left edge. Auto preserves the current spacing for each style.
   $options:
     - auto: Auto (Default)
-    - 0: "0 px"
-    - 4: "4 px"
-    - 8: "8 px"
-    - 12: "12 px"
-    - 16: "16 px"
-    - 20: "20 px"
-    - 24: "24 px"
+    - "0": "0 px"
+    - "4": "4 px"
+    - "8": "8 px"
+    - "12": "12 px"
+    - "16": "16 px"
+    - "20": "20 px"
+    - "24": "24 px"
 
 - sectionGap: auto
   $name: Section spacing
   $description: Horizontal spacing between info sections. Auto preserves the current spacing for each style.
   $options:
     - auto: Auto (Default)
-    - 2: "2 px"
-    - 4: "4 px"
-    - 6: "6 px"
-    - 8: "8 px"
-    - 10: "10 px"
-    - 12: "12 px"
-    - 16: "16 px"
-    - 20: "20 px"
-    - 24: "24 px"
+    - "2": "2 px"
+    - "4": "4 px"
+    - "6": "6 px"
+    - "8": "8 px"
+    - "10": "10 px"
+    - "12": "12 px"
+    - "16": "16 px"
+    - "20": "20 px"
+    - "24": "24 px"
 
 - showDrive: true
   $name: Show Drive
@@ -566,7 +581,6 @@ static ColorOverride ParseColorOverride(
         );
 
     if (
-        !end ||
         *end != L'\0' ||
         rgb > 0xFFFFFF
     )
@@ -608,7 +622,6 @@ static int ParseAutoPixelSetting(
         );
 
     if (
-        !end ||
         *end != L'\0'
     )
     {
@@ -1269,10 +1282,10 @@ static std::wstring GetFileTypeDescription(
     if (
         SHGetFileInfoW(
             path.c_str(),
-            0,
+            FILE_ATTRIBUTE_NORMAL,
             &info,
             sizeof(info),
-            SHGFI_TYPENAME
+            SHGFI_USEFILEATTRIBUTES | SHGFI_TYPENAME
         ) == 0
     )
     {
@@ -1528,6 +1541,9 @@ static std::wstring BuildSingleFileDetails(
         return JoinMetadataParts(parts);
     }
 
+    if (IsWorkerStopRequested())
+        return JoinMetadataParts(parts);
+
     IShellItem* localItem = nullptr;
     if (FAILED(SHCreateItemFromParsingName(
             path.c_str(), nullptr, IID_PPV_ARGS(&localItem))) ||
@@ -1549,6 +1565,12 @@ static std::wstring BuildSingleFileDetails(
         return JoinMetadataParts(parts);
     }
 
+    if (IsWorkerStopRequested())
+    {
+        item2->Release();
+        return JoinMetadataParts(parts);
+    }
+
     UINT32 imageWidth = 0, imageHeight = 0;
     UINT32 videoWidth = 0, videoHeight = 0;
     UINT32 frameRate = 0;
@@ -1564,6 +1586,13 @@ static std::wstring BuildSingleFileDetails(
     auto dur = media ? ReadUInt64Property(item2, PKEY_Media_Duration, &duration) : PropertyReadResult::Missing;
     auto cam = photo ? ReadStringProperty(item2, PKEY_Photo_CameraModel, &cameraModel) : PropertyReadResult::Missing;
     auto lens = photo ? ReadStringProperty(item2, PKEY_Photo_LensModel, &lensModel) : PropertyReadResult::Missing;
+
+    if (IsWorkerStopRequested())
+    {
+        item2->Release();
+        return JoinMetadataParts(parts);
+    }
+
     auto fr = video && extended ? ReadUInt32Property(item2, PKEY_Video_FrameRate, &frameRate) : PropertyReadResult::Missing;
     auto isoR = photo && extended ? ReadUInt32Property(item2, PKEY_Photo_ISOSpeed, &iso) : PropertyReadResult::Missing;
     auto apR = photo && extended ? ReadDoubleProperty(item2, PKEY_Photo_FNumber, &aperture) : PropertyReadResult::Missing;
@@ -2763,10 +2792,19 @@ static void RefreshInfoBarWindow(
     if (!settings.singleFileDetails)
         visibleChanges &= ~CacheChangeFileDetails;
 
-    if (visibleChanges == CacheChangeNone)
-        return;
+if (visibleChanges == CacheChangeNone)
+    return;
 
-    RECT client{};
+// File Details can change width substantially when switching between file
+// types. Repaint the complete status row so pixels from a previously wider
+// metadata panel can't remain visible.
+if (visibleChanges & CacheChangeFileDetails)
+{
+    InvalidateInfoBarWindow(hwnd);
+    return;
+}
+
+RECT client{};
 
     const bool currentClientAvailable =
         GetClientRect(
@@ -4454,6 +4492,14 @@ static unsigned ReadCurrentView(
         }
 
         selection->Release();
+     }
+
+    // Single-file details are only valid while exactly one item is selected.
+    if (selected != 1)
+    {
+        singleFileDetails.clear();
+        keepSingleFileMetadataCache = false;
+        singleSelectionCache = SingleSelectionRefreshCache{};
     }
 
     if (!keepSingleFileMetadataCache)
@@ -6271,6 +6317,7 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         if (!g_unloading.load(std::memory_order_acquire))
         {
+            RefreshTrackedDpiAndFont(hwnd);
             EnsureWindowDataCache(hwnd);
             EnsureShellBrowserRegistration(hwnd);
             RefreshValidatedStatusRow(hwnd);
@@ -6747,28 +6794,45 @@ void Wh_ModSettingsChanged()
     // may have changed even if the Explorer selection itself did not.
     AcquireSRWLockExclusive(&g_subclassLock);
 
-    std::vector<HWND> fontRefreshWindows;
+    for (TrackedDirectUiState& state : g_trackedWindows)
+        state.selectionGeneration++;
+
+    std::vector<HWND> refreshWindows;
 
     try
     {
-        fontRefreshWindows.reserve(g_trackedWindows.size());
+        refreshWindows.reserve(g_trackedWindows.size());
 
-        for (TrackedDirectUiState& state : g_trackedWindows)
-        {
-            state.selectionGeneration++;
-            fontRefreshWindows.push_back(state.hwnd);
-        }
+        for (const TrackedDirectUiState& state : g_trackedWindows)
+            refreshWindows.push_back(state.hwnd);
     }
     catch (...)
     {
-        for (TrackedDirectUiState& state : g_trackedWindows)
-            state.selectionGeneration++;
+        refreshWindows.clear();
+        Wh_Log(L"DirectUI settings refresh snapshot failed");
     }
 
     ReleaseSRWLockExclusive(&g_subclassLock);
 
-    for (HWND hwnd : fontRefreshWindows)
-        RefreshTrackedDpiAndFont(hwnd);
+    for (HWND hwnd : refreshWindows)
+    {
+        if (
+            g_refreshDirectUiMessage &&
+            !PostMessageW(
+                hwnd,
+                g_refreshDirectUiMessage,
+                0,
+                0
+            )
+        )
+        {
+            Wh_Log(
+                L"DirectUI settings refresh post failed hwnd=%p error=%lu",
+                hwnd,
+                GetLastError()
+            );
+        }
+    }
 
     if (g_workerWakeEvent)
         SetEvent(g_workerWakeEvent);
