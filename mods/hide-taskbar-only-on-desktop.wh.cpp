@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars only while their display is showing the desktop
-// @version         4.1.0
+// @version         4.5.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -89,8 +89,10 @@ You can independently choose:
 - Which displays should hide their taskbar when desktop-only.
 - Which displays should allow bottom-edge hover reveal.
 
-Selections use Windows display device names such as `\\.\DISPLAY1`. These
-identifiers may differ from the numbers shown in Windows Display Settings.
+Selections use logical display numbers (Display 1, Display 2, and so on) based on
+the currently connected monitors. Windows may internally name the same monitor
+with device identifiers such as `\\.\DISPLAY25`; those internal identifiers are
+not exposed as the selection number.
 
 The mod tracks monitor identity during the current session so a reconnected
 display that receives a different `DISPLAYn` number can retain its selection
@@ -163,7 +165,7 @@ or the connected display set changes.
 ## Limitations
 
 - Hover reveal is supported only for bottom-docked taskbars.
-- Display selection currently exposes `DISPLAY1` through `DISPLAY16`.
+- Display selection currently exposes Display 1 through Display 16.
 - `DISPLAYn` identifiers may differ from the numbering shown in Windows Display
   Settings and can change after display configuration changes.
 - A taskbar docked to the top or side is not hidden by the desktop-only rule.
@@ -203,31 +205,33 @@ and configurable bottom-edge hover reveal.
   $name: Reveal taskbar on bottom-edge hover
   $description: >-
     Select the displays where bottom-edge hovering should reveal the taskbar.
-    The display options use Windows `\\.\DISPLAYn` device numbers, which may
-    differ from the numbers shown in Windows Display Settings. Select All
-    displays to enable it everywhere, or replace it with individual displays.
+    Select the displays by their current logical number (Display 1, Display 2, and
+    so on). Internal Windows device identifiers can differ and are not used for
+    the selection number. Select All displays to enable it everywhere, or replace
+    it with individual displays.
   $options:
   - all: All displays
-  - monitor1: DISPLAY1
-  - monitor2: DISPLAY2
-  - monitor3: DISPLAY3
-  - monitor4: DISPLAY4
-  - monitor5: DISPLAY5
-  - monitor6: DISPLAY6
-  - monitor7: DISPLAY7
-  - monitor8: DISPLAY8
-  - monitor9: DISPLAY9
-  - monitor10: DISPLAY10
-  - monitor11: DISPLAY11
-  - monitor12: DISPLAY12
-  - monitor13: DISPLAY13
-  - monitor14: DISPLAY14
-  - monitor15: DISPLAY15
-  - monitor16: DISPLAY16
+  - monitor1: Display 1
+  - monitor2: Display 2
+  - monitor3: Display 3
+  - monitor4: Display 4
+  - monitor5: Display 5
+  - monitor6: Display 6
+  - monitor7: Display 7
+  - monitor8: Display 8
+  - monitor9: Display 9
+  - monitor10: Display 10
+  - monitor11: Display 11
+  - monitor12: Display 12
+  - monitor13: Display 13
+  - monitor14: Display 14
+  - monitor15: Display 15
+  - monitor16: Display 16
 - hideOnMonitors: ["all"]
   $name: Taskbars to hide on desktop
   $description: >-
-    Select one or more displays using the Windows `\\.\DISPLAYn` device number.
+    Select one or more displays using their current logical display number. Internal
+    Windows `\\.\DISPLAYn` identifiers are not used for the selection number.
     These numbers may differ from the display numbers shown in Windows Display
     Settings. Choose All displays to hide every connected display. Only
     bottom-docked taskbars participate in desktop-based hiding. Use Add to
@@ -236,22 +240,22 @@ and configurable bottom-edge hover reveal.
     monitor device when possible.
   $options:
   - all: All displays
-  - monitor1: DISPLAY1
-  - monitor2: DISPLAY2
-  - monitor3: DISPLAY3
-  - monitor4: DISPLAY4
-  - monitor5: DISPLAY5
-  - monitor6: DISPLAY6
-  - monitor7: DISPLAY7
-  - monitor8: DISPLAY8
-  - monitor9: DISPLAY9
-  - monitor10: DISPLAY10
-  - monitor11: DISPLAY11
-  - monitor12: DISPLAY12
-  - monitor13: DISPLAY13
-  - monitor14: DISPLAY14
-  - monitor15: DISPLAY15
-  - monitor16: DISPLAY16
+  - monitor1: Display 1
+  - monitor2: Display 2
+  - monitor3: Display 3
+  - monitor4: Display 4
+  - monitor5: Display 5
+  - monitor6: Display 6
+  - monitor7: Display 7
+  - monitor8: Display 8
+  - monitor9: Display 9
+  - monitor10: Display 10
+  - monitor11: Display 11
+  - monitor12: Display 12
+  - monitor13: Display 13
+  - monitor14: Display 14
+  - monitor15: Display 15
+  - monitor16: Display 16
 */
 // ==/WindhawkModSettings==
 
@@ -458,7 +462,11 @@ void RecoverStaleHiddenTaskbar(HWND hwnd) {
     }
 
     if (g_explorerShowWindowOriginal) {
-        g_explorerShowWindowOriginal(hwnd, SW_SHOW);
+        RemovePropW(
+            hwnd,
+            kHiddenByModProperty
+        );
+        g_explorerShowWindowOriginal(hwnd, SW_SHOWNA);
     }
 }
 
@@ -485,7 +493,11 @@ BOOL WINAPI ExplorerShowWindowHook(HWND hwnd, int nCmdShow) {
             const bool ownerAlive = IsHiddenTaskbarOwnerAlive(hwnd);
 
             if (!ownerAlive && g_explorerShowWindowOriginal) {
-                return g_explorerShowWindowOriginal(hwnd, SW_SHOW);
+                RemovePropW(
+                    hwnd,
+                    kHiddenByModProperty
+                );
+                return g_explorerShowWindowOriginal(hwnd, SW_SHOWNA);
             }
 
             if (ownerAlive && IsExplorerSecondaryTaskbar(hwnd)) {
@@ -731,56 +743,6 @@ bool GetStableMonitorDeviceId(
     return output[0] != L'\0';
 }
 
-int GetDisplayDeviceNumber(
-    const wchar_t* deviceName
-) {
-    if (!deviceName) {
-        return 0;
-    }
-
-    constexpr wchar_t kPrefix[] = L"\\\\.\\DISPLAY";
-    constexpr size_t kPrefixLength =
-        ARRAYSIZE(kPrefix) - 1;
-
-    if (
-        wcsncmp(
-            deviceName,
-            kPrefix,
-            kPrefixLength
-        ) != 0
-    ) {
-        return 0;
-    }
-
-    wchar_t* endNumber = nullptr;
-
-    long number =
-        wcstol(
-            deviceName + kPrefixLength,
-            &endNumber,
-            10
-        );
-
-    if (
-        endNumber == deviceName + kPrefixLength ||
-        *endNumber != L'\0' ||
-        number < 1 ||
-        number > static_cast<long>(
-            kMaxMonitorNumbers
-        )
-    ) {
-        Wh_Log(
-            L"Unsupported display device number for %s: %ld (supported range: 1-%d)",
-            deviceName,
-            number,
-            static_cast<int>(kMaxMonitorNumbers)
-        );
-        return 0;
-    }
-
-    return static_cast<int>(number);
-}
-
 void ResetMonitorSelectionBindings() {
     for (
         size_t i = 0;
@@ -810,11 +772,11 @@ void BindSelectionIdentity(
     }
 
     for (size_t i = 0; i < monitors.count; ++i) {
-        if (
-            GetDisplayDeviceNumber(
-                monitors.entries[i].deviceName
-            ) == configuredNumber
-        ) {
+        // Settings use the logical order of the currently connected
+        // monitors rather than the Windows DISPLAYn device identifier.
+        // This keeps "Display 2" usable even when Windows happens to name
+        // that monitor DISPLAY25, DISPLAY9, or another non-sequential value.
+        if (static_cast<int>(i + 1) == configuredNumber) {
             if (monitors.entries[i].stableDeviceId[0] != L'\0') {
                 bindings[configuredNumber].configured = true;
                 wcsncpy_s(
@@ -907,6 +869,49 @@ MonitorList GetCurrentMonitors() {
         reinterpret_cast<LPARAM>(&list)
     );
 
+    // Give the settings UI a deterministic, user-friendly numbering: the
+    // primary display is Display 1, followed by the remaining active displays
+    // ordered by their Windows device name. The actual device number is only
+    // an internal identifier and is never used as the selection index.
+    for (size_t i = 1; i < list.count; ++i) {
+        MonitorEntry key = list.entries[i];
+        MONITORINFO miKey = {};
+        miKey.cbSize = sizeof(miKey);
+        const bool keyPrimary =
+            key.monitor &&
+            GetMonitorInfoW(key.monitor, &miKey) &&
+            (miKey.dwFlags & MONITORINFOF_PRIMARY) != 0;
+
+        size_t j = i;
+        while (j > 0) {
+            MONITORINFO miPrev = {};
+            miPrev.cbSize = sizeof(miPrev);
+            const bool prevPrimary =
+                list.entries[j - 1].monitor &&
+                GetMonitorInfoW(list.entries[j - 1].monitor, &miPrev) &&
+                (miPrev.dwFlags & MONITORINFOF_PRIMARY) != 0;
+
+            bool shouldMoveBefore = false;
+            if (keyPrimary != prevPrimary) {
+                shouldMoveBefore = keyPrimary;
+            } else {
+                shouldMoveBefore =
+                    wcscmp(
+                        key.deviceName,
+                        list.entries[j - 1].deviceName
+                    ) < 0;
+            }
+
+            if (!shouldMoveBefore) {
+                break;
+            }
+
+            list.entries[j] = list.entries[j - 1];
+            --j;
+        }
+        list.entries[j] = key;
+    }
+
     return list;
 }
 
@@ -957,9 +962,9 @@ int GetMonitorNumber(
 ) {
     for (size_t i = 0; i < list.count; ++i) {
         if (list.entries[i].monitor == monitor) {
-            return GetDisplayDeviceNumber(
-                list.entries[i].deviceName
-            );
+            // The settings UI is intentionally based on the logical monitor
+            // order, not the internal Windows DISPLAYn device identifier.
+            return static_cast<int>(i + 1);
         }
     }
 
@@ -1703,21 +1708,34 @@ void SetTaskbarState(
             return;
         }
 
-        // Keep normal state transitions synchronous. Explorer can immediately
-        // re-show a taskbar while processing shell/minimize transitions; using
-        // ShowWindowAsync here can leave several SHOW/HIDE requests queued and
-        // cause a visible flicker loop.
+        // Clear our ownership marker before showing so Explorer is never left
+        // with a hidden taskbar that still looks owned by this mod. Keep the
+        // normal transition synchronous so Explorer cannot queue a stale SHOW
+        // behind our state reconciliation.
+        RemovePropW(
+            state.hwnd,
+            kHiddenByModProperty
+        );
+
         ShowWindow(
             state.hwnd,
-            SW_SHOW
+            SW_SHOWNA
         );
 
         if (IsWindowVisible(state.hwnd)) {
-            RemovePropW(
-                state.hwnd,
-                kHiddenByModProperty
-            );
             state.hiddenByMod = false;
+        } else {
+            // Restore the marker if the show operation did not make the taskbar
+            // visible. This keeps ownership explicit rather than leaving a
+            // silently hidden, unowned taskbar behind.
+            SetPropW(
+                state.hwnd,
+                kHiddenByModProperty,
+                reinterpret_cast<HANDLE>(
+                    static_cast<ULONG_PTR>(GetCurrentProcessId())
+                )
+            );
+            state.hiddenByMod = true;
         }
 
         return;
@@ -1763,6 +1781,108 @@ void SetTaskbarState(
         );
         state.hiddenByMod = false;
     }
+}
+
+struct CursorShellSurfaceContext {
+    POINT point;
+    HMONITOR monitor;
+    bool found;
+};
+
+BOOL CALLBACK FindShellSurfaceAtCursorProc(
+    HWND hwnd,
+    LPARAM lParam
+) {
+    auto* context =
+        reinterpret_cast<CursorShellSurfaceContext*>(lParam);
+
+    if (!context || context->found || !IsWindowVisible(hwnd)) {
+        return context && context->found ? FALSE : TRUE;
+    }
+
+    WCHAR className[256] = {};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+        return TRUE;
+    }
+
+    if (!IsTaskbarPopupClass(className)) {
+        return TRUE;
+    }
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect) ||
+        !PtInRect(&rect, context->point)) {
+        return TRUE;
+    }
+
+    context->found = true;
+    context->monitor =
+        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    return FALSE;
+}
+
+struct VisibleShellPopupContext {
+    HMONITOR monitor;
+    bool found;
+};
+
+BOOL CALLBACK FindVisibleShellPopupOnMonitorProc(
+    HWND hwnd,
+    LPARAM lParam
+) {
+    auto* context =
+        reinterpret_cast<VisibleShellPopupContext*>(lParam);
+
+    if (!context || context->found || !IsWindowVisible(hwnd)) {
+        return context && context->found ? FALSE : TRUE;
+    }
+
+    WCHAR className[256] = {};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+        return TRUE;
+    }
+
+    if (!IsTaskbarPopupClass(className) ||
+        IsShellChromeClass(className) ||
+        IsDesktopInfrastructureWindow(hwnd, className)) {
+        return TRUE;
+    }
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect)) {
+        return TRUE;
+    }
+
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    if (!context->monitor ||
+        !GetMonitorInfoW(context->monitor, &mi)) {
+        return TRUE;
+    }
+
+    RECT intersection = {};
+    if (IntersectRect(&intersection, &rect, &mi.rcMonitor)) {
+        context->found = true;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+bool IsVisibleShellPopupOnMonitor(HMONITOR monitor) {
+    if (!monitor) {
+        return false;
+    }
+
+    VisibleShellPopupContext context = {};
+    context.monitor = monitor;
+
+    EnumWindows(
+        FindVisibleShellPopupOnMonitorProc,
+        reinterpret_cast<LPARAM>(&context)
+    );
+
+    return context.found;
 }
 
 void ApplyBaseTaskbarState() {
@@ -1951,7 +2071,8 @@ void UpdateCursorHoverSnapshot() {
 
         const TaskbarMonitorState& state = g_taskbarStates[i];
 
-        if (!ShouldRevealOnHover(state) ||
+        if (!state.hiddenByMod ||
+            !ShouldRevealOnHover(state) ||
             !IsBottomDockedTaskbar(state.hwnd, state.monitor)) {
             continue;
         }
@@ -2075,8 +2196,6 @@ void UpdateTaskbarState() {
         monitors
     );
 
-    UpdateCursorHoverSnapshot();
-
     // ABM_GETSTATE reports the native auto-hide setting globally. Sample it
     // once per reconciliation and reuse the result for every taskbar.
     g_nativeAutoHideEnabled =
@@ -2157,26 +2276,6 @@ void UpdateTaskbarState() {
     const bool hovering =
         cursorInHoverZone;
 
-    auto shellSurfaceOnMonitor =
-        [&](HMONITOR monitor) {
-            for (
-                size_t monitorIndex = 0;
-                monitorIndex < monitors.count;
-                ++monitorIndex
-            ) {
-                if (
-                    monitors.entries[monitorIndex].monitor ==
-                    monitor
-                ) {
-                    return scan.shellSurfaceOnMonitor[
-                        monitorIndex
-                    ];
-                }
-            }
-
-            return false;
-        };
-
     if (hovering) {
         g_hoverActive = true;
         g_hoverMonitor = cursorMonitor;
@@ -2190,12 +2289,14 @@ void UpdateTaskbarState() {
             SetTaskbarState(
                 state,
                 state.monitor == g_hoverMonitor ||
-                shellSurfaceOnMonitor(state.monitor) ||
                 !state.desktopOnly ||
                 !ShouldHideTaskbar(state)
             );
         }
 
+        // Snapshot the state after visibility reconciliation. The cursor sampler
+        // must see the taskbars that are actually hidden by the mod.
+        UpdateCursorHoverSnapshot();
         return;
     }
 
@@ -2219,12 +2320,43 @@ void UpdateTaskbarState() {
                 SetTaskbarState(
                     state,
                     state.monitor == g_hoverMonitor ||
-                    shellSurfaceOnMonitor(state.monitor) ||
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state)
                 );
             }
 
+            UpdateCursorHoverSnapshot();
+            return;
+        }
+
+        bool shellPopupPresent = false;
+        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            TaskbarMonitorState& state = g_taskbarStates[i];
+            if (IsVisibleShellPopupOnMonitor(state.monitor)) {
+                shellPopupPresent = true;
+                break;
+            }
+        }
+
+        if (shellPopupPresent) {
+            // Keep the revealed taskbar visible while a shell popup/context
+            // menu is still open, even when the cursor has moved outside the
+            // popup. The popup itself is what keeps the interaction alive.
+            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+                TaskbarMonitorState& state =
+                    g_taskbarStates[i];
+
+                SetTaskbarState(
+                    state,
+                    !state.desktopOnly ||
+                    !ShouldHideTaskbar(state) ||
+                    IsVisibleShellPopupOnMonitor(state.monitor)
+                );
+            }
+
+            g_hoverDeadline = now + 100;
+            ArmHoverExpireTimer();
+            UpdateCursorHoverSnapshot();
             return;
         }
 
@@ -2235,6 +2367,7 @@ void UpdateTaskbarState() {
         CancelHoverExpireTimer();
 
         ApplyBaseTaskbarState();
+        UpdateCursorHoverSnapshot();
         return;
     }
 
@@ -2244,11 +2377,12 @@ void UpdateTaskbarState() {
 
         SetTaskbarState(
             state,
-            shellSurfaceOnMonitor(state.monitor) ||
             !state.desktopOnly ||
             !ShouldHideTaskbar(state)
         );
     }
+
+    UpdateCursorHoverSnapshot();
 }
 
 void ArmHoverExpireTimer() {
@@ -2415,6 +2549,10 @@ bool HasEnabledHoverSnapshot() {
 }
 
 DWORD WINAPI CursorSamplingThread(LPVOID) {
+    SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    );
+
     bool lastHoverZone = false;
     HMONITOR lastMonitor = nullptr;
     int cursorPositionFailures = 0;
@@ -2569,7 +2707,6 @@ void EnsureTaskbarShowHook() {
 }
 
 
-
 LRESULT CALLBACK WorkerMessageWindowProc(
     HWND hwnd,
     UINT message,
@@ -2687,24 +2824,13 @@ void DestroyWorkerMessageWindow() {
     g_taskbarCreatedMessage = 0;
 }
 
-void UpdateSafetyTimer(UINT_PTR timerId) {
-    if (!timerId) {
-        return;
-    }
-
-    constexpr UINT kSafetyPollIntervalMs = 1000;
-
-    SetTimer(
-        nullptr,
-        timerId,
-        kSafetyPollIntervalMs,
-        nullptr
-    );
-}
-
 DWORD WINAPI WorkerThread(
     LPVOID
 ) {
+    SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    );
+
     MSG msg = {};
 
     PeekMessageW(
@@ -2763,11 +2889,15 @@ DWORD WINAPI WorkerThread(
     EnsureTaskbarShowHook();
     UpdateTaskbarState();
 
+    // Keep a true periodic safety poll. It is only a fallback for shell/window
+    // transitions that do not produce a usable accessibility event. Refresh
+    // events never re-arm this timer, so frequent events cannot postpone it.
+    constexpr UINT kSafetyPollIntervalMs = 250;
     UINT_PTR timerId =
         SetTimer(
             nullptr,
             kSafetyTimerId,
-            1000,
+            kSafetyPollIntervalMs,
             nullptr
         );
 
@@ -2792,12 +2922,14 @@ DWORD WINAPI WorkerThread(
 
             EnsureTaskbarShowHook();
             UpdateTaskbarState();
-            UpdateSafetyTimer(timerId);
 
             continue;
         }
 
         if (msg.message == WM_APP_REFRESH) {
+            // Clear before processing. A new event that arrives during the
+            // reconciliation can then set the flag again instead of being
+            // silently coalesced into the refresh already in progress.
             InterlockedExchange(
                 &g_refreshPosted,
                 0
@@ -2806,7 +2938,13 @@ DWORD WINAPI WorkerThread(
             EnsureTaskbarShowHook();
             UpdateTaskbarState();
 
-            UpdateSafetyTimer(timerId);
+            // Do not lose a refresh posted while UpdateTaskbarState() ran.
+            if (InterlockedExchange(
+                    &g_refreshPosted,
+                    0
+                ) != 0) {
+                PostRefresh();
+            }
 
             continue;
         }
@@ -2816,7 +2954,6 @@ DWORD WINAPI WorkerThread(
             EnsureTaskbarShowHook();
             UpdateTaskbarState();
 
-            UpdateSafetyTimer(timerId);
 
             continue;
         }
@@ -2824,7 +2961,6 @@ DWORD WINAPI WorkerThread(
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
 
-        UpdateSafetyTimer(timerId);
     }
 
     if (timerId) {
@@ -3119,20 +3255,28 @@ void RestoreAllTaskbars() {
             return;
         }
 
-        /*
-         * Teardown/recovery is intentionally asynchronous. This path can run
-         * during tool shutdown, where blocking on Explorer's UI thread
-         * could otherwise hang Windhawk itself.
-         */
-        ShowWindowAsync(
-            hwnd,
-            SW_SHOW
-        );
-
+        // Remove ownership before the restore request so Explorer cannot treat
+        // its own SHOW path as an attempt to violate the mod's hidden state.
         RemovePropW(
             hwnd,
             kHiddenByModProperty
         );
+
+        // Teardown must not wait on Explorer's UI thread.
+        if (!ShowWindowAsync(
+                hwnd,
+                SW_SHOWNA
+            )) {
+            // Keep explicit ownership if the asynchronous restore request could
+            // not be queued.
+            SetPropW(
+                hwnd,
+                kHiddenByModProperty,
+                reinterpret_cast<HANDLE>(
+                    static_cast<ULONG_PTR>(GetCurrentProcessId())
+                )
+            );
+        }
     };
 
     restoreTaskbarIfMarked(
