@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
-// @name           Windows 7 Network Flyout Recreation 
-// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 including the Network Sharing Center Control Panel page
+// @name           Windows 7 Network Flyout Recreation
+// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
 // @version        5.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
@@ -2197,7 +2197,7 @@ COLORREF GetTextColor() {
 }
 
 COLORREF GetSecondaryTextColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_GRAYTEXT);
+    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
     return (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(110, 110, 110);
 }
 
@@ -6609,7 +6609,11 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId);
 
 static void EnsureToolbarCache(HWND hToolbar) {
     if (!hToolbar) return;
-    int currentCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    DWORD_PTR countResult = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult))
+        return;
+    int currentCount = (int)countResult;
     if (currentCount != g_ToolbarCache.buttonCount)
         g_ToolbarCache.valid = FALSE;
     if (!g_ToolbarCache.valid) {
@@ -6655,10 +6659,7 @@ static CRITICAL_SECTION g_retrobarAnchorLock;
 static BOOL  g_retrobarAnchorLockInit = FALSE;
 
 void SetRetroBarNetworkAnchor(POINT clickPt) {
-    if (!g_retrobarAnchorLockInit) {
-        InitializeCriticalSection(&g_retrobarAnchorLock);
-        g_retrobarAnchorLockInit = TRUE;
-    }
+    // g_retrobarAnchorLock is initialized unconditionally in Wh_ModInit.
     // A small rect centered on the click point is enough for
     // PositionWindowNearTray: it only needs a representative point and the
     // monitor to resolve the correct taskbar edge and DPI.
@@ -7827,7 +7828,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             if (g_Settings.theme == 1) {
                 // Dark theme: use Marlett font character (manual style)
                 SelectObject(hdc, g_hFontArrow);
-                SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : RGB(180, 180, 180));
+                SetTextColor(hdc, IsHighContrastActive()
+                    ? (g_IsHoveringArrow ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT))
+                    : RGB(180, 180, 180));
                 LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
                 RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
                 DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
@@ -7895,7 +7898,12 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     FormatDisplaySSID(paintState.networks[i], i, ssidBuf, ARRAYSIZE(ssidBuf));
                     BOOL isConnected = (paintState.networks[i].connState == CONN_STATE_CONNECTED);
                     SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
-                    SetTextColor(hdc, GetNetworkNameColor());
+                    {
+                        COLORREF rowTextColor = GetNetworkNameColor();
+                        if (IsHighContrastActive() && (isSelected || isHovered))
+                            rowTextColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                        SetTextColor(hdc, rowTextColor);
+                    }
                     // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
                     // WINDOW_HEIGHT*1.01/100 float math); WINDOW_HEIGHT is
                     // already DPI-scaled, so ScaleDpi(4) (~1% of the base
@@ -7908,7 +7916,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
                         SelectObject(hdc, g_hFontBold);
-                        SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHTTEXT) : (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+                        SetTextColor(hdc, IsHighContrastActive()
+                            ? ((isSelected || isHovered) ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT))
+                            : (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
                         RECT rcStatus;
                         rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
                         rcStatus.left   = rcRow.left + 80;
@@ -8354,17 +8364,26 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     // pnidui.dll can arrive after Explorer's toolbar; retry until cached.
     InitPniduiInfo();
     *outButtonId = -1;
-    int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    DWORD_PTR countResult = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult))
+        return;
+    int count = (int)countResult;
     Wh_Log(L"[Discovery] Toolbar has %d buttons", count);
     for (int i = 0; i < count; i++) {
         TBBUTTON tb{};
-        if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+        DWORD_PTR gotButton = 0;
+        if (!SendMessageTimeoutW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb,
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &gotButton) || !gotButton)
+            continue;
         if (tb.fsState & TBSTATE_HIDDEN) continue;
         if (tb.fsStyle & TBSTYLE_SEP) continue;
         if (IsNetworkButton(hToolbar, i)) {
             *outButtonId = tb.idCommand;
             WCHAR text[128] = {0};
-            SendMessageW(hToolbar, TB_GETBUTTONTEXT, tb.idCommand, (LPARAM)text);
+            DWORD_PTR gotText = 0;
+            SendMessageTimeoutW(hToolbar, TB_GETBUTTONTEXT, tb.idCommand, (LPARAM)text,
+                               SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &gotText);
             Wh_Log(L"[Discovery] Network found: btn[%d] id=%d text='%s'", i, tb.idCommand, text);
             return;
         }
@@ -8422,7 +8441,20 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             return DefSubclassProc(hWnd, msg, wParam, lParam);
         }
 
+        if (s_iconLBtnDown && (msg == WM_CAPTURECHANGED || msg == WM_MOUSELEAVE)) {
+            ResetNetworkIconDragState();
+        }
+
         if (s_iconLBtnDown && hWnd == s_iconDragToolbar) {
+            if (msg == WM_MOUSEMOVE && !(wParam & MK_LBUTTON) &&
+                !(GetKeyState(VK_LBUTTON) & 0x8000)) {
+                // The button was released while the cursor was outside the
+                // toolbar (press, slide off the taskbar, release), so we
+                // never got a WM_LBUTTONUP. Without this, the next unrelated
+                // drag that moves over the toolbar would be replayed as a
+                // continuation of this stale gesture.
+                ResetNetworkIconDragState();
+            }
             if (msg == WM_MOUSEMOVE && (wParam & MK_LBUTTON)) {
                 POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 int dragX = GetSystemMetrics(SM_CXDRAG);
@@ -8592,20 +8624,18 @@ static SendNotifyMessageW_t SendNotifyMessageW_Orig = nullptr;
 // pattern ManagedShell uses (OpenProcess -> VirtualAllocEx ->
 // SendMessage(toolbar) -> ReadProcessMemory). Returns TRUE on success.
 static BOOL ReadRemoteToolbarButton(HANDLE hProcess, HWND hToolbar,
-                                    int index, TBBUTTON* outTb,
+                                    LPVOID remoteTb, int index, TBBUTTON* outTb,
                                     RemoteTrayData* outData) {
     ZeroMemory(outTb, sizeof(*outTb));
     ZeroMemory(outData, sizeof(*outData));
-
-    SIZE_T tbSize = sizeof(TBBUTTON);
-    LPVOID remoteTb = VirtualAllocEx(hProcess, NULL, tbSize, MEM_COMMIT, PAGE_READWRITE);
     if (!remoteTb) return FALSE;
 
     BOOL ok = FALSE;
-    LRESULT r = SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)index, (LPARAM)remoteTb);
-    if (r) {
+    DWORD_PTR r = 0;
+    if (SendMessageTimeoutW(hToolbar, TB_GETBUTTON, (WPARAM)index, (LPARAM)remoteTb,
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &r) && r) {
         SIZE_T read = 0;
-        if (ReadProcessMemory(hProcess, remoteTb, outTb, tbSize, &read) && read >= sizeof(DWORD_PTR)) {
+        if (ReadProcessMemory(hProcess, remoteTb, outTb, sizeof(TBBUTTON), &read) && read >= sizeof(DWORD_PTR)) {
             if (outTb->dwData) {
                 SIZE_T dataRead = 0;
                 ok = ReadProcessMemory(hProcess, (LPCVOID)outTb->dwData,
@@ -8614,7 +8644,6 @@ static BOOL ReadRemoteToolbarButton(HANDLE hProcess, HWND hToolbar,
             }
         }
     }
-    VirtualFreeEx(hProcess, remoteTb, 0, MEM_RELEASE);
     return ok;
 }
 
@@ -8721,9 +8750,15 @@ static BOOL ScanExplorerForNetworkIcon() {
         return FALSE;
     }
 
+    static DWORD s_cachedPniduiPid = 0;
+    static BYTE* s_cachedPniduiBase = NULL;
+    static SIZE_T s_cachedPniduiSize = 0;
     BYTE* pniduiBase = NULL;
     SIZE_T pniduiSize = 0;
-    if (!GetRemoteModuleRange(explorerPid, L"pnidui.dll", &pniduiBase, &pniduiSize)) {
+    if (s_cachedPniduiPid == explorerPid && s_cachedPniduiBase) {
+        pniduiBase = s_cachedPniduiBase;
+        pniduiSize = s_cachedPniduiSize;
+    } else if (!GetRemoteModuleRange(explorerPid, L"pnidui.dll", &pniduiBase, &pniduiSize)) {
         // On Windows 10 the network flyout icons live in pnidui.dll loaded
         // inside explorer; ExplorerPatcher loads it there too. Missing it
         // means we cannot safely distinguish the network icon from any other
@@ -8731,14 +8766,29 @@ static BOOL ScanExplorerForNetworkIcon() {
         CloseHandle(hProcess);
         Wh_Log(L"[RetroBar] pnidui.dll not found in explorer process");
         return FALSE;
+    } else {
+        s_cachedPniduiPid = explorerPid;
+        s_cachedPniduiBase = pniduiBase;
+        s_cachedPniduiSize = pniduiSize;
     }
 
-    int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    DWORD_PTR countResult = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult)) {
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+    int count = (int)countResult;
+    LPVOID remoteTb = VirtualAllocEx(hProcess, NULL, sizeof(TBBUTTON), MEM_COMMIT, PAGE_READWRITE);
+    if (!remoteTb) {
+        CloseHandle(hProcess);
+        return FALSE;
+    }
     BOOL found = FALSE;
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {};
         RemoteTrayData data = {};
-        if (!ReadRemoteToolbarButton(hProcess, hToolbar, i, &tb, &data))
+        if (!ReadRemoteToolbarButton(hProcess, hToolbar, remoteTb, i, &tb, &data))
             continue;
         if (tb.fsState & TBSTATE_HIDDEN) continue;
         if (tb.fsStyle & TBSTYLE_SEP) continue;
@@ -8756,11 +8806,14 @@ static BOOL ScanExplorerForNetworkIcon() {
                data.hwnd, data.uCallbackMessage, data.uID, data.uVersion);
         break;
     }
+    VirtualFreeEx(hProcess, remoteTb, 0, MEM_RELEASE);
     CloseHandle(hProcess);
     if (!found)
         Wh_Log(L"[RetroBar] Network icon not found in Explorer toolbar (%d buttons)", count);
     return found;
 }
+
+static DWORD s_consecutiveScanFailures = 0;
 
 static void EnsureIconScanned(BOOL force) {
     DWORD now = GetTickCount();
@@ -8771,12 +8824,25 @@ static void EnsureIconScanned(BOOL force) {
     // at a slow cadence otherwise.
     if (haveValid && !force && (now - s_lastScanTick < 5000))
         return;
-    if (!haveValid && !force && (now - s_lastScanTick < 1500))
-        return;
+    if (!haveValid && !force) {
+        // The icon may be unresolvable for a long-lived reason (in the
+        // overflow area, pnidui.dll not loaded, Windows 11 modern tray,
+        // Explorer not up yet). Retrying every 1.5s forever is expensive
+        // (EnumWindows + CreateToolhelp32Snapshot + a cross-process walk
+        // per attempt), so back off exponentially up to 30s while it keeps
+        // failing.
+        DWORD backoffMs = 1500u << std::min<DWORD>(s_consecutiveScanFailures, 4u); // 1.5s..24s
+        backoffMs = std::min<DWORD>(backoffMs, 30000u);
+        if (now - s_lastScanTick < backoffMs)
+            return;
+    }
     s_lastScanTick = now;
     if (s_networkHwnd && !IsWindow(s_networkHwnd))
         s_networkHwnd = NULL;
-    ScanExplorerForNetworkIcon();
+    if (ScanExplorerForNetworkIcon())
+        s_consecutiveScanFailures = 0;
+    else if (!force)
+        s_consecutiveScanFailures++;
 }
 
 // Visibility of our flyout captured on the RetroBar UI thread at the moment
@@ -8891,13 +8957,21 @@ static void ClearCachedIcon() {
     s_lastScanTick = 0;
 }
 
-static BOOL InstallInterception() {
+static BOOL InstallInterception(bool applyNow = true) {
     if (s_hookInstalled) return TRUE;
     // Seed the icon cache before hooking so the very first click is caught.
     EnsureIconScanned(TRUE);
     if (WindhawkUtils::SetFunctionHook(SendNotifyMessageW, SendNotifyMessageW_Hook,
                                        &SendNotifyMessageW_Orig)) {
         s_hookInstalled = TRUE;
+        // Hooks registered outside Wh_ModInit stay pending until
+        // Wh_ApplyHookOperations() is called. The Wh_ModInit-time caller
+        // skips this (Windhawk applies automatically right after it
+        // returns); the TickRefresh() path below runs long after that and
+        // must apply explicitly, or the mod believes interception is live
+        // while SendNotifyMessageW is in fact still unhooked.
+        if (applyNow)
+            Wh_ApplyHookOperations();
         Wh_Log(L"[RetroBar] SendNotifyMessageW hook installed");
         return TRUE;
     }
@@ -8923,7 +8997,7 @@ static void RemoveInterception() {
 // the icon is missing (Explorer restart, taskbar created late, etc.).
 static void TickRefresh() {
     if (!s_hookInstalled) {
-        InstallInterception();
+        InstallInterception(/*applyNow=*/true);
         return;
     }
     if (!s_networkHwnd || !IsWindow(s_networkHwnd))
@@ -9007,7 +9081,7 @@ static BOOL InstallTrayInterceptionInternal() {
     // ToolbarWindow32 to subclass; its tray interception lives in the
     // RetroBarTray namespace (SendNotifyMessageW hook).
     if (g_IsRetroBarHost) {
-        return RetroBarTray::InstallInterception();
+        return RetroBarTray::InstallInterception(/*applyNow=*/false);
     }
     if (!IsExplorerProcess()) return TRUE;
     InitPniduiInfo();
@@ -11519,14 +11593,19 @@ BOOL Wh_ModInit() {
     // practice, deadlocked the Control Panel page.
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
+    InitializeCriticalSection(&g_retrobarAnchorLock);
+    g_retrobarAnchorLockInit = TRUE;
 
-    if (!Win7NetworkCenterLinks::Init()) {
+    g_IsExplorerHost = IsExplorerProcess();
+    g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
+
+    // Win7NetworkCenterLinks hooks dui70.dll/LoadImageW process-wide for a
+    // Control Panel page that RetroBar.exe can never host; skip it there.
+    if (!g_IsRetroBarHost && !Win7NetworkCenterLinks::Init()) {
         // The flyout does not depend on this optional Control Panel feature.
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
     }
 
-    g_IsExplorerHost = IsExplorerProcess();
-    g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
     if (!g_IsExplorerHost && !g_IsRetroBarHost) {
         g_Initialized = TRUE;
         return TRUE;
