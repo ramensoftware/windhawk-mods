@@ -4,6 +4,7 @@
 // @description Makes padding of tray icons adjustable in legacy taskbar
 // @version 1.0
 // @author Anixx
+// @github          https://github.com/Anixx
 // @include explorer.exe
 // @compilerOptions -lcomctl32 -lpsapi
 // ==/WindhawkMod==
