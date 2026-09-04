@@ -1757,12 +1757,19 @@ static LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     UINT msg = g_msgAnim.load();
     if (msg && uMsg == msg) {
         switch (AnimMsg(wParam)) {
-            case AnimMsg::FirstFrame:
-                if (lParam &&
-                    PresentFirstFrame(hwnd,
-                                      *reinterpret_cast<AnimRequest*>(lParam)))
-                    return 1;
-                break;
+        case AnimMsg::FirstFrame:
+        {
+            static AnimRequest* lastReq = nullptr;
+            if (!lastReq && lParam) {
+                lastReq = reinterpret_cast<AnimRequest*>(lParam);
+            }
+            if (lastReq && PresentFirstFrame(hwnd, *lastReq)) {
+                lastReq = nullptr;
+                return 1;
+            }
+            lastReq = nullptr;
+        }
+        break;
             case AnimMsg::Drain:
                 DrainQueue(hwnd);
                 break;
@@ -2245,29 +2252,23 @@ static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
         else
             ::ShowWindow(hwnd, SW_HIDE);
     }
-    ULONGLONG start = GetTickCount64(), elapsed = 0;
-    float lastT = -1;
-    while (!g_stopping.load() &&
-           (elapsed = GetTickCount64() - start) <= req.durationMs) {
-        float t =
-            req.durationMs == 0
-                ? 1.f
-                : std::clamp(float(elapsed) / float(req.durationMs), 0.f, 1.f);
-        if (t - lastT >= 0.001f) {
-            lastT = t;
-            auto p = ParamsFor(AnimationType::Close, t, float(RECTH(rcWin)));
-            ScopedDpiAware dpi; // one present call only -- no app code inside
-            PresentOverlay(ha, *req.gdi, req, rcWin, p);
-        }
-        // Answer sent messages only (see the comment above the function): this
-        // keeps the thread from looking hung without dispatching posted
-        // messages or input into the app, and without ever touching WM_QUIT.
-        MsgWaitForMultipleObjectsEx(0, nullptr, 0, QS_SENDMESSAGE,
-                                    MWMO_INPUTAVAILABLE);
-        MSG m;
-        PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
-        DwmFlush();
+ULONGLONG start = GetTickCount64(), elapsed = 0;
+float lastT = -1;
+while (!g_stopping.load() &&
+       (elapsed = GetTickCount64() - start) <= req.durationMs) {
+    float t = req.durationMs == 0 ? 1.f :
+              std::clamp(float(elapsed) / float(req.durationMs), 0.f, 1.f);
+    if (t - lastT >= 0.001f) {
+        lastT = t;
+        auto p = ParamsFor(AnimationType::Close, t, float(RECTH(rcWin)));
+        ScopedDpiAware dpi;
+        PresentOverlay(ha, *req.gdi, req, rcWin, p);
     }
+    // Don't block the DWM
+    MSG msg;
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+    Sleep(16); 
+}
     {
         Win7TransformParams pe =
             ParamsFor(AnimationType::Close, 1.f, float(RECTH(rcWin)));
@@ -2836,7 +2837,7 @@ BOOL Wh_ModInit() {
 #undef HOOK_WIDE2
                         return TRUE;
     } catch (...) {
-        Wh_Log(L"Wh_ModInit: unexpected exception, aborting mod load");
+        Wh_Log(L"Wh_ModInit: unexpected exception, cancelling mod load");
         return FALSE;
     }
 }
