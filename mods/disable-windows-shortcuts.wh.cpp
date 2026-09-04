@@ -7,7 +7,6 @@
 // @github          https://github.com/Louis047
 // @include         explorer.exe
 // @include         dwm.exe
-// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -33,6 +32,10 @@ For **Special Shortcuts** and **Direct Shortcuts** to be blocked, you **must** a
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
 *Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to completely release the hotkeys for other applications. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must restart Explorer to restore those standard shortcuts.*
+
+## Changes in 1.3.0
+- Reorganized shortcuts into three distinct sections: **Special Shortcuts**, **Direct Shortcuts**, and **Standard Shortcuts**.
+- If upgrading from version 1.2.1 or earlier, please review and re-apply your settings as configuration keys were restructured.
 
 ## Notes
 - Win+L (Lock PC) cannot be blocked through standard hooks
@@ -800,7 +803,7 @@ void PromptForExplorerRestart()
         int button = 0;
         if (pTaskDialogIndirect && SUCCEEDED(pTaskDialogIndirect(&taskDialogConfig, &button, nullptr, nullptr)) && button == IDYES)
         {
-            WCHAR commandLine[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
+            WCHAR commandLine[] = L"cmd.exe /d /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
             STARTUPINFOW si = { .cb = sizeof(si) };
             PROCESS_INFORMATION pi{};
             if (CreateProcessW(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
@@ -1035,6 +1038,9 @@ DWORD WINAPI HookThread(LPVOID lpParam)
     // Force OS to create a message queue for this thread
     MSG msg;
     PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+
+    // Initialize/seed keyboard state cleanly before installing the hook
+    RefreshKeyboardState();
 
     HMODULE hMod = NULL;
     GetModuleHandleExW(
