@@ -243,6 +243,14 @@ struct ShutdownRequest {
     bool proceed = false;
 };
 
+// Requests that arrived while a screen was already up (the WM_APP_SHOW fast
+// path below). They do not get their own screen; instead they are made to
+// follow the outcome of the screen that IS currently visible, so a second
+// caller can never start the real shutdown/logoff behind the first user's
+// back while that user's Cancel is still possible. Signalled and cleared
+// from WM_DESTROY, right after the visible screen's own request is.
+static std::vector<ShutdownRequest*> g_waiters;
+
 // ---------------------------------------------------------------------------
 // Skins
 //
@@ -2288,6 +2296,18 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // the one hook thread that owns this specific request.
         auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (req && req->reply) SetEvent(req->reply);
+        // Any request that arrived while this screen was up follows its
+        // outcome exactly -- same force/proceed the visible screen just
+        // decided (whichever handler set them into *req above, including the
+        // "0 programs" and failed-CreateWindow fail-open paths, which never
+        // reach WM_DESTROY and so never populate g_waiters in the first
+        // place; only a request that actually got a screen on-screen does).
+        for (auto* w : g_waiters) {
+            if (req) { w->force = req->force; w->proceed = req->proceed; }
+            else     { w->force = false;      w->proceed = true; }  // preview: nothing to decide, proceed
+            if (w->reply) SetEvent(w->reply);
+        }
+        g_waiters.clear();
         return 0;
     }
     }
@@ -2333,11 +2353,13 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // outcome here can never be clobbered by any other request.
         auto* req = reinterpret_cast<ShutdownRequest*>(lp);
         if (g_dialog) {
-            // A screen is already up; let the second caller continue. This
-            // only ever touches *req, never the request whose screen is
-            // currently showing.
-            req->force = false; req->proceed = true;
-            SetEvent(req->reply);
+            // A screen is already up. Do not pre-approve this second request
+            // -- that would let it start the real shutdown while the first
+            // user's screen is still on display and undecided, making their
+            // subsequent Cancel do nothing. Instead park it: WM_DESTROY
+            // gives it the same outcome (force/proceed) as the request whose
+            // screen is actually showing, once that one is decided.
+            g_waiters.push_back(req);
             return 0;
         }
         try {
@@ -2475,9 +2497,32 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
 // Hook-side entry: hand the request to the UI thread and block until the
 // screen reports its decision. Returns true when Windows should proceed.
+// Forward declaration: used below (lazy-start on the first request from a
+// non-explorer host) but defined further down, next to Wh_ModInit's own
+// (eager, explorer-only) call.
+static bool StartUiThread();
+
+// Deliberately synchronous, not post-and-return: ExitWindowsEx/
+// InitiateShutdownW's return value is exactly what tells the caller (the
+// shell's own shutdown state machine) whether to proceed with tearing itself
+// down. Returning immediately would report "started" before the user has
+// even chosen an option, which would let the caller start closing windows,
+// killing the process, etc. while the screen is still up and undecided --
+// trading the current re-entrancy risk for a worse one. Keeping this
+// synchronous is what lets a plain `return TRUE/FALSE` here still mean what
+// the caller expects it to mean.
 static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
     *outForce = false;
-    if (g_insideHook || !g_uiThreadId || !g_hotkeyWindow) return true;
+    if (g_insideHook) return true;
+    // Lazy start for every host except explorer.exe, which already started
+    // the thread eagerly in Wh_ModInit for the preview hotkey. Everywhere
+    // else this fires at most once per process lifetime (the first real
+    // shutdown/logoff attempt), so there is no reason to keep a thread and
+    // two window classes resident from startup for a feature that may never
+    // trigger in that process. StartUiThread()'s own `if (g_uiThread) return
+    // true;` guard makes calling it here on every request harmless.
+    if (!g_uiThreadId && !StartUiThread()) return true;   // fail open
+    if (!g_uiThreadId || !g_hotkeyWindow) return true;
 
     // Heap-allocated, not stack: on the (last-resort) timeout/WM_QUIT paths
     // below, this function gives up on waiting while the UI thread may still
@@ -2671,7 +2716,15 @@ BOOL Wh_ModInit() {
     // thread still sitting in GetMessage -- a dangling-window-class crash.
     // Started here, a shutdown arriving before the thread is ready fails open
     // (ShowWin7LogoffDialog returns its callers' true), which is safe.
-    if (!StartUiThread()) {
+    //
+    // Only explorer.exe needs the thread up front, for the preview hotkey
+    // (g_isExplorer gates ApplyHotkey/WM_HOTKEY already). Every other host
+    // only ever needs it for an actual shutdown/logoff attempt, which is rare
+    // and often never happens in that process's lifetime at all -- so there
+    // it is started lazily, from ShowWin7LogoffDialog on the first request,
+    // instead of sitting in GetMessage with two registered window classes
+    // for the whole session.
+    if (g_isExplorer && !StartUiThread()) {
         Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
     }
 
