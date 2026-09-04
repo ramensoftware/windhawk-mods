@@ -171,14 +171,6 @@ or the connected display set changes.
   configured until the user changes the setting.
 - The mod does not modify Windows' native taskbar auto-hide setting.
 
-## Demo
-
-A real recording is recommended here for the repository submission: show a
-selected taskbar hiding when its display becomes desktop-only, revealing when
-the pointer reaches the bottom edge, and hiding again after the dismissal
-delay. Do not use a generated or illustrative image in place of a real
-recording.
-
 ## Goal
 
 The goal is a specific visibility rule:
