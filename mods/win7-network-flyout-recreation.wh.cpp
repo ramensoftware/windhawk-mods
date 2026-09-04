@@ -261,6 +261,7 @@ If any issues are encountered, please report them to the author of the mod.
 #include <type_traits>
 #include <stdlib.h>
 #include <cwctype>
+#include <atomic>
 
 // Use the mod's own module as the HINSTANCE for every RegisterClass /
 // UnregisterClass / CreateWindowEx call in this file, instead of the host
@@ -6535,8 +6536,19 @@ typedef struct {
 } ToolbarScanCache;
 
 static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
+// g_ToolbarCache is read/modify/written from both the taskbar thread
+// (IsCachedNetworkButton, via ToolbarWndProc) and the flyout/hotkey thread
+// (QueryToolbarNetworkIconRect -> EnsureToolbarCache). Guard every access so
+// the flyout thread can never observe valid==TRUE with a stale networkId,
+// and so the two threads never redundantly run DetectNetworkButtonId's full
+// discovery scan concurrently. Initialized unconditionally in Wh_ModInit,
+// same as g_retrobarAnchorLock.
+static CRITICAL_SECTION g_toolbarCacheLock;
+static BOOL g_toolbarCacheLockInit = FALSE;
 static void InvalidateToolbarCache() {
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
     g_ToolbarCache.valid = FALSE;
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
 }
 
 // Click-vs-drag tracking for the tray network icon.
@@ -6614,6 +6626,10 @@ static void EnsureToolbarCache(HWND hToolbar) {
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult))
         return;
     int currentCount = (int)countResult;
+    // Re-check validity and (re)run discovery under the lock, atomically, so
+    // a second thread that lost the race sees the freshly-populated cache
+    // instead of redoing DetectNetworkButtonId's full scan.
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
     if (currentCount != g_ToolbarCache.buttonCount)
         g_ToolbarCache.valid = FALSE;
     if (!g_ToolbarCache.valid) {
@@ -6623,17 +6639,22 @@ static void EnsureToolbarCache(HWND hToolbar) {
         g_ToolbarCache.buttonCount = currentCount;
         g_ToolbarCache.valid = (detectedId != -1);
     }
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
 }
 
 static BOOL QueryToolbarNetworkIconRect(HWND hToolbar, RECT* outRect) {
     if (!hToolbar || !outRect) return FALSE;
     EnsureToolbarCache(hToolbar);
-    if (g_ToolbarCache.networkId == -1) return FALSE;
+    int networkId;
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    networkId = g_ToolbarCache.networkId;
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    if (networkId == -1) return FALSE;
     // PositionWindowNearTray can run on the hotkey thread. Don't use a
     // blocking SendMessage here: if the toolbar thread is waiting on us
     // we would deadlock explorer.exe.
     DWORD_PTR idx = (DWORD_PTR)-1;
-    if (!SendMessageTimeoutW(hToolbar, TB_COMMANDTOINDEX, (WPARAM)g_ToolbarCache.networkId, 0,
+    if (!SendMessageTimeoutW(hToolbar, TB_COMMANDTOINDEX, (WPARAM)networkId, 0,
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &idx) || (int)idx < 0)
         return FALSE;
     RECT rc = {};
@@ -6644,8 +6665,13 @@ static BOOL QueryToolbarNetworkIconRect(HWND hToolbar, RECT* outRect) {
     if (IsRectEmpty(&rc)) return FALSE;
     MapWindowPoints(hToolbar, NULL, (POINT*)&rc, 2);
     *outRect = rc;
+    // Resolved only here (the flyout/hotkey-thread caller of this function),
+    // so publish it under the same lock for the taskbar-thread reader below
+    // rather than a bare unsynchronized write.
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
     s_lastNetworkIconScreenRect = rc;
     s_haveLastNetworkIconRect = TRUE;
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
     return TRUE;
 }
 
@@ -6691,8 +6717,12 @@ static BOOL GetNetworkIconScreenRect(RECT* outRect) {
     HWND hToolbar = FindPrimaryTrayToolbar();
     if (hToolbar && QueryToolbarNetworkIconRect(hToolbar, outRect))
         return TRUE;
-    if (s_haveLastNetworkIconRect) {
-        *outRect = s_lastNetworkIconScreenRect;
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    BOOL haveRect = s_haveLastNetworkIconRect;
+    RECT cachedRect = s_lastNetworkIconScreenRect;
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    if (haveRect) {
+        *outRect = cachedRect;
         return TRUE;
     }
     // RetroBar fallback (e.g. flyout opened via the hotkey before any click):
@@ -6799,7 +6829,9 @@ found:
 static BOOL IsNetworkButton(HWND hToolbar, int buttonIndex) {
     if (buttonIndex < 0 || !g_pniduiBase) return FALSE;
     TBBUTTON tb{};
-    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)buttonIndex, (LPARAM)&tb)) {
+    DWORD_PTR got = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_GETBUTTON, (WPARAM)buttonIndex, (LPARAM)&tb,
+                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &got) || !got) {
         return FALSE;
     }
     if (!tb.dwData) return FALSE;
@@ -8397,7 +8429,10 @@ static BOOL IsCachedNetworkButton(HWND hToolbar, int btnIdx) {
     if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb))
         return FALSE;
     EnsureToolbarCache(hToolbar);
-    return (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId);
+    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    BOOL match = (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId);
+    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    return match;
 }
 
 static void HandleNetworkIconClick() {
@@ -8547,8 +8582,10 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         SendMessageW(hWnd, TB_GETITEMRECT, (WPARAM)btnIdx, (LPARAM)&rcIcon) &&
                         !IsRectEmpty(&rcIcon)) {
                         MapWindowPoints(hWnd, NULL, (POINT*)&rcIcon, 2);
+                        if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
                         s_lastNetworkIconScreenRect = rcIcon;
                         s_haveLastNetworkIconRect = TRUE;
+                        if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
                     }
                 }
                 if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
@@ -8611,9 +8648,16 @@ struct RemoteTrayData {
 };
 #pragma pack(pop)
 
-static HWND    s_networkHwnd = NULL;
-static UINT    s_networkCallbackMsg = 0;
+// After the fix in item 2, EnsureIconScanned()/ScanExplorerForNetworkIcon()
+// only ever run on the hotkey thread (TickRefresh); SendNotifyMessageW_Hook
+// on RetroBar's UI thread only ever reads these two. Kept atomic so a
+// half-written pair can never be observed cross-thread, with the message
+// published last: the hook's fast-path compare (Msg == s_networkCallbackMsg
+// && s_networkHwnd == hWnd) can only match once both are consistent.
+static std::atomic<HWND> s_networkHwnd{NULL};
+static std::atomic<UINT> s_networkCallbackMsg{0};
 static UINT    s_networkUid = 0;
+static UINT    s_networkVersion = 0; // notify-icon version (v3 vs v4 activation semantics)
 static BOOL    s_hookInstalled = FALSE;
 static DWORD   s_lastScanTick = 0;
 
@@ -8798,9 +8842,10 @@ static BOOL ScanExplorerForNetworkIcon() {
         // When pnidui couldn't be resolved remotely we keep the
         // ATL-class heuristic as the sole guard; IsRemoteNetworkIconWindow
         // returns FALSE without a base, so reaching here requires the base.
-        s_networkHwnd = data.hwnd;
-        s_networkCallbackMsg = data.uCallbackMessage;
         s_networkUid = data.uID;
+        s_networkVersion = data.uVersion;
+        s_networkHwnd.store(data.hwnd, std::memory_order_relaxed);
+        s_networkCallbackMsg.store(data.uCallbackMessage, std::memory_order_release);
         found = TRUE;
         Wh_Log(L"[RetroBar] Network icon found: hwnd=0x%p cbMsg=0x%x uid=%u ver=%u",
                data.hwnd, data.uCallbackMessage, data.uID, data.uVersion);
@@ -8903,7 +8948,15 @@ static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
 #ifndef NIN_KEYSELECT
 #define NIN_KEYSELECT (WM_USER + 3)
 #endif
-        BOOL swallowActivation = (lowEvent == WM_LBUTTONDOWN ||
+        // Below NOTIFYICON_VERSION_4 the icon never produces NIN_SELECT /
+        // NIN_KEYSELECT, so swallowing the legacy WM_LBUTTON* messages (which
+        // is what used to happen unconditionally) would eat the click and
+        // open nothing - worse than not intercepting at all. Only swallow
+        // when a v4 activation is actually expected; otherwise pass every
+        // legacy message through untouched so native behaviour is preserved.
+        const BOOL isV4 = (s_networkVersion >= 4 /* NOTIFYICON_VERSION_4 */);
+        BOOL swallowActivation = isV4 &&
+                                 (lowEvent == WM_LBUTTONDOWN ||
                                   lowEvent == WM_LBUTTONUP ||
                                   lowEvent == WM_LBUTTONDBLCLK ||
                                   lowEvent == NIN_SELECT ||
@@ -8921,7 +8974,10 @@ static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
                 // cursor position in that case.
                 if (pt.x == 0 && pt.y == 0)
                     GetCursorPos(&pt);
-                EnsureIconScanned(FALSE);
+                // Cache lookup only - no scanning here. Scanning (EnumWindows,
+                // Toolhelp snapshot, cross-process reads) is done exclusively
+                // by the hotkey thread's TickRefresh() so this very hot hook
+                // never blocks RetroBar's UI thread mid-gesture.
 
                 // Act on the single v4 activation edge. For the mouse the
                 // desired state is the opposite of what was visible at DOWN;
@@ -8938,10 +8994,8 @@ static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
             return TRUE; // swallow: explorer.exe must not open the modern flyout
         }
     }
-    // Opportunistically keep the network icon cache fresh without scanning
-    // on every unrelated message (throttled inside EnsureIconScanned).
-    if (Msg >= WM_USER && Msg < 0xC000)
-        EnsureIconScanned(FALSE);
+    // Non-matching path: pure cache lookup above, no scanning here. Refresh
+    // of the icon cache happens only on the hotkey thread via TickRefresh().
     return SendNotifyMessageW_Orig ? SendNotifyMessageW_Orig(hWnd, Msg, wParam, lParam)
                                    : TRUE;
 }
@@ -8954,13 +9008,17 @@ static void ClearCachedIcon() {
     s_networkHwnd = NULL;
     s_networkCallbackMsg = 0;
     s_networkUid = 0;
+    s_networkVersion = 0;
     s_lastScanTick = 0;
 }
 
 static BOOL InstallInterception(bool applyNow = true) {
     if (s_hookInstalled) return TRUE;
-    // Seed the icon cache before hooking so the very first click is caught.
-    EnsureIconScanned(TRUE);
+    // Do NOT scan here: this can run from Wh_ModInit, and the scan
+    // (EnumWindows + Toolhelp snapshot + cross-process reads) is expensive.
+    // The hotkey thread's first TickRefresh() tick (well within a few
+    // seconds of injection, long before any click can land) seeds the cache
+    // instead.
     if (WindhawkUtils::SetFunctionHook(SendNotifyMessageW, SendNotifyMessageW_Hook,
                                        &SendNotifyMessageW_Orig)) {
         s_hookInstalled = TRUE;
@@ -8991,13 +9049,17 @@ static void RemoveInterception() {
     s_networkHwnd = NULL;
     s_networkCallbackMsg = 0;
     s_networkUid = 0;
+    s_networkVersion = 0;
 }
 
 // Called periodically from the hotkey thread's message loop to (re)scan when
 // the icon is missing (Explorer restart, taskbar created late, etc.).
 static void TickRefresh() {
     if (!s_hookInstalled) {
-        InstallInterception(/*applyNow=*/true);
+        if (!InstallInterception(/*applyNow=*/true))
+            return;
+        // Seed the cache now that the hook is live, on this (hotkey) thread.
+        EnsureIconScanned(TRUE);
         return;
     }
     if (!s_networkHwnd || !IsWindow(s_networkHwnd))
@@ -9118,9 +9180,14 @@ static BOOL InstallTrayInterceptionInternal() {
     if (hToolbar) {
         int detectedId = -1;
         DetectNetworkButtonId(hToolbar, &detectedId);
+        DWORD_PTR btnCountResult = 0;
+        BOOL gotCount = SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &btnCountResult);
+        if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
         g_ToolbarCache.networkId = detectedId;
-        g_ToolbarCache.buttonCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+        g_ToolbarCache.buttonCount = gotCount ? (int)btnCountResult : -1;
         g_ToolbarCache.valid = (detectedId != -1);
+        if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
     }
     return TRUE;
 }
@@ -11595,6 +11662,8 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_Ctx.csLock);
     InitializeCriticalSection(&g_retrobarAnchorLock);
     g_retrobarAnchorLockInit = TRUE;
+    InitializeCriticalSection(&g_toolbarCacheLock);
+    g_toolbarCacheLockInit = TRUE;
 
     g_IsExplorerHost = IsExplorerProcess();
     g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
@@ -11645,6 +11714,10 @@ BOOL Wh_ModInit() {
             DarkContextMenu::Uninit();
         if (g_retrobarAnchorLockInit)
             DeleteCriticalSection(&g_retrobarAnchorLock);
+        if (g_toolbarCacheLockInit) {
+            DeleteCriticalSection(&g_toolbarCacheLock);
+            g_toolbarCacheLockInit = FALSE;
+        }
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -11757,6 +11830,10 @@ void Wh_ModUninit() {
     if (g_retrobarAnchorLockInit) {
         DeleteCriticalSection(&g_retrobarAnchorLock);
         g_retrobarAnchorLockInit = FALSE;
+    }
+    if (g_toolbarCacheLockInit) {
+        DeleteCriticalSection(&g_toolbarCacheLock);
+        g_toolbarCacheLockInit = FALSE;
     }
     if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
         if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
