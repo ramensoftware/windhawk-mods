@@ -269,7 +269,8 @@ static_assert(sizeof(GfxSizeOpaque) == 8);
 // The Windows-folder image is created once while the mod is loaded. Chromium
 // object layouts aren't available to this mod at compile time, so use
 // generously oversized storage and verify a trailing guard
-// after each foreign constructor call.
+// after each foreign constructor call. If a guard is overwritten, don't run
+// the foreign destructor on an object whose representation may be corrupted.
 static constexpr size_t kOpaqueObjectStorageSize = 4096;
 static constexpr size_t kOpaqueObjectGuardSize = 256;
 static constexpr unsigned char kOpaqueObjectGuardValue = 0xA5;
@@ -311,6 +312,9 @@ using ResourceBundleGetFontDeltaFn = const FontListOpaque* (*)(void*, int);
 
 using LabelSetFontListFn = void (*)(void*, const FontListOpaque*);
 
+// Chrome 152 declares MenuItemView::GetFontList() as returning
+// `const gfx::FontList` by value. On Win64 the member-function ABI uses:
+// RCX = this, RDX = hidden result buffer.
 using MenuItemGetFontListFn = FontListOpaque* (*)(const void*, FontListOpaque*);
 
 using MenuItemGetVerticalMarginFn = int (*)(const void*);
@@ -462,6 +466,10 @@ static BookmarkBarViewDeletingDtorFn g_BookmarkBarViewDeletingDtorOriginal;
 static std::atomic_bool g_chromeSetupStarted = false;
 static std::atomic_bool g_hooksActivated = false;
 static std::atomic_bool g_symbolResolutionSucceeded = false;
+// Once the bounded startup wait is abandoned, the resolver may still finish
+// to populate Windhawk's symbol cache, but hooks must stay inactive in this
+// Chrome instance. Late activation would miss constructor-tracked UI objects.
+static std::atomic_bool g_hookActivationAbandoned = false;
 static HANDLE g_symbolResolutionThread;
 static HANDLE g_symbolResolutionDoneEvent;
 static HANDLE g_symbolNotificationThread;
@@ -492,8 +500,18 @@ static std::atomic_bool g_extensionContainerTrackingReady = false;
 static std::atomic_bool g_windowsFolderReady = false;
 static std::atomic_bool g_bookmarkFolderLiveUpdateReady = false;
 
+static void ClearChromeRuntimeReadiness() {
+  g_addressBarFontHooksReady.store(false, std::memory_order_release);
+  g_tabFontHooksReady.store(false, std::memory_order_release);
+  g_tabCloseHooksReady.store(false, std::memory_order_release);
+  g_extensionTrackingReady.store(false, std::memory_order_release);
+  g_extensionContainerTrackingReady.store(false, std::memory_order_release);
+  g_bookmarkFolderLiveUpdateReady.store(false, std::memory_order_release);
+}
+
 static std::once_flag g_windowsFolderOnce;
 static std::mutex g_windowsFolderImageMutex;
+static DWORD g_windowsFolderThreadId = 0;
 
 //  0 = not checked
 //  1 = compatible
@@ -503,6 +521,9 @@ static std::atomic_int g_tabLayoutCompatibility = 0;
 static thread_local int g_bookmarkCtorDepth = 0;
 static thread_local int g_bookmarkMenuCtorDepth = 0;
 static thread_local const FontListOpaque* g_pendingBookmarkOriginalFont = nullptr;
+
+static thread_local int g_tabTitleCtorDepth = 0;
+static thread_local const FontListOpaque* g_pendingTabTitleOriginalFont = nullptr;
 
 static thread_local int g_omniboxCtorDepth = 0;
 static thread_local void* g_pendingOmniboxTextfield = nullptr;
@@ -527,8 +548,13 @@ struct OmniboxInfo {
 static std::mutex g_omniboxesMutex;
 static std::unordered_map<void*, OmniboxInfo> g_omniboxes;
 
+struct TabTitleInfo {
+  DWORD threadId;
+  const FontListOpaque* originalFont;
+};
+
 static std::mutex g_tabObjectsMutex;
-static std::unordered_map<void*, DWORD> g_tabTitles;
+static std::unordered_map<void*, TabTitleInfo> g_tabTitles;
 static std::unordered_set<void*> g_tabCloseButtons;
 
 static std::mutex g_extensionViewsMutex;
@@ -741,14 +767,14 @@ static bool ApplyAddressBarFont(void* textfield, const FontListOpaque* originalF
 
   bool guardIntact = IsOpaqueObjectGuardIntact(derivedFontStorage);
 
-  if (guardIntact) {
-    g_TextfieldSetFontListOriginal(textfield, derivedFont);
-  } else {
-    Wh_Log(L"Address bar FontList storage guard was overwritten");
+  if (!guardIntact) {
+    Wh_Log(L"Address bar FontList storage guard was overwritten; skipping destructor");
+    return false;
   }
 
+  g_TextfieldSetFontListOriginal(textfield, derivedFont);
   g_FontListDtor(derivedFont);
-  return guardIntact;
+  return true;
 }
 
 // OmniboxViewViews reaches views::Textfield through a multiple-inheritance
@@ -778,6 +804,7 @@ static void OmniboxViewViewsCtorHook(void* self,
   const FontListOpaque* constructorFont = fontList;
   OpaqueObjectStorage derivedFontStorage = {};
   FontListOpaque* derivedFont = nullptr;
+  bool derivedFontSafeToDestroy = false;
 
   int targetSize = g_addressBarFontSize.load(std::memory_order_relaxed);
 
@@ -789,8 +816,9 @@ static void OmniboxViewViewsCtorHook(void* self,
 
     if (IsOpaqueObjectGuardIntact(derivedFontStorage)) {
       constructorFont = derivedFont;
+      derivedFontSafeToDestroy = true;
     } else {
-      Wh_Log(L"Address bar constructor FontList storage guard was overwritten");
+      Wh_Log(L"Address bar constructor FontList storage guard was overwritten; skipping destructor");
     }
   }
 
@@ -799,7 +827,7 @@ static void OmniboxViewViewsCtorHook(void* self,
 
   g_omniboxCtorDepth--;
 
-  if (derivedFont) {
+  if (derivedFont && derivedFontSafeToDestroy) {
     g_FontListDtor(derivedFont);
   }
 
@@ -818,8 +846,7 @@ static void OmniboxViewViewsCtorHook(void* self,
   g_FontListCopyCtor(originalFont, fontList);
 
   if (!IsOpaqueObjectGuardIntact(*originalFontStorage)) {
-    Wh_Log(L"Address bar original FontList storage guard was overwritten");
-    g_FontListDtor(originalFont);
+    Wh_Log(L"Address bar original FontList storage guard was overwritten; skipping destructor");
     return;
   }
 
@@ -899,6 +926,10 @@ static void* LabelButtonLabelDeletingDtorHook(void* self, unsigned int flags) {
 static const FontListOpaque* TypographyGetFontHook(const void* self, int context, int style) {
   const FontListOpaque* originalFont = g_TypographyGetFontOriginal(self, context, style);
 
+  if (g_tabTitleCtorDepth > 0 && !g_pendingTabTitleOriginalFont) {
+    g_pendingTabTitleOriginalFont = originalFont;
+  }
+
   if (g_bookmarkCtorDepth <= 0 && g_bookmarkMenuCtorDepth <= 0) {
     return originalFont;
   }
@@ -944,8 +975,7 @@ static void CreateWindowsFolderImage() {
   DestroyIcon(iconInfo.hIcon);
 
   if (!IsOpaqueObjectGuardIntact(g_skBitmapStorage)) {
-    Wh_Log(L"ERROR: SkBitmap exceeded reserved opaque storage");
-    g_SkBitmapDtor(g_skBitmapStorage.data);
+    Wh_Log(L"ERROR: SkBitmap exceeded reserved opaque storage; skipping destructor");
     return;
   }
 
@@ -958,19 +988,30 @@ static void CreateWindowsFolderImage() {
     return;
   }
 
+  g_windowsFolderThreadId = GetCurrentThreadId();
   g_windowsFolderReady.store(true, std::memory_order_release);
 
-  Wh_Log(L"Windows bookmark folder image: ready");
+  Wh_Log(L"Windows bookmark folder image: ready on UI thread %lu", g_windowsFolderThreadId);
 }
 
-static void DestroyWindowsFolderImage() {
+static void DestroyWindowsFolderImageOnCurrentThread() {
   std::lock_guard<std::mutex> lock(g_windowsFolderImageMutex);
 
-  if (!g_windowsFolderReady.exchange(false, std::memory_order_acq_rel)) return;
+  if (!g_windowsFolderReady.load(std::memory_order_acquire)) return;
 
+  DWORD threadId = GetCurrentThreadId();
+
+  if (g_windowsFolderThreadId != threadId) {
+    Wh_Log(L"Windows bookmark folder image cleanup skipped on non-owning thread %lu (owner %lu)",
+           threadId, g_windowsFolderThreadId);
+    return;
+  }
+
+  g_windowsFolderReady.store(false, std::memory_order_release);
   g_ImageSkiaDtor(g_imageSkiaStorage.data);
+  g_windowsFolderThreadId = 0;
 
-  Wh_Log(L"Windows bookmark folder image: destroyed");
+  Wh_Log(L"Windows bookmark folder image: destroyed on UI thread %lu", threadId);
 }
 
 static ImageModelOpaque* GetBookmarkFolderIconHook(ImageModelOpaque* result, int iconType,
@@ -1060,7 +1101,16 @@ static int MenuConfigCornerRadiusForMenuHook(const void* self, const void* contr
 // -----------------------------------------------------------------------------
 
 static void TabTitleCtorHook(void* self) {
+  const FontListOpaque* previousPendingFont = g_pendingTabTitleOriginalFont;
+  g_pendingTabTitleOriginalFont = nullptr;
+  g_tabTitleCtorDepth++;
+
   g_TabTitleCtorOriginal(self);
+
+  g_tabTitleCtorDepth--;
+
+  const FontListOpaque* originalFont = g_pendingTabTitleOriginalFont;
+  g_pendingTabTitleOriginalFont = previousPendingFont;
 
   if (!g_tabFontHooksReady.load(std::memory_order_relaxed)) {
     return;
@@ -1069,12 +1119,17 @@ static void TabTitleCtorHook(void* self) {
   {
     std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
 
-    g_tabTitles[self] = GetCurrentThreadId();
+    g_tabTitles[self] = {GetCurrentThreadId(), originalFont};
   }
 
   int fontSize = g_tabFontSize.load(std::memory_order_relaxed);
 
   if (fontSize == kChromeDefaultFontSize) return;
+
+  if (!originalFont) {
+    Wh_Log(L"Tab title original font capture failed; leaving this title unchanged");
+    return;
+  }
 
   const FontListOpaque* font = GetConfiguredTabFont();
 
@@ -1373,32 +1428,110 @@ static HWND FindWindowForThread(DWORD threadId) {
   return context.chrome ? context.chrome : context.first;
 }
 
+static void WINAPI DestroyWindowsFolderImageOnCurrentThreadProc(void*) {
+  DestroyWindowsFolderImageOnCurrentThread();
+}
+
+static void DestroyWindowsFolderImageOnOwningThread() {
+  DWORD threadId = 0;
+
+  {
+    std::lock_guard<std::mutex> lock(g_windowsFolderImageMutex);
+
+    if (!g_windowsFolderReady.load(std::memory_order_acquire)) return;
+
+    threadId = g_windowsFolderThreadId;
+  }
+
+  if (!threadId) return;
+
+  HWND hwnd = FindWindowForThread(threadId);
+
+  if (!hwnd) {
+    Wh_Log(L"Windows bookmark folder image cleanup: no window found for owning UI thread %lu; leaving it alive",
+           threadId);
+    return;
+  }
+
+  if (!RunFromWindowThread(hwnd, DestroyWindowsFolderImageOnCurrentThreadProc, nullptr)) {
+    Wh_Log(L"Windows bookmark folder image cleanup: failed to dispatch to owning UI thread %lu; leaving it alive",
+           threadId);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Live address-bar update
 // -----------------------------------------------------------------------------
 
-static void WINAPI ApplyAddressBarFontOnCurrentThread(void*) {
+struct AddressBarApplyParams {
+  bool teardown;
+};
+
+static void WINAPI ApplyAddressBarFontOnCurrentThread(void* parameter) {
   if (!g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
 
+  const auto* params = static_cast<const AddressBarApplyParams*>(parameter);
+  bool teardown = params && params->teardown;
   DWORD threadId = GetCurrentThreadId();
-  std::vector<std::pair<void*, const FontListOpaque*>> omniboxes;
+
+  if (!teardown) {
+    std::vector<std::pair<void*, const FontListOpaque*>> omniboxes;
+
+    {
+      std::lock_guard<std::mutex> lock(g_omniboxesMutex);
+
+      for (const auto& [omnibox, info] : g_omniboxes) {
+        if (info.threadId == threadId) {
+          omniboxes.push_back({info.textfield, GetOmniboxOriginalFont(info)});
+        }
+      }
+    }
+
+    for (const auto& [textfield, originalFont] : omniboxes) {
+      ApplyAddressBarFont(textfield, originalFont);
+    }
+
+    return;
+  }
+
+  struct TeardownEntry {
+    void* textfield;
+    std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
+  };
+
+  std::vector<TeardownEntry> omniboxes;
 
   {
     std::lock_guard<std::mutex> lock(g_omniboxesMutex);
 
-    for (const auto& [omnibox, info] : g_omniboxes) {
-      if (info.threadId == threadId) {
-        omniboxes.push_back({info.textfield, GetOmniboxOriginalFont(info)});
+    for (auto it = g_omniboxes.begin(); it != g_omniboxes.end();) {
+      if (it->second.threadId == threadId) {
+        omniboxes.push_back({it->second.textfield, std::move(it->second.originalFontStorage)});
+        it = g_omniboxes.erase(it);
+      } else {
+        ++it;
       }
     }
   }
 
-  for (const auto& [textfield, originalFont] : omniboxes) {
-    ApplyAddressBarFont(textfield, originalFont);
+  for (auto& entry : omniboxes) {
+    if (!entry.originalFontStorage) continue;
+
+    auto* originalFont =
+        reinterpret_cast<FontListOpaque*>(entry.originalFontStorage->data);
+
+    ApplyAddressBarFont(entry.textfield, originalFont);
+
+    if (g_FontListDtor) {
+      g_FontListDtor(originalFont);
+    }
   }
+
+  Wh_Log(L"Restored and released %llu address bar fonts on UI thread %lu",
+         static_cast<unsigned long long>(omniboxes.size()), threadId);
 }
 
-static void ApplyFontToExistingAddressBars() {
+static void ApplyFontToExistingAddressBars(bool teardown = false) {
   if (!g_addressBarFontHooksReady.load(std::memory_order_relaxed)) return;
 
   std::vector<DWORD> threadIds;
@@ -1414,16 +1547,20 @@ static void ApplyFontToExistingAddressBars() {
   std::sort(threadIds.begin(), threadIds.end());
   threadIds.erase(std::unique(threadIds.begin(), threadIds.end()), threadIds.end());
 
+  AddressBarApplyParams params{teardown};
+
   for (DWORD threadId : threadIds) {
     HWND hwnd = FindWindowForThread(threadId);
 
     if (!hwnd) {
-      Wh_Log(L"Address bar live update: no window found for UI thread %lu", threadId);
+      Wh_Log(L"Address bar %ls: no window found for UI thread %lu",
+             teardown ? L"teardown" : L"live update", threadId);
       continue;
     }
 
-    if (!RunFromWindowThread(hwnd, ApplyAddressBarFontOnCurrentThread, nullptr)) {
-      Wh_Log(L"Address bar live update: failed to dispatch to UI thread %lu", threadId);
+    if (!RunFromWindowThread(hwnd, ApplyAddressBarFontOnCurrentThread, &params)) {
+      Wh_Log(L"Address bar %ls: failed to dispatch to UI thread %lu",
+             teardown ? L"teardown" : L"live update", threadId);
     }
   }
 }
@@ -1542,23 +1679,31 @@ static void ApplyFolderIconToExistingBookmarkBars() {
 static void WINAPI ApplyTabTweaksOnCurrentThread(void*) {
   DWORD threadId = GetCurrentThreadId();
 
-  std::vector<void*> titles;
+  std::vector<std::pair<void*, const FontListOpaque*>> titles;
 
   {
     std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
 
-    for (const auto& [title, titleThreadId] : g_tabTitles) {
-      if (titleThreadId == threadId) {
-        titles.push_back(title);
+    for (const auto& [title, info] : g_tabTitles) {
+      if (info.threadId == threadId) {
+        titles.push_back({title, info.originalFont});
       }
     }
   }
 
-  const FontListOpaque* font = g_tabFontHooksReady.load(std::memory_order_relaxed) ? GetConfiguredTabFont() : nullptr;
+  int fontSize = g_tabFontSize.load(std::memory_order_relaxed);
+  const FontListOpaque* configuredFont =
+      g_tabFontHooksReady.load(std::memory_order_relaxed) && fontSize != kChromeDefaultFontSize
+          ? GetConfiguredTabFont()
+          : nullptr;
 
-  for (void* title : titles) {
-    if (font && g_LabelSetFontList) {
-      g_LabelSetFontList(title, font);
+  for (const auto& [title, originalFont] : titles) {
+    if (g_tabFontHooksReady.load(std::memory_order_relaxed) && originalFont && g_LabelSetFontList) {
+      const FontListOpaque* font = fontSize == kChromeDefaultFontSize ? originalFont : configuredFont;
+
+      if (font) {
+        g_LabelSetFontList(title, font);
+      }
     }
 
     if (g_ViewInvalidateLayout) {
@@ -1573,8 +1718,8 @@ static void ApplyTweaksToExistingTabs() {
   {
     std::lock_guard<std::mutex> lock(g_tabObjectsMutex);
 
-    for (const auto& [title, threadId] : g_tabTitles) {
-      threadIds.push_back(threadId);
+    for (const auto& [title, info] : g_tabTitles) {
+      threadIds.push_back(info.threadId);
     }
   }
 
@@ -1767,9 +1912,14 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       // Menus: OPTIONAL
       // -----------------------------------------------------------------------
 
-      {{L"views::MenuItemView::GetFontList"}, &g_MenuItemGetFontListOriginal, MenuItemGetFontListHook, true},
+      {{L"views::MenuItemView::GetFontList",
+        LR"(?GetFontList@MenuItemView@views@@QEBA?BVFontList@gfx@@XZ)"},
+       &g_MenuItemGetFontListOriginal,
+       MenuItemGetFontListHook,
+       true},
 
-      {{L"views::MenuItemView::GetVerticalMargin"},
+      {{L"views::MenuItemView::GetVerticalMargin",
+        LR"(?GetVerticalMargin@MenuItemView@views@@QEBAHXZ)"},
        &g_MenuItemGetVerticalMarginOriginal,
        MenuItemGetVerticalMarginHook,
        true},
@@ -1935,6 +2085,11 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
          g_SkBitmapDtor ? L"ready" : L"MISSING", g_ImageSkiaDtor ? L"ready" : L"MISSING");
   Wh_Log(L"Bookmark folder icon live update: %ls", folderIconLiveUpdateReady ? L"ready" : L"unavailable");
 
+  Wh_Log(L"Menu tweaks: fontList=%ls verticalMargin=%ls cornerRadius=%ls",
+         g_MenuItemGetFontListOriginal ? L"ready" : L"MISSING",
+         g_MenuItemGetVerticalMarginOriginal ? L"ready" : L"MISSING",
+         g_MenuConfigCornerRadiusForMenuOriginal ? L"ready" : L"MISSING");
+
   Wh_Log(
       L"Extension live symbols: actionCtor=%ls actionDeletingDtor=%ls "
       L"preferredSizeChanged=%ls",
@@ -2021,6 +2176,34 @@ static void ShowSymbolNotification(NOTIFYICONDATAW& notifyIcon,
   }
 }
 
+static DWORD WaitForHandlesWithMessageLoop(const HANDLE* handles, DWORD handleCount) {
+  for (;;) {
+    DWORD waitResult = MsgWaitForMultipleObjectsEx(
+        handleCount, handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+
+    if (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + handleCount) {
+      return waitResult;
+    }
+
+    if (waitResult == WAIT_OBJECT_0 + handleCount) {
+      MSG message;
+
+      while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        if (message.message == WM_QUIT) {
+          return WAIT_ABANDONED;
+        }
+
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+      }
+
+      continue;
+    }
+
+    return waitResult;
+  }
+}
+
 static DWORD WINAPI SymbolNotificationThreadProc(void*) {
   HWND window =
       CreateWindowExW(0, L"STATIC", L"", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr);
@@ -2062,7 +2245,7 @@ static DWORD WINAPI SymbolNotificationThreadProc(void*) {
   }
 
   HANDLE waitHandles[] = {g_symbolResolutionDoneEvent, g_symbolNotificationStopEvent};
-  DWORD waitResult = WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles, FALSE, INFINITE);
+  DWORD waitResult = WaitForHandlesWithMessageLoop(waitHandles, ARRAYSIZE(waitHandles));
 
   if (waitResult == WAIT_OBJECT_0) {
     bool success = g_symbolResolutionSucceeded.load(std::memory_order_acquire);
@@ -2085,10 +2268,15 @@ static DWORD WINAPI SymbolNotificationThreadProc(void*) {
           NIIF_ERROR);
     }
 
-    // Keep the status icon available for hover until this Chrome instance is
-    // closed/restarted or the mod is disabled.
-    WaitForSingleObject(g_symbolNotificationStopEvent, INFINITE);
-  } else if (waitResult != WAIT_OBJECT_0 + 1) {
+    // Keep pumping this top-level window while the status icon remains alive,
+    // so system broadcasts can't block on an unresponsive notification thread.
+    HANDLE stopHandles[] = {g_symbolNotificationStopEvent};
+    waitResult = WaitForHandlesWithMessageLoop(stopHandles, ARRAYSIZE(stopHandles));
+
+    if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
+      Wh_Log(L"Symbol notification stop wait failed: %lu", GetLastError());
+    }
+  } else if (waitResult != WAIT_OBJECT_0 + 1 && waitResult != WAIT_ABANDONED) {
     Wh_Log(L"Symbol notification wait failed: %lu", GetLastError());
   }
 
@@ -2126,6 +2314,14 @@ static DWORD WINAPI ChromeSymbolResolutionThreadProc(void* param) {
   ULONGLONG startedAt = GetTickCount64();
 
   bool success = InstallChromeHooks(chromeDll);
+
+  // If the 5-second startup window has already been abandoned, this resolver
+  // run is cache preparation only. Don't leave feature-level "ready" flags set
+  // when no hooks will be applied in this Chrome instance.
+  if (g_hookActivationAbandoned.load(std::memory_order_acquire)) {
+    ClearChromeRuntimeReadiness();
+  }
+
   g_symbolResolutionSucceeded.store(success, std::memory_order_release);
 
   ULONGLONG elapsed = GetTickCount64() - startedAt;
@@ -2154,6 +2350,7 @@ static bool StartChromeHookSetup(HMODULE chromeDll) {
 
     if (!Wh_ApplyHookOperations()) {
       Wh_Log(L"Wh_ApplyHookOperations failed");
+      ClearChromeRuntimeReadiness();
       return false;
     }
 
@@ -2176,6 +2373,7 @@ static bool StartChromeHookSetup(HMODULE chromeDll) {
 
     if (!Wh_ApplyHookOperations()) {
       Wh_Log(L"Wh_ApplyHookOperations failed");
+      ClearChromeRuntimeReadiness();
       return false;
     }
 
@@ -2190,19 +2388,21 @@ static bool StartChromeHookSetup(HMODULE chromeDll) {
   if (waitResult == WAIT_OBJECT_0) {
     bool success = g_symbolResolutionSucceeded.load(std::memory_order_acquire);
 
-    WaitForSingleObject(g_symbolResolutionThread, INFINITE);
-    CloseHandle(g_symbolResolutionThread);
-    g_symbolResolutionThread = nullptr;
-
-    CloseHandle(g_symbolResolutionDoneEvent);
-    g_symbolResolutionDoneEvent = nullptr;
-
+    // Keep the resolver thread/event handles owned by Wh_ModBeforeUninit. This
+    // avoids a close/read race if the mod is disabled around the startup wait.
     Wh_Log(L"Chrome symbol resolution completed within startup wait (%llu ms)", waited);
 
     if (!success) return false;
 
+    if (g_hookActivationAbandoned.load(std::memory_order_acquire)) {
+      ClearChromeRuntimeReadiness();
+      Wh_Log(L"Chrome hook activation was abandoned while symbol resolution was running");
+      return true;
+    }
+
     if (!Wh_ApplyHookOperations()) {
       Wh_Log(L"Wh_ApplyHookOperations failed");
+      ClearChromeRuntimeReadiness();
       return false;
     }
 
@@ -2212,6 +2412,13 @@ static bool StartChromeHookSetup(HMODULE chromeDll) {
   }
 
   if (waitResult == WAIT_TIMEOUT) {
+    // Don't late-apply hooks when resolution finishes. Constructor-based
+    // tracking would miss UI objects that Chrome already created, producing a
+    // partially active mod. The worker is intentionally allowed to finish only
+    // so the next Chrome launch can use the populated symbol cache.
+    g_hookActivationAbandoned.store(true, std::memory_order_release);
+    ClearChromeRuntimeReadiness();
+
     Wh_Log(
         L"Chrome symbol startup wait timed out after %llu ms; continuing Chrome "
         L"without UI tweaks. After symbol analysis finishes, restart Chrome to activate the mod",
@@ -2219,6 +2426,9 @@ static bool StartChromeHookSetup(HMODULE chromeDll) {
     StartSymbolNotifications();
     return true;
   }
+
+  g_hookActivationAbandoned.store(true, std::memory_order_release);
+  ClearChromeRuntimeReadiness();
 
   Wh_Log(L"Chrome symbol wait failed: %lu; continuing Chrome without UI tweaks", GetLastError());
   StartSymbolNotifications();
@@ -2354,6 +2564,10 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+  // Prevent an in-flight startup resolver from activating hooks while the mod
+  // is being disabled or reloaded.
+  g_hookActivationAbandoned.store(true, std::memory_order_release);
+
   g_bookmarkFontSize.store(kChromeDefaultFontSize, std::memory_order_relaxed);
   g_useWindowsFolderIcon.store(false, std::memory_order_relaxed);
   g_addressBarFontSize.store(-1, std::memory_order_relaxed);
@@ -2396,32 +2610,11 @@ void Wh_ModBeforeUninit() {
   if (!g_hooksActivated.load(std::memory_order_acquire)) return;
 
   ApplyFontToExistingBookmarkLabels();
-  ApplyFontToExistingAddressBars();
+  ApplyFontToExistingAddressBars(true);
   ApplyFolderIconToExistingBookmarkBars();
   ApplyTweaksToExistingTabs();
   ApplyWidthToExistingExtensionButtons();
-
-  std::vector<std::unique_ptr<OpaqueObjectStorage>> omniboxOriginalFonts;
-
-  {
-    std::lock_guard<std::mutex> lock(g_omniboxesMutex);
-
-    for (auto& [omnibox, info] : g_omniboxes) {
-      if (info.originalFontStorage) {
-        omniboxOriginalFonts.push_back(std::move(info.originalFontStorage));
-      }
-    }
-
-    g_omniboxes.clear();
-  }
-
-  if (g_FontListDtor) {
-    for (const auto& storage : omniboxOriginalFonts) {
-      g_FontListDtor(reinterpret_cast<FontListOpaque*>(storage->data));
-    }
-  }
-
-  DestroyWindowsFolderImage();
+  DestroyWindowsFolderImageOnOwningThread();
 }
 
 void Wh_ModUninit() {
