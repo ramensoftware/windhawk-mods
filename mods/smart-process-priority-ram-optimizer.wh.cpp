@@ -3,7 +3,7 @@
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
 // @version         1.0.0
-// @author          gilnett
+// @author          gilnett & Antigravity
 // @github          https://github.com/gilnett
 // @include         explorer.exe
 // @compilerOptions -lntdll -lpsapi -ladvapi32 -lole32 -lshell32
@@ -36,6 +36,15 @@ Trims idle background processes' working sets, gated by per-process cooldowns an
 
 ## Panic Hotkey
 Ctrl+Alt+F11 triggers an immediate cleanup pass.
+
+## Credits & Acknowledgments
+- **Inspirations & Concepts**:
+  - **Process Lasso (Bitsum)**: Inspired by the ProBalance concept for foreground responsiveness and background runaway CPU restraint.
+  - **LiveTuner (LT)**: Inspired by dynamic real-time priority tuning and responsiveness heuristics.
+  - **ISLC (Intelligent Standby List Cleaner by Wagnardsoft)**: Inspired by adaptive threshold triggers and gaming memory management.
+  - **Mem Reduct (Henry++)**: Inspired by safe working-set trimming techniques.
+- **Development**:
+  - Developed by **gilnett** with architectural and optimization assistance from **Antigravity**.
 */
 // ==/WindhawkModReadme==
 
