@@ -3,7 +3,7 @@
 // @name Adjustable tray icons padding for Win10 taskbar
 // @description Makes padding of tray icons adjustable in legacy taskbar
 // @version 1.0
-// @author anixx
+// @author Anixx
 // @include explorer.exe
 // @compilerOptions -lcomctl32 -lpsapi
 // ==/WindhawkMod==
