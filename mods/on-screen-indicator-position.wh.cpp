@@ -76,6 +76,9 @@ a monitor by number or by interface name. The two work together.
 * Offsets are given at 100% scaling and scaled to whichever monitor the
   indicator appears on, so the same value moves the same distance on a display
   running at 150%.
+* With two indicators set to different spots you can catch the previous one
+  flashing at the new spot for a frame before the new one draws. That's the
+  confirmator reusing its frame, the placement hook can't do anything about it.
 * Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
 
 ## Credits
@@ -92,7 +95,9 @@ both target the same function and work out the origin handling.
 /*
 - position: topRight
   $name: Position
-  $description: Where on the screen the indicator appears
+  $description: >-
+    Where on the screen the indicator appears. Anything left on Same as the main
+    position below follows this one.
   $options:
   - windowsDefault: Windows default (only apply the offsets)
   - topLeft: Top left
@@ -285,7 +290,6 @@ struct {
     std::atomic<Position> perIndicator[(size_t)Indicator::count];
 } g_settings;
 
-// The position to place the indicator that is being shown right now.
 bool AnyPerIndicator() {
     for (size_t i = 0; i < (size_t)Indicator::count; i++) {
         if (g_settings.perIndicator[i].load() != Position::windowsDefault) {
@@ -296,6 +300,7 @@ bool AnyPerIndicator() {
     return false;
 }
 
+// The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
     if (g_kindUnreliable.load()) {
         return g_settings.position.load();
@@ -675,15 +680,18 @@ BOOL Wh_ModInit() {
         },
     };
 
-    // The placement hook is the first entry and is always needed. The eight that
-    // record which kind is being shown only matter when a kind has a spot of its
-    // own, and with the shipped defaults none does, so they aren't installed at
-    // all rather than patching eight entry points to write a value that would be
-    // thrown away.
-    size_t hookCount = anyPerIndicator ? ARRAYSIZE(symbolHooks) : 1;
-
-    if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks, hookCount)) {
+    // All nine go in every time. The eight that record which kind is being shown
+    // are coroutine ramps that store a value and tail-call the original, so
+    // patching them when no kind has a spot of its own costs nothing worth
+    // measuring, and installing the same set every time keeps the symbol cache
+    // from being resolved again the first time someone turns an override on.
+    if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
+                     ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
+        // Wh_ModUninit doesn't run when Wh_ModInit returns FALSE, so the
+        // reference taken above has to go back here.
+        FreeLibrary(g_hardwareConfirmatorModule);
+        g_hardwareConfirmatorModule = nullptr;
         return FALSE;
     }
 
@@ -691,27 +699,25 @@ BOOL Wh_ModInit() {
     // a null here means that kind would never be recorded and every kind after
     // it would be placed using a stale one. Rather than misplace an indicator,
     // drop to the main position for everything and say so in the log.
-    if (anyPerIndicator) {
-        const void* kindRecorders[] = {
-            (void*)ShowVolumeAsync_Original,
-            (void*)ShowBrightnessAsync_Original,
-            (void*)ShowKeyboardBrightnessAsync_Original,
-            (void*)ShowAirplaneModeOnAsync_Original,
-            (void*)ShowCameraOnAsync_Original,
-            (void*)ShowCameraAccessEnabledAsync_Original,
-            (void*)ShowMicrophoneMutedAsync_Original,
-            (void*)ShowTextAsync_Original,
-        };
+    const void* kindRecorders[] = {
+        (void*)ShowVolumeAsync_Original,
+        (void*)ShowBrightnessAsync_Original,
+        (void*)ShowKeyboardBrightnessAsync_Original,
+        (void*)ShowAirplaneModeOnAsync_Original,
+        (void*)ShowCameraOnAsync_Original,
+        (void*)ShowCameraAccessEnabledAsync_Original,
+        (void*)ShowMicrophoneMutedAsync_Original,
+        (void*)ShowTextAsync_Original,
+    };
 
-        for (const void* recorder : kindRecorders) {
-            if (!recorder) {
-                Wh_Log(
-                    L"An indicator entry point didn't resolve, so the position "
-                    L"per indicator settings are ignored and everything uses "
-                    L"the main position");
-                g_kindUnreliable = true;
-                break;
-            }
+    for (const void* recorder : kindRecorders) {
+        if (!recorder) {
+            Wh_Log(
+                L"An indicator entry point didn't resolve, so the position "
+                L"per indicator settings are ignored and everything uses "
+                L"the main position");
+            g_kindUnreliable = true;
+            break;
         }
     }
 
@@ -730,15 +736,10 @@ void Wh_ModUninit() {
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // Whether the kind recorders are installed is decided in Wh_ModInit, so
-    // turning the first override on, or the last one off, needs a reload to
-    // match. Everything else takes effect on the next indicator.
-    bool hadPerIndicator = AnyPerIndicator();
+    // Every hook is installed either way now, so nothing here needs a reload and
+    // a change takes effect on the next indicator.
     LoadSettings();
-    *bReload = AnyPerIndicator() != hadPerIndicator;
-
-    return TRUE;
 }
