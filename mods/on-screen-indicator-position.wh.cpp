@@ -310,6 +310,27 @@ bool AnyPerIndicator() {
     return false;
 }
 
+// Only for the log, so a line someone is asked to read back says which kind it was
+// rather than a number to count enum members against.
+PCWSTR IndicatorName(Indicator indicator) {
+    static constexpr PCWSTR kNames[] = {
+        L"volume",     L"brightness", L"keyboardBrightness", L"airplaneMode",
+        L"camera",     L"microphone", L"text",
+    };
+    static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
+
+    size_t i = (size_t)indicator;
+    return i < ARRAYSIZE(kNames) ? kNames[i] : L"unknown";
+}
+
+// Said from two places, so it lives in one.
+void LogKindUnreliable() {
+    Wh_Log(
+        L"An indicator entry point didn't resolve, so the position "
+        L"per indicator settings are ignored and everything uses "
+        L"the main position");
+}
+
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
     if (g_kindUnreliable.load()) {
@@ -506,7 +527,7 @@ WinrtRect* WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              WinrtRect* retval,
                                              const WinrtRect* rect) {
-    Wh_Log(L"> indicator=%d", (int)g_currentIndicator.load());
+    Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
 
     // Read the offsets once so the placement below uses one consistent pair.
     int offsetSettingX = g_settings.offsetX.load();
@@ -759,10 +780,7 @@ BOOL Wh_ModInit() {
             // Only worth saying to someone who has an override set. With the
             // shipped defaults there is nothing being ignored to complain about.
             if (anyPerIndicator) {
-                Wh_Log(
-                    L"An indicator entry point didn't resolve, so the position "
-                    L"per indicator settings are ignored and everything uses "
-                    L"the main position");
+                LogKindUnreliable();
             }
             break;
         }
@@ -793,9 +811,6 @@ void Wh_ModSettingsChanged() {
     // Turning on the first override no longer re-runs Wh_ModInit, so this is the
     // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
-        Wh_Log(
-            L"An indicator entry point didn't resolve, so the position "
-            L"per indicator settings are ignored and everything uses "
-            L"the main position");
+        LogKindUnreliable();
     }
 }
