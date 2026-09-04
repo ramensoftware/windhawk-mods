@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-03T20:39:26.000Z</updated>
+    <updated>2026-09-04T19:26:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.5]]></title>
+        <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#9547257f6e615dc30a528040b02b9def90181b7b</id>
+        <link href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe"/>
+        <updated>2026-09-04T19:26:37.000Z</updated>
+        <content type="html"><![CDATA[<p>Add address bar</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Blocked Shutdown UX & Logoff Sequence 1.0]]></title>
         <id>https://windhawk.net/mods/win7-bsdr#b71ad7e072474d28c82dc126b48917cb26fa3c44</id>
@@ -732,36 +743,6 @@ and Manual management (Alt+R).</p>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#a9855f73d19de31e603101483d1fb85e8f027620</id>
-        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
-        <updated>2026-08-30T17:49:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7classicautoplaydialog">Windows 7 Classic AutoPlay Dialog</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.</p>
-<p>What is seen is a simple list of real actions (open folder, play with Windows
-Media Player, view pictures with Windows Photo Viewer, ReadyBoost). A program
-from the disc is offered only if clicked and only if the file is on that
-volume.</p>
-<p>The "Always do this" choice is remembered by the mod, not by Windows policy.
-A privacy setting can hide the volume or device name in this mod only.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/autoplay.png" alt="autoplay.png" /></p>
-<h2 id="notes">Notes</h2>
-<p>The mod has been tested on Windows 10 21H2 and Windows 11 24H2.
-This mod is a best-effort reimplementation using native Windows components.
-Native AutoPlay is suppressed by intercepting the shell's enumeration of
-<code>IQueryCancelAutoPlay</code> CLSIDs under
-<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID</code>
-and synthesizing this mod's handler. Nothing is written to that key. Leftover
-values from earlier versions of the mod are deleted when the owner instance
-starts.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.5 ([Sep 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9547257f6e615dc30a528040b02b9def90181b7b/mods/flexible-explorer-toolbars-deluxe.wh.cpp))
+
+Add address bar
+
 ## 1.4 ([Aug 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/be13fba7112e7504c68607c9f2ca8dee08de621c/mods/flexible-explorer-toolbars-deluxe.wh.cpp))
 
 * Fix initial layout of breadcrumbs
