@@ -130,6 +130,35 @@ If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog
+// - 5.0.0: Network and Sharing Center map rebuilt on the layout of Windows
+//   7's own netcenter.dll UIFILE: a fixed 480rp map (40rp gutters, five
+//   80rp icon/connector cells, three 160rp label cells - the geometry the
+//   Windows 7 grids produce in their 600rp pane) so every label is centred
+//   under its node in every language and nothing stretches or squeezes when
+//   the window is resized, the original double 1rp connector lines coloured
+//   with the system activecaption/activeborder colours instead of a fixed
+//   light-blue bar, the Windows 7 "labelText" style for the node labels, and
+//   the three genuine map states: PC ==== Network ==== Internet, PC ====
+//   Network --X-- Internet (connected, no Internet access) and PC --X--
+//   Network ---- Internet (not connected to any network), the last of which
+//   was previously drawn as a fully connected map.
+// - 5.0.0: Tray toolbar discovery no longer runs while holding the toolbar
+//   cache lock. The scan sends ~2 x buttonCount messages to the taskbar
+//   thread, which itself takes the same lock on every tray mouse message;
+//   when the flyout thread won the race the taskbar froze for the sum of
+//   all 200 ms send timeouts (several seconds with a dozen tray icons). The
+//   lock now only publishes the result. The tray icon rect used for DPI
+//   selection is likewise resolved before the main state lock is taken in
+//   ToggleFlyoutWindow.
+// - 5.0.0: RetroBar: the RetroBar instance no longer scans explorer.exe
+//   cross-process (OpenProcess with PROCESS_VM_WRITE, VirtualAllocEx,
+//   ReadProcessMemory, Toolhelp module snapshots) to find the network icon.
+//   The Explorer instance of the mod - which already resolves the icon
+//   in-process - publishes the owner window and callback message on a
+//   message-only window, and the RetroBar instance asks for them with a
+//   registered window message. The periodic retry also honours its
+//   exponential backoff now (it was forced on every 3 s tick), so a setup
+//   where the icon cannot be resolved no longer polls forever.
 // - 5.0.0: Added High Contrast theme support. When a Windows High Contrast
 //   theme is active, the flyout, the notification popup, the connect button,
 //   the password dialog, and the native controls all switch to system colors
@@ -152,11 +181,12 @@ If any issues are encountered, please report them to the author of the mod.
 //   tray icon clicks with SendNotifyMessageW toward the icon owner windows in
 //   explorer.exe (it does not own a ToolbarWindow32), so tray interception can
 //   no longer rely on subclassing the Explorer notification toolbar. The mod
-//   now hooks SendNotifyMessageW inside RetroBar.exe, identifies the network
-//   notify icon by scanning Explorer's notification toolbar cross-process
-//   (the same read-only TBBUTTON/TRAYDATA enumeration ManagedShell itself
-//   performs, matched against pnidui.dll's address range in the Explorer
-//   process), swallows the native left-press/select callbacks that would open
+//   now hooks SendNotifyMessageW inside RetroBar.exe, asks the mod's own
+//   Explorer instance which notify icon is the network one (the Explorer
+//   instance already identifies it in-process via pnidui.dll's address range
+//   and publishes owner window + callback message on a message-only window;
+//   no cross-process memory access or PROCESS_VM_* handle on explorer.exe is
+//   needed), swallows the native left-press/select callbacks that would open
 //   the modern flyout and shows this flyout instead, anchored at the click
 //   point. Hover/leave/right-click callbacks are passed through untouched so
 //   RetroBar's own tooltip and the native tray context menu keep working. The
@@ -6541,14 +6571,14 @@ static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
 // (QueryToolbarNetworkIconRect -> EnsureToolbarCache). Guard every access so
 // the flyout thread can never observe valid==TRUE with a stale networkId,
 // and so the two threads never redundantly run DetectNetworkButtonId's full
-// discovery scan concurrently. Initialized unconditionally in Wh_ModInit,
-// same as g_retrobarAnchorLock.
+// discovery scan concurrently. Initialized unconditionally in Wh_ModInit
+// (before the tray subclass or the hotkey thread exist), same as
+// g_retrobarAnchorLock, so no "is initialized" guard is needed here.
 static CRITICAL_SECTION g_toolbarCacheLock;
-static BOOL g_toolbarCacheLockInit = FALSE;
 static void InvalidateToolbarCache() {
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    EnterCriticalSection(&g_toolbarCacheLock);
     g_ToolbarCache.valid = FALSE;
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    LeaveCriticalSection(&g_toolbarCacheLock);
 }
 
 // Click-vs-drag tracking for the tray network icon.
@@ -6626,29 +6656,40 @@ static void EnsureToolbarCache(HWND hToolbar) {
                              SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult))
         return;
     int currentCount = (int)countResult;
-    // Re-check validity and (re)run discovery under the lock, atomically, so
-    // a second thread that lost the race sees the freshly-populated cache
-    // instead of redoing DetectNetworkButtonId's full scan.
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
-    if (currentCount != g_ToolbarCache.buttonCount)
-        g_ToolbarCache.valid = FALSE;
-    if (!g_ToolbarCache.valid) {
-        int detectedId = -1;
-        DetectNetworkButtonId(hToolbar, &detectedId);
-        g_ToolbarCache.networkId = detectedId;
-        g_ToolbarCache.buttonCount = currentCount;
-        g_ToolbarCache.valid = (detectedId != -1);
+    // The lock is only used to READ the validity flag and to PUBLISH the
+    // result. DetectNetworkButtonId() issues ~2 x buttonCount cross-thread
+    // SendMessageTimeoutW calls to the taskbar thread, and that same thread
+    // reaches this function via ToolbarWndProc -> IsCachedNetworkButton on
+    // every tray mouse message. Running the scan under the lock made the
+    // taskbar thread block in EnterCriticalSection while the flyout/hotkey
+    // thread was sending to it: every send then burned its full 200 ms
+    // timeout (~4-5 s of frozen taskbar with a dozen tray icons). Two
+    // threads racing here can at worst both scan; they compute the same
+    // answer, and that is far cheaper than stalling the taskbar.
+    bool needScan;
+    {
+        CsGuard g(g_toolbarCacheLock);
+        needScan = !g_ToolbarCache.valid ||
+                   currentCount != g_ToolbarCache.buttonCount;
     }
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    if (!needScan) return;
+
+    int detectedId = -1;
+    DetectNetworkButtonId(hToolbar, &detectedId);   // no lock held
+
+    CsGuard g(g_toolbarCacheLock);
+    g_ToolbarCache.networkId   = detectedId;
+    g_ToolbarCache.buttonCount = currentCount;
+    g_ToolbarCache.valid       = (detectedId != -1);
 }
 
 static BOOL QueryToolbarNetworkIconRect(HWND hToolbar, RECT* outRect) {
     if (!hToolbar || !outRect) return FALSE;
     EnsureToolbarCache(hToolbar);
     int networkId;
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    EnterCriticalSection(&g_toolbarCacheLock);
     networkId = g_ToolbarCache.networkId;
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    LeaveCriticalSection(&g_toolbarCacheLock);
     if (networkId == -1) return FALSE;
     // PositionWindowNearTray can run on the hotkey thread. Don't use a
     // blocking SendMessage here: if the toolbar thread is waiting on us
@@ -6668,11 +6709,137 @@ static BOOL QueryToolbarNetworkIconRect(HWND hToolbar, RECT* outRect) {
     // Resolved only here (the flyout/hotkey-thread caller of this function),
     // so publish it under the same lock for the taskbar-thread reader below
     // rather than a bare unsynchronized write.
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    EnterCriticalSection(&g_toolbarCacheLock);
     s_lastNetworkIconScreenRect = rc;
     s_haveLastNetworkIconRect = TRUE;
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    LeaveCriticalSection(&g_toolbarCacheLock);
     return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+// Explorer -> RetroBar network icon publication
+// ---------------------------------------------------------------------------
+// The Explorer instance of the mod already knows the network notify icon's
+// owner window and callback message in-process (IsNetworkButton() reads the
+// toolbar's TRAYDATA directly through TBBUTTON.dwData). Instead of having the
+// RetroBar instance rediscover the same data cross-process - which needed an
+// OpenProcess(PROCESS_VM_WRITE) handle on explorer.exe, VirtualAllocEx and
+// ReadProcessMemory, all of which AV/EDR products flag - the Explorer instance
+// answers a registered query message on a message-only window, and the
+// RetroBar instance simply asks (see RetroBarTray::QueryExplorerForNetworkIcon).
+// wParam selects the field, the answer is the LRESULT (0 = unknown / no
+// network icon in this explorer.exe).
+static const PCWSTR kTrayInfoClassName = L"Win7NetFlyout_TrayInfoWnd";
+static UINT g_uQueryNetworkIconMsg = 0;
+static HWND g_hTrayInfoWnd = NULL;           // hotkey thread of the Explorer host
+static bool g_trayInfoClassRegistered = false;
+enum TrayInfoField : WPARAM {
+    TRAYINFO_HWND         = 0,
+    TRAYINFO_CALLBACK_MSG = 1,
+    TRAYINFO_UID          = 2,
+    TRAYINFO_VERSION      = 3,
+};
+
+static UINT GetQueryNetworkIconMessage() {
+    if (!g_uQueryNetworkIconMsg)
+        g_uQueryNetworkIconMsg = RegisterWindowMessageW(L"Win7NetFlyout_QueryNetworkIcon");
+    return g_uQueryNetworkIconMsg;
+}
+
+// Layout of the per-icon data Explorer's notification toolbar stores in
+// TBBUTTON.dwData (the same layout ManagedShell/RetroBar rely on). Only read
+// in-process, by the Explorer host.
+#pragma pack(push, 8)
+struct TrayItemData {
+    HWND  hwnd;
+    UINT  uID;
+    UINT  uCallbackMessage;
+    DWORD dwState;
+    DWORD uVersion;
+    HICON hIcon;
+};
+#pragma pack(pop)
+
+// Explorer host only. Resolves the network notify icon's TRAYDATA from the
+// cached network button. Every toolbar access is a bounded
+// SendMessageTimeoutW, and no lock is held across them.
+static BOOL QueryNetworkTrayItemData(TrayItemData* out) {
+    ZeroMemory(out, sizeof(*out));
+    HWND hToolbar = FindPrimaryTrayToolbar();
+    if (!hToolbar) return FALSE;
+    EnsureToolbarCache(hToolbar);
+    int networkId;
+    {
+        CsGuard g(g_toolbarCacheLock);
+        networkId = g_ToolbarCache.valid ? g_ToolbarCache.networkId : -1;
+    }
+    if (networkId == -1) return FALSE;
+    DWORD_PTR idx = (DWORD_PTR)-1;
+    if (!SendMessageTimeoutW(hToolbar, TB_COMMANDTOINDEX, (WPARAM)networkId, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &idx) || (int)idx < 0)
+        return FALSE;
+    TBBUTTON tb{};
+    DWORD_PTR got = 0;
+    if (!SendMessageTimeoutW(hToolbar, TB_GETBUTTON, idx, (LPARAM)&tb,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &got) || !got || !tb.dwData)
+        return FALSE;
+    const TrayItemData* data = reinterpret_cast<const TrayItemData*>(tb.dwData);
+    if (!data->hwnd || !IsWindow(data->hwnd)) return FALSE;
+    *out = *data;
+    return TRUE;
+}
+
+static LRESULT CALLBACK TrayInfoWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == g_uQueryNetworkIconMsg && g_uQueryNetworkIconMsg) {
+        TrayItemData data;
+        if (!QueryNetworkTrayItemData(&data)) return 0;
+        switch (wParam) {
+            case TRAYINFO_HWND:         return (LRESULT)(ULONG_PTR)data.hwnd;
+            case TRAYINFO_CALLBACK_MSG: return (LRESULT)data.uCallbackMessage;
+            case TRAYINFO_UID:          return (LRESULT)data.uID;
+            case TRAYINFO_VERSION:      return (LRESULT)data.uVersion;
+        }
+        return 0;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+// Created on the Explorer host's hotkey thread (it owns a message loop and
+// outlives every tray-interception state), destroyed by the same thread on
+// its way out; the class is unregistered in Wh_ModUninit after the thread
+// has been joined.
+static void CreateTrayInfoWindow() {
+    if (g_hTrayInfoWnd) return;
+    HINSTANCE hInst = HINST_THISCOMPONENT;
+    if (!g_trayInfoClassRegistered) {
+        WNDCLASSW wc = {0};
+        wc.lpfnWndProc   = TrayInfoWndProc;
+        wc.hInstance     = hInst;
+        wc.lpszClassName = kTrayInfoClassName;
+        if (!RegisterClassW(&wc)) {
+            Wh_Log(L"TrayInfo: RegisterClassW failed (%lu)", GetLastError());
+            return;
+        }
+        g_trayInfoClassRegistered = true;
+    }
+    UINT queryMsg = GetQueryNetworkIconMessage();
+    g_hTrayInfoWnd = CreateWindowExW(0, kTrayInfoClassName, L"", 0, 0, 0, 0, 0,
+                                     HWND_MESSAGE, NULL, hInst, NULL);
+    if (!g_hTrayInfoWnd) {
+        Wh_Log(L"TrayInfo: CreateWindowExW failed (%lu)", GetLastError());
+        return;
+    }
+    // UIPI blocks registered messages from a lower-integrity sender; let a
+    // non-elevated RetroBar query an elevated explorer.exe as well.
+    if (queryMsg)
+        ChangeWindowMessageFilterEx(g_hTrayInfoWnd, queryMsg, MSGFLT_ALLOW, NULL);
+}
+
+static void DestroyTrayInfoWindow() {
+    if (g_hTrayInfoWnd) {
+        DestroyWindow(g_hTrayInfoWnd);
+        g_hTrayInfoWnd = NULL;
+    }
 }
 
 // Anchor rect captured by the RetroBar SendNotifyMessageW hook (the click
@@ -6717,10 +6884,10 @@ static BOOL GetNetworkIconScreenRect(RECT* outRect) {
     HWND hToolbar = FindPrimaryTrayToolbar();
     if (hToolbar && QueryToolbarNetworkIconRect(hToolbar, outRect))
         return TRUE;
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    EnterCriticalSection(&g_toolbarCacheLock);
     BOOL haveRect = s_haveLastNetworkIconRect;
     RECT cachedRect = s_lastNetworkIconScreenRect;
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    LeaveCriticalSection(&g_toolbarCacheLock);
     if (haveRect) {
         *outRect = cachedRect;
         return TRUE;
@@ -8429,9 +8596,9 @@ static BOOL IsCachedNetworkButton(HWND hToolbar, int btnIdx) {
     if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb))
         return FALSE;
     EnsureToolbarCache(hToolbar);
-    if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+    EnterCriticalSection(&g_toolbarCacheLock);
     BOOL match = (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId);
-    if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+    LeaveCriticalSection(&g_toolbarCacheLock);
     return match;
 }
 
@@ -8582,10 +8749,10 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         SendMessageW(hWnd, TB_GETITEMRECT, (WPARAM)btnIdx, (LPARAM)&rcIcon) &&
                         !IsRectEmpty(&rcIcon)) {
                         MapWindowPoints(hWnd, NULL, (POINT*)&rcIcon, 2);
-                        if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+                        EnterCriticalSection(&g_toolbarCacheLock);
                         s_lastNetworkIconScreenRect = rcIcon;
                         s_haveLastNetworkIconRect = TRUE;
-                        if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+                        LeaveCriticalSection(&g_toolbarCacheLock);
                     }
                 }
                 if (msg == WM_MOUSEACTIVATE) return MA_ACTIVATE;
@@ -8612,9 +8779,7 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 // RetroBar draws the notification area itself (WPF) and has no
 // ToolbarWindow32 in its process, so the Explorer-side toolbar subclass
 // cannot intercept its icon clicks. Instead, when RetroBar runs with
-// Explorer as the shell (its default/recommended setup) it enumerates
-// Explorer's notification toolbar read-only, cross-process, exactly like
-// ManagedShell's ExplorerTrayService does, and - on click - forwards the
+// Explorer as the shell (its default/recommended setup) it forwards the
 // interaction to the icon owner window (which lives in explorer.exe) with
 // SendNotifyMessageW:
 //
@@ -8623,10 +8788,12 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 //                      lParam = mouseMsg | (nid.uID << 16)  (v4 icons))
 //
 // Hooking SendNotifyMessageW inside RetroBar.exe lets the mod:
-//   * identify the network icon up-front by scanning Explorer's toolbar
-//     cross-process and matching the owner window against pnidui.dll's
-//     address range inside the Explorer process (the same heuristic the
-//     Explorer-side code uses in-process);
+//   * identify the network icon up-front by asking the mod's own Explorer
+//     instance (which already resolved the icon in-process through
+//     pnidui.dll's address range, see IsNetworkButton) for the icon owner
+//     window + callback message through a registered window message - no
+//     cross-process memory access, no PROCESS_VM_* handle on explorer.exe,
+//     and a single copy of the undocumented TRAYDATA layout;
 //   * swallow the left-press / select / double-click callbacks that would
 //     make explorer.exe open the modern network flyout;
 //   * toggle this classic flyout instead, anchored at the click point.
@@ -8634,22 +8801,8 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 // RetroBar's own tooltip and the native tray context menu keep working.
 namespace RetroBarTray {
 
-// Layout of the per-icon data Explorer's toolbar stores in TBBUTTON.dwData.
-// Only the leading HWND is needed to identify the icon; the remainder is
-// declared so ReadProcessMemory can fetch a fixed, correctly aligned block.
-#pragma pack(push, 8)
-struct RemoteTrayData {
-    HWND  hwnd;
-    UINT  uID;
-    UINT  uCallbackMessage;
-    DWORD dwState;
-    DWORD uVersion;
-    HICON hIcon;
-};
-#pragma pack(pop)
-
-// After the fix in item 2, EnsureIconScanned()/ScanExplorerForNetworkIcon()
-// only ever run on the hotkey thread (TickRefresh); SendNotifyMessageW_Hook
+// EnsureIconScanned()/QueryExplorerForNetworkIcon() only ever run on the
+// hotkey thread (TickRefresh); SendNotifyMessageW_Hook
 // on RetroBar's UI thread only ever reads these two. Kept atomic so a
 // half-written pair can never be observed cross-thread, with the message
 // published last: the hook's fast-path compare (Msg == s_networkCallbackMsg
@@ -8664,198 +8817,47 @@ static DWORD   s_lastScanTick = 0;
 using SendNotifyMessageW_t = decltype(&SendNotifyMessageW);
 static SendNotifyMessageW_t SendNotifyMessageW_Orig = nullptr;
 
-// Read a fixed-size structure from another process with the same robust
-// pattern ManagedShell uses (OpenProcess -> VirtualAllocEx ->
-// SendMessage(toolbar) -> ReadProcessMemory). Returns TRUE on success.
-static BOOL ReadRemoteToolbarButton(HANDLE hProcess, HWND hToolbar,
-                                    LPVOID remoteTb, int index, TBBUTTON* outTb,
-                                    RemoteTrayData* outData) {
-    ZeroMemory(outTb, sizeof(*outTb));
-    ZeroMemory(outData, sizeof(*outData));
-    if (!remoteTb) return FALSE;
-
-    BOOL ok = FALSE;
-    DWORD_PTR r = 0;
-    if (SendMessageTimeoutW(hToolbar, TB_GETBUTTON, (WPARAM)index, (LPARAM)remoteTb,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &r) && r) {
-        SIZE_T read = 0;
-        if (ReadProcessMemory(hProcess, remoteTb, outTb, sizeof(TBBUTTON), &read) && read >= sizeof(DWORD_PTR)) {
-            if (outTb->dwData) {
-                SIZE_T dataRead = 0;
-                ok = ReadProcessMemory(hProcess, (LPCVOID)outTb->dwData,
-                                       outData, sizeof(*outData), &dataRead) &&
-                     dataRead >= sizeof(HWND);
-            }
-        }
-    }
-    return ok;
-}
-
-// Resolves a module's address range inside another process (used to verify
-// the network icon owner is backed by pnidui.dll inside explorer).
-static BOOL GetRemoteModuleRange(DWORD pid, PCWSTR moduleName,
-                                 BYTE** outBase, SIZE_T* outSize) {
-    if (outBase) *outBase = NULL;
-    if (outSize) *outSize = 0;
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-    if (hSnap == INVALID_HANDLE_VALUE) return FALSE;
-    BOOL found = FALSE;
-    MODULEENTRY32W me = {};
-    me.dwSize = sizeof(me);
-    if (Module32FirstW(hSnap, &me)) {
-        do {
-            if (_wcsicmp(me.szModule, moduleName) == 0) {
-                if (outBase) *outBase = reinterpret_cast<BYTE*>(me.modBaseAddr);
-                if (outSize) *outSize = (SIZE_T)me.modBaseSize;
-                found = TRUE;
-                break;
-            }
-        } while (Module32NextW(hSnap, &me));
-    }
-    CloseHandle(hSnap);
-    return found;
-}
-
-// Cross-process mirror of the Explorer-side IsNetworkButton(): the network
-// icon owner window uses an "ATL:<hex>" class name whose hexadecimal suffix
-// is the vftable pointer of the pnidui.dll notify object, so it must fall
-// inside pnidui.dll's address range in the Explorer process.
-static BOOL IsRemoteNetworkIconWindow(HWND hIconWnd, BYTE* pniduiBase, SIZE_T pniduiSize) {
-    if (!hIconWnd || !IsWindow(hIconWnd) || !pniduiBase) return FALSE;
-    WCHAR cls[256] = {};
-    if (!GetClassNameW(hIconWnd, cls, ARRAYSIZE(cls))) return FALSE;
-    if (wcsncmp(cls, L"ATL:", 4) != 0) return FALSE;
-    const WCHAR* p = cls + 4;
-    ULONG_PTR addr = 0;
-    while (*p) {
-        WCHAR c = *p;
-        int digit;
-        if      (c >= L'0' && c <= L'9') digit = c - L'0';
-        else if (c >= L'A' && c <= L'F') digit = 10 + (c - L'A');
-        else if (c >= L'a' && c <= L'f') digit = 10 + (c - L'a');
-        else break;
-        addr = (addr << 4) | digit;
-        ++p;
-    }
-    return (addr >= (ULONG_PTR)pniduiBase &&
-            addr <  (ULONG_PTR)(pniduiBase + pniduiSize));
-}
-
-// Enumerate Explorer's notification toolbar in its own process and cache the
-// network icon's owner window / callback message / id. Read-only: no window
-// is subclassed and no message that changes state is sent.
-static BOOL ScanExplorerForNetworkIcon() {
-    // Explorer's taskbar may be shadowed by RetroBar's same-named decoy;
-    // pick the Shell_TrayWnd owned by an explorer.exe process.
-    struct FindExplorerTrayCtx { DWORD pid; HWND h; };
-    FindExplorerTrayCtx enumCtx = { 0, NULL };
-    EnumWindows([](HWND h, LPARAM lp) -> BOOL {
-        FindExplorerTrayCtx* e = reinterpret_cast<FindExplorerTrayCtx*>(lp);
-        WCHAR cls[64] = {};
-        if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"Shell_TrayWnd") == 0) {
-            WCHAR exe[MAX_PATH] = {};
-            DWORD pid = 0;
-            GetWindowThreadProcessId(h, &pid);
-            HANDLE hp = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-            if (hp) {
-                DWORD sz = MAX_PATH;
-                if (QueryFullProcessImageNameW(hp, 0, exe, &sz)) {
-                    WCHAR* name = wcsrchr(exe, L'\\');
-                    name = name ? name + 1 : exe;
-                    if (_wcsicmp(name, L"explorer.exe") == 0) { e->pid = pid; e->h = h; }
-                }
-                CloseHandle(hp);
-            }
-            if (e->h) return FALSE;
-        }
+// Ask the mod's Explorer instance for the network notify icon. The Explorer
+// host publishes it on a message-only window of class kTrayInfoClassName
+// (see TrayInfoWndProc); each field is one bounded SendMessageTimeoutW. There
+// may be more than one explorer.exe (e.g. "Launch folder windows in a
+// separate process"), so walk every publisher and take the first one that
+// actually owns a network icon. Read-only: no handle on explorer.exe is
+// opened and nothing is written into it.
+static BOOL QueryExplorerForNetworkIcon() {
+    UINT queryMsg = GetQueryNetworkIconMessage();
+    if (!queryMsg) return FALSE;
+    auto Ask = [&](HWND hInfo, WPARAM field, DWORD_PTR* out) -> BOOL {
+        *out = 0;
+        // Generous timeout: the Explorer hotkey thread answering this may
+        // itself have to re-scan its toolbar (a few 200 ms-bounded sends).
+        return SendMessageTimeoutW(hInfo, queryMsg, field, 0,
+                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, out) != 0;
+    };
+    BOOL sawPublisher = FALSE;
+    HWND hInfo = NULL;
+    while ((hInfo = FindWindowExW(HWND_MESSAGE, hInfo, kTrayInfoClassName, NULL)) != NULL) {
+        sawPublisher = TRUE;
+        DWORD_PTR rHwnd = 0, rMsg = 0, rUid = 0, rVer = 0;
+        if (!Ask(hInfo, TRAYINFO_HWND, &rHwnd) || !rHwnd) continue;
+        HWND hIconWnd = reinterpret_cast<HWND>(rHwnd);
+        if (!IsWindow(hIconWnd)) continue;
+        if (!Ask(hInfo, TRAYINFO_CALLBACK_MSG, &rMsg) || !rMsg) continue;
+        Ask(hInfo, TRAYINFO_UID, &rUid);
+        Ask(hInfo, TRAYINFO_VERSION, &rVer);
+        s_networkUid = (UINT)rUid;
+        s_networkVersion = (UINT)rVer;
+        s_networkHwnd.store(hIconWnd, std::memory_order_relaxed);
+        s_networkCallbackMsg.store((UINT)rMsg, std::memory_order_release);
+        Wh_Log(L"[RetroBar] Network icon from Explorer instance: hwnd=0x%p cbMsg=0x%x uid=%u ver=%u",
+               hIconWnd, (UINT)rMsg, (UINT)rUid, (UINT)rVer);
         return TRUE;
-    }, reinterpret_cast<LPARAM>(&enumCtx));
-    HWND hTray = enumCtx.h;
-    if (!hTray) {
-        Wh_Log(L"[RetroBar] Explorer Shell_TrayWnd not found yet");
-        return FALSE;
     }
-
-    HWND hNotify   = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    HWND hSysPager = hNotify ? FindWindowExW(hNotify, NULL, L"SysPager", NULL) : NULL;
-    HWND hToolbar  = hSysPager ? FindWindowExW(hSysPager, NULL, L"ToolbarWindow32", NULL) : NULL;
-    if (!hToolbar) {
-        Wh_Log(L"[RetroBar] Explorer ToolbarWindow32 not found");
-        return FALSE;
-    }
-
-    DWORD explorerPid = 0;
-    GetWindowThreadProcessId(hToolbar, &explorerPid);
-    HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ |
-                                  PROCESS_VM_WRITE | PROCESS_QUERY_LIMITED_INFORMATION,
-                                  FALSE, explorerPid);
-    if (!hProcess) {
-        Wh_Log(L"[RetroBar] OpenProcess(explorer, pid=%lu) failed: %lu", explorerPid, GetLastError());
-        return FALSE;
-    }
-
-    static DWORD s_cachedPniduiPid = 0;
-    static BYTE* s_cachedPniduiBase = NULL;
-    static SIZE_T s_cachedPniduiSize = 0;
-    BYTE* pniduiBase = NULL;
-    SIZE_T pniduiSize = 0;
-    if (s_cachedPniduiPid == explorerPid && s_cachedPniduiBase) {
-        pniduiBase = s_cachedPniduiBase;
-        pniduiSize = s_cachedPniduiSize;
-    } else if (!GetRemoteModuleRange(explorerPid, L"pnidui.dll", &pniduiBase, &pniduiSize)) {
-        // On Windows 10 the network flyout icons live in pnidui.dll loaded
-        // inside explorer; ExplorerPatcher loads it there too. Missing it
-        // means we cannot safely distinguish the network icon from any other
-        // ATL-based tray icon, so skip this scan and retry later.
-        CloseHandle(hProcess);
-        Wh_Log(L"[RetroBar] pnidui.dll not found in explorer process");
-        return FALSE;
-    } else {
-        s_cachedPniduiPid = explorerPid;
-        s_cachedPniduiBase = pniduiBase;
-        s_cachedPniduiSize = pniduiSize;
-    }
-
-    DWORD_PTR countResult = 0;
-    if (!SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &countResult)) {
-        CloseHandle(hProcess);
-        return FALSE;
-    }
-    int count = (int)countResult;
-    LPVOID remoteTb = VirtualAllocEx(hProcess, NULL, sizeof(TBBUTTON), MEM_COMMIT, PAGE_READWRITE);
-    if (!remoteTb) {
-        CloseHandle(hProcess);
-        return FALSE;
-    }
-    BOOL found = FALSE;
-    for (int i = 0; i < count; i++) {
-        TBBUTTON tb = {};
-        RemoteTrayData data = {};
-        if (!ReadRemoteToolbarButton(hProcess, hToolbar, remoteTb, i, &tb, &data))
-            continue;
-        if (tb.fsState & TBSTATE_HIDDEN) continue;
-        if (tb.fsStyle & TBSTYLE_SEP) continue;
-        if (!data.hwnd) continue;
-        if (pniduiBase && !IsRemoteNetworkIconWindow(data.hwnd, pniduiBase, pniduiSize))
-            continue;
-        // When pnidui couldn't be resolved remotely we keep the
-        // ATL-class heuristic as the sole guard; IsRemoteNetworkIconWindow
-        // returns FALSE without a base, so reaching here requires the base.
-        s_networkUid = data.uID;
-        s_networkVersion = data.uVersion;
-        s_networkHwnd.store(data.hwnd, std::memory_order_relaxed);
-        s_networkCallbackMsg.store(data.uCallbackMessage, std::memory_order_release);
-        found = TRUE;
-        Wh_Log(L"[RetroBar] Network icon found: hwnd=0x%p cbMsg=0x%x uid=%u ver=%u",
-               data.hwnd, data.uCallbackMessage, data.uID, data.uVersion);
-        break;
-    }
-    VirtualFreeEx(hProcess, remoteTb, 0, MEM_RELEASE);
-    CloseHandle(hProcess);
-    if (!found)
-        Wh_Log(L"[RetroBar] Network icon not found in Explorer toolbar (%d buttons)", count);
-    return found;
+    if (!sawPublisher)
+        Wh_Log(L"[RetroBar] No Explorer instance of the mod is publishing tray info yet");
+    else
+        Wh_Log(L"[RetroBar] Explorer instance has no resolvable network icon (overflow area / modern tray?)");
+    return FALSE;
 }
 
 static DWORD s_consecutiveScanFailures = 0;
@@ -8863,19 +8865,18 @@ static DWORD s_consecutiveScanFailures = 0;
 static void EnsureIconScanned(BOOL force) {
     DWORD now = GetTickCount();
     BOOL haveValid = (s_networkHwnd && IsWindow(s_networkHwnd));
-    // While a valid icon is cached, throttle re-scans (each scan enumerates
-    // windows and reads another process's memory). Re-scan immediately when
-    // the cached owner window is gone (Explorer restart), when forced, or
-    // at a slow cadence otherwise.
+    // While a valid icon is cached, throttle re-queries. Re-query immediately
+    // when the cached owner window is gone (Explorer restart), when forced,
+    // or at a slow cadence otherwise.
     if (haveValid && !force && (now - s_lastScanTick < 5000))
         return;
     if (!haveValid && !force) {
         // The icon may be unresolvable for a long-lived reason (in the
-        // overflow area, pnidui.dll not loaded, Windows 11 modern tray,
-        // Explorer not up yet). Retrying every 1.5s forever is expensive
-        // (EnumWindows + CreateToolhelp32Snapshot + a cross-process walk
-        // per attempt), so back off exponentially up to 30s while it keeps
-        // failing.
+        // overflow area, Windows 11 modern tray, the mod's Explorer instance
+        // not running). Polling forever is pointless in those states, so
+        // back off exponentially up to 30s while it keeps failing. `force`
+        // (TaskbarCreated) bypasses the backoff without counting as a
+        // failure, so a freshly restarted Explorer is picked up quickly.
         DWORD backoffMs = 1500u << std::min<DWORD>(s_consecutiveScanFailures, 4u); // 1.5s..24s
         backoffMs = std::min<DWORD>(backoffMs, 30000u);
         if (now - s_lastScanTick < backoffMs)
@@ -8884,7 +8885,7 @@ static void EnsureIconScanned(BOOL force) {
     s_lastScanTick = now;
     if (s_networkHwnd && !IsWindow(s_networkHwnd))
         s_networkHwnd = NULL;
-    if (ScanExplorerForNetworkIcon())
+    if (QueryExplorerForNetworkIcon())
         s_consecutiveScanFailures = 0;
     else if (!force)
         s_consecutiveScanFailures++;
@@ -8974,10 +8975,10 @@ static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
                 // cursor position in that case.
                 if (pt.x == 0 && pt.y == 0)
                     GetCursorPos(&pt);
-                // Cache lookup only - no scanning here. Scanning (EnumWindows,
-                // Toolhelp snapshot, cross-process reads) is done exclusively
-                // by the hotkey thread's TickRefresh() so this very hot hook
-                // never blocks RetroBar's UI thread mid-gesture.
+                // Cache lookup only - no querying here. The Explorer query
+                // is done exclusively by the hotkey thread's TickRefresh() so
+                // this very hot hook never blocks RetroBar's UI thread
+                // mid-gesture.
 
                 // Act on the single v4 activation edge. For the mouse the
                 // desired state is the opposite of what was visible at DOWN;
@@ -8994,7 +8995,7 @@ static BOOL WINAPI SendNotifyMessageW_Hook(HWND hWnd, UINT Msg,
             return TRUE; // swallow: explorer.exe must not open the modern flyout
         }
     }
-    // Non-matching path: pure cache lookup above, no scanning here. Refresh
+    // Non-matching path: pure cache lookup above, no querying here. Refresh
     // of the icon cache happens only on the hotkey thread via TickRefresh().
     return SendNotifyMessageW_Orig ? SendNotifyMessageW_Orig(hWnd, Msg, wParam, lParam)
                                    : TRUE;
@@ -9010,15 +9011,15 @@ static void ClearCachedIcon() {
     s_networkUid = 0;
     s_networkVersion = 0;
     s_lastScanTick = 0;
+    s_consecutiveScanFailures = 0;
 }
 
 static BOOL InstallInterception(bool applyNow = true) {
     if (s_hookInstalled) return TRUE;
-    // Do NOT scan here: this can run from Wh_ModInit, and the scan
-    // (EnumWindows + Toolhelp snapshot + cross-process reads) is expensive.
-    // The hotkey thread's first TickRefresh() tick (well within a few
-    // seconds of injection, long before any click can land) seeds the cache
-    // instead.
+    // Do NOT query here: this can run from Wh_ModInit, before the Explorer
+    // instance publishes anything. The hotkey thread's first TickRefresh()
+    // tick (well within a few seconds of injection, long before any click
+    // can land) seeds the cache instead.
     if (WindhawkUtils::SetFunctionHook(SendNotifyMessageW, SendNotifyMessageW_Hook,
                                        &SendNotifyMessageW_Orig)) {
         s_hookInstalled = TRUE;
@@ -9052,18 +9053,22 @@ static void RemoveInterception() {
     s_networkVersion = 0;
 }
 
-// Called periodically from the hotkey thread's message loop to (re)scan when
-// the icon is missing (Explorer restart, taskbar created late, etc.).
-static void TickRefresh() {
+// Called periodically from the hotkey thread's message loop to re-query
+// when the icon is missing (Explorer restart, taskbar created late, etc.).
+// `force` is reserved for the TaskbarCreated path: the periodic 3 s tick
+// must go through EnsureIconScanned's backoff, otherwise a setup where the
+// icon can never be resolved (overflow area, modern Win11 tray) would
+// re-query forever.
+static void TickRefresh(BOOL force = FALSE) {
     if (!s_hookInstalled) {
         if (!InstallInterception(/*applyNow=*/true))
             return;
         // Seed the cache now that the hook is live, on this (hotkey) thread.
-        EnsureIconScanned(TRUE);
+        EnsureIconScanned(force);
         return;
     }
     if (!s_networkHwnd || !IsWindow(s_networkHwnd))
-        EnsureIconScanned(TRUE);
+        EnsureIconScanned(force);
 }
 
 } // namespace RetroBarTray
@@ -9183,11 +9188,11 @@ static BOOL InstallTrayInterceptionInternal() {
         DWORD_PTR btnCountResult = 0;
         BOOL gotCount = SendMessageTimeoutW(hToolbar, TB_BUTTONCOUNT, 0, 0,
                                  SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &btnCountResult);
-        if (g_toolbarCacheLockInit) EnterCriticalSection(&g_toolbarCacheLock);
+        EnterCriticalSection(&g_toolbarCacheLock);
         g_ToolbarCache.networkId = detectedId;
         g_ToolbarCache.buttonCount = gotCount ? (int)btnCountResult : -1;
         g_ToolbarCache.valid = (detectedId != -1);
-        if (g_toolbarCacheLockInit) LeaveCriticalSection(&g_toolbarCacheLock);
+        LeaveCriticalSection(&g_toolbarCacheLock);
     }
     return TRUE;
 }
@@ -9221,6 +9226,15 @@ void ToggleFlyoutWindow() {
         PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
         return;
     }
+    // Resolve the tray icon rect BEFORE taking csLock: this chain ends in
+    // SendMessageTimeoutW calls to the taskbar thread (and possibly a full
+    // toolbar re-scan). csLock is the mod's main state lock - it is taken by
+    // RefreshNetworkData, the WLAN notification callback and by the DrawTextW
+    // hook on the Network Center page thread - so it must never be held
+    // across anything that can wait on another thread. Only the result is
+    // consumed under the lock below.
+    RECT rcIconForDpi = {};
+    BOOL haveIconRect = GetNetworkIconScreenRect(&rcIconForDpi);
     // 5.0.0: CsGuard replaces the manual Enter/LeaveCriticalSection pair.
     // Every early return below used to have to remember to leave the lock;
     // the guard releases it on all paths (including exceptions), and the two
@@ -9288,10 +9302,8 @@ void ToggleFlyoutWindow() {
             DetermineLocale();
             LoadSettings();
             ApplyNativeControlsTheme();
-            RECT rcIconForDpi = {};
-            UINT dpi = GetNetworkIconScreenRect(&rcIconForDpi)
-                ? GetDpiForScreenRect(&rcIconForDpi)
-                : GetDpiForWindow(g_hWndFlyout);
+            UINT dpi = haveIconRect ? GetDpiForScreenRect(&rcIconForDpi)
+                                    : GetDpiForWindow(g_hWndFlyout);
             if (dpi < 96) dpi = 96;
             if (dpi != g_dpi) RecalcDpiMetrics(dpi);
             g_SelectedRowIndex = g_HoveredRowIndex = -1;
@@ -9421,6 +9433,12 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     };
 
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
+    // Explorer host: publish the network tray icon (owner window + callback
+    // message) for a RetroBar instance of this mod. Lives on this thread so
+    // the query is answered by a thread that is never the taskbar thread
+    // and that is joined before the mod image is unmapped.
+    if (g_IsExplorerHost)
+        CreateTrayInfoWindow();
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL) ||
                              (g_IsRetroBarHost && RetroBarTray::IsInterceptionInstalled());
@@ -9489,9 +9507,11 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             if (g_IsRetroBarHost) {
                 // Explorer (re)started its taskbar: drop the cached network
-                // icon and let the periodic timer re-scan and re-hook.
+                // icon and re-query immediately (bypassing the backoff); the
+                // periodic timer keeps retrying if the Explorer instance is
+                // not up yet.
                 RetroBarTray::ClearCachedIcon();
-                RetroBarTray::TickRefresh();
+                RetroBarTray::TickRefresh(/*force=*/TRUE);
                 TranslateMessage(&msg); DispatchMessageW(&msg);
                 continue;
             }
@@ -9520,6 +9540,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     }
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
     UnregisterHotKey(NULL, HOTKEY_ID);
+    DestroyTrayInfoWindow();
     if (g_pNLM) {
         g_pNLM->Release();
         g_pNLM = NULL;
@@ -9987,21 +10008,37 @@ static void RefreshNetCenterCategoryFromNlmQuick() {
     }
 }
 
-static std::wstring GetConnectedNetworkName() {
-    if (g_Settings.privacyMode) {
-        WCHAR privateName[64] = {0};
-        StringCchPrintfW(privateName, ARRAYSIZE(privateName),
-                         LOC(STR_NETWORK_PRIVACY_FMT), 1);
-        return std::wstring(privateName);
-    }
-
+// outHasNetwork (optional) receives TRUE when some network is actually
+// connected (NLM, shared Wi-Fi state or Ethernet) and FALSE when the returned
+// name is only the localized "Network" placeholder. The Network Map uses it
+// to break the PC -> network hop, like Windows 7 does when the PC is not
+// connected to any network.
+static std::wstring GetConnectedNetworkName(BOOL* outHasNetwork = nullptr) {
+    if (outHasNetwork) *outHasNetwork = TRUE;
     // The custom Network Map lives in Control Panel and should mirror the
     // native "View active networks" section. Prefer NLM's current connected
     // network name over the shared WLAN scan cache, which can lag behind a
     // Control Panel live refresh and leave the custom map showing the previous
     // SSID while the native section below has already updated.
     std::wstring nlmName;
-    if (TryGetConnectedNlmNetworkInfo(&nlmName, nullptr) && !nlmName.empty())
+    BOOL nlmConnected = TryGetConnectedNlmNetworkInfo(&nlmName, nullptr);
+
+    if (g_Settings.privacyMode) {
+        WCHAR privateName[64] = {0};
+        StringCchPrintfW(privateName, ARRAYSIZE(privateName),
+                         LOC(STR_NETWORK_PRIVACY_FMT), 1);
+        if (outHasNetwork && !nlmConnected) {
+            EnterCriticalSection(&g_Ctx.csLock);
+            BOOL connected = g_EthernetConnected;
+            for (int i = 0; !connected && i < g_NetworkCount; i++)
+                if (g_NetworkList[i].connState == CONN_STATE_CONNECTED) connected = TRUE;
+            LeaveCriticalSection(&g_Ctx.csLock);
+            *outHasNetwork = connected;
+        }
+        return std::wstring(privateName);
+    }
+
+    if (nlmConnected && !nlmName.empty())
         return nlmName;
     
     // Copy shared data under the critical section so reads are safe
@@ -10027,6 +10064,8 @@ static std::wstring GetConnectedNetworkName() {
     if (ethernetConnected && ethernetName[0] != L'\0')
         return std::wstring(ethernetName);
 
+    // NLM may report a connected network that has no display name yet.
+    if (outHasNetwork) *outHasNetwork = (nlmConnected || ethernetConnected);
     return GetLang()->networkFallback;
 }
 
@@ -10124,11 +10163,11 @@ static PCWSTR GetNetworkMapShellParams() {
 }
 
 static std::wstring NetworkMapVisual() {
-    // DirectUI's valid endellipsis layout is left-aligned. In privacy mode,
-    // two leading spaces visually center the short "PC" label beneath its icon
-    // without using the unsupported contentalign="center" token.
-    std::wstring pcName = g_Settings.privacyMode ? L"    PC" : GetComputerNameStr();
-    std::wstring networkName = GetConnectedNetworkName();
+    // Labels are centred by the grid cell (contentalign="topcenter", as in the
+    // Windows 7 UIFILE), so privacy mode just uses a plain "PC" label.
+    std::wstring pcName = g_Settings.privacyMode ? L"PC" : GetComputerNameStr();
+    BOOL hasNetwork = TRUE;
+    std::wstring networkName = GetConnectedNetworkName(&hasNetwork);
     std::wstring internetName = GetLang()->internetLabel;
     
     // Cache connectivity once for this entire NetworkMapVisual() build,
@@ -10156,9 +10195,8 @@ static std::wstring NetworkMapVisual() {
     const wchar_t* fullMapText = GetLang()->fullMap;
     std::wstring xml;
 
-    // Put the link in its own, full-width top row. This lets it stay at the
-    // upper right without reserving horizontal space in the PC->Network->
-    // Internet flow layout (which must remain on one line).
+    // Same structure as Windows 7's netcenter.dll "minimap" UIFILE: the link
+    // sits at the upper right of the map area, then the map itself.
     // Do not emit a clickable link when neither Network CLSID resolves.
     // That is preferable to showing a link which opens an Explorer error.
     PCWSTR fullMapParams = GetNetworkMapShellParams();
@@ -10174,83 +10212,107 @@ static std::wstring NetworkMapVisual() {
         xml += L"</element>";
     }
 
-    // Move the complete network-map group 10% to the left.
-    // 96rp - 10% = 86.4rp; use 86rp so it remains DPI-scalable.
-    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
-    xml += L"padding=\"rect(86rp,15rp,10rp,15rp)\" ";
-    xml += L">";
+    // --- MiniMap (Windows 7 netcenter.dll, resid "minimap") -------------------
+    // Windows 7 lays the map out as five equal cells (pc | pctonet | net |
+    // nettoinet | inet) between two 40rp gutters, with the labels in three
+    // equal cells underneath, inside a content pane of FIXED width. Those two
+    // grids only line up when the map is 480rp wide (label centres W/6 ==
+    // icon centres 32 + W/10  <=>  W == 480), which is what Windows 7 ends up
+    // with, so the same geometry is reproduced here with fixed cells -
+    // 40 | 80 | 80 | 80 | 80 | 80 | 40 and 160 | 160 | 160 - instead of
+    // proportional grids: the modern page's content pane is fluid, so
+    // proportional cells drifted the labels away from the icons in a wide
+    // window and squeezed the icons in a narrow one. Fixed cells keep every
+    // node, line and label where Windows 7 puts it at any window width (a
+    // pane narrower than the map clips it, as Windows 7's fixed pane would).
+    // Vertical metrics follow the UIFILE - 32rp node row, two 1rp lines at
+    // y=15/17, 16rp status glyph at y=9 - shifted by +2rp because the icons
+    // this page rasterises reliably are 36rp.
+    // Every icon is a <button layoutpos="left" content="icon(...)"> placed
+    // directly in a borderlayout, the one markup this page is known to
+    // rasterise (an explicit width/height on the button or a flowlayout
+    // wrapper made DirectUI drop the icon), so positioning is done with
+    // spacer elements only.
+    const wchar_t* kLineOn  = L"activecaption";   // Windows 7 class "connected"
+    const wchar_t* kLineOff = L"activeborder";    // Windows 7 class "disconnected"
+    const BOOL internetHop = hasNetwork && isOnline;
+    const wchar_t* pcNetLine   = hasNetwork  ? kLineOn : kLineOff;
+    const wchar_t* netInetLine = internetHop ? kLineOn : kLineOff;
+    static const wchar_t kNoInternetGlyph[] = L"content=\"icon(32758,16rp,16rp)\"";
 
-    // PC section: 15% (about 14rp) farther right within the map.
-    // Horizontally scaled to 86% (the customized map is 14% narrower).
-    // The negative right side keeps the connector anchored on its right end.
-    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
-    // PC artwork: 1rp left; 15 + (-21) keeps the horizontal total unchanged.
-    xml += L"padding=\"rect(15rp,3rp,-21rp,5rp)\">";
-    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
-    xml += L" content=\"icon(32755,36rp,36rp)\"/>";
-    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
-    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
-    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    // Keep DirectUI's known-valid endellipsis token. Centering is handled by
-    // the icon/container geometry; this avoids an unsupported XML value.
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + Esc(pcName.c_str()) + L"\"/>";
-    xml += L"</element>";
+    auto Cell = [](const wchar_t* width, const std::wstring& inner) {
+        return L"<element layoutpos=\"left\" width=\"" + std::wstring(width) +
+               L"\" layout=\"borderlayout()\">" + inner + L"</element>";
+    };
+    auto Node = [&](const wchar_t* iconAttr) {
+        // 36rp icon centred in the 80rp cell.
+        std::wstring n;
+        n += L"<element layoutpos=\"left\" width=\"22rp\"/>";
+        n += L"<button layoutpos=\"left\" accessible=\"true\" accrole=\"graphic\" ";
+        n += std::wstring(iconAttr) + L"/>";
+        return Cell(L"80rp", n);
+    };
+    auto Lines = [&](const wchar_t* lineColor) {
+        std::wstring l;
+        l += L"<element layoutpos=\"top\" height=\"17rp\"/>";
+        l += L"<element layoutpos=\"top\" height=\"1rp\" background=\"" + std::wstring(lineColor) + L"\"/>";
+        l += L"<element layoutpos=\"top\" height=\"1rp\"/>";
+        l += L"<element layoutpos=\"top\" height=\"1rp\" background=\"" + std::wstring(lineColor) + L"\"/>";
+        return l;
+    };
+    auto Connector = [&](const wchar_t* lineColor, BOOL broken) -> std::wstring {
+        if (!broken)
+            return Cell(L"80rp", Lines(lineColor));
+        // 32rp segment | 16rp red X, centred in the cell | 32rp segment
+        std::wstring glyph;
+        glyph += L"<element layoutpos=\"top\" height=\"11rp\"/>";
+        glyph += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
+        glyph += std::wstring(kNoInternetGlyph) + L"/>";
+        return Cell(L"80rp", Cell(L"32rp", Lines(lineColor)) +
+                             Cell(L"16rp", glyph) +
+                             Cell(L"32rp", Lines(lineColor)));
+    };
+    auto Label = [&](const std::wstring& text) {
+        // Windows 7 "labelText" (CONTROLPANELSTYLE part 4), centred in a
+        // 160rp cell so it sits under its node's centre (80/240/400rp).
+        std::wstring l;
+        l += L"<element layoutpos=\"left\" width=\"160rp\" ";
+        l += L"font=\"gtf(CONTROLPANELSTYLE,4,0)\" ";
+        l += L"foreground=\"gtc(CONTROLPANELSTYLE,4,0,3803)\" ";
+        l += L"contentalign=\"topcenter|endellipsis\" accessible=\"true\" accrole=\"statictext\" ";
+        l += L"content=\"" + Esc(text.c_str()) + L"\"/>";
+        return l;
+    };
+
+    xml += L"<element layoutpos=\"top\" layout=\"borderlayout()\" ";
+    xml += L"padding=\"rect(0rp,10rp,0rp,15rp)\">";
+    // The map itself: fixed 480rp, left-aligned, like Windows 7's.
+    xml += L"<element layoutpos=\"left\" width=\"480rp\" layout=\"borderlayout()\">";
+
+    // Row 1: 40 | pc | pc-net | net | net-inet | inet | 40
+    xml += L"<element layoutpos=\"top\" height=\"36rp\" layout=\"borderlayout()\">";
+    xml += L"<element layoutpos=\"left\" width=\"40rp\"/>";
+    xml += Node(L"content=\"icon(32755,36rp,36rp)\"");
+    xml += Connector(pcNetLine, !hasNetwork);
+    // 32756 resolves at runtime to the Home/Public/Work icon of the current
+    // profile; 32760 is the distinct gray "offline" artwork (DirectUI caches
+    // resource 32756, so reusing it kept the coloured bench after a
+    // disconnect).
+    xml += Node(internetHop ? L"content=\"icon(32756,36rp,36rp)\""
+                            : L"content=\"icon(32760,36rp,36rp)\"");
+    xml += Connector(netInetLine, hasNetwork && !isOnline);
+    xml += Node(L"content=\"icon(32757,36rp,36rp)\"");
     xml += L"</element>";
 
-    // Horizontally scaled to 86%: 125rp -> 108rp.
-    // Its extension remains anchored to the left, not the right.
-    xml += L"<element layoutpos=\"left\" width=\"108rp\" height=\"2rp\" ";
-    xml += L"background=\"argb(255,135,195,235)\"/>";
-
-    // Network section, horizontally scaled to 86% like the PC section.
-    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
-    xml += L"padding=\"rect(4rp,3rp,-22rp,5rp)\">";
-    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
-    // Use a distinct hardcoded DirectUI resource while offline: DirectUI caches
-    // resource 32756, so reusing it kept the colored bench after disconnect.
-    xml += isOnline ? L" content=\"icon(32756,36rp,36rp)\"/>"
-                                : L" content=\"icon(32760,36rp,36rp)\"/>";
-    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
-    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
-    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + Esc(networkName.c_str()) + L"\"/>";
-    xml += L"</element>";
+    // Row 2: labels (UIFILE: three equal cells, 3rp below the icons).
+    xml += L"<element layoutpos=\"top\" layout=\"borderlayout()\" padding=\"rect(0rp,3rp,0rp,0rp)\">";
+    xml += Label(pcName);
+    xml += Label(networkName);
+    xml += Label(internetName);
     xml += L"</element>";
 
-    // If this connection has no Internet access, split the 108rp connector
-    // around a 16rp red X at its exact midpoint. Otherwise retain one
-    // uninterrupted line. NetworkMapVisual is rebuilt by DirectUI when the
-    // native Network Center refreshes after a connectivity transition.
-    if (!isOnline) {
-        xml += L"<element layoutpos=\"left\" width=\"46rp\" height=\"2rp\" ";
-        xml += L"background=\"argb(255,135,195,235)\"/>";
-        xml += L"<button layoutpos=\"left\" accessible=\"true\" accrole=\"graphic\" ";
-        xml += L"content=\"icon(32758,16rp,16rp)\"/>";
-        xml += L"<element layoutpos=\"left\" width=\"46rp\" height=\"2rp\" ";
-        xml += L"background=\"argb(255,135,195,235)\"/>";
-    } else {
-        xml += L"<element layoutpos=\"left\" width=\"108rp\" height=\"2rp\" ";
-        xml += L"background=\"argb(255,135,195,235)\"/>";
-    }
-
-    // Internet section
-    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
-    // Internet artwork: one further rp right; 6 + 2 preserves the 8rp
-    // container width, so its connector and label do not move.
-    xml += L"padding=\"rect(6rp,5rp,2rp,5rp)\">";
-    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
-    xml += L" content=\"icon(32757,36rp,36rp)\"/>";
-    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
-    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
-    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + Esc(internetName.c_str()) + L"\"/>";
-    xml += L"</element>";
-    xml += L"</element>";
-
-    xml += L"</element>";  // flow-layout map
+    xml += L"</element>";  // 480rp map
+    xml += L"</element>";  // band
 
     return xml;
 }
@@ -10276,14 +10338,19 @@ static std::wstring AddActiveNetworkLocationIcon(const std::wstring& in) {
     if (in.find(L"icon(32756,36rp,36rp)", section) != std::wstring::npos)
         return in;
 
-    // Direct child of ActiveNetworksSection. The source PNG contains
-    // Move the artwork 2% of its 36rp size left (0.72rp, rounded to 1rp)
-    // and a little lower. 23 + (-13) remains 10rp, so the native text stays
-    // fixed while only the icon's visual position changes.
+    // Direct child of ActiveNetworksSection, laid out like the Windows 7
+    // "netprofile" row: a 48rp profile glyph (class "navbutton") in its own
+    // left column, with 10rp between the glyph and the text column. The
+    // vertical offset (33rp) skips the section's divider header so the icon
+    // aligns with the profile name below it; 23 + (-13) keeps the native text
+    // at its original 10rp indent while only the icon position changes.
+    // 36rp (not the original 48rp) matches the row height the modern page
+    // gives the profile block, so the icon never pushes the row taller.
     const std::wstring iconXml =
         L"<element layoutpos=\"left\" layout=\"borderlayout()\" "
         L"padding=\"rect(23rp,33rp,-13rp,0rp)\">"
         L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" "
+        L"contentalign=\"middlecenter\" background=\"argb(0,0,0,0)\" "
         L"content=\"icon(32756,36rp,36rp)\"/>"
         L"</element>";
 
@@ -11663,7 +11730,6 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_retrobarAnchorLock);
     g_retrobarAnchorLockInit = TRUE;
     InitializeCriticalSection(&g_toolbarCacheLock);
-    g_toolbarCacheLockInit = TRUE;
 
     g_IsExplorerHost = IsExplorerProcess();
     g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
@@ -11714,10 +11780,7 @@ BOOL Wh_ModInit() {
             DarkContextMenu::Uninit();
         if (g_retrobarAnchorLockInit)
             DeleteCriticalSection(&g_retrobarAnchorLock);
-        if (g_toolbarCacheLockInit) {
-            DeleteCriticalSection(&g_toolbarCacheLock);
-            g_toolbarCacheLockInit = FALSE;
-        }
+        DeleteCriticalSection(&g_toolbarCacheLock);
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -11831,15 +11894,21 @@ void Wh_ModUninit() {
         DeleteCriticalSection(&g_retrobarAnchorLock);
         g_retrobarAnchorLockInit = FALSE;
     }
-    if (g_toolbarCacheLockInit) {
-        DeleteCriticalSection(&g_toolbarCacheLock);
-        g_toolbarCacheLockInit = FALSE;
-    }
+    DeleteCriticalSection(&g_toolbarCacheLock);
     if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
         if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
             Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
         } else {
             Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
+        }
+    }
+    if (g_trayInfoClassRegistered) {
+        // The window itself was destroyed by the hotkey thread before
+        // SafeCleanup() joined it above.
+        if (UnregisterClassW(kTrayInfoClassName, HINST_THISCOMPONENT)) {
+            g_trayInfoClassRegistered = false;
+        } else {
+            Wh_Log(L"UnregisterClassW(%s) failed (%lu)", kTrayInfoClassName, GetLastError());
         }
     }
     if (g_flyoutClassRegistered) {
