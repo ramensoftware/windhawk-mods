@@ -8121,7 +8121,6 @@ namespace
 
         WH_HOOK_SYMBOLS_OPTIONS options{};
         options.optionsSize = sizeof(options);
-        options.noUndecoratedSymbols = TRUE;
 
         if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
                                         ARRAYSIZE(shell32DllHooks),
