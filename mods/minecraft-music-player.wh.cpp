@@ -23,10 +23,6 @@ Adds a Minecraft styled overlay for the current thing playing.
   $name: Overlay scale
   $description: >-
     Multiplier applied to the overlay's native size (3 = original, 6 = double, etc.)
-- default-font: false
-  $name: Use Default Font
-  $description: >-
-    Use default/system font instead of the custom one
 - show-toast: true
   $name: Show Toast
   $description: >-
@@ -406,6 +402,7 @@ std::string StripSurroundingQuotes(const std::string& str) {
     return str;
 }
 
+// Left-over name. It doesn't download anything now.
 DWORD WINAPI FontDownloadThread(LPVOID) {
     if (g_customFont != "") {
         std::wstring wsCustomFont = StringToWString(g_customFont);
@@ -416,14 +413,7 @@ DWORD WINAPI FontDownloadThread(LPVOID) {
         Wh_Log(L"Operation %s.", notFailed ? L"completed successfully" : L"failed");
         return notFailed;
     }
-
-    auto fontBytes = LoadWithCache(
-        L"https://github.com/tryashtar/minecraft-ttf/releases/download/v1.6/MinecraftDefaultUniformBMP-Regular.ttf",
-        L"minecraft-font.ttf"
-    );
-    if (!fontBytes.empty()) {
-        InitCustomFontFromMemory(fontBytes);
-    }
+    
     return 0;
 }
 
