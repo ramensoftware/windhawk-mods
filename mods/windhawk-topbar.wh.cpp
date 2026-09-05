@@ -158,8 +158,11 @@ and strips island root backgrounds.
   $name: Show Wi-Fi button
 - showBluetoothButton: true
   $name: Show Bluetooth button
-- showTrayButton: true
+- showTrayButton: false
   $name: Show tray button
+- enableHotkeys: false
+  $name: Enable keyboard shortcuts (Ctrl+Alt+1…7)
+  $description: Turn on global hotkeys. They may conflict with AltGr on some layouts.
 - showClock: true
   $name: Show time
 - timeFormat: "🕑hh:mm tt"
@@ -237,6 +240,7 @@ and strips island root backgrounds.
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
@@ -268,16 +272,33 @@ and strips island root backgrounds.
 #include <string>
 #include <string_view>
 #include <thread>
-#include <mutex>
+#include <atomic>
+
 #include <vector>
 
 using namespace winrt::Windows::UI::Xaml;
+
+
 namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wf = winrt::Windows::Foundation;
 namespace wui = winrt::Windows::UI;
-
+// Returns the system accent color, falling back to default blue if it fails.
+wui::Color GetSystemAccentColor() {
+    try {
+        auto settings = winrt::Windows::UI::ViewManagement::UISettings();
+        auto c = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+        // Darken by 20%
+        const double factor = 0.8;
+        uint8_t r = static_cast<uint8_t>(c.R * factor);
+        uint8_t g = static_cast<uint8_t>(c.G * factor);
+        uint8_t b = static_cast<uint8_t>(c.B * factor);
+        return wui::ColorHelper::FromArgb(c.A, r, g, b);
+    } catch (...) {
+        return wui::ColorHelper::FromArgb(255, 0, 120, 212);
+    }
+}
 // ============================================================================
 // Forward declarations
 // ============================================================================
@@ -323,7 +344,8 @@ struct {
     bool showSoundButton = true;
     bool showWifiButton = true;
     bool showBluetoothButton = true;
-    bool showTrayButton = true;
+    bool showTrayButton = false;
+    bool enableHotkeys = false;
     bool showClock = true;
     std::wstring timeFormat = L"🕑hh:mm tt";
     bool showDate = true;
@@ -596,7 +618,16 @@ std::vector<TreeElementMatcher> ParseTargetChain(std::wstring_view target) {
         size_t arrow = target.find(L" > ", pos);
         auto partSv = target.substr(
             pos, arrow == std::wstring_view::npos ? std::wstring_view::npos : arrow - pos);
-        result.push_back(ParseMatcherPart(TrimWs(partSv)));
+        std::wstring trimmed = TrimWs(partSv);
+        if (trimmed.starts_with(L":root > ")) {
+            // Remove the prefix and mark the next matcher as root-required
+            trimmed = TrimWs(trimmed.substr(8)); // remove ":root > "
+            auto matcher = ParseMatcherPart(trimmed);
+            matcher.rootRequired = true;         // the actual matcher must be a root element
+            result.push_back(std::move(matcher));
+        } else {
+            result.push_back(ParseMatcherPart(trimmed));
+        }
         if (arrow == std::wstring_view::npos) {
             break;
         }
@@ -640,57 +671,33 @@ bool TestTreeMatcher(FrameworkElement const& element, TreeElementMatcher const& 
 
 bool MatchesAncestorChain(FrameworkElement const& element,
                           std::vector<TreeElementMatcher> const& chain) {
-    if (chain.size() <= 1) {
-        return true;
-    }
+    if (chain.size() <= 1) return true;
     DependencyObject current = element;
     int chainIndex = static_cast<int>(chain.size()) - 2;
-    
     while (chainIndex >= 0) {
-        // Skip leading wildcards (they match any number of intermediate parents)
+        // Wildcard: skip any number of ancestors to match the next matcher
         if (chain[chainIndex].wildcard) {
-            chainIndex--;
-            continue;
-        }
-        
-        // For ':root' constraints, just skip (handled in TestTreeMatcher)
-        if (chain[chainIndex].rootRequired) {
-            chainIndex--;
-            continue;
-        }
-        
-        // Walk up one parent
-        current = wuxm::VisualTreeHelper::GetParent(current);
-        if (!current) {
-            return false;
-        }
-        auto fe = current.try_as<FrameworkElement>();
-        if (fe && TestTreeMatcher(fe, chain[chainIndex])) {
-            chainIndex--;
-            continue;
-        }
-        
-        // If there's a wildcard immediately before this matcher, try skipping
-        // multiple ancestors to find a match
-        if (chainIndex > 0 && chain[chainIndex - 1].wildcard) {
-            DependencyObject ancestor = current;
-            bool found = false;
-            while (ancestor) {
-                auto ancestorFe = ancestor.try_as<FrameworkElement>();
-                if (ancestorFe && TestTreeMatcher(ancestorFe, chain[chainIndex])) {
-                    current = ancestor;
-                    chainIndex -= 2; // skip the * and this matcher
-                    found = true;
+            int nextIdx = chainIndex - 1; // the matcher after the wildcard (since chain is reversed)
+            bool matched = false;
+            while (current) {
+                auto fe = current.try_as<FrameworkElement>();
+                if (fe && TestTreeMatcher(fe, chain[nextIdx])) {
+                    // found a matching ancestor; move current to this ancestor
+                    chainIndex = nextIdx - 1;
+                    matched = true;
                     break;
                 }
-                ancestor = wuxm::VisualTreeHelper::GetParent(ancestor);
+                current = wuxm::VisualTreeHelper::GetParent(current);
             }
-            if (found) {
-                continue;
-            }
+            if (!matched) return false;
+            continue;
         }
-        
-        return false;
+        // Normal matcher: walk one parent up
+        current = wuxm::VisualTreeHelper::GetParent(current);
+        if (!current) return false;
+        auto fe = current.try_as<FrameworkElement>();
+        if (!fe || !TestTreeMatcher(fe, chain[chainIndex])) return false;
+        chainIndex--;
     }
     return true;
 }
@@ -1102,11 +1109,7 @@ constexpr PCWSTR kMoonFill =
     L"C17.5 21.7 20.6 19.6 22 16.6 C21 17 19.9 17.2 18.7 17.2 "
     L"C14 17.2 10.2 13.4 10.2 8.7 C10.2 6.6 11 4.6 12.5 3 Z";
 
-constexpr PCWSTR kNightLightFill =
-    L"M13 6 C9.7 6.5 7.2 9.4 7.2 12.9 C7.2 16.8 10.3 19.9 14.2 19.9 "
-    L"C16.8 19.9 19.1 18.4 20.2 16.2 C19.5 16.5 18.6 16.6 17.8 16.6 "
-    L"C14.3 16.6 11.5 13.8 11.5 10.3 C11.5 8.7 12.1 7.2 13 6 Z "
-    L"M6 2.4 L6.9 4.6 L9.1 5.5 L6.9 6.4 L6 8.6 L5.1 6.4 L2.9 5.5 L5.1 4.6 Z";
+
 
 constexpr PCWSTR kLockFill = L"M6.6 10.6 L17.4 10.6 L17.4 20.4 L6.6 20.4 Z";
 constexpr PCWSTR kLockShackle = L"M9.2 10.6 L9.2 7.7 A2.8 2.8 0 0 1 14.8 7.7 L14.8 10.6";
@@ -1120,7 +1123,7 @@ constexpr PCWSTR kHeadphoneStroke = L"M4.6 15.2 L4.6 12 A7.4 7.4 0 0 1 19.4 12 L
 constexpr PCWSTR kHeadphoneFill =
     L"M3 14.4 L6.6 14.4 L6.6 20.2 L3 20.2 Z M17.4 14.4 L21 14.4 L21 20.2 L17.4 20.2 Z";
 
-constexpr PCWSTR kAppFill = L"M5 5 L19 5 L19 19 L5 19 Z";
+constexpr PCWSTR kAppFill = L"M7 5 L17 5 C18.1 5 19 5.9 19 7 L19 17 C19 18.1 18.1 19 17 19 L7 19 C5.9 19 5 18.1 5 17 L5 7 C5 5.9 5.9 5 7 5 Z M9 9 L9 15 L15 15 L15 9 Z";
 constexpr PCWSTR kCheckStroke = L"M5 12.5 L10 17.5 L19 6.5";
 
 }  // namespace icons
@@ -3678,7 +3681,7 @@ bool g_populatingPanel = false;
 // Non-zero once the mod starts tearing down; background workers check it before
 // touching XAML or dispatching back to the UI thread.
 volatile LONG g_shuttingDown = 0;
-volatile LONG g_backgroundJobs = 0;
+
 volatile LONG g_crashedOnce = 0;
 
 // (Crash flag mechanism removed – no registry key needed)
@@ -3746,14 +3749,14 @@ void RunOnUiThread(std::function<void()> work) {
 // Wi-Fi scans and Bluetooth inquiry block for seconds; running them on the UI
 // thread would freeze the whole bar. Each worker owns its own apartment, and
 // Wh_ModUninit waits for the count to drain.
-std::vector<std::thread> g_backgroundThreads;
-std::mutex g_backgroundMutex;
+std::atomic<int> g_backgroundJobs{0};
 
 void RunInBackground(std::function<void()> work) {
     if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
         return;
     }
-    std::thread t([work = std::move(work)]() {
+    g_backgroundJobs.fetch_add(1);
+    std::thread([work = std::move(work)]() {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         try {
             work();
@@ -3762,9 +3765,8 @@ void RunInBackground(std::function<void()> work) {
         if (SUCCEEDED(hr)) {
             CoUninitialize();
         }
-    });
-    std::lock_guard<std::mutex> lock(g_backgroundMutex);
-    g_backgroundThreads.push_back(std::move(t));
+        g_backgroundJobs.fetch_sub(1);
+    }).detach();
 }
 
 // Panels tear themselves down from inside their own click handlers, which would
@@ -4179,34 +4181,12 @@ void PopulateDisplayPanel() {
 
     children.Append(MakeDivider());
 
-    bool nightLightOn = nightlight::IsEnabled();
     bool darkMode = IsAppsDarkMode();
-
-    // Directly toggle Night Light, no settings page fallback!
-    // Compact, side-by-side buttons
-    auto nightTile = MakeGhostButton(L"QuickToggleTile", kTileCorner);
-    nightTile.HorizontalAlignment(HorizontalAlignment::Stretch);
-    nightTile.Padding(Thickness{8, 6, 8, 6}); // Much smaller padding = shorter button
-    nightTile.Background(nightLightOn ? MakeBrush(0xFF, 0x4C, 0x8E, 0xE0) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-
-    wuxc::StackPanel nightStack;
-    nightStack.Orientation(wuxc::Orientation::Horizontal);
-    nightStack.Spacing(8);
-    if (auto icon = BuildVectorIcon(nullptr, icons::kNightLightFill, L"", 24, 16, 1.7, L"#FFFFFF")) {
-        icon.VerticalAlignment(VerticalAlignment::Center);
-        nightStack.Children().Append(icon);
-    }
-    nightStack.Children().Append(MakeText(nullptr, L"Night light", 12));
-    nightTile.Content(nightStack);
-    nightTile.Click([](auto&&, auto&&) {
-        if (!nightlight::Toggle()) { Wh_Log(L"Night light toggle failed"); }
-        RepopulateLater(PopulateDisplayPanel);
-    });
 
     auto darkTile = MakeGhostButton(L"QuickToggleTile", kTileCorner);
     darkTile.HorizontalAlignment(HorizontalAlignment::Stretch);
     darkTile.Padding(Thickness{8, 6, 8, 6});
-    darkTile.Background(darkMode ? MakeBrush(0xFF, 0x4C, 0x8E, 0xE0) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+    darkTile.Background(darkMode ? MakeBrush(0xFF, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
 
     wuxc::StackPanel darkStack;
     darkStack.Orientation(wuxc::Orientation::Horizontal);
@@ -4223,7 +4203,7 @@ void PopulateDisplayPanel() {
     });
 
     // Put them side-by-side (2 columns)
-    children.Append(MakeTileRow(nightTile, darkTile));
+    children.Append(darkTile);
 
     children.Append(MakeDivider());
     children.Append(MakeSettingsLink(L"Display settings", L"ms-settings:display"));
@@ -4754,7 +4734,7 @@ void PopulateWifiPanel() {
     wifiProgress.Width(14);
     wifiProgress.Height(14);
     wifiProgress.VerticalAlignment(VerticalAlignment::Center);
-    wifiProgress.Foreground(MakeBrush(0xFF, 0x03, 0x6B, 0xD7));
+    wifiProgress.Foreground(MakeBrush(0xFF, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B));
     wifiProgress.Opacity(g_wifiScanning ? 1.0 : 0.3);
     leftStack.Children().Append(wifiProgress);
 
@@ -4964,7 +4944,7 @@ void PopulateBluetoothPanel() {
     btProgress.Width(14);
     btProgress.Height(14);
     btProgress.VerticalAlignment(VerticalAlignment::Center);
-    btProgress.Foreground(MakeBrush(0xFF, 0x03, 0x6B, 0xD7));
+    btProgress.Foreground(MakeBrush(0xFF, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B));
     btProgress.Opacity(g_bluetoothScanning ? 1.0 : 0.3);
     leftStack.Children().Append(btProgress);
 
@@ -5310,8 +5290,8 @@ void InstallGlobalMenuResources() {
         }
         auto resources = application.Resources();
 
-        auto hover = MakeBrush(0x24, 0xFF, 0xFF, 0xFF);
-        auto pressed = MakeBrush(0x14, 0xFF, 0xFF, 0xFF);
+        auto hover = MakeBrush(0x30, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B);
+        auto pressed = MakeBrush(0x20, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B);
 
         auto set = [&](PCWSTR key, wf::IInspectable const& value) {
             auto boxedKey = winrt::box_value(winrt::hstring(key));
@@ -5363,8 +5343,8 @@ Style MakeMenuPresenterStyle() {
 // renames or re-scopes the theme resources.
 void ApplyMenuItemLook(wuxc::MenuFlyoutItemBase const& item) {
     try {
-        auto hover = MakeBrush(0x24, 0xFF, 0xFF, 0xFF);
-        auto pressed = MakeBrush(0x14, 0xFF, 0xFF, 0xFF);
+        auto hover = MakeBrush(0x24, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B);
+        auto pressed = MakeBrush(0x14, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B);
         auto resources = item.Resources();
         auto set = [&](PCWSTR key, wf::IInspectable const& value) {
             auto boxedKey = winrt::box_value(winrt::hstring(key));
@@ -6466,13 +6446,15 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
     // Register global hotkeys (Ctrl+Alt+1..5) to open control flyouts.
         // Hotkeys are disabled by default. Ctrl+Alt+digit is a common app binding.
         // Uncomment the lines below to re-enable them.
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
+        if (g_settings.enableHotkeys) {
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
+        }
         RegisterAppBar(g_topBarHwnd);
         // A moment later, so the shell has finished its own start-up layout pass
         // and doesn't immediately overwrite our reservation.
@@ -6633,6 +6615,7 @@ void LoadSettings() {
     g_settings.showWifiButton = Wh_GetIntSetting(L"showWifiButton") != 0;
     g_settings.showBluetoothButton = Wh_GetIntSetting(L"showBluetoothButton") != 0;
     g_settings.showTrayButton = Wh_GetIntSetting(L"showTrayButton") != 0;
+    g_settings.enableHotkeys = Wh_GetIntSetting(L"enableHotkeys") != 0;
     g_settings.showClock = Wh_GetIntSetting(L"showClock") != 0;
     g_settings.timeFormat = GetStringSettingCopy(L"timeFormat");
     g_settings.showDate = Wh_GetIntSetting(L"showDate") != 0;
@@ -6757,21 +6740,17 @@ void WhTool_ModUninit() {
         SetEvent(g_stopEvent);
     }
 
-    // Join all background threads **before** the UI thread, to avoid races.
-    std::vector<std::thread> threads;
-    {
-        std::lock_guard<std::mutex> lock(g_backgroundMutex);
-        threads.swap(g_backgroundThreads);
-    }
-    for (auto& t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-
-    // Now stop the UI thread.
+    // Stop the UI thread first.
     if (g_topBarHwnd) {
         PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
+    }
+    if (g_topBarThreadId) {
+        PostThreadMessage(g_topBarThreadId, WM_QUIT, 0, 0);
+    }
+
+    // Wait for background jobs to finish.
+    for (int i = 0; i < 60 && g_backgroundJobs.load() > 0; i++) {
+        Sleep(100);
     }
     if (g_topBarThreadId) {
         PostThreadMessage(g_topBarThreadId, WM_QUIT, 0, 0);
