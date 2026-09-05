@@ -2,7 +2,7 @@
 // @id              win7-bsdr
 // @name            Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 // @description     Bring back Windows Vista/7's shutdown experience
-// @version         1.0
+// @version         1.1
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -18,23 +18,31 @@
 /*
 # Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 * This mod brings back the old blocked shutdown screen from Windows 7 or Vista, which appears when you try to shut down or restart the computer while programs prevent shutdown.
+    * Using the Vista blocked shutdown UX requires extra steps. See the instructions below the screenshot for more details.
 * The blocked shutdown UX part is a direct port of my [AuthUX BSDR fork](https://github.com/Ingan121/AuthUX/tree/bsdr).
     * This mod's UX part has no effect if AuthUX BSDR is installed.
 * This mod also optionally restores the logoff sequence of Windows 7 and earlier, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
-* (Optional) Loading resources from an external DLL is supported for localization. This requires one of the following:
-    * `winsrv.dll` and `winsrv.dll.mui` from Windows 7 or Vista. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
-    * `AuthUX.dll` from a build of AuthUX that supports BSDR.
-    * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
-    * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows Vista/7 version**; this will brick your Windows installation!
-    * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
 * This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
+    * Not yet tested with RTL languages.
 
 ![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
+## Using external DLL resources for localization or Vista BSDR
+* Loading resources from an external DLL is supported for localization or for using Vista's blocked shutdown resolver.
+* This requires one of the following:
+    * `winsrv.dll` and `winsrv.dll.mui` from Windows 7 or Vista. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
+    * `AuthUX.dll` from a build of AuthUX that supports BSDR.
+* Set the DLL path in the mod settings afterwards.
+* Windows 7 DLL only: You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
+    * Please don't do this with Vista `winsrv.dll`; the main DLL contains the required bitmaps.
+* Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows Vista/7 version**; this will brick your Windows installation!
+* This is not necessary if you only want to use the English version of Windows 7's blocked shutdown resolver.
+    * Hardcoded resources will be used instead if the path is not set or the file is missing.
+
 ## ⚠ Important usage note ⚠
 
 This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
@@ -55,7 +63,7 @@ and make sure that `LogonUI.exe` is in the list.
   $name: AuthUX.dll/winsrv.dll path
   $name:ko-KR: AuthUX.dll/winsrv.dll 경로
   $description: Path to your copy of winsrv.dll from Windows Vista/7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
-  $description:ko-KR: Windows Vista7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
+  $description:ko-KR: Windows Vista/7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
 - themeScrollbar: false
   $name: Apply visual styles to the scroll bar
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
@@ -85,6 +93,7 @@ and make sure that `LogonUI.exe` is in the list.
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <climits>
@@ -2380,17 +2389,22 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
             const int srcH = bmIcon.bmHeight;
             const int dstW = MulDiv(srcW, dpi, 96);
             const int dstH = MulDiv(srcH, dpi, 96);
-            const int iconMargin = MulDiv(6, dpi, 96);
+
+            const int buttonHeight = rcButton.bottom - rcButton.top;
+            const int iconMargin = std::max(0, (buttonHeight - dstH) / 2);
+
+            const int iconX = rcButton.left + iconMargin;
+            const int iconY = rcButton.top + iconMargin;
 
             HDC hdcSrc = CreateCompatibleDC(hdc);
             HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
 
-            AlphaBlend(hdc, iconMargin, iconMargin, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
+            AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
 
             SelectObject(hdcSrc, hOldSrc);
             DeleteDC(hdcSrc);
 
-            rcButton.left = iconMargin + dstW;
+            rcButton.left = iconX + dstW;
         }
     }
 
@@ -2864,6 +2878,7 @@ void CustomBSDR::Cancel(bool noExitProcess) {
 INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_INITDIALOG: {
+        isVista = false;
         hTitleText = nullptr;
         hAppList = nullptr;
         hAppListScroll = nullptr;
@@ -2893,9 +2908,13 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return FALSE;
         }
 
-        if (!hWarningText || !hYesButton || !hNoButton) {
+        if (!hWarningText && !hYesButton && !hNoButton) {
             Wh_Log(L"Vista resources detected");
             isVista = true;
+        } else if (!hWarningText || !hYesButton || !hNoButton) {
+            Wh_Log(L"Dialog is missing necessary controls");
+            dlgInitFailed = true;
+            return FALSE;
         }
 
         // Hide title bar
@@ -3336,17 +3355,43 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             if (!separatorBitmap || !btnNormalBitmap || !btnHoverBitmap || !btnPressedBitmap || !btnSelectedBitmap || !btnSelectedHoverBitmap) {
                 Wh_Log(L"One or more images are missing; falling back to high-contrast rendering...");
                 isHighContrast = true;
-            }
-
-            if (isVista) {
+            } else if (isVista) {
                 btnRedNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_NORMAL);
                 btnRedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_HOVER);
                 btnRedPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_PRESSED);
                 btnRedSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_SELECTED);
                 btnRedSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_SELECTED_HOVER);
-                btnIconLogoffRestart = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_LOGOFF_RESTART);
-                btnIconShutdown = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_SHUTDOWN);
+                // If Vista-specific resources are missing, draw the force button in blue or without an icon
+                // Only avoid inconsistent button color
+                if (!btnRedNormalBitmap || !btnRedHoverBitmap || !btnRedPressedBitmap || !btnRedSelectedBitmap || !btnRedSelectedHoverBitmap) {
+                    if (btnRedNormalBitmap) {
+                        DeleteObject(btnRedNormalBitmap);
+                        btnRedNormalBitmap = nullptr;
+                    }
+                    if (btnRedHoverBitmap) {
+                        DeleteObject(btnRedHoverBitmap);
+                        btnRedHoverBitmap = nullptr;
+                    }
+                    if (btnRedPressedBitmap) {
+                        DeleteObject(btnRedPressedBitmap);
+                        btnRedPressedBitmap = nullptr;
+                    }
+                    if (btnRedSelectedBitmap) {
+                        DeleteObject(btnRedSelectedBitmap);
+                        btnRedSelectedBitmap = nullptr;
+                    }
+                    if (btnRedSelectedHoverBitmap) {
+                        DeleteObject(btnRedSelectedHoverBitmap);
+                        btnRedSelectedHoverBitmap = nullptr;
+                    }
+                }
             }
+        }
+
+        if (isVista) {
+            // Icons still show in high contrast
+            btnIconLogoffRestart = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_LOGOFF_RESTART);
+            btnIconShutdown = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_SHUTDOWN);
         }
 
         if (!isHighContrast) {
@@ -3516,6 +3561,34 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             DeleteObject(btnSelectedHoverBitmap);
             btnSelectedHoverBitmap = nullptr;
         }
+        if (btnRedNormalBitmap) {
+            DeleteObject(btnRedNormalBitmap);
+            btnRedNormalBitmap = nullptr;
+        }
+        if (btnRedHoverBitmap) {
+            DeleteObject(btnRedHoverBitmap);
+            btnRedHoverBitmap = nullptr;
+        }
+        if (btnRedPressedBitmap) {
+            DeleteObject(btnRedPressedBitmap);
+            btnRedPressedBitmap = nullptr;
+        }
+        if (btnRedSelectedBitmap) {
+            DeleteObject(btnRedSelectedBitmap);
+            btnRedSelectedBitmap = nullptr;
+        }
+        if (btnRedSelectedHoverBitmap) {
+            DeleteObject(btnRedSelectedHoverBitmap);
+            btnRedSelectedHoverBitmap = nullptr;
+        }
+        if (btnIconLogoffRestart) {
+            DeleteObject(btnIconLogoffRestart);
+            btnIconLogoffRestart = nullptr;
+        }
+        if (btnIconShutdown) {
+            DeleteObject(btnIconShutdown);
+            btnIconShutdown = nullptr;
+        }
         if (hTitleFont) {
             DeleteObject(hTitleFont);
             hTitleFont = nullptr;
@@ -3539,7 +3612,6 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     bool unloadCancelHandled = false;
     int ret = 0;
 
-    isVista = false;
     dlgInitFailed = false;
     bgOffsetX = 0;
     bgOffsetY = 0;
