@@ -89,29 +89,47 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 
 
 - rendering:
-  - renderUsingVisualStyles: false
-    $name: Render using visual styles
-    $name:ro: Randează folosind stiluri vizuale
-    $description: >-
-      Render the usage bar using the parts provided by the theme to match the system's appearance. You won't be able to customize the bar rendering if this option is enabled.
-    $description:ro: >-
-      Randează bara de utilizare folosind părțile furnizate de temă pentru a se potrivi cu aspectul sistemului. Nu vei putea personaliza randarea barei dacă această opțiune este activată.
+  - renderingMode: custom
+    $name: Rendering mode
+    $name:ro: Mod de randare
+    $description: >- 
+      Choose the bar rendering mode (default: Custom):
+
+
+      Custom - Renders the bar by making it look similar to the one rendered using the parts from the original Aero theme from Windows 8.x, 10 and 11, but allows additional customization, like changing colors, height and corner radius.
+
+
+      Visual styles - Renders the bar using the parts provided by the theme to match the system's appearance. You won't be able to customize the bar rendering if this rendering mode is selected.
+
+
+      WinUI-like - Renders the bar using the WinUI ProgressBar control's style to better match Windows 11's design language. If this rendering mode is selected, every single option from the "Custom rendering" section, except the ones related to the percentage label, will be ignored.
+    $description:ro: >- 
+      Alege modul de randare al barei (prestabilit: Personalizat):
+
+
+      Personalizat - Randează bara făcând-o să arate similar cu cea randată folosind părțile din tema Aero originală de pe Windows 8.x, 10 și 11, însă permite personalizare adițională, precum schimbarea culorilor, înălțimii și razei colțului.
+
+
+      Stiluri vizuale - Randează bara folosind părțile furnizate de temă pentru a se potrivi cu aspectul sistemului. Nu vei putea personaliza randarea barei dacă acest mod de randare este selectat.
+
+
+      În stilul WinUI - Randează bara de utilizare folosind stilul controlului ProgressBar din WinUI pentru a se potrivi mai bine cu limbajul de design al Windows 11. Dacă acest mod de randare este selectat, toate opțiunile din secțiunea "Randare personalizată", cu excepția celor care au legătură cu eticheta pentru procentaj, vor fi ignorate.
+    $options:
+      - custom: Custom
+      - visualStyles: Visual styles
+      - winuiLike: WinUI-like
+    $options:ro:
+      - custom: Personalizat
+      - visualStyles: Stiluri vizuale
+      - winuiLike: În stilul WinUI
 
   - darkModeVSRendering: true
     $name: Render using dark mode parts when using visual styles
     $name:ro: Randează folosind părți întunecate atunci când se folosesc stiluri vizuale
     $description: >-
-      Render the usage bar using the dark mode parts from the "DarkMode_CopyEngine::Progress" class when dark mode is enabled. You must have Windows 11 build 26200.6899 or higher installed and the "Render using visual styles" option enabled for this to work.
+      Render the usage bar using the dark mode parts from the "DarkMode_CopyEngine::Progress" class when dark mode is enabled. You must have Windows 11 build 26200.6899 or higher installed and the "Visual styles" rendering mode selected for this to work.
     $description:ro: >-
-      Randează bara de utilizare folosind părți întunecate din clasa "DarkMode_CopyEngine::Progress" atunci când modul întunecat este activat. Trebuie să ai instalat Windows 11, build-ul 26200.6899 sau mai recent și opțiunea "Randează folosind stiluri vizuale" activată pentru ca această opțiune să funcționeze.
-
-  - winuiLikeRendering: false
-    $name: Use WinUI style for rendering
-    $name:ro: Folosește stilul WinUI pentru randare
-    $description: >-
-      Render the usage bar using the style of the WinUI ProgressBar control. If the "Render using visual styles" option is enabled, it will take precedence over this option. Also, every single option from the "Custom rendering" section, except the ones related to the percentage label, will be ignored.
-    $description:ro: >-
-      Randează bara de utilizare folosind stilul controlului ProgressBar din WinUI. Dacă opțiunea "Randează folosind stiluri vizuale" este activată, acea opțiune va avea precedență asupra acestei opțiuni. De asemenea, toate opțiunile din secțiunea "Randare personalizată", cu excepția celor care au legătură cu eticheta pentru procentaj, vor fi ignorate.
+      Randează bara de utilizare folosind părți întunecate din clasa "DarkMode_CopyEngine::Progress" atunci când modul întunecat este activat. Trebuie să ai instalat Windows 11, build-ul 26200.6899 sau mai recent și modul de randare "Stiluri vizuale" selectat pentru ca această opțiune să funcționeze.
 
   - winuiLikeRenderingCustomColors: false
     $name: Allow using custom colors when rendering using the WinUI style
@@ -239,15 +257,15 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   $name: Custom rendering
   $name:ro: Randare personalizată
   $description: >-
-    These options will be ignored when the "Render using visual styles" option is enabled.
+    These options will be ignored when the "Visual styles" rendering mode is used.
     
 
-    If the "Use WinUI style for rendering" option is enabled, every single option from this section will be ignored, except the options related to the percentage label. If you want to customize the bar's colors and still render it using the WinUI style, enable the "Allow using custom colors when rendering using the WinUI style" option.
+    If the "WinUI-like" rendering mode is used, every single option from this section will be ignored, except the options related to the percentage label. If you want to customize the bar's colors and still render it using the WinUI style, enable the "Allow using custom colors when rendering using the WinUI style" option.
   $description:ro: >-
-    Aceste opțiuni vor fi ignorate atunci când opțiunea "Randează folosind stiluri vizuale" este activată.
+    Aceste opțiuni vor fi ignorate atunci când este folosit modul de randare "Stiluri vizuale".
 
 
-    Dacă opțiunea "Folosește stilul WinUI pentru randare" este activată, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori perssonalizate atunci când se randează folosind stilul WinUI".
+    Dacă modul de randare "În stilul WinUI" este folosit, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori perssonalizate atunci când se randează folosind stilul WinUI".
 */
 // ==/WindhawkModSettings==
 
@@ -279,9 +297,8 @@ static INT      g_warningThreshold               = 90;
 static INT      g_intermediateThreshold          = 0;
 
 // Rendering
-static BOOL     g_renderUsingVisualStyles        = FALSE;
+static WindhawkUtils::StringSetting g_renderingMode;
 static BOOL     g_darkModeVSRendering            = TRUE;
-static BOOL     g_winuiLikeRendering             = FALSE;
 static BOOL     g_winuiLikeRenderingCustomColors = FALSE;
 
 // Custom rendering
@@ -290,9 +307,9 @@ static BOOL     g_renderBarBorder                = TRUE;
 static INT      g_heightFactor                   = 100;
 static INT      g_cornerRadiusFactor             = 0;
 static BOOL     g_roundProgressRightCorners      = TRUE;
-static INT      g_percentageLabel                = 0;
+static WindhawkUtils::StringSetting g_percentageLabel;
 static INT      g_percentageLabelSize            = 70;
-static WindhawkUtils::StringSetting  g_percentageLabelFont;
+static WindhawkUtils::StringSetting g_percentageLabelFont;
 
 // Light mode colors
 static COLORREF g_barColorLight                  = 0x00E6E6E6;
@@ -356,25 +373,19 @@ static void LoadSettings() {
     g_intermediateThreshold          = Wh_GetIntSetting(L"general.intermediatePercentageThreshold");
 
     // Rendering
-    g_renderUsingVisualStyles        = Wh_GetIntSetting(L"rendering.renderUsingVisualStyles");
+    g_renderingMode                  = WindhawkUtils::StringSetting::make(L"rendering.renderingMode");
     g_darkModeVSRendering            = Wh_GetIntSetting(L"rendering.darkModeVSRendering");
-    g_winuiLikeRendering             = Wh_GetIntSetting(L"rendering.winuiLikeRendering");
     g_winuiLikeRenderingCustomColors = Wh_GetIntSetting(L"rendering.winuiLikeRenderingCustomColors");
-
+    
     // Custom rendering
     g_useSystemAccentColor           = Wh_GetIntSetting(L"customRendering.useSystemAccentColor");
     g_renderBarBorder                = Wh_GetIntSetting(L"customRendering.renderBarBorder");
     g_heightFactor                   = Wh_GetIntSetting(L"customRendering.heightFactor");
     g_cornerRadiusFactor             = Wh_GetIntSetting(L"customRendering.cornerRadiusFactor");
     g_roundProgressRightCorners      = Wh_GetIntSetting(L"customRendering.roundProgressRightCorners");
+    g_percentageLabel                = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabel");
     g_percentageLabelFont            = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabelFont");
     g_percentageLabelSize            = Wh_GetIntSetting(L"customRendering.percentageLabelSize");
-
-    WindhawkUtils::StringSetting percentageLabelMode = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabel");
-    
-    if (wcscmp(percentageLabelMode, L"usedSpace") == 0) g_percentageLabel = 1;
-    else if (wcscmp(percentageLabelMode, L"freeSpace") == 0) g_percentageLabel = 2;
-    else g_percentageLabel = 0;
 
     if (g_heightFactor > 100) g_heightFactor = 100;
     else if (g_heightFactor < 0) g_heightFactor = 0;
@@ -401,7 +412,7 @@ static void LoadSettings() {
     g_progressColorFullDark          = LoadColorSetting(L"customRendering.darkModeColors.progressColorFull",          0x00533DFF);
     g_percentageLabelColorDark       = LoadColorSetting(L"customRendering.darkModeColors.percentageLabelColor",       0x00FFFFFF);
 
-    if (g_winuiLikeRendering) {
+    if (wcscmp(g_renderingMode, L"winuiLike") == 0) {
         g_renderBarBorder                = FALSE;
         g_heightFactor                   = 20;
         g_roundProgressRightCorners      = TRUE;
@@ -561,7 +572,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
         if (pClipRect) IntersectRect(&clipRect, &clipRect, pClipRect);
 
-        if (g_renderUsingVisualStyles && g_darkModeVSRendering && darkMode && g_darkHTheme) 
+        if (wcscmp(g_renderingMode, L"visualStyles") == 0 && g_darkModeVSRendering && darkMode && g_darkHTheme) 
             hTheme = g_darkHTheme;
 
         RECT fullBarRect = { 
@@ -570,14 +581,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
         int maxBarHeight = clipRect.bottom - clipRect.top;
         int percentageLabelFontHeight = -(maxBarHeight * g_percentageLabelSize / 100);
+        int heightFactor = g_heightFactor;
 
-        if (!g_renderUsingVisualStyles) {
-            if (g_winuiLikeRendering) {
-                if (iPartId == PP_FILL) g_heightFactor = 20;
-                else if (iPartId == PP_TRANSPARENTBAR) g_heightFactor = 1;
-            }
+        if (wcscmp(g_renderingMode, L"winuiLike") == 0) {
+            if (iPartId == PP_FILL) heightFactor = 20;
+            else if (iPartId == PP_TRANSPARENTBAR) heightFactor = 1;
+        }
 
-            int inset = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200;
+        if (wcscmp(g_renderingMode, L"visualStyles") != 0) {
+            int inset = (clipRect.bottom - clipRect.top) * (100 - heightFactor) / 200;
 
             clipRect.top = clipRect.top + inset;
             clipRect.bottom = clipRect.bottom - inset;
@@ -590,7 +602,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
             if (g_remainingSpaceAsProgress)
                 clipRect.right = clipRect.left + g_barWidth - progressWidth;
 
-            if (g_renderUsingVisualStyles) {
+            if (wcscmp(g_renderingMode, L"visualStyles") == 0) {
                 if (usedPercentage >= g_warningThreshold)
                     progressStyle = PBFS_ERROR;
                 else if (g_intermediateThreshold && usedPercentage >= g_intermediateThreshold)
@@ -621,7 +633,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
                 int radius;
 
-                if (g_winuiLikeRendering) 
+                if (wcscmp(g_renderingMode, L"winuiLike") == 0) 
                     radius = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200 + 1;
                 else 
                     radius = GetCornerRadius(clipRect);
@@ -634,10 +646,10 @@ HRESULT WINAPI HookedDrawThemeBackground(
                 if (radius * 2 <= clipRect.right - clipRect.left)
                     FillRoundedRect(hdc, clipRect, radius, color, TRUE, g_roundProgressRightCorners);
 
-                if (g_percentageLabel) {
+                if (wcscmp(g_percentageLabel, L"dontShow") != 0) {
                     DrawPercentageLabel(
                         hdc, fullBarRect, g_percentageLabelFont, percentageLabelFontHeight, 
-                        (g_percentageLabel == 1) ? usedPercentage : (100 - usedPercentage),
+                        (wcscmp(g_percentageLabel, L"usedPercentage") == 0) ? usedPercentage : (100 - usedPercentage),
                         (darkMode) ? g_percentageLabelColorDark : g_percentageLabelColorLight
                     );
                 }
@@ -650,10 +662,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
             g_barWidth  = clipRect.right - clipRect.left;
             if (g_barWidth < 1) g_barWidth = 1;
 
-            if (g_renderUsingVisualStyles)
+            if (wcscmp(g_renderingMode, L"visualStyles") == 0)
                 DrawThemeBackground_orig(hTheme, hdc, PP_TRANSPARENTBAR, PBS_NORMAL, &clipRect, 0);
             else {
-                int radius = GetCornerRadius(clipRect);
+                int radius;
+
+                if (wcscmp(g_renderingMode, L"winuiLike") == 0) 
+                    radius = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200 + 1;
+                else 
+                    radius = GetCornerRadius(clipRect);
 
                 if (g_renderBarBorder) {
                     FillRoundedRect(
