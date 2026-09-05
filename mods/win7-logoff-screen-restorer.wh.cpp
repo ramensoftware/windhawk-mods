@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id             win7-logoff-screen-restorer
-// @name           Windows Vista/7 Logoff Screen Restorer
+// @name           Windows Vista/7 Logoff/Shutdown Screen Restorer
 // @description    This mod restores the classic Windows Vista/7 full-screen "programs still need to close" logoff and shutdown screen for Windows 10 and 11
 // @version        1.0.0
 // @author         babamohammed
@@ -180,6 +180,7 @@ If any issues are encountered, please report them to the mod's author.
 
 #include <unordered_map>
 #include <atomic>
+#include <mutex>
 #include <new>
 using ExitWindowsEx_t = BOOL (WINAPI*)(UINT, DWORD);
 static ExitWindowsEx_t ExitWindowsEx_Original = nullptr;
@@ -490,9 +491,12 @@ static constexpr UINT WM_APP_SHOW         = WM_APP + 1; // lParam: HANDLE reply 
 static constexpr UINT WM_APP_APPLYSETTINGS = WM_APP + 2;
 static constexpr UINT WM_APP_QUITUI       = WM_APP + 3;
 
-static HWND   g_hotkeyWindow = nullptr;   // message-only control window (UI thread)
-static HANDLE g_uiThread = nullptr;
-static DWORD  g_uiThreadId = 0;
+// Written by the UI thread (including on cleanup), read by hook threads and
+// by Wh_ModUninit -- made atomic so those cross-thread reads are never torn
+// or reordered relative to the writes.
+static std::atomic<HWND>  g_hotkeyWindow{nullptr};  // message-only control window (UI thread)
+static std::atomic<DWORD> g_uiThreadId{0};
+static HANDLE g_uiThread = nullptr;   // only ever written from StartUiThreadOnce/Wh_ModUninit
 static bool   g_isExplorer = false;       // only explorer registers the preview hotkey
 
 // Set while the control window exists; the UI thread clears it just before it
@@ -2405,38 +2409,57 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         return 0;
-    case WM_APP_QUITUI: {
-        // Close any screen first (on this thread, so DestroyWindow is legal)
-        // so the hook blocked on it wakes up, then drain and answer any
-        // WM_APP_SHOW still queued behind it before finally stopping the
-        // loop -- otherwise a request that arrived in the same instant would
-        // be discarded along with this window, and its hook thread would
-        // block on `reply` forever (see the bounded wait in
-        // ShowWin7LogoffDialog for the other half of that fix). Both leave
-        // proceed TRUE: the mod must never silently cancel a real action it
-        // only intercepted, matching the "disable the mod while the screen is
-        // up" path in WM_APP_APPLYSETTINGS.
-        if (g_dialog) {
-            if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(g_dialog, GWLP_USERDATA)))
-                { req->force = false; req->proceed = true; }
-            DestroyWindow(g_dialog);
-        }
-        MSG leftover;
-        while (PeekMessageW(&leftover, nullptr, WM_APP_SHOW, WM_APP_SHOW, PM_REMOVE)) {
-            if (auto* req = reinterpret_cast<ShutdownRequest*>(leftover.lParam)) {
-                req->force = false; req->proceed = true;
-                if (req->reply) SetEvent(req->reply);
-            }
-        }
-        PostQuitMessage(0);
-        return 0;
-    }
+    // WM_APP_QUITUI used to be handled here as a window message posted to
+    // g_hotkeyWindow. It is now sent as a *thread* message (PostThreadMessageW
+    // against the thread id, which is valid the instant CreateThread returns
+    // -- see Wh_ModBeforeUninit/Wh_ModUninit), because g_hotkeyWindow may
+    // never get published (StartUiThread's 5 s wait can time out, or window
+    // creation can simply fail) while the thread keeps running; waiting on a
+    // handle that might never exist was leaving the host hung forever on
+    // unload. GetMessageW still returns thread messages (with msg.hwnd ==
+    // NULL), so UiThreadProc's own loop intercepts it directly -- see
+    // DrainOnQuit below.
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// Shared by UiThreadProc's message loop (the normal path) and its post-loop
+// cleanup (the belt-and-suspenders re-drain -- see UiThreadProc). Closes any
+// on-screen dialog first (on this thread, so DestroyWindow is legal) so a
+// hook blocked on it wakes up, then drains and answers any WM_APP_SHOW still
+// queued behind it -- otherwise a request that arrived in the same instant
+// would be discarded along with the window, and its hook thread would block
+// on `reply` forever (see the bounded wait in ShowWin7LogoffDialog for the
+// other half of that fix). Both leave proceed TRUE: the mod must never
+// silently cancel a real action it only intercepted, matching the "disable
+// the mod while the screen is up" path in WM_APP_APPLYSETTINGS.
+static void DrainOnQuit() {
+    if (g_dialog) {
+        if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(g_dialog, GWLP_USERDATA)))
+            { req->force = false; req->proceed = true; }
+        DestroyWindow(g_dialog);
+    }
+    MSG leftover;
+    while (PeekMessageW(&leftover, nullptr, WM_APP_SHOW, WM_APP_SHOW, PM_REMOVE)) {
+        if (auto* req = reinterpret_cast<ShutdownRequest*>(leftover.lParam)) {
+            req->force = false; req->proceed = true;
+            if (req->reply) SetEvent(req->reply);
+        }
+    }
+}
+
 static DWORD WINAPI UiThreadProc(LPVOID) {
     HINSTANCE hMod = GetModModuleHandle();
+
+    // Force this thread's message queue to exist before anything else runs,
+    // so PostThreadMessageW(g_uiThreadId, ...) from another thread (Wh_ModInit
+    // returns before this line could plausibly run, but Wh_ModBeforeUninit/
+    // Wh_ModUninit could race it) can never fail with ERROR_INVALID_THREAD_ID
+    // for lack of a queue. Harmless no-op peek: there is nothing in the queue
+    // yet and PM_NOREMOVE leaves it that way.
+    MSG primeQueue;
+    PeekMessageW(&primeQueue, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
     auto cleanup = [&]() {
         if (g_hotkeyWindow) { UnregisterHotKey(g_hotkeyWindow, kHotkeyId);
                               DestroyWindow(g_hotkeyWindow); g_hotkeyWindow = nullptr; }
@@ -2479,11 +2502,33 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
         MSG m{};
         while (GetMessageW(&m, nullptr, 0, 0) > 0) {
+            // Thread message (PostThreadMessageW), not a window message --
+            // msg.hwnd is NULL for these, so DispatchMessageW would not have
+            // delivered it to ControlProc anyway. This is the authoritative
+            // unload signal from Wh_ModBeforeUninit/Wh_ModUninit; see the
+            // comment on WM_APP_QUITUI in ControlProc for why it moved here.
+            if (!m.hwnd && m.message == WM_APP_QUITUI) {
+                DrainOnQuit();
+                break;
+            }
             TranslateMessage(&m);
             DispatchMessageW(&m);
         }
 
+        // Belt-and-suspenders re-drain: a WM_APP_SHOW posted after the
+        // WM_APP_QUITUI above was dequeued but before this thread actually
+        // gets here would otherwise sit unanswered forever (DrainOnQuit's own
+        // drain already ran), leaving its hook thread parked for the full
+        // 65 s bound in ShowWin7LogoffDialog -- and Wh_ModUninit blocked on
+        // g_hooksIdle for that whole time.
         if (g_dialog) DestroyWindow(g_dialog);
+        MSG leftover;
+        while (PeekMessageW(&leftover, nullptr, WM_APP_SHOW, WM_APP_SHOW, PM_REMOVE)) {
+            if (auto* req = reinterpret_cast<ShutdownRequest*>(leftover.lParam)) {
+                req->force = false; req->proceed = true;
+                if (req->reply) SetEvent(req->reply);
+            }
+        }
         if (g_hotkeyWindow) UnregisterHotKey(g_hotkeyWindow, kHotkeyId);
         if (g_hotkeyWindow) { DestroyWindow(g_hotkeyWindow); g_hotkeyWindow = nullptr; }
         UnregisterClassW(kCtrlClassName, hMod);
@@ -2570,30 +2615,29 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
     for (;;) {
         ULONGLONG now = GetTickCount64();
         DWORD remaining = (now >= deadline) ? 0 : (DWORD)(deadline - now);
-        DWORD wait = MsgWaitForMultipleObjects(1, &req->reply, FALSE, remaining, QS_ALLINPUT);
+        DWORD wait = MsgWaitForMultipleObjects(1, &req->reply, FALSE, remaining, QS_SENDMESSAGE);
         if (wait == WAIT_TIMEOUT) {
             Wh_Log(L"Timed out waiting for the logoff screen to close; proceeding unforced");
             proceed = true; gaveUp = true;   // fail open
             break;
         }
         if (WaitForSingleObject(req->reply, 0) == WAIT_OBJECT_0) { proceed = req->proceed; *outForce = req->force; break; }
-        // Pump any messages sent to this thread (e.g. DWM queries) while the
-        // screen is up, so the shell stays responsive. A WM_QUIT here belongs
-        // to this thread (e.g. the shell process itself is exiting) and must
-        // not be silently discarded: re-post it and stop waiting so it is
-        // seen by whatever loop this thread returns to.
+        // This is the shell's (or Task Manager's, etc.) own UI thread, deep
+        // inside ExitWindowsEx/InitiateShutdownW, re-entrantly waiting on the
+        // mod's *own* UI thread to answer. It must keep answering messages
+        // *sent* to it (e.g. DWM's cross-thread SendMessage queries) so those
+        // callers can't deadlock -- that's all PM_QS_SENDMESSAGE dispatches
+        // here. Everything else (posted input, timers, WM_COMMANDs, and any
+        // WM_QUIT belonging to this thread's own real loop) is deliberately
+        // left on the queue untouched: previously this pumped and dispatched
+        // the *entire* posted-message queue with PM_REMOVE, which ran
+        // arbitrary shell code re-entrantly, on the caller's own thread, in
+        // the middle of its shutdown sequence, for up to the full 65 s bound.
+        // A WM_QUIT sitting in the queue needs no special handling either --
+        // left alone here, it is simply the first thing the thread's real
+        // loop sees once this function returns.
         MSG m{};
-        bool gotQuit = false;
-        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
-            if (m.message == WM_QUIT) { gotQuit = true; break; }
-            TranslateMessage(&m);
-            DispatchMessageW(&m);
-        }
-        if (gotQuit) {
-            PostQuitMessage((int)m.wParam);
-            proceed = true; gaveUp = true;   // fail open
-            break;
-        }
+        PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
     }
 
     if (!gaveUp) { CloseHandle(req->reply); delete req; }
@@ -2658,18 +2702,39 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
 }
 
 // Brings the UI thread up. Returns false if it could not be started.
-static bool StartUiThread() {
-    if (g_uiThread) return true;
-    g_uiReady     = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_uiThreadDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hooksIdle   = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-    if (!g_uiReady || !g_uiThreadDone || !g_hooksIdle) return false;
-    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
-    if (!g_uiThread) { Wh_Log(L"CreateThread for the UI thread failed"); return false; }
+//
+// g_uiReady/g_uiThreadDone/g_hooksIdle are created unconditionally in
+// Wh_ModInit, before any hook is installed, so they always exist by the time
+// this (or a hook) runs -- this function only ever starts the thread itself.
+//
+// Guarded by std::call_once rather than the old "if (g_uiThread) return
+// true;" check: two shell threads racing into ShowWin7LogoffDialog on a
+// non-explorer host could both pass a plain pointer check before either had
+// written g_uiThread, each creating its own thread and pair of window
+// classes. call_once makes exactly one caller actually run
+// StartUiThreadOnce; everyone else blocks until it finishes and then observes
+// its result.
+static std::once_flag g_uiThreadOnce;
+static bool g_uiThreadStartOk = false;
+
+static void StartUiThreadOnce() {
+    DWORD tid = 0;
+    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &tid);
+    if (!g_uiThread) {
+        Wh_Log(L"CreateThread for the UI thread failed");
+        g_uiThreadStartOk = false;
+        return;
+    }
+    g_uiThreadId.store(tid, std::memory_order_release);
     // Do not post anything to the control window before the thread has
     // actually created it.
     WaitForSingleObject(g_uiReady, 5000);
-    return g_hotkeyWindow != nullptr;
+    g_uiThreadStartOk = (g_hotkeyWindow.load(std::memory_order_acquire) != nullptr);
+}
+
+static bool StartUiThread() {
+    std::call_once(g_uiThreadOnce, StartUiThreadOnce);
+    return g_uiThreadStartOk;
 }
 
 BOOL Wh_ModInit() {
@@ -2681,6 +2746,26 @@ BOOL Wh_ModInit() {
     }
 
     LoadSkinSetting();
+
+    // Created here, before any hook is installed, so the in-flight-hook
+    // guard and the unload waits are always meaningful: InFlightHook's
+    // constructor can run the instant SetFunctionHook below returns, on any
+    // host (not just explorer.exe, which used to be the only one where the
+    // UI thread -- and therefore these events -- existed this early). If
+    // g_hooksIdle didn't exist yet, ResetEvent(nullptr) would silently no-op
+    // and Wh_ModUninit's later WaitForSingleObject(g_hooksIdle, INFINITE)
+    // would return immediately while a hook was still executing.
+    g_uiReady      = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_uiThreadDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hooksIdle    = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!g_uiReady || !g_uiThreadDone || !g_hooksIdle) {
+        Wh_Log(L"Failed to create synchronization events");
+        if (g_uiReady)      CloseHandle(g_uiReady);
+        if (g_uiThreadDone) CloseHandle(g_uiThreadDone);
+        if (g_hooksIdle)    CloseHandle(g_hooksIdle);
+        g_uiReady = g_uiThreadDone = g_hooksIdle = nullptr;
+        return FALSE;
+    }
 
     // Both entry points are hooked. Which one a given shell surface uses
     // varies with the Windows version and with the action (sign out vs shut
@@ -2708,11 +2793,20 @@ BOOL Wh_ModInit() {
         } else Wh_Log(L"InitiateShutdownW not found");
     }
 
-    if (!anyHook) { Wh_Log(L"No shutdown entry point could be hooked"); return FALSE; }
+    if (!anyHook) {
+        Wh_Log(L"No shutdown entry point could be hooked");
+        // No hook is live and Windhawk will not call Wh_ModUninit after a
+        // FALSE return, so these must be released here or they leak.
+        CloseHandle(g_uiReady);      g_uiReady = nullptr;
+        CloseHandle(g_uiThreadDone); g_uiThreadDone = nullptr;
+        CloseHandle(g_hooksIdle);    g_hooksIdle = nullptr;
+        return FALSE;
+    }
 
-    // Only start the UI thread once at least one hook is live. Starting it
-    // before the hooks meant the !anyHook path above returned FALSE (so
-    // Windhawk frees the image and never calls Wh_ModUninit) with the UI
+    // Only start the UI thread itself once at least one hook is live (the
+    // synchronization events it uses already exist from above). Starting the
+    // thread before the hooks meant the !anyHook path above returned FALSE
+    // (so Windhawk frees the image and never calls Wh_ModUninit) with the UI
     // thread still sitting in GetMessage -- a dangling-window-class crash.
     // Started here, a shutdown arriving before the thread is ready fails open
     // (ShowWin7LogoffDialog returns its callers' true), which is safe.
@@ -2740,6 +2834,23 @@ void Wh_ModSettingsChanged() {
         PostMessageW(g_hotkeyWindow, WM_APP_APPLYSETTINGS, 0, 0);
 }
 
+// Signals the UI thread to wind up, using its thread id (valid the instant
+// CreateThread returned) rather than g_hotkeyWindow. The window handle is not
+// a safe stop signal: StartUiThread gives up waiting for it after 5 s and
+// returns false while leaving the thread running, and window creation can
+// simply fail -- either way g_hotkeyWindow would stay null forever and
+// nothing would ever be posted, hanging the host in the INFINITE join below.
+// Waiting on g_uiReady first (only when the thread was actually started --
+// otherwise nobody will ever signal it) guarantees the thread has reached its
+// message loop and PostThreadMessageW cannot fail for lack of a queue (see
+// the priming PeekMessageW at the top of UiThreadProc).
+static void SignalUiThreadQuit() {
+    if (!g_uiThread) return;   // never started (or never even attempted) -- nothing to signal
+    WaitForSingleObject(g_uiReady, INFINITE);
+    DWORD tid = g_uiThreadId.load(std::memory_order_acquire);
+    if (tid) PostThreadMessageW(tid, WM_APP_QUITUI, 0, 0);
+}
+
 // Windhawk calls this while the hooks are still installed, before it removes
 // them and unloads the mod. Tearing the screen down here unblocks a hook
 // thread that is sitting in ShowWin7LogoffDialog, so disabling/updating the
@@ -2747,7 +2858,7 @@ void Wh_ModSettingsChanged() {
 // the watchdog fires (Windhawk has to wait for the hook thread to leave the
 // mod's code before it can free the image).
 void Wh_ModBeforeUninit() {
-    if (g_hotkeyWindow) PostMessageW(g_hotkeyWindow, WM_APP_QUITUI, 0, 0);
+    SignalUiThreadQuit();
 }
 
 void Wh_ModUninit() {
@@ -2756,7 +2867,7 @@ void Wh_ModUninit() {
     //    ERROR_ACCESS_DENIED and leaves the window alive with a WndProc about
     //    to be unmapped), unregisters the hotkey and both window classes, and
     //    frees the icon cache.
-    if (g_hotkeyWindow) PostMessageW(g_hotkeyWindow, WM_APP_QUITUI, 0, 0);
+    SignalUiThreadQuit();
 
     // 2. Do not let any hook thread keep executing mod code after the DLL is
     //    freed. During a real logoff the screen being torn down wakes the
