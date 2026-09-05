@@ -6,7 +6,8 @@
 // @description:ru-RU Мониторинг батареи и управление (ANC, Ultra Bass, EQ, Low Latency) для наушников Nothing и CMF прямо в панели задач Windows 11
 // @version         1.0.0
 // @author          lenorio
-// @github          https://github.com/lenorio/Nothing-Track
+// @github          https://github.com/lenorio
+// @homepage        https://github.com/lenorio/Nothing-Track
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -ldwmapi -lshcore -lwininet
