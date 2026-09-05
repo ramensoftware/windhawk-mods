@@ -4,7 +4,7 @@
 // @description     A mod for Windhawk that adds the "now playing" overlay
 // @version         1.0.0
 // @author          MaxURhino
-// @github          https://github.com/maxurhino
+// @github          https://github.com/MaxURhino
 // @homepage        https://maxurhino.github.io
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lgdiplus -lwindowsapp -lshell32 -luser32 -lwinhttp -lshlwapi
@@ -36,6 +36,10 @@ Adds a Minecraft styled overlay for the current thing playing.
   $name: Show Animation
   $description: >-
     Adds a show/hide animation to the "Now Playing" toast
+- custom-font: ""
+  $name: Custom Font (Optional)
+  $description: >-
+    If you want to use a custom font, you can input the path in here.
 */
 // ==/WindhawkModSettings==
 
@@ -314,6 +318,7 @@ struct NowPlayingInfo {
 };
 
 NowPlayingInfo g_nowPlaying;
+std::string g_customFont;
 
 NowPlayingInfo GetNowPlayingInfo() {
     NowPlayingInfo info;
@@ -394,7 +399,24 @@ std::vector<BYTE> LoadWithCache(const wchar_t* url, const wchar_t* cacheFileName
     return downloaded;
 }
 
+std::string StripSurroundingQuotes(const std::string& str) {
+    if (str.size() >= 2 && str.front() == '"' && str.back() == '"') {
+        return str.substr(1, str.size() - 2);
+    }
+    return str;
+}
+
 DWORD WINAPI FontDownloadThread(LPVOID) {
+    if (g_customFont != "") {
+        std::wstring wsCustomFont = StringToWString(g_customFont);
+        Wh_Log(L"Initializing custom font with path \"%s\"", wsCustomFont.c_str());
+
+        bool notFailed = InitCustomFont(wsCustomFont.c_str());
+
+        Wh_Log(L"Operation %s.", notFailed ? L"completed successfully" : L"failed");
+        return notFailed;
+    }
+
     auto fontBytes = LoadWithCache(
         L"https://github.com/tryashtar/minecraft-ttf/releases/download/v1.6/MinecraftDefaultUniformBMP-Regular.ttf",
         L"minecraft-font.ttf"
@@ -680,6 +702,10 @@ void parseModSettings() {
 
     g_defaultFont   = Wh_GetIntSetting(L"default-font"  ) != 0;
     g_showAnimation = Wh_GetIntSetting(L"show-animation") != 0;
+
+    g_customFont = StripSurroundingQuotes(WStringToString(Wh_GetStringSetting(L"custom-font")));
+
+    CreateThread(nullptr, 0, FontDownloadThread, nullptr, 0, nullptr);
 }
 
 DWORD WINAPI OverlayThread(LPVOID) {
