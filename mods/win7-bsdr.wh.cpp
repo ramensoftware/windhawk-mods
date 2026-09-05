@@ -18,19 +18,21 @@
 /*
 # Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 * This mod brings back the old blocked shutdown screen from Windows 7 or Vista, which appears when you try to shut down or restart the computer while programs prevent shutdown.
-    * Using the Vista blocked shutdown UX requires extra steps. See the instructions below the screenshot for more details.
+    * Using the Vista blocked shutdown UX requires extra steps. See the instructions below the screenshots for more details.
 * The blocked shutdown UX part is a direct port of my [AuthUX BSDR fork](https://github.com/Ingan121/AuthUX/tree/bsdr).
     * This mod's UX part has no effect if AuthUX BSDR is installed.
 * This mod also optionally restores the logoff sequence of Windows 7 and earlier, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
 * This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
-* This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.
+* This mod does not modify any system files. The optional DLL below can be placed anywhere in the file system.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
     * Not yet tested with RTL languages.
 
-![Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
+![Windows 7 Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
+
+![Windows Vista Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_hBPq0On2jK.png)
 ## Using external DLL resources for localization or Vista BSDR
 * Loading resources from an external DLL is supported for localization or for using Vista's blocked shutdown resolver.
 * This requires one of the following:
@@ -116,11 +118,6 @@ and make sure that `LogonUI.exe` is in the list.
 #define BSDR_CANCEL_TIMER 1
 #define BSDR_CANCEL_TIMER_MS 700
 
-#define RETURN_IF_FAILED(x) do { \
-    HRESULT hr = (x); \
-    if (FAILED(hr)) return hr; \
-} while(0)
-
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
 
@@ -170,6 +167,7 @@ std::atomic<bool> g_isExiting = false;
 #define IDS_BSDR_BLOCKINGAPP_LOGOFF 1030
 #define IDS_BSDR_BLOCKINGAPP_RESTART 1031
 // Strings only found in 7 winsrv
+// (Vista doesn't change the title, and warning is included in the description text)
 #define IDS_BSDR_WAITINGFOR 1035
 #define IDS_BSDR_BLOCKING_BGAPPS 1036
 #define IDS_BSDR_WARNING_LOGOFF 1037
@@ -1983,12 +1981,25 @@ HRESULT GetBitmapFromRandomStream(IWICImagingFactory* pWICImagingFactory, ABI::W
     }
 
     Microsoft::WRL::ComPtr<IStream> spStream;
-    RETURN_IF_FAILED(CreateStreamOverRandomAccessStream(stream, IID_PPV_ARGS(&spStream)));
+    HRESULT hr = CreateStreamOverRandomAccessStream(stream, IID_PPV_ARGS(&spStream));
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateStreamOverRandomAccessStream failed, HR=%08X", hr);
+        return hr;
+    }
 
     Microsoft::WRL::ComPtr<IWICBitmapSource> spWICBitmapSource;
-    RETURN_IF_FAILED(LoadImageWithWIC(pWICImagingFactory, spStream.Get(), &spWICBitmapSource));
+    hr = LoadImageWithWIC(pWICImagingFactory, spStream.Get(), &spWICBitmapSource);
+    if (FAILED(hr)) {
+        Wh_Log(L"LoadImageWithWIC failed, HR=%08X", hr);
+        return hr;
+    }
 
-    RETURN_IF_FAILED(ConvertWICBitmapToHBITMAP(pWICImagingFactory, spWICBitmapSource.Get(), outBitmap));
+    hr = ConvertWICBitmapToHBITMAP(pWICImagingFactory, spWICBitmapSource.Get(), outBitmap);
+    if (FAILED(hr)) {
+        Wh_Log(L"ConvertWICBitmapToHBITMAP failed, HR=%08X", hr);
+        return hr;
+    }
+
     return S_OK;
 }
 #pragma endregion wicutil.cpp
@@ -2029,10 +2040,6 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
     HRSRC hResource = nullptr;
     const void* pResourceData = nullptr;
 
-    if (forceHardcoded) {
-        Wh_Log(L"Failed to load bitmap from DLL; falling back to hardcoded one...");
-    }
-
     if (g_isUsingHardcodedRes || !g_hResDll || forceHardcoded) {
         switch (resourceId) {
             case IDB_BSDR_SEPARATOR:
@@ -2053,9 +2060,21 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
             case IDB_BSDR_BTN_SELECTED_HOVER:
                 pResourceData = RES_BSDR_BTN_SELECTED_HOVER;
                 break;
+            case IDB_BSDR_BTN_RED_NORMAL:
+            case IDB_BSDR_BTN_RED_HOVER:
+            case IDB_BSDR_BTN_RED_PRESSED:
+            case IDB_BSDR_BTN_RED_SELECTED:
+            case IDB_BSDR_BTN_RED_SELECTED_HOVER:
+            case IDB_BSDR_BTN_ICON_LOGOFF_RESTART:
+            case IDB_BSDR_BTN_ICON_SHUTDOWN:
+                return nullptr;
             default:
                 Wh_Log(L"Unknown image resource ID: %d", resourceId);
                 return nullptr;
+        }
+
+        if (forceHardcoded) {
+            Wh_Log(L"Failed to load bitmap from DLL; falling back to hardcoded one...");
         }
     } else {
         hResource = FindResourceW(g_hResDll, MAKEINTRESOURCEW(resourceId), RT_BITMAP);
@@ -2399,6 +2418,7 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
             HDC hdcSrc = CreateCompatibleDC(hdc);
             HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
 
+            // Vista didn't apply HALFTONE, etc. for HiDPI on this either
             AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
 
             SelectObject(hdcSrc, hOldSrc);
@@ -2427,12 +2447,17 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
     }
 
     if (drewAsHighContrast && isFocused && !GetPropW(pDIS->hwndItem, L"CustomBSDR_HideFocus")) {
-        int cxEdge = 2 * GetSystemMetrics(SM_CXEDGE);
-        int cxBorder = GetSystemMetrics(SM_CXBORDER) + cxEdge;
-        int cyEdge = 2 * GetSystemMetrics(SM_CYEDGE);
-        int cyBorder = GetSystemMetrics(SM_CYBORDER) + cyEdge;
+        int cxEdge = GetSystemMetrics(SM_CXEDGE);
+        int cxBorder = 2 * GetSystemMetrics(SM_CXBORDER) + cxEdge;
+        int cyEdge = GetSystemMetrics(SM_CYEDGE);
+        int cyBorder = 2 * GetSystemMetrics(SM_CYBORDER) + cyEdge;
 
         InflateRect(&rcButton, -cxBorder, -cyBorder);
+        // It may draw 2px rectangle unlike Vista/7
+        // Apparently this is because some accessibility option got enabled by default on recent 10 builds
+        // https://stackoverflow.com/a/64256424
+        // Go disable that if you value accuracy
+        // Also Vista drew it with the rect resized after the icon draw
         DrawFocusRect(hdc, &rcButton);
     }
 }
@@ -2909,6 +2934,19 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (!hWarningText && !hYesButton && !hNoButton) {
+            // Extra probes using 7-specific strings (Vista includes warning messages in description texts but 7 uses separate strings)
+            // Note: Vista bitmaps also exist in 7 winsrv (just unused) so they are not appropriate for probing
+            wchar_t probeText[256] = {};
+            if (LoadStringW(g_hResDll, IDS_BSDR_WAITINGFOR, probeText, _countof(probeText)) ||
+                LoadStringW(g_hResDll, IDS_BSDR_BLOCKING_BGAPPS, probeText, _countof(probeText)) ||
+                LoadStringW(g_hResDll, IDS_BSDR_WARNING_LOGOFF, probeText, _countof(probeText)) ||
+                LoadStringW(g_hResDll, IDS_BSDR_WARNING_RESTART, probeText, _countof(probeText)) ||
+                LoadStringW(g_hResDll, IDS_BSDR_BLOCKINGAPPCOUNT_MULTI, probeText, _countof(probeText)) ||
+                LoadStringW(g_hResDll, IDS_BSDR_BLOCKINGAPPCOUNT_SINGLE, probeText, _countof(probeText))) {
+                Wh_Log(L"Dialog is missing necessary controls (Vista-style dialog detected but found 7-specific strings)");
+                dlgInitFailed = true;
+                return FALSE;
+            }
             Wh_Log(L"Vista resources detected");
             isVista = true;
         } else if (!hWarningText || !hYesButton || !hNoButton) {
