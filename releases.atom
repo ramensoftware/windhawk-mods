@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-05T17:13:54.000Z</updated>
+    <updated>2026-09-05T17:20:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome Native UI Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/chrome-native-ui-tweaks#6075adc388cffe962678b6dd3c3d35618d4595df</id>
+        <link href="https://windhawk.net/mods/chrome-native-ui-tweaks"/>
+        <updated>2026-09-05T17:20:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromenativeuitweaks">Chrome Native UI Tweaks</h1>
+<p>Customize parts of Chrome's native browser interface without affecting web content.</p>
+<p><img src="https://i.imgur.com/AQoyFDj.png" alt="Example configuration" /></p>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Enable the mod.</li>
+<li>Restart Chrome once.</li>
+<li>Open the mod settings, adjust the options you want, and click <strong>Save settings</strong>.</li>
+</ol>
+<p>All settings default to Chrome's normal UI. Once the mod is active, saved setting changes are applied immediately without restarting Chrome.</p>
+<p>Disabling or uninstalling the mod restores the original UI in the running Chrome instance. Re-enabling the mod in that same Chrome instance requires a restart.</p>
+<h2 id="features">Features</h2>
+<h3 id="bookmarks">Bookmarks</h3>
+<ul>
+<li>Adjust the bookmark bar font size.</li>
+<li>Replace Chrome's bookmark folder icon with the Windows system folder icon.</li>
+</ul>
+<h3 id="addressbar">Address bar</h3>
+<ul>
+<li>Adjust the font size of URL and search text in the address bar.</li>
+</ul>
+<h3 id="tabs">Tabs</h3>
+<ul>
+<li>Adjust the tab title font size.</li>
+<li>Hide tab close (×) buttons and reclaim the reserved space.</li>
+<li>Adjust the spacing between the favicon and tab title.</li>
+</ul>
+<h3 id="extensions">Extensions</h3>
+<ul>
+<li>Reduce spacing between pinned extension icons.</li>
+</ul>
+<h3 id="menus">Menus</h3>
+<ul>
+<li>Adjust font size in bookmark folder, context, and three-dot menus.</li>
+<li>Reduce vertical spacing between menu items.</li>
+<li>Adjust popup menu corner radius.</li>
+</ul>
+<p><img src="https://i.imgur.com/M6PIC6Z.png" alt="Menu customization" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Tested with <strong>Google Chrome 152.0.7977.76 x64</strong>.</li>
+<li>The mod relies on Chrome's internal native UI symbols, so Chrome updates can occasionally require compatibility adjustments.</li>
+<li>After a Chrome update, Windhawk may need to download and resolve new <code>chrome.dll</code> symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Chrome continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status on hover and displays short balloon messages when preparation starts and finishes. Keep that Chrome instance open until the status says the symbols are ready, then restart Chrome once to activate the mod.</li>
+<li>A full fresh-symbol fallback can be large. In a Chrome 152.0.7977.76 test with the local PDB and Windhawk symbol cache removed, the resulting uncompressed <code>chrome.dll.pdb</code> was <strong>5.59 GB (5.21 GiB)</strong> and total preparation took <strong>139.5 seconds</strong> on a <strong>75 Mbit/s</strong> connection and an <strong>Intel Core i7-8700K</strong>. The download finished after roughly two minutes and symbol analysis took roughly another 20 seconds. Symbol-server delivery is compressed, so the network transfer is much smaller than the final PDB. Times vary with connection, CPU, and Chrome build.</li>
+<li>Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in <code>uninitializing</code> until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.</li>
+<li>Chrome processes launched with <code>--remote-debugging-pipe</code> (for example, Playwright/CDP automation sessions) are intentionally skipped so auxiliary browser instances don't pay the native UI symbol-resolution cost.</li>
+<li>The optional Windows folder icon is a fixed Windows raster icon. It doesn't follow Chrome's theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.</li>
+<li>The older <strong>Chrome UI Tweaks</strong> mod overlaps with this mod's menu spacing and corner-radius options. If both mods are used on a Chrome version where they work, configure those overlapping menu options in only one mod to avoid conflicting results.</li>
+</ul>]]></content>
+        <author>
+            <name>Dron007</name>
+            <uri>https://github.com/Dron007</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Start Button Centered Origin 0.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#439154bf481990369a27159931010092934dbb06</id>
@@ -1203,45 +1262,6 @@ determines the target monitor using the cursor position, and repositions the win
         <author>
             <name>ereinaimer</name>
             <uri>https://github.com/ereinaimer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Button Replacer 0.12.4]]></title>
-        <id>https://windhawk.net/mods/start-button-replacer#245e2afbfc6630d0dbda09e94d1fd7ebbce4e191</id>
-        <link href="https://windhawk.net/mods/start-button-replacer"/>
-        <updated>2026-08-26T10:28:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startbuttonreplacer">Start Button Replacer</h1>
-<p>Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.</p>
-<p><img src="https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif" alt="preview" /></p>
-<p>Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.</p>
-<h2 id="imagesources">Image sources</h2>
-<p>Local files:</p>
-<pre><code>C:\Users\YourName\Pictures\start.png
-</code></pre>
-<p>Environment variables are supported:</p>
-<pre><code>%USERPROFILE%\Pictures\start.jpg
-</code></pre>
-<p>HTTP/HTTPS URLs are also supported:</p>
-<pre><code>https://example.com/start.gif
-</code></pre>
-<h2 id="animatedgifplayback">Animated GIF playback</h2>
-<ul>
-<li>Always</li>
-<li>Hover</li>
-<li>Pressed</li>
-<li>Stopped</li>
-</ul>
-<h2 id="effects">Effects</h2>
-<p>Separate scale, rotation and opacity settings are available for hover and pressed states.</p>
-<h2 id="separatestateimages">Separate state images</h2>
-<p>The main <strong>Image source</strong> is always the normal image. Add a hover, pressed or activated image source to enable that state automatically. The activated image is shown while the Start menu is open. If it is blank or unavailable, activated falls back to the pressed image, then the hover image, then the main image. Other blank or unavailable state images fall back to the main image.</p>
-<p>While the Start menu is shown, pressing the button temporarily uses the pressed state. The activated state resumes on release and otherwise takes priority over the hover state.</p>
-<p>State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to <code>0</code> to switch instantly.</p>
-<h2 id="notes">Notes</h2>
-<p>For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.</p>]]></content>
-        <author>
-            <name>Ender</name>
-            <uri>https://github.com/EnderDragonEP</uri>
         </author>
     </entry>
 </feed>

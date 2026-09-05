@@ -1354,6 +1354,37 @@
         "version": "1.0.4"
       }
     },
+    "chrome-native-ui-tweaks": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788628833000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788628833000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Dron007",
+        "compilerOptions": "-lshell32",
+        "description": "Customize Chrome's native UI: fonts, tab close (×) buttons, menu density, extension spacing, and bookmark folder icons. Web content is untouched.",
+        "github": "https://github.com/Dron007",
+        "include": [
+          "chrome.exe"
+        ],
+        "name": "Chrome Native UI Tweaks",
+        "version": "1.0"
+      }
+    },
     "chrome-pip-alt-tab-window-hider": {
       "details": {
         "defaultSorting": 1210,

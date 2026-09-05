@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-05T17:13:54.000Z</updated>
+    <updated>2026-09-05T17:20:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome Native UI Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/chrome-native-ui-tweaks#6075adc388cffe962678b6dd3c3d35618d4595df</id>
+        <link href="https://windhawk.net/mods/chrome-native-ui-tweaks"/>
+        <updated>2026-09-05T17:20:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromenativeuitweaks">Chrome Native UI Tweaks</h1>
+<p>Customize parts of Chrome's native browser interface without affecting web content.</p>
+<p><img src="https://i.imgur.com/AQoyFDj.png" alt="Example configuration" /></p>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Enable the mod.</li>
+<li>Restart Chrome once.</li>
+<li>Open the mod settings, adjust the options you want, and click <strong>Save settings</strong>.</li>
+</ol>
+<p>All settings default to Chrome's normal UI. Once the mod is active, saved setting changes are applied immediately without restarting Chrome.</p>
+<p>Disabling or uninstalling the mod restores the original UI in the running Chrome instance. Re-enabling the mod in that same Chrome instance requires a restart.</p>
+<h2 id="features">Features</h2>
+<h3 id="bookmarks">Bookmarks</h3>
+<ul>
+<li>Adjust the bookmark bar font size.</li>
+<li>Replace Chrome's bookmark folder icon with the Windows system folder icon.</li>
+</ul>
+<h3 id="addressbar">Address bar</h3>
+<ul>
+<li>Adjust the font size of URL and search text in the address bar.</li>
+</ul>
+<h3 id="tabs">Tabs</h3>
+<ul>
+<li>Adjust the tab title font size.</li>
+<li>Hide tab close (×) buttons and reclaim the reserved space.</li>
+<li>Adjust the spacing between the favicon and tab title.</li>
+</ul>
+<h3 id="extensions">Extensions</h3>
+<ul>
+<li>Reduce spacing between pinned extension icons.</li>
+</ul>
+<h3 id="menus">Menus</h3>
+<ul>
+<li>Adjust font size in bookmark folder, context, and three-dot menus.</li>
+<li>Reduce vertical spacing between menu items.</li>
+<li>Adjust popup menu corner radius.</li>
+</ul>
+<p><img src="https://i.imgur.com/M6PIC6Z.png" alt="Menu customization" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Tested with <strong>Google Chrome 152.0.7977.76 x64</strong>.</li>
+<li>The mod relies on Chrome's internal native UI symbols, so Chrome updates can occasionally require compatibility adjustments.</li>
+<li>After a Chrome update, Windhawk may need to download and resolve new <code>chrome.dll</code> symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Chrome continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status on hover and displays short balloon messages when preparation starts and finishes. Keep that Chrome instance open until the status says the symbols are ready, then restart Chrome once to activate the mod.</li>
+<li>A full fresh-symbol fallback can be large. In a Chrome 152.0.7977.76 test with the local PDB and Windhawk symbol cache removed, the resulting uncompressed <code>chrome.dll.pdb</code> was <strong>5.59 GB (5.21 GiB)</strong> and total preparation took <strong>139.5 seconds</strong> on a <strong>75 Mbit/s</strong> connection and an <strong>Intel Core i7-8700K</strong>. The download finished after roughly two minutes and symbol analysis took roughly another 20 seconds. Symbol-server delivery is compressed, so the network transfer is much smaller than the final PDB. Times vary with connection, CPU, and Chrome build.</li>
+<li>Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in <code>uninitializing</code> until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.</li>
+<li>Chrome processes launched with <code>--remote-debugging-pipe</code> (for example, Playwright/CDP automation sessions) are intentionally skipped so auxiliary browser instances don't pay the native UI symbol-resolution cost.</li>
+<li>The optional Windows folder icon is a fixed Windows raster icon. It doesn't follow Chrome's theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.</li>
+<li>The older <strong>Chrome UI Tweaks</strong> mod overlaps with this mod's menu spacing and corner-radius options. If both mods are used on a Chrome version where they work, configure those overlapping menu options in only one mod to avoid conflicting results.</li>
+</ul>]]></content>
+        <author>
+            <name>Dron007</name>
+            <uri>https://github.com/Dron007</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Start Button Centered Origin 0.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#439154bf481990369a27159931010092934dbb06</id>
@@ -530,165 +589,6 @@ and make sure that <code>LogonUI.exe</code> is in the list.</p>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chromium Window Title Format 1.0]]></title>
-        <id>https://windhawk.net/mods/chromium-window-title-format#6dc728a85328d84fdaddb6b4339cd9347accc66e</id>
-        <link href="https://windhawk.net/mods/chromium-window-title-format"/>
-        <updated>2026-09-02T17:36:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromiumwindowtitleformat">Chromium Window Title Format</h1>
-<p>Rewrites Microsoft Edge and Google Chrome window titles using a template you
-control, so a window with many tabs is identifiable at a glance in Alt+Tab, the
-taskbar and jump lists.</p>
-<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/7a382537a7e63a8645df1d3599f30cda286128d3/chromium-window-title-format/before-after.png" alt="Before and after, on Edge and Chrome" /></p>
-<p>Taskbar previews before and after, on both browsers. The bottom row is the same
-window list under two different templates - bold digits, and a superscript count
-with the profile in italics.</p>
-<p>Default title:</p>
-<pre><code>E-Mail and 16 more pages - Personal - Microsoft Edge
-</code></pre>
-<p>Some things you can ask for instead:</p>
-<pre><code>E-Mail and 16 more pages - Personal      {title}?( {more})?( - {profile})
-E-Mail and 16 more pages                 {title}?( {more})
-[17] E-Mail                              ?([{count}] ){title}
-17 E-Mail (bold digits)                  ?({count:bold} ){title}
-03 E-Mail - Personal (superscript+italic) ?({count:pad2:sup} ){title}?( — {profile:italic})
-</code></pre>
-<h2 id="howitworksandwhatitwillnottouch">How it works, and what it will not touch</h2>
-<p>The mod never guesses at English text. On startup it reads the browser's <strong>own
-localized resource file</strong> to learn the exact browser suffix, the private-window
-wording and the page-count wording for your language, then matches those
-literals right-anchored against each title. The profile is matched against the
-names the install actually has, rather than against punctuation - browsers do
-not always join the profile with the same character they use elsewhere in the
-title.</p>
-<p>If a title does not match the grammar it discovered, the title is left <strong>exactly
-as it is</strong>. That is a hard rule, not a setting, and it is what keeps the
-following safe:</p>
-<ul>
-<li>app and installed-web-app (PWA) windows</li>
-<li>picture-in-picture, DevTools, print preview, task manager</li>
-<li>dialogs</li>
-<li><strong>windows you named yourself</strong> with the browser's own "Name window" command</li>
-</ul>
-<p>A window you named yourself is left alone for the same reason as the rest: its
-title is <em>only</em> the name you gave it - no tab count, no page title, no profile -
-so there is nothing in the text for a template to work from, and nothing that
-distinguishes it from a dialog or an app window. Recognising those needs the
-browser's own objects rather than its text, which is a separate feature and a
-separate discussion.</p>
-<h2 id="edgeandchromearenotequallycapable">Edge and Chrome are not equally capable</h2>
-<p>Chrome's window title contains <strong>only</strong> the page title and the browser name -
-there is no tab count and no profile anywhere in it. That is a fact about
-Chrome, not a limitation of the mod, so <code>{extra}</code>, <code>{more}</code>, <code>{profile}</code> and
-<code>{private}</code> are always empty there and any <code>?( ... )</code> group containing only
-those tokens disappears. <code>{title}</code> and <code>{browser}</code> work on both.</p>
-<p>On Chrome, <code>{count}</code> is therefore empty too: the count is not in the title, and
-this mod reads only the title.</p>
-<h2 id="templatesyntax">Template syntax</h2>
-<p>| Token | Meaning |
-| --- | --- |
-| <code>{title}</code> | Active tab title |
-| <code>{more}</code> | The browser's own count phrase, e.g. <code>and 16 more pages</code> (Edge) |
-| <code>{count}</code> | Total tabs, including the active one (Edge) |
-| <code>{extra}</code> | Just the number from the count phrase (Edge) |
-| <code>{profile}</code> | Profile name, or the privacy marker (Edge) |
-| <code>{private}</code> | <code>InPrivate</code> / <code>Guest</code> without brackets, else empty (Edge) |
-| <code>{browser}</code> | Browser name as it appears in the suffix |</p>
-<p>Modifiers chain with <code>:</code> - <code>{count:pad2:sup}</code>, <code>{profile:italic}</code>.</p>
-<ul>
-<li>Numeric: <code>pad2</code>, <code>pad3</code> (zero-pad), <code>min2</code> (empty unless 2 or more)</li>
-<li>Style: <code>sup</code>, <code>sub</code> (digits only), <code>bold</code>, <code>italic</code>, <code>bolditalic</code>, <code>sans</code>,
-<code>serifbold</code>, <code>serifitalic</code>, <code>mono</code>, <code>script</code>, <code>fraktur</code>, <code>dbl</code></li>
-<li>Text: <code>upper</code>, <code>lower</code>, <code>trim</code>, <code>max&lt;N&gt;</code></li>
-</ul>
-<p><code>?( ... )</code> drops the whole group, literal text included, when every token inside
-is empty. Escapes: <code>\{ \} \? \( \) \\</code> and <code>\uXXXX</code>.</p>
-<h2 id="acautionaboutthefancyletterstyles">A caution about the fancy letter styles</h2>
-<p><code>bold</code>, <code>italic</code> and friends use Unicode mathematical alphanumerics. They look
-great in the taskbar but they are not plain letters, which has real costs:</p>
-<ul>
-<li>Screen readers announce them character by character. The window's
-accessibility name is the title you display, so styling <code>{title}</code> degrades it.</li>
-<li>Alt+Tab type-to-search stops matching what you type.</li>
-<li>They need a font that covers the range. Superscript and subscript digits live
-in Segoe UI itself and are safe; the mathematical letters come from Segoe UI
-Symbol, so on a trimmed Windows image they can render as boxes.</li>
-<li>The italic, bold-italic, serif-italic, script and fraktur styles contain <strong>no
-digits</strong>, so
-digits pass through unstyled.</li>
-</ul>
-<p>Style short prefixes like <code>{count}</code>, not <code>{title}</code>.</p>
-<h2 id="limitsworthknowing">Limits worth knowing</h2>
-<ul>
-<li><p><strong>If all you want is the browser name gone</strong>, <a href="https://windhawk.net/mods/file-explorer-remove-suffixes">Remove Taskbar Window Suffixes</a>
-is designed for exactly that and does it for every program at once, with far
-less machinery. Its <em>Universal</em> mode drops the last <code>-</code> or <code>—</code> segment from
-any title, and its custom regex rules can target <code>msedge.exe</code> or <code>chrome.exe</code>
-and rewrite with capture groups - which covers dropping the suffix and a fair
-amount of reordering too.</p>
-<p>Two things are genuinely different here, and neither is a criticism of that
-mod. It edits <strong>how a title appears on the taskbar</strong>, by its own description,
-while this one changes the <strong>real window title</strong> - so Alt+Tab, the window's own
-title bar and jump lists follow. And a regex matches text, whereas this mod
-decomposes a title into <em>named</em> fields - page title, tab count, profile,
-privacy marker - using the browser's own localized resources, so <code>{count}</code> is
-a number you can style or pad and stays right in every language the browser
-ships. If you want the suffix gone, use that mod. Use this one when you want
-the parts.</p></li>
-<li><p><strong>Edge and Chrome only.</strong> The mod targets <code>msedge.exe</code> and <code>chrome.exe</code>. It
-needs no symbols and no PDB, so it is not pinned to a particular browser
-build, but other Chromium forks are not currently recognized and would each
-need their own entry and browser-name hint.</p></li>
-<li><p><strong><code>{profile}</code> is matched by name, never by position.</strong> A trailing segment is
-removed only when it is exactly one of the profile names this install actually
-has, read from the browser's own <code>Local State</code>. One profile is enough. The
-cost of matching by name is a page genuinely titled <code>Notes - Personal</code> on an
-install whose profile is <code>Personal</code>, whose tail moves into <code>{profile}</code>; the
-alternative - stripping whatever follows the last separator - would truncate
-every title containing a dash, so the name match is the floor.
-Where the profile list cannot be read at all, nothing is stripped, and any
-count sitting behind the profile is lost with it. The setting <code>Guess the
-profile when the profile list cannot be read</code> trades that back on weaker
-evidence, and is off by default - its description says what it costs.</p></li>
-<li><p><strong>The profile list is read once, at startup.</strong> Add, rename or remove a profile
-and <code>{profile}</code> keeps working from the old list until the browser restarts or
-the mod is reloaded. This is deliberate: the list decides whether text is
-removed from a title, so going stale is safer than re-reading it underneath a
-composition in progress.</p></li>
-<li><p><strong>Titles are restored on unload on a best-effort budget.</strong> Each window gets
-250 ms to acknowledge the restoring write, because the alternative is letting
-one unresponsive window hang the uninstall. A window whose thread is busy at
-that moment keeps the rewritten title until it next sets it itself. A window
-that has changed its own title since is left alone rather than being handed a
-now-older one. Both counts are logged.</p></li>
-<li><p><strong>The language is resolved in the browser's own order</strong>: <code>--lang</code>, then the
-browser's stored UI language, then Windows' display-language list, then the
-regional-format locale, then <code>en-US</code>. Each is matched against the packs the
-browser actually ships, which are mostly bare language codes. Picking the
-wrong one would make the mod appear to work and rewrite nothing, so the pack
-that was read, every page-count form found in it, and the browser suffix that
-actually matched a title are all logged to make that visible.</p></li>
-<li><p><strong>A <code>UserDataDir</code> group policy is read; a portable install still is not.</strong> The
-policy is taken from <code>HKLM</code> and then <code>HKCU</code> under
-<code>SOFTWARE\Policies\Microsoft\Edge</code> (<code>Google\Chrome</code> for Chrome), which is where
-the browser reads it and it outranks <code>--user-data-dir</code>, so a managed machine
-matches profile names normally. A policy path still holding a <code>${...}</code> variable
-that this mod cannot expand is treated as unknown rather than guessed at. What
-remains unreadable - a portable or repacked install, a truncated <code>Local State</code> -
-leaves <code>{profile}</code> empty and takes any count behind it, unless the guess setting
-above is turned on.</p></li>
-<li><p><strong>A profile that has never been renamed may not be matched.</strong> A freshly created
-profile can be shown under a localized default label - <code>Personal</code>,
-<code>Henkilökohtainen</code> - that appears nowhere in <code>Local State</code>, which still records
-the internal name. Once the profile has been used normally the browser writes
-the displayed name and the match works. Nothing is mangled meanwhile; the
-segment simply stays in <code>{title}</code>.</p></li>
-</ul>]]></content>
-        <author>
-            <name>mazany</name>
-            <uri>https://github.com/mazany</uri>
         </author>
     </entry>
 </feed>
