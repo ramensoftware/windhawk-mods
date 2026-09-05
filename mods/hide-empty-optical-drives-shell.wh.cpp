@@ -8,29 +8,29 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshell32 -lshlwapi -lcomctl32
+// @compilerOptions -lole32 -lshell32 -lshlwapi -lcomctl32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Hide Empty Optical Drives
 
-Hides empty optical drives only from **This PC**.
+Hides empty optical drives from **This PC** while leaving the device and its
+drive letter fully available to Windows.
 
-The physical drive and drive letter are never disabled or removed. Explorer,
-AutoPlay, mounting and device notifications continue to see the drive normally.
+Unlike the built-in "Hide empty drives" option, this mod is intended for
+optical CD/DVD/BD drives that still remain visible in This PC when empty.
 
-Implementation:
-- filters optical-drive PIDLs from `IShellFolder::EnumObjects` for This PC;
-- listens for `WM_DEVICECHANGE` instead of polling continuously;
-- retries briefly after insertion while the disc spins up;
-- intercepts optical-media removal in Explorer windows early enough to avoid
-  most of the transient generic-drive redraw.
+The mod only affects File Explorer (`explorer.exe`). File dialogs and
+third-party file managers are not modified.
 
-Media detection is conservative:
-- readable/mounted volume -> show;
-- ERROR_NOT_READY / ERROR_NO_MEDIA_IN_DRIVE -> hide;
-- any other error -> show (fail open).
+Media detection is event-driven. There is no permanent polling. After Windows
+reports media insertion, the mod retries briefly while an optical disc spins up.
+
+Detection is conservative:
+- readable/mounted media -> show;
+- no ready media -> hide;
+- unknown/error state -> show (fail open).
 */
 // ==/WindhawkModReadme==
 
@@ -41,10 +41,6 @@ Media detection is conservative:
   $description: >-
     Optional letters to manage, for example G or DE.
     Leave empty to manage all optical drives.
-
-- verboseLogging: false
-  $name: Verbose logging
-  $description: Log media state transitions and notifier activity.
 */
 // ==/WindhawkModSettings==
 
@@ -53,622 +49,150 @@ Media detection is conservative:
 #include <shlwapi.h>
 #include <dbt.h>
 #include <commctrl.h>
+#include <atomic>
 #include <cwctype>
-#include <new>
+#include <windhawk_utils.h>
 
-struct Settings {
-    WCHAR driveLetters[27];
-    bool verboseLogging;
+enum class MediaState : LONG {
+    Unknown = 0,
+    Empty = 1,
+    Present = 2,
 };
-
-Settings g_settings = {};
-
-using EnumObjects_t = HRESULT(STDMETHODCALLTYPE*)(
-    IShellFolder*, HWND, SHCONTF, IEnumIDList**);
-
-EnumObjects_t g_EnumObjectsOriginal = nullptr;
-
-PIDLIST_ABSOLUTE g_thisPcPidl = nullptr;
-
-HANDLE g_notificationThread = nullptr;
-DWORD g_notificationThreadId = 0;
-HWND g_notificationWindow = nullptr;
-HWINEVENTHOOK g_windowCreateHook = nullptr;
 
 constexpr UINT_PTR kRetryTimerId = 1;
 constexpr UINT kRetryIntervalMs = 500;
 constexpr int kMaxRetryAttempts = 20;
-constexpr UINT_PTR kExplorerSubclassId = 0x48454F44; // HEOD
 
+constexpr UINT kMsgRefreshThisPc = WM_APP + 1;
+constexpr UINT kMsgShutdown = WM_APP + 2;
+constexpr UINT kMsgInitialScan = WM_APP + 3;
+
+std::atomic<bool> g_enabled{true};
+std::atomic<DWORD> g_managedMask{0x03FFFFFFu};
+std::atomic<DWORD> g_opticalMask{0};
+
+std::atomic<LONG> g_mediaState[26];
 DWORD g_pendingInsertMask = 0;
 int g_retryAttempts[26] = {};
 
-ULONGLONG g_lastArrivalTick[26] = {};
-ULONGLONG g_lastRemovalTick[26] = {};
-constexpr ULONGLONG kDuplicateEventWindowMs = 250;
+HANDLE g_notificationThread = nullptr;
+HANDLE g_notificationReadyEvent = nullptr;
+DWORD g_notificationThreadId = 0;
+std::atomic<HWND> g_notificationWindow{nullptr};
+std::atomic<bool> g_notificationThreadReady{false};
 
-struct DecisionLogState {
-    bool initialized;
-    bool hide;
-    DWORD error;
-};
+using CDrivesViewCallback_ShouldShow_t =
+    HRESULT(STDMETHODCALLTYPE*)(
+        void*,
+        IShellFolder*,
+        LPCITEMIDLIST,
+        LPCITEMIDLIST);
 
-DecisionLogState g_decisionLogState[26] = {};
-
-enum class MediaState {
-    Unknown,
-    Empty,
-    Present,
-};
-
-static bool IsManagedLetter(WCHAR letter);
-
-
-static bool IsDuplicateEvent(
-    WCHAR letter,
-    bool arrival) {
-    int index = letter - L'A';
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG* ticks =
-        arrival ? g_lastArrivalTick : g_lastRemovalTick;
-
-    if (ticks[index] &&
-        now - ticks[index] < kDuplicateEventWindowMs) {
-        return true;
-    }
-
-    ticks[index] = now;
-    return false;
-}
+CDrivesViewCallback_ShouldShow_t
+    CDrivesViewCallback_ShouldShow_Original = nullptr;
 
 static void MakeRootPath(WCHAR letter, WCHAR (&root)[4]) {
-    root[0] = (WCHAR)towupper(letter);
+    root[0] = letter;
     root[1] = L':';
     root[2] = L'\\';
     root[3] = L'\0';
 }
 
-static bool IsOpticalDrive(WCHAR letter) {
-    WCHAR root[4];
-    MakeRootPath(letter, root);
-    return GetDriveTypeW(root) == DRIVE_CDROM;
-}
-
-static MediaState ProbeMediaState(WCHAR letter) {
-    if (!IsOpticalDrive(letter)) {
-        return MediaState::Unknown;
-    }
-
-    WCHAR root[4];
-    MakeRootPath(letter, root);
-
-    WCHAR volumeName[MAX_PATH + 1] = {};
-    WCHAR fileSystemName[MAX_PATH + 1] = {};
-    DWORD serial = 0;
-    DWORD maxComponentLength = 0;
-    DWORD fileSystemFlags = 0;
-
-    SetLastError(ERROR_SUCCESS);
-
-    if (GetVolumeInformationW(
-            root,
-            volumeName,
-            ARRAYSIZE(volumeName),
-            &serial,
-            &maxComponentLength,
-            &fileSystemFlags,
-            fileSystemName,
-            ARRAYSIZE(fileSystemName))) {
-        return MediaState::Present;
-    }
-
-    DWORD error = GetLastError();
-
-    if (error == ERROR_NOT_READY ||
-        error == ERROR_NO_MEDIA_IN_DRIVE) {
-        return MediaState::Empty;
-    }
-
-    return MediaState::Unknown;
-}
-
-static void RefreshThisPc() {
-    if (!g_thisPcPidl) {
-        return;
-    }
-
-    SHChangeNotify(
-        SHCNE_UPDATEDIR,
-        SHCNF_IDLIST | SHCNF_FLUSHNOWAIT,
-        g_thisPcPidl,
-        nullptr);
-}
-
-static void NotifyMediaInserted(WCHAR letter) {
-    WCHAR root[4];
-    MakeRootPath(letter, root);
-
-    if (g_settings.verboseLogging) {
-        Wh_Log(L"%c: notifier: media inserted", letter);
-    }
-
-    SHChangeNotify(
-        SHCNE_MEDIAINSERTED,
-        SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
-        root,
-        nullptr);
-
-    RefreshThisPc();
-}
-
-static void NotifyMediaRemoved(WCHAR letter) {
-    WCHAR root[4];
-    MakeRootPath(letter, root);
-
-    if (g_settings.verboseLogging) {
-        Wh_Log(L"%c: notifier: media removed", letter);
-    }
-
-    // Shell-only notification. The device and drive letter stay untouched.
-    SHChangeNotify(
-        SHCNE_DRIVEREMOVED,
-        SHCNF_PATHW | SHCNF_FLUSH,
-        root,
-        nullptr);
-
-    RefreshThisPc();
-}
-
-static bool IsThisPcFolder(IShellFolder* folder) {
-    if (!folder || !g_thisPcPidl) {
-        return false;
-    }
-
-    IPersistFolder2* persist = nullptr;
-    HRESULT hr = folder->QueryInterface(
-        __uuidof(IPersistFolder2),
-        reinterpret_cast<void**>(&persist));
-
-    if (FAILED(hr) || !persist) {
-        return false;
-    }
-
-    PIDLIST_ABSOLUTE currentPidl = nullptr;
-    hr = persist->GetCurFolder(&currentPidl);
-    persist->Release();
-
-    if (FAILED(hr) || !currentPidl) {
-        return false;
-    }
-
-    BOOL equal = ILIsEqual(currentPidl, g_thisPcPidl);
-    CoTaskMemFree(currentPidl);
-    return equal != FALSE;
-}
-
-static void StartInsertionRetry(WCHAR letter) {
-    int index = letter - L'A';
-    DWORD bit = 1u << index;
-
-    g_pendingInsertMask |= bit;
-    g_retryAttempts[index] = 0;
-
-    if (g_notificationWindow) {
-        SetTimer(
-            g_notificationWindow,
-            kRetryTimerId,
-            kRetryIntervalMs,
-            nullptr);
-    }
-}
-
-static void HandleMediaArrival(WCHAR letter) {
-    if (IsDuplicateEvent(letter, true)) {
-        return;
-    }
-
-    if (g_settings.verboseLogging) {
-        Wh_Log(L"%c: WM_DEVICECHANGE media arrival", letter);
-    }
-
-    if (ProbeMediaState(letter) == MediaState::Present) {
-        g_pendingInsertMask &= ~(1u << (letter - L'A'));
-        g_retryAttempts[letter - L'A'] = 0;
-        NotifyMediaInserted(letter);
-        return;
-    }
-
-    StartInsertionRetry(letter);
-    RefreshThisPc();
-}
-
-static void ProcessPendingInsertions() {
-    DWORD pending = g_pendingInsertMask;
-
-    for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
-        DWORD bit = 1u << (letter - L'A');
-
-        if (!(pending & bit)) {
-            continue;
-        }
-
-        int index = letter - L'A';
-
-        if (ProbeMediaState(letter) == MediaState::Present) {
-            if (g_settings.verboseLogging) {
-                Wh_Log(
-                    L"%c: media ready after %d retry/retries",
-                    letter,
-                    g_retryAttempts[index] + 1);
-            }
-
-            g_pendingInsertMask &= ~bit;
-            g_retryAttempts[index] = 0;
-            NotifyMediaInserted(letter);
-            continue;
-        }
-
-        if (++g_retryAttempts[index] >= kMaxRetryAttempts) {
-            if (g_settings.verboseLogging) {
-                Wh_Log(L"%c: media-ready retry window expired", letter);
-            }
-
-            g_pendingInsertMask &= ~bit;
-            g_retryAttempts[index] = 0;
-            RefreshThisPc();
-        }
-    }
-
-    if (!g_pendingInsertMask && g_notificationWindow) {
-        KillTimer(g_notificationWindow, kRetryTimerId);
-    }
-}
-
-static void RecheckManagedOpticalDrives() {
-    bool retryNeeded = false;
-
-    for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
-        if (!IsManagedLetter(letter) || !IsOpticalDrive(letter)) {
-            continue;
-        }
-
-        MediaState state = ProbeMediaState(letter);
-
-        if (state == MediaState::Present) {
-            DWORD bit = 1u << (letter - L'A');
-            g_pendingInsertMask &= ~bit;
-            g_retryAttempts[letter - L'A'] = 0;
-
-            // DBT_DEVNODES_CHANGED is the fallback for optical stacks that
-            // occasionally omit a repeated media-arrival notification.
-            NotifyMediaInserted(letter);
-        } else if (state != MediaState::Empty) {
-            StartInsertionRetry(letter);
-            retryNeeded = true;
-        }
-    }
-
-    if (retryNeeded && g_settings.verboseLogging) {
-        Wh_Log(L"DBT_DEVNODES_CHANGED -> short optical recheck window");
-    }
-}
-
-static bool GetManagedOpticalLetterFromVolume(
-    LPARAM lParam,
-    WCHAR* matchedLetter) {
-    if (!lParam) {
-        return false;
-    }
-
-    auto* header =
-        reinterpret_cast<const DEV_BROADCAST_HDR*>(lParam);
-
-    if (header->dbch_devicetype != DBT_DEVTYP_VOLUME) {
-        return false;
-    }
-
-    auto* volume =
-        reinterpret_cast<const DEV_BROADCAST_VOLUME*>(lParam);
-
-    DWORD mask = volume->dbcv_unitmask;
-
-    for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
-        DWORD bit = 1u << (letter - L'A');
-
-        if (!(mask & bit) ||
-            !IsManagedLetter(letter) ||
-            !IsOpticalDrive(letter)) {
-            continue;
-        }
-
-        if (matchedLetter) {
-            *matchedLetter = letter;
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-static LRESULT CALLBACK ExplorerWindowSubclassProc(
-    HWND hwnd,
-    UINT message,
-    WPARAM wParam,
-    LPARAM lParam,
-    UINT_PTR,
-    DWORD_PTR) {
-    if (message == WM_DEVICECHANGE &&
-        wParam == DBT_DEVICEREMOVECOMPLETE) {
-        WCHAR letter = 0;
-
-        if (GetManagedOpticalLetterFromVolume(lParam, &letter)) {
-            if (!IsDuplicateEvent(letter, false)) {
-                if (g_settings.verboseLogging) {
-                    Wh_Log(
-                        L"%c: Explorer intercepted media removal",
-                        letter);
-                }
-
-                NotifyMediaRemoved(letter);
-            }
-
-            return TRUE;
-        }
-    }
-
-    if (message == WM_NCDESTROY) {
-        RemoveWindowSubclass(
-            hwnd,
-            ExplorerWindowSubclassProc,
-            kExplorerSubclassId);
-    }
-
-    return DefSubclassProc(hwnd, message, wParam, lParam);
-}
-
-static void TrySubclassExplorerWindow(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) {
-        return;
-    }
-
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hwnd, &processId);
-
-    if (processId != GetCurrentProcessId()) {
-        return;
-    }
-
-    WCHAR className[64] = {};
-
-    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
-        lstrcmpW(className, L"CabinetWClass") != 0) {
-        return;
-    }
-
-    SetWindowSubclass(
-        hwnd,
-        ExplorerWindowSubclassProc,
-        kExplorerSubclassId,
-        0);
-}
-
-static BOOL CALLBACK EnumExplorerWindowsProc(HWND hwnd, LPARAM) {
-    TrySubclassExplorerWindow(hwnd);
-    return TRUE;
-}
-
-static void CALLBACK WindowCreateWinEventProc(
-    HWINEVENTHOOK,
-    DWORD event,
-    HWND hwnd,
-    LONG idObject,
-    LONG,
-    DWORD,
-    DWORD) {
-    if (event == EVENT_OBJECT_CREATE &&
-        idObject == OBJID_WINDOW) {
-        TrySubclassExplorerWindow(hwnd);
-    }
-}
-
-static LRESULT CALLBACK NotificationWindowSubclassProc(
-    HWND hwnd,
-    UINT message,
-    WPARAM wParam,
-    LPARAM lParam,
-    UINT_PTR,
-    DWORD_PTR) {
-    switch (message) {
-        case WM_DEVICECHANGE: {
-            if (wParam == DBT_DEVICEARRIVAL) {
-                WCHAR letter = 0;
-
-                if (GetManagedOpticalLetterFromVolume(
-                        lParam,
-                        &letter)) {
-                    HandleMediaArrival(letter);
-                }
-            } else if (wParam == DBT_DEVNODES_CHANGED) {
-                RecheckManagedOpticalDrives();
-            }
-
-            return TRUE;
-        }
-
-        case WM_TIMER:
-            if (wParam == kRetryTimerId) {
-                ProcessPendingInsertions();
-                return 0;
-            }
-            break;
-
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
-            return 0;
-
-        case WM_NCDESTROY:
-            RemoveWindowSubclass(
-                hwnd,
-                NotificationWindowSubclassProc,
-                1);
-            g_notificationWindow = nullptr;
-            PostQuitMessage(0);
-            break;
-    }
-
-    return DefSubclassProc(hwnd, message, wParam, lParam);
-}
-
-static DWORD WINAPI NotificationThreadProc(void*) {
-    // Use a built-in system window class instead of registering our own.
-    // Predefined system classes must be created with a null hInstance.
-    // This also keeps Windhawk hot reloads free of stale class state.
-    HWND hwnd = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        L"STATIC",
-        L"",
-        WS_POPUP,
-        0,
-        0,
-        0,
-        0,
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr);
-
-    if (!hwnd) {
-        Wh_Log(L"Notification window creation failed: %u", GetLastError());
-        return 1;
-    }
-
-    if (!SetWindowSubclass(
-            hwnd,
-            NotificationWindowSubclassProc,
-            1,
-            0)) {
-        Wh_Log(L"Notification window subclass failed: %u", GetLastError());
-        DestroyWindow(hwnd);
-        return 1;
-    }
-
-    g_notificationWindow = hwnd;
-
-    if (g_settings.verboseLogging) {
-        Wh_Log(L"Device notification window ready: %p", hwnd);
-    }
-
-    MSG msg = {};
-
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-
-    return 0;
-}
-
-static void LoadSettings() {
-    g_settings.driveLetters[0] = L'\0';
-
-    PCWSTR letters = Wh_GetStringSetting(L"driveLetters");
-
-    if (letters) {
-        size_t out = 0;
-
-        for (size_t i = 0;
-             letters[i] &&
-             out < ARRAYSIZE(g_settings.driveLetters) - 1;
-             i++) {
-            WCHAR ch = (WCHAR)towupper(letters[i]);
-
-            if (ch < L'A' || ch > L'Z') {
-                continue;
-            }
-
-            bool duplicate = false;
-
-            for (size_t j = 0; j < out; j++) {
-                if (g_settings.driveLetters[j] == ch) {
-                    duplicate = true;
-                    break;
-                }
-            }
-
-            if (!duplicate) {
-                g_settings.driveLetters[out++] = ch;
-            }
-        }
-
-        g_settings.driveLetters[out] = L'\0';
-        Wh_FreeStringSetting(letters);
-    }
-
-    g_settings.verboseLogging =
-        Wh_GetIntSetting(L"verboseLogging") != 0;
+static DWORD LetterBit(WCHAR letter) {
+    return 1u << (letter - L'A');
 }
 
 static bool IsManagedLetter(WCHAR letter) {
-    letter = (WCHAR)towupper(letter);
-
-    if (!g_settings.driveLetters[0]) {
-        return true;
+    if (letter < L'A' || letter > L'Z') {
+        return false;
     }
 
-    for (size_t i = 0; g_settings.driveLetters[i]; i++) {
-        if (g_settings.driveLetters[i] == letter) {
-            return true;
-        }
+    return (g_managedMask.load(std::memory_order_relaxed) &
+            LetterBit(letter)) != 0;
+}
+
+static bool IsCachedOpticalDrive(WCHAR letter) {
+    if (letter < L'A' || letter > L'Z') {
+        return false;
+    }
+
+    return (g_opticalMask.load(std::memory_order_acquire) &
+            LetterBit(letter)) != 0;
+}
+
+static MediaState GetCachedMediaState(WCHAR letter) {
+    if (letter < L'A' || letter > L'Z') {
+        return MediaState::Unknown;
+    }
+
+    return static_cast<MediaState>(
+        g_mediaState[letter - L'A'].load(std::memory_order_acquire));
+}
+
+static bool SetCachedMediaState(
+    WCHAR letter,
+    MediaState state
+) {
+    LONG old = g_mediaState[letter - L'A'].exchange(
+        static_cast<LONG>(state),
+        std::memory_order_acq_rel);
+
+    if (old != static_cast<LONG>(state)) {
+        Wh_Log(
+            L"%c: state %d -> %d",
+            letter,
+            old,
+            static_cast<LONG>(state));
+        return true;
     }
 
     return false;
 }
 
-static bool IsEmptyOpticalDrive(
-    IShellFolder* parent,
-    PCUITEMID_CHILD pidl) {
-    STRRET strret = {};
+static bool SetOpticalDrivePresent(
+    WCHAR letter,
+    bool optical
+) {
+    DWORD bit = LetterBit(letter);
+    DWORD oldMask = g_opticalMask.load(std::memory_order_relaxed);
 
-    HRESULT hr = parent->GetDisplayNameOf(
-        pidl,
-        SHGDN_FORPARSING,
-        &strret);
+    for (;;) {
+        DWORD newMask =
+            optical ? (oldMask | bit) : (oldMask & ~bit);
 
-    if (FAILED(hr)) {
-        return false;
+        if (newMask == oldMask) {
+            return false;
+        }
+
+        if (g_opticalMask.compare_exchange_weak(
+                oldMask,
+                newMask,
+                std::memory_order_release,
+                std::memory_order_relaxed)) {
+            return true;
+        }
     }
+}
 
-    WCHAR parsingName[MAX_PATH] = {};
-
-    hr = StrRetToBufW(
-        &strret,
-        pidl,
-        parsingName,
-        ARRAYSIZE(parsingName));
-
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    WCHAR letter = (WCHAR)towupper(parsingName[0]);
-
-    if (letter < L'A' ||
-        letter > L'Z' ||
-        parsingName[1] != L':' ||
-        !IsManagedLetter(letter) ||
-        !IsOpticalDrive(letter)) {
-        return false;
-    }
-
+static MediaState ProbeOpticalMediaState(WCHAR letter) {
     WCHAR root[4];
     MakeRootPath(letter, root);
 
+    if (GetDriveTypeW(root) != DRIVE_CDROM) {
+        return MediaState::Unknown;
+    }
+
+    DWORD previousErrorMode = 0;
+    bool errorModeChanged =
+        SetThreadErrorMode(
+            SEM_FAILCRITICALERRORS,
+            &previousErrorMode) != FALSE;
+
     WCHAR volumeName[MAX_PATH + 1] = {};
-    WCHAR fileSystemName[MAX_PATH + 1] = {};
     DWORD serial = 0;
     DWORD maxComponentLength = 0;
     DWORD fileSystemFlags = 0;
+    WCHAR fileSystemName[MAX_PATH + 1] = {};
 
     SetLastError(ERROR_SUCCESS);
 
@@ -684,395 +208,771 @@ static bool IsEmptyOpticalDrive(
 
     DWORD error = ok ? ERROR_SUCCESS : GetLastError();
 
-    bool hide =
-        !ok &&
-        (error == ERROR_NOT_READY ||
-         error == ERROR_NO_MEDIA_IN_DRIVE);
-
-    if (g_settings.verboseLogging) {
-        int index = letter - L'A';
-        DecisionLogState& state = g_decisionLogState[index];
-
-        if (!state.initialized ||
-            state.hide != hide ||
-            state.error != error) {
-            if (ok) {
-                Wh_Log(
-                    L"%c: SHOW volume=\"%s\" fs=\"%s\"",
-                    letter,
-                    volumeName,
-                    fileSystemName);
-            } else if (hide) {
-                Wh_Log(
-                    L"%c: HIDE no ready media (error=%u)",
-                    letter,
-                    error);
-            } else {
-                Wh_Log(
-                    L"%c: SHOW fail-open (error=%u)",
-                    letter,
-                    error);
-            }
-
-            state.initialized = true;
-            state.hide = hide;
-            state.error = error;
-        }
+    if (errorModeChanged) {
+        SetThreadErrorMode(previousErrorMode, nullptr);
     }
 
-    return hide;
+    if (ok) {
+        Wh_Log(
+            L"%c: media present, volume=\"%s\", fs=\"%s\"",
+            letter,
+            volumeName,
+            fileSystemName);
+        return MediaState::Present;
+    }
+
+    if (error == ERROR_NOT_READY ||
+        error == ERROR_NO_MEDIA_IN_DRIVE) {
+        return MediaState::Empty;
+    }
+
+    Wh_Log(
+        L"%c: media probe inconclusive, error=%u",
+        letter,
+        error);
+    return MediaState::Unknown;
 }
 
-class FilteredEnumIDList final : public IEnumIDList {
-public:
-    FilteredEnumIDList(
-        IEnumIDList* inner,
-        IShellFolder* parent)
-        : m_refCount(1),
-          m_inner(inner),
-          m_parent(parent) {
-        m_inner->AddRef();
-        m_parent->AddRef();
+static void RefreshThisPc(PIDLIST_ABSOLUTE thisPcPidl) {
+    if (!thisPcPidl) {
+        return;
     }
 
-    ~FilteredEnumIDList() {
-        m_parent->Release();
-        m_inner->Release();
+    SHChangeNotify(
+        SHCNE_UPDATEDIR,
+        SHCNF_IDLIST | SHCNF_FLUSHNOWAIT,
+        thisPcPidl,
+        nullptr);
+}
+
+static bool GetDriveLetterFromItem(
+    IShellFolder* folder,
+    LPCITEMIDLIST pidlItem,
+    WCHAR* letter
+) {
+    if (!folder || !pidlItem || !letter) {
+        return false;
     }
 
-    HRESULT STDMETHODCALLTYPE QueryInterface(
-        REFIID riid,
-        void** object) override {
-        if (!object) {
-            return E_POINTER;
-        }
+    STRRET strret = {};
 
-        *object = nullptr;
-
-        if (riid == __uuidof(IUnknown) ||
-            riid == __uuidof(IEnumIDList)) {
-            *object = static_cast<IEnumIDList*>(this);
-            AddRef();
-            return S_OK;
-        }
-
-        return E_NOINTERFACE;
+    if (FAILED(folder->GetDisplayNameOf(
+            pidlItem,
+            SHGDN_FORPARSING,
+            &strret))) {
+        return false;
     }
 
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return (ULONG)InterlockedIncrement(&m_refCount);
+    WCHAR parsingName[MAX_PATH] = {};
+
+    if (FAILED(StrRetToBufW(
+            &strret,
+            pidlItem,
+            parsingName,
+            ARRAYSIZE(parsingName)))) {
+        return false;
     }
 
-    ULONG STDMETHODCALLTYPE Release() override {
-        LONG ref = InterlockedDecrement(&m_refCount);
+    WCHAR candidate =
+        static_cast<WCHAR>(towupper(parsingName[0]));
 
-        if (!ref) {
-            delete this;
-            return 0;
-        }
-
-        return (ULONG)ref;
+    if (candidate < L'A' ||
+        candidate > L'Z' ||
+        parsingName[1] != L':') {
+        return false;
     }
 
-    HRESULT STDMETHODCALLTYPE Next(
-        ULONG count,
-        PITEMID_CHILD* items,
-        ULONG* fetched) override {
-        if (!items) {
-            return E_POINTER;
-        }
+    *letter = candidate;
+    return true;
+}
 
-        if (count != 1 && !fetched) {
-            return E_POINTER;
-        }
-
-        ULONG visible = 0;
-
-        while (visible < count) {
-            PITEMID_CHILD child = nullptr;
-            ULONG got = 0;
-
-            HRESULT hr = m_inner->Next(1, &child, &got);
-
-            if (hr != S_OK || !got || !child) {
-                if (fetched) {
-                    *fetched = visible;
-                }
-
-                return visible == count ? S_OK : S_FALSE;
-            }
-
-            if (IsEmptyOpticalDrive(m_parent, child)) {
-                CoTaskMemFree(child);
-                continue;
-            }
-
-            items[visible++] = child;
-        }
-
-        if (fetched) {
-            *fetched = visible;
-        }
-
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE Skip(ULONG count) override {
-        while (count--) {
-            PITEMID_CHILD child = nullptr;
-            ULONG got = 0;
-
-            if (Next(1, &child, &got) != S_OK ||
-                !got ||
-                !child) {
-                return S_FALSE;
-            }
-
-            CoTaskMemFree(child);
-        }
-
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE Reset() override {
-        return m_inner->Reset();
-    }
-
-    HRESULT STDMETHODCALLTYPE Clone(
-        IEnumIDList** output) override {
-        if (!output) {
-            return E_POINTER;
-        }
-
-        *output = nullptr;
-
-        IEnumIDList* cloned = nullptr;
-        HRESULT hr = m_inner->Clone(&cloned);
-
-        if (FAILED(hr) || !cloned) {
-            return hr;
-        }
-
-        auto* wrapper =
-            new (std::nothrow) FilteredEnumIDList(
-                cloned,
-                m_parent);
-
-        cloned->Release();
-
-        if (!wrapper) {
-            return E_OUTOFMEMORY;
-        }
-
-        *output = wrapper;
-        return S_OK;
-    }
-
-private:
-    LONG m_refCount;
-    IEnumIDList* m_inner;
-    IShellFolder* m_parent;
-};
-
-static HRESULT STDMETHODCALLTYPE EnumObjects_Hook(
-    IShellFolder* self,
-    HWND hwnd,
-    SHCONTF flags,
-    IEnumIDList** enumList) {
+static HRESULT STDMETHODCALLTYPE
+CDrivesViewCallback_ShouldShow_Hook(
+    void* self,
+    IShellFolder* folder,
+    LPCITEMIDLIST pidlFolder,
+    LPCITEMIDLIST pidlItem
+) {
     HRESULT hr =
-        g_EnumObjectsOriginal(
+        CDrivesViewCallback_ShouldShow_Original(
             self,
-            hwnd,
-            flags,
-            enumList);
+            folder,
+            pidlFolder,
+            pidlItem);
 
-    if (hr != S_OK ||
-        !enumList ||
-        !*enumList ||
-        !IsThisPcFolder(self)) {
+    if (hr == S_FALSE ||
+        !g_enabled.load(std::memory_order_acquire)) {
         return hr;
     }
 
-    auto* wrapper =
-        new (std::nothrow) FilteredEnumIDList(
-            *enumList,
-            self);
+    WCHAR letter = 0;
 
-    if (!wrapper) {
+    if (!GetDriveLetterFromItem(
+            folder,
+            pidlItem,
+            &letter)) {
         return hr;
     }
 
-    (*enumList)->Release();
-    *enumList = wrapper;
+    if (!IsManagedLetter(letter) ||
+        !IsCachedOpticalDrive(letter)) {
+        return hr;
+    }
+
+    if (GetCachedMediaState(letter) ==
+        MediaState::Empty) {
+        return S_FALSE;
+    }
+
     return hr;
 }
 
-static bool HookThisPcEnumObjects() {
-    IShellFolder* desktop = nullptr;
-    HRESULT hr = SHGetDesktopFolder(&desktop);
+static void StartInsertionRetry(
+    HWND hwnd,
+    WCHAR letter
+) {
+    int index = letter - L'A';
+    DWORD bit = LetterBit(letter);
 
-    if (FAILED(hr) || !desktop) {
-        Wh_Log(L"SHGetDesktopFolder failed: 0x%08X", hr);
-        return false;
+    g_pendingInsertMask |= bit;
+    g_retryAttempts[index] = 0;
+
+    SetTimer(
+        hwnd,
+        kRetryTimerId,
+        kRetryIntervalMs,
+        nullptr);
+}
+
+static void InitialScan(
+    PIDLIST_ABSOLUTE thisPcPidl
+) {
+    bool changed = false;
+
+    for (WCHAR letter = L'A';
+         letter <= L'Z';
+         letter++) {
+        if (!IsManagedLetter(letter)) {
+            continue;
+        }
+
+        WCHAR root[4];
+        MakeRootPath(letter, root);
+
+        if (GetDriveTypeW(root) != DRIVE_CDROM) {
+            continue;
+        }
+
+        changed |= SetOpticalDrivePresent(
+            letter,
+            true);
+
+        MediaState state =
+            ProbeOpticalMediaState(letter);
+
+        changed |= SetCachedMediaState(
+            letter,
+            state);
     }
 
-    hr = SHGetFolderLocation(
+    if (changed) {
+        RefreshThisPc(thisPcPidl);
+    }
+}
+
+static void ProcessPendingInsertions(
+    HWND hwnd,
+    PIDLIST_ABSOLUTE thisPcPidl
+) {
+    DWORD pending = g_pendingInsertMask;
+    bool refresh = false;
+
+    for (WCHAR letter = L'A';
+         letter <= L'Z';
+         letter++) {
+        DWORD bit = LetterBit(letter);
+
+        if (!(pending & bit)) {
+            continue;
+        }
+
+        int index = letter - L'A';
+
+        WCHAR root[4];
+        MakeRootPath(letter, root);
+
+        if (GetDriveTypeW(root) != DRIVE_CDROM) {
+            g_pendingInsertMask &= ~bit;
+            g_retryAttempts[index] = 0;
+            refresh |= SetOpticalDrivePresent(
+                letter,
+                false);
+            refresh |= SetCachedMediaState(
+                letter,
+                MediaState::Unknown);
+            continue;
+        }
+
+        SetOpticalDrivePresent(letter, true);
+
+        MediaState state =
+            ProbeOpticalMediaState(letter);
+
+        if (state == MediaState::Present) {
+            g_pendingInsertMask &= ~bit;
+            g_retryAttempts[index] = 0;
+
+            refresh |= SetCachedMediaState(
+                letter,
+                MediaState::Present);
+            continue;
+        }
+
+        if (++g_retryAttempts[index] >=
+            kMaxRetryAttempts) {
+            g_pendingInsertMask &= ~bit;
+            g_retryAttempts[index] = 0;
+
+            refresh |= SetCachedMediaState(
+                letter,
+                state);
+        }
+    }
+
+    if (!g_pendingInsertMask) {
+        KillTimer(hwnd, kRetryTimerId);
+    }
+
+    if (refresh) {
+        RefreshThisPc(thisPcPidl);
+    }
+}
+
+static void HandleVolumeDeviceChange(
+    HWND hwnd,
+    WPARAM eventType,
+    LPARAM lParam,
+    PIDLIST_ABSOLUTE thisPcPidl
+) {
+    if (!lParam) {
+        return;
+    }
+
+    auto* header =
+        reinterpret_cast<const DEV_BROADCAST_HDR*>(
+            lParam);
+
+    if (header->dbch_devicetype !=
+        DBT_DEVTYP_VOLUME) {
+        return;
+    }
+
+    auto* volume =
+        reinterpret_cast<const DEV_BROADCAST_VOLUME*>(
+            lParam);
+
+    DWORD mask = volume->dbcv_unitmask;
+    bool refresh = false;
+
+    for (WCHAR letter = L'A';
+         letter <= L'Z';
+         letter++) {
+        DWORD bit = LetterBit(letter);
+
+        if (!(mask & bit) ||
+            !IsManagedLetter(letter)) {
+            continue;
+        }
+
+        WCHAR root[4];
+        MakeRootPath(letter, root);
+
+        if (eventType == DBT_DEVICEARRIVAL) {
+            if (GetDriveTypeW(root) !=
+                DRIVE_CDROM) {
+                continue;
+            }
+
+            refresh |= SetOpticalDrivePresent(
+                letter,
+                true);
+
+            Wh_Log(
+                L"%c: WM_DEVICECHANGE arrival%s",
+                letter,
+                (volume->dbcv_flags & DBTF_MEDIA)
+                    ? L" (media)"
+                    : L"");
+
+            MediaState state =
+                ProbeOpticalMediaState(letter);
+
+            if (state == MediaState::Present) {
+                g_pendingInsertMask &= ~bit;
+                g_retryAttempts[
+                    letter - L'A'] = 0;
+
+                refresh |= SetCachedMediaState(
+                    letter,
+                    MediaState::Present);
+            } else {
+                StartInsertionRetry(
+                    hwnd,
+                    letter);
+            }
+        } else if (
+            eventType ==
+            DBT_DEVICEREMOVECOMPLETE) {
+            bool stillOptical =
+                GetDriveTypeW(root) ==
+                DRIVE_CDROM;
+
+            if (stillOptical) {
+                Wh_Log(
+                    L"%c: WM_DEVICECHANGE removal%s",
+                    letter,
+                    (volume->dbcv_flags &
+                     DBTF_MEDIA)
+                        ? L" (media)"
+                        : L"");
+
+                g_pendingInsertMask &= ~bit;
+                g_retryAttempts[
+                    letter - L'A'] = 0;
+
+                refresh |=
+                    SetOpticalDrivePresent(
+                        letter,
+                        true);
+
+                refresh |=
+                    SetCachedMediaState(
+                        letter,
+                        MediaState::Empty);
+            } else if (
+                IsCachedOpticalDrive(letter)) {
+                g_pendingInsertMask &= ~bit;
+                g_retryAttempts[
+                    letter - L'A'] = 0;
+
+                refresh |=
+                    SetOpticalDrivePresent(
+                        letter,
+                        false);
+
+                refresh |=
+                    SetCachedMediaState(
+                        letter,
+                        MediaState::Unknown);
+            }
+        }
+    }
+
+    if (refresh) {
+        RefreshThisPc(thisPcPidl);
+    }
+}
+
+static LRESULT CALLBACK
+NotificationWindowSubclassProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    UINT_PTR,
+    DWORD_PTR refData
+) {
+    auto thisPcPidl =
+        reinterpret_cast<PIDLIST_ABSOLUTE>(
+            refData);
+
+    switch (message) {
+        case WM_DEVICECHANGE:
+            if (wParam == DBT_DEVICEARRIVAL ||
+                wParam ==
+                    DBT_DEVICEREMOVECOMPLETE) {
+                HandleVolumeDeviceChange(
+                    hwnd,
+                    wParam,
+                    lParam,
+                    thisPcPidl);
+            }
+            return TRUE;
+
+        case WM_TIMER:
+            if (wParam == kRetryTimerId) {
+                ProcessPendingInsertions(
+                    hwnd,
+                    thisPcPidl);
+                return 0;
+            }
+            break;
+
+        case kMsgInitialScan:
+            InitialScan(thisPcPidl);
+            return 0;
+
+        case kMsgRefreshThisPc:
+            RefreshThisPc(thisPcPidl);
+            return 0;
+
+        case kMsgShutdown:
+            KillTimer(hwnd, kRetryTimerId);
+            RefreshThisPc(thisPcPidl);
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_CLOSE:
+            KillTimer(hwnd, kRetryTimerId);
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(
+                hwnd,
+                NotificationWindowSubclassProc,
+                1);
+            g_notificationWindow.store(nullptr, std::memory_order_release);
+            PostQuitMessage(0);
+            break;
+    }
+
+    return DefSubclassProc(
+        hwnd,
+        message,
+        wParam,
+        lParam);
+}
+
+static DWORD WINAPI NotificationThreadProc(void*) {
+    MSG msg = {};
+    PeekMessageW(
+        &msg,
         nullptr,
-        CSIDL_DRIVES,
-        nullptr,
+        WM_USER,
+        WM_USER,
+        PM_NOREMOVE);
+
+    PIDLIST_ABSOLUTE thisPcPidl = nullptr;
+
+    HRESULT hr = SHGetKnownFolderIDList(
+        FOLDERID_ComputerFolder,
         0,
-        &g_thisPcPidl);
-
-    if (FAILED(hr) || !g_thisPcPidl) {
-        Wh_Log(
-            L"SHGetFolderLocation(CSIDL_DRIVES) failed: 0x%08X",
-            hr);
-        desktop->Release();
-        return false;
-    }
-
-    IShellFolder* thisPcFolder = nullptr;
-
-    hr = desktop->BindToObject(
-        g_thisPcPidl,
         nullptr,
-        __uuidof(IShellFolder),
-        reinterpret_cast<void**>(&thisPcFolder));
+        &thisPcPidl);
 
-    desktop->Release();
+    if (FAILED(hr) || !thisPcPidl) {
+        Wh_Log(
+            L"SHGetKnownFolderIDList failed: 0x%08X",
+            hr);
+        g_notificationThreadReady.store(false, std::memory_order_release);
+        SetEvent(g_notificationReadyEvent);
+        return 1;
+    }
 
-    if (FAILED(hr) || !thisPcFolder) {
-        Wh_Log(L"BindToObject(This PC) failed: 0x%08X", hr);
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW |
+            WS_EX_NOACTIVATE,
+        L"STATIC",
+        L"",
+        WS_POPUP,
+        0,
+        0,
+        0,
+        0,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr);
+
+    if (!hwnd) {
+        Wh_Log(
+            L"Notification window creation failed: %u",
+            GetLastError());
+        CoTaskMemFree(thisPcPidl);
+        g_notificationThreadReady.store(false, std::memory_order_release);
+        SetEvent(g_notificationReadyEvent);
+        return 1;
+    }
+
+    if (!SetWindowSubclass(
+            hwnd,
+            NotificationWindowSubclassProc,
+            1,
+            reinterpret_cast<DWORD_PTR>(
+                thisPcPidl))) {
+        Wh_Log(
+            L"Notification window subclass failed: %u",
+            GetLastError());
+        DestroyWindow(hwnd);
+        CoTaskMemFree(thisPcPidl);
+        g_notificationThreadReady.store(false, std::memory_order_release);
+        SetEvent(g_notificationReadyEvent);
+        return 1;
+    }
+
+    g_notificationWindow.store(hwnd, std::memory_order_release);
+    g_notificationThreadReady.store(true, std::memory_order_release);
+    SetEvent(g_notificationReadyEvent);
+
+    PostMessageW(
+        hwnd,
+        kMsgInitialScan,
+        0,
+        0);
+
+    while (GetMessageW(
+               &msg,
+               nullptr,
+               0,
+               0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    CoTaskMemFree(thisPcPidl);
+    return 0;
+}
+
+static DWORD LoadManagedMask() {
+    WindhawkUtils::StringSetting letters =
+        WindhawkUtils::StringSetting::make(
+            L"driveLetters");
+
+    DWORD mask = 0;
+
+    for (size_t i = 0;
+         letters.get()[i];
+         i++) {
+        WCHAR ch =
+            static_cast<WCHAR>(
+                towupper(letters.get()[i]));
+
+        if (ch >= L'A' &&
+            ch <= L'Z') {
+            mask |= LetterBit(ch);
+        }
+    }
+
+    return mask
+        ? mask
+        : 0x03FFFFFFu;
+}
+
+static bool HookDrivesViewShouldShow() {
+    HMODULE shell32 =
+        LoadLibraryExW(
+            L"shell32.dll",
+            nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (!shell32) {
+        Wh_Log(
+            L"Failed to load shell32.dll: %u",
+            GetLastError());
         return false;
     }
 
-    void** vtable =
-        *reinterpret_cast<void***>(thisPcFolder);
+    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                L"public: virtual long __cdecl "
+                L"CDrivesViewCallback::ShouldShow("
+                L"struct IShellFolder *,"
+                L"struct _ITEMIDLIST_ABSOLUTE const *,"
+                L"struct _ITEMID_CHILD const __unaligned *)"
+            },
+            &CDrivesViewCallback_ShouldShow_Original,
+            CDrivesViewCallback_ShouldShow_Hook,
+            false
+        },
+    };
 
-    bool hooked = Wh_SetFunctionHook(
-        vtable[4], // IShellFolder::EnumObjects
-        reinterpret_cast<void*>(EnumObjects_Hook),
-        reinterpret_cast<void**>(&g_EnumObjectsOriginal));
+    return WindhawkUtils::HookSymbols(
+        shell32,
+        hooks,
+        ARRAYSIZE(hooks));
+}
 
-    if (g_settings.verboseLogging) {
-        Wh_Log(
-            L"This PC EnumObjects hook: function=%p hooked=%d",
-            vtable[4],
-            hooked);
+static void StopNotificationThread(bool restoreView) {
+    if (!g_notificationThread) {
+        return;
     }
 
-    thisPcFolder->Release();
-    return hooked;
+    HWND hwnd =
+        g_notificationWindow.load(
+            std::memory_order_acquire);
+
+    if (hwnd) {
+        if (restoreView) {
+            PostMessageW(
+                hwnd,
+                kMsgShutdown,
+                0,
+                0);
+        } else {
+            PostMessageW(
+                hwnd,
+                WM_CLOSE,
+                0,
+                0);
+        }
+    } else if (g_notificationThreadId) {
+        while (!PostThreadMessageW(
+                    g_notificationThreadId,
+                    WM_QUIT,
+                    0,
+                    0) &&
+               WaitForSingleObject(
+                   g_notificationThread,
+                   50) ==
+                   WAIT_TIMEOUT) {
+        }
+    }
+
+    WaitForSingleObject(
+        g_notificationThread,
+        INFINITE);
+
+    CloseHandle(g_notificationThread);
+    g_notificationThread = nullptr;
+    g_notificationThreadId = 0;
+    g_notificationWindow.store(
+        nullptr,
+        std::memory_order_release);
+    g_pendingInsertMask = 0;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Hide Empty Optical Drives v1.0.0");
+    Wh_Log(
+        L"Initializing Hide Empty Optical Drives");
 
-    LoadSettings();
-
-    HRESULT coHr =
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
-    bool uninitializeCom =
-        coHr == S_OK || coHr == S_FALSE;
-
-    bool hooked = HookThisPcEnumObjects();
-
-    if (uninitializeCom) {
-        CoUninitialize();
+    for (auto& state : g_mediaState) {
+        state.store(
+            static_cast<LONG>(
+                MediaState::Unknown),
+            std::memory_order_relaxed);
     }
 
-    if (!hooked) {
-        Wh_Log(L"Failed to hook This PC EnumObjects");
+    g_opticalMask.store(
+        0,
+        std::memory_order_relaxed);
+
+    g_managedMask.store(
+        LoadManagedMask(),
+        std::memory_order_release);
+
+    g_enabled.store(
+        true,
+        std::memory_order_release);
+
+    g_notificationReadyEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
+
+    if (!g_notificationReadyEvent) {
+        Wh_Log(
+            L"CreateEvent failed: %u",
+            GetLastError());
         return FALSE;
     }
 
-    EnumWindows(EnumExplorerWindowsProc, 0);
-
-    g_windowCreateHook = SetWinEventHook(
-        EVENT_OBJECT_CREATE,
-        EVENT_OBJECT_CREATE,
-        nullptr,
-        WindowCreateWinEventProc,
-        GetCurrentProcessId(),
-        0,
-        WINEVENT_OUTOFCONTEXT);
-
-    if (!g_windowCreateHook) {
-        Wh_Log(
-            L"SetWinEventHook failed: %u",
-            GetLastError());
-    }
-
-    g_notificationThread = CreateThread(
-        nullptr,
-        0,
-        NotificationThreadProc,
-        nullptr,
-        0,
-        &g_notificationThreadId);
+    g_notificationThread =
+        CreateThread(
+            nullptr,
+            0,
+            NotificationThreadProc,
+            nullptr,
+            0,
+            &g_notificationThreadId);
 
     if (!g_notificationThread) {
         Wh_Log(
-            L"CreateThread(notification) failed: %u",
+            L"CreateThread failed: %u",
             GetLastError());
+        CloseHandle(
+            g_notificationReadyEvent);
+        g_notificationReadyEvent =
+            nullptr;
         return FALSE;
+    }
+
+    WaitForSingleObject(
+        g_notificationReadyEvent,
+        INFINITE);
+
+    CloseHandle(
+        g_notificationReadyEvent);
+    g_notificationReadyEvent =
+        nullptr;
+
+    if (!g_notificationThreadReady.load(
+            std::memory_order_acquire)) {
+        StopNotificationThread(false);
+        return FALSE;
+    }
+
+    if (!HookDrivesViewShouldShow()) {
+        Wh_Log(
+            L"Failed to hook "
+            L"CDrivesViewCallback::ShouldShow");
+        StopNotificationThread(false);
+        return FALSE;
+    }
+
+    HWND hwnd =
+        g_notificationWindow.load(
+            std::memory_order_acquire);
+
+    if (hwnd) {
+        PostMessageW(
+            hwnd,
+            kMsgRefreshThisPc,
+            0,
+            0);
     }
 
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    g_managedMask.store(
+        LoadManagedMask(),
+        std::memory_order_release);
 
-    ZeroMemory(
-        g_decisionLogState,
-        sizeof(g_decisionLogState));
-    ZeroMemory(g_lastArrivalTick, sizeof(g_lastArrivalTick));
-    ZeroMemory(g_lastRemovalTick, sizeof(g_lastRemovalTick));
+    HWND hwnd =
+        g_notificationWindow.load(
+            std::memory_order_acquire);
+
+    if (hwnd) {
+        PostMessageW(
+            hwnd,
+            kMsgInitialScan,
+            0,
+            0);
+
+        // A settings change can alter visibility even when media state
+        // itself did not change.
+        PostMessageW(
+            hwnd,
+            kMsgRefreshThisPc,
+            0,
+            0);
+    }
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Hide Empty Optical Drives v1.0.0");
+    Wh_Log(
+        L"Uninitializing Hide Empty Optical Drives");
 
-    if (g_windowCreateHook) {
-        UnhookWinEvent(g_windowCreateHook);
-        g_windowCreateHook = nullptr;
-    }
+    // Make the hook pass through immediately. The notification thread then
+    // refreshes This PC before it exits, restoring items hidden by the mod.
+    g_enabled.store(
+        false,
+        std::memory_order_release);
 
-    if (g_notificationWindow) {
-        PostMessageW(
-            g_notificationWindow,
-            WM_CLOSE,
-            0,
-            0);
-    } else if (g_notificationThreadId) {
-        PostThreadMessageW(
-            g_notificationThreadId,
-            WM_QUIT,
-            0,
-            0);
-    }
-
-    if (g_notificationThread) {
-        WaitForSingleObject(g_notificationThread, 3000);
-        CloseHandle(g_notificationThread);
-        g_notificationThread = nullptr;
-    }
-
-    g_notificationThreadId = 0;
-    g_notificationWindow = nullptr;
-    g_pendingInsertMask = 0;
-
-    ZeroMemory(g_retryAttempts, sizeof(g_retryAttempts));
-    ZeroMemory(g_lastArrivalTick, sizeof(g_lastArrivalTick));
-    ZeroMemory(g_lastRemovalTick, sizeof(g_lastRemovalTick));
-    ZeroMemory(
-        g_decisionLogState,
-        sizeof(g_decisionLogState));
-
-    if (g_thisPcPidl) {
-        CoTaskMemFree(g_thisPcPidl);
-        g_thisPcPidl = nullptr;
-    }
+    StopNotificationThread(true);
 }
