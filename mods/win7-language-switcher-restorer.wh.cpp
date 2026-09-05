@@ -2,7 +2,7 @@
 // @id             win7-language-switcher-restorer
 // @name           Windows 7/8.1 Language Switcher Restorer
 // @description    This mod restores the classic Windows 7 and Windows 8.1 language switcher on Windows 10 and 11
-// @version        1.0.0
+// @version        1.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -16,7 +16,7 @@
 
 ## About
 
-This mod restores the classic **Windows 7 and 8.1 language switcher** on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.
+This mod tries to restore the classic **Windows 7 and 8.1 language switcher** on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.
 
 **Important**: This is a **best-effort visual and functional recreation**. The mod intercepts clicks on the taskbar language indicator, as well as the **Win+Space** and **Alt+Shift / Ctrl+Shift** keyboard shortcuts, replacing the modern Windows 10/11 flyout with a recreation of the Windows 7/8.1 one. It is important to note that this mod **does not replace the modern Windows language switcher for elevated windows**.
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.
