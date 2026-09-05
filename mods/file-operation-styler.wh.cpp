@@ -8064,67 +8064,63 @@ namespace
 
         WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
-                {LR"(?_CreateTileElement@COperationStatusTile@@AEAAJKKPEAVElement@DirectUI@@@Z)"},
+                {LR"(private: long __cdecl COperationStatusTile::_CreateTileElement(unsigned long,unsigned long,class DirectUI::Element *))"},
                 &targets->createTileElement,
                 nullptr,
                 false,
             },
             {
-                {LR"(?ProgressPositionProp@OperationTileElement@@SAPEBUPropertyInfo@DirectUI@@XZ)"},
+                {LR"(public: static struct DirectUI::PropertyInfo const * __cdecl OperationTileElement::ProgressPositionProp(void))"},
                 &targets->progressPositionProp,
                 nullptr,
                 false,
             },
             {
-                {LR"(?_GetProgressHWND@OperationTileElement@@AEAAPEAUHWND__@@XZ)"},
+                {LR"(private: struct HWND__ * __cdecl OperationTileElement::_GetProgressHWND(void))"},
                 &targets->getProgressHWND,
                 nullptr,
                 false,
             },
             {
-                {LR"(?OnPropertyChanged@OperationTileElement@@UEAAXPEBUPropertyInfo@DirectUI@@HPEAVValue@3@1@Z)"},
+                {LR"(public: virtual void __cdecl OperationTileElement::OnPropertyChanged(struct DirectUI::PropertyInfo const *,int,class DirectUI::Value *,class DirectUI::Value *))"},
                 &targets->onPropertyChanged,
                 nullptr,
                 false,
             },
             {
-                {LR"(??1OperationTileElement@@UEAA@XZ)"},
+                {LR"(public: virtual __cdecl OperationTileElement::~OperationTileElement(void))"},
                 &targets->operationTileDestructor,
                 nullptr,
                 false,
             },
             {
-                {LR"(?_UpdateRemainingItemsAndSize@COperationStatusTile@@AEAAJ_K000@Z)"},
+                {LR"(private: long __cdecl COperationStatusTile::_UpdateRemainingItemsAndSize(unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64))"},
                 &targets->updateRemainingItemsAndSize,
                 nullptr,
                 false,
             },
             {
-                {LR"(?_UpdateSummary@COperationStatusTile@@AEAAJPEBG@Z)"},
+                {LR"(private: long __cdecl COperationStatusTile::_UpdateSummary(unsigned short const *))"},
                 &targets->updateSummary,
                 nullptr,
                 false,
             },
             {
-                {LR"(?SetTileDisplayMode@COperationStatusTile@@UEAAJ_N@Z)"},
+                {LR"(public: virtual long __cdecl COperationStatusTile::SetTileDisplayMode(bool))"},
                 &targets->setTileDisplayMode,
                 nullptr,
                 false,
             },
             {
-                {LR"(?_CalculateRate@COperationStatusTileRateCalculator@@AEAAN_K000000PEAN@Z)"},
+                {LR"(private: double __cdecl COperationStatusTileRateCalculator::_CalculateRate(unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,double *))"},
                 &targets->calculateRate,
                 nullptr,
                 false,
             },
         };
 
-        WH_HOOK_SYMBOLS_OPTIONS options{};
-        options.optionsSize = sizeof(options);
-
         if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
-                                        ARRAYSIZE(shell32DllHooks),
-                                        &options) ||
+                                        ARRAYSIZE(shell32DllHooks)) ||
             !targets->createTileElement || !targets->progressPositionProp ||
             !targets->getProgressHWND || !targets->onPropertyChanged ||
             !targets->operationTileDestructor ||
