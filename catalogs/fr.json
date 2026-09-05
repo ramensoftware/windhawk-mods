@@ -5996,7 +5996,7 @@
           9
         ],
         "ratingUsers": 9,
-        "updated": 1788290706000,
+        "updated": 1788621176000,
         "users": 110
       },
       "metadata": {
@@ -6006,12 +6006,12 @@
         "author": "meteoni",
         "compilerOptions": "-luser32",
         "description": "Removes the long pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "name": "Faster Virtual Desktop Switching",
-        "version": "1.0"
+        "version": "1.0.1"
       }
     },
     "favorites-in-navpane": {
@@ -8827,7 +8827,7 @@
           10
         ],
         "ratingUsers": 10,
-        "updated": 1788112306000,
+        "updated": 1788621181000,
         "users": 44
       },
       "metadata": {
@@ -8837,13 +8837,13 @@
         "author": "meteoni",
         "compilerOptions": "-lole32 -loleaut32 -luuid -ldwmapi -lversion -lgdi32 -ladvapi32",
         "description": "Lightweight, low-cortisol window manager with true per-virtual-desktop layouts.",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "MultiWM",
-        "version": "1.13.19"
+        "version": "1.13.20"
       }
     },
     "mutealert": {
@@ -10413,7 +10413,7 @@
           0
         ],
         "ratingUsers": 1,
-        "updated": 1788287216000,
+        "updated": 1788621188000,
         "users": 59
       },
       "metadata": {
@@ -10423,12 +10423,12 @@
         "author": "meteoni",
         "compilerOptions": "-lole32",
         "description": "Summon existing windows to the current virtual desktop instead of pulling you away.",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "name": "Don't Pull Me to Another Desktop",
-        "version": "0.4.0"
+        "version": "0.4.1"
       }
     },
     "prevista-explorer-statusbar": {
@@ -12082,19 +12082,19 @@
           15
         ],
         "ratingUsers": 16,
-        "updated": 1786003189000,
+        "updated": 1788621194000,
         "users": 1141
       },
       "metadata": {
         "author": "meteoni",
         "compilerOptions": "-ladvapi32 -lntdll",
         "description": "Removes the delay Windows applies to startup applications after sign-in",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "name": "Startup App Delay Fix",
-        "version": "1.4"
+        "version": "1.4.1"
       }
     },
     "suppress-run-box-error-message": {
@@ -13173,7 +13173,7 @@
           40
         ],
         "ratingUsers": 45,
-        "updated": 1788370166000,
+        "updated": 1788621200000,
         "users": 654
       },
       "metadata": {
@@ -13183,13 +13183,13 @@
         "author": "meteoni",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi -lwindowscodecs",
         "description": "Create tracked icon separators with configurable padding on the taskbar.",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Icon Separators",
-        "version": "1.0.32"
+        "version": "1.0.33"
       }
     },
     "taskbar-icon-size": {
@@ -14317,7 +14317,7 @@
           14
         ],
         "ratingUsers": 16,
-        "updated": 1776269854000,
+        "updated": 1788621205000,
         "users": 418
       },
       "metadata": {
@@ -14327,12 +14327,12 @@
         "author": "meteoni",
         "compilerOptions": "-lcomctl32",
         "description": "Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Z-Order Override",
-        "version": "0.8"
+        "version": "0.8.1"
       }
     },
     "taskmgr-esc": {
@@ -15723,7 +15723,7 @@
           5
         ],
         "ratingUsers": 5,
-        "updated": 1786194174000,
+        "updated": 1788621211000,
         "users": 179
       },
       "metadata": {
@@ -15733,12 +15733,12 @@
         "author": "meteoni",
         "compilerOptions": "-lcomctl32 -lshcore",
         "description": "Set a custom size and position for the new Widget Board on Windows 11.",
-        "github": "https://github.com/Meteony",
+        "github": "https://github.com/Meteoni",
         "include": [
           "WidgetBoard.exe"
         ],
         "name": "Widget Board Size and Position",
-        "version": "0.1"
+        "version": "0.1.1"
       }
     },
     "win-d-per-monitor": {

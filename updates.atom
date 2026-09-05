@@ -2,12 +2,110 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-04T22:02:35.000Z</updated>
+    <updated>2026-09-05T15:13:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Widget Board Size and Position 0.1.1]]></title>
+        <id>https://windhawk.net/mods/widget-board-size-position#f157de8be1492b6a69025eda9e8a22f5caad47b7</id>
+        <link href="https://windhawk.net/mods/widget-board-size-position"/>
+        <updated>2026-09-05T15:13:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Z-Order Override 0.8.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-z-order-override#47bd3790bfa3878f9eaba84661f0cbc623f1c2b7</id>
+        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
+        <updated>2026-09-05T15:13:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.33]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-separators#821a5dc751f6f7a2f74dbf5043556d3b9dbc7c93</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
+        <updated>2026-09-05T15:13:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Startup App Delay Fix 1.4.1]]></title>
+        <id>https://windhawk.net/mods/startup-app-delay-fix#5dfb0c9fddff47dafe0638de29216812c5b21bee</id>
+        <link href="https://windhawk.net/mods/startup-app-delay-fix"/>
+        <updated>2026-09-05T15:13:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Don't Pull Me to Another Desktop 0.4.1]]></title>
+        <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#4edd57ac998c0a1d0da4cad434a068b7ba8e8f31</id>
+        <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
+        <updated>2026-09-05T15:13:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.13.20]]></title>
+        <id>https://windhawk.net/mods/multiwm#de3547deee4febfd63a689621a62b6167c23de5f</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-09-05T15:13:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0.1]]></title>
+        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#b7df6a5c2e3bb491dce85d8fe5bc65040f8d91a0</id>
+        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
+        <updated>2026-09-05T15:12:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
+<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.3.9]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#c34a28655b833d318fb47fc08d8ec2c5ef939b8c</id>
@@ -410,250 +508,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 3.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#4bc0c8b1cc92febe0bdadacb4330bb09d8669550</id>
-        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
-        <updated>2026-09-02T17:27:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added "In-place Personalization navigation" setting to keep "Desktop Background" and "Window Color" inside the Control Panel window</li>
-<li>Restored the iSCSi Initiator applet</li>
-<li>Restored the Game Controllers applet</li>
-<li>Restored the Personalization category view links</li>
-<li>Simplified the code</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.0.1]]></title>
-        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#e01d0d0dbd6204804235831fd7f68821e4614028</id>
-        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
-        <updated>2026-09-01T20:53:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizerplus">Desktop Audio Visualizer Plus</h1>
-<p>Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.</p>
-<h2 id="features">Features</h2>
-<h3 id="audio">Audio</h3>
-<ul>
-<li>WASAPI loopback capture for system audio</li>
-<li>Optional per-application audio source</li>
-<li>1024-point FFT</li>
-<li>32 logarithmic frequency bands</li>
-<li>10-band custom EQ curve applied across the FFT bands ( Win 11 )</li>
-<li>Up to 256 rendered visual bars</li>
-<li>Auto-Gain normalization</li>
-<li>Attack / decay controls</li>
-<li>Optional CAVA-style smoothing</li>
-</ul>
-<h3 id="visualization">Visualization</h3>
-<ul>
-<li>Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types</li>
-<li>Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles</li>
-<li>Linear, Step, Cosine and Catmull-Rom interpolation</li>
-<li>Vertical and horizontal orientations</li>
-<li>Mirrored visualization pass</li>
-<li>Configurable bar count, width, spacing, height and corner radius</li>
-<li>Circular radius and start-angle controls</li>
-</ul>
-<h3 id="appearance">Appearance</h3>
-<ul>
-<li>Solid colors and gradients</li>
-<li>Album-derived colors and album gradients</li>
-<li>Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering</li>
-<li>Configurable opacity and dynamic opacity curves</li>
-<li>Dynamic color curves</li>
-<li>Bar borders with visualizer, album and custom hex colors</li>
-<li>Optional visualizer backgrounds: solid, gradient, album color and album gradient</li>
-</ul>
-<h3 id="lyrics">Lyrics</h3>
-<p>Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.</p>
-<p>The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.</p>
-<h2 id="lyricsdatasource">Lyrics data source</h2>
-<p>When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.</p>
-<h2 id="customeqwin11">Custom EQ ( Win 11 )</h2>
-<p>The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.</p>
-<h2 id="performance">Performance</h2>
-<p>The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.</p>
-<p>The visualizer frame rate can be configured independently. A value of <code>0</code> removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.</p>
-<p>Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.</p>
-<hr />
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/IOwofqV.png" alt="eq" /></p>
-<p><img src="https://i.imgur.com/TU0iXkc.gif" alt="1" /></p>
-<p><img src="https://i.imgur.com/8NllN1h.gif" alt="2" /></p>
-<p><img src="https://i.imgur.com/VNz6GOi.gif" alt="3" /></p>
-<p><img src="https://i.imgur.com/aqXU5Fa.gif" alt="4" /></p>
-<hr />
-<h1 id="credits">Credits</h1>
-<ul>
-<li><strong>NeiZ</strong> — Author and maintainer.</li>
-<li><strong>SuperSmile123</strong> — Contributor.</li>
-<li><strong>Salyts</strong> — Reference / upstream desktop audio visualizer implementation.</li>
-<li><strong>GR0UD</strong> — Upstream audio capture / FFT implementation reference.</li>
-</ul>
-<hr />
-<h2 id="reportabug">Report a Bug</h2>
-<p>Please report bugs and feature requests through the repository issue tracker: <a href="https://github.com/NeiZqwe/windhawk-mods/issues">Report an Issue on GitHub</a></p>]]></content>
-        <author>
-            <name>NeiZ</name>
-            <uri>https://github.com/NeiZqwe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Language Switcher Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-language-switcher-restorer#bdc548be9cea54ede4520004188e7c0db2c4017d</id>
-        <link href="https://windhawk.net/mods/win7-language-switcher-restorer"/>
-        <updated>2026-09-01T20:53:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781languageswitcherrestorer">Windows 7/8.1 Language Switcher Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic <strong>Windows 7 and 8.1 language switcher</strong> on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.</p>
-<p><strong>Important</strong>: This is a <strong>best-effort visual and functional recreation</strong>. The mod intercepts clicks on the taskbar language indicator, as well as the <strong>Win+Space</strong> and <strong>Alt+Shift / Ctrl+Shift</strong> keyboard shortcuts, replacing the modern Windows 10/11 flyout with a fast, lightweight, classic switcher.</p>
-<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h2 id="windows7theme">Windows 7 Theme</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7language.PNG" alt="win7language.PNG" /></p>
-<h2 id="windows81theme">Windows 8.1 Theme</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8language.PNG" alt="win8language.PNG" /></p>
-<h2 id="mainfeatures">Main Features</h2>
-<ul>
-<li><strong>Two classic styles</strong>: selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.</li>
-<li><strong>Light and dark theme support</strong>: automatic adaptation to system colors and theme.</li>
-<li><strong>Quick dismissal</strong>: closes upon clicking outside or pressing Escape.</li>
-<li><strong>Translated into 27 languages</strong>: fully localized interface.</li>
-<li><strong>Win+Space cycling</strong>: holding Win and pressing Space cycles through layouts without popping up the Start Menu.</li>
-<li><strong>Alt+Shift and Ctrl+Shift support</strong>: fast switching with auto-repeat suppression and clean modifier sequence tracking.</li>
-<li><strong>Robust Multi-Threaded Architecture</strong>: modeled on win7-network-flyout-recreation for rock-solid stability and clean reloading.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
-        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
-        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
-        <updated>2026-09-01T19:25:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fastervirtualdesktopswitching">Faster Virtual Desktop Switching</h1>
-<p>Removes the long-standing pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif" alt="GIF" /></p>
-<p><em>Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10.</em></p>
-<p>Windows 11 can synchronously request a full-monitor-sized wallpaper thumbnail
-before beginning a virtual desktop transition. On a high-DPI display with specific wallpaper
-configurations, that request can take roughly 136-169 ms when warm and more than one second 
-when cold (exact figure depends).</p>
-<p>This mod caps that request to the maximum size documented for <code>IThumbnailCache</code>, which is 
-1024 pixels. In testing, that netted a latency reduction of ~150ms, effectively eliminating 
-the long-standing pre-animation stutter issue. </p>
-<p>Laptop users who use three- or four-finger swipe gestures can especially benefit from this mod.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
-        <link href="https://windhawk.net/mods/explorer-info-bar"/>
-        <updated>2026-09-01T19:19:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerinfobar">Explorer Info Bar+</h1>
-<p>A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.</p>
-<p>Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.</p>
-<p>Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png" alt="Explorer Info Bar+ preview" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Drive free-space information</li>
-<li>Current folder content summary</li>
-<li>Folder count</li>
-<li>File count</li>
-<li>Immediate file size total</li>
-<li>Selection information</li>
-<li>Selected folders</li>
-<li>Selected files</li>
-<li>Selected file size</li>
-<li>Single-file details when available</li>
-<li>Real file extension</li>
-<li>Image resolution</li>
-<li>Video resolution</li>
-<li>Media duration</li>
-<li>Three display styles</li>
-<li>Simple</li>
-<li>Flat panes</li>
-<li>Soft cards</li>
-<li>Configurable section order</li>
-<li>Individual section visibility controls</li>
-<li>Custom text and panel colors</li>
-<li>Automatic theme-derived colors by default</li>
-<li>Works with File Explorer's native status area rather than replacing Explorer itself</li>
-</ul>
-<h2 id="compatibilitywhythismodisseparate">Compatibility / Why this mod is separate</h2>
-<p>Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic <code>msctls_statusbar32</code>-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.</p>
-<p>Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.</p>
-<p>Explorer Info Bar+ paints over the native status-row text, including output from Explorer Status Bar Metadata. Do not enable Explorer Status Bar Metadata at the same time because its output will be covered. When Explorer Status Bar Metadata is not used, Explorer Info Bar+'s optional Single File Details can provide file extension, dimensions, and duration when available.</p>
-<h2 id="examples">Examples</h2>
-<p>Typical information shown by the mod:</p>
-<pre><code class="text language-text">Drive D: 150.7GB free
-Content: 15 folders / 25 files (77.2MB)
-Selected: 2 folders / 4 files (571KB)
-</code></pre>
-<p>When one file is selected, additional details can appear:</p>
-<pre><code class="text language-text">.jpg (4032×3024)
-.jpeg (6000×4000)
-.mp4 (1920×1080, 01:23:43)
-.mp3 (00:03:47)
-.doc
-.pdf
-</code></pre>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.7.0]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#691c1898c7f30d05c5f44e919692a0268fb815f1</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-09-01T18:59:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Identify the chevron by its class name plus AutomationId, independent of the  display language, and accept it only when exactly one element matches</li>
-<li>Restrict detection to tray elements, so no taskbar button can be matched by a keyword and invoked</li>
-<li>Do nothing instead of guessing the chevron by position when it cannot be identified; the guess is now an opt-in setting, off by default</li>
-<li>Cover the most common Windows display languages in the name fallback</li>
-<li>Add a "Hover delay" setting, so the flyout does not open when the cursor only brushes past the chevron</li>
-<li>Keep tray icon context menus usable: detect clicks that fall between polling ticks, and never collapse while a context menu is open</li>
-<li>Suppress the chevron tooltip whenever the cursor is on it, covering both "Show hidden icons" and "Hide", and with the taskbar on either edge</li>
-<li>Hide only tooltips owned by the taskbar process</li>
-<li>Do not treat an unrendered chevron as a hover target, which could turn the corner of the screen into a hotspot and make the flyout cycle</li>
-<li>Drive re-finding from the cursor instead of a fixed timer, with backoff on repeated failures, so an auto-hiding taskbar works immediately on reveal and a taskbar with no hidden icons costs almost nothing</li>
-<li>Scope the fullscreen check to the monitor the chevron is on</li>
-<li>Set per-monitor-v2 DPI awareness on the worker thread</li>
-<li>Document that the mod is Windows 11 only, and how to restore the keyword defaults</li>
-</ul>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Don't Pull Me to Another Desktop 0.4.0]]></title>
-        <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#a582b4e5a3122b2ecdd6a12150d45206ae93cb0c</id>
-        <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
-        <updated>2026-09-01T18:26:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed the mod.</li>
-<li>Changed the classifier to be rooted narrowly in CVirtualDesktopForegroundPolicy::ForegroundViewChanged, which offers better classification accuracy against normal user actions. </li>
-<li>Hardening against apps that briefly activate a pre-existing window before creating a new one.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>

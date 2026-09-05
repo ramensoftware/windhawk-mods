@@ -1,3 +1,8 @@
+## 1.0.33 ([Sep 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/821a5dc751f6f7a2f74dbf5043556d3b9dbc7c93/mods/taskbar-icon-separators.wh.cpp))
+
+* Updated the author's GitHub profile URL after the username changed from `Meteony` to `Meteoni`.
+* Updated screenshot and GIF URLs to use the renamed `Meteoni/meteoni-assets` repository.
+
 ## 1.0.32 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/02f079f671bc75ec5a452696bf2d3db712733079/mods/taskbar-icon-separators.wh.cpp))
 
 - Added arbitrary rotation support. You can now have cool backslashes on your taskbar (suggestion by @phntsm).
