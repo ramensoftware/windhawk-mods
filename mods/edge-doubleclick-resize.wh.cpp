@@ -47,7 +47,7 @@ edges natively.
 
 ## دبل كليك على حافة النافذة لتكبير العرض أو الطول
 
-- الحافة اليسرى أو اليمنى -> يكبّر العرض بالكامل (يبقى الطول كما هو). دبل كليك مرة ثانية على نفس الحافة يرجّع العرض السابق.
+- الحافة اليسرى أو اليمنى -> يكبّر العرض بالكامل (يبقى الطول كما هو). دبل كليك مرة ثانية يرجّع العرض السابق.
 - الحافة العلوية أو السفلية -> يُترك سلوك ويندوز الأصلي (تكبير/استعادة الطول) كما هو.
 - الزاوية -> يكبّر الاثنين معاً.
 */
@@ -64,36 +64,14 @@ DefWindowProcW_t DefWindowProcW_Original;
 using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_Original;
 
-using DefDlgProcW_t = decltype(&DefDlgProcW);
-DefDlgProcW_t DefDlgProcW_Original;
-
-using DefDlgProcA_t = decltype(&DefDlgProcA);
-DefDlgProcA_t DefDlgProcA_Original;
-
-using DefFrameProcW_t = decltype(&DefFrameProcW);
-DefFrameProcW_t DefFrameProcW_Original;
-
-using DefFrameProcA_t = decltype(&DefFrameProcA);
-DefFrameProcA_t DefFrameProcA_Original;
-
-// Remembers a window's horizontal bounds from just before a width
-// maximize, so a later double-click on the same edge can restore them
-// (mirroring the toggle behavior of Windows' native vertical maximize).
-// Stored per-window via SetPropW rather than a global map, since
-// DefWindowProc runs on whichever UI thread owns the window.
-struct PrevHorizontalRect {
-    int x;
-    int width;
-};
-
-constexpr wchar_t kPrevRectPropName[] = L"EdgeDoubleClickResizeWH_PrevRect";
-
-void CleanupPrevRectOnDestroy(HWND hWnd, UINT Msg) {
-    if (Msg == WM_NCDESTROY) {
-        auto* prev = (PrevHorizontalRect*)RemovePropW(hWnd, kPrevRectPropName);
-        delete prev;
-    }
-}
+// A saved width is always > 0 for any real window, so a missing or
+// zero property means "nothing saved". Storing the two ints directly
+// as property values (rather than a heap-allocated struct) means
+// there's nothing to free: the values die with the window, and any
+// leftover property from a previous mod instance/reload is just
+// harmless stale data instead of a dangling pointer.
+constexpr wchar_t kPrevXProp[] = L"EdgeDoubleClickResizeWH_PrevX";
+constexpr wchar_t kPrevWProp[] = L"EdgeDoubleClickResizeWH_PrevW";
 
 // Shared logic: inspects the hit-test code and resizes width and/or
 // height depending on which edge was double-clicked. Returns true if
@@ -113,7 +91,7 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     bool onTop    = (hit == HTTOPLEFT  || hit == HTTOPRIGHT);
     bool onBottom = (hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT);
 
-    if (!(onLeft || onRight || onTop || onBottom))
+    if (!(onLeft || onRight))
         return false; // Not an edge/corner we handle.
 
     // Skip maximized/minimized windows, and windows that aren't
@@ -189,38 +167,37 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     int newW = wr.right - wr.left;
     int newH = wr.bottom - wr.top;
 
-    if (onLeft || onRight) {
-        // Align the visible edges with the screen edges exactly,
-        // compensating for the invisible border.
-        int targetX = mi.rcWork.left - leftInset;
-        int targetW = (mi.rcWork.right + rightInset) - targetX;
+    // Align the visible edges with the screen edges exactly,
+    // compensating for the invisible border.
+    int targetX = mi.rcWork.left - leftInset;
+    int targetW = (mi.rcWork.right + rightInset) - targetX;
 
-        int curW = wr.right - wr.left;
-        const int tolerance = 2; // allow for rounding
-        bool alreadyAtTarget = abs(wr.left - targetX) <= tolerance &&
-                                abs(curW - targetW) <= tolerance;
+    int curW = wr.right - wr.left;
+    const int tolerance = 2; // allow for rounding
+    bool alreadyAtTarget = std::abs(wr.left - targetX) <= tolerance &&
+                            std::abs(curW - targetW) <= tolerance;
 
-        auto* prev = (PrevHorizontalRect*)GetPropW(hWnd, kPrevRectPropName);
+    int prevW = (int)(INT_PTR)GetPropW(hWnd, kPrevWProp);
 
-        if (alreadyAtTarget && prev) {
-            // Already width-maximized and we have prior bounds: toggle
-            // back to them, like the native vertical maximize does.
-            newX = prev->x;
-            newW = prev->width;
-            RemovePropW(hWnd, kPrevRectPropName);
-            delete prev;
-        } else {
-            // About to maximize the width: remember the current bounds
-            // so the next double-click on this edge can restore them.
-            if (!prev) {
-                prev = new PrevHorizontalRect();
-                SetPropW(hWnd, kPrevRectPropName, (HANDLE)prev);
-            }
-            prev->x = wr.left;
-            prev->width = curW;
-            newX = targetX;
-            newW = targetW;
-        }
+    if (alreadyAtTarget && prevW > 0) {
+        // Already width-maximized and we have prior bounds: toggle
+        // back to them, like the native vertical maximize does.
+        newX = (int)(INT_PTR)GetPropW(hWnd, kPrevXProp);
+        newW = prevW;
+        RemovePropW(hWnd, kPrevXProp);
+        RemovePropW(hWnd, kPrevWProp);
+    } else if (!alreadyAtTarget) {
+        // About to maximize the width: remember the current bounds so
+        // the next double-click on this edge can restore them. If the
+        // window already happens to sit at the target size with
+        // nothing saved, leave it alone rather than "maximizing" to
+        // the same rect and saving bounds nobody asked to restore.
+        SetPropW(hWnd, kPrevXProp, (HANDLE)(INT_PTR)wr.left);
+        SetPropW(hWnd, kPrevWProp, (HANDLE)(INT_PTR)curW);
+        newX = targetX;
+        newW = targetW;
+    } else {
+        return false; // Already at target, nothing saved: no-op.
     }
 
     if (onTop || onBottom) {
@@ -234,9 +211,12 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     return true; // Handled; caller should not call the original proc.
 }
 
+// Only DefWindowProcW/A need hooking. DefDlgProc and DefFrameProc both
+// fall through to DefWindowProc for unhandled messages, so resizable
+// dialogs and MDI frames are already covered through that path -
+// hooking them directly would only pre-empt those windows' own
+// message handling for no added coverage.
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
     if (Msg == WM_NCLBUTTONDBLCLK) {
         if (HandleEdgeDoubleClick(hWnd, wParam))
             return 0;
@@ -245,8 +225,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 }
 
 LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
     if (Msg == WM_NCLBUTTONDBLCLK) {
         if (HandleEdgeDoubleClick(hWnd, wParam))
             return 0;
@@ -254,63 +232,10 @@ LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     return DefWindowProcA_Original(hWnd, Msg, wParam, lParam);
 }
 
-// Resizable dialogs (options/find/preferences windows, etc.) route
-// unhandled messages through DefDlgProc instead of DefWindowProc.
-LRESULT WINAPI DefDlgProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
-    if (Msg == WM_NCLBUTTONDBLCLK) {
-        if (HandleEdgeDoubleClick(hWnd, wParam))
-            return 0;
-    }
-    return DefDlgProcW_Original(hWnd, Msg, wParam, lParam);
-}
-
-LRESULT WINAPI DefDlgProcA_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
-    if (Msg == WM_NCLBUTTONDBLCLK) {
-        if (HandleEdgeDoubleClick(hWnd, wParam))
-            return 0;
-    }
-    return DefDlgProcA_Original(hWnd, Msg, wParam, lParam);
-}
-
-// MDI frame windows route unhandled messages through DefFrameProc.
-// MDI children are WS_CHILD and already filtered out in
-// HandleEdgeDoubleClick, so DefMDIChildProc doesn't need a hook.
-LRESULT WINAPI DefFrameProcW_Hook(HWND hWnd, HWND hMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
-    if (Msg == WM_NCLBUTTONDBLCLK) {
-        if (HandleEdgeDoubleClick(hWnd, wParam))
-            return 0;
-    }
-    return DefFrameProcW_Original(hWnd, hMDIClient, Msg, wParam, lParam);
-}
-
-LRESULT WINAPI DefFrameProcA_Hook(HWND hWnd, HWND hMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    CleanupPrevRectOnDestroy(hWnd, Msg);
-
-    if (Msg == WM_NCLBUTTONDBLCLK) {
-        if (HandleEdgeDoubleClick(hWnd, wParam))
-            return 0;
-    }
-    return DefFrameProcA_Original(hWnd, hMDIClient, Msg, wParam, lParam);
-}
-
 BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook,
                                     &DefWindowProcW_Original);
     WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook,
                                     &DefWindowProcA_Original);
-    WindhawkUtils::SetFunctionHook(DefDlgProcW, DefDlgProcW_Hook,
-                                    &DefDlgProcW_Original);
-    WindhawkUtils::SetFunctionHook(DefDlgProcA, DefDlgProcA_Hook,
-                                    &DefDlgProcA_Original);
-    WindhawkUtils::SetFunctionHook(DefFrameProcW, DefFrameProcW_Hook,
-                                    &DefFrameProcW_Original);
-    WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook,
-                                    &DefFrameProcA_Original);
     return TRUE;
 }
