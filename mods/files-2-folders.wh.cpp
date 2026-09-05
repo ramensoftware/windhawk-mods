@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              files-2-folders
 // @name            Files 2 Folders
-// @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.5
+// @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), or Defolder to unpack folders back out, with a workaround hotkey for other file managers
+// @version         2.6.2
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomdlg32 -lgdi32 -luser32
+// @compilerOptions -lole32 -luuid -lshlwapi -lshell32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -83,21 +83,56 @@ top there.
 The **Operation** setting controls what happens to the selection:
 
 - **Move — fast** (default): uses `MoveFileExW` directly, which is essentially
-  instant for same-volume moves, but there's no progress bar, no **Ctrl+Z**
-  undo, and no UAC prompt if a destination needs admin rights (it just fails).
+  instant for same-volume moves, but there's no progress bar and no **Ctrl+Z**
+  undo. It also can't request administrator permission, so moving into a
+  protected location (Program Files, Windows) isn't possible — the mod says so
+  and points you at the other two modes.
 - **Move — safe**: routes moves through `IFileOperation` instead — that gives
-  you the standard Windows progress dialog, **Ctrl+Z undo**, UAC elevation
-  prompts for protected paths, and conflict-resolution dialogs, at the cost of
-  significantly slower operation on large selections.
+  you the standard Windows progress dialog, **Ctrl+Z undo**, conflict-resolution
+  dialogs, and the shell's own "You'll need to provide administrator permission"
+  prompt for protected paths, at the cost of significantly slower operation on
+  large selections. Note that when a move is carried out with administrator
+  permission, Windows doesn't record it on your undo stack, so **Ctrl+Z won't
+  undo that one** — the same as when Explorer itself elevates a move.
 - **Copy**: copies the selection into the subfolder via `IFileOperation`,
   leaving the originals in place. Same shell progress / undo / conflict UI as
   the safe move.
+
+## Defolder — the reverse operation
+**Defolder** is the fourth button in the dialog's Operation control. Instead of
+moving files *into* a new subfolder, it moves the contents of the folders you
+selected *out* into the folder you are browsing, and then offers to remove the
+folders that were left empty.
+
+It is **recursive**: files at any depth are pulled up to the top level, so the
+inner folder structure is discarded. Select a few folders, pick **Defolder**,
+and confirm the summary ("Move 47 files out of 3 folders...") — the subfolder
+mode options are greyed out while it is selected, because there is no
+destination to choose.
+
+Notes:
+
+- Only the folders in your selection are touched; any files you also selected
+  are ignored.
+- Folders are removed only if they actually end up empty. Anything that could
+  not be moved keeps its folder alive, so nothing is deleted with contents
+  still in it.
+- Junctions and symbolic links are skipped rather than followed, so a link
+  inside the selection can't pull in files from elsewhere.
+- The **Defolder: use the safe move engine** setting controls whether the files
+  move via the shell (Ctrl+Z undo, conflict prompts, permission prompts) or the
+  fast direct move (auto-renames collisions, cannot be undone).
+- **Ctrl+Z after a Defolder is only partial.** With the safe engine the file
+  moves are undoable, but removing the emptied folders is not — undo brings the
+  files back while the folder structure stays gone. The confirmation is asked
+  every time for this reason, including in silent mode.
 
 In copy mode the dialog options say "Copy" rather than "Move", so you can tell
 the configured operation at a glance.
 
 The dialog also has an **Operation** segmented control above the mode list —
-three buttons glued together (**Move - fast** / **Move - safe** / **Copy**),
+four buttons glued together (**Move - fast** / **Move - safe** / **Copy** /
+**Defolder**),
 the active one shown pressed/held down. Picking one changes the operation for
 just this one run, without touching the **Operation** setting — handy for a
 one-off copy, or a one-off progress-bar/undo-capable move, without changing
@@ -155,6 +190,11 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
     On (default): in "Fixed name" mode, if a folder of that name already exists, files are moved into it (e.g. everything goes into "archive").
     Off: a new numbered folder is created instead ("archive", "archive (2)", "archive (3)"…), the way Explorer numbers duplicates.
     Only affects the "Fixed name" mode. "By date" always creates a new numbered folder; "by name"/"by extension" always reuse.
+- defolderUseShell: true
+  $name: "Defolder: use the safe move engine"
+  $description: |-
+    On (default): Defolder moves files with the same Windows file-operation engine as "Move - safe", so you get Ctrl+Z undo, the "Replace or skip files?" prompt, and a permission prompt for protected locations.
+    Off: uses the fast direct move instead, which auto-renames collisions ("file (2).txt") and is quicker for very large folders, but cannot be undone.
 - showNestedPreview: true
   $name: "Fixed name: show nested-folder preview"
   $description: |-
@@ -199,13 +239,15 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   $name: "Operation"
   $description: |-
     What to do with the selected items:
-    Move - fast (default): instant same-volume rename via MoveFileExW — but no Ctrl+Z undo, no progress bar, and no prompt if a destination needs admin rights (it just fails).
-    Move - safe: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and a UAC prompt when needed. Noticeably slower, especially with hundreds of files.
+    Move - fast (default): instant same-volume rename via MoveFileExW — but no Ctrl+Z undo, no progress bar, and it can't move into locations that need administrator permission.
+    Move - safe: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and Windows' own permission prompt for protected locations. Noticeably slower, especially with hundreds of files. (A move carried out with administrator permission can't be undone with Ctrl+Z — Windows doesn't record it on your undo stack.)
     Copy: copies the items into the subfolder and leaves the originals in place (same shell progress / undo / conflict UI as the safe move).
+    Defolder: the reverse operation - moves the contents of the selected folders OUT into the folder you are browsing, then offers to remove the folders left empty. Recursive: files at any depth are pulled up to the top level and the inner folder structure is discarded.
   $options:
   - moveFast: "Move - fast (instant)"
   - moveSafe: "Move - safe (progress, Ctrl+Z undo)"
   - copy: "Copy (leave originals)"
+  - defolder: "Defolder (unpack folders)"
 - hotkeyEnabled: true
   $name: "Workaround for other programs"
   $description: |-
@@ -263,20 +305,34 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
-#include <windowsx.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <string>
 #include <vector>
-#include <algorithm>
+#include <cwctype>   // towupper (BuildHotkeyVk)
+#include <atomic>
 
 // Not pulled in by this toolchain's <windows.h>/<winuser.h> headers even
 // though it's a long-standing documented static-control style; define it
 // directly rather than bumping WINVER (which the PR validator disallows).
 #ifndef SS_END_ELLIPSIS
 #define SS_END_ELLIPSIS 0x00004000L
+#endif
+
+// Same story for the IFileOperation flags used by the "Move - safe" path.
+// FOFX_ADDUNDORECORD is the one that actually makes the operation undoable
+// with Ctrl+Z; without it IFileOperation records no undo information at all.
+#ifndef FOFX_ADDUNDORECORD
+#define FOFX_ADDUNDORECORD 0x20000000
+#endif
+// Lets the shell's own copy engine raise the elevation prompt and carry out the
+// operation elevated, instead of failing with ERROR_ACCESS_DENIED.
+#ifndef FOFX_SHOWELEVATIONPROMPT
+#define FOFX_SHOWELEVATIONPROMPT 0x00040000
 #endif
 
 // ============================================================
@@ -294,7 +350,8 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 // ============================================================
 static std::wstring LoadShell32String(UINT id, const wchar_t* fallback) {
     static HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr,
-                                             LOAD_LIBRARY_AS_DATAFILE);
+                                             LOAD_LIBRARY_AS_DATAFILE |
+                                             LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hShell32) {
         // LoadStringW with cchBufferMax == 0 returns a read-only pointer to the
         // resource and its length, avoiding a guess at the buffer size.
@@ -328,7 +385,7 @@ static const struct { const wchar_t* key; F2FMode mode; } kModeKeys[] = {
 static F2FMode ModeFromKey(const std::wstring& key) {
     for (auto& e : kModeKeys)
         if (key == e.key) return e.mode;
-    Wh_Log(L"Files2Folders: unknown defaultMode key '%s', using fixed", key.c_str());
+    Wh_Log(L"unknown defaultMode key '%s', using fixed", key.c_str());
     return MODE_FIXED_NAME;
 }
 
@@ -343,18 +400,24 @@ enum F2FOperation {
     F2F_MOVE_FAST = 0,
     F2F_MOVE_SAFE = 1,
     F2F_COPY      = 2,
+    // Not a destination-building operation like the three above: Defolder moves
+    // the *contents* of the selected folders up into the folder being browsed
+    // and then offers to remove the emptied folders. It ignores the subfolder
+    // mode radios entirely, which the dialog greys out while it is selected.
+    F2F_DEFOLDER  = 3,
 };
 
 static const struct { const wchar_t* key; F2FOperation op; } kOperationKeys[] = {
     { L"moveFast", F2F_MOVE_FAST },
     { L"moveSafe", F2F_MOVE_SAFE },
     { L"copy",     F2F_COPY },
+    { L"defolder", F2F_DEFOLDER },
 };
 
 static F2FOperation OperationFromKey(const std::wstring& key) {
     for (auto& e : kOperationKeys)
         if (key == e.key) return e.op;
-    Wh_Log(L"Files2Folders: unknown operation key '%s', using moveFast", key.c_str());
+    Wh_Log(L"unknown operation key '%s', using moveFast", key.c_str());
     return F2F_MOVE_FAST;
 }
 
@@ -364,6 +427,7 @@ static F2FOperation OperationFromKey(const std::wstring& key) {
 struct ModSettings {
     std::wstring defaultSubfolderName;
     bool fixedNameReuse;
+    bool defolderUseShell;
     bool showNestedPreview;
     bool showAddLevelButton;
     std::wstring dateFormat;
@@ -391,6 +455,7 @@ static void LoadSettings() {
     if (s) Wh_FreeStringSetting(s);
 
     g_settings.fixedNameReuse = Wh_GetIntSetting(L"fixedNameReuse") != 0;
+    g_settings.defolderUseShell = Wh_GetIntSetting(L"defolderUseShell") != 0;
     g_settings.showNestedPreview = Wh_GetIntSetting(L"showNestedPreview") != 0;
     g_settings.showAddLevelButton = Wh_GetIntSetting(L"showAddLevelButton") != 0;
 
@@ -432,10 +497,16 @@ static void LoadSettings() {
     g_settings.hotkeySilent = Wh_GetIntSetting(L"hotkeySilent") != 0;
 }
 
-static void RestartHotkeyThread();
+static void StartHotkeyThread();
+static void StopHotkeyThread();
 void Wh_ModSettingsChanged() {
+    // Stop the hotkey thread *before* rewriting g_settings: the low-level
+    // keyboard hook reads g_settings.hotkeyChar (BuildHotkeyVk,
+    // ModifiersMatchForLLHook) on that thread, and LoadSettings reassigns those
+    // std::wstring members underneath it.
+    StopHotkeyThread();
     LoadSettings();
-    RestartHotkeyThread();
+    StartHotkeyThread();
 }
 
 // ============================================================
@@ -526,6 +597,26 @@ static std::wstring GetFileExt(const std::wstring& name) {
 static bool IsDirectoryPath(const std::wstring& path) {
     DWORD a = GetFileAttributesW(path.c_str());
     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// Join a directory and a child name with exactly one separator.
+//
+// A drive root already ends in a backslash ("C:\"), so the naive
+// dir + L"\\" + name produces "C:\\New Folder" with a doubled separator.
+// MoveFileExW tolerates that, but SHCreateItemFromParsingName does not — it
+// rejects the path with E_INVALIDARG (0x80070057), which silently broke the
+// whole IFileOperation path ("Move - safe" / "Copy") for items sitting in a
+// drive root while "Move - fast" kept working.
+//
+// Not shlwapi's PathCombineW/PathAppendW: those are capped at MAX_PATH, while
+// these paths are std::wstring throughout and can legitimately exceed it.
+static std::wstring PathJoin(const std::wstring& dir, const std::wstring& name) {
+    if (dir.empty()) return name;
+    if (name.empty()) return dir;
+    wchar_t last = dir.back();
+    if (last == L'\\' || last == L'/')
+        return dir + name;
+    return dir + L"\\" + name;
 }
 
 // ============================================================
@@ -701,8 +792,13 @@ static bool ExtractFolderAndSelection(IShellView* pSV,
         if (folderOut.empty() && !itemsOut.empty()) {
             const std::wstring& first = itemsOut.front();
             size_t slash = first.find_last_of(L"\\/");
-            if (slash != std::wstring::npos)
-                folderOut = first.substr(0, slash);
+            if (slash != std::wstring::npos) {
+                // Keep the root separator — "C:" alone is drive-relative and
+                // resolves against the current directory, not the drive root.
+                folderOut = (slash == 2 && first[1] == L':')
+                    ? first.substr(0, 3)
+                    : first.substr(0, slash);
+            }
         }
 
         ok = !folderOut.empty() && !itemsOut.empty();
@@ -756,15 +852,15 @@ static std::wstring UniqueDest(const std::wstring& destDir,
             ext  = leaf.substr(dot);
         }
     }
-    std::wstring p = destDir + L"\\" + base + ext;
+    std::wstring p = PathJoin(destDir, base + ext);
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES)
         return p;
     for (int n = 2; n < 100000; ++n) {
-        p = destDir + L"\\" + base + L" (" + std::to_wstring(n) + L")" + ext;
+        p = PathJoin(destDir, base + L" (" + std::to_wstring(n) + L")" + ext);
         if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES)
             return p;
     }
-    return destDir + L"\\" + base + ext;
+    return PathJoin(destDir, base + ext);
 }
 
 static int MoveItemsFast(HWND owner,
@@ -808,77 +904,560 @@ static int MoveItemsFast(HWND owner,
     }
 
     if (failed > 0 && owner && !silent) {
-        WCHAR msg[1024];
+        // Built as a std::wstring, not wsprintfW into a fixed buffer: the
+        // source path and the localized FormatMessageW text are both
+        // unbounded, and wsprintfW takes no buffer size (and caps at 1024
+        // bytes of output), so a long path would overrun a WCHAR[1024].
         LPWSTR sysMsg = nullptr;
         FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
                        | FORMAT_MESSAGE_IGNORE_INSERTS,
                        nullptr, firstErrCode,
                        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                        (LPWSTR)&sysMsg, 0, nullptr);
-        wsprintfW(msg, L"%d item(s) could not be moved.\n\nFirst error: %s\n%s",
-                  failed, firstError.c_str(),
-                  sysMsg ? sysMsg : L"");
+        std::wstring msg = std::to_wstring(failed);
+        msg += L" item(s) could not be moved.\n\nFirst error: ";
+        msg += firstError;
+        msg += L"\n";
+        if (sysMsg) msg += sysMsg;
         if (sysMsg) LocalFree(sysMsg);
-        MessageBoxW(owner, msg, L"Files 2 Folder", MB_ICONWARNING);
+        MessageBoxW(owner, msg.c_str(), L"Files 2 Folder", MB_ICONWARNING);
     }
     return moved;
 }
 
 // ============================================================
-//  Shell path — IFileOperation. Gives undo, UAC, progress UI,
-//  conflict-resolution dialogs. Single PerformOperations() call.
+//  Shell path — IFileOperation. Gives undo (unelevated runs only),
+//  elevation for protected destinations, and the shell's own
+//  progress/conflict/error UI. Single PerformOperations() call.
 //  Handles both the "safe move" and the "copy" operations: when
 //  copy is true we queue CopyItem (originals stay put), otherwise
 //  MoveItem.
 // ============================================================
+// Case-insensitive de-dup of the destination folders in `moves`, preserving
+// first-seen order, so SHChangeNotify fires once per folder rather than once
+// per moved item.
+static std::vector<std::wstring> UniqueDests(
+        const std::vector<std::pair<std::wstring, std::wstring>>& moves) {
+    std::vector<std::wstring> dests;
+    for (auto& m : moves) {
+        bool seen = false;
+        for (auto& d : dests) {
+            if (_wcsicmp(d.c_str(), m.second.c_str()) == 0) { seen = true; break; }
+        }
+        if (!seen) dests.push_back(m.second);
+    }
+    return dests;
+}
+
 static int RunItemsShell(HWND owner,
                          const std::vector<std::pair<std::wstring, std::wstring>>& moves,
                          bool copy)
 {
     if (moves.empty()) return 0;
 
+    // Only balance CoUninitialize when *we* initialized the apartment.
+    // RPC_E_CHANGED_MODE means the thread is already in a different apartment
+    // (Explorer's UI thread may already be MTA); that's fine — we just use the
+    // existing one and must not uninitialize it out from under the host.
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     bool comInited = SUCCEEDED(hrCo);
+    if (hrCo == RPC_E_CHANGED_MODE)
+        Wh_Log(L"thread already in a different COM apartment, reusing it");
 
     IFileOperation* op = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
-                                IID_PPV_ARGS(&op))) || !op) {
+    HRESULT hrCreate = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                        IID_PPV_ARGS(&op));
+    if (FAILED(hrCreate) || !op) {
+        Wh_Log(L"CoCreateInstance(FileOperation) failed, hr=0x%08X", (unsigned)hrCreate);
         if (comInited) CoUninitialize();
         return 0;
     }
     op->SetOwnerWindow(owner);
+    // FOFX_ADDUNDORECORD is what actually puts the operation on Explorer's
+    // undo stack (Ctrl+Z) — IFileOperation records nothing without it, which
+    // is the whole point of choosing "Move - safe" over "Move - fast".
+    // FOFX_SHOWELEVATIONPROMPT lets the shell's own copy engine raise the
+    // "You'll need to provide administrator permission" prompt and run the
+    // operation elevated itself when a destination needs it — no probing on our
+    // side, and nothing happens unless a real access failure occurs.
+    // Copy hooks are deliberately left enabled here (no FOFX_NOCOPYHOOKS) so
+    // third-party shell extensions participate, matching a normal Explorer
+    // move. Note the progress dialog is timing-gated by the shell: a
+    // same-volume move of a few small files completes too fast to show one,
+    // and error/conflict dialogs are left enabled (no FOF_NOERRORUI) so the
+    // shell reports problems the way Explorer normally does.
     op->SetOperationFlags(FOF_NOCONFIRMMKDIR | FOF_NO_CONNECTED_ELEMENTS
-                          | FOFX_NOCOPYHOOKS);
+                          | FOFX_ADDUNDORECORD | FOFX_SHOWELEVATIONPROMPT);
 
     int queued = 0;
     for (auto& m : moves) {
+        // Log each of the three failure points separately, so a zero-queued run
+        // is diagnosable: a bad source path, a bad destination, and a rejected
+        // MoveItem are otherwise indistinguishable.
         IShellItem* pSrc = nullptr;
-        if (FAILED(SHCreateItemFromParsingName(m.first.c_str(), nullptr,
-                                               IID_PPV_ARGS(&pSrc))) || !pSrc)
+        HRESULT hrSrc = SHCreateItemFromParsingName(m.first.c_str(), nullptr,
+                                                    IID_PPV_ARGS(&pSrc));
+        if (FAILED(hrSrc) || !pSrc) {
+            Wh_Log(L"src item failed hr=0x%08X for '%s'",
+                   (unsigned)hrSrc, m.first.c_str());
             continue;
-        IShellItem* pDst = nullptr;
-        if (SUCCEEDED(SHCreateItemFromParsingName(m.second.c_str(), nullptr,
-                                                  IID_PPV_ARGS(&pDst))) && pDst) {
-            HRESULT hr = copy ? op->CopyItem(pSrc, pDst, nullptr, nullptr)
-                              : op->MoveItem(pSrc, pDst, nullptr, nullptr);
-            if (SUCCEEDED(hr))
-                queued++;
-            pDst->Release();
         }
+        IShellItem* pDst = nullptr;
+        HRESULT hrDst = SHCreateItemFromParsingName(m.second.c_str(), nullptr,
+                                                    IID_PPV_ARGS(&pDst));
+        if (FAILED(hrDst) || !pDst) {
+            Wh_Log(L"dest item failed hr=0x%08X for '%s'",
+                   (unsigned)hrDst, m.second.c_str());
+            pSrc->Release();
+            continue;
+        }
+        HRESULT hr = copy ? op->CopyItem(pSrc, pDst, nullptr, nullptr)
+                          : op->MoveItem(pSrc, pDst, nullptr, nullptr);
+        if (SUCCEEDED(hr)) {
+            queued++;
+        } else {
+            Wh_Log(L"%s failed hr=0x%08X ('%s' -> '%s')",
+                   copy ? L"CopyItem" : L"MoveItem", (unsigned)hr,
+                   m.first.c_str(), m.second.c_str());
+        }
+        pDst->Release();
         pSrc->Release();
     }
 
-    if (queued > 0) op->PerformOperations();
+    if (queued > 0) {
+        HRESULT hr = op->PerformOperations();
+        // PerformOperations reports per-item trouble through GetAnyOperationsAborted
+        // rather than a failed HRESULT, so check both. An abort is the normal,
+        // expected result when the user cancels the shell's own progress or
+        // conflict dialog — log it, but never nag with a message box.
+        BOOL aborted = FALSE;
+        op->GetAnyOperationsAborted(&aborted);
+        if (FAILED(hr)) {
+            Wh_Log(L"PerformOperations failed, hr=0x%08X (queued=%d, copy=%d)",
+                   (unsigned)hr, queued, (int)copy);
+            queued = 0;
+        } else if (aborted) {
+            Wh_Log(L"operation aborted/cancelled by the user or shell (queued=%d)",
+                   queued);
+            queued = 0;
+        }
+    } else {
+        Wh_Log(L"nothing queued for the shell operation (%d candidate move(s))",
+               (int)moves.size());
+    }
     op->Release();
     if (comInited) CoUninitialize();
     return queued;
 }
 
-static bool EnsureDir(const std::wstring& path) {
-    if (IsDirectoryPath(path)) return true;
-    return SHCreateDirectoryExW(nullptr, path.c_str(), nullptr) == ERROR_SUCCESS
-        || IsDirectoryPath(path);
+// Create `path` (and any missing parents) through the shell, letting the shell
+// itself raise the "You'll need to provide administrator permission" prompt and
+// run the creation elevated. FOFX_SHOWELEVATIONPROMPT is what enables that; the
+// operation is otherwise an ordinary in-process IFileOperation.
+//
+// Only the deepest missing level is queued as a NewItem: IFileOperation::NewItem
+// needs an existing parent IShellItem, so a chain like "a\b\c" cannot be queued
+// in one shot. Instead the existing ancestor is found first and the levels are
+// created one PerformOperations at a time, from the top down.
+static bool CreateDirShellElevated(HWND owner, const std::wstring& path) {
+    // Collect the missing levels, shallowest first.
+    std::vector<std::wstring> missing;
+    for (std::wstring cur = path; !cur.empty(); ) {
+        if (IsDirectoryPath(cur)) break;
+        missing.insert(missing.begin(), cur);
+        size_t slash = cur.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) break;
+        // Keep the root separator: the parent of "C:\x" is "C:\" — not "C:",
+        // which is a drive-relative path and resolves somewhere else entirely.
+        std::wstring parent = (slash == 2 && cur[1] == L':') ? cur.substr(0, 3)
+                                                             : cur.substr(0, slash);
+        // A drive root is its own parent, so without this the loop never
+        // terminates. IsDirectoryPath is false whenever GetFileAttributesW fails
+        // for *any* reason - including access-denied on a mapped drive, which is
+        // exactly what routes us here - so a root can reach this point while
+        // still failing the directory test.
+        if (parent == cur) break;
+        cur = parent;
+    }
+    if (missing.empty()) return IsDirectoryPath(path);
+
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    bool comInited = SUCCEEDED(hrCo);
+
+    for (auto& dir : missing) {
+        size_t slash = dir.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) break;
+        std::wstring parent = (slash == 2 && dir[1] == L':') ? dir.substr(0, 3)
+                                                             : dir.substr(0, slash);
+        std::wstring leaf = dir.substr(slash + 1);
+        if (parent.empty() || leaf.empty()) break;
+
+        IFileOperation* op = nullptr;
+        if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                    IID_PPV_ARGS(&op))) || !op)
+            break;
+        op->SetOwnerWindow(owner);
+        op->SetOperationFlags(FOF_NOCONFIRMMKDIR | FOFX_SHOWELEVATIONPROMPT);
+
+        IShellItem* pParent = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(), nullptr,
+                                                  IID_PPV_ARGS(&pParent))) && pParent) {
+            if (SUCCEEDED(op->NewItem(pParent, FILE_ATTRIBUTE_DIRECTORY, leaf.c_str(),
+                                      nullptr, nullptr)))
+                op->PerformOperations();
+            pParent->Release();
+        }
+        op->Release();
+
+        // Stop as soon as a level fails — the next NewItem would have no parent.
+        if (!IsDirectoryPath(dir)) break;
+    }
+    if (comInited) CoUninitialize();
+
+    bool ok = IsDirectoryPath(path);
+    if (!ok)
+        Wh_Log(L"elevated create of '%s' failed", path.c_str());
+    return ok;
 }
+
+// Create several sibling directories under one already-existing parent in a
+// SINGLE elevated IFileOperation, so a run that needs 20 new folders in a
+// protected location costs one consent prompt instead of 20.
+//
+// Only flat siblings are batched: NewItem needs an existing parent IShellItem,
+// so nested chains still go one level per PerformOperations via
+// CreateDirShellElevated. Returns false if the batch could not be run at all
+// (declined at the prompt, or the parent could not be resolved).
+static bool CreateDirsShellElevatedBatch(HWND owner,
+                                         const std::wstring& parent,
+                                         const std::vector<std::wstring>& leaves) {
+    if (leaves.empty()) return true;
+
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    bool comInited = SUCCEEDED(hrCo);
+
+    bool ran = false;
+    IFileOperation* op = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                   IID_PPV_ARGS(&op))) && op) {
+        op->SetOwnerWindow(owner);
+        op->SetOperationFlags(FOF_NOCONFIRMMKDIR | FOFX_SHOWELEVATIONPROMPT);
+        IShellItem* pParent = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(), nullptr,
+                                                  IID_PPV_ARGS(&pParent))) && pParent) {
+            int queued = 0;
+            for (auto& leaf : leaves) {
+                if (SUCCEEDED(op->NewItem(pParent, FILE_ATTRIBUTE_DIRECTORY,
+                                          leaf.c_str(), nullptr, nullptr)))
+                    queued++;
+            }
+            if (queued > 0) {
+                ran = SUCCEEDED(op->PerformOperations());
+                BOOL aborted = FALSE;
+                op->GetAnyOperationsAborted(&aborted);
+                if (aborted) ran = false;
+            }
+            pParent->Release();
+        }
+        op->Release();
+    }
+    if (comInited) CoUninitialize();
+    return ran;
+}
+
+
+// Run-scoped elevation state, shared across every EnsureDir call in one user
+// action so the run behaves as a unit rather than per item.
+struct ElevationState {
+    bool allowed = false;   // does this operation support elevating at all?
+    bool used    = false;   // did any destination actually need it?
+    bool refused = false;   // declined or failed once - stop asking
+    bool denied  = false;   // a destination was refused for want of permission
+};
+
+// Try the direct creation first and only escalate to the shell (which may
+// prompt for elevation) when the failure was actually a permission problem.
+// Probing writability up front would be both wasteful and wrong: on a default
+// C:\ the root grants add-subdirectory but not add-file, so a probe that
+// creates a temp file reports "needs elevation" for a case that works fine.
+//
+// `st.allowed` is false for Move - fast, which cannot complete an elevated move
+// afterwards: creating the folder would prompt for consent and then leave an
+// empty directory behind in a protected location. `st.refused` latches the
+// first decline so a multi-destination run stops re-prompting, and `st.used`
+// records that elevation happened (logged by the caller, since an elevated
+// move is not undoable with Ctrl+Z).
+static bool EnsureDir(HWND owner, const std::wstring& path, ElevationState& st) {
+    if (IsDirectoryPath(path)) return true;
+    // SHCreateDirectoryExW returns the Win32 error code directly and does NOT
+    // set GetLastError() - read the return value, not GetLastError().
+    DWORD err = (DWORD)SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
+    if (err == ERROR_SUCCESS || IsDirectoryPath(path))
+        return true;
+    if (err != ERROR_ACCESS_DENIED && err != ERROR_PRIVILEGE_NOT_HELD) {
+        Wh_Log(L"create '%s' failed, err=%u (not a permission issue)",
+               path.c_str(), (unsigned)err);
+        return false;
+    }
+    st.denied = true;
+    if (!st.allowed || st.refused) {
+        Wh_Log(L"create '%s' denied and elevation is %s", path.c_str(),
+               st.allowed ? L"already declined for this run"
+                          : L"unavailable for this operation");
+        return false;
+    }
+    Wh_Log(L"create '%s' denied (err=%u), asking the shell to elevate",
+           path.c_str(), (unsigned)err);
+    if (!CreateDirShellElevated(owner, path)) {
+        // Declined at the consent prompt, or the elevated create failed. Either
+        // way the rest of this run would only produce more prompts.
+        st.refused = true;
+        return false;
+    }
+    st.used = true;
+    return true;
+}
+
+// Pre-create the per-item destination folders for the by-name / by-extension
+// modes. They are all flat siblings of one existing parent, so when the parent
+// needs administrator permission every one of them can be queued into a single
+// elevated IFileOperation - one consent prompt for the whole run instead of one
+// per file. Anything creatable without elevation is created here too, so the
+// per-item EnsureDir below simply finds the folders already present.
+//
+// Best-effort: failures are left for EnsureDir to report per item.
+static void BatchCreateSiblings(HWND owner,
+                                const std::wstring& folder,
+                                const std::vector<std::wstring>& items,
+                                ElevationState& elev,
+                                bool byExtension) {
+    std::vector<std::wstring> needElev;
+    for (auto& item : items) {
+        if (IsDirectoryPath(item)) continue;
+        std::wstring leaf = GetFileNameOnly(item);
+        std::wstring name;
+        if (byExtension) {
+            name = GetFileExt(leaf);
+            if (name.empty()) name = L"_no_ext";
+        } else {
+            name = GetFileBase(leaf);
+        }
+        name = SanitizeFolderName(name);
+        if (name.empty()) continue;
+
+        std::wstring dest = PathJoin(folder, name);
+        if (IsDirectoryPath(dest)) continue;
+        // Already collected? (many files share one extension / base name)
+        bool seen = false;
+        for (auto& n : needElev)
+            if (_wcsicmp(n.c_str(), name.c_str()) == 0) { seen = true; break; }
+        if (seen) continue;
+
+        DWORD err = (DWORD)SHCreateDirectoryExW(nullptr, dest.c_str(), nullptr);
+        if (err == ERROR_SUCCESS || IsDirectoryPath(dest)) continue;
+        if (err == ERROR_ACCESS_DENIED || err == ERROR_PRIVILEGE_NOT_HELD)
+            needElev.push_back(name);
+    }
+
+    if (needElev.empty() || !elev.allowed || elev.refused) return;
+
+    Wh_Log(L"%d destination folder(s) need elevation; creating them in one batch",
+           (int)needElev.size());
+    if (CreateDirsShellElevatedBatch(owner, folder, needElev))
+        elev.used = true;
+    else
+        elev.refused = true;   // declined - don't re-prompt per item below
+}
+
+
+// ============================================================
+//  Defolder — move the contents of the selected folders up into
+//  the folder being browsed, then optionally remove the folders
+//  that were emptied.
+//
+//  Recursive: every file anywhere under a selected folder is
+//  pulled up to the top level, so the internal structure is
+//  discarded. That is the point of the feature, but it is also
+//  destructive and effectively irreversible for the folder
+//  removal, so the caller confirms with a summary first.
+// ============================================================
+
+// Depth-first walk collecting every *file* under `dir` (at any depth), plus
+// every directory encountered, deepest-last so the caller can remove them in
+// reverse order once they are empty.
+//
+// Reparse points are not followed: a junction or symlink under the selection
+// would otherwise pull in files from outside it, or loop.
+static void CollectTreeContents(const std::wstring& dir,
+                                std::vector<std::wstring>& filesOut,
+                                std::vector<std::wstring>& dirsOut,
+                                int depth = 0) {
+    if (depth > 64) {          // pathological nesting guard
+        Wh_Log(L"defolder: depth limit reached at '%s'", dir.c_str());
+        return;
+    }
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW(PathJoin(dir, L"*").c_str(), FindExInfoBasic,
+                                &fd, FindExSearchNameMatch, nullptr, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
+            continue;
+        std::wstring full = PathJoin(dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            // Don't descend, and don't move it either — a reparse point is
+            // neither safely a file nor safely a directory for this purpose.
+            Wh_Log(L"defolder: skipping reparse point '%s'", full.c_str());
+            continue;
+        }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            CollectTreeContents(full, filesOut, dirsOut, depth + 1);
+            dirsOut.push_back(full);      // after its children: deepest-last
+        } else {
+            filesOut.push_back(full);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+// Remove directories that are now empty, deepest-first. Returns how many went
+// away. Never recursive-deletes: RemoveDirectoryW fails on a non-empty
+// directory, which is exactly the safety property we want — anything the move
+// left behind (a skipped reparse point, a file that failed to move) keeps its
+// parent alive.
+static int RemoveEmptyDirs(const std::vector<std::wstring>& dirsDeepestLast,
+                           const std::vector<std::wstring>& roots) {
+    int removed = 0;
+    for (auto& d : dirsDeepestLast) {
+        if (RemoveDirectoryW(d.c_str())) removed++;
+    }
+    // The selected folders themselves come last — their children are gone by now.
+    for (auto& r : roots) {
+        if (RemoveDirectoryW(r.c_str())) removed++;
+    }
+    return removed;
+}
+
+static void DoDefolder(HWND owner,
+                       const std::wstring& folder,
+                       const std::vector<std::wstring>& items,
+                       bool silent,
+                       F2FOperation moveVia)
+{
+    // Only directories can be defoldered; a mixed selection just ignores files.
+    //
+    // A junction or directory symlink must be rejected here, not just when
+    // encountered during the walk: GetFileAttributesW reports it as a directory
+    // (DIRECTORY | REPARSE_POINT), so it would otherwise be enumerated through
+    // - moving the *target's* files out from wherever it points - and then
+    // removed. Skipping the roots too is what makes the README's promise true.
+    std::vector<std::wstring> roots;
+    for (auto& item : items) {
+        DWORD a = GetFileAttributesW(item.c_str());
+        if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if (a & FILE_ATTRIBUTE_REPARSE_POINT) {
+            Wh_Log(L"defolder: skipping reparse-point root '%s'", item.c_str());
+            continue;
+        }
+        roots.push_back(item);
+    }
+
+    if (roots.empty()) {
+        if (!silent)
+            MessageBoxW(owner,
+                L"Select one or more folders to defolder.\n\n"
+                L"Defolder moves the contents of the selected folders into the "
+                L"current folder.",
+                L"Files 2 Folder", MB_ICONINFORMATION);
+        return;
+    }
+
+    std::vector<std::wstring> files, dirs;
+    for (auto& r : roots)
+        CollectTreeContents(r, files, dirs);
+
+    if (files.empty()) {
+        // Nothing to move, but the folders may still be removable. Deliberately
+        // NOT gated on `silent`: RemoveDirectoryW bypasses the Recycle Bin, so
+        // this is unrecoverable and must always be confirmed. Same reasoning as
+        // the summary confirmation below.
+        std::wstring q = L"The selected folder(s) contain no files.\n\nRemove ";
+        q += std::to_wstring(dirs.size() + roots.size());
+        q += L" empty folder(s)?";
+        if (MessageBoxW(owner, q.c_str(), L"Files 2 Folder",
+                        MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) != IDYES)
+            return;
+        int gone = RemoveEmptyDirs(dirs, roots);
+        Wh_Log(L"defolder: no files; removed %d empty folder(s)", gone);
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                       folder.c_str(), nullptr);
+        return;
+    }
+
+    // One summary confirmation covering both halves of the operation, since the
+    // flatten discards the folder structure and the removal can't be undone.
+    //
+    // Deliberately NOT gated on `silent`. Silent mode exists so the other three
+    // operations can run straight from the context menu, but that entry carries
+    // the shell's localized "Move to a folder" label - letting one click
+    // silently flatten a tree and delete the folders would be a very large gap
+    // between what the menu says and what it does, with no undo for the removal.
+    {
+        std::wstring q = L"Move ";
+        q += std::to_wstring(files.size());
+        q += (files.size() == 1) ? L" file out of " : L" files out of ";
+        q += std::to_wstring(roots.size());
+        q += (roots.size() == 1) ? L" folder into this one," : L" folders into this one,";
+        q += L"\nand then remove the folders that end up empty?";
+        q += L"\n\nAny subfolder structure inside them is discarded.";
+        if (MessageBoxW(owner, q.c_str(), L"Files 2 Folder",
+                        MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) != IDYES)
+            return;
+    }
+
+    // Every file lands directly in the browsed folder. UniqueDest is applied by
+    // the move helpers themselves for the fast path; the shell path resolves
+    // collisions through its own rename-on-collision handling.
+    std::vector<std::pair<std::wstring, std::wstring>> moves;
+    for (auto& f : files) moves.push_back({ f, folder });
+
+    int done = (moveVia == F2F_MOVE_FAST)
+        ? MoveItemsFast(owner, moves, silent)
+        : RunItemsShell(owner, moves, /*copy=*/false);
+
+    Wh_Log(L"defolder: moved %d of %d file(s)", done, (int)files.size());
+
+    // Nothing moved - cancelled at the shell's progress/conflict dialog, or
+    // every move failed. Leave the tree completely alone: subfolders that
+    // happened to be empty *already* are not ours to delete, and
+    // RemoveDirectoryW bypasses the Recycle Bin, so removing them here would be
+    // an unrecoverable side effect of an operation the user just cancelled.
+    if (done == 0) {
+        Wh_Log(L"defolder: nothing was moved - leaving the folders alone");
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                       folder.c_str(), nullptr);
+        return;
+    }
+
+    // Only clean up what actually emptied. RemoveDirectoryW refuses non-empty
+    // directories, so a partial move simply leaves those folders in place.
+    int gone = RemoveEmptyDirs(dirs, roots);
+    Wh_Log(L"defolder: removed %d folder(s)", gone);
+
+    if (!silent && done < (int)files.size()) {
+        std::wstring m = L"Moved ";
+        m += std::to_wstring(done);
+        m += L" of ";
+        m += std::to_wstring(files.size());
+        m += L" file(s). Folders that still contain items were left in place.";
+        MessageBoxW(owner, m.c_str(), L"Files 2 Folder", MB_ICONWARNING);
+    }
+
+    SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT,
+                   folder.c_str(), nullptr);
+}
+
 
 static void DoFiles2Folder(HWND owner,
                            F2FMode mode,
@@ -889,7 +1468,28 @@ static void DoFiles2Folder(HWND owner,
                            bool silent,
                            F2FOperation effectiveOp)
 {
+    // Defolder is the odd one out: it has no destination to build, so it runs
+    // before any of the subfolder-mode logic and returns. The dialog greys out
+    // the mode radios while it is selected for the same reason.
+    if (effectiveOp == F2F_DEFOLDER) {
+        DoDefolder(owner, folder, items, silent,
+                   g_settings.defolderUseShell ? F2F_MOVE_SAFE : F2F_MOVE_FAST);
+        return;
+    }
+
     std::vector<std::pair<std::wstring, std::wstring>> moves;
+
+    // "By name" / "by extension" only apply to files, so folders in the
+    // selection are skipped. Counting them lets an empty `moves` be explained
+    // correctly instead of being blamed on permissions.
+    int skippedFolders = 0;
+
+    // Elevation state for this whole run. Move - fast cannot complete an
+    // elevated move (MoveFileExW runs in-process), so it must not create the
+    // destination elevated either - that would prompt for consent and then
+    // leave an empty folder behind in a protected location.
+    ElevationState elev;
+    elev.allowed = (effectiveOp != F2F_MOVE_FAST);
 
     if (mode == MODE_FIXED_NAME || mode == MODE_DATE_NAMED) {
         // Resolve the destination into a parent directory plus a leaf folder.
@@ -905,7 +1505,7 @@ static void DoFiles2Folder(HWND owner,
             std::vector<std::wstring> segs = SplitNamePath(fixedName);
             if (!segs.empty()) {
                 for (size_t i = 0; i + 1 < segs.size(); ++i)
-                    parentDir += L"\\" + segs[i];
+                    parentDir = PathJoin(parentDir, segs[i]);
                 leaf = segs.back();
             }
         } else {
@@ -929,9 +1529,9 @@ static void DoFiles2Folder(HWND owner,
         // same-named files inside it are still de-duplicated by the move step.)
         bool reuse = (mode == MODE_FIXED_NAME) && g_settings.fixedNameReuse;
         std::wstring dest = reuse
-            ? parentDir + L"\\" + leaf
+            ? PathJoin(parentDir, leaf)
             : UniqueDest(parentDir, leaf, /*splitExtension=*/false);
-        if (!EnsureDir(dest)) {
+        if (!EnsureDir(owner, dest, elev)) {
             if (!silent)
                 MessageBoxW(owner, L"Could not create destination folder.",
                             L"Files 2 Folder", MB_ICONERROR);
@@ -940,56 +1540,90 @@ static void DoFiles2Folder(HWND owner,
         for (auto& item : items) moves.push_back({ item, dest });
     }
     else if (mode == MODE_PER_FILE_NAME) {
+        BatchCreateSiblings(owner, folder, items, elev, /*byExtension=*/false);
         for (auto& item : items) {
-            if (IsDirectoryPath(item)) continue;
+            if (IsDirectoryPath(item)) { skippedFolders++; continue; }
             std::wstring leaf = GetFileNameOnly(item);
             std::wstring base = SanitizeFolderName(GetFileBase(leaf));
             if (base.empty()) continue;
-            std::wstring dest = folder + L"\\" + base;
-            if (!EnsureDir(dest)) continue;
+            std::wstring dest = PathJoin(folder, base);
+            if (!EnsureDir(owner, dest, elev)) continue;
             moves.push_back({ item, dest });
         }
     }
     else if (mode == MODE_PER_EXTENSION) {
+        BatchCreateSiblings(owner, folder, items, elev, /*byExtension=*/true);
         for (auto& item : items) {
-            if (IsDirectoryPath(item)) continue;
+            if (IsDirectoryPath(item)) { skippedFolders++; continue; }
             std::wstring leaf = GetFileNameOnly(item);
             std::wstring ext  = GetFileExt(leaf);
             if (ext.empty()) ext = L"_no_ext";
             ext = SanitizeFolderName(ext);
-            std::wstring dest = folder + L"\\" + ext;
-            if (!EnsureDir(dest)) continue;
+            std::wstring dest = PathJoin(folder, ext);
+            if (!EnsureDir(owner, dest, elev)) continue;
             moves.push_back({ item, dest });
         }
     }
 
+    for (auto& m : moves)
+        Wh_Log(L"queued move '%s' -> '%s'", m.first.c_str(), m.second.c_str());
+
     // Move - fast goes straight through MoveFileExW; both Move - safe and Copy
     // route through IFileOperation (Copy leaves the originals in place).
+    // Nothing to move. The reason matters: a selection of only folders in the
+    // file-only modes is an ordinary mistake, and blaming it on permissions
+    // (which the previous single branch did) sends the user somewhere useless.
+    if (moves.empty()) {
+        if (silent) {
+            Wh_Log(L"nothing to move (skippedFolders=%d, denied=%d)",
+                   skippedFolders, (int)elev.denied);
+            return;
+        }
+        if (!elev.denied && skippedFolders > 0) {
+            MessageBoxW(owner,
+                L"These modes only apply to files - the selection contains "
+                L"only folders.\n\nUse \"Defolder\" to unpack folders, or pick "
+                L"a different subfolder mode.",
+                L"Files 2 Folder", MB_ICONINFORMATION);
+        } else if (elev.denied && !elev.allowed) {
+            // Move - fast can't elevate, and this is raised before anything is
+            // created, so no consent is requested and no empty folder is left.
+            MessageBoxW(owner,
+                L"This location requires administrator permission.\n\n"
+                L"\"Move - fast\" cannot request it - use \"Move - safe\" or "
+                L"\"Copy\", which let Windows prompt for permission.",
+                L"Files 2 Folder", MB_ICONWARNING);
+        } else if (elev.denied) {
+            Wh_Log(L"elevation declined or unavailable; nothing was moved");
+        }
+        return;
+    }
+
+    int done = 0;
     switch (effectiveOp) {
         case F2F_MOVE_SAFE:
-            RunItemsShell(owner, moves, /*copy=*/false);
+            done = RunItemsShell(owner, moves, /*copy=*/false);
             break;
         case F2F_COPY:
-            RunItemsShell(owner, moves, /*copy=*/true);
+            done = RunItemsShell(owner, moves, /*copy=*/true);
             break;
         case F2F_MOVE_FAST:
         default:
-            MoveItemsFast(owner, moves, silent);
+            done = MoveItemsFast(owner, moves, silent);
             break;
     }
+
+    if (elev.used)
+        Wh_Log(L"destination was created elevated; Ctrl+Z will not undo this move");
+
+    // Nothing changed on disk (cancelled at the consent or conflict dialog, or
+    // every item failed), so there is nothing for the shell to refresh.
+    if (done == 0) return;
 
     // One notification for the source folder, plus one per unique destination.
     // (IFileOperation already notifies, but an extra UPDATEDIR is harmless.)
     SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT, folder.c_str(), nullptr);
-    std::vector<std::wstring> uniqueDests;
-    for (auto& m : moves) {
-        bool seen = false;
-        for (auto& d : uniqueDests) {
-            if (_wcsicmp(d.c_str(), m.second.c_str()) == 0) { seen = true; break; }
-        }
-        if (!seen) uniqueDests.push_back(m.second);
-    }
-    for (auto& d : uniqueDests) {
+    for (auto& d : UniqueDests(moves)) {
         SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSHNOWAIT, d.c_str(), nullptr);
     }
 }
@@ -1054,7 +1688,7 @@ static void DestroyDlgTheme(DlgTheme& t) {
 static void ApplyDarkTitleBar(HWND hwnd, bool dark) {
     using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
     static DwmSetWindowAttribute_t pDwmSet = []() -> DwmSetWindowAttribute_t {
-        HMODULE h = LoadLibraryW(L"dwmapi.dll");
+        HMODULE h = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (DwmSetWindowAttribute_t)GetProcAddress(h, "DwmSetWindowAttribute")
                  : nullptr;
     }();
@@ -1081,7 +1715,7 @@ using FlushMenuThemes_t = void(WINAPI*)();
 
 static SetWindowTheme_t GetSetWindowTheme() {
     static SetWindowTheme_t p = []() -> SetWindowTheme_t {
-        HMODULE h = LoadLibraryW(L"uxtheme.dll");
+        HMODULE h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (SetWindowTheme_t)GetProcAddress(h, "SetWindowTheme") : nullptr;
     }();
     return p;
@@ -1090,7 +1724,7 @@ static SetWindowTheme_t GetSetWindowTheme() {
 static AllowDarkModeForWindow_t GetAllowDarkModeForWindow() {
     static AllowDarkModeForWindow_t p = []() -> AllowDarkModeForWindow_t {
         HMODULE h = GetModuleHandleW(L"uxtheme.dll");
-        if (!h) h = LoadLibraryW(L"uxtheme.dll");
+        if (!h) h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (AllowDarkModeForWindow_t)GetProcAddress(h, MAKEINTRESOURCEA(133))
                  : nullptr;
     }();
@@ -1100,7 +1734,7 @@ static AllowDarkModeForWindow_t GetAllowDarkModeForWindow() {
 static SetPreferredAppMode_t GetSetPreferredAppMode() {
     static SetPreferredAppMode_t p = []() -> SetPreferredAppMode_t {
         HMODULE h = GetModuleHandleW(L"uxtheme.dll");
-        if (!h) h = LoadLibraryW(L"uxtheme.dll");
+        if (!h) h = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return h ? (SetPreferredAppMode_t)GetProcAddress(h, MAKEINTRESOURCEA(135))
                  : nullptr;
     }();
@@ -1166,6 +1800,7 @@ struct DlgState {
 #define IDC_OP_MOVE_FAST       1028
 #define IDC_OP_MOVE_SAFE       1029
 #define IDC_OP_COPY            1030
+#define IDC_OP_DEFOLDER        1031
 
 // Per-dialog runtime state. Stored on the heap and reached via
 // GWLP_USERDATA so two dialogs open at once on different threads (a
@@ -1218,16 +1853,37 @@ static void ApplyF2FLabels(HWND hDlg, const DlgState* s) {
         SetDlgItemTextW(hDlg, IDC_HEADER, header);
     }
 
-    // Operation segmented control: three BS_PUSHLIKE buttons (Move - fast /
-    // Move - safe / Copy) glued together above the mode list. The checked
-    // one renders pressed/held down via the normal radio-check state.
+    // Operation segmented control: four BS_PUSHLIKE buttons (Move - fast /
+    // Move - safe / Copy / Defolder) glued together above the mode list. The
+    // checked one renders pressed/held down via the normal radio-check state.
     int opRb = IDC_OP_MOVE_FAST;
     switch (s->runOp) {
         case F2F_MOVE_FAST: opRb = IDC_OP_MOVE_FAST; break;
         case F2F_MOVE_SAFE: opRb = IDC_OP_MOVE_SAFE; break;
-        case F2F_COPY:       opRb = IDC_OP_COPY;      break;
+        case F2F_COPY:      opRb = IDC_OP_COPY;      break;
+        case F2F_DEFOLDER:  opRb = IDC_OP_DEFOLDER;  break;
     }
-    CheckRadioButton(hDlg, IDC_OP_MOVE_FAST, IDC_OP_COPY, opRb);
+    CheckRadioButton(hDlg, IDC_OP_MOVE_FAST, IDC_OP_DEFOLDER, opRb);
+
+    // Defolder has no destination to choose, so the subfolder-mode radios and
+    // their inputs don't apply — grey them out rather than leave controls that
+    // silently do nothing. The header explains what will happen instead.
+    const BOOL modesOn = (s->runOp != F2F_DEFOLDER);
+    const int modeCtls[] = { IDC_RB_FIXED, IDC_RB_PERNAME, IDC_RB_PEREXT,
+                             IDC_RB_DATE, IDC_ED_FIXED, IDC_ED_DATE,
+                             IDC_BTN_ADD_LEVEL, IDC_LBL_NESTED_PREVIEW };
+    for (int id : modeCtls) {
+        if (HWND h = GetDlgItem(hDlg, id)) EnableWindow(h, modesOn);
+    }
+
+    if (!modesOn) {
+        SetDlgItemTextW(hDlg, IDC_HEADER,
+            s->singleItem
+                ? L"Defolder: move everything out of the selected folder into "
+                  L"this one."
+                : L"Defolder: move everything out of the selected folders into "
+                  L"this one.");
+    }
 }
 
 // Renders the live nested-folder breadcrumb preview under the "Fixed name"
@@ -1332,7 +1988,8 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             UpdateNestedPreview(hDlg);
             return TRUE;
         }
-        if ((id == IDC_OP_MOVE_FAST || id == IDC_OP_MOVE_SAFE || id == IDC_OP_COPY)
+        if ((id == IDC_OP_MOVE_FAST || id == IDC_OP_MOVE_SAFE ||
+             id == IDC_OP_COPY || id == IDC_OP_DEFOLDER)
             && code == BN_CLICKED)
         {
             // Set the per-run Operation from whichever radio was picked and
@@ -1340,7 +1997,8 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             // Operation setting — this only affects the current run.
             s->runOp = (id == IDC_OP_MOVE_FAST) ? F2F_MOVE_FAST
                      : (id == IDC_OP_MOVE_SAFE) ? F2F_MOVE_SAFE
-                                                  : F2F_COPY;
+                     : (id == IDC_OP_COPY)      ? F2F_COPY
+                                                : F2F_DEFOLDER;
             ApplyF2FLabels(hDlg, s);
             return TRUE;
         }
@@ -1484,20 +2142,24 @@ static bool ShowF2FDialog(HWND owner, DlgState& state) {
             L"You have selected multiple items.  What would you like to do?");
     cdit++;
 
-    // Operation segmented control: three BS_PUSHLIKE autoradio buttons glued
+    // Operation segmented control: four BS_PUSHLIKE autoradio buttons glued
     // together edge-to-edge (no gap, no group box) so they read as one
-    // three-state control. The checked one renders pressed/held down.
+    // four-state control. The checked one renders pressed/held down.
     // Picking one sets the per-run Operation without touching the Operation
     // setting; ApplyF2FLabels keeps the pressed segment in sync and
     // re-renders the Move/Copy verb in the mode list below.
+    // The four segments share the same 7..273 span the three used to.
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_GROUP | WS_TABSTOP, 0,
-            7, 18, 89, 14, IDC_OP_MOVE_FAST, CLS_BUTTON, L"Move - fast");
+            7, 18, 67, 14, IDC_OP_MOVE_FAST, CLS_BUTTON, L"Move - fast");
     cdit++;
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
-            96, 18, 89, 14, IDC_OP_MOVE_SAFE, CLS_BUTTON, L"Move - safe");
+            74, 18, 67, 14, IDC_OP_MOVE_SAFE, CLS_BUTTON, L"Move - safe");
     cdit++;
     addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
-            185, 18, 88, 14, IDC_OP_COPY, CLS_BUTTON, L"Copy");
+            141, 18, 62, 14, IDC_OP_COPY, CLS_BUTTON, L"Copy");
+    cdit++;
+    addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
+            203, 18, 70, 14, IDC_OP_DEFOLDER, CLS_BUTTON, L"Defolder");
     cdit++;
 
     // Row 1: RB fixed name + edit + "Add level" button (button only added
@@ -1810,7 +2472,7 @@ static bool    g_isHotkeyOwner = false;
 // Set by StopHotkeyThread before it tears the thread down. Read on the hotkey
 // thread so HandleHotkeyTriggered won't open a fresh modal while teardown is
 // dismissing modals — otherwise StopHotkeyThread could race a new dialog.
-static volatile LONG g_hotkeyShuttingDown = 0;
+static std::atomic<bool> g_hotkeyShuttingDown{false};
 static const UINT WM_F2F_TRIGGER  = WM_APP + 1;
 static const UINT WM_F2F_SHUTDOWN = WM_APP + 2;
 static const int  HOTKEY_ID = 0xF2F0;
@@ -1846,6 +2508,10 @@ static bool ReadClipboardFiles(std::vector<std::wstring>& out) {
 static std::wstring ParentDir(const std::wstring& path) {
     size_t slash = path.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return L"";
+    // Keep the trailing separator for a drive root: the parent of "C:\file.txt"
+    // is "C:\", whereas "C:" is a drive-*relative* path that resolves against
+    // the process's current directory on C — a different folder entirely.
+    if (slash == 2 && path[1] == L':') return path.substr(0, 3);
     return path.substr(0, slash);
 }
 
@@ -1962,17 +2628,43 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// The module the mod's code lives in. A window class must be registered with
+// this rather than GetModuleHandleW(nullptr) (which is explorer.exe): the class
+// belongs to the module its window procedure lives in, and registering it under
+// the host's handle leaves a class whose lpfnWndProc points into an image that
+// can be unloaded.
+static HINSTANCE GetCurrentModuleHandle() {
+    HMODULE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetCurrentModuleHandle, &h);
+    return (HINSTANCE)h;
+}
+
 static DWORD WINAPI HotkeyThreadProc(LPVOID) {
     WNDCLASSW wc = {};
     wc.lpfnWndProc   = HotkeyWndProc;
-    wc.hInstance     = (HINSTANCE)GetModuleHandleW(nullptr);
+    wc.hInstance     = GetCurrentModuleHandle();
     wc.lpszClassName = L"Files2FolderHotkeyWnd";
-    RegisterClassW(&wc);
+    // A stale registration from a previous load would leave lpfnWndProc
+    // pointing into an unmapped image, and CreateWindowExW would happily
+    // succeed against it - so treat a failed registration as fatal rather than
+    // building a window on top of whatever class already exists.
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        return 1;
+    }
 
     g_hotkeyWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0,
                                   0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   wc.hInstance, nullptr);
-    if (!g_hotkeyWnd) return 1;
+    if (!g_hotkeyWnd) {
+        // Unregister here too: the normal exit path below is not reached, and
+        // leaving the class behind would dangle after the mod unloads.
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
 
     // Win-based combos can't be claimed by RegisterHotKey, so use a low-level
     // keyboard hook for those (what PowerToys uses). Ctrl/Alt-only combos keep
@@ -1987,17 +2679,17 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
                            g_settings.hotkeyShift;
         if (!hasOtherMod) {
             // Log only — never a modal. This thread is re-created on every
-            // settings change (Wh_ModSettingsChanged -> RestartHotkeyThread),
+            // settings change (Wh_ModSettingsChanged restarts it),
             // and the mod runs in every explorer.exe, so a popup here spams the
             // user on each settings touch and once per extra Explorer instance.
             std::wstring combo = DescribeHotkey();
-            Wh_Log(L"Files2Folders: bare Win combo (%s) can't be intercepted",
+            Wh_Log(L"bare Win combo (%s) can't be intercepted",
                    combo.c_str());
         }
         g_llKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
                                         (HINSTANCE)GetModuleHandleW(nullptr), 0);
         if (!g_llKeyHook) {
-            Wh_Log(L"Files2Folders: SetWindowsHookEx(WH_KEYBOARD_LL) failed");
+            Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed");
         }
     } else if (!RegisterHotKey(g_hotkeyWnd, HOTKEY_ID,
                                BuildHotkeyModifiers() | MOD_NOREPEAT,
@@ -2010,7 +2702,7 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
         // transiently during an Explorer restart). The thread is also re-created
         // on every settings change. A popup here would spam the user in both
         // cases; the log line is the right place to surface a real conflict.
-        Wh_Log(L"Files2Folders: RegisterHotKey(%s) failed (reserved or in use?)",
+        Wh_Log(L"RegisterHotKey(%s) failed (reserved or in use?)",
                combo.c_str());
     }
 
@@ -2050,7 +2742,7 @@ static bool AcquireHotkeyOwnership() {
         // Park a sentinel so repeated calls (e.g. on settings change) don't
         // re-probe and accidentally promote this non-owner to owner.
         g_hotkeyOwnerMutex = INVALID_HANDLE_VALUE;
-        Wh_Log(L"Files2Folders: another instance owns the hotkey; standing down");
+        Wh_Log(L"another instance owns the hotkey; standing down");
         return false;
     }
 
@@ -2079,7 +2771,7 @@ static void StopHotkeyThread() {
 
     // Signal first so HandleHotkeyTriggered won't open a new modal once we
     // start closing the current one.
-    InterlockedExchange(&g_hotkeyShuttingDown, 1);
+    g_hotkeyShuttingDown = true;
 
     if (g_hotkeyWnd) PostMessageW(g_hotkeyWnd, WM_F2F_SHUTDOWN, 0, 0);
     else if (g_hotkeyThreadId) PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
@@ -2102,36 +2794,32 @@ static void StopHotkeyThread() {
     CloseHandle(g_hotkeyThread);
     g_hotkeyThread = nullptr;
     g_hotkeyThreadId = 0;
-    // Reset for the next StartHotkeyThread (RestartHotkeyThread = Stop + Start).
-    InterlockedExchange(&g_hotkeyShuttingDown, 0);
-}
-
-// Re-register the hotkey when settings change (key/modifiers/enabled).
-static void RestartHotkeyThread() {
-    StopHotkeyThread();
-    StartHotkeyThread();
+    // Reset for the next StartHotkeyThread (settings changes stop then start).
+    g_hotkeyShuttingDown = false;
 }
 
 // ============================================================
 //  Init / Uninit
 // ============================================================
 BOOL Wh_ModInit() {
-    Wh_Log(L"Files2Folders: Init");
+    Wh_Log(L"Init");
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx,
-                       (void*)TrackPopupMenuEx_Hook,
-                       (void**)&TrackPopupMenuEx_Orig);
-    Wh_SetFunctionHook((void*)PostMessageW,
-                       (void*)PostMessageW_Hook,
-                       (void**)&PostMessageW_Orig);
+    // WindhawkUtils::SetFunctionHook rather than the raw Wh_SetFunctionHook:
+    // it binds the target, the hook and the original pointer through the same
+    // function type, so a signature mismatch is a compile error instead of a
+    // crash at the first call. The void* casts hid that.
+    WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
+                                   &TrackPopupMenuEx_Orig);
+    WindhawkUtils::SetFunctionHook(PostMessageW, PostMessageW_Hook,
+                                   &PostMessageW_Orig);
 
     StartHotkeyThread();
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Files2Folders: Uninit");
+    Wh_Log(L"Uninit");
     StopHotkeyThread();
 
     // Release ownership. Only the owner holds a real handle (non-owners parked
