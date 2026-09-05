@@ -50,6 +50,8 @@ Choose one of the included themes or adjust a few basic options to create your o
 File Operation Styler changes the appearance of the normal file operation window only.  
 Windows continues to handle the actual copy, move, delete, conflicts, and errors.
 
+Settings changes apply to new file-operation windows; operations already in progress may use the native Windows presentation until they complete.
+
 */
 // ==/WindhawkModReadme==
 
@@ -1205,6 +1207,7 @@ namespace
     constexpr size_t kInfoPanelRateHistorySamples = 72;
     constexpr UINT_PTR kHostWindowSubclassId = 0xF0510010;
     constexpr UINT_PTR kProgressWindowSubclassId = 0xF0510011;
+    constexpr WPARAM kRemoveProgressWindowSubclassCommand = 1;
 
     struct CircleState
     {
@@ -4000,12 +4003,19 @@ namespace
             return true;
         }
 
-        if (GetWindowThreadProcessId(progressWindow, nullptr) !=
-            GetCurrentThreadId())
+        DWORD progressWindowThreadId =
+            GetWindowThreadProcessId(progressWindow, nullptr);
+        if (progressWindowThreadId != GetCurrentThreadId())
         {
+            HWND hostWindow = GetAncestor(progressWindow, GA_ROOT);
             DWORD_PTR result = FALSE;
-            if (SendMessageTimeoutW(
-                    progressWindow, g_removeHostSubclassMessage, 0, 0,
+            if (hostWindow &&
+                GetWindowThreadProcessId(hostWindow, nullptr) ==
+                    progressWindowThreadId &&
+                SendMessageTimeoutW(
+                    hostWindow, g_removeHostSubclassMessage,
+                    kRemoveProgressWindowSubclassCommand,
+                    reinterpret_cast<LPARAM>(progressWindow),
                     SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result) &&
                 result == TRUE)
             {
@@ -4026,17 +4036,18 @@ namespace
             return true;
         }
 
-        if (!RemoveWindowSubclass(progressWindow,
-                                  NativeProgressWindowSubclassProc,
-                                  kProgressWindowSubclassId) &&
-            GetWindowSubclass(progressWindow,
+        BOOL removed = RemoveWindowSubclass(
+            progressWindow, NativeProgressWindowSubclassProc,
+            kProgressWindowSubclassId);
+        DWORD removeError = removed ? ERROR_SUCCESS : GetLastError();
+        if (GetWindowSubclass(progressWindow,
                               NativeProgressWindowSubclassProc,
                               kProgressWindowSubclassId, &referenceData))
         {
             Wh_Log(L"Presentation teardown failed to remove progress "
                    L"subclass hwnd=%p error=%lu",
                    reinterpret_cast<void *>(progressWindow),
-                   GetLastError());
+                   removeError);
             return false;
         }
 
@@ -4718,6 +4729,25 @@ namespace
             message != WM_NCDESTROY)
         {
             return DefSubclassProc(window, message, wParam, lParam);
+        }
+
+        if (g_removeHostSubclassMessage &&
+            message == g_removeHostSubclassMessage &&
+            wParam == kRemoveProgressWindowSubclassCommand)
+        {
+            HWND progressWindow = reinterpret_cast<HWND>(lParam);
+            if (!progressWindow || !IsWindow(progressWindow))
+            {
+                return TRUE;
+            }
+            if (GetWindowThreadProcessId(progressWindow, nullptr) !=
+                GetCurrentThreadId())
+            {
+                return FALSE;
+            }
+            return RemoveProgressWindowSubclassForTeardown(progressWindow)
+                       ? TRUE
+                       : FALSE;
         }
 
         if (g_removeHostSubclassMessage &&
