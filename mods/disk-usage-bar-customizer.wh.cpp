@@ -46,7 +46,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 | ![System colors in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png) Colors adapting to the system's theme (light mode) | ![System colors in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png) Colors adapting to the system's theme (dark mode) |
 |:--|:--|
 |||
-| ![Accent color in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png) **Accent color as the normal progress color (ligth mode)** | ![Accent color in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png) **Accent color as the normal progress color (dark mode)** |
+| ![Accent color in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png) **Accent color as the normal progress color (light mode)** | ![Accent color in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png) **Accent color as the normal progress color (dark mode)** |
 |||
 | ![Custom colors](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png) **Custom colors** | ![Rounded corners](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/rounded_corners.png) **Rounded corners** |
 |||
@@ -109,9 +109,9 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
     $name: Use WinUI style for rendering
     $name:ro: Folosește stilul WinUI pentru randare
     $description: >-
-      Render the usage bar using the style of the the WinUI ProgressBar control. If the "Render using visual styles" option is enabled, it will take precedence over this option.
+      Render the usage bar using the style of the WinUI ProgressBar control. If the "Render using visual styles" option is enabled, it will take precedence over this option. Also, every single option from the "Custom rendering" section, except the ones related to the percentage label, will be ignored.
     $description:ro: >-
-      Randează bara de utilizare folosind stilul controlului ProgressBar din WinUI. Dacă opțiunea "Randează folosind stiluri vizuale" este activată, acea opțiune va avea precedență asupra acestei opțiuni.
+      Randează bara de utilizare folosind stilul controlului ProgressBar din WinUI. Dacă opțiunea "Randează folosind stiluri vizuale" este activată, acea opțiune va avea precedență asupra acestei opțiuni. De asemenea, toate opțiunile din secțiunea "Randare personalizată", cu excepția celor care au legătură cu eticheta pentru procentaj, vor fi ignorate.
 
   - winuiLikeRenderingCustomColors: false
     $name: Allow using custom colors when rendering using the WinUI style
@@ -240,8 +240,14 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   $name:ro: Randare personalizată
   $description: >-
     These options will be ignored when the "Render using visual styles" option is enabled.
+    
+
+    If the "Use WinUI style for rendering" option is enabled, every single option from this section will be ignored, except the options related to the percentage label. If you want to customize the bar's colors and still render it using the WinUI style, enable the "Allow using custom colors when rendering using the WinUI style" option.
   $description:ro: >-
     Aceste opțiuni vor fi ignorate atunci când opțiunea "Randează folosind stiluri vizuale" este activată.
+
+
+    Dacă opțiunea "Folosește stilul WinUI pentru randare" este activată, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori perssonalizate atunci când se randează folosind stilul WinUI".
 */
 // ==/WindhawkModSettings==
 
@@ -455,7 +461,7 @@ static void FillRoundedRect(
     if (rect.right <= rect.left || rect.bottom <= rect.top) return;
 
     Graphics graphics(hdc);
-    graphics.SetSmoothingMode(SmoothingModeAntiAlias8x8);
+    graphics.SetSmoothingMode(SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
 
     SolidBrush brush(Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
@@ -566,6 +572,11 @@ HRESULT WINAPI HookedDrawThemeBackground(
         int percentageLabelFontHeight = -(maxBarHeight * g_percentageLabelSize / 100);
 
         if (!g_renderUsingVisualStyles) {
+            if (g_winuiLikeRendering) {
+                if (iPartId == PP_FILL) g_heightFactor = 20;
+                else if (iPartId == PP_TRANSPARENTBAR) g_heightFactor = 1;
+            }
+
             int inset = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200;
 
             clipRect.top = clipRect.top + inset;
@@ -638,16 +649,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
         else if (iPartId == PP_TRANSPARENTBAR) {
             g_barWidth  = clipRect.right - clipRect.left;
             if (g_barWidth < 1) g_barWidth = 1;
- 
-            if (!g_renderUsingVisualStyles && g_winuiLikeRendering) {
-                int inset = (clipRect.bottom - clipRect.top) / 2;
-
-                clipRect.top = clipRect.top + inset;
-                clipRect.bottom = clipRect.bottom - inset;
-
-                if (inset * 2 == clipRect.bottom - clipRect.top + inset * 2)
-                    clipRect.bottom++;
-            }
 
             if (g_renderUsingVisualStyles)
                 DrawThemeBackground_orig(hTheme, hdc, PP_TRANSPARENTBAR, PBS_NORMAL, &clipRect, 0);
