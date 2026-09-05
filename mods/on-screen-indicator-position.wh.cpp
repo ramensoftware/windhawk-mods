@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
-// @version         1.2.7
+// @version         1.3.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -69,6 +69,9 @@ a monitor by number or by interface name. The two work together.
 
 ## Notes
 
+* **Skip the slide out animation** has the indicator disappear rather than slide
+  away. Windows has its own no animation path for hiding and the mod asks for that
+  one, so the sliding in and everything outside the indicator are left alone.
 * The slide-in animation direction is chosen by Windows from the built-in
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
@@ -79,6 +82,9 @@ a monitor by number or by interface name. The two work together.
 * With two indicators set to different spots you can catch the previous one
   flashing at the new spot for a frame before the new one draws. That's the
   confirmator reusing its frame, the placement hook can't do anything about it.
+  Skipping the slide out makes it easier to catch rather than harder, since what
+  lands at the new spot is the tail end of the previous indicator instead of an
+  empty frame.
 * Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
 
 ## Credits
@@ -112,19 +118,18 @@ both target the same function and work out the origin handling.
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves right,
-    negative moves left. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator sideways. A positive number moves it right, a negative one
+    moves it left. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves down,
-    negative moves up. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator up or down. A positive number moves it down, a negative one
+    moves it up. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
+- skipHideAnimation: false
+  $name: Skip the slide out animation
+  $description: The indicator disappears instead of sliding away.
 - perIndicator:
   - volume: same
     $name: Volume
@@ -219,8 +224,9 @@ both target the same function and work out the origin handling.
     - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give an individual indicator its own spot. Anything left on Same as the main
-    position follows the Position setting above. The offsets apply to all of them.
+    Give one kind of indicator a spot of its own. Anything left on "Same as the
+    main position" follows the Position setting above. The offsets apply to all
+    of them either way.
 */
 // ==/WindhawkModSettings==
 
@@ -283,6 +289,7 @@ struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
+    std::atomic<bool> skipHideAnimation;
     // Position::windowsDefault means "no override", so the main position is used.
     // It is never offered as a per-indicator choice, which leaves it free to be
     // the sentinel. The main position keeps its own meaning of leaving Windows'
@@ -298,6 +305,37 @@ bool AnyPerIndicator() {
     }
 
     return false;
+}
+
+// Only for the log, so a line someone is asked to read back says which kind it was
+// rather than a number to count enum members against.
+PCWSTR IndicatorName(Indicator indicator) {
+    static constexpr PCWSTR kNames[] = {
+        L"volume",     L"brightness", L"keyboardBrightness", L"airplaneMode",
+        L"camera",     L"microphone", L"text",
+    };
+    static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
+
+    size_t i = (size_t)indicator;
+    return i < ARRAYSIZE(kNames) ? kNames[i] : L"unknown";
+}
+
+// Said from two places, so it lives in one.
+void LogKindUnreliable() {
+    Wh_Log(
+        L"An indicator entry point didn't resolve, so the position "
+        L"per indicator settings are ignored and everything uses "
+        L"the main position");
+}
+
+// Set when either half of the hide pair didn't resolve, which leaves the skip
+// setting with nothing to do.
+std::atomic<bool> g_hideAnimationUnavailable{false};
+
+void LogHideAnimationUnavailable() {
+    Wh_Log(
+        L"The hide entry points didn't resolve, so the slide out animation "
+        L"is left alone");
 }
 
 // The position to place the indicator that is being shown right now.
@@ -473,6 +511,26 @@ char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
     return ShowTextAsync_Original(pThis, text, value);
 }
 
+// The control hides itself two ways and Windows picks the animated one. Handing the
+// call to the other is the whole feature, so nothing has to be torn out of the
+// animation and nothing outside this control is touched.
+using ConfirmatorHostControl_Hide_t = void(WINAPI*)(void* pThis);
+ConfirmatorHostControl_Hide_t ConfirmatorHostControl_Hide_Original;
+
+// Same shape as the one above today, declared separately so a drift in one doesn't
+// quietly redefine the other.
+using ConfirmatorHostControl_HideWithoutAnimation_t = void(WINAPI*)(void* pThis);
+ConfirmatorHostControl_HideWithoutAnimation_t
+    ConfirmatorHostControl_HideWithoutAnimation_Original;
+void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
+    if (g_settings.skipHideAnimation.load() &&
+        ConfirmatorHostControl_HideWithoutAnimation_Original) {
+        return ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
+    }
+
+    return ConfirmatorHostControl_Hide_Original(pThis);
+}
+
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -481,7 +539,7 @@ WinrtRect* WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              WinrtRect* retval,
                                              const WinrtRect* rect) {
-    Wh_Log(L"> indicator=%d", (int)g_currentIndicator.load());
+    Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
 
     // Read the offsets once so the placement below uses one consistent pair.
     int offsetSettingX = g_settings.offsetX.load();
@@ -520,10 +578,21 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
         pThis, retval, &shiftedRect);
 
-    if (result) {
-        PlaceInArea(shiftedRect, CurrentPosition(), offsetSettingX,
-                    offsetSettingY, result);
+    // Nothing to place happens for a kind left on the main position while that is
+    // on Windows default, and for someone who only wanted the animation setting.
+    // The edge clamp inside PlaceInArea would still be free to move the indicator
+    // off the spot Windows picked, so it is skipped rather than run with nothing to
+    // do. The shift above stays either way, since the original needs it.
+    Position position = CurrentPosition();
+    bool anyPlacement = position != Position::windowsDefault || offsetSettingX ||
+                        offsetSettingY;
 
+    if (result && anyPlacement) {
+        PlaceInArea(shiftedRect, position, offsetSettingX, offsetSettingY,
+                    result);
+    }
+
+    if (result) {
         // Shift the result back.
         result->X += offsetX;
         result->Y += offsetY;
@@ -578,6 +647,8 @@ void LoadSettings() {
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
 
+    g_settings.skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation");
+
     static const PCWSTR kIndicatorSettings[] = {
         L"perIndicator.volume",
         L"perIndicator.brightness",
@@ -610,7 +681,8 @@ BOOL Wh_ModInit() {
     bool anyPerIndicator = AnyPerIndicator();
 
     if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
-        !g_settings.offsetX && !g_settings.offsetY) {
+        !g_settings.offsetX && !g_settings.offsetY &&
+        !g_settings.skipHideAnimation) {
         Wh_Log(L"Nothing to do");
         return FALSE;
     }
@@ -681,13 +753,26 @@ BOOL Wh_ModInit() {
             ShowMicrophoneMutedAsync_Hook,
             true,  // optional
         },
+        {
+            {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::Hide(void))"},
+            &ConfirmatorHostControl_Hide_Original,
+            ConfirmatorHostControl_Hide_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::HideWithoutAnimation(void))"},
+            &ConfirmatorHostControl_HideWithoutAnimation_Original,
+            nullptr,  // wanted for its address, not hooked
+            true,     // optional
+        },
     };
 
-    // All nine go in every time. The eight that record which kind is being shown
-    // are coroutine ramps that store a value and tail-call the original, so
+    // The whole set goes in every time. The eight that record which kind is being
+    // shown are coroutine ramps that store a value and tail-call the original, so
     // patching them when no kind has a spot of its own costs nothing worth
     // measuring, and installing the same set every time keeps the symbol cache
-    // from being resolved again the first time someone turns an override on.
+    // from being resolved again the first time someone turns an override on. The
+    // same goes for the hide pair and the animation setting.
     if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
                      ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -713,16 +798,21 @@ BOOL Wh_ModInit() {
         (void*)ShowTextAsync_Original,
     };
 
+    if (!ConfirmatorHostControl_Hide_Original ||
+        !ConfirmatorHostControl_HideWithoutAnimation_Original) {
+        g_hideAnimationUnavailable = true;
+        if (g_settings.skipHideAnimation) {
+            LogHideAnimationUnavailable();
+        }
+    }
+
     for (const void* recorder : kindRecorders) {
         if (!recorder) {
             g_kindUnreliable = true;
             // Only worth saying to someone who has an override set. With the
             // shipped defaults there is nothing being ignored to complain about.
             if (anyPerIndicator) {
-                Wh_Log(
-                    L"An indicator entry point didn't resolve, so the position "
-                    L"per indicator settings are ignored and everything uses "
-                    L"the main position");
+                LogKindUnreliable();
             }
             break;
         }
@@ -753,9 +843,10 @@ void Wh_ModSettingsChanged() {
     // Turning on the first override no longer re-runs Wh_ModInit, so this is the
     // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
-        Wh_Log(
-            L"An indicator entry point didn't resolve, so the position "
-            L"per indicator settings are ignored and everything uses "
-            L"the main position");
+        LogKindUnreliable();
+    }
+
+    if (g_hideAnimationUnavailable && g_settings.skipHideAnimation) {
+        LogHideAnimationUnavailable();
     }
 }
