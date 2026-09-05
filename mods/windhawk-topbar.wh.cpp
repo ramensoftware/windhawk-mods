@@ -42,8 +42,8 @@ More themes can be found and contributed from:
 
 ## Process model
 
-The bar runs inside the main Explorer process (`explorer.exe`). It creates its own window
-and thread, but does not spawn a separate process. XAML Islands require a real Explorer host.
+The bar runs in its own Explorer tool process (`explorer.exe -tool-mod windhawk-topbar`).
+A mutex keeps one bar alive. XAML Islands require a real Explorer host.
 
 ## Styling
 
@@ -384,6 +384,7 @@ std::vector<ControlStyleRule> g_themeStyleRules;
 // Globals
 // ============================================================================
 
+// Tool-mod mutex removed for merged model.
 HANDLE g_topBarThread;
 DWORD g_topBarThreadId;
 HANDLE g_stopEvent = nullptr;  // Stop event for clean shutdown
@@ -5742,7 +5743,6 @@ FrameworkElement BuildTopBarContent() {
         wallpaperLayer.Opacity(1); // Slightly transparent so the top bar tint shows
         barRoot.Children().Append(wallpaperLayer);
         g_wallpaperLayer = wallpaperLayer; // Save reference
-        g_wallpaperLayer = wallpaperLayer; // Save reference for updates
     }
     // Interactive content grid (This is TopBarRoot and gets the blur)
     wuxc::Grid root;
@@ -6332,15 +6332,9 @@ void ForegroundEventProcInstall() {
 }
 
 DWORD WINAPI TopBarThreadProc(LPVOID) {
+    Wh_Log(L"TopBar: TopBarThreadProc started.");
     try {
-        // Wait for the stop event (or timeout). If stop is requested, exit now.
-        if (g_stopEvent) {
-            if (WaitForSingleObject(g_stopEvent, 5000) == WAIT_OBJECT_0) {
-                return 1;  // shutdown requested before we start
-            }
-        } else {
-            Sleep(5000);
-        }
+        // No delay – start immediately.
 
         winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -6674,6 +6668,7 @@ void LoadSettings() {
 
 
 BOOL WhTool_ModInit() {
+    Wh_Log(L"TopBar: WhTool_ModInit called.");
     LoadSettings();
 
     g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
@@ -6762,17 +6757,46 @@ void WhTool_ModUninit() {
 }
 
 // ============================================================================
-// Regular mod entry points (run in the main Explorer process)
-// These call the tool-mod functions so the same logic is used either way.
+// Standard mod entry points
 // ============================================================================
 
 BOOL Wh_ModInit() {
-    WhTool_ModInit();
+    DWORD sessionId = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    // --- MERGED MODEL: Run directly inside Explorer (simplest working config) ---
+    if (!WhTool_ModInit()) {
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // No extra actions needed; the thread is already created in WhTool_ModInit.
+    // Do nothing – the thread is already created.
 }
 
 void Wh_ModSettingsChanged() {
@@ -6782,5 +6806,3 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     WhTool_ModUninit();
 }
-
-
