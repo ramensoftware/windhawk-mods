@@ -936,8 +936,7 @@ static bool HookDrivesViewShouldShow() {
         return false;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK
-        shell32DllHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
                 {
                     L"public: virtual long __cdecl "
