@@ -4,7 +4,7 @@
 // @name:ro         Personalizator bară de utilizare discuri
 // @description     Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border, rounded corners and more.
 // @description:ro  Personalizează orice ține de bara de utilizare a discurilor din secțiunea Acest PC din Explorer, inclusiv culori în funcție de temă, înălțime, bordură, colțuri rotunjite și mai multe.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Valer100
 // @github          https://github.com/Valer100
 // @include         explorer.exe
@@ -30,6 +30,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 ### Rendering
 - Render using visual styles
 - Render using dark mode parts when using visual styles
+- WinUI-like rendering
 
 ### Custom rendering
 - Use system's accent color for the normal progress color
@@ -41,39 +42,21 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 
 
 ## Screenshots
-### Colors adapting to the system's theme
-![System colors light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png)
 
-![System colors dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png)
-
-### Accent color as the normal progress color
-![Accent color light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png)
-
-![Accent color dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png)
-
-### Custom colors
-![Custom colors](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png)
-
-### No border
-![No border](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png)
-
-### Custom height
-![Custom height](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png)
-
-### Custom warning threshold
-![Custom warning threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png)
-
-### Custom intermediate threshold
-![Custom intermediate threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/intermediate_progress_style.png)
-
-### Show remaining space as progress instead of used space
-![Show remaining space as progress instead of used space](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png)
-
-### Rounded corners
-![Rounded corners](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/rounded_corners.png)
-
-### Percentage overlay
-![Percentage overlay](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/percentage_overlay.png)
+| ![System colors in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png) Colors adapting to the system's theme (light mode) | ![System colors in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png) Colors adapting to the system's theme (dark mode) |
+|:--|:--|
+|||
+| ![Accent color in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png) **Accent color as the normal progress color (ligth mode)** | ![Accent color in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png) **Accent color as the normal progress color (dark mode)** |
+|||
+| ![Custom colors](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png) **Custom colors** | ![Rounded corners](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/rounded_corners.png) **Rounded corners** |
+|||
+| ![No border](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png) **No border** | ![Custom height](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png) **Custom height** |
+|||
+| ![Custom warning threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png) **Custom warning threshold** | ![Custom intermediate threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/intermediate_progress_style.png) **Custom intermediate threshold** |
+|||
+| ![WinUI-like rendering in light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_winui_rendering.png) **WinUI-like rendering (light mode)** | ![WinUI-like rendering in dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_winui_rendering.png) **WinUI-like rendering (dark mode)** |
+|||
+| ![Show remaining space as progress instead of used space](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png) **Show remaining space as progress**  | ![Percentage overlay](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/percentage_overlay.png) **Percentage overlay** |
 */
 // ==/WindhawkModReadme==
 
@@ -121,6 +104,18 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       Render the usage bar using the dark mode parts from the "DarkMode_CopyEngine::Progress" class when dark mode is enabled. You must have Windows 11 build 26200.6899 or higher installed and the "Render using visual styles" option enabled for this to work.
     $description:ro: >-
       Randează bara de utilizare folosind părți întunecate din clasa "DarkMode_CopyEngine::Progress" atunci când modul întunecat este activat. Trebuie să ai instalat Windows 11, build-ul 26200.6899 sau mai recent și opțiunea "Randează folosind stiluri vizuale" activată pentru ca această opțiune să funcționeze.
+
+  - winuiLikeRendering: false
+    $name: Use WinUI style for rendering
+    $name:ro: Folosește stilul WinUI pentru randare
+    $description: >-
+      Render the usage bar using the style of the the WinUI ProgressBar control. If the "Render using visual styles" option is enabled, it will take precedence over this option.
+    $description:ro: >-
+      Randează bara de utilizare folosind stilul controlului ProgressBar din WinUI. Dacă opțiunea "Randează folosind stiluri vizuale" este activată, acea opțiune va avea precedență asupra acestei opțiuni.
+
+  - winuiLikeRenderingCustomColors: false
+    $name: Allow using custom colors when rendering using the WinUI style
+    $name:ro: Permite folosirea de culori personalizate atunci când se randează folosind stilul WinUI
 
   $name: Rendering
   $name:ro: Randare
@@ -280,6 +275,8 @@ static INT      g_intermediateThreshold          = 0;
 // Rendering
 static BOOL     g_renderUsingVisualStyles        = FALSE;
 static BOOL     g_darkModeVSRendering            = TRUE;
+static BOOL     g_winuiLikeRendering             = FALSE;
+static BOOL     g_winuiLikeRenderingCustomColors = FALSE;
 
 // Custom rendering
 static BOOL     g_useSystemAccentColor           = FALSE;
@@ -355,6 +352,8 @@ static void LoadSettings() {
     // Rendering
     g_renderUsingVisualStyles        = Wh_GetIntSetting(L"rendering.renderUsingVisualStyles");
     g_darkModeVSRendering            = Wh_GetIntSetting(L"rendering.darkModeVSRendering");
+    g_winuiLikeRendering             = Wh_GetIntSetting(L"rendering.winuiLikeRendering");
+    g_winuiLikeRenderingCustomColors = Wh_GetIntSetting(L"rendering.winuiLikeRenderingCustomColors");
 
     // Custom rendering
     g_useSystemAccentColor           = Wh_GetIntSetting(L"customRendering.useSystemAccentColor");
@@ -395,6 +394,24 @@ static void LoadSettings() {
     g_progressColorIntermediateDark  = LoadColorSetting(L"customRendering.darkModeColors.progressColorIntermediate",  0x0000E1FC);
     g_progressColorFullDark          = LoadColorSetting(L"customRendering.darkModeColors.progressColorFull",          0x00533DFF);
     g_percentageLabelColorDark       = LoadColorSetting(L"customRendering.darkModeColors.percentageLabelColor",       0x00FFFFFF);
+
+    if (g_winuiLikeRendering) {
+        g_renderBarBorder                = FALSE;
+        g_heightFactor                   = 20;
+        g_roundProgressRightCorners      = TRUE;
+        
+        if (!g_winuiLikeRenderingCustomColors) {
+            g_useSystemAccentColor           = TRUE;
+
+            g_barColorLight                  = 0x00868686;
+            g_progressColorIntermediateLight = 0x00005D9D;
+            g_progressColorFullLight         = 0x001C2BC4;
+
+            g_barColorDark                   = 0x009A9A9A;
+            g_progressColorIntermediateDark  = 0x0000E1FC;
+            g_progressColorFullDark          = 0x00533DFF;
+        }
+    }
 }
 
 
@@ -427,7 +444,7 @@ static int GetCornerRadius(const RECT& rect) {
     int height = rect.bottom - rect.top;
     if (height <= 0 || g_cornerRadiusFactor <= 0) return 0;
 
-    int radius = ((height / 2) * g_cornerRadiusFactor + 50) / 100;
+    int radius = ((height / 2) * g_cornerRadiusFactor) / 100;
     return (radius < 1) ? 1 : radius;
 }
 
@@ -438,7 +455,7 @@ static void FillRoundedRect(
     if (rect.right <= rect.left || rect.bottom <= rect.top) return;
 
     Graphics graphics(hdc);
-    graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+    graphics.SetSmoothingMode(SmoothingModeAntiAlias8x8);
     graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
 
     SolidBrush brush(Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
@@ -591,7 +608,12 @@ HRESULT WINAPI HookedDrawThemeBackground(
                 else 
                     return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 
-                int radius = GetCornerRadius(clipRect);
+                int radius;
+
+                if (g_winuiLikeRendering) 
+                    radius = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200 + 1;
+                else 
+                    radius = GetCornerRadius(clipRect);
 
                 if (g_renderBarBorder) {
                     clipRect.top++; clipRect.left++; clipRect.bottom--; clipRect.right--;
@@ -617,6 +639,16 @@ HRESULT WINAPI HookedDrawThemeBackground(
             g_barWidth  = clipRect.right - clipRect.left;
             if (g_barWidth < 1) g_barWidth = 1;
  
+            if (!g_renderUsingVisualStyles && g_winuiLikeRendering) {
+                int inset = (clipRect.bottom - clipRect.top) / 2;
+
+                clipRect.top = clipRect.top + inset;
+                clipRect.bottom = clipRect.bottom - inset;
+
+                if (inset * 2 == clipRect.bottom - clipRect.top + inset * 2)
+                    clipRect.bottom++;
+            }
+
             if (g_renderUsingVisualStyles)
                 DrawThemeBackground_orig(hTheme, hdc, PP_TRANSPARENTBAR, PBS_NORMAL, &clipRect, 0);
             else {
