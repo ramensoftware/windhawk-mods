@@ -62,14 +62,23 @@ class name (`Button`), `ClassName#Name`, or a parent chain (`StackPanel > TextBl
 | `TrayPanel` | Right-hand strip holding the status buttons and clock |
 | `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton` `TrayButton` | Status buttons |
 | `ClockButton` / `ClockText` | Date/time |
-| `DisplayFlyoutRoot` `SoundFlyoutRoot` `WifiFlyoutRoot` `BluetoothFlyoutRoot` `TrayFlyoutRoot` | Flyout panel roots |
-| `FlyoutTitle` `FlyoutListRow` `FlyoutFooterLink` `FlyoutDivider` | Shared flyout parts |
-| `ExpanderHeader` / `QuickToggleTile` | Collapsible section headers, and the Display tiles |
-| `SoundMuteButton` | Mute button in the Sound panel |
-| `WifiPasswordBox` `WifiConnectButton` `WifiCancelButton` | The inline Wi-Fi password prompt |
 
-More targets can be discovered with **UWPSpy** by attaching to the top bar process
-(`explorer.exe -tool-mod windhawk-topbar`).
+
+More targets can be discovered with **UWPSpy** by Spying the TopBar's `explorer.exe` process
+
+### Keyboard shortcuts (For Inspecting the elements in Flyouts)
+
+After setting UWPSpy at Sticky mode, the following Shortcuts can be used to trigger the flyouts for stylings:
+
+| Hotkey | Action |
+|--------|--------|
+| Ctrl+Alt+1 | Toggle Display flyout |
+| Ctrl+Alt+2 | Toggle Sound flyout |
+| Ctrl+Alt+3 | Toggle Wi-Fi flyout |
+| Ctrl+Alt+4 | Toggle Bluetooth flyout |
+| Ctrl+Alt+5 | Toggle Tray flyout |
+| Ctrl+Alt+6 | Show Start button context menu |
+| Ctrl+Alt+7 | Show Task list context menu |
 
 Style syntax: `Property=Value`, `Property:=<Xaml/>`, `$name` constants.
 `TaskButton` also accepts `IconTintColor` and `IconTintOpacity`.
@@ -82,12 +91,10 @@ and strips island root backgrounds.
 
 ## Known limitations
 
-- Tray clicks are synthesized (cursor moved to real icon).
-- Night Light uses an undocumented CloudStore blob.
-- Audio device switching uses undocumented `IPolicyConfig`.
-- Bluetooth pairing opens Settings (needs consent UI).
-- Brightness needs a WMI-capable panel or a DDC/CI monitor.
-- Task list refreshes on a 5‑second timer.
+- Tray icons dont show up - Will be fixed later.
+- Night Light button wont work as it is undocumented - May be fixed later
+- Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.
+
 */
 // ==/WindhawkModReadme==
 
@@ -198,6 +205,8 @@ and strips island root backgrounds.
 #include <shlwapi.h>
 #include <shellscalingapi.h>
 #include <objbase.h>
+
+
 
 // Deliberately NOT including <initguid.h>: it would make every DEFINE_GUID in
 // the headers below emit a definition into this translation unit, which risks
@@ -384,7 +393,8 @@ std::vector<ControlStyleRule> g_themeStyleRules;
 // Globals
 // ============================================================================
 
-// Tool-mod mutex removed for merged model.
+bool g_isToolModProcessLauncher = false;
+HANDLE g_toolModProcessMutex = nullptr;
 HANDLE g_topBarThread;
 DWORD g_topBarThreadId;
 HANDLE g_stopEvent = nullptr;  // Stop event for clean shutdown
@@ -441,6 +451,8 @@ constexpr int HOTKEY_ID_SOUND = 2;
 constexpr int HOTKEY_ID_WIFI = 3;
 constexpr int HOTKEY_ID_BLUETOOTH = 4;
 constexpr int HOTKEY_ID_TRAY = 5;
+constexpr int HOTKEY_ID_START_MENU = 6;
+constexpr int HOTKEY_ID_TASK_MENU = 7;
 UINT g_taskbarCreatedMsg = 0;
 bool g_appBarRegistered = false;
 
@@ -5273,9 +5285,7 @@ void PopulateTrayPanel() {
         children.Append(row);
     }
 
-    children.Append(MakeDivider());
-    children.Append(
-        MakeSettingsLink(L"Taskbar notification settings", L"ms-settings:taskbar"));
+
 }
 
 // ============================================================================
@@ -6294,6 +6304,22 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 case HOTKEY_ID_TRAY:
                     ToggleFlyout(g_trayFlyout, g_trayButton);
                     break;
+                case HOTKEY_ID_START_MENU:
+                    if (g_startContextMenu) {
+                        auto it = g_namedElements.find(L"StartButton");
+                        if (it != g_namedElements.end()) {
+                            g_startContextMenu.ShowAt(it->second.as<FrameworkElement>());
+                        }
+                    }
+                    break;
+                case HOTKEY_ID_TASK_MENU:
+                    if (g_taskContextMenu) {
+                        auto it = g_namedElements.find(L"TaskListPanel");
+                        if (it != g_namedElements.end()) {
+                            g_taskContextMenu.ShowAt(it->second.as<FrameworkElement>());
+                        }
+                    }
+                    break;
             }
             return 0;
 
@@ -6381,6 +6407,13 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         try {
             g_xamlManager = wuxh::WindowsXamlManager::InitializeForCurrentThread();
+            // Force dark theme for the whole app
+            try {
+                auto app = Application::Current();
+                if (app) {
+                    app.RequestedTheme(ApplicationTheme::Dark);
+                }
+            } catch (...) {}
             g_desktopSource = wuxh::DesktopWindowXamlSource();
 
             auto native = g_desktopSource.as<IDesktopWindowXamlSourceNative>();
@@ -6434,11 +6467,13 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
     // Register global hotkeys (Ctrl+Alt+1..5) to open control flyouts.
         // Hotkeys are disabled by default. Ctrl+Alt+digit is a common app binding.
         // Uncomment the lines below to re-enable them.
-        // RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
-        // RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
-        // RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
-        // RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-        // RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
+        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
         RegisterAppBar(g_topBarHwnd);
         // A moment later, so the shell has finished its own start-up layout pass
         // and doesn't immediately overwrite our reservation.
@@ -6760,6 +6795,11 @@ void WhTool_ModUninit() {
 // Standard mod entry points
 // ============================================================================
 
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
 BOOL Wh_ModInit() {
     DWORD sessionId = 0;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
@@ -6767,6 +6807,9 @@ BOOL Wh_ModInit() {
     }
 
     bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -6781,28 +6824,132 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
     LocalFree(argv);
 
     if (isExcluded) {
         return FALSE;
     }
 
-    // --- MERGED MODEL: Run directly inside Explorer (simplest working config) ---
-    if (!WhTool_ModInit()) {
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        // Hook out the host's real entry point so explorer.exe never starts as
+        // a shell -- this process exists only to run the bar.
+        auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandle(nullptr));
+        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
+            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+        void* entryPoint =
+            reinterpret_cast<BYTE*>(dosHeader) + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+
+        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
         return FALSE;
     }
 
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // Do nothing – the thread is already created.
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    // Already running from a previous load: don't start a second bar.
+    if (HANDLE existing = OpenMutex(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID)) {
+        CloseHandle(existing);
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    // CreateProcessInternalW rather than CreateProcessW: Windhawk's own
+    // injection hooks sit on the public function, and going through them here
+    // would have the launcher inject into itself.
+    using CreateProcessInternalW_t =
+        BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+                      BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION,
+                      PHANDLE);
+    auto createProcessInternalW = reinterpret_cast<CreateProcessInternalW_t>(
+        GetProcAddress(kernelModule, "CreateProcessInternalW"));
+    if (!createProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
+
+    PROCESS_INFORMATION processInfo{};
+    if (!createProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
+                                FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &startupInfo,
+                                &processInfo, nullptr)) {
+        Wh_Log(L"CreateProcess failed: %u", GetLastError());
+        return;
+    }
+
+    CloseHandle(processInfo.hProcess);
+    CloseHandle(processInfo.hThread);
 }
 
 void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
     WhTool_ModUninit();
+    ExitProcess(0);
 }
