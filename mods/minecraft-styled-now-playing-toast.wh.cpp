@@ -7,13 +7,21 @@
 // @github          https://github.com/MaxURhino
 // @homepage        https://maxurhino.github.io
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lgdiplus -lwindowsapp -lshell32 -luser32 -lwinhttp -lshlwapi
+// @compilerOptions -lgdi32 -lgdiplus -lwindowsapp -lshell32 -luser32 -lshlwapi
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Adds a Minecraft styled overlay for the current thing playing.
+# About
+This mod adds a Minecraft styled overlay for the current thing playing on your computer.
+It does use a nine-patch rect for it's background sizing, and it can use your default, system font, if a custom isn't provided.
+The modification uses some of Mojang assets compacted in Base64 links, so please support Mojang by buying their original game.
+# Settings
+You can change a bunch of the mod settings, like:
+- Overlay scale
+- Show toast/animation
+- Change custom font
 */
 // ==/WindhawkModReadme==
 
@@ -40,11 +48,9 @@ Adds a Minecraft styled overlay for the current thing playing.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <winhttp.h>
+#include <windhawk_utils.h>
 
-#define INITGUID
 #include <shlobj.h>
-#include <knownfolders.h>
 
 #include <string>
 #include <vector>
@@ -63,107 +69,38 @@ HINSTANCE g_hInstance = nullptr;
 Gdiplus::FontFamily* g_customFontFamily = nullptr;
 Gdiplus::PrivateFontCollection* g_privateFonts = nullptr;
 
-std::vector<BYTE> DownloadUrlToMemory(const wchar_t* url) {
-    std::vector<BYTE> result;
-
-    URL_COMPONENTS urlComp = { sizeof(urlComp) };
-    wchar_t hostName[256] = {};
-    wchar_t urlPath[2048] = {};
-
-    urlComp.lpszHostName = hostName;
-    urlComp.dwHostNameLength = ARRAYSIZE(hostName);
-    urlComp.lpszUrlPath = urlPath;
-    urlComp.dwUrlPathLength = ARRAYSIZE(urlPath);
-
-    if (!WinHttpCrackUrl(url, 0, 0, &urlComp)) {
-        return result;
+std::string WStringToString(const WCHAR* str) {
+    if (!str) {
+        return {};
     }
 
-    HINTERNET hSession = WinHttpOpen(
-        L"WindhawkModAgent/1.0",
-        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-        WINHTTP_NO_PROXY_NAME,
-        WINHTTP_NO_PROXY_BYPASS,
-        0
-    );
-
-    if (!hSession) {
-        return result;
-    }
-
-    WinHttpSetTimeouts(hSession, 5000, 5000, 5000, 5000);
-
-    HINTERNET hConnect = WinHttpConnect(
-        hSession,
-        hostName,
-        urlComp.nPort,
-        0
-    );
-
-    if (!hConnect) {
-        WinHttpCloseHandle(hSession);
-        return result;
-    }
-
-    DWORD flags =
-        (urlComp.nScheme == INTERNET_SCHEME_HTTPS)
-            ? WINHTTP_FLAG_SECURE
-            : 0;
-
-    HINTERNET hRequest = WinHttpOpenRequest(
-        hConnect,
-        L"GET",
-        urlPath,
+    int size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        str,
+        -1,
         nullptr,
-        WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES,
-        flags
+        0,
+        nullptr,
+        nullptr
     );
 
-    if (!hRequest) {
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return result;
+    if (size <= 0) {
+        return {};
     }
 
-    bool ok =
-        WinHttpSendRequest(
-            hRequest,
-            WINHTTP_NO_ADDITIONAL_HEADERS,
-            0,
-            WINHTTP_NO_REQUEST_DATA,
-            0,
-            0,
-            0
-        ) &&
-        WinHttpReceiveResponse(hRequest, nullptr);
+    std::string result(size - 1, '\0');
 
-    if (ok) {
-        DWORD bytesAvailable = 0;
-
-        while (
-            WinHttpQueryDataAvailable(hRequest, &bytesAvailable) &&
-            bytesAvailable > 0
-        ) {
-            size_t oldSize = result.size();
-            result.resize(oldSize + bytesAvailable);
-
-            DWORD bytesRead = 0;
-
-            WinHttpReadData(
-                hRequest,
-                result.data() + oldSize,
-                bytesAvailable,
-                &bytesRead
-            );
-
-            result.resize(oldSize + bytesRead);
-        }
-    }
-
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        str,
+        -1,
+        result.data(),
+        size,
+        nullptr,
+        nullptr
+    );
 
     return result;
 }
@@ -241,51 +178,6 @@ Gdiplus::Image* LoadImageFromMemory(
     return image;
 }
 
-std::vector<BYTE> g_fontBytes;
-
-bool InitCustomFontFromMemory(
-    const std::vector<BYTE>& fontData
-) {
-    if (fontData.empty()) {
-        return false;
-    }
-
-    g_fontBytes = fontData;
-
-    g_privateFonts =
-        new Gdiplus::PrivateFontCollection();
-
-    Gdiplus::Status status =
-        g_privateFonts->AddMemoryFont(
-            g_fontBytes.data(),
-            (INT)g_fontBytes.size()
-        );
-
-    if (status != Gdiplus::Ok) {
-        return false;
-    }
-
-    int count =
-        g_privateFonts->GetFamilyCount();
-
-    if (count == 0) {
-        return false;
-    }
-
-    g_customFontFamily =
-        new Gdiplus::FontFamily();
-
-    int found = 0;
-
-    g_privateFonts->GetFamilies(
-        1,
-        g_customFontFamily,
-        &found
-    );
-
-    return found > 0;
-}
-
 HWND g_hwnd;
 HANDLE g_thread;
 volatile bool g_stop = false;
@@ -303,9 +195,6 @@ int g_musicNotes_currentFrame = 0;
 
 int g_musicNotes_currentWidth = 0;
 int g_musicNotes_currentHeight = 0;
-
-const UINT_PTR musicNotes_kAnimTimerId = 1;
-const UINT musicNotes_kAnimIntervalMs = 100;
 
 int g_scale = 3;
 bool g_defaultFont = false;
@@ -435,29 +324,6 @@ Gdiplus::Font* MakeCustomFont(
     );
 }
 
-Gdiplus::RectF MeasureText(
-    Gdiplus::Graphics& graphics,
-    const std::wstring& text,
-    Gdiplus::Font* font
-) {
-    Gdiplus::RectF boundingBox;
-
-    Gdiplus::PointF origin(
-        0.0f,
-        0.0f
-    );
-
-    graphics.MeasureString(
-        text.c_str(),
-        -1,
-        font,
-        origin,
-        &boundingBox
-    );
-
-    return boundingBox;
-}
-
 std::wstring StringToWString(
     const std::string& str
 ) {
@@ -492,44 +358,6 @@ std::wstring StringToWString(
     return result;
 }
 
-std::string WStringToString(
-    const std::wstring& wstr
-) {
-    if (wstr.empty()) {
-        return std::string();
-    }
-
-    int sizeNeeded =
-        WideCharToMultiByte(
-            CP_UTF8,
-            0,
-            wstr.c_str(),
-            (int)wstr.size(),
-            nullptr,
-            0,
-            nullptr,
-            nullptr
-        );
-
-    std::string result(
-        sizeNeeded,
-        0
-    );
-
-    WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        wstr.c_str(),
-        (int)wstr.size(),
-        &result[0],
-        sizeNeeded,
-        nullptr,
-        nullptr
-    );
-
-    return result;
-}
-
 struct NinePatchMargins {
     int left;
     int top;
@@ -553,6 +381,7 @@ struct NowPlayingInfo {
 };
 
 NowPlayingInfo g_nowPlaying;
+NowPlayingInfo g_lastPlaying;
 
 std::string g_customFont;
 
@@ -602,149 +431,7 @@ const int kHoldDurationFrames = 250;
 const int kHiddenY = -30;
 const int kVisibleY = 0;
 
-std::wstring GetCacheDir() {
-    PWSTR path = nullptr;
-    std::wstring result;
-
-    if (
-        SUCCEEDED(
-            SHGetKnownFolderPath(
-                FOLDERID_LocalAppData,
-                0,
-                nullptr,
-                &path
-            )
-        )
-    ) {
-        result = path;
-
-        result +=
-            L"\\WindhawkMinecraftMusicPlayer\\";
-
-        CreateDirectoryW(
-            result.c_str(),
-            nullptr
-        );
-
-        CoTaskMemFree(path);
-    }
-
-    return result;
-}
-
-std::vector<BYTE> ReadEntireFile(
-    const wchar_t* path
-) {
-    std::vector<BYTE> result;
-
-    HANDLE hFile =
-        CreateFileW(
-            path,
-            GENERIC_READ,
-            FILE_SHARE_READ,
-            nullptr,
-            OPEN_EXISTING,
-            0,
-            nullptr
-        );
-
-    if (hFile == INVALID_HANDLE_VALUE) {
-        return result;
-    }
-
-    LARGE_INTEGER size;
-
-    GetFileSizeEx(
-        hFile,
-        &size
-    );
-
-    result.resize(
-        (size_t)size.QuadPart
-    );
-
-    DWORD bytesRead = 0;
-
-    ReadFile(
-        hFile,
-        result.data(),
-        (DWORD)size.QuadPart,
-        &bytesRead,
-        nullptr
-    );
-
-    CloseHandle(hFile);
-
-    return result;
-}
-
-bool WriteEntireFile(
-    const wchar_t* path,
-    const std::vector<BYTE>& data
-) {
-    HANDLE hFile =
-        CreateFileW(
-            path,
-            GENERIC_WRITE,
-            0,
-            nullptr,
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr
-        );
-
-    if (hFile == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-
-    DWORD written = 0;
-
-    bool ok =
-        WriteFile(
-            hFile,
-            data.data(),
-            (DWORD)data.size(),
-            &written,
-            nullptr
-        ) != 0;
-
-    CloseHandle(hFile);
-
-    return ok;
-}
-
-std::vector<BYTE> LoadWithCache(
-    const wchar_t* url,
-    const wchar_t* cacheFileName
-) {
-    std::wstring cachePath =
-        GetCacheDir() + cacheFileName;
-
-    std::vector<BYTE> cached =
-        ReadEntireFile(
-            cachePath.c_str()
-        );
-
-    if (!cached.empty()) {
-        return cached;
-    }
-
-    std::vector<BYTE> downloaded =
-        DownloadUrlToMemory(url);
-
-    if (!downloaded.empty()) {
-        WriteEntireFile(
-            cachePath.c_str(),
-            downloaded
-        );
-    }
-
-    return downloaded;
-}
-
-std::string StripSurroundingQuotes(
-    const std::string& str
-) {
+std::string StripSurroundingQuotes(const std::string& str) {
     if (
         str.size() >= 2 &&
         str.front() == '"' &&
@@ -759,12 +446,29 @@ std::string StripSurroundingQuotes(
     return str;
 }
 
-DWORD WINAPI FontDownloadThread(
+std::wstring StripSurroundingQuotes(const WCHAR* str) {
+    if (!str) {
+        return {};
+    }
+
+    std::wstring result(str);
+
+    if (result.size() >= 2 &&
+        result.front() == L'"' &&
+        result.back() == L'"') {
+        result = result.substr(1, result.size() - 2);
+    }
+
+    return result;
+}
+
+WindhawkUtils::StringSetting customFont;
+
+DWORD WINAPI FontChangeThread(
     LPVOID
 ) {
     if (g_customFont != "") {
-        std::wstring wsCustomFont =
-            StringToWString(g_customFont);
+        std::wstring wsCustomFont = StripSurroundingQuotes(customFont.get());
 
         Wh_Log(
             L"Initializing custom font with path \"%s\"",
@@ -1045,18 +749,24 @@ void DrawNinePatch(
 }
 
 std::string createSongName() {
+    if ((g_nowPlaying.title.empty() && g_nowPlaying.subtitle.empty()) || (g_lastPlaying.title == g_nowPlaying.title && g_lastPlaying.subtitle == g_nowPlaying.subtitle)) {
+        return lastSongName;
+    }
+    g_lastPlaying = g_nowPlaying;
     return
-        WStringToString(g_nowPlaying.subtitle) +
+        WStringToString(g_nowPlaying.subtitle.c_str()) +
         " - " +
-        WStringToString(g_nowPlaying.title);
+        WStringToString(g_nowPlaying.title.c_str());
 }
 
 void RenderAndUpdateWindow(
     HWND hwnd,
     int height
 ) {
+    float dpiScale = GetDpiForWindow(hwnd) / 96.0f;
+
     float sizeInPoints =
-        7.0f * g_scale;
+        7.0f * g_scale * dpiScale;
 
     if (
         g_systemFontFamily ||
@@ -1112,13 +822,15 @@ void RenderAndUpdateWindow(
             0.0f
         );
 
-        measureGraphics.MeasureString(
-            songNameWstring.c_str(),
-            -1,
-            titleFont,
-            origin,
-            &bbox
-        );
+        if (g_slideState != SlideState::Hidden) {
+            measureGraphics.MeasureString(
+                songNameWstring.c_str(),
+                -1,
+                titleFont,
+                origin,
+                &bbox
+            );
+        }
 
         ReleaseDC(
             nullptr,
@@ -1223,7 +935,8 @@ void RenderAndUpdateWindow(
 
     if (
         g_image &&
-        g_image->GetLastStatus() == Ok
+        g_image->GetLastStatus() == Ok &&
+        g_slideState != SlideState::Hidden
     ) {
         graphics.SetCompositingMode(
             CompositingModeSourceCopy
@@ -1248,7 +961,8 @@ void RenderAndUpdateWindow(
     if (
         g_musicNotes &&
         g_musicNotes->GetLastStatus() == Ok &&
-        g_musicNotes_frameHeight > 0
+        g_musicNotes_frameHeight > 0 &&
+        g_slideState != SlideState::Hidden
     ) {
         graphics.SetCompositingMode(
             CompositingModeSourceOver
@@ -1292,7 +1006,7 @@ void RenderAndUpdateWindow(
         );
     }
 
-    if (titleFont) {
+    if (titleFont && g_slideState != SlideState::Hidden) {
         graphics.SetCompositingMode(
             CompositingModeSourceOver
         );
@@ -1313,8 +1027,8 @@ void RenderAndUpdateWindow(
         );
 
         Gdiplus::PointF textPos(
-            30.0f * g_scale,
-            10.5f * g_scale
+            30.0f * g_scale * dpiScale,
+            10.5f * g_scale * dpiScale
         );
 
         Gdiplus::SolidBrush shadowBrush(
@@ -1450,6 +1164,35 @@ LRESULT CALLBACK WndProc(
             return 0;
         }
 
+        case WM_DPICHANGED: {
+            UINT dpi = HIWORD(wp);
+
+            float dpiScale = dpi / 96.0f;
+
+            RECT* suggestedRect = reinterpret_cast<RECT*>(lp);
+
+            suggestedRect->left   *= g_scale * dpiScale;
+            suggestedRect->top    *= g_scale * dpiScale;
+            suggestedRect->bottom *= g_scale * dpiScale;
+            suggestedRect->right  *= g_scale * dpiScale;
+
+            int height = suggestedRect->bottom - suggestedRect->top;
+
+            SetWindowPos(
+                hwnd,
+                nullptr,
+                suggestedRect->left,
+                suggestedRect->top,
+                suggestedRect->right - suggestedRect->left,
+                height,
+                SWP_NOZORDER | SWP_NOACTIVATE
+            );
+
+            RenderAndUpdateWindow(hwnd, height);
+
+            return 0;
+        }
+
         case WM_APP: {
             ApplyScaleAndRedraw();
             return 0;
@@ -1532,38 +1275,39 @@ void parseModSettings() {
         g_scale = 1;
     }
 
-    g_defaultFont =
-        Wh_GetIntSetting(
-            L"default-font"
-        ) != 0;
-
     g_showAnimation =
         Wh_GetIntSetting(
             L"show-animation"
         ) != 0;
 
-    g_customFont =
-        StripSurroundingQuotes(
-            WStringToString(
-                Wh_GetStringSetting(
-                    L"custom-font"
-                )
-            )
-        );
+    customFont = WindhawkUtils::StringSetting::make(L"custom-font");
 
-    CreateThread(
-        nullptr,
-        0,
-        FontDownloadThread,
-        nullptr,
-        0,
-        nullptr
-    );
+    std::wstring newCustomFont = StripSurroundingQuotes(customFont.get());
+    const WCHAR* ncfCStr = newCustomFont.c_str();
+
+    std::string stringNCF = WStringToString(ncfCStr);
+
+    bool shouldChangeFont = stringNCF != g_customFont;
+
+    g_customFont = stringNCF;
+
+    if (shouldChangeFont) {
+        CreateThread(
+            nullptr,
+            0,
+            FontChangeThread,
+            nullptr,
+            0,
+            nullptr
+        );
+    }
 }
 
 DWORD WINAPI OverlayThread(
     LPVOID
 ) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     winrt::init_apartment(
         winrt::apartment_type::multi_threaded
     );
