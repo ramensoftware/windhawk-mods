@@ -150,15 +150,15 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
   - "en": "English"
   - "ru": "Русский"
 - marginSide: "4 4"
-  $name: Widget margins (left right)
-  $name:ru-RU: Отступы виджета (слева справа)
-  $description: Margin in pixels: left and right separated by a space (default: 4 4)
-  $description:ru-RU: Отступ в пикселях: левый и правый через пробел (по умолчанию 4 4)
+  $name: "Widget margins (left right)"
+  $name:ru-RU: "Отступы виджета (слева справа)"
+  $description: "Margin in pixels: left and right separated by a space (default: 4 4)"
+  $description:ru-RU: "Отступ в пикселях: левый и правый через пробел (по умолчанию 4 4)"
 - hideDisconnectedBuds: true
-  $name: Hide disconnected earbud
-  $name:ru-RU: Скрывать отключенный наушник
-  $description: Hide inactive earbud in the widget avoiding disconnected battery icon
-  $description:ru-RU: Скрывать неактивный наушник в виджете и не показывать батарею с крестиком
+  $name: "Hide disconnected earbud"
+  $name:ru-RU: "Скрывать отключенный наушник"
+  $description: "Hide inactive earbud in the widget avoiding disconnected battery icon"
+  $description:ru-RU: "Скрывать неактивный наушник в виджете и не показывать батарею с крестиком"
 */
 // ==/WindhawkModSettings==
 
