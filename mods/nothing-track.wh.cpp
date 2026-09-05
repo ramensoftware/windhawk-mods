@@ -10,7 +10,7 @@
 // @homepage        https://github.com/lenorio/Nothing-Track
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -ldwmapi -lshcore -lwininet
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,6 +18,8 @@
 # Nothing Track
 
 Displays battery levels and quick audio controls for Nothing and CMF earbuds on the Windows 11 taskbar.
+
+![Nothing Track Screenshot](https://raw.githubusercontent.com/lenorio/Nothing-Track/main/assets/screenshot.png)
 
 The mod communicates with earbuds directly over Bluetooth RFCOMM (SPP), so you don't need the phone app or an emulator to check battery or toggle features on PC.
 
@@ -119,33 +121,44 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
   - "tray_after_showdesktop_left": "Трей - Слева от кнопки Показать рабочий стол"
   - "tray_after_showdesktop_right": "Трей - Справа от кнопки Показать рабочий стол"
 - displayFormat: "compact"
-  $name: "Формат отображения"
-  $name:en-US: "Display format"
+  $name: Display format
+  $name:ru-RU: Формат отображения
   $options:
-  - "compact": "Компактный (Две батареи: L и R) / Compact (Dual battery)"
-  - "detailed": "Подробный (Имя + Батареи) / Detailed (Name + Batteries)"
-  - "single_active": "Один активный наушник / Single active earbud"
-  - "icon_only": "Только иконки (🎧) / Icon only"
+  - "compact": "Compact (Dual battery: L & R)"
+  - "detailed": "Detailed (Name + Batteries)"
+  - "single_active": "Single active earbud"
+  - "icon_only": "Icon only (🎧)"
+  $options:ru-RU:
+  - "compact": "Компактный (Две батареи: L и R)"
+  - "detailed": "Подробный (Имя + Батареи)"
+  - "single_active": "Один активный наушник"
+  - "icon_only": "Только иконки (🎧)"
 - pollInterval: 30
-  $name: "Интервал опроса батареи (сек)"
-  $name:en-US: "Battery polling interval (sec)"
-  $description: "Периодичность обновления заряда аккумулятора по Bluetooth (10-120 сек)"
-  $description:en-US: "Battery update interval over Bluetooth (10-120 sec)"
+  $name: Battery polling interval (sec)
+  $name:ru-RU: Интервал опроса батареи (сек)
+  $description: Battery update interval over Bluetooth (10-120 sec)
+  $description:ru-RU: Периодичность обновления заряда аккумулятора по Bluetooth (10-120 сек)
 - language: "auto"
-  $name: "Язык интерфейса"
-  $name:en-US: "Interface language"
+  $name: Interface language
+  $name:ru-RU: Язык интерфейса
   $options:
-  - "auto": "Авто (Язык системы) / Auto (System language)"
-  - "ru": "Русский"
+  - "auto": "Auto (System language)"
   - "en": "English"
+  - "ru": "Russian"
+  $options:ru-RU:
+  - "auto": "Авто (Язык системы)"
+  - "en": "English"
+  - "ru": "Русский"
 - marginSide: "4 4"
-  $name: "Отступы виджета (слева справа)"
-  $description: "Отступ в пикселях: левый и правый через пробел (по умолчанию 4 4)"
+  $name: Widget margins (left right)
+  $name:ru-RU: Отступы виджета (слева справа)
+  $description: Margin in pixels: left and right separated by a space (default: 4 4)
+  $description:ru-RU: Отступ в пикселях: левый и правый через пробел (по умолчанию 4 4)
 - hideDisconnectedBuds: true
-  $name: "Скрывать отключенный наушник"
-  $name:en-US: "Hide disconnected earbud"
-  $description: "Скрывать неактивный наушник в виджете и не показывать батарею с крестиком"
-  $description:en-US: "Hide inactive earbud in the widget avoiding disconnected battery icon"
+  $name: Hide disconnected earbud
+  $name:ru-RU: Скрывать отключенный наушник
+  $description: Hide inactive earbud in the widget avoiding disconnected battery icon
+  $description:ru-RU: Скрывать неактивный наушник в виджете и не показывать батарею с крестиком
 */
 // ==/WindhawkModSettings==
 
@@ -175,16 +188,19 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
 #include <winrt/Windows.Storage.Streams.h>
 
 #include <windows.h>
-#include <shellapi.h>
 #include <cwchar>
 #include <cwctype>
+#include <cstdint>
+#include <memory>
 #include <vector>
+#include <deque>
 #include <string>
 #include <string_view>
 #include <chrono>
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <algorithm>
 #include <functional>
 #include <windhawk_api.h>
@@ -259,18 +275,20 @@ static ModSettings g_settings;
 static EarbudsState g_earbudsState;
 static std::mutex g_stateMutex;
 static HWND g_taskbarWnd = nullptr;
-static bool g_unloading = false;
+static std::atomic<bool> g_unloading{false};
 
 // XAML Elements references
-static Grid g_injectedGrid{nullptr};
-static FrameworkElement g_injectionParent{nullptr};
+[[clang::no_destroy]] static Grid g_injectedGrid{nullptr};
+[[clang::no_destroy]] static FrameworkElement g_injectionParent{nullptr};
 static int g_injectedColumn = -1;
-static FrameworkElement g_trackedElement{nullptr};
+[[clang::no_destroy]] static FrameworkElement g_trackedElement{nullptr};
 static Thickness g_trackedElementOriginalMargin{};
 static bool g_hasTrackedElementOriginalMargin = false;
 static std::wstring g_trackPosition = L"";
 static winrt::event_token g_layoutUpdateToken{};
-static DispatcherTimer g_dispatcherTimer{nullptr};
+[[clang::no_destroy]] static DispatcherTimer g_dispatcherTimer{nullptr};
+[[clang::no_destroy]] static DispatcherTimer g_retryTimer{nullptr};
+[[clang::no_destroy]] static Flyout s_currentFlyout{nullptr};
 static winrt::event_token g_timerToken{};
 
 static inline uint16_t ComputeCrc16(const uint8_t* data, size_t size) {
@@ -305,7 +323,7 @@ static inline std::vector<uint8_t> BuildPacket(uint16_t commandId, const std::ve
 class BluetoothManager {
 public:
     static BluetoothManager& Instance() {
-        static BluetoothManager s_instance;
+        [[clang::no_destroy]] static BluetoothManager s_instance;
         return s_instance;
     }
 
@@ -314,15 +332,29 @@ public:
         m_stopRequested.store(false);
         m_running.store(true);
         m_worker = std::thread([this]() { WorkerLoop(); });
+        m_actionWorker = std::thread([this]() { ActionLoop(); });
     }
 
     void Stop() {
         m_stopRequested.store(true);
         Disconnect();
+        m_actionCv.notify_all();
+        if (m_actionWorker.joinable()) {
+            m_actionWorker.join();
+        }
         if (m_worker.joinable()) {
             m_worker.join();
         }
         m_running.store(false);
+    }
+
+    void PostAction(std::function<void()> action) {
+        if (m_stopRequested.load()) return;
+        {
+            std::lock_guard<std::mutex> lock(m_actionMutex);
+            m_actionQueue.push_back(std::move(action));
+        }
+        m_actionCv.notify_one();
     }
 
     bool IsConnected() const {
@@ -441,6 +473,35 @@ private:
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_connected{false};
     std::thread m_worker;
+    std::thread m_actionWorker;
+    std::mutex m_actionMutex;
+    std::condition_variable m_actionCv;
+    std::deque<std::function<void()>> m_actionQueue;
+
+    void ActionLoop() {
+        try {
+            init_apartment(winrt::apartment_type::multi_threaded);
+        } catch (...) {}
+        while (!m_stopRequested.load()) {
+            std::function<void()> action;
+            {
+                std::unique_lock<std::mutex> lock(m_actionMutex);
+                m_actionCv.wait(lock, [this]() {
+                    return m_stopRequested.load() || !m_actionQueue.empty();
+                });
+                if (m_stopRequested.load()) break;
+                if (!m_actionQueue.empty()) {
+                    action = std::move(m_actionQueue.front());
+                    m_actionQueue.pop_front();
+                }
+            }
+            if (action) {
+                try {
+                    action();
+                } catch (...) {}
+            }
+        }
+    }
 
     std::mutex m_socketMutex;
     StreamSocket m_socket{nullptr};
@@ -630,8 +691,8 @@ private:
                         for (auto& c : lower) c = towlower(c);
                         if (lower.find(L"nothing") != std::wstring::npos ||
                             lower.find(L"cmf") != std::wstring::npos ||
-                            lower.find(L"buds") != std::wstring::npos ||
-                            lower.find(L"ear") != std::wstring::npos) {
+                            lower.find(L"ear (") != std::wstring::npos ||
+                            lower.find(L"ear(") != std::wstring::npos) {
                             auto btDev = BluetoothDevice::FromIdAsync(dev.Id()).get();
                             if (btDev) {
                                 targetBtDev = btDev;
@@ -642,17 +703,26 @@ private:
                     }
                 } catch (...) {}
 
-                // 2. Fallback: check RFCOMM selector if name did not match
+                // 2. Fallback: check RFCOMM selector, verifying device name
                 if (!targetBtDev) {
                     try {
                         auto selector = RfcommDeviceService::GetDeviceSelector(RfcommServiceId::FromUuid(SppUuid()));
                         auto devices = DeviceInformation::FindAllAsync(selector).get();
-                        if (devices.Size() > 0) {
-                            auto s = RfcommDeviceService::FromIdAsync(devices.GetAt(0).Id()).get();
+                        for (uint32_t i = 0; i < devices.Size(); ++i) {
+                            auto s = RfcommDeviceService::FromIdAsync(devices.GetAt(i).Id()).get();
                             if (s && s.Device()) {
-                                targetBtDev = s.Device();
-                                service = s;
-                                realName = targetBtDev.Name().c_str();
+                                std::wstring devName = s.Device().Name().c_str();
+                                std::wstring lower = devName;
+                                for (auto& c : lower) c = towlower(c);
+                                if (lower.find(L"nothing") != std::wstring::npos ||
+                                    lower.find(L"cmf") != std::wstring::npos ||
+                                    lower.find(L"ear (") != std::wstring::npos ||
+                                    lower.find(L"ear(") != std::wstring::npos) {
+                                    targetBtDev = s.Device();
+                                    service = s;
+                                    realName = devName;
+                                    break;
+                                }
                             }
                         }
                     } catch (...) {}
@@ -757,21 +827,38 @@ private:
                             if (reader.ReadByte() != 0x55) continue;
 
                             if (reader.LoadAsync(7).get() < 7) break;
-                            reader.ReadByte(); // 0x60
-                            reader.ReadByte(); // 0x01
+                            uint8_t b1 = reader.ReadByte(); // 0x60
+                            uint8_t b2 = reader.ReadByte(); // 0x01
                             uint8_t cmdLo = reader.ReadByte();
                             uint8_t cmdHi = reader.ReadByte();
                             uint16_t cmd = cmdLo | (cmdHi << 8);
                             uint8_t pLen = reader.ReadByte();
-                            reader.ReadByte(); // 0x00
-                            reader.ReadByte(); // opId
+                            uint8_t b6 = reader.ReadByte(); // 0x00
+                            uint8_t opId = reader.ReadByte(); // opId
 
                             uint32_t toRead = pLen + 2;
                             if (reader.LoadAsync(toRead).get() < toRead) break;
                             std::vector<uint8_t> payload(pLen);
                             if (pLen > 0) reader.ReadBytes(payload);
-                            reader.ReadByte(); // crcLo
-                            reader.ReadByte(); // crcHi
+                            uint8_t crcLo = reader.ReadByte();
+                            uint8_t crcHi = reader.ReadByte();
+                            uint16_t expectedCrc = static_cast<uint16_t>(crcLo | (crcHi << 8));
+
+                            std::vector<uint8_t> packetData;
+                            packetData.reserve(8 + pLen);
+                            packetData.push_back(0x55);
+                            packetData.push_back(b1);
+                            packetData.push_back(b2);
+                            packetData.push_back(cmdLo);
+                            packetData.push_back(cmdHi);
+                            packetData.push_back(pLen);
+                            packetData.push_back(b6);
+                            packetData.push_back(opId);
+                            packetData.insert(packetData.end(), payload.begin(), payload.end());
+
+                            if (ComputeCrc16(packetData.data(), packetData.size()) != expectedCrc) {
+                                continue;
+                            }
 
                             ProcessPacket(cmd, payload);
                         }
@@ -1357,6 +1444,8 @@ struct FlyoutContext {
     }
 };
 
+static std::weak_ptr<FlyoutContext> s_currentFlyoutCtx;
+
 static UIElement BuildFlyoutContent() {
     ScrollViewer sv;
     sv.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
@@ -1375,6 +1464,7 @@ static UIElement BuildFlyoutContent() {
     mainSp.Spacing(10);
 
     auto ctx = std::make_shared<FlyoutContext>();
+    s_currentFlyoutCtx = ctx;
 
     EarbudsState state;
     {
@@ -1565,9 +1655,9 @@ static UIElement BuildFlyoutContent() {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.ancMode = m;
             }
-            std::thread([m]() {
+            BluetoothManager::Instance().PostAction([m]() {
                 BluetoothManager::Instance().SetAnc(m);
-            }).detach();
+            });
         });
 
         Grid::SetColumn(item.btn, (int)i);
@@ -1599,9 +1689,9 @@ static UIElement BuildFlyoutContent() {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.ancMode = sm;
             }
-            std::thread([sm]() {
+            BluetoothManager::Instance().PostAction([sm]() {
                 BluetoothManager::Instance().SetAnc(sm);
-            }).detach();
+            });
         });
 
         Grid::SetColumn(subItem.btn, (int)i);
@@ -1684,9 +1774,9 @@ static UIElement BuildFlyoutContent() {
                 g_earbudsState.bassEnabled = true;
                 g_earbudsState.bassLevel = lvl;
             }
-            std::thread([lvl]() {
+            BluetoothManager::Instance().PostAction([lvl]() {
                 BluetoothManager::Instance().SetBass(true, lvl);
-            }).detach();
+            });
         });
 
         Grid::SetColumn(item.btn, i);
@@ -1706,9 +1796,9 @@ static UIElement BuildFlyoutContent() {
             currentLvl = g_earbudsState.bassLevel;
         }
         ctx->ApplyBassVisuals(isOn, currentLvl);
-        std::thread([isOn, currentLvl]() {
+        BluetoothManager::Instance().PostAction([isOn, currentLvl]() {
             BluetoothManager::Instance().SetBass(isOn, currentLvl);
-        }).detach();
+        });
     });
 
     ctx->ApplyBassVisuals(state.bassEnabled, state.bassLevel);
@@ -1773,9 +1863,9 @@ static UIElement BuildFlyoutContent() {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.eqPreset = presetId;
             }
-            std::thread([presetId]() {
+            BluetoothManager::Instance().PostAction([presetId]() {
                 BluetoothManager::Instance().SetEq(presetId);
-            }).detach();
+            });
         });
 
         int row = (int)(i / 3);
@@ -1828,15 +1918,16 @@ static UIElement BuildFlyoutContent() {
     ctx->ApplyLowLatencyVisuals(state.lowLatencyEnabled);
 
     ctx->lowLatencyBtn.Click([ctx](auto const&, auto const&) {
-        bool next = !g_earbudsState.lowLatencyEnabled;
+        bool next = false;
         {
             std::lock_guard<std::mutex> lock(g_stateMutex);
-            g_earbudsState.lowLatencyEnabled = next;
+            g_earbudsState.lowLatencyEnabled = !g_earbudsState.lowLatencyEnabled;
+            next = g_earbudsState.lowLatencyEnabled;
         }
         ctx->ApplyLowLatencyVisuals(next);
-        std::thread([next]() {
+        BluetoothManager::Instance().PostAction([next]() {
             BluetoothManager::Instance().SetLowLatency(next);
-        }).detach();
+        });
     });
     Grid::SetColumn(ctx->lowLatencyBtn, 0);
     ctx->toolsGrid.Children().Append(ctx->lowLatencyBtn);
@@ -1879,9 +1970,9 @@ static UIElement BuildFlyoutContent() {
                     timer.Stop();
                     timer = nullptr;
                 }
-                std::thread([isLeft]() {
+                BluetoothManager::Instance().PostAction([isLeft]() {
                     BluetoothManager::Instance().FindBuds(isLeft, false);
-                }).detach();
+                });
 
                 ringBtn.Background(SolidColorBrush(Color{0x0D, 0xFF, 0xFF, 0xFF}));
                 ringIcon.Text(L"\uEA8F");
@@ -1904,9 +1995,9 @@ static UIElement BuildFlyoutContent() {
                 ringLabel.Text(Loc(isLeft ? StringId::StopLeft : StringId::StopRight));
                 ringLabel.Foreground(SolidColorBrush(Colors::White()));
 
-                std::thread([isLeft]() {
+                BluetoothManager::Instance().PostAction([isLeft]() {
                     BluetoothManager::Instance().FindBuds(isLeft, true);
-                }).detach();
+                });
 
                 timer = DispatcherTimer();
                 timer.Interval(std::chrono::milliseconds(5000));
@@ -1926,9 +2017,9 @@ static UIElement BuildFlyoutContent() {
                         tmr.Stop();
                         tmr = nullptr;
                     }
-                    std::thread([isLeft]() {
+                    BluetoothManager::Instance().PostAction([isLeft]() {
                         BluetoothManager::Instance().FindBuds(isLeft, false);
-                    }).detach();
+                    });
                 });
                 timer.Start();
             }
@@ -2091,6 +2182,7 @@ static Grid BuildWidgetGrid() {
 
     // Setup Flyout on click (opens unconstrained above the taskbar)
     Flyout flyout;
+    s_currentFlyout = flyout;
     try {
         flyout.Placement(winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutPlacementMode::Top);
         flyout.ShouldConstrainToRootBounds(false);
@@ -2103,10 +2195,25 @@ static Grid BuildWidgetGrid() {
     flyout.Closed([](auto const&, auto const&) {
         s_flyoutOpen = false;
         s_refreshFlyoutUi = nullptr;
-        std::thread([]() {
-            BluetoothManager::Instance().FindBuds(true, false);
-            BluetoothManager::Instance().FindBuds(false, false);
-        }).detach();
+        auto c = s_currentFlyoutCtx.lock();
+        if (c) {
+            if (c->ringTimerL) {
+                try { c->ringTimerL.Stop(); } catch (...) {}
+                c->ringTimerL = nullptr;
+            }
+            if (c->ringTimerR) {
+                try { c->ringTimerR.Stop(); } catch (...) {}
+                c->ringTimerR = nullptr;
+            }
+            if (c->isRingingL || c->isRingingR) {
+                c->isRingingL = false;
+                c->isRingingR = false;
+                BluetoothManager::Instance().PostAction([]() {
+                    BluetoothManager::Instance().FindBuds(true, false);
+                    BluetoothManager::Instance().FindBuds(false, false);
+                });
+            }
+        }
     });
 
     btn.Click([btn, flyout](auto const&, auto const&) {
@@ -2584,6 +2691,40 @@ static void RemoveWidgetGrid() {
         g_dispatcherTimer = nullptr;
     }
 
+    if (g_retryTimer) {
+        try {
+            g_retryTimer.Stop();
+        } catch (...) {}
+        g_retryTimer = nullptr;
+    }
+
+    if (s_currentFlyout) {
+        try {
+            s_currentFlyout.Hide();
+        } catch (...) {}
+        s_currentFlyout = nullptr;
+    }
+
+    auto c = s_currentFlyoutCtx.lock();
+    if (c) {
+        if (c->ringTimerL) {
+            try { c->ringTimerL.Stop(); } catch (...) {}
+            c->ringTimerL = nullptr;
+        }
+        if (c->ringTimerR) {
+            try { c->ringTimerR.Stop(); } catch (...) {}
+            c->ringTimerR = nullptr;
+        }
+        if (c->isRingingL || c->isRingingR) {
+            c->isRingingL = false;
+            c->isRingingR = false;
+            BluetoothManager::Instance().PostAction([]() {
+                BluetoothManager::Instance().FindBuds(true, false);
+                BluetoothManager::Instance().FindBuds(false, false);
+            });
+        }
+    }
+
     if (!g_injectionParent) return;
     try {
         if (g_layoutUpdateToken.value) {
@@ -2611,20 +2752,9 @@ static void RemoveWidgetGrid() {
         g_trackPosition = L"";
 
         auto targetGrid = g_injectionParent.try_as<Grid>();
-        int widgetCol = -1;
-        widgetCol = RemoveWidgetGridChildren(targetGrid);
-        bool isTrackingPosition = (g_settings.position == L"taskbar_left_edge" ||
-                                g_settings.position == L"taskbar_center_edge" ||
-                                g_settings.position == L"taskbar_right_edge" ||
-                                g_settings.position == L"taskbar_left_start" ||
-                                g_settings.position == L"taskbar_right_start" ||
-                                g_settings.position == L"taskbar_after_search_left" ||
-                                g_settings.position == L"taskbar_after_search_right" ||
-                                g_settings.position == L"taskbar_after_taskview_left" ||
-                                g_settings.position == L"taskbar_after_taskview_right" ||
-                                g_settings.position == L"taskbar_after_widgets_left" ||
-                                g_settings.position == L"taskbar_after_widgets_right");
-        if (!isTrackingPosition && widgetCol >= 0 && targetGrid && widgetCol < (int)targetGrid.ColumnDefinitions().Size()) {
+        int widgetCol = g_injectedColumn;
+        RemoveWidgetGridChildren(targetGrid);
+        if (widgetCol >= 0 && targetGrid && widgetCol < (int)targetGrid.ColumnDefinitions().Size()) {
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
                 if (child) {
@@ -2861,11 +2991,18 @@ static void ApplySettings() {
 }
 
 static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCount = 0) {
+    if (g_unloading.load()) return;
     static constexpr int kMaxRetries = 50;
     auto retry = [&]() {
-        if (retryCount >= kMaxRetries) {
-            Wh_Log(L"ApplySettingsWithRetry: giving up after %d retries", kMaxRetries);
+        if (g_unloading.load() || retryCount >= kMaxRetries) {
+            if (retryCount >= kMaxRetries) {
+                Wh_Log(L"ApplySettingsWithRetry: giving up after %d retries", kMaxRetries);
+            }
             return;
+        }
+        if (g_retryTimer) {
+            try { g_retryTimer.Stop(); } catch (...) {}
+            g_retryTimer = nullptr;
         }
         auto timer = DispatcherTimer();
         timer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(100)});
@@ -2876,11 +3013,17 @@ static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCo
                 winrt::Windows::Foundation::IInspectable const&) {
                 timer.Stop();
                 timer.Tick(*tickToken);
-                ApplySettingsWithRetry(xamlRootContent, retryCount + 1);
+                if (g_retryTimer == timer) {
+                    g_retryTimer = nullptr;
+                }
+                if (!g_unloading.load()) {
+                    ApplySettingsWithRetry(xamlRootContent, retryCount + 1);
+                }
             });
+        g_retryTimer = timer;
         timer.Start();
     };
-    if (g_unloading) return;
+    if (g_unloading.load()) return;
     auto systemTrayFrame = FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
     if (!systemTrayFrame) {
         retry();
@@ -2967,6 +3110,7 @@ static void LoadSettings() {
     }
     g_settings.pollInterval = Wh_GetIntSetting(L"pollInterval");
     if (g_settings.pollInterval <= 0) g_settings.pollInterval = 30;
+    g_settings.pollInterval = std::clamp(g_settings.pollInterval, 10, 120);
 
     PCWSTR margins = Wh_GetStringSetting(L"marginSide");
     if (margins) {
@@ -2974,13 +3118,7 @@ static void LoadSettings() {
         Wh_FreeStringSetting(margins);
     }
 
-    PCWSTR hideVal = Wh_GetStringSetting(L"hideDisconnectedBuds");
-    if (hideVal) {
-        g_settings.hideDisconnectedBuds = (wcscmp(hideVal, L"0") != 0 && _wcsicmp(hideVal, L"false") != 0);
-        Wh_FreeStringSetting(hideVal);
-    } else {
-        g_settings.hideDisconnectedBuds = true;
-    }
+    g_settings.hideDisconnectedBuds = Wh_GetIntSetting(L"hideDisconnectedBuds") != 0;
 }
 
 // Windhawk mod entry points
@@ -2991,9 +3129,6 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Start background Bluetooth SPP manager
-    BluetoothManager::Instance().Start();
-
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"HookTaskbarDllSymbols failed");
         return FALSE;
@@ -3003,6 +3138,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit NothingTrack");
+
+    // Start background Bluetooth SPP manager
+    BluetoothManager::Instance().Start();
+
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (g_taskbarWnd) {
         RunFromWindowThread(g_taskbarWnd, [](void*) {
