@@ -9559,6 +9559,35 @@
         "version": "1.0.0"
       }
     },
+    "numlock-lockdown": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788625584000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788625584000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "tonythethompson",
+        "compilerOptions": "-luser32 -lshell32 -lwtsapi32",
+        "description": "Keeps Num Lock permanently ON, with a modifier key for temporary override",
+        "github": "https://github.com/tonythethompson",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Num Lock Lockdown",
+        "version": "1.1.9"
+      }
+    },
     "nvidia-control-panel-missing-dialog-hider": {
       "details": {
         "defaultSorting": 580,

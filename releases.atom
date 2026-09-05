@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-05T16:04:35.000Z</updated>
+    <updated>2026-09-05T16:26:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Num Lock Lockdown 1.1.9]]></title>
+        <id>https://windhawk.net/mods/numlock-lockdown#4ff551adf85080f58bc3d6ad8afd0832d177bd4a</id>
+        <link href="https://windhawk.net/mods/numlock-lockdown"/>
+        <updated>2026-09-05T16:26:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="numlocklockdown">Num Lock Lockdown</h1>
+<p>Keeps Num Lock ON with almost no background work. A low-level keyboard hook
+watches the Num Lock key and the override modifier. There is no fast polling.
+An optional slow safety check (off, or every few seconds; 10 s by default)
+covers the few cases the hook cannot see.</p>
+<h2 id="behavior">Behavior</h2>
+<p>| Situation | Result |
+| --- | --- |
+| Normal use | Num Lock stays ON. The Num Lock key does nothing (default). |
+| Hold Shift + press Num Lock | Normal toggle is allowed. |
+| Release Shift | Num Lock is forced back ON if it is off. |
+| Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, on unlock/resume/focus change, or on the safety check. |
+| Mod disabled | The Num Lock <em>key</em> behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |</p>
+<p>Hold <strong>Left Shift</strong> or <strong>Right Shift</strong> and press Num Lock to toggle it
+normally for as long as you keep Shift down. While Shift is held, numpad
+arrows are Shift+Arrow in most apps (extend selection), not plain arrows.
+Ctrl, Alt, and Win have the same kind of extra meaning. Release the
+override and Num Lock is turned back on.</p>
+<p><strong>Block</strong> (the default) swallows Num Lock for every process, so a game or app
+that uses Num Lock as a hotkey will not see the key. Use <strong>Allow</strong> if you need
+those binds; the mod still forces Num Lock back ON on key-up.</p>
+<h2 id="whyatoolmod">Why a tool mod?</h2>
+<p>The mod is loaded into a dedicated <code>windhawk.exe</code> process (<code>@include
+windhawk.exe</code>). It does not inject into Explorer or every running app. That
+keeps overhead low and avoids tying Num Lock to the shell process.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The keyboard hook cannot see keystrokes sent to a higher-integrity
+(elevated) window because of UIPI. <code>SendInput</code> is also subject to UIPI:
+when an elevated window is focused, the injected Num Lock pulse is
+dropped and neither the return value nor <code>GetLastError</code> reports it. Run
+Windhawk as administrator if you need the force-on to work while an
+elevated app is in front. When focus moves back to a normal window, a
+foreground-change hook retries the pulse. The safety check is a slower
+fallback for cases with no focus change.</li>
+<li>The hook also cannot see some Remote Desktop / KVM paths. Session-unlock
+/ resume handlers and the safety check cover those.</li>
+<li>If the hook misses a modifier key-up (elevated window or secure desktop),
+the next Num Lock event re-reads the real modifier state from the OS, and
+the worker does the same before skipping a force-on.</li>
+<li><strong>Block</strong> also swallows the ToggleKeys accessibility shortcut (hold Num
+Lock for 5 seconds) and the MouseKeys shortcut (Left Alt + Left Shift +
+Num Lock) whenever your override modifier is not Shift or Alt. Use
+<strong>Allow</strong> if you need those shortcuts.</li>
+<li>Synthetic Num Lock presses this mod sends are tagged and ignored by
+<em>this</em> hook, so the force-on path cannot fight itself. Other apps still
+see those injected presses (the pulse has to reach the OS to move the
+LED). A game bound to Num Lock can therefore see a synthetic press when
+a force-on fires, even in <strong>Block</strong> mode.</li>
+<li>In "allow" mode, holding Num Lock without the modifier can leave it off
+until you release the key. Auto-repeat is swallowed so the LED does not
+flicker; force-on runs on key-up. If the safety check is on (10 s by
+default), it can still force Num Lock back ON while the key is held.</li>
+<li>The Win key is never blocked. Only Num Lock is filtered. If you hold Win and
+press numpad 1/3/5/9, Windows may type those digits because Win+Numpad1 is
+not the same shortcut as Win+1 on the number row. That is OS behavior.</li>
+</ul>]]></content>
+        <author>
+            <name>tonythethompson</name>
+            <uri>https://github.com/tonythethompson</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.6]]></title>
         <id>https://windhawk.net/mods/net-speed-taskbar#e7faca32a6b7a3166a709ac824ec060b54070fc6</id>
@@ -1066,89 +1133,6 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 <li>WinClassic community for documenting the HomeGroup restoration approach</li>
 <li>Cips - Testing on Windows 11 25H2</li>
 </ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Display Control Panel Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-display-control-panel-restorer#743200bf8812751c4b474fc274fcfccb954cafa8</id>
-        <link href="https://windhawk.net/mods/win7-display-control-panel-restorer"/>
-        <updated>2026-08-23T17:47:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicdisplaycontrolpanelrestorer">Classic Display Control Panel Restorer</h1>
-<p>This mod restores the classic <strong>Display</strong> and <strong>Screen Resolution</strong> Control Panel pages on Windows 10 and 11.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h1 id="changeresolutionpage">Change Resolution Page</h1>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display1.PNG" alt="Display" /> </p>
-<h1 id="changedpipage">Change DPI Page</h1>
-<h2 id="display2httpsrawgithubusercontentcombabamohammed2022babamohammed2022maindisplay2png"><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display2.PNG" alt="Display 2" /></h2>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>No File Replacement:</strong> The mod is designed to be stable and user-friendly, and does not require replacing any Windows system files.</li>
-<li><strong>Complete Classic UI:</strong> The mod restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.</li>
-<li><strong>Full Breadcrumb & Sidebar:</strong> The mod shows the original <strong>Display > Screen Resolution</strong> breadcrumb title and the classic Control Panel sidebar task links.</li>
-<li><strong>Working classic DPI presets:</strong> The 100/125/150/200% radio choices use the existing Apply button and the classic Please Wait transition.</li>
-<li><strong>Classic Icon & Localized Text:</strong> The mod uses the classic Display icon and localized strings for all supported languages.</li>
-<li><strong>Optional Redirects:</strong> The mod can redirect <code>desk.cpl</code>, related legacy commands, and even <code>ms-settings:display</code> to the restored classic page.</li>
-<li><strong>Offline Caching:</strong> The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use. After the load, the module the loader actually mapped is confirmed to be the very same file object that passed verification (<code>GetFileInformationByHandleEx(FileIdInfo)</code>), and is unloaded and refused otherwise.</li>
-<li><strong>No permanent background work:</strong> The hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks. While no Display page is open the worker thread is blocked on its wait handles with no timeout, so there is neither a window-tree enumeration nor a periodic wake-up.</li>
-<li><strong>Safe Fallback:</strong> If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.</li>
-<li><strong>Instant Toggle:</strong> Disabling the mod immediately restores normal Windows behavior for newly opened pages.</li>
-</ul>
-<hr />
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Page language:</strong> Follow Windows automatically or choose a supported language.</li>
-<li><strong>Show sidebar task links:</strong> Show or hide the complete classic task list.</li>
-<li><strong>Screen Resolution compatibility adaptation:</strong> Keep enabled for the normal recommended layout.</li>
-<li><strong>Redirect classic Display launch routes:</strong> Restore <code>desk.cpl</code> and other classic commands.</li>
-<li><strong>Redirect Display settings:</strong> Open the restored classic page instead of the Settings app.</li>
-<li><strong>Working orientation:</strong> Landscape / Portrait / flipped are applied with the documented <code>ChangeDisplaySettingsExW</code> and <code>SetDisplayConfig</code> APIs (width/height are swapped when the mode requires it). The native Orientation row is used; the optional setting only unhides it when the 1511 provider would hide it.</li>
-<li><strong>Keep classic DPI presets selectable:</strong> Keep the classic scaling choices enabled on the Display page.</li>
-<li><strong>Keep downloaded files:</strong> Retain the verified component for faster re-enabling.</li>
-</ul>
-<hr />
-<h2 id="howitworks">How It Works</h2>
-<p>The mod hooks into <code>explorer.exe</code>, <code>control.exe</code>, and <code>rundll32.exe</code> to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component (the Windows 10 1511 DLL which is the last version to have the classic page in the Control Panel) and it is also verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.</p>
-<p>The mod has been tested on <strong>Windows 10 1809</strong>, <strong>Windows 10 21H2</strong>, <strong>Windows 11 24H2</strong> and <strong>Windows 11 25H2</strong>, and works with the native 64‑bit Control Panel environment.</p>
-<hr />
-<h2 id="supportedlanguages">Supported Languages</h2>
-<p>The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German, Brazilian Portuguese, and Polish. The page content and the complete breadcrumb follow the selected language.</p>
-<hr />
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod runs inside <code>explorer.exe</code> and requires <strong>64‑bit Windows 10 or Windows 11</strong>. It is <strong>x64-only and is not supported on ARM64</strong> (on an ARM64 device the mod has no effect; see Known Limitations).</li>
-<li>On first use, wait a few seconds for the setup to finish, then reopen Control Panel.</li>
-<li>After changing a setting or language, close any already open Display page and reopen it.</li>
-<li>If the page does not appear, check the Windhawk log for download or hash verification errors.</li>
-<li>Keep <strong>Screen Resolution compatibility adaptation</strong> enabled for the normal recommended configuration.</li>
-</ul>
-<hr />
-<h2 id="knownlimitations">Known Limitations</h2>
-<ul>
-<li><strong>Combobox inside the screen preview:</strong> The combobox that appears inside the screen preview area does not function correctly.</li>
-<li><strong>Magnifier link:</strong> The help text on the Display page renders the Magnifier reference as a blue link in every supported language. The link is kept for its original text and appearance only; clicking it does nothing.</li>
-<li><strong>Orientation:</strong> By default the Orientation row is hidden because the provider list is empty on current adapters. Enable the <strong>Show the classic Orientation row</strong> setting to restore the provider's untouched Orientation markup (screen rotation is still applied when you change the selection and press Apply).</li>
-<li>The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.</li>
-<li>The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.</li>
-<li>Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.</li>
-<li><strong>ARM64 (x64-only):</strong> The mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.</li>
-</ul>
-<hr />
-<h2 id="directshellroutes">Direct shell routes</h2>
-<p>While the mod is active, the restored pages are also reachable directly, without going through the Control Panel UI (paste into Win+R or a shortcut):</p>
-<ul>
-<li><code>shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}</code> - the restored classic <strong>Display</strong> hub page.</li>
-<li><code>shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\Settings</code> - the restored classic <strong>Screen Resolution</strong> page.</li>
-</ul>
-<p>These are useful as an alternative entry point if a Control Panel task link ever misbehaves on a particular Windows build.</p>
-<hr />
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>Cips</strong> — testing on Windows 11 25H2</li>
-</ul>
-<hr />]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>

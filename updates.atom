@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-05T16:04:35.000Z</updated>
+    <updated>2026-09-05T16:26:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Num Lock Lockdown 1.1.9]]></title>
+        <id>https://windhawk.net/mods/numlock-lockdown#4ff551adf85080f58bc3d6ad8afd0832d177bd4a</id>
+        <link href="https://windhawk.net/mods/numlock-lockdown"/>
+        <updated>2026-09-05T16:26:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="numlocklockdown">Num Lock Lockdown</h1>
+<p>Keeps Num Lock ON with almost no background work. A low-level keyboard hook
+watches the Num Lock key and the override modifier. There is no fast polling.
+An optional slow safety check (off, or every few seconds; 10 s by default)
+covers the few cases the hook cannot see.</p>
+<h2 id="behavior">Behavior</h2>
+<p>| Situation | Result |
+| --- | --- |
+| Normal use | Num Lock stays ON. The Num Lock key does nothing (default). |
+| Hold Shift + press Num Lock | Normal toggle is allowed. |
+| Release Shift | Num Lock is forced back ON if it is off. |
+| Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, on unlock/resume/focus change, or on the safety check. |
+| Mod disabled | The Num Lock <em>key</em> behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |</p>
+<p>Hold <strong>Left Shift</strong> or <strong>Right Shift</strong> and press Num Lock to toggle it
+normally for as long as you keep Shift down. While Shift is held, numpad
+arrows are Shift+Arrow in most apps (extend selection), not plain arrows.
+Ctrl, Alt, and Win have the same kind of extra meaning. Release the
+override and Num Lock is turned back on.</p>
+<p><strong>Block</strong> (the default) swallows Num Lock for every process, so a game or app
+that uses Num Lock as a hotkey will not see the key. Use <strong>Allow</strong> if you need
+those binds; the mod still forces Num Lock back ON on key-up.</p>
+<h2 id="whyatoolmod">Why a tool mod?</h2>
+<p>The mod is loaded into a dedicated <code>windhawk.exe</code> process (<code>@include
+windhawk.exe</code>). It does not inject into Explorer or every running app. That
+keeps overhead low and avoids tying Num Lock to the shell process.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The keyboard hook cannot see keystrokes sent to a higher-integrity
+(elevated) window because of UIPI. <code>SendInput</code> is also subject to UIPI:
+when an elevated window is focused, the injected Num Lock pulse is
+dropped and neither the return value nor <code>GetLastError</code> reports it. Run
+Windhawk as administrator if you need the force-on to work while an
+elevated app is in front. When focus moves back to a normal window, a
+foreground-change hook retries the pulse. The safety check is a slower
+fallback for cases with no focus change.</li>
+<li>The hook also cannot see some Remote Desktop / KVM paths. Session-unlock
+/ resume handlers and the safety check cover those.</li>
+<li>If the hook misses a modifier key-up (elevated window or secure desktop),
+the next Num Lock event re-reads the real modifier state from the OS, and
+the worker does the same before skipping a force-on.</li>
+<li><strong>Block</strong> also swallows the ToggleKeys accessibility shortcut (hold Num
+Lock for 5 seconds) and the MouseKeys shortcut (Left Alt + Left Shift +
+Num Lock) whenever your override modifier is not Shift or Alt. Use
+<strong>Allow</strong> if you need those shortcuts.</li>
+<li>Synthetic Num Lock presses this mod sends are tagged and ignored by
+<em>this</em> hook, so the force-on path cannot fight itself. Other apps still
+see those injected presses (the pulse has to reach the OS to move the
+LED). A game bound to Num Lock can therefore see a synthetic press when
+a force-on fires, even in <strong>Block</strong> mode.</li>
+<li>In "allow" mode, holding Num Lock without the modifier can leave it off
+until you release the key. Auto-repeat is swallowed so the LED does not
+flicker; force-on runs on key-up. If the safety check is on (10 s by
+default), it can still force Num Lock back ON while the key is held.</li>
+<li>The Win key is never blocked. Only Num Lock is filtered. If you hold Win and
+press numpad 1/3/5/9, Windows may type those digits because Win+Numpad1 is
+not the same shortcut as Win+1 on the number row. That is OS behavior.</li>
+</ul>]]></content>
+        <author>
+            <name>tonythethompson</name>
+            <uri>https://github.com/tonythethompson</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.6]]></title>
         <id>https://windhawk.net/mods/net-speed-taskbar#e7faca32a6b7a3166a709ac824ec060b54070fc6</id>
@@ -522,20 +589,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>Jona like it, code it</name>
             <uri>https://github.com/Stunning-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.32]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-separators#02f079f671bc75ec5a452696bf2d3db712733079</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
-        <updated>2026-09-02T17:29:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added arbitrary rotation support. You can now have cool backslashes on your taskbar (suggestion by @phntsm).</li>
-<li>Custom icon paths support (contribution by @phntsm).</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
