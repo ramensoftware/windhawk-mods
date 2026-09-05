@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.0.0
+// @version         1.0.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -12,39 +12,61 @@
 
 // ==WindhawkModReadme==
 /*
-# Smart Process Priority & RAM Optimizer (v1.0.0)
+# Smart Process Priority & RAM Optimizer (v1.0.1)
 
-Boosts the responsiveness of the active foreground application, protects real-time audio and local AI engines from throttling or trimming, throttles CPU-heavy background tasks, and safely reclaims idle memory with hardware-protective SSD safeguards.
+Boosts the responsiveness of the active foreground application, protects
+real-time audio and local AI engines from throttling or trimming, throttles
+CPU-heavy background tasks, and safely reclaims idle memory with
+hardware-protective SSD safeguards.
 
 ## Foreground Priority & I/O Boost
-Elevates the active window's process to Above Normal or High CPU priority and High disk I/O priority via a system event hook, and restores the previous priority when focus moves away. The foreground process is never trimmed.
+Elevates the active window's process to Above Normal or High CPU priority and
+High disk I/O priority via a system event hook, and restores the previous
+priority when focus moves away. The foreground process is never trimmed.
 
 ## Local AI Engine Handling
-Recognizes common local AI inference processes (llama-server, LM Studio, Ollama, KoboldCPP, Jan, ComfyUI, and others). While one is actively generating - detected from CPU usage or working-set changes, so GPU-offloaded inference is covered too - it keeps full priority and its memory is never trimmed. After a configurable period of inactivity, its memory can be released to the Windows standby cache and reloads almost instantly on the next prompt.
+Recognizes common local AI inference processes (llama-server, LM Studio, Ollama,
+KoboldCPP, Jan, ComfyUI, and others). While one is actively generating -
+detected from CPU usage or working-set changes, so GPU-offloaded inference is
+covered too - it keeps full priority and its memory is never trimmed. After a
+configurable period of inactivity, its memory can be released to the Windows
+standby cache and reloads almost instantly on the next prompt.
 
 ## Audio & Multimedia Shield
-Monitors active WASAPI audio sessions and exempts the whole process family of an app currently playing audio (browser, renderer, and helper processes) from CPU throttling and memory trimming.
+Monitors active WASAPI audio sessions and exempts the whole process family of an
+app currently playing audio (browser, renderer, and helper processes) from CPU
+throttling and memory trimming.
 
 ## Multitasking vs Single-Task Adaptation
-Detects rapid window switching and extends grace periods and protects visible windows accordingly. Detects fullscreen/3D game windows and runs one preventive memory sweep before the game allocates its own memory.
+Detects rapid window switching and extends grace periods and protects visible
+windows accordingly. Detects fullscreen/3D game windows and runs one preventive
+memory sweep before the game allocates its own memory.
 
 ## Automatic Process Classification
-Skips processes outside the interactive user session (background services) and packaged UWP/MSIX apps (already managed by Windows itself), regardless of name, on top of the manual exclusion list.
+Skips processes outside the interactive user session (background services) and
+packaged UWP/MSIX apps (already managed by Windows itself), regardless of name,
+on top of the manual exclusion list.
 
 ## SSD-Protective Memory Reclaim
-Trims idle background processes' working sets, gated by per-process cooldowns and free-RAM thresholds to avoid unnecessary SSD writes. Below 5% free RAM these cooldowns are relaxed so the mod can react before the system runs out of memory.
+Trims idle background processes' working sets, gated by per-process cooldowns
+and free-RAM thresholds to avoid unnecessary SSD writes. Below 5% free RAM these
+cooldowns are relaxed so the mod can react before the system runs out of memory.
 
 ## Panic Hotkey
 Ctrl+Alt+F11 triggers an immediate cleanup pass.
 
 ## Credits & Acknowledgments
 - **Inspirations & Concepts**:
-  - **Process Lasso (Bitsum)**: Inspired by the ProBalance concept for foreground responsiveness and background runaway CPU restraint.
-  - **LiveTuner (LT)**: Inspired by dynamic real-time priority tuning and responsiveness heuristics.
-  - **ISLC (Intelligent Standby List Cleaner by Wagnardsoft)**: Inspired by adaptive threshold triggers and gaming memory management.
+  - **Process Lasso (Bitsum)**: Inspired by the ProBalance concept for
+foreground responsiveness and background runaway CPU restraint.
+  - **LiveTuner (LT)**: Inspired by dynamic real-time priority tuning and
+responsiveness heuristics.
+  - **ISLC (Intelligent Standby List Cleaner by Wagnardsoft)**: Inspired by
+adaptive threshold triggers and gaming memory management.
   - **Mem Reduct (Henry++)**: Inspired by safe working-set trimming techniques.
 - **Development**:
-  - Developed by **gilnett** with architectural and optimization assistance from **Antigravity**.
+  - Developed by **gilnett** with architectural and optimization assistance from
+**Antigravity**.
 */
 // ==/WindhawkModReadme==
 
@@ -64,7 +86,16 @@ Ctrl+Alt+F11 triggers an immediate cleanup pass.
   $description: Temporarily lowers the priority of background processes that spike CPU usage while a foreground app is active.
 - backgroundCpuThrottleThresholdPercent: 15
   $name: Background CPU Throttle Threshold (%)
-  $description: A background process using more total CPU than this (or maxing out a full CPU core) while a foreground app is active gets temporarily throttled (5% to 50%).
+  $description: A background process using more total CPU than this while a foreground app is active gets temporarily throttled (5% to 50%).
+- backgroundThrottlePriorityLevel: "belowNormal"
+  $name: Background Throttle Priority Level
+  $description: Priority class assigned to CPU-heavy background processes while a foreground app is active.
+  $options:
+    - "belowNormal": Below Normal (Recommended - Responsive & Safe for Compiles/Renders)
+    - "idle": Idle Priority (Aggressive - Maximizes Foreground CPU)
+- enableEcoQosManagement: false
+  $name: Enable Efficiency Mode (EcoQoS) on Throttled Apps
+  $description: Applies Windows power-throttling efficiency mode to throttled background apps, routing them to E-Cores.
 - enableSmartAiOptimization: true
   $name: Smart Local AI Optimization
   $description: Protects recognized local AI engines during active generation and releases dormant compute memory after inactivity.
@@ -183,6 +214,10 @@ Ctrl+Alt+F11 triggers an immediate cleanup pass.
 // NTDLL & Low-Level Definitions
 // ---------------------------------------------------------------------------
 
+typedef NTSTATUS(NTAPI *pfnNtQueryInformationProcess)(
+    HANDLE ProcessHandle, INT ProcessInformationClass, PVOID ProcessInformation,
+    ULONG ProcessInformationLength, PULONG ReturnLength);
+
 typedef NTSTATUS(NTAPI *pfnNtSetInformationProcess)(
     HANDLE ProcessHandle, INT ProcessInformationClass, PVOID ProcessInformation,
     ULONG ProcessInformationLength);
@@ -209,6 +244,7 @@ typedef struct _PROCESS_POWER_THROTTLING_STATE {
 #endif
 static constexpr INT ProcessPowerThrottlingInfoClass = 4;
 
+static pfnNtQueryInformationProcess g_pfnNtQueryInformationProcess = nullptr;
 static pfnNtSetInformationProcess g_pfnNtSetInformationProcess = nullptr;
 static pfnSHQueryUserNotificationState g_pfnSHQueryUserNotificationState =
     nullptr;
@@ -271,12 +307,20 @@ enum class ForegroundPrioritySetting {
   High,
 };
 
+enum class ThrottlePrioritySetting {
+  BelowNormal,
+  Idle,
+};
+
 struct ModSettings {
   bool enableProBalance = true;
   ForegroundPrioritySetting foregroundPriorityLevel =
       ForegroundPrioritySetting::AboveNormal;
   bool enableBackgroundThrottling = true;
   int backgroundCpuThrottleThresholdPercent = 15;
+  ThrottlePrioritySetting backgroundThrottlePriorityLevel =
+      ThrottlePrioritySetting::BelowNormal;
+  bool enableEcoQosManagement = false;
   bool enableSmartAiOptimization = true;
   int aiInactivityGraceMinutes = 5;
   bool enableAudioShielding = true;
@@ -331,18 +375,22 @@ static bool g_panicHotkeyRegistered = false;
 static std::atomic<bool> g_forceCleanupRequested{false};
 static std::atomic<bool> g_gameSweepRequested{false};
 
-// Foreground priority-boost state, guarded by g_probalanceMutex.
-static std::mutex g_probalanceMutex;
+// Unified priority management state (foreground boost & background throttling),
+// guarded by g_priorityMutex so neither feature can misread or overwrite
+// an original priority set by the other.
+static std::mutex g_priorityMutex;
 static DWORD g_currentBoostedPid = 0;
 static HANDLE g_boostedProcessHandle = nullptr;
 static DWORD g_originalBoostedPriority = NORMAL_PRIORITY_CLASS;
+static ULONG g_originalBoostedIoPriority = IoPriorityNormal;
 
-// Background CPU-throttling state; only touched from the worker thread.
+// Background CPU-throttling state, guarded by g_priorityMutex.
 // We hold an open handle for each throttled process to prevent Windows from
 // recycling its PID.
 struct ThrottledProcessInfo {
   HANDLE hProcess = nullptr;
   DWORD originalPriority = NORMAL_PRIORITY_CLASS;
+  ULONG originalIoPriority = IoPriorityNormal;
 };
 static std::map<DWORD, ThrottledProcessInfo>
     g_throttledProcesses; // pid -> info
@@ -733,6 +781,20 @@ static void CollectDescendants(
 // I/O Priority & EcoQoS Helpers
 // ---------------------------------------------------------------------------
 
+static ULONG GetProcessIoPriorityHint(HANDLE hProcess) {
+  if (!g_pfnNtQueryInformationProcess)
+    return IoPriorityNormal;
+  ULONG ioPriority = IoPriorityNormal;
+  ULONG returnLength = 0;
+  NTSTATUS status = g_pfnNtQueryInformationProcess(
+      hProcess, ProcessIoPriorityInfoClass, &ioPriority, sizeof(ioPriority),
+      &returnLength);
+  if (status >= 0) {
+    return ioPriority;
+  }
+  return IoPriorityNormal;
+}
+
 static void SetProcessIoPriorityHint(HANDLE hProcess, ULONG priority) {
   if (!g_pfnNtSetInformationProcess)
     return;
@@ -751,16 +813,30 @@ static void SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
       &state, sizeof(state));
 }
 
+// Restore: hand power management control cleanly back to the OS scheduler.
+// ControlMask = 0, StateMask = 0 means "system managed".
+static void ResetProcessEcoQoS(HANDLE hProcess) {
+  PROCESS_POWER_THROTTLING_STATE state{};
+  state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+  state.ControlMask = 0;
+  state.StateMask = 0;
+  SetProcessInformation(
+      hProcess, (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+      &state, sizeof(state));
+}
+
 // ---------------------------------------------------------------------------
 // Foreground Priority Boost (Zero-Stutter)
 // ---------------------------------------------------------------------------
 
-// Must be called while holding g_probalanceMutex.
+// Must be called while holding g_priorityMutex.
 static void RestoreForegroundBoostLocked() {
   if (g_boostedProcessHandle) {
     if (WaitForSingleObject(g_boostedProcessHandle, 0) != WAIT_OBJECT_0) {
       SetPriorityClass(g_boostedProcessHandle, g_originalBoostedPriority);
-      SetProcessIoPriorityHint(g_boostedProcessHandle, IoPriorityNormal);
+      SetProcessIoPriorityHint(g_boostedProcessHandle,
+                               g_originalBoostedIoPriority);
+      ResetProcessEcoQoS(g_boostedProcessHandle);
     }
     CloseHandle(g_boostedProcessHandle);
     g_boostedProcessHandle = nullptr;
@@ -770,7 +846,7 @@ static void RestoreForegroundBoostLocked() {
 
 static void UpdateForegroundBoost(DWORD newForegroundPid,
                                   const ModSettings &settings) {
-  std::lock_guard<std::mutex> lock(g_probalanceMutex);
+  std::lock_guard<std::mutex> lock(g_priorityMutex);
 
   if (!settings.enableProBalance) {
     RestoreForegroundBoostLocked();
@@ -794,9 +870,31 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
                     FALSE, newForegroundPid);
     if (hNew) {
-      DWORD prevPriority = GetPriorityClass(hNew);
-      g_originalBoostedPriority =
-          (prevPriority != 0) ? prevPriority : NORMAL_PRIORITY_CLASS;
+      DWORD origPriority = NORMAL_PRIORITY_CLASS;
+      ULONG origIoPriority = IoPriorityNormal;
+
+      // Check if this process was throttled by the background throttler.
+      // If so, retrieve its true pre-throttled original priority and IO
+      // priority so we never capture IDLE/Low as its "original" state.
+      auto itThrottled = g_throttledProcesses.find(newForegroundPid);
+      if (itThrottled != g_throttledProcesses.end()) {
+        origPriority = itThrottled->second.originalPriority;
+        origIoPriority = itThrottled->second.originalIoPriority;
+        if (itThrottled->second.hProcess) {
+          CloseHandle(itThrottled->second.hProcess);
+        }
+        g_throttledProcesses.erase(itThrottled);
+        g_throttleStaleSampleCount.erase(newForegroundPid);
+        ResetProcessEcoQoS(hNew);
+      } else {
+        DWORD prevPriority = GetPriorityClass(hNew);
+        origPriority =
+            (prevPriority != 0) ? prevPriority : NORMAL_PRIORITY_CLASS;
+        origIoPriority = GetProcessIoPriorityHint(hNew);
+      }
+
+      g_originalBoostedPriority = origPriority;
+      g_originalBoostedIoPriority = origIoPriority;
 
       DWORD targetPriority =
           (settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
@@ -901,20 +999,53 @@ static std::vector<ProcessSnapshotEntry> CaptureProcessSnapshotCached() {
   return g_processSnapshotCache;
 }
 
+static bool RestoreAndEraseThrottledProcess(DWORD pid) {
+  HANDLE hSaved = nullptr;
+  DWORD originalPriority = NORMAL_PRIORITY_CLASS;
+  ULONG originalIoPriority = IoPriorityNormal;
+  {
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
+    auto it = g_throttledProcesses.find(pid);
+    if (it == g_throttledProcesses.end()) {
+      return false;
+    }
+    hSaved = it->second.hProcess;
+    originalPriority = it->second.originalPriority;
+    originalIoPriority = it->second.originalIoPriority;
+    g_throttledProcesses.erase(it);
+    g_throttleStaleSampleCount.erase(pid);
+  }
+  if (hSaved) {
+    if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
+      SetPriorityClass(hSaved, originalPriority);
+      SetProcessIoPriorityHint(hSaved, originalIoPriority);
+      ResetProcessEcoQoS(hSaved);
+    }
+    CloseHandle(hSaved);
+  }
+  return true;
+}
+
 static void RestoreAllThrottledProcesses() {
-  for (auto &kv : g_throttledProcesses) {
-    HANDLE h = kv.second.hProcess;
-    if (h) {
-      if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) {
-        SetPriorityClass(h, kv.second.originalPriority);
-        SetProcessIoPriorityHint(h, IoPriorityNormal);
-        SetProcessEcoQoS(h, /*enableThrottling=*/false);
+  std::vector<ThrottledProcessInfo> toRestore;
+  {
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
+    for (auto &kv : g_throttledProcesses) {
+      toRestore.push_back(kv.second);
+    }
+    g_throttledProcesses.clear();
+    g_throttleStaleSampleCount.clear();
+  }
+  for (auto &info : toRestore) {
+    if (info.hProcess) {
+      if (WaitForSingleObject(info.hProcess, 0) != WAIT_OBJECT_0) {
+        SetPriorityClass(info.hProcess, info.originalPriority);
+        SetProcessIoPriorityHint(info.hProcess, info.originalIoPriority);
+        ResetProcessEcoQoS(info.hProcess);
       }
-      CloseHandle(h);
+      CloseHandle(info.hProcess);
     }
   }
-  g_throttledProcesses.clear();
-  g_throttleStaleSampleCount.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -987,10 +1118,12 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD> &rawAudioPids,
     }
 
     // 3. All ancestor processes (main browser / launcher)
+    std::unordered_set<DWORD> seen{aPid};
     DWORD cur = aPid;
     while (true) {
       auto itP = parentOf.find(cur);
-      if (itP == parentOf.end() || itP->second == 0 || itP->second == 4)
+      if (itP == parentOf.end() || itP->second == 0 || itP->second == 4 ||
+          !seen.insert(itP->second).second)
         break;
       activeAudioPids.insert(itP->second);
       cur = itP->second;
@@ -1003,13 +1136,14 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD> &rawAudioPids,
 static void ApplyBackgroundThrottling(const ModSettings &settings,
                                       DWORD foregroundPid) {
   if (!settings.enableBackgroundThrottling) {
-    if (!g_throttledProcesses.empty()) {
-      RestoreAllThrottledProcesses();
-    }
+    RestoreAllThrottledProcesses();
     return;
   }
   if (foregroundPid == 0)
     return;
+
+  // If foreground process was throttled, restore and erase it immediately
+  RestoreAndEraseThrottledProcess(foregroundPid);
 
   DWORD currentPid = GetCurrentProcessId();
   auto now = std::chrono::steady_clock::now();
@@ -1059,18 +1193,7 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     // Audio stream protection for entire browser/media tree:
     // If active or recently active, immediately restore priority if throttled.
     if (settings.enableAudioShielding && activeAudioPids.count(pid)) {
-      auto itThrottled = g_throttledProcesses.find(pid);
-      if (itThrottled != g_throttledProcesses.end()) {
-        HANDLE hSaved = itThrottled->second.hProcess;
-        DWORD original = itThrottled->second.originalPriority;
-        if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
-          SetPriorityClass(hSaved, original);
-          SetProcessIoPriorityHint(hSaved, IoPriorityNormal);
-          SetProcessEcoQoS(hSaved, /*enableThrottling=*/false);
-        }
-        CloseHandle(hSaved);
-        g_throttledProcesses.erase(itThrottled);
-      }
+      RestoreAndEraseThrottledProcess(pid);
       continue;
     }
 
@@ -1082,20 +1205,9 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     // Visible Window Protection:
     // An application with a visible non-minimized window (e.g. 2nd monitor
     // Twitch stream, video playback, or side-by-side app) must NEVER be
-    // throttled to IDLE or EcoQoS.
+    // throttled.
     if (hasVisibleWindow) {
-      auto itThrottled = g_throttledProcesses.find(pid);
-      if (itThrottled != g_throttledProcesses.end()) {
-        HANDLE hSaved = itThrottled->second.hProcess;
-        DWORD original = itThrottled->second.originalPriority;
-        if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
-          SetPriorityClass(hSaved, original);
-          SetProcessIoPriorityHint(hSaved, IoPriorityNormal);
-          SetProcessEcoQoS(hSaved, /*enableThrottling=*/false);
-        }
-        CloseHandle(hSaved);
-        g_throttledProcesses.erase(itThrottled);
-      }
+      RestoreAndEraseThrottledProcess(pid);
       continue;
     }
 
@@ -1113,7 +1225,11 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     }
 
     double cpuPercent = SampleCpuPercent(pid, hProc);
-    bool isThrottled = g_throttledProcesses.count(pid) != 0;
+    bool isThrottled = false;
+    {
+      std::lock_guard<std::mutex> lock(g_priorityMutex);
+      isThrottled = (g_throttledProcesses.count(pid) != 0);
+    }
 
     // Track AI token generation activity. CPU usage alone misses
     // GPU-offloaded inference (CUDA/Vulkan), where the host process can
@@ -1149,81 +1265,56 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
           (std::chrono::duration_cast<std::chrono::seconds>(now - itAi->second)
                .count() < 10);
       if (isGenerating) {
-        auto itThrottled = g_throttledProcesses.find(pid);
-        if (itThrottled != g_throttledProcesses.end()) {
-          HANDLE hSaved = itThrottled->second.hProcess;
-          DWORD original = itThrottled->second.originalPriority;
-          if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
-            SetPriorityClass(hSaved, original);
-            SetProcessIoPriorityHint(hSaved, IoPriorityNormal);
-            SetProcessEcoQoS(hSaved, /*enableThrottling=*/false);
-          }
-          CloseHandle(hSaved);
-          g_throttledProcesses.erase(itThrottled);
-        }
+        RestoreAndEraseThrottledProcess(pid);
         CloseHandle(hProc);
         continue;
       }
     }
 
-    DWORD numCores = GetSystemCoreCount();
     bool isCpuHeavy =
-        (cpuPercent >= settings.backgroundCpuThrottleThresholdPercent) ||
-        (cpuPercent * numCores >= 85.0);
+        (cpuPercent >= settings.backgroundCpuThrottleThresholdPercent);
 
     bool isCpuCalm =
         (cpuPercent >= 0) &&
-        (cpuPercent < settings.backgroundCpuThrottleThresholdPercent / 2.0) &&
-        (cpuPercent * numCores < 40.0);
+        (cpuPercent < settings.backgroundCpuThrottleThresholdPercent / 2.0);
 
     if (isCpuHeavy && !isThrottled) {
       DWORD prevPriority = GetPriorityClass(hProc);
       if (PriorityClassToRank(prevPriority) >
           PriorityClassToRank(IDLE_PRIORITY_CLASS)) {
-        DWORD targetThrottlePrio =
-            isMultiTasking ? BELOW_NORMAL_PRIORITY_CLASS : IDLE_PRIORITY_CLASS;
+        DWORD targetThrottlePrio = BELOW_NORMAL_PRIORITY_CLASS;
+        if (!isMultiTasking &&
+            settings.backgroundThrottlePriorityLevel ==
+                ThrottlePrioritySetting::Idle) {
+          targetThrottlePrio = IDLE_PRIORITY_CLASS;
+        }
 
-        if (SetPriorityClass(hProc, targetThrottlePrio)) {
-          SetProcessIoPriorityHint(hProc, IoPriorityLow);
-          SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
-          g_throttledProcesses[pid] = {hProc, prevPriority};
-          g_throttleStaleSampleCount.erase(pid);
-          hProc = nullptr; // Transferred ownership to g_throttledProcesses:
-                           // blocks PID reuse!
+        if (PriorityClassToRank(prevPriority) >
+            PriorityClassToRank(targetThrottlePrio)) {
+          ULONG prevIo = GetProcessIoPriorityHint(hProc);
+          if (SetPriorityClass(hProc, targetThrottlePrio)) {
+            SetProcessIoPriorityHint(hProc, IoPriorityLow);
+            if (settings.enableEcoQosManagement) {
+              SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
+            }
+            {
+              std::lock_guard<std::mutex> lock(g_priorityMutex);
+              g_throttledProcesses[pid] = {hProc, prevPriority, prevIo};
+              g_throttleStaleSampleCount.erase(pid);
+            }
+            hProc = nullptr; // Transferred ownership to g_throttledProcesses:
+                             // blocks PID reuse!
+          }
         }
       }
     } else if (isThrottled && isCpuCalm) {
-      auto itThrottled = g_throttledProcesses.find(pid);
-      if (itThrottled != g_throttledProcesses.end()) {
-        HANDLE hSaved = itThrottled->second.hProcess;
-        DWORD original = itThrottled->second.originalPriority;
-        if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
-          SetPriorityClass(hSaved, original);
-          SetProcessIoPriorityHint(hSaved, IoPriorityNormal);
-          SetProcessEcoQoS(hSaved, /*enableThrottling=*/false);
-        }
-        CloseHandle(hSaved);
-        g_throttledProcesses.erase(itThrottled);
-      }
-      g_throttleStaleSampleCount.erase(pid);
+      RestoreAndEraseThrottledProcess(pid);
     } else if (isThrottled && cpuPercent < 0) {
       // No CPU sample this cycle; after a few consecutive misses restore
       // the process instead of leaving it throttled forever.
       DWORD &missCount = g_throttleStaleSampleCount[pid];
       if (++missCount >= 5) {
-        auto itThrottled = g_throttledProcesses.find(pid);
-        if (itThrottled != g_throttledProcesses.end()) {
-          HANDLE hSaved = itThrottled->second.hProcess;
-          DWORD original = itThrottled->second.originalPriority;
-          if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
-            SetPriorityClass(hSaved, original);
-            SetProcessIoPriorityHint(hSaved, IoPriorityNormal);
-            SetProcessEcoQoS(hSaved, /*enableThrottling=*/false);
-          }
-          CloseHandle(hSaved);
-          g_throttledProcesses.erase(itThrottled);
-        }
-        g_throttleStaleSampleCount.erase(pid);
+        RestoreAndEraseThrottledProcess(pid);
       }
     } else if (isThrottled) {
       g_throttleStaleSampleCount.erase(pid);
@@ -1234,16 +1325,26 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     }
   }
 
-  for (auto it = g_throttledProcesses.begin();
-       it != g_throttledProcesses.end();) {
-    if (WaitForSingleObject(it->second.hProcess, 0) == WAIT_OBJECT_0 ||
-        alivePids.count(it->first) == 0) {
-      CloseHandle(it->second.hProcess);
-      it = g_throttledProcesses.erase(it);
-    } else {
-      ++it;
+  std::vector<HANDLE> deadHandles;
+  {
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
+    for (auto it = g_throttledProcesses.begin();
+         it != g_throttledProcesses.end();) {
+      if (WaitForSingleObject(it->second.hProcess, 0) == WAIT_OBJECT_0 ||
+          alivePids.count(it->first) == 0) {
+        deadHandles.push_back(it->second.hProcess);
+        it = g_throttledProcesses.erase(it);
+      } else {
+        ++it;
+      }
     }
   }
+  for (HANDLE h : deadHandles) {
+    if (h) {
+      CloseHandle(h);
+    }
+  }
+
   for (auto it = g_cpuSamples.begin(); it != g_cpuSamples.end();) {
     it = (alivePids.count(it->first) == 0) ? g_cpuSamples.erase(it)
                                            : std::next(it);
@@ -1550,8 +1651,15 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
     auto wsIt = windowStates.find(pid);
     bool hasVisibleWindow =
         wsIt != windowStates.end() && wsIt->second.hasVisibleWindow;
-    bool isMinimized = settings.trimMinimizedWindows &&
-                       wsIt != windowStates.end() && wsIt->second.isMinimized;
+    bool isWindowMinimized =
+        wsIt != windowStates.end() && wsIt->second.isMinimized;
+
+    // If "Trim Minimized Windows" is disabled, do not trim minimized apps
+    if (!settings.trimMinimizedWindows && isWindowMinimized) {
+      continue;
+    }
+
+    bool isMinimized = isWindowMinimized;
 
     if (isMultiTasking && hasVisibleWindow && !isMinimized && !isAi) {
       continue;
@@ -1828,7 +1936,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
 static void MemoryOptimizerWorker() {
   HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-  Wh_Log(L"[SmartOptimizer] Adaptive Memory & Priority Optimizer engine v1.0.0 "
+  Wh_Log(L"[SmartOptimizer] Adaptive Memory & Priority Optimizer engine"
          L"started "
          L"(0.00%% CPU passive wait).");
 
@@ -1965,7 +2073,7 @@ static void MemoryOptimizerWorker() {
   }
 
   {
-    std::lock_guard<std::mutex> lock(g_probalanceMutex);
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
     RestoreForegroundBoostLocked();
   }
 
@@ -2003,6 +2111,18 @@ static void LoadSettings() {
       (int)Wh_GetIntSetting(L"backgroundCpuThrottleThresholdPercent");
   g_settings.backgroundCpuThrottleThresholdPercent =
       std::clamp(bgThrottle, 5, 50);
+
+  PCWSTR bgPrioStr = Wh_GetStringSetting(L"backgroundThrottlePriorityLevel");
+  if (bgPrioStr && wcscmp(bgPrioStr, L"idle") == 0) {
+    g_settings.backgroundThrottlePriorityLevel = ThrottlePrioritySetting::Idle;
+  } else {
+    g_settings.backgroundThrottlePriorityLevel =
+        ThrottlePrioritySetting::BelowNormal;
+  }
+  Wh_FreeStringSetting(bgPrioStr);
+
+  g_settings.enableEcoQosManagement =
+      Wh_GetIntSetting(L"enableEcoQosManagement") != 0;
 
   g_settings.enableSmartAiOptimization =
       Wh_GetIntSetting(L"enableSmartAiOptimization") != 0;
@@ -2089,12 +2209,15 @@ static void LoadSettings() {
 BOOL WhTool_ModInit() {
   Wh_Log(
       L"[SmartOptimizer] Initializing Smart Process Priority & RAM Optimizer "
-      L"v1.0.0 (Dedicated Tool Process)...");
+      L"v1.0.1 (Dedicated Tool Process)...");
 
   HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
   if (hNtdll) {
     g_pfnNtSetInformationProcess = (pfnNtSetInformationProcess)GetProcAddress(
         hNtdll, "NtSetInformationProcess");
+    g_pfnNtQueryInformationProcess =
+        (pfnNtQueryInformationProcess)GetProcAddress(
+            hNtdll, "NtQueryInformationProcess");
   }
 
   HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -2132,7 +2255,7 @@ BOOL WhTool_ModInit() {
   g_workerRunning.store(true);
   g_workerThread.emplace(MemoryOptimizerWorker);
 
-  Wh_Log(L"[SmartOptimizer] Mod v1.0.0 initialized successfully.");
+  Wh_Log(L"[SmartOptimizer] Mod v1.0.1 initialized successfully.");
   return TRUE;
 }
 
@@ -2142,15 +2265,11 @@ void WhTool_ModSettingsChanged() {
 
   ModSettings settings = GetSettingsSnapshot();
 
-  // If background throttling was disabled, restore all throttled processes
-  // immediately
-  if (!settings.enableBackgroundThrottling) {
-    RestoreAllThrottledProcesses();
-  }
-
-  // If foreground boost was disabled, restore boosted process immediately
+  // If foreground boost was disabled, restore boosted process immediately.
+  // Note: Background throttling restoration is handled safely by the worker
+  // thread upon waking to avoid cross-thread data races on throttled processes.
   if (!settings.enableProBalance) {
-    std::lock_guard<std::mutex> lock(g_probalanceMutex);
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
     RestoreForegroundBoostLocked();
   }
 
@@ -2168,7 +2287,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-  Wh_Log(L"[SmartOptimizer] Deinitializing mod v1.0.0...");
+  Wh_Log(L"[SmartOptimizer] Deinitializing mod v1.0.1...");
 
   if (g_hookThreadRunning.load()) {
     g_hookThreadRunning.store(false);
@@ -2202,7 +2321,7 @@ void WhTool_ModUninit() {
   g_audioPidLastActive.clear();
   g_audioPidsCache.clear();
   {
-    std::lock_guard<std::mutex> lock(g_probalanceMutex);
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
     RestoreForegroundBoostLocked();
   }
 
