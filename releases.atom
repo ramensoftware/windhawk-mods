@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-03T20:39:26.000Z</updated>
+    <updated>2026-09-05T16:04:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.6]]></title>
+        <id>https://windhawk.net/mods/net-speed-taskbar#e7faca32a6b7a3166a709ac824ec060b54070fc6</id>
+        <link href="https://windhawk.net/mods/net-speed-taskbar"/>
+        <updated>2026-09-05T16:04:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarnetworkspeedindicator">Taskbar Network Speed Indicator</h1>
+<p>A free-floating widget docked to the taskbar, featuring a real-time sparkline
+chart and multiple visual layouts. Shows current download/upload speed,
+refreshed every second.</p>
+<p>Runs as a dedicated, isolated <code>explorer.exe</code> helper process (not the real
+shell) using the "mods as tools" pattern, so a bug in it can't take down your
+actual desktop. It targets <code>explorer.exe</code> rather than <code>windhawk.exe</code> because
+the taskbar's own content lives in DWM's immersive Z-band
+(<code>ZBID_IMMERSIVE_NOTIFICATION</code>), and <code>CreateWindowInBand</code> -- the only way to
+place a window in that band -- appears to require the calling process to
+actually be an <code>explorer.exe</code> image.</p>
+<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-internet-speed-mod.gif" alt="Demo" /></p>
+<ul>
+<li>Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.</li>
+<li>Move the widget anywhere along your taskbar using the Horizontal Position setting.</li>
+<li>Click-through: it won't get in the way of your taskbar buttons.</li>
+<li>Recovers automatically on an Explorer crash/restart, not just a clean shell exit.</li>
+<li>Hides while a full-screen app or game covers the taskbar's monitor.</li>
+</ul>
+<p>Note: <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
+and <a href="https://windhawk.net/mods/taskbar-system-info">Taskbar System Info</a> both
+offer similar taskbar network readouts. This mod's differentiators are the
+free horizontal placement anywhere along the taskbar and the sparkline chart
+layouts.</p>
+<p>A few consequences of running as a dedicated <code>explorer.exe</code> helper process,
+worth knowing:</p>
+<ul>
+<li>A second <strong>"Windows Explorer"</strong> entry appears in Task Manager. Ending it
+won't relaunch the widget until the shell restarts or the mod is reloaded.</li>
+<li>Any other mod you have enabled with <code>@include explorer.exe</code> gets injected
+into this helper process too, since it genuinely is an <code>explorer.exe</code>. Most
+mods no-op there, but it can make Windhawk's per-process mod list and crash
+attribution look busier than expected.</li>
+</ul>]]></content>
+        <author>
+            <name>Narayan</name>
+            <uri>https://github.com/NarayanChetri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Blocked Shutdown UX & Logoff Sequence 1.0]]></title>
         <id>https://windhawk.net/mods/win7-bsdr#b71ad7e072474d28c82dc126b48917cb26fa3c44</id>
@@ -1105,110 +1149,6 @@ The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
 <li><strong>Cips</strong> — testing on Windows 11 25H2</li>
 </ul>
 <hr />]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Update Control Panel Page Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-update-control-panel-restorer#e10588c8b0101b4ab1e8b525bcc00a0aa1d2bf5b</id>
-        <link href="https://windhawk.net/mods/windows-update-control-panel-restorer"/>
-        <updated>2026-08-23T17:46:46.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="windowsupdatecontrolpanelrestorer">Windows Update Control Panel Restorer</h2>
-<p>This mod adds a best-effort classic Windows Update page back to Control Panel on
-Windows 10 and Windows 11 by reimplementing it where possible and by partially recreating the legacy interface. The mod utilizes a Windows 8.1 UI dll with the modern
-Windows Update backend/status layer, without replacing system files or writing
-real Control Panel registration keys.</p>
-<p>This is a reimplementation, not the original Windows Update client. Some buttons
-and small visual details are limited due to modern Windows versions' architecture, and more details may be
-improved in future versions.</p>
-<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<h2 id="screenshot"><strong>Screenshot</strong></h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsupdate.PNG" alt="Windows Update Control Panel Restorer" /></p>
-<h2 id="keyfeatures"><strong>Key Features</strong></h2>
-<ul>
-<li>Classic Windows Update interface with real-time status.</li>
-<li>Option to choose between Windows 7 or Windows 8.1 visual style.</li>
-<li>Clear notification when Windows Update is unavailable.</li>
-<li>Optional banner for available updates and link to settings.</li>
-<li>Option to hide outdated "Check for updates" box when the service is disabled.</li>
-<li>Read-only view of classic update settings; changes must be made via the modern Settings app.</li>
-<li><strong>Multilingual UI</strong>: English, Italian, Spanish, French, Turkish, Russian, Portuguese, Chinese, Polish, Dutch, or auto-detect.</li>
-<li><strong>"Check for updates" feature</strong>: click the sidebar link to run a REAL online search against Windows Update/Microsoft Update in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
-The result is deliberately conservative and matches what the Settings app would offer: definition (antimalware) updates, optional/browse-only items, preview and beta packages and non-installable entries are filtered out, and an update that cannot be positively identified as offered is not counted. If Windows says your PC is up to date, so does this page.</li>
-<li><strong>"Updates FAQ" link</strong>: opens a compact window with ten common questions and answers about Windows updates.</li>
-<li><strong>Native sidebar</strong>: preserves the original Windows Control Panel sidebar without adding or modifying external elements.</li>
-</ul>
-<h2 id="notes"><strong>Notes</strong></h2>
-<ul>
-<li><strong>The Control Panel entry appears immediately.</strong> Registration is published
-when the mod is enabled and is completely independent of the payload
-download, so "Windows Update" is in Control Panel right away - on first run,
-with no internet connection, and even if the download fails. Only the classic
-page's own content needs the payload; if it is not ready yet, opening the item
-shows a translated explanation and offers to open Windows Update in Settings.</li>
-<li>After the first successful setup the verified payload is cached and reused
-with no network access at all, so the page works fully offline afterwards.</li>
-<li>Installing updates is still handled by the modern Settings app.</li>
-<li>The "last checked" and "updates were installed" times come from Windows
-Update's recorded registry timestamps when those values are available.</li>
-<li><strong>Why the mod downloads a DLL:</strong> The restored page is the real Windows 8.1
-Windows Update Control Panel UI (wucltux.dll), loaded privately from a
-verified copy obtained from the Microsoft Symbol Server. That DLL is a
-<strong>necessary dependency</strong>: it is what renders the classic page, and the whole
-point of this mod is to bring that original page back. Without it there is
-nothing to show, so the mod cannot function offline or without this payload.
-The download is a one-time fetch (retried up to a few times), the file is
-pinned to a known SHA-256 and its PE machine type is validated before it is
-ever loaded, and it is kept as a private copy outside System32 and nothing is
-installed to or replaced in the operating system. The Microsoft Symbol Server
-URL is tied to this exact historical build; if Microsoft removes that file,
-first-time setup will no longer work unless the verified payload was cached.
-This is therefore a hard dependency on a single remote file, not a
-convenience: the mod is not self-contained. Only the localization is - the
-matching MUI satellite files are never downloaded, because every string the
-restored page needs is embedded in the mod's own source.</li>
-</ul>
-<h2 id="stabilityandsafetydesign"><strong>Stability and safety design</strong></h2>
-<ul>
-<li><strong>Nothing is written to the real registry or to system files.</strong> Every key and
-value is served from an in-memory virtualization layer, and each synthetic
-handle is backed by a genuine per-process <em>volatile</em> key that is deleted on
-unload, so no trace remains.</li>
-<li><strong>Setup never blocks the shell.</strong> The download runs on a background thread,
-is serialized across processes with a named mutex, is bounded per call, per
-attempt and by an overall deadline, and aborts immediately on shutdown, so a
-slow or captive-portal network can never hang Explorer or delay sign-out.</li>
-<li><strong>Every failure is contained.</strong> The setup worker, the language rebuild worker
-and both mod entry points have hard exception boundaries, so no failure can
-reach <code>std::terminate</code> and take Explorer down. Any step that fails degrades to
-a working fallback instead of an error.</li>
-<li><strong>Payload integrity is pinned.</strong> The download goes to a private temporary file
-that is size-, PE-machine- and SHA-256-checked against a pinned digest before
-it is atomically moved into place and loaded from outside System32.</li>
-<li><strong>Clean teardown.</strong> Disabling the mod hides the entry immediately, stops the
-workers, unloads the private payload and the generated resource modules it
-mapped, and then removes the files it created. A file still mapped by another
-process is left alone and retried on a later load or unload - never
-force-deleted and never scheduled machine-wide. In the rare case where a
-generated file is still locked when the mod unloads (for example because a
-Control Panel page created from it is still alive), the file is left on disk
-and deleted by the cleanup pass of a later load or unload.</li>
-</ul>
-<h2 id="knownlimitations"><strong>Known Limitations</strong></h2>
-<ul>
-<li><strong>Update installation</strong>: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.</li>
-<li><strong>Visual differences</strong>: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.</li>
-<li><strong>Classic Settings page</strong>: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible and it's currently a decorative page. However, if proper documentation to improve it is found, a better implementation will be done.</li>
-</ul>
-<h2 id="credits"><strong>Credits</strong></h2>
-<ul>
-<li><strong>Yvor</strong> - Testing on Windows 10 21H2.</li>
-<li><strong>Cips</strong> - Testing on Windows 11 25H2.</li>
-<li><strong>Allison</strong> - Suggestions for the implementation of the native Control Panel navigation links.</li>
-</ul>
-<p>If any issues are encountered, please report them to the author of the mod.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>

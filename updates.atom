@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-05T15:13:31.000Z</updated>
+    <updated>2026-09-05T16:04:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.6]]></title>
+        <id>https://windhawk.net/mods/net-speed-taskbar#e7faca32a6b7a3166a709ac824ec060b54070fc6</id>
+        <link href="https://windhawk.net/mods/net-speed-taskbar"/>
+        <updated>2026-09-05T16:04:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarnetworkspeedindicator">Taskbar Network Speed Indicator</h1>
+<p>A free-floating widget docked to the taskbar, featuring a real-time sparkline
+chart and multiple visual layouts. Shows current download/upload speed,
+refreshed every second.</p>
+<p>Runs as a dedicated, isolated <code>explorer.exe</code> helper process (not the real
+shell) using the "mods as tools" pattern, so a bug in it can't take down your
+actual desktop. It targets <code>explorer.exe</code> rather than <code>windhawk.exe</code> because
+the taskbar's own content lives in DWM's immersive Z-band
+(<code>ZBID_IMMERSIVE_NOTIFICATION</code>), and <code>CreateWindowInBand</code> -- the only way to
+place a window in that band -- appears to require the calling process to
+actually be an <code>explorer.exe</code> image.</p>
+<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-internet-speed-mod.gif" alt="Demo" /></p>
+<ul>
+<li>Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.</li>
+<li>Move the widget anywhere along your taskbar using the Horizontal Position setting.</li>
+<li>Click-through: it won't get in the way of your taskbar buttons.</li>
+<li>Recovers automatically on an Explorer crash/restart, not just a clean shell exit.</li>
+<li>Hides while a full-screen app or game covers the taskbar's monitor.</li>
+</ul>
+<p>Note: <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
+and <a href="https://windhawk.net/mods/taskbar-system-info">Taskbar System Info</a> both
+offer similar taskbar network readouts. This mod's differentiators are the
+free horizontal placement anywhere along the taskbar and the sparkline chart
+layouts.</p>
+<p>A few consequences of running as a dedicated <code>explorer.exe</code> helper process,
+worth knowing:</p>
+<ul>
+<li>A second <strong>"Windows Explorer"</strong> entry appears in Task Manager. Ending it
+won't relaunch the widget until the shell restarts or the mod is reloaded.</li>
+<li>Any other mod you have enabled with <code>@include explorer.exe</code> gets injected
+into this helper process too, since it genuinely is an <code>explorer.exe</code>. Most
+mods no-op there, but it can make Windhawk's per-process mod list and crash
+attribution look busier than expected.</li>
+</ul>]]></content>
+        <author>
+            <name>Narayan</name>
+            <uri>https://github.com/NarayanChetri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Widget Board Size and Position 0.1.1]]></title>
         <id>https://windhawk.net/mods/widget-board-size-position#f157de8be1492b6a69025eda9e8a22f5caad47b7</id>
@@ -492,22 +536,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota Bars 1.6.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#0a4b26cb2cb709280cbafe70422c4f9aefce092b</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-09-02T17:28:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add OpenAI credits bar: balance shown against a per-account max, with thresholds and notifications</li>
-<li>Add option to show $ or credit amounts on extra-usage/credits bars instead of percentages</li>
-<li>Fix Anthropic extra-usage bar vanishing at the start of each monthly cycle</li>
-<li>Hide extra OpenAI rate limits (Codex Spark, gpt-reserve) behind one opt-in toggle</li>
-</ul>]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
         </author>
     </entry>
 </feed>
