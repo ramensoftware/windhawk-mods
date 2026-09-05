@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-bsdr
-// @name            Windows 7 Blocked Shutdown UX & Logoff Sequence
-// @description     Bring back Windows 7's shutdown experience
+// @name            Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
+// @description     Bring back Windows Vista/7's shutdown experience
 // @version         1.0
 // @author          Ingan121
 // @github          https://github.com/Ingan121
@@ -16,17 +16,17 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 Blocked Shutdown UX & Logoff Sequence
-* This mod brings back the old blocked shutdown screen from Windows 7, which appears when you try to shut down or restart the computer while programs prevent shutdown.
+# Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
+* This mod brings back the old blocked shutdown screen from Windows 7 or Vista, which appears when you try to shut down or restart the computer while programs prevent shutdown.
 * The blocked shutdown UX part is a direct port of my [AuthUX BSDR fork](https://github.com/Ingan121/AuthUX/tree/bsdr).
     * This mod's UX part has no effect if AuthUX BSDR is installed.
-* This mod also optionally restores Windows 7's logoff sequence, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
+* This mod also optionally restores the logoff sequence of Windows 7 and earlier, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
 * (Optional) Loading resources from an external DLL is supported for localization. This requires one of the following:
-    * `winsrv.dll` and `winsrv.dll.mui` from Windows 7. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
+    * `winsrv.dll` and `winsrv.dll.mui` from Windows 7 or Vista. Put `winsrv.dll` in some folder, create a folder named after your locale (e.g. `en-US`), and put `winsrv.dll.mui` there.
     * `AuthUX.dll` from a build of AuthUX that supports BSDR.
     * Set the DLL path in the mod settings afterwards. You may also point this directly to `winsrv.dll.mui` instead of setting up the directory structure mentioned above.
-    * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows 7 version**; this will brick your Windows installation!
+    * Warning: **never, ever replace `C:\Windows\System32\winsrv.dll` (or mui) with the Windows Vista/7 version**; this will brick your Windows installation!
     * This is not necessary. Hardcoded resources will be used instead if the path is not set or the file is missing.
 * This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
 * This mod does not modify any system files. The above optional DLL can be placed anywhere in the file system.
@@ -54,16 +54,16 @@ and make sure that `LogonUI.exe` is in the list.
 - resDllPath: ""
   $name: AuthUX.dll/winsrv.dll path
   $name:ko-KR: AuthUX.dll/winsrv.dll 경로
-  $description: Path to your copy of winsrv.dll from Windows 7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
-  $description:ko-KR: Windows 7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
+  $description: Path to your copy of winsrv.dll from Windows Vista/7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
+  $description:ko-KR: Windows Vista7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
 - themeScrollbar: false
   $name: Apply visual styles to the scroll bar
   $name:ko-KR: 스크롤 막대에 시각 테마 적용
-  $description: The original Windows 7 blocked shutdown resolver had an unthemed scroll bar. Enable this if you find it ugly.
-  $description:ko-KR: Windows 7의 원본 BSDR은 스크롤 막대에 테마를 적용하지 않았습니다. 그것이 마음에 들지 않는 경우 이 옵션을 활성화하십시오.
+  $description: The original Windows Vista/7 blocked shutdown resolver had an unthemed scroll bar. Enable this if you find it ugly.
+  $description:ko-KR: Windows Vista/7의 원본 BSDR은 스크롤 막대에 테마를 적용하지 않았습니다. 그것이 마음에 들지 않는 경우 이 옵션을 활성화하십시오.
 - disableAsyncLogoff: false
-  $name: Restore Windows 7's logoff sequence
-  $name:ko-KR: Windows 7의 로그오프 절차 복원
+  $name: Restore Windows Vista/7's logoff sequence
+  $name:ko-KR: Windows Vista/7의 로그오프 절차 복원
   $description: Switch to the 'logging off' screen after all applications have been closed. If your user account has no password set, you might be immediately logged back on automatically after logging off.
   $description:ko-KR: 모든 응용 프로그램이 닫힌 이후 '로그오프 중' 화면으로 전환합니다. 사용자 계정에 암호가 설정되지 않은 경우, 로그오프 직후 자동으로 다시 로그온 될 수 있습니다.
 - noSafetyChecks: false
@@ -125,6 +125,7 @@ std::atomic<bool> g_isExiting = false;
 
 #pragma region resources
 // Resource IDs
+// Dialog and controls
 #define IDD_BSDR_DLG 20
 #define IDC_BSDR_TITLE 261
 #define IDC_BSDR_SEPARATOR_TOP 269
@@ -133,15 +134,25 @@ std::atomic<bool> g_isExiting = false;
 #define IDC_BSDR_SEPARATOR_BOTTOM 270
 #define IDC_BSDR_DESC 262
 #define IDC_BSDR_FORCE_BTN 260
-#define IDC_BSDR_WARNING 271
+#define IDC_BSDR_WARNING 271 // 7 only; Vista also misses IDYES and IDNO
 
+// Bitmaps
 #define IDB_BSDR_SEPARATOR 528
 #define IDB_BSDR_BTN_NORMAL 536
 #define IDB_BSDR_BTN_HOVER 537
 #define IDB_BSDR_BTN_PRESSED 538
 #define IDB_BSDR_BTN_SELECTED 539
 #define IDB_BSDR_BTN_SELECTED_HOVER 540
+// Bitmaps only used by Vista BSDR (technically they still exist in Win7 winsrv but unused)
+#define IDB_BSDR_BTN_RED_NORMAL 531
+#define IDB_BSDR_BTN_RED_HOVER 532
+#define IDB_BSDR_BTN_RED_PRESSED 533
+#define IDB_BSDR_BTN_RED_SELECTED 534
+#define IDB_BSDR_BTN_RED_SELECTED_HOVER 535
+#define IDB_BSDR_BTN_ICON_LOGOFF_RESTART 544 // 546 also exists separately for restart but these images are 100% identical
+#define IDB_BSDR_BTN_ICON_SHUTDOWN 545
 
+// Strings
 #define IDS_BSDR_DESC_LOGOFF 1025
 #define IDS_BSDR_BTN_LOGOFF 1026
 #define IDS_BSDR_DESC_RESTART 1027
@@ -149,6 +160,7 @@ std::atomic<bool> g_isExiting = false;
 #define IDS_BSDR_BLOCKINGAPP_SHUTDOWN 1029
 #define IDS_BSDR_BLOCKINGAPP_LOGOFF 1030
 #define IDS_BSDR_BLOCKINGAPP_RESTART 1031
+// Strings only found in 7 winsrv
 #define IDS_BSDR_WAITINGFOR 1035
 #define IDS_BSDR_BLOCKING_BGAPPS 1036
 #define IDS_BSDR_WARNING_LOGOFF 1037
@@ -1784,10 +1796,10 @@ namespace CustomBSDR {
     HWND hAppList = nullptr;
     HWND hAppListScroll = nullptr;
     HWND hScrollBar = nullptr;
-    HWND hWarningText = nullptr;
     HWND hForceButton = nullptr;
     HWND hCancelButton = nullptr;
     HWND hDescText = nullptr;
+    HWND hWarningText = nullptr;
     HWND hYesButton = nullptr;
     HWND hNoButton = nullptr;
     HWND hHoverButton = nullptr;
@@ -1805,7 +1817,7 @@ namespace CustomBSDR {
     bool IsHighContrast();
     HBITMAP LoadAlphaBitmap(UINT resourceId, bool forceHardcoded = false);
     void DrawSeparator(LPDRAWITEMSTRUCT pDIS);
-    void DrawButton(LPDRAWITEMSTRUCT pDIS);
+    void DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed);
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
     void UpdateAppListLayout();
@@ -1824,8 +1836,16 @@ namespace CustomBSDR {
     HBITMAP btnPressedBitmap = nullptr;
     HBITMAP btnSelectedBitmap = nullptr;
     HBITMAP btnSelectedHoverBitmap = nullptr;
+    HBITMAP btnRedNormalBitmap = nullptr;
+    HBITMAP btnRedHoverBitmap = nullptr;
+    HBITMAP btnRedPressedBitmap = nullptr;
+    HBITMAP btnRedSelectedBitmap = nullptr;
+    HBITMAP btnRedSelectedHoverBitmap = nullptr;
+    HBITMAP btnIconLogoffRestart = nullptr;
+    HBITMAP btnIconShutdown = nullptr;
 
     // variables
+    bool isVista = false;
     bool dlgInitFailed = false;
     int bgOffsetX = 0;
     int bgOffsetY = 0;
@@ -2221,7 +2241,7 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
     }
 }
 
-void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
+void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
     HDC hdc = pDIS->hDC;
 
     bool isPressed = (pDIS->itemState & ODS_SELECTED);
@@ -2230,6 +2250,11 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
     RECT rcButton = pDIS->rcItem;
 
     bool drewAsHighContrast = isHighContrast;
+
+    const int dpi = GetDpiForWindow(hDlg);
+
+    static constexpr int borderSize = 4;
+    static constexpr BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
     if (isHighContrast) {
         UINT uState = DFCS_BUTTONPUSH;
@@ -2240,35 +2265,47 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
         HBITMAP hBitmap = nullptr;
         bool isHover = (hHoverButton == pDIS->hwndItem);
 
-        if (isPressed) {
-            hBitmap = btnPressedBitmap;
-        } else if (isFocused && isHover) {
-            hBitmap = btnSelectedHoverBitmap;
-        } else if (isFocused) {
-            hBitmap = btnSelectedBitmap;
-        } else if (isHover) {
-            hBitmap = btnHoverBitmap;
-        } else {
-            hBitmap = btnNormalBitmap;
+        if (isVista && isRed) {
+            if (isPressed) {
+                hBitmap = btnRedPressedBitmap;
+            } else if (isFocused && isHover) {
+                hBitmap = btnRedSelectedHoverBitmap;
+            } else if (isFocused) {
+                hBitmap = btnRedSelectedBitmap;
+            } else if (isHover) {
+                hBitmap = btnRedHoverBitmap;
+            } else {
+                hBitmap = btnRedNormalBitmap;
+            }
+        }
+        if (!hBitmap) {
+            if (isPressed) {
+                hBitmap = btnPressedBitmap;
+            } else if (isFocused && isHover) {
+                hBitmap = btnSelectedHoverBitmap;
+            } else if (isFocused) {
+                hBitmap = btnSelectedBitmap;
+            } else if (isHover) {
+                hBitmap = btnHoverBitmap;
+            } else {
+                hBitmap = btnNormalBitmap;
+            }
         }
 
-        if (hBitmap) {
-            BITMAP bm = {};
-            GetObject(hBitmap, sizeof(bm), &bm);
+        BITMAP bm = {};
+        if (hBitmap && GetObjectW(hBitmap, sizeof(bm), &bm) && bm.bmWidth > 2 * borderSize && bm.bmHeight > 2 * borderSize) {
+            const int width = rcButton.right - rcButton.left;
+            const int height = rcButton.bottom - rcButton.top;
 
-            int width = rcButton.right - rcButton.left;
-            int height = rcButton.bottom - rcButton.top;
+            const int borderSizeDraw = MulDiv(borderSize, dpi, 96);
 
-            const int borderSize = 4;
-            const int borderSizeDraw = MulDiv(borderSize, GetDpiForWindow(hDlg), 96);
+            const int srcW = bm.bmWidth;
+            const int srcH = bm.bmHeight;
+            const int dstW = width;
+            const int dstH = height;
 
-            int srcW = bm.bmWidth;
-            int srcH = bm.bmHeight;
-            int dstW = width;
-            int dstH = height;
-
-            int left = rcButton.left;
-            int top = rcButton.top;
+            const int left = rcButton.left;
+            const int top = rcButton.top;
 
             BITMAPINFO bmi = {};
             bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -2298,8 +2335,6 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
 
                 HDC hdcSrc = CreateCompatibleDC(hdc);
                 HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hBitmap);
-
-                BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
                 // 1 2 3
                 // 4 5 6
@@ -2334,6 +2369,28 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS) {
                 uState |= DFCS_PUSHED;
             DrawFrameControl(hdc, &rcButton, DFC_BUTTON, uState);
             drewAsHighContrast = true;
+        }
+    }
+
+    if (isVista && isRed) {
+        HBITMAP hIconBitmap = _logonUIState == LogonUIState_ShuttingDown ? btnIconShutdown : btnIconLogoffRestart;
+        BITMAP bmIcon = {};
+        if (hIconBitmap && GetObjectW(hIconBitmap, sizeof(bmIcon), &bmIcon)) {
+            const int srcW = bmIcon.bmWidth;
+            const int srcH = bmIcon.bmHeight;
+            const int dstW = MulDiv(srcW, dpi, 96);
+            const int dstH = MulDiv(srcH, dpi, 96);
+            const int iconMargin = MulDiv(6, dpi, 96);
+
+            HDC hdcSrc = CreateCompatibleDC(hdc);
+            HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
+
+            AlphaBlend(hdc, iconMargin, iconMargin, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
+
+            SelectObject(hdcSrc, hOldSrc);
+            DeleteDC(hdcSrc);
+
+            rcButton.left = iconMargin + dstW;
         }
     }
 
@@ -2447,7 +2504,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
         return;
     }
 
-    int dpi = GetDpiForWindow(hDlg);
+    const int dpi = GetDpiForWindow(hDlg);
 
     AppTile tile = {};
     if (FAILED(blockingApp->get_Id(&tile.appId))) {
@@ -2469,7 +2526,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
 
     if (SUCCEEDED(blockingApp->get_Caption(&caption))) {
         const wchar_t* captionStr = WindowsGetStringRawBuffer(caption, nullptr);
-        if (tile.isBlocking) {
+        if (tile.isBlocking && !isVista) {
             wchar_t waitingFor[256] = {};
             GetString(IDS_BSDR_WAITINGFOR, waitingFor, _countof(waitingFor));
             titleText = std::wstring(waitingFor) + L" " + captionStr;
@@ -2597,7 +2654,7 @@ void CustomBSDR::UpdateAppListLayout() {
         return;
     }
 
-    int dpi = GetDpiForWindow(hDlg);
+    const int dpi = GetDpiForWindow(hDlg);
 
     const int iconSize = MulDiv(32, dpi, 96);
     const int topMargin = MulDiv(11, dpi, 96);
@@ -2668,7 +2725,7 @@ void CustomBSDR::UpdateAppListLayout() {
         RECT rcTitle, rcNo;
         GetWindowRect(hTitleText, &rcTitle);
         MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcTitle, 2);
-        GetWindowRect(hNoButton, &rcNo);
+        GetWindowRect(isVista ? hCancelButton : hNoButton, &rcNo);
         MapWindowPoints(HWND_DESKTOP, hDlg, (LPPOINT)&rcNo, 2);
         int topPadding = rcTitle.top;
         int dialogWidth = rcTitle.right;
@@ -2740,7 +2797,7 @@ void CustomBSDR::UpdateAppListLayout() {
     SetWindowPos(hAppListScroll, nullptr, 0, -scrollPos, currentWidth, totalContentHeight, SWP_NOZORDER);
 
     // Set the title text based on the number of apps on the list
-    if (hTitleText) {
+    if (hTitleText && !isVista) {
         wchar_t titleFormat[256] = {};
         // Redraw the entire title control area to prevent artifacts from previous longer text when the number of apps decreases
         InvalidateRect(hTitleText, nullptr, TRUE);
@@ -2811,10 +2868,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         hAppList = nullptr;
         hAppListScroll = nullptr;
         hScrollBar = nullptr;
-        hWarningText = nullptr;
         hForceButton = nullptr;
         hCancelButton = nullptr;
         hDescText = nullptr;
+        hWarningText = nullptr;
         hYesButton = nullptr;
         hNoButton = nullptr;
         hHoverButton = nullptr;
@@ -2823,17 +2880,22 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         hTitleText = GetDlgItem(hWndDlg, IDC_BSDR_TITLE);
         hAppList = GetDlgItem(hWndDlg, IDC_BSDR_APPLIST);
         hScrollBar = GetDlgItem(hWndDlg, IDC_BSDR_SCROLLBAR);
-        hWarningText = GetDlgItem(hWndDlg, IDC_BSDR_WARNING);
         hForceButton = GetDlgItem(hWndDlg, IDC_BSDR_FORCE_BTN);
         hCancelButton = GetDlgItem(hWndDlg, IDCANCEL);
         hDescText = GetDlgItem(hWndDlg, IDC_BSDR_DESC);
+        hWarningText = GetDlgItem(hWndDlg, IDC_BSDR_WARNING);
         hYesButton = GetDlgItem(hWndDlg, IDYES);
         hNoButton = GetDlgItem(hWndDlg, IDNO);
 
-        if (!hTitleText || !hAppList || !hScrollBar || !hWarningText || !hForceButton || !hCancelButton || !hDescText || !hYesButton || !hNoButton) {
+        if (!hTitleText || !hAppList || !hScrollBar || !hForceButton || !hCancelButton || !hDescText) {
             Wh_Log(L"Dialog is missing necessary controls");
             dlgInitFailed = true;
             return FALSE;
+        }
+
+        if (!hWarningText || !hYesButton || !hNoButton) {
+            Wh_Log(L"Vista resources detected");
+            isVista = true;
         }
 
         // Hide title bar
@@ -2841,10 +2903,12 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         // Use composited style on dialog, not bg window, to prevent the scrollbar control from flickering on drag
         SetWindowLongW(hWndDlg, GWL_EXSTYLE, GetWindowLongW(hWndDlg, GWL_EXSTYLE) | WS_EX_COMPOSITED);
 
-        // Hide the warning message controls
-        ShowWindow(hWarningText, SW_HIDE);
-        ShowWindow(hYesButton, SW_HIDE);
-        ShowWindow(hNoButton, SW_HIDE);
+        if (!isVista) {
+            // Hide the warning message controls
+            ShowWindow(hWarningText, SW_HIDE);
+            ShowWindow(hYesButton, SW_HIDE);
+            ShowWindow(hNoButton, SW_HIDE);
+        }
 
         if (!Wh_GetIntSetting(L"themeScrollbar")) {
             SetWindowTheme(hScrollBar, L" ", L"");
@@ -2878,10 +2942,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         // which is good for us because the dialog is only shown on the primary monitor
         // Even a 1px offset disables that behavior and makes the window use DPI of the monitor the window is primarily in
         // This behavior is the same for per-monitor V1, V2, and also MonitorFromWindow/MonitorFromRect
-        int dpi = GetDpiForWindow(hWndDlg);
+        const int dpi = GetDpiForWindow(hWndDlg);
 
-        int itemHeight = MulDiv(83, dpi, 96);
-        int itemHeightNoReason = MulDiv(62, dpi, 96);
+        const int itemHeight = MulDiv(83, dpi, 96);
+        const int itemHeightNoReason = MulDiv(62, dpi, 96);
 
         int totalItemsHeight = 0;
         for (auto& app : pendingAppsLocal) {
@@ -2938,7 +3002,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         RECT rcTitle, rcNo;
         GetWindowRect(hTitleText, &rcTitle);
         MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcTitle, 2);
-        GetWindowRect(hNoButton, &rcNo);
+        GetWindowRect(isVista ? hCancelButton : hNoButton, &rcNo);
         MapWindowPoints(HWND_DESKTOP, hWndDlg, (LPPOINT)&rcNo, 2);
         int topPadding = rcTitle.top;
         int dialogWidth = rcTitle.right;
@@ -2957,15 +3021,17 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         SetPropW(hCancelButton, L"CustomBSDR_HideFocus", (HANDLE)(cancelButtonUIState & UISF_HIDEFOCUS));
         SetPropW(hCancelButton, L"CustomBSDR_HideAccel", (HANDLE)(cancelButtonUIState & UISF_HIDEACCEL));
 
-        SetWindowSubclass(hYesButton, ButtonSubclassProc, 0, 0);
-        LRESULT yesButtonUIState = SendMessageW(hYesButton, WM_QUERYUISTATE, 0, 0);
-        SetPropW(hYesButton, L"CustomBSDR_HideFocus", (HANDLE)(yesButtonUIState & UISF_HIDEFOCUS));
-        SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)(yesButtonUIState & UISF_HIDEACCEL));
+        if (!isVista) {
+            SetWindowSubclass(hYesButton, ButtonSubclassProc, 0, 0);
+            LRESULT yesButtonUIState = SendMessageW(hYesButton, WM_QUERYUISTATE, 0, 0);
+            SetPropW(hYesButton, L"CustomBSDR_HideFocus", (HANDLE)(yesButtonUIState & UISF_HIDEFOCUS));
+            SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)(yesButtonUIState & UISF_HIDEACCEL));
 
-        SetWindowSubclass(hNoButton, ButtonSubclassProc, 0, 0);
-        LRESULT noButtonUIState = SendMessageW(hNoButton, WM_QUERYUISTATE, 0, 0);
-        SetPropW(hNoButton, L"CustomBSDR_HideFocus", (HANDLE)(noButtonUIState & UISF_HIDEFOCUS));
-        SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)(noButtonUIState & UISF_HIDEACCEL));
+            SetWindowSubclass(hNoButton, ButtonSubclassProc, 0, 0);
+            LRESULT noButtonUIState = SendMessageW(hNoButton, WM_QUERYUISTATE, 0, 0);
+            SetPropW(hNoButton, L"CustomBSDR_HideFocus", (HANDLE)(noButtonUIState & UISF_HIDEFOCUS));
+            SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)(noButtonUIState & UISF_HIDEACCEL));
+        }
 
         // Set font for title and description/warning texts
         HFONT hDialogFont = (HFONT)SendMessageW(hWndDlg, WM_GETFONT, 0, 0);
@@ -2999,12 +3065,14 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         switch (_logonUIState) {
         case LogonUIState_LoggingOff:
             GetString(IDS_BSDR_DESC_LOGOFF, desc, _countof(desc));
-            GetString(IDS_BSDR_WARNING_LOGOFF, warning, _countof(warning));
+            if (hWarningText)
+                GetString(IDS_BSDR_WARNING_LOGOFF, warning, _countof(warning));
             GetString(IDS_BSDR_BTN_LOGOFF, btnText, _countof(btnText));
             break;
         case LogonUIState_Restarting:
             GetString(IDS_BSDR_DESC_RESTART, desc, _countof(desc));
-            GetString(IDS_BSDR_WARNING_RESTART, warning, _countof(warning));
+            if (hWarningText)
+                GetString(IDS_BSDR_WARNING_RESTART, warning, _countof(warning));
             GetString(IDS_BSDR_BTN_RESTART, btnText, _countof(btnText));
             break;
         default:
@@ -3063,15 +3131,15 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         } else if (pDIS->CtlType == ODT_BUTTON) {
-            DrawButton(pDIS);
+            DrawButton(pDIS, pDIS->CtlID == IDC_BSDR_FORCE_BTN);
             SetWindowLongPtrW(hWndDlg, DWLP_MSGRESULT, TRUE);
             return TRUE;
         }
         break;
     }
     case WM_COMMAND: {
-        switch (LOWORD(wParam)) {
-        case IDCANCEL:
+        WORD id = LOWORD(wParam);
+        if (id == IDCANCEL) {
             {
                 std::lock_guard lock(cancelMutex);
                 isCanceling = true;
@@ -3086,7 +3154,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
                 PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
             }
             return TRUE;
-        case IDC_BSDR_FORCE_BTN:
+        } else if (id == IDYES || (isVista && id == IDC_BSDR_FORCE_BTN)) {
+            Resolve(BlockedShutdownResolution_Force);
+            PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
+            return TRUE;
+        } else if (id == IDC_BSDR_FORCE_BTN) {
             ShowWindow(hWarningText, SW_SHOW);
             ShowWindow(hYesButton, SW_SHOW);
             ShowWindow(hNoButton, SW_SHOW);
@@ -3094,11 +3166,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             ShowWindow(hCancelButton, SW_HIDE);
             ShowWindow(hForceButton, SW_HIDE);
             return TRUE;
-        case IDYES:
-            Resolve(BlockedShutdownResolution_Force);
-            PostMessageW(hBgWnd, WM_CLOSE, 0, BSDR_CLOSE);
-            return TRUE;
-        case IDNO:
+        } else if (id == IDNO) {
             ShowWindow(hWarningText, SW_HIDE);
             ShowWindow(hYesButton, SW_HIDE);
             ShowWindow(hNoButton, SW_HIDE);
@@ -3132,7 +3200,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     }
     case WM_MOUSEWHEEL: {
-        int dpi = GetDpiForWindow(hWndDlg);
+        const int dpi = GetDpiForWindow(hWndDlg);
         int visibleHeight = MulDiv(300, dpi, 96);
 
         if (hAppList) {
@@ -3141,9 +3209,9 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             visibleHeight = rcContainer.bottom - rcContainer.top;
         }
 
-        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-        int oldPos = scrollPos;
-        int lineHeight = MulDiv(20, dpi, 96);
+        const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        const int oldPos = scrollPos;
+        const int lineHeight = MulDiv(20, dpi, 96);
         if (scrollLines == WHEEL_PAGESCROLL) {
             scrollPos -= visibleHeight * (delta > 0 ? 1 : -1);
         } else {
@@ -3168,7 +3236,11 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     }
     case WM_VSCROLL: {
-        int dpi = GetDpiForWindow(hWndDlg);
+        if ((HWND)lParam != hScrollBar) {
+            return FALSE;
+        }
+
+        const int dpi = GetDpiForWindow(hWndDlg);
         int visibleHeight = MulDiv(300, dpi, 96);
 
         if (hAppList) {
@@ -3177,7 +3249,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             visibleHeight = rcContainer.bottom - rcContainer.top;
         }
 
-        int oldPos = scrollPos;
+        const int oldPos = scrollPos;
         switch (LOWORD(wParam)) {
         case SB_LINEUP: scrollPos -= MulDiv(20, dpi, 96); break;
         case SB_LINEDOWN: scrollPos += MulDiv(20, dpi, 96); break;
@@ -3264,6 +3336,16 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             if (!separatorBitmap || !btnNormalBitmap || !btnHoverBitmap || !btnPressedBitmap || !btnSelectedBitmap || !btnSelectedHoverBitmap) {
                 Wh_Log(L"One or more images are missing; falling back to high-contrast rendering...");
                 isHighContrast = true;
+            }
+
+            if (isVista) {
+                btnRedNormalBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_NORMAL);
+                btnRedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_HOVER);
+                btnRedPressedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_PRESSED);
+                btnRedSelectedBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_SELECTED);
+                btnRedSelectedHoverBitmap = LoadAlphaBitmap(IDB_BSDR_BTN_RED_SELECTED_HOVER);
+                btnIconLogoffRestart = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_LOGOFF_RESTART);
+                btnIconShutdown = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_SHUTDOWN);
             }
         }
 
@@ -3457,6 +3539,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     bool unloadCancelHandled = false;
     int ret = 0;
 
+    isVista = false;
     dlgInitFailed = false;
     bgOffsetX = 0;
     bgOffsetY = 0;
@@ -3581,8 +3664,10 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                         if (hDlg && msg.message == WM_SYSKEYDOWN && msg.wParam == VK_MENU) {
                             SetPropW(hForceButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             SetPropW(hCancelButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                            SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
-                            SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            if (!isVista) {
+                                SetPropW(hYesButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                                SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
+                            }
                             RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
                         }
                         if (!hDlg || !IsDialogMessageW(hDlg, &msg)) {
@@ -3704,11 +3789,17 @@ void CustomBSDR::Start(LogonUIState state) {
         std::lock_guard lock(g_resolvedMutex);
         g_resolvedValue = BlockedShutdownResolution_None;
         g_wasClicked = false;
+        g_rejectNextResolved = false;
     }
 
     {
         std::lock_guard lock(cancelMutex);
         isCanceling = false;
+    }
+
+    {
+        std::lock_guard lock(pendingAppsMutex);
+        pendingApps->clear();
     }
 
     if (!ResetEvent(hStopEvent)) {
@@ -3759,7 +3850,7 @@ void CustomBSDR::RemoveApplication(UINT appid) {
 
 int CustomBSDR::GetScaleFactor() {
     std::lock_guard lock(pendingAppsMutex);
-    int dpi = hDlg ? GetDpiForWindow(hDlg) : GetDpiForSystem();
+    const int dpi = hDlg ? GetDpiForWindow(hDlg) : GetDpiForSystem();
     return MulDiv(dpi, 100, 96);
 }
 
