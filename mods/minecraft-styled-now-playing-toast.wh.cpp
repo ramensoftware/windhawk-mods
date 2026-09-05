@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              minecraft-music-player
-// @name            Minecraft Music Player
+// @id              minecraft-styled-now-playing-toast
+// @name            Minecraft styled Now Playing Toast
 // @description     A mod for Windhawk that adds the "now playing" overlay
 // @version         1.0.0
 // @author          MaxURhino
@@ -1094,8 +1094,6 @@ void RenderAndUpdateWindow(
     std::wstring songNameWstring =
         StringToWString(songName);
 
-    AdvanceAnimation();
-
     int width =
         g_baseWidth *
         g_scale;
@@ -1673,15 +1671,6 @@ DWORD WINAPI OverlayThread(
     ReleaseDC(
         g_hwnd,
         hdcTemp
-    );
-
-    CreateThread(
-        nullptr,
-        0,
-        FontDownloadThread,
-        nullptr,
-        0,
-        nullptr
     );
 
     ShowWindow(
