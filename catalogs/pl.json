@@ -12687,6 +12687,38 @@
         "version": "1.1.4"
       }
     },
+    "taskbar-centered-start-split-icons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788628434000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788628434000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "rick",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Pins the Start button to true screen-center and splits running-app taskbar buttons into two groups flanking it by which side of the screen each window is on (Windows 11 only; incompatible with \"Start button always on the left\")",
+        "github": "https://github.com/rycalvo",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Start Button Centered Origin",
+        "version": "0.1.0"
+      }
+    },
     "taskbar-classic-menu": {
       "details": {
         "defaultSorting": 14148,

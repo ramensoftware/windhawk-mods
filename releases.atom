@@ -2,12 +2,168 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-05T16:26:24.000Z</updated>
+    <updated>2026-09-05T17:13:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Start Button Centered Origin 0.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#439154bf481990369a27159931010092934dbb06</id>
+        <link href="https://windhawk.net/mods/taskbar-centered-start-split-icons"/>
+        <updated>2026-09-05T17:13:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarstartbuttoncenteredorigin">Taskbar Start Button Centered Origin</h1>
+<p>Pins the Windows/Start button to the exact horizontal center of the primary
+monitor, regardless of how many taskbar icons are present. Running-app
+taskbar buttons are split into two groups that flank the Start button:</p>
+<ul>
+<li>A button goes to the <strong>left</strong> group if its window's current on-screen
+position is left of screen-center.</li>
+<li>A button goes to the <strong>right</strong> group if its window is right of
+screen-center.</li>
+<li>Pinned-but-not-running apps have no window to check the position of, so
+they're classified by the <code>leftApps</code>/<code>rightApps</code> name lists below, falling
+back to <code>unresolvedAppsDefaultSide</code> if unlisted. Within whichever side
+they land on, <code>pinnedAppsAnchor</code> picks whether they sit at the far edge
+or right next to Start.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/leftside.png" alt="Window left of screen-center" /><br />
+<em>The crosshair-marked window sits left of screen-center - its taskbar icon
+follows, landing left of Start.</em></p>
+<p><img src="https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/rightdefault.png" alt="Window right of screen-center" /><br />
+<em>The same window moved right of screen-center - its icon moves with it,
+to the right of Start.</em></p>
+<p>When you drag a window across the center line of the screen, its taskbar
+button switches sides to follow it. Side-switching is driven by a periodic
+poll of tracked windows' positions and is best-effort: it happens shortly
+after a drag/move settles, not on every intermediate pixel of the drag.</p>
+<p>Search, Task View and Widgets can either stay at the far left edge, or move
+right next to Start on whichever side you prefer.</p>
+<p>The window-tracking behind position-based splitting and drag-follow can be
+turned off entirely with <code>trackWindowPositions</code>, if you'd rather keep just
+the centered Start button and system-button placement with no background
+probing of taskbar buttons and no periodic position polling - every app is
+then classified the same way as a pinned-but-not-running one instead.</p>
+<h2 id="knownlimitationspleasereadbeforereportingissues">Known limitations (please read before reporting issues)</h2>
+<ul>
+<li><strong>Windows 11 only.</strong> Windows 10's taskbar has no XAML layer to hook into.</li>
+<li><strong>Primary monitor only</strong>, for both the Start button's position and
+window-side classification - and on a multi-monitor setup this is a
+bigger limitation than it might sound: a window's side is decided by
+comparing its position against the <em>primary</em> monitor's center line, so
+every window on a monitor entirely to one side of the primary reads as a
+fixed left/right regardless of where on that monitor it actually sits -
+only movement within the primary monitor (or across its center line) is
+tracked per-pixel. Taskbars on secondary displays aren't specially
+handled either (their icons keep Windows' default layout) - the mod's
+positioning plan is only ever computed on the primary taskbar's own
+thread, so secondary-monitor elements are simply never included in it
+and fall through to Windows' native positioning.</li>
+<li><strong>Don't enable alongside "Start button always on the left".</strong> Both mods
+hook the same process-wide <code>IUIElement::Arrange</code> vtable slot, and both
+write their own X position for the Start button - with both enabled,
+they simply disagree, and whichever one's hook runs last for a given
+Arrange call wins for that pass. This mod's <code>systemButtonsPlacement:
+far-left</code> setting covers the same "keep everything else out of Start's
+way" goal that mod's <code>otherSystemButtonsOnTheLeft</code> option does, so
+there's no reason to run both together. This mod is intentionally scoped
+to true screen-center plus position-based icon splitting specifically -
+not a general Start-position picker - so this conflict is a documented
+incompatibility to avoid rather than something planned to be resolved by
+merging the two mods or their positioning logic.</li>
+<li><strong>The Start menu itself doesn't follow the repositioned Start button.</strong>
+This mod only moves the Start <em>button</em> - nothing decides where the Start
+<em>menu</em> opens. With the taskbar's own "Taskbar alignment" set to
+"Center", the menu happens to open near screen-center anyway since
+that's where Windows expects it by default, but with alignment set to
+"Left", the button sits at true center while the menu still opens at the
+left edge. This is a solvable limitation rather than a permanent one -
+<code>taskbar-start-button-position.wh.cpp</code> repositions the menu itself by
+hooking <code>StartMenuExperienceHost.exe</code> - just not something this mod
+does today.</li>
+<li><strong>A very crowded side compresses instead of overflowing cleanly.</strong> If
+enough app icons pile up on one side that they'd run into the system
+tray/clock on the right (or, in "far left" placement, into Search/Task
+View/Widgets on the left), icon spacing on that side is compressed just
+enough to keep the whole group within bounds - icons still render at
+full size, so once genuinely crowded they visually overlap each other
+rather than being hidden or scrolled the way the taskbar's own overflow
+handling would.</li>
+<li><strong>Windows' own "Combine taskbar buttons and hide labels: When taskbar
+is full" doesn't shrink icons under this mod</strong> (icons stay full-size and
+compress/overlap instead, per the point above) - "Always" isn't
+affected and works normally. Likely because the "when full" decision is
+made by native layout logic (this mod only overrides each button's
+final X position afterward, it never touches sizing), evaluated against
+the taskbar's native, unsplit layout rather than this mod's split one -
+unconfirmed, not yet investigated further.</li>
+<li><strong>A grouped button (multiple windows combined under one icon) follows
+only its first window.</strong> With "Combine taskbar buttons" set to "Always",
+a group's side and ordering are both decided by whichever of its windows
+happens to be first in the taskbar's own internal list - not necessarily
+the one you'd expect - so a group whose windows straddle the center line
+won't visually reflect all of them. There's no exposed way to pick a
+more meaningful "primary" window for a group, so this is a documented
+tradeoff rather than a bug.</li>
+<li><strong>The taskbar's own overflow button, when it appears on a crowded
+taskbar, keeps its native position</strong> rather than being classified and
+placed like the buttons around it - this mod doesn't give it a slot in
+the split layout.</li>
+<li><strong>Undocumented internals.</strong> This mod hooks private, unversioned classes
+inside <code>taskbar.dll</code> and <code>Taskbar.View.dll</code> (via symbols resolved from
+Microsoft's public symbol server at runtime, not hardcoded offsets). A
+Windows update can change these internals and break the mod until it's
+updated. If that happens, disable the mod rather than filing against
+explorer.exe crashing.</li>
+<li>The "resolve which HWND a taskbar button represents" step reuses a
+technique from other taskbar-reordering mods (synchronously reporting a
+sentinel "click" to the taskbar's internal click handler, which is
+intercepted before it does anything, to read back the window handle) -
+but unlike those mods, which only ever dispatch it from an actual user
+gesture on one specific button, this mod dispatches it unattended, on
+its own background timer, against every button it hasn't resolved yet.
+It runs on a periodic timer rather than inline during layout, and
+Arrange only ever reads whatever the timer has already cached - running
+it synchronously from inside the taskbar's own layout pass was the
+confirmed cause of an explorer.exe crash (specifically when Windows'
+"show taskbar apps on" setting is anything other than "All taskbars",
+since that's when a window moving across monitors structurally adds/
+removes taskbar buttons rather than just repositioning them). As a
+further safeguard, the very first such probe of a session is held back
+until a real (non-sentinel) click has been seen passing through the same
+interception point, and three misses on a path that has never once
+succeeded latch this mod's probing off entirely on that path (see
+<code>Wh_Log</code> for which) - so a running app's icon may briefly show on its
+default side, rather than by window position, until you click any
+taskbar button once. That gate
+only covers <em>before</em> interception is ever confirmed working, though: if
+a future Windows update breaks interception in a way that still lets a
+probe reach the taskbar's real click handler afterward, the probe's
+sentinel value gets delivered as that handler's real argument, and the
+realistic worst case is a stray window activate/minimize or an access
+violation in explorer.exe, not merely icons freezing on their default
+side.</li>
+<li><strong>Taskbar buttons can disappear when a display is deactivated</strong> (via
+Settings, unplugging, or a third-party display on/off tool) - if
+"Taskbar behaviors &gt; When using multiple displays, show my taskbar apps
+on" isn't set to "All taskbars", Windows itself can drop a window's
+taskbar button entirely until you switch to that window (e.g. via
+Alt+Tab), rather than migrating it to the remaining taskbar. Reactivating
+a display doesn't trigger this. This is native Explorer/taskbar.dll
+behavior upstream of anything the mod hooks into, not something this mod
+causes or can work around.</li>
+</ul>
+<h2 id="disclosures">Disclosures</h2>
+<p>I am not a software developer. The present mod was developed using the
+Claude Code extension in VS Code. This mod was created for my own
+interests and shared for targeted development by members of the Windhawk
+community.</p>]]></content>
+        <author>
+            <name>rick</name>
+            <uri>https://github.com/rycalvo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Num Lock Lockdown 1.1.9]]></title>
         <id>https://windhawk.net/mods/numlock-lockdown#4ff551adf85080f58bc3d6ad8afd0832d177bd4a</id>
@@ -1086,56 +1242,6 @@ determines the target monitor using the cursor position, and repositions the win
         <author>
             <name>Ender</name>
             <uri>https://github.com/EnderDragonEP</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 HomeGroup Page Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-home-group-restorer#8441db3ba3cc4eba8b9115efec5979b2356ddeea</id>
-        <link href="https://windhawk.net/mods/win11-home-group-restorer"/>
-        <updated>2026-08-23T17:57:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11homegrouppagerestorer">Windows 11 HomeGroup Page Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic <strong>HomeGroup</strong> page in Control Panel and Windows 11 (and Windows 10 1803+ if necessary). The HomeGroup feature was removed starting with Windows 10 version 1803 (April 2018). This mod restores the visual Control Panel page using the original <code>hgcpl.dll</code> downloaded and verified from Microsoft's symbol servers.</p>
-<p>Note: This mod is a fix for the <a href="https://windhawk.net/mods/win7-legacy-applet-restorer">Windows 7 Legacy Applet Restorer mod</a> because the HomeGroup page was removed from Windows 11 while on Windows 10 it is still present despite the service not being functional/hard to restore properly.
-The mod has been tested on Windows 11 24H2 and Windows 11 25H2.
-<strong>IMPORTANT</strong>: This is a <strong>cosmetic restoration only</strong>. The underlying HomeGroup networking services (<code>HomeGroupListener</code>, <code>HomeGroupProvider</code>) were removed from Windows 10 1803+ and completely stripped from Windows 11. The page will display, but actual homegroup creation/joining/sharing will not work because the backend services no longer exist.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/homegroup.png" alt="homegroup" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Classic HomeGroup page</strong>: The mod restores the "HomeGroup" entry in the Control Panel</li>
-<li><strong>Automatic setup</strong>: The required <code>hgcpl.dll</code> is downloaded and SHA-256 verified automatically from Microsoft's symbol servers</li>
-<li><strong>Registry virtualization</strong>: All registry entries are provided through an in-memory virtualization layer and nothing is written to the real registry</li>
-<li><strong>Conservative resource handling</strong>: The mod is designed to be stable and user friendly using a conservative approach</li>
-<li><strong>100% reversible</strong>: Disabling the mod makes the Control Panel entry disappear immediately</li>
-<li><strong>25 embedded languages</strong>: Replacement text for all 249 HomeGroup resource IDs is embedded in 25 languages; no MUI files are copied, downloaded, or required (the wording was written for this mod and inevitably overlaps Microsoft's original UI text where there is little room for variation)</li>
-<li><strong>Language selector</strong>: The mod follows the Windows UI language automatically or allows a manual language override</li>
-<li><strong>Offline re-enable</strong>: Once downloaded, the base DLL is cached locally for offline use</li>
-</ul>
-<h2 id="designandsafetynotes">Design and safety notes</h2>
-<ul>
-<li>Setup runs on a background thread and it never blocks explorer.exe startup</li>
-<li>Download goes to a temporary file, SHA-256 checked against a pinned digest, then atomically moved into place</li>
-<li>After <code>LoadLibraryExW</code>, the loaded module is confirmed to map the same file object via <code>GetFileInformationByHandleEx(FileIdInfo)</code></li>
-<li>All registry values are provided through an in-memory virtualization layer backed by volatile (in-memory-only) registry keys</li>
-<li>The mod only stores files in its dedicated Windhawk mod-storage folder via <code>Wh_GetModStoragePath</code></li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>No actual networking</strong>: HomeGroup sharing/joining is non-functional because the backend services were removed/disabled by Microsoft in Windows 10 1803+ and the control panel page was removed from Windows 11</li>
-<li><strong>Windows 11</strong>: The page displays but some sub-features may show errors since the COM infrastructure is more heavily stripped</li>
-<li><strong>Private resource copy</strong>: The mod builds a private resource-only copy of the verified DLL and injects the embedded RT_STRING blocks without modifying Windows files or the verified executable DLL</li>
-<li><strong>Coexistence with Windows 7 Legacy Applet Restorer</strong>: This mod and the <a href="https://windhawk.net/mods/win7-legacy-applet-restorer">Windows 7 Legacy Applet Restorer</a> both provide the HomeGroup Control Panel entry (<code>{67CA7650-96E6-4FDD-BB43-A8E774F73A57}</code>). Duplicate entries are prevented automatically instead of relying on a "pick one" rule: before injecting the HomeGroup CLSID into the Control Panel namespace enumeration, this mod checks whether that name is already being provided — by the real registry (Windows versions that still have it, or a third-party registration) or by the other mod's hooks in the same enumeration — and yields if so. If you still see a duplicate entry with an old version of the other mod, update it (its side needs the same check) or disable its HomeGroup option.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>HomeGroup registry structure documented by <a href="https://strontic.github.io/xcyclopedia/">Strontic xCyclopedia</a></li>
-<li>WinClassic community for documenting the HomeGroup restoration approach</li>
-<li>Cips - Testing on Windows 11 25H2</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
