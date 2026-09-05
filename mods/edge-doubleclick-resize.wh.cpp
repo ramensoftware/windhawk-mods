@@ -116,26 +116,40 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
     if (!GetWindowRect(hWnd, &wr))
         return false;
 
-    RECT vr = wr; // Visible frame bounds.
-    if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                      &vr, sizeof(vr)))) {
-        vr = wr; // Fall back to zero insets if the DWM call fails.
+    // DWMWA_EXTENDED_FRAME_BOUNDS is always in physical pixels, while
+    // GetWindowRect is DPI-virtualized for processes that aren't
+    // per-monitor DPI aware. With @include * this mod runs inside such
+    // processes, so on a scaled display vr and wr can be in different
+    // coordinate spaces. PhysicalToLogicalPoint converts vr into the
+    // window's own (possibly virtualized) space to match wr; it's a
+    // no-op for per-monitor-aware callers.
+    RECT vr = wr; // Visible frame bounds, to be converted below.
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                         &vr, sizeof(vr)))) {
+        POINT tl = {vr.left, vr.top};
+        POINT br = {vr.right, vr.bottom};
+        if (PhysicalToLogicalPoint(hWnd, &tl) && PhysicalToLogicalPoint(hWnd, &br)) {
+            vr.left = tl.x;
+            vr.top = tl.y;
+            vr.right = br.x;
+            vr.bottom = br.y;
+        } else {
+            vr = wr;
+        }
+    } else {
+        vr = wr;
     }
 
     // Invisible border thickness on each side (difference between the
-    // real and visible bounds).
+    // real and visible bounds), now that both are in the same space.
     int leftInset   = vr.left   - wr.left;
     int topInset    = vr.top    - wr.top;
     int rightInset  = wr.right  - vr.right;
     int bottomInset = wr.bottom - vr.bottom;
 
-    // DWMWA_EXTENDED_FRAME_BOUNDS is always in physical pixels, while
-    // GetWindowRect is DPI-virtualized for processes that aren't
-    // per-monitor DPI aware. With @include * this mod runs inside such
-    // processes, so on a scaled display the two rects can be in
-    // different coordinate spaces. If the insets are far larger than a
-    // plausible frame width, discard them rather than risk throwing the
-    // window off-screen.
+    // Cheap sanity net: a genuine invisible border is a few pixels, so
+    // discard anything wildly larger rather than risk misplacing the
+    // window if the conversion above still didn't line up.
     const int maxInset =
         (GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)) * 4;
     if (leftInset < 0 || topInset < 0 || rightInset < 0 || bottomInset < 0 ||
