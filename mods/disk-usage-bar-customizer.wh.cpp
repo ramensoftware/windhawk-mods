@@ -28,9 +28,8 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 - Custom warning & intermediate percentage thresholds
 
 ### Rendering
-- Render using visual styles
+- Rendering modes: Custom, Visual styles and WinUI-like
 - Render using dark mode parts when using visual styles
-- WinUI-like rendering
 
 ### Custom rendering
 - Use system's accent color for the normal progress color
@@ -265,7 +264,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
     Aceste opțiuni vor fi ignorate atunci când este folosit modul de randare "Stiluri vizuale".
 
 
-    Dacă modul de randare "În stilul WinUI" este folosit, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori perssonalizate atunci când se randează folosind stilul WinUI".
+    Dacă modul de randare "În stilul WinUI" este folosit, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori personalizate atunci când se randează folosind stilul WinUI".
 */
 // ==/WindhawkModSettings==
 
@@ -413,9 +412,8 @@ static void LoadSettings() {
     g_percentageLabelColorDark       = LoadColorSetting(L"customRendering.darkModeColors.percentageLabelColor",       0x00FFFFFF);
 
     if (wcscmp(g_renderingMode, L"winuiLike") == 0) {
-        g_renderBarBorder                = FALSE;
-        g_heightFactor                   = 20;
-        g_roundProgressRightCorners      = TRUE;
+        g_renderBarBorder           = FALSE;
+        g_roundProgressRightCorners = TRUE;
         
         if (!g_winuiLikeRenderingCustomColors) {
             g_useSystemAccentColor           = TRUE;
@@ -461,7 +459,7 @@ static int GetCornerRadius(const RECT& rect) {
     int height = rect.bottom - rect.top;
     if (height <= 0 || g_cornerRadiusFactor <= 0) return 0;
 
-    int radius = ((height / 2) * g_cornerRadiusFactor) / 100;
+    int radius = ((height / 2) * g_cornerRadiusFactor + 50) / 100;
     return (radius < 1) ? 1 : radius;
 }
 
@@ -582,10 +580,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
         int maxBarHeight = clipRect.bottom - clipRect.top;
         int percentageLabelFontHeight = -(maxBarHeight * g_percentageLabelSize / 100);
         int heightFactor = g_heightFactor;
+        int radius;
 
         if (wcscmp(g_renderingMode, L"winuiLike") == 0) {
             if (iPartId == PP_FILL) heightFactor = 20;
             else if (iPartId == PP_TRANSPARENTBAR) heightFactor = 1;
+
+            radius = (clipRect.bottom - clipRect.top) * heightFactor / 200 + 1;
+        } else {
+            radius = GetCornerRadius(clipRect);
         }
 
         if (wcscmp(g_renderingMode, L"visualStyles") != 0) {
@@ -631,13 +634,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
                 else 
                     return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 
-                int radius;
-
-                if (wcscmp(g_renderingMode, L"winuiLike") == 0) 
-                    radius = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200 + 1;
-                else 
-                    radius = GetCornerRadius(clipRect);
-
                 if (g_renderBarBorder) {
                     clipRect.top++; clipRect.left++; clipRect.bottom--; clipRect.right--;
                     if (radius > 0) radius--;
@@ -649,7 +645,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
                 if (wcscmp(g_percentageLabel, L"dontShow") != 0) {
                     DrawPercentageLabel(
                         hdc, fullBarRect, g_percentageLabelFont, percentageLabelFontHeight, 
-                        (wcscmp(g_percentageLabel, L"usedPercentage") == 0) ? usedPercentage : (100 - usedPercentage),
+                        (wcscmp(g_percentageLabel, L"usedSpace") == 0) ? usedPercentage : (100 - usedPercentage),
                         (darkMode) ? g_percentageLabelColorDark : g_percentageLabelColorLight
                     );
                 }
@@ -665,13 +661,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
             if (wcscmp(g_renderingMode, L"visualStyles") == 0)
                 DrawThemeBackground_orig(hTheme, hdc, PP_TRANSPARENTBAR, PBS_NORMAL, &clipRect, 0);
             else {
-                int radius;
-
-                if (wcscmp(g_renderingMode, L"winuiLike") == 0) 
-                    radius = (clipRect.bottom - clipRect.top) * (100 - g_heightFactor) / 200 + 1;
-                else 
-                    radius = GetCornerRadius(clipRect);
-
                 if (g_renderBarBorder) {
                     FillRoundedRect(
                         hdc, clipRect, radius, (darkMode) ? g_barBorderColorDark : g_barBorderColorLight, 
