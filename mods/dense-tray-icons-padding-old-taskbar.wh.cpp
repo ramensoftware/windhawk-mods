@@ -4,7 +4,7 @@
 // @description Makes padding of tray icons adjustable in legacy taskbar
 // @version 1.0
 // @author Anixx
-// @github          https://github.com/Anixx
+// @github https://github.com/Anixx
 // @include explorer.exe
 // @compilerOptions -lcomctl32 -lpsapi
 // ==/WindhawkMod==
@@ -50,8 +50,7 @@ GetSystemMetrics_t GetSystemMetrics_Orig = nullptr;
 using GetSystemMetricsForDpi_t = decltype(&GetSystemMetricsForDpi);
 GetSystemMetricsForDpi_t GetSystemMetricsForDpi_Orig = nullptr;
 
-inline bool IsFromExplorer() {
-    void* ret = __builtin_return_address(0);
+__attribute__((always_inline)) inline bool IsFromExplorer(void* ret) {
     ULONG_PTR a = (ULONG_PTR)ret;
     return a >= g_expBase && a < g_expEnd;
 }
@@ -290,15 +289,21 @@ static int HandleMetricsResult(int r) {
 
 int WINAPI GetSystemMetrics_Hook(int nIndex) {
     int r = GetSystemMetrics_Orig(nIndex);
-    if (nIndex==SM_CXSMICON && g_padding!=0 && IsFromExplorer()) {
-        return HandleMetricsResult(r);
+    if (nIndex==SM_CXSMICON && g_padding!=0) {
+        void* ret = __builtin_return_address(0);
+        if (IsFromExplorer(ret)) {
+            return HandleMetricsResult(r);
+        }
     }
     return r;
 }
 int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
     int r = GetSystemMetricsForDpi_Orig? GetSystemMetricsForDpi_Orig(nIndex, dpi) : GetSystemMetrics_Orig(nIndex);
-    if (nIndex==SM_CXSMICON && g_padding!=0 && IsFromExplorer()) {
-        return HandleMetricsResult(r);
+    if (nIndex==SM_CXSMICON && g_padding!=0) {
+        void* ret = __builtin_return_address(0);
+        if (IsFromExplorer(ret)) {
+            return HandleMetricsResult(r);
+        }
     }
     return r;
 }
