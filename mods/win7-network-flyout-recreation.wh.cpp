@@ -314,6 +314,7 @@ If any issues are encountered, please report them to the author of the mod.
 #include <process.h>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 #include <stdlib.h>
@@ -520,13 +521,17 @@ void RecalcDpiMetrics(UINT dpi) {
 
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
-static HANDLE g_hConnectThread = NULL; 
-// Handle of the short-lived thread that waits for a superseded connect
-// thread to finish and closes its handle (see ReapConnectThreadHandleProc).
-// Tracked so SafeCleanup() can join it before Wh_ModUninit returns; both
-// this and the connect thread run code in the mod's own image, so leaving
-// either alive when Windhawk unloads the DLL crashes the process on return.
-static HANDLE g_hReapThread = NULL;
+// All async-connect threads that may still be running (the current one plus
+// any superseded by a rapid reconnect), guarded by g_Ctx.csLock. Previously a
+// superseded thread's handle was handed off to a short-lived "reaper" thread
+// that waited and closed it, with only the most recent reaper tracked for
+// SafeCleanup() to join. With three connects in flight (A -> B -> C), the
+// reaper waiting on A got its handle closed and untracked as soon as the
+// reaper for B was created, leaving it able to still be running mod-image
+// code when Wh_ModUninit returned. Tracking the connect-thread handles
+// directly - and joining every one of them in SafeCleanup() - removes the
+// reaper thread and that gap entirely.
+static std::vector<HANDLE> g_connectThreads;
 
 // Track per-load class registrations so the first RegisterClassW of a load is
 // required to succeed (a leftover class from a previous load bails out of that
@@ -5965,15 +5970,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     return 0;
 }
 
-// Waits for a previous async-connect thread to finish and closes its handle,
-// off the flyout's UI thread. See the call site in AskForPasswordAndConnect.
-static unsigned __stdcall ReapConnectThreadHandleProc(void* p) {
-    HANDLE h = (HANDLE)p;
-    WaitForSingleObject(h, INFINITE);
-    CloseHandle(h);
-    return 0;
-}
-
 static BOOL AskForPasswordAndConnect(int index) {
     if (!g_Ctx.hWlanClient) return FALSE;
 
@@ -6098,30 +6094,28 @@ static BOOL AskForPasswordAndConnect(int index) {
         free(ctx);
         return FALSE;
     }
-    if (g_hConnectThread) {
-        // Don't block the flyout's UI thread waiting for the previous
-        // WlanConnect to finish (it can still be in flight on rapid
-        // reconnects to a second network). Hand the old handle off to a
-        // short-lived reaper thread that waits and closes it asynchronously.
-        HANDLE hOldThread = g_hConnectThread;
-        HANDLE hReaper = (HANDLE)_beginthreadex(NULL, 0,
-            ReapConnectThreadHandleProc, hOldThread, 0, NULL);
-        if (hReaper) {
-            // Drop our reference to any previous reaper's handle (it has
-            // long since finished by the time a new connect is started) and
-            // track this one instead, so SafeCleanup() can join it at
-            // unload rather than leaving it untracked and potentially still
-            // running mod code when the DLL is unmapped.
-            if (g_hReapThread) CloseHandle(g_hReapThread);
-            g_hReapThread = hReaper;
-        } else {
-            // Couldn't spin up a reaper thread; fall back to closing the
-            // handle immediately. This does not terminate the still-running
-            // thread, it only releases our reference to its handle.
-            CloseHandle(hOldThread);
-        }
+    // Don't block the flyout's UI thread waiting for a previous WlanConnect
+    // to finish (it can still be in flight on rapid reconnects to a second
+    // network). Rather than spawning a reaper thread to consume the old
+    // handle - which left earlier reapers untracked and able to outlive
+    // Wh_ModUninit on a third overlapping connect - just keep every
+    // in-flight connect thread's handle around so SafeCleanup() can join
+    // them all at unload. Opportunistically drop handles for threads that
+    // have already finished so the list doesn't grow without bound across
+    // many reconnects.
+    {
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_connectThreads.erase(
+            std::remove_if(g_connectThreads.begin(), g_connectThreads.end(),
+                [](HANDLE h) {
+                    if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) return false;
+                    CloseHandle(h);
+                    return true;
+                }),
+            g_connectThreads.end());
+        g_connectThreads.push_back(hThread);
+        LeaveCriticalSection(&g_Ctx.csLock);
     }
-    g_hConnectThread = hThread;
     return TRUE;
 }
 
@@ -9642,25 +9636,28 @@ void SafeCleanup() {
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-    if (g_hConnectThread) {
+    {
         // AsyncConnectThreadProc can wait up to 10s on g_hConnectMutex before
         // doing anything, so any join timeout shorter than that (previously
         // 5s) is a guaranteed fall-through, not a rare race. Wait for real
-        // completion instead: the thread is bounded, just not by 5s.
-        Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
-        DWORD waitResult = WaitForSingleObject(g_hConnectThread, INFINITE);
-        Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
-        CloseHandle(g_hConnectThread);
-        g_hConnectThread = NULL;
-    } else {
-        Wh_Log(L"SafeCleanup: No pending connect thread");
-    }
-    if (g_hReapThread) {
-        // Same reasoning as the connect thread above: this also runs code
-        // in the mod's image, so it must finish before Wh_ModUninit returns.
-        WaitForSingleObject(g_hReapThread, INFINITE);
-        CloseHandle(g_hReapThread);
-        g_hReapThread = NULL;
+        // completion instead: each thread is bounded, just not by 5s.
+        // Join every tracked connect thread, not just the most recent one -
+        // on rapid reconnects (A -> B -> C) more than one can still be
+        // in flight, and all of them run code in the mod's image.
+        std::vector<HANDLE> threads;
+        EnterCriticalSection(&g_Ctx.csLock);
+        threads.swap(g_connectThreads);
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (!threads.empty()) {
+            Wh_Log(L"SafeCleanup: Waiting for %zu connect thread(s) to finish...", threads.size());
+            for (HANDLE h : threads) {
+                WaitForSingleObject(h, INFINITE);
+                CloseHandle(h);
+            }
+            Wh_Log(L"SafeCleanup: Connect thread(s) finished");
+        } else {
+            Wh_Log(L"SafeCleanup: No pending connect thread");
+        }
     }
     if (g_hProfileDialogThread) {
         DWORD tid = GetThreadId(g_hProfileDialogThread);
@@ -11100,12 +11097,17 @@ static void TeardownNetCenterHost() {
             DWORD_PTR dwResult = 0;
             int attempt = 0;
             while (IsWindow(item.msgWindow)) {
+                // SMTO_NORMAL (not SMTO_ABORTIFHUNG) so the 5s timeout is
+                // actually spent blocking. With SMTO_ABORTIFHUNG the call
+                // returns 0 immediately whenever the receiving thread is
+                // considered hung, turning this into a tight, full-CPU retry
+                // loop that never lets Wh_ModUninit return.
                 LRESULT sent = SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
-                                                    SMTO_ABORTIFHUNG, 5000, &dwResult);
+                                                    SMTO_NORMAL, 5000, &dwResult);
                 if (sent != 0 || !IsWindow(item.msgWindow))
                     break;
                 attempt++;
-                Wh_Log(L"[NetMap] NC teardown message timed out (attempt %d); waiting", attempt);
+                Wh_Log(L"[NetMap] NC teardown message timed out (attempt %d); retrying", attempt);
             }
         } else {
             if (item.hostWindow && IsWindow(item.hostWindow)) {
@@ -11401,12 +11403,24 @@ static void PrimeNetworkCategoryForNetCenterHost() {
     if (InterlockedCompareExchange(&g_ncRefreshInFlight, 1, 0) != 0)
         return;
 
+    // See the matching comment in EnsureNetCenterNetworkDataFresh(): guard
+    // the isUninitializing check + CreateThread + handle store with the same
+    // lock Wh_ModUninit joins under, so the check and the join can't
+    // interleave and leave an unjoined worker thread at unload.
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (g_Ctx.isUninitializing) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        return;
+    }
     if (g_ncRefreshThread) {
         CloseHandle(g_ncRefreshThread);
         g_ncRefreshThread = NULL;
     }
     g_ncRefreshThread = CreateThread(NULL, 0, NcNetworkDataRefreshWorker, NULL, 0, NULL);
-    if (!g_ncRefreshThread) {
+    HANDLE hCreated = g_ncRefreshThread;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!hCreated) {
         InterlockedExchange(&g_ncRefreshInFlight, 0);
         Wh_Log(L"[NetMap] CreateThread failed for initial priming pass");
     } else {
@@ -11552,12 +11566,29 @@ static void EnsureNetCenterNetworkDataFresh() {
 
     s_lastRefreshTick = now;
 
+    // The isUninitializing check above is not atomic with Wh_ModUninit's
+    // join of g_ncRefreshThread: a page thread that passed that check just
+    // before Wh_ModUninit set the flag could otherwise still reach here and
+    // overwrite the handle after uninit already joined and nulled it,
+    // leaving a worker thread unjoined when the DLL is unmapped. (The
+    // in-flight guard above doesn't close this gap either - the worker
+    // clears it right before returning, not as part of uninit's join.) Take
+    // the same lock Wh_ModUninit re-checks under, and re-verify the flag
+    // inside it so the check-then-create is atomic with the join.
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (g_Ctx.isUninitializing) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        return;
+    }
     if (g_ncRefreshThread) {
         CloseHandle(g_ncRefreshThread);
         g_ncRefreshThread = NULL;
     }
     g_ncRefreshThread = CreateThread(NULL, 0, NcNetworkDataRefreshWorker, NULL, 0, NULL);
-    if (!g_ncRefreshThread) {
+    HANDLE hCreated = g_ncRefreshThread;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!hCreated) {
         InterlockedExchange(&g_ncRefreshInFlight, 0);
         Wh_Log(L"[NetMap] CreateThread failed, skipping this refresh");
     }
@@ -11932,16 +11963,36 @@ void Wh_ModUninit() {
     // would still be running inside the mod image when Windhawk unmaps it.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
 
-    if (Win7NetworkCenterLinks::g_ncRefreshThread) {
+    // Re-read (and re-check after each join) under g_Ctx.csLock - the same
+    // lock the create sites now take around their isUninitializing check +
+    // CreateThread + handle store. Without that, a page thread could pass
+    // the check just before isUninitializing was set above and publish a
+    // new handle after this join already sampled NULL, leaving that worker
+    // unjoined when Windhawk unmaps the DLL. Looping until no handle is
+    // observed closes that window: a handle published between our unlock
+    // and the next EnterCriticalSection above will be caught here too, since
+    // EnsureNetCenterNetworkDataFresh()/PrimeNetworkCategoryForNetCenterHost()
+    // now refuse to create once isUninitializing is set, so this converges
+    // in at most one extra iteration.
+    for (;;) {
+        EnterCriticalSection(&g_Ctx.csLock);
+        HANDLE hRefresh = Win7NetworkCenterLinks::g_ncRefreshThread;
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (!hRefresh)
+            break;
         // Was bounded to 5s; NcNetworkDataRefreshWorker's worst case
         // (WlanEnumInterfaces + WlanGetNetworkBssList per network +
         // GetAdaptersAddresses + 2x CoCreateInstance) can exceed that on a
         // laptop with many visible SSIDs. A timed-out fall-through here
         // means Windhawk unmaps the DLL while this thread is still running
         // inside it, so wait for real completion instead.
-        WaitForSingleObject(Win7NetworkCenterLinks::g_ncRefreshThread, INFINITE);
-        CloseHandle(Win7NetworkCenterLinks::g_ncRefreshThread);
-        Win7NetworkCenterLinks::g_ncRefreshThread = NULL;
+        WaitForSingleObject(hRefresh, INFINITE);
+        EnterCriticalSection(&g_Ctx.csLock);
+        if (Win7NetworkCenterLinks::g_ncRefreshThread == hRefresh) {
+            CloseHandle(Win7NetworkCenterLinks::g_ncRefreshThread);
+            Win7NetworkCenterLinks::g_ncRefreshThread = NULL;
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
     }
 
     if (!g_IsExplorerHost && !g_IsRetroBarHost) {
