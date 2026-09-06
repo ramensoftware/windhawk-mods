@@ -17,11 +17,11 @@ The idea is based on the mod by Aubymori (https://github.com/aubymori).
 
 Before:
 
-[Before](https://i.imgur.com/jupSjfl.png)
+![Before](https://i.imgur.com/jupSjfl.png)
 
 After:
 
-[After](https://i.imgur.com/Jz4EkRQ.png)
+![After](https://i.imgur.com/Jz4EkRQ.png)
 
 Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod.
 
@@ -29,6 +29,8 @@ Be warned that the progress indicator will not be displayed on the task buttons 
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
+#include <mutex>
+#include <unordered_set>
 
 #ifdef _WIN64
 #define CALCON __cdecl
@@ -64,6 +66,13 @@ static HWND FindTaskListForTray(HWND hTray)
     return FindWindowExW(hTaskSw, NULL, L"MSTaskListWClass", NULL);
 }
 
+static bool IsWindowOfCurrentProcess(HWND hWnd)
+{
+    DWORD dwPid = 0;
+    GetWindowThreadProcessId(hWnd, &dwPid);
+    return dwPid == GetCurrentProcessId();
+}
+
 static HWND GetTrayForTaskList(HWND hList)
 {
     HWND hCur = hList;
@@ -92,6 +101,8 @@ static bool IsTrayHorizontal(HWND hTray)
     return (rc.right - rc.left) > (rc.bottom - rc.top);
 }
 
+// --- per-thread painting tracker ---
+
 static thread_local HWND tl_currentTaskList = NULL;
 static thread_local HWND tl_currentTaskListStack[8] = {};
 static thread_local int tl_stackDepth = 0;
@@ -111,6 +122,11 @@ static void PopTaskList()
         tl_currentTaskList = NULL;
 }
 
+// tracked set of subclassed lists - exact teardown, no enumeration
+static std::mutex g_subclassedMutex;
+static std::unordered_set<HWND> g_subclassedTaskLists;
+
+// WH_SUBCLASSPROC in this SDK is 5 params: HWND, UINT, WPARAM, LPARAM, DWORD_PTR
 LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
     if (uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT)
@@ -122,33 +138,51 @@ LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     }
     else if (uMsg == WM_NCDESTROY)
     {
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedTaskLists.erase(hWnd);
+        }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskListSubclassProc);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-static void SubclassTaskList(HWND hList)
+static void SubclassTaskListIfNew(HWND hList)
 {
-    if (!hList)
+    if (!hList ||!IsWindowOfCurrentProcess(hList))
         return;
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hList, TaskListSubclassProc, 0);
+
+    bool isNew = false;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        isNew = g_subclassedTaskLists.insert(hList).second;
+    }
+    if (isNew)
+    {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hList, TaskListSubclassProc, 0);
+    }
 }
 
-static void SubclassAllTaskLists()
+static void SubclassAllTaskListsCurrentProcess()
 {
-    HWND hTrays[16];
-    int n = 0;
-    HWND hMain = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hMain)
-        hTrays[n++] = hMain;
-    HWND hSec = NULL;
-    while ((hSec = FindWindowExW(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) && n < 16)
-        hTrays[n++] = hSec;
+    DWORD curPid = GetCurrentProcessId();
 
-    for (int i = 0; i < n; i++)
+    HWND hMain = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hMain && IsWindowOfCurrentProcess(hMain))
     {
-        HWND hList = FindTaskListForTray(hTrays[i]);
-        SubclassTaskList(hList);
+        HWND hList = FindTaskListForTray(hMain);
+        SubclassTaskListIfNew(hList);
+    }
+
+    HWND hSec = NULL;
+    while ((hSec = FindWindowExW(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)))
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hSec, &pid);
+        if (pid!= curPid)
+            continue;
+        HWND hList = FindTaskListForTray(hSec);
+        SubclassTaskListIfNew(hList);
     }
 }
 
@@ -160,6 +194,7 @@ HDC WINAPI BeginPaint_hook(HWND hWnd, LPPAINTSTRUCT lpPaint)
     if (wcscmp(szClass, L"MSTaskListWClass") == 0)
     {
         PushTaskList(hWnd);
+        SubclassTaskListIfNew(hWnd);
     }
     return hdc;
 }
@@ -188,10 +223,7 @@ void CALCON CTaskBtnGroup__DrawBar_hook(void *pThis, HDC hDC, void *pRenderInfo,
         if (hTray)
             isHorizontal = IsTrayHorizontal(hTray);
     }
-    else
-    {
-        SubclassAllTaskLists();
-    }
+    // else: keep default true, no enumeration from paint path
 
     if (isHorizontal)
     {
@@ -220,7 +252,6 @@ void CALCON CTaskBtnGroup__DrawBar_hook(void *pThis, HDC hDC, void *pRenderInfo,
 BOOL Wh_ModInit(void)
 {
     HMODULE hExplorer = GetModuleHandleW(NULL);
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
 
     WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
@@ -234,33 +265,28 @@ BOOL Wh_ModInit(void)
     if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
         return FALSE;
 
-    WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
-        { {L"BeginPaint"}, (void **)&BeginPaint_orig, (void *)BeginPaint_hook, FALSE },
-        { {L"EndPaint"}, (void **)&EndPaint_orig, (void *)EndPaint_hook, FALSE },
-    };
+    // Direct hooks, no PDB download, no network dependency
+    if (!WindhawkUtils::SetFunctionHook(BeginPaint, BeginPaint_hook, &BeginPaint_orig) ||
+       !WindhawkUtils::SetFunctionHook(EndPaint, EndPaint_hook, &EndPaint_orig))
+    {
+        Wh_Log(L"Failed to hook BeginPaint/EndPaint");
+        return FALSE;
+    }
 
-    WindhawkUtils::HookSymbols(hUser32, user32DllHooks, ARRAYSIZE(user32DllHooks));
-
-    SubclassAllTaskLists();
+    SubclassAllTaskListsCurrentProcess();
 
     return TRUE;
 }
 
 void Wh_ModUninit(void)
 {
-    HWND hTrays[16];
-    int n = 0;
-    HWND hMain = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hMain)
-        hTrays[n++] = hMain;
-    HWND hSec = NULL;
-    while ((hSec = FindWindowExW(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) && n < 16)
-        hTrays[n++] = hSec;
-
-    for (int i = 0; i < n; i++)
+    std::unordered_set<HWND> taskLists;
     {
-        HWND hList = FindTaskListForTray(hTrays[i]);
-        if (hList)
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hList, TaskListSubclassProc);
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        taskLists.swap(g_subclassedTaskLists);
+    }
+    for (HWND hList : taskLists)
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hList, TaskListSubclassProc);
     }
 }
