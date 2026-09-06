@@ -49,20 +49,27 @@ typedef struct tagBUTTONRENDERINFOSTATES
 typedef void (*CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
 CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
 
-typedef HDC(WINAPI *BeginPaint_t)(HWND, LPPAINTSTRUCT);
-typedef BOOL(WINAPI *EndPaint_t)(HWND, const PAINTSTRUCT *);
-BeginPaint_t BeginPaint_orig = nullptr;
-EndPaint_t EndPaint_orig = nullptr;
+using CreateWindowExW_t = HWND(WINAPI *)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CreateWindowExW_t CreateWindowExW_orig = nullptr;
 
 static HWND FindTaskListForTray(HWND hTray)
 {
-    HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
-    if (!hReBar)
+    wchar_t szClass[32]{};
+    if (!GetClassNameW(hTray, szClass, ARRAYSIZE(szClass)))
         return NULL;
-    HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
-    if (!hTaskSw)
-        return NULL;
-    return FindWindowExW(hTaskSw, NULL, L"MSTaskListWClass", NULL);
+
+    HWND hParent = NULL;
+    if (_wcsicmp(szClass, L"Shell_SecondaryTrayWnd") == 0)
+    {
+        hParent = FindWindowExW(hTray, NULL, L"WorkerW", NULL);
+    }
+    else
+    {
+        HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
+        hParent = hReBar? FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL) : NULL;
+    }
+
+    return hParent? FindWindowExW(hParent, NULL, L"MSTaskListWClass", NULL) : NULL;
 }
 
 static bool IsWindowOfCurrentProcess(HWND hWnd)
@@ -106,11 +113,16 @@ static std::vector<HWND> EnumCurrentProcessTrayTaskLists()
     DWORD curPid = GetCurrentProcessId();
 
     HWND hMain = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hMain && IsWindowOfCurrentProcess(hMain))
+    if (hMain)
     {
-        HWND hList = FindTaskListForTray(hMain);
-        if (hList)
-            out.push_back(hList);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hMain, &pid);
+        if (pid == curPid)
+        {
+            HWND hList = FindTaskListForTray(hMain);
+            if (hList)
+                out.push_back(hList);
+        }
     }
 
     HWND hSec = NULL;
@@ -177,8 +189,6 @@ LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     }
     else if (uMsg == WM_NCDESTROY)
     {
-        // SubclassProcWrapper in windhawk_utils.h already removed the subclass
-        // before calling us. Just erase from our set.
         std::lock_guard<std::mutex> lock(g_subclassedMutex);
         g_subclassedTaskLists.erase(hWnd);
     }
@@ -198,36 +208,23 @@ static void SubclassTaskListIfNew(HWND hList)
         WindhawkUtils::SetWindowSubclassFromAnyThread(hList, TaskListSubclassProc, 0);
 }
 
-HDC WINAPI BeginPaint_hook(HWND hWnd, LPPAINTSTRUCT lpPaint)
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
 {
-    HDC hdc = BeginPaint_orig(hWnd, lpPaint);
-    wchar_t cls[64]{};
-    GetClassNameW(hWnd, cls, 64);
-    if (wcscmp(cls, L"MSTaskListWClass") == 0)
+    HWND hWnd = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (hWnd && lpClassName && ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xFFFF))
     {
-        PushTaskList(hWnd);
-        SubclassTaskListIfNew(hWnd);
+        if (_wcsicmp(lpClassName, L"MSTaskListWClass") == 0)
+        {
+            SubclassTaskListIfNew(hWnd);
+        }
     }
-    return hdc;
-}
-
-BOOL WINAPI EndPaint_hook(HWND hWnd, const PAINTSTRUCT *lpPaint)
-{
-    wchar_t cls[64]{};
-    GetClassNameW(hWnd, cls, 64);
-    if (wcscmp(cls, L"MSTaskListWClass") == 0)
-    {
-        if (tl_currentTaskList == hWnd)
-            PopTaskList();
-    }
-    return EndPaint_orig(hWnd, lpPaint);
+    return hWnd;
 }
 
 void CALCON CTaskBtnGroup__DrawBar_hook(void *pThis, HDC hDC, void *pRenderInfo, PBUTTONRENDERINFOSTATES pRenderStates)
 {
     LPRECT lprcDest = (LPRECT)((char *)pRenderInfo + 4);
 
-    // No GetParent / GetWindowRect here - orientation resolved at Push time
     bool isHorizontal = tl_currentTaskList? tl_isHorizontal : true;
 
     if (isHorizontal)
@@ -269,10 +266,9 @@ BOOL Wh_ModInit(void)
     if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
         return FALSE;
 
-    if (!WindhawkUtils::SetFunctionHook(BeginPaint, BeginPaint_hook, &BeginPaint_orig) ||
-       !WindhawkUtils::SetFunctionHook(EndPaint, EndPaint_hook, &EndPaint_orig))
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_orig))
     {
-        Wh_Log(L"Failed to hook BeginPaint/EndPaint");
+        Wh_Log(L"Failed to hook CreateWindowExW");
         return FALSE;
     }
 
