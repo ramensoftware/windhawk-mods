@@ -2417,22 +2417,23 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
             const int dstW = MulDiv(srcW, dpi, 96);
             const int dstH = MulDiv(srcH, dpi, 96);
 
-            const int buttonHeight = rcButton.bottom - rcButton.top;
             const int iconMargin = std::max(0, (buttonHeight - dstH) / 2);
 
             const int iconX = rcButton.left + iconMargin;
             const int iconY = rcButton.top + iconMargin;
 
-            HDC hdcSrc = CreateCompatibleDC(hdc);
-            HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
+            if (iconMargin + dstW <= buttonWidth) {
+                HDC hdcSrc = CreateCompatibleDC(hdc);
+                HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
 
-            // Vista didn't apply HALFTONE, etc. for HiDPI on this either
-            AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
+                // Vista didn't apply HALFTONE, etc. for HiDPI on this either
+                AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
 
-            SelectObject(hdcSrc, hOldSrc);
-            DeleteDC(hdcSrc);
+                SelectObject(hdcSrc, hOldSrc);
+                DeleteDC(hdcSrc);
 
-            rcButton.left = iconX + dstW;
+                rcButton.left = iconX + dstW;
+            }
         }
     }
 
@@ -3127,23 +3128,26 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
 
         // Load and set the appropriate strings based on the current LogonUI state
         wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
+        bool loadedStrings = false;
         switch (_logonUIState) {
         case LogonUIState_LoggingOff:
             GetString(IDS_BSDR_DESC_LOGOFF, desc, _countof(desc));
             if (hWarningText)
                 GetString(IDS_BSDR_WARNING_LOGOFF, warning, _countof(warning));
             GetString(IDS_BSDR_BTN_LOGOFF, btnText, _countof(btnText));
+            loadedStrings = true;
             break;
         case LogonUIState_Restarting:
             GetString(IDS_BSDR_DESC_RESTART, desc, _countof(desc));
             if (hWarningText)
                 GetString(IDS_BSDR_WARNING_RESTART, warning, _countof(warning));
             GetString(IDS_BSDR_BTN_RESTART, btnText, _countof(btnText));
+            loadedStrings = true;
             break;
         default:
             break;
         }
-        if (_logonUIState != LogonUIState_ShuttingDown) {
+        if (loadedStrings) {
             if (hDescText)
                 SetWindowTextW(hDescText, desc);
             if (hWarningText)
@@ -3435,7 +3439,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         }
 
         if (isVista) {
-            // Icons still show in high contrast
+            // Icons still show in high contrast. Since only one icon is shown on one BSDR session, skip the above all-or-nothing logic here
             btnIconLogoffRestart = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_LOGOFF_RESTART);
             btnIconShutdown = LoadAlphaBitmap(IDB_BSDR_BTN_ICON_SHUTDOWN);
         }
