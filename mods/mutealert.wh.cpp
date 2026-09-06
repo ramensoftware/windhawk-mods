@@ -441,6 +441,7 @@ struct ModSettings {
     std::wstring meetWindowTitle = L"meet -|meet \u2013|meet \u2014";
     std::wstring meetBrowserExecutables =
         L"chrome.exe|msedge.exe|firefox.exe|brave.exe|vivaldi.exe|opera.exe|arc.exe";
+    std::vector<std::wstring> meetBrowserNames;
     bool meetWarning = false;
     bool meetAudioCue = false;
     bool meetRightClickToggle = false;
@@ -452,6 +453,15 @@ struct ModSettings {
 };
 
 static ModSettings g_settings;
+
+static bool MeetMonitoringEnabled() {
+    bool syncCalls = g_settings.headsetSyncCalls &&
+        (g_settings.headsetSyncMode == L"full" ||
+         g_settings.headsetSyncMode == L"muteOnly");
+    return g_settings.meetEnabled &&
+        (g_settings.showCallStateIcon || g_settings.meetWarning ||
+         g_settings.meetRightClickToggle || syncCalls);
+}
 static std::atomic<int> g_audioRole{eConsole};
 static std::atomic<int> g_updateInterval{50};
 static std::atomic<int> g_peakSensitivity{150};
@@ -586,6 +596,28 @@ static void LoadSettings() {
     g_settings.meetEnabled = Wh_GetIntSetting(L"meetEnabled") != 0;
     g_settings.meetWindowTitle = GetStringSetting(L"meetWindowTitle");
     g_settings.meetBrowserExecutables = GetStringSetting(L"meetBrowserExecutables");
+    if (g_settings.meetWindowTitle.find_first_not_of(L" |\t\r\n") ==
+        std::wstring::npos) {
+        g_settings.meetWindowTitle = ModSettings{}.meetWindowTitle;
+    }
+    if (g_settings.meetBrowserExecutables.find_first_not_of(L" |\t\r\n") ==
+        std::wstring::npos) {
+        g_settings.meetBrowserExecutables = ModSettings{}.meetBrowserExecutables;
+    }
+    g_settings.meetBrowserNames.clear();
+    std::wistringstream browserTokens(g_settings.meetBrowserExecutables);
+    std::wstring browserToken;
+    while (std::getline(browserTokens, browserToken, L'|')) {
+        size_t first = browserToken.find_first_not_of(L" \t\r\n");
+        size_t last = browserToken.find_last_not_of(L" \t\r\n");
+        if (first == std::wstring::npos) continue;
+        browserToken = browserToken.substr(first, last - first + 1);
+        std::transform(browserToken.begin(), browserToken.end(),
+                       browserToken.begin(), [](wchar_t value) {
+                           return static_cast<wchar_t>(std::towlower(value));
+                       });
+        g_settings.meetBrowserNames.push_back(std::move(browserToken));
+    }
     g_settings.meetWarning = Wh_GetIntSetting(L"meetWarning") != 0;
     g_settings.meetAudioCue = Wh_GetIntSetting(L"meetAudioCue") != 0;
     g_settings.meetRightClickToggle =
@@ -1164,17 +1196,11 @@ static unsigned CallAppMaskForProcess(DWORD processId) {
         (image->fileName == L"cpthost.exe" &&
          image->fullPath.find(L"\\zoom\\") != std::wstring::npos))
         return kZoomAppMask;
-    if (g_settings.meetEnabled) {
-        std::wistringstream tokens(Lowercase(g_settings.meetBrowserExecutables));
-        std::wstring token;
-        while (std::getline(tokens, token, L'|')) {
-            size_t first = token.find_first_not_of(L" \t");
-            size_t last = token.find_last_not_of(L" \t");
-            if (first != std::wstring::npos &&
-                token.substr(first, last - first + 1) == image->fileName)
-                return kMeetAppMask;
-        }
-    }
+    if (MeetMonitoringEnabled() &&
+        std::find(g_settings.meetBrowserNames.begin(),
+                  g_settings.meetBrowserNames.end(), image->fileName) !=
+            g_settings.meetBrowserNames.end())
+        return kMeetAppMask;
     return 0;
 }
 
@@ -1182,8 +1208,26 @@ static unsigned CallAppMaskForProcess(DWORD processId) {
 // audio-service child, while its top-level windows belong to an ancestor.
 static std::vector<DWORD> g_meetCaptureProcesses;
 static std::unordered_map<DWORD, DWORD> g_captureProcessParents;
+static bool g_captureParentsLoaded = false;
+
+static void EnsureCaptureProcessParents() {
+    if (g_captureParentsLoaded || IsStopping()) return;
+    g_captureParentsLoaded = true;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            g_captureProcessParents.emplace(entry.th32ProcessID,
+                                             entry.th32ParentProcessID);
+        } while (!IsStopping() && Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+}
 
 static void AddMeetCaptureProcess(DWORD processId) {
+    EnsureCaptureProcessParents();
     const auto* image = CachedProcessImage(processId);
     if (!image) return;
     const std::wstring browserPath = image->fullPath;
@@ -1263,20 +1307,7 @@ static unsigned CaptureSessionAppMaskForRole(IMMDeviceEnumerator* enumerator,
 static unsigned CaptureSessionAppMask(IMMDeviceEnumerator* enumerator) {
     g_meetCaptureProcesses.clear();
     g_captureProcessParents.clear();
-    if (g_settings.meetEnabled) {
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snapshot != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32W entry{};
-            entry.dwSize = sizeof(entry);
-            if (Process32FirstW(snapshot, &entry)) {
-                do {
-                    g_captureProcessParents.emplace(entry.th32ProcessID,
-                                                     entry.th32ParentProcessID);
-                } while (!IsStopping() && Process32NextW(snapshot, &entry));
-            }
-            CloseHandle(snapshot);
-        }
-    }
+    g_captureParentsLoaded = false;
     if (!enumerator) return 0;
     return CaptureSessionAppMaskForRole(enumerator, eConsole) |
            CaptureSessionAppMaskForRole(enumerator, eCommunications) |
@@ -1487,7 +1518,8 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
             ULONGLONG now = GetTickCount64();
             if (!lastTitleDiagnostic || now - lastTitleDiagnostic >= 60000) {
                 Wh_Log(L"[Google Meet] Browser capture detected but no eligible "
-                       L"window title matched. Check meetWindowTitle and keep "
+                       L"window title matched. If you are in a Meet call, "
+                       L"check meetWindowTitle and keep "
                        L"the meeting tab selected. Window titles are not logged.");
                 lastTitleDiagnostic = now;
             }
@@ -1710,7 +1742,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     bool monitorZoom =
         g_settings.showCallStateIcon || g_settings.zoomWarning ||
         g_settings.zoomRightClickToggle || syncCallsFromHeadset;
-    bool monitorMeet = g_settings.meetEnabled;
+    bool monitorMeet = MeetMonitoringEnabled();
 
     while (!IsStopping() &&
            WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT) {
@@ -1957,6 +1989,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     g_processImageCache.clear();
     g_meetCaptureProcesses.clear();
     g_captureProcessParents.clear();
+    g_captureParentsLoaded = false;
     NotifyTaskbar();
     automation = nullptr;
     captureEnumerator = nullptr;
@@ -3217,7 +3250,7 @@ static bool StartAudioThread() {
         g_settings.slackRightClickToggle ||
         g_settings.teamsWarning || g_settings.teamsRightClickToggle ||
         g_settings.zoomWarning || g_settings.zoomRightClickToggle ||
-        g_settings.meetEnabled) {
+        MeetMonitoringEnabled()) {
         g_callAppsThread = CreateThread(
             nullptr, 0, CallAppsThreadProc, nullptr, 0, nullptr);
         if (!g_callAppsThread) {
