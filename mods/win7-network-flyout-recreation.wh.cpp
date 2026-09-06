@@ -8,7 +8,6 @@
 // @include        explorer.exe
 // @include        control.exe
 // @include        RetroBar.exe
-// @architecture   x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi
 // ==/WindhawkMod==
 
@@ -58,7 +57,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Wi
 - **Windows 10** with the native taskbar
 - **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) or similar mods)
 - The network icon must be visible in the main system tray (overflow menu not supported)
-- **[RetroBar](https://github.com/dremin/RetroBar)** is also supported: when the classic taskbar is in use, clicking its network tray icon opens this flyout instead of the modern one. RetroBar must run with Explorer as the shell (the recommended, default RetroBar setup); the flyout is then driven by the RetroBar process itself.
+- **[RetroBar](https://github.com/dremin/RetroBar)** is also supported: when the classic taskbar is in use, clicking its network tray icon opens this flyout instead of the modern one. RetroBar must run with Explorer as the shell (the recommended, default RetroBar setup); the flyout is then driven by the RetroBar process itself. Supported on x86 and x64 RetroBar builds; a native ARM64 RetroBar build is not currently supported.
 
 **Note:** Some heavily customized and unstable taskbar configurations may still not be supported.
 
@@ -467,6 +466,14 @@ static int GetNetworkCountSafe();
 static BOOL GetNetworkIconScreenRect(RECT* outRect);
 static UINT GetDpiForScreenRect(const RECT* rc);
 
+// Forward-declared so RecalcDpiMetrics() can re-bind fonts on the Connect
+// button/checkbox after InitGlobalFonts() recreates them; defined later
+// alongside the rest of the flyout child-window state.
+extern HWND g_hWndButtonConnect;
+extern HWND g_hWndCheckboxConnect;
+extern HFONT g_hFontButton;
+extern HFONT g_hFontCheckbox;
+
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
     WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
@@ -493,6 +500,17 @@ void RecalcDpiMetrics(UINT dpi) {
     LoadSystemIcons();
 
     InitGlobalFonts();
+    // InitGlobalFonts() starts with FreeGlobalFonts(), deleting the previous
+    // g_hFontButton/g_hFontCheckbox handles. g_hWndButtonConnect and
+    // g_hWndCheckboxConnect were only ever WM_SETFONT'd once, at WM_CREATE,
+    // so without re-sending it here they keep drawing with now-deleted GDI
+    // font handles after any DPI change - including the very first show,
+    // since ToggleFlyoutWindow() calls RecalcDpiMetrics() again once the
+    // tray icon's monitor DPI is known, after the children already exist.
+    if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))
+        SendMessageW(g_hWndButtonConnect, WM_SETFONT, (WPARAM)g_hFontButton, TRUE);
+    if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
+        SendMessageW(g_hWndCheckboxConnect, WM_SETFONT, (WPARAM)g_hFontCheckbox, TRUE);
     InitRefreshButtonRect();
     RecalcArrowRect();
 }
@@ -2436,6 +2454,57 @@ BOOL g_bListExpanded       = TRUE;
 HFONT g_hFontButton        = NULL;
 int g_ButtonConnectIsOwnerDraw = -1;
 
+// Theme brushes cached by Win7PasswordWndProc/FlyoutWndProc's WM_CTLCOLOR*
+// handlers. These used to be function-local statics: since they live in the
+// mod image, each CreateSolidBrush() they made was leaked into explorer.exe
+// for the rest of the session on every disable/re-enable or update, because
+// nothing ever freed them. Hoisted to file scope so FreeCachedThemeBrushes()
+// (called from Wh_ModUninit) can delete them all in one place.
+static HBRUSH g_hBrPwdHideStaticDark   = NULL;
+static HBRUSH g_hBrPwdHideStaticLight  = NULL;
+static HBRUSH g_hBrPwdCheckboxStatic   = NULL;
+static HBRUSH g_hBrPwdCheckboxStaticDark = NULL;
+static HBRUSH g_hBrPwdLabelStatic      = NULL;
+static HBRUSH g_hBrPwdEdit             = NULL;
+static HBRUSH g_hBrPwdCheckboxBtn      = NULL;
+static HBRUSH g_hBrPwdHideBtnDark      = NULL;
+static HBRUSH g_hBrPwdHideBtnLight     = NULL;
+static HBRUSH g_hBrPwdOkCancelBtn      = NULL;
+// The password dialog's font: created once per dialog instance in WM_CREATE
+// and shared by every control in it via WM_SETFONT, but never deleted -
+// tracked here so WM_DESTROY can free it per-dialog instead of leaking one
+// font handle per password prompt.
+static HFONT  g_hFontPwdDlg            = NULL;
+
+static HBRUSH g_hBrFlyoutCheckboxStatic     = NULL;
+static COLORREF g_lastFlyoutChkBg           = (COLORREF)-1;
+static HBRUSH g_hBrFlyoutCheckboxStaticDark = NULL;
+static COLORREF g_lastFlyoutChkBgDark       = (COLORREF)-1;
+static HBRUSH g_hBrFlyoutLabelStatic        = NULL;
+static COLORREF g_lastFlyoutLabelBg         = (COLORREF)-1;
+static HBRUSH g_hBrFlyoutCheckboxBtn        = NULL;
+static COLORREF g_lastFlyoutChkBtnBg        = (COLORREF)-1;
+static HBRUSH g_hBrFlyoutCheckboxBtnDark    = NULL;
+static COLORREF g_lastFlyoutChkBtnBgDark    = (COLORREF)-1;
+
+// Deletes every theme brush cached above and resets their "last color" state.
+// Called once from Wh_ModUninit(); safe to call on brushes that were never
+// created (DeleteObject(NULL) style guards below skip those).
+static void FreeCachedThemeBrushes() {
+    HBRUSH* brushes[] = {
+        &g_hBrPwdHideStaticDark, &g_hBrPwdHideStaticLight, &g_hBrPwdCheckboxStatic,
+        &g_hBrPwdCheckboxStaticDark, &g_hBrPwdLabelStatic, &g_hBrPwdEdit,
+        &g_hBrPwdCheckboxBtn, &g_hBrPwdHideBtnDark, &g_hBrPwdHideBtnLight,
+        &g_hBrPwdOkCancelBtn, &g_hBrFlyoutCheckboxStatic, &g_hBrFlyoutCheckboxStaticDark,
+        &g_hBrFlyoutLabelStatic, &g_hBrFlyoutCheckboxBtn, &g_hBrFlyoutCheckboxBtnDark,
+    };
+    for (HBRUSH* pb : brushes) {
+        if (*pb) { DeleteObject(*pb); *pb = NULL; }
+    }
+    g_lastFlyoutChkBg = g_lastFlyoutChkBgDark = g_lastFlyoutLabelBg =
+        g_lastFlyoutChkBtnBg = g_lastFlyoutChkBtnBgDark = (COLORREF)-1;
+}
+
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -2722,7 +2791,7 @@ static GdipCreateBitmapFromStreamFunc pGdipCreateBitmapFromStream = NULL;
 static GdipCreateHICONFromBitmapFunc pGdipCreateHICONFromBitmap = NULL;
 
 static BOOL g_inPasswordPrompt = FALSE;
-LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
+LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass);
 static WCHAR g_TooltipBuffer[1024] = {0};
 // -------------------------------------------------------
 // Localization
@@ -3354,7 +3423,7 @@ static bool IsExplorerProcess();
 void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOOL autoConnect, WCHAR* outXml, size_t outSize);
 static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue);
 static BOOL ProfileSecurityMatches(const WCHAR* profileXml, DOT11_AUTH_ALGORITHM authAlgorithm, DOT11_CIPHER_ALGORITHM cipherAlgorithm);
-LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
+LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass);
 void RefreshWifiData(HANDLE hClient);
 void UpdateLayoutGeometry(int scrollbarOffset = 0);
 void ConnectToNetwork(int index);
@@ -5374,9 +5443,14 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
+        // Freed in WM_DESTROY below; also defensively freed here in case a
+        // previous instance's WM_DESTROY was somehow skipped, so repeated
+        // prompts can't leak one font handle each.
+        if (g_hFontPwdDlg) { DeleteObject(g_hFontPwdDlg); g_hFontPwdDlg = NULL; }
         HFONT hFontDlg = CreateFontW(ptPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        g_hFontPwdDlg = hFontDlg;
         SendMessageW(hwnd, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         HWND hInstr = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
             WS_CHILD|WS_VISIBLE, ScaleDpi(15), ScaleDpi(15), ScaleDpi(380), ScaleDpi(20), hwnd, (HMENU)200, cs->hInstance, NULL);
@@ -5501,14 +5575,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (hwndCtrl == GetDlgItem(hwnd, 102) || hwndCtrl == GetDlgItem(hwnd, 103)) {
             if (g_Settings.theme == 1) {
                 SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
-                static HBRUSH hBrushHideDark = NULL;
-                if (!hBrushHideDark) hBrushHideDark = CreateSolidBrush(RGB(20, 20, 20));
-                return (INT_PTR)hBrushHideDark;
+                if (!g_hBrPwdHideStaticDark) g_hBrPwdHideStaticDark = CreateSolidBrush(RGB(20, 20, 20));
+                return (INT_PTR)g_hBrPwdHideStaticDark;
             } else {
                 SetBkColor(hdc, GetSysColor(COLOR_BTNFACE)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(0, 0, 0));
-                static HBRUSH hBrushHideLight = NULL;
-                if (!hBrushHideLight) hBrushHideLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-                return (INT_PTR)hBrushHideLight;
+                if (!g_hBrPwdHideStaticLight) g_hBrPwdHideStaticLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+                return (INT_PTR)g_hBrPwdHideStaticLight;
             }
         }
         ConnectionState connState = CONN_STATE_IDLE;
@@ -5517,15 +5589,13 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
-                static HBRUSH hBrushCheckbox = NULL;
-                if (!hBrushCheckbox) hBrushCheckbox = CreateSolidBrush(chkBg);
-                return (INT_PTR)hBrushCheckbox;
+                if (!g_hBrPwdCheckboxStatic) g_hBrPwdCheckboxStatic = CreateSolidBrush(chkBg);
+                return (INT_PTR)g_hBrPwdCheckboxStatic;
             } else if (g_Settings.theme == 1) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
-                static HBRUSH hBrushCheckboxDark = NULL;
-                if (!hBrushCheckboxDark) hBrushCheckboxDark = CreateSolidBrush(chkBg);
-                return (INT_PTR)hBrushCheckboxDark;
+                if (!g_hBrPwdCheckboxStaticDark) g_hBrPwdCheckboxStaticDark = CreateSolidBrush(chkBg);
+                return (INT_PTR)g_hBrPwdCheckboxStaticDark;
             } else {
                 SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(255, 255, 255));
                 return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
@@ -5533,9 +5603,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         }
         if (g_Settings.theme == 1) {
             SetBkColor(hdc, RGB(20, 20, 20)); SetTextColor(hdc, RGB(100, 200, 255)); SetBkMode(hdc, OPAQUE);
-            static HBRUSH hBrPwdStatic = NULL;
-            if (!hBrPwdStatic) hBrPwdStatic = CreateSolidBrush(RGB(20, 20, 20));
-            return (INT_PTR)hBrPwdStatic;
+            if (!g_hBrPwdLabelStatic) g_hBrPwdLabelStatic = CreateSolidBrush(RGB(20, 20, 20));
+            return (INT_PTR)g_hBrPwdLabelStatic;
         } else {
             SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(14, 75, 184));
             return (INT_PTR)GetStockObject(NULL_BRUSH);
@@ -5553,9 +5622,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             SetBkColor(hdc, RGB(40, 40, 50));
             SetTextColor(hdc, RGB(255, 255, 255));
             SetBkMode(hdc, OPAQUE);
-            static HBRUSH hBrEdit = NULL;
-            if (!hBrEdit) hBrEdit = CreateSolidBrush(RGB(40, 40, 50));
-            return (INT_PTR)hBrEdit;
+            if (!g_hBrPwdEdit) g_hBrPwdEdit = CreateSolidBrush(RGB(40, 40, 50));
+            return (INT_PTR)g_hBrPwdEdit;
         }
         return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
@@ -5567,9 +5635,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
-                static HBRUSH hBrushCheckboxBtn = NULL;
-                if (!hBrushCheckboxBtn) hBrushCheckboxBtn = CreateSolidBrush(chkBg);
-                return (INT_PTR)hBrushCheckboxBtn;
+                if (!g_hBrPwdCheckboxBtn) g_hBrPwdCheckboxBtn = CreateSolidBrush(chkBg);
+                return (INT_PTR)g_hBrPwdCheckboxBtn;
             } else {
                 SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(255, 255, 255));
                 return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
@@ -5578,19 +5645,19 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (hwndBtn == GetDlgItem(hwnd, 102)) {
             if (g_Settings.theme == 1) {
                 SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE);
-                static HBRUSH hBrHideDark = NULL; if (!hBrHideDark) hBrHideDark = CreateSolidBrush(RGB(20, 20, 20));
-                return (INT_PTR)hBrHideDark;
+                if (!g_hBrPwdHideBtnDark) g_hBrPwdHideBtnDark = CreateSolidBrush(RGB(20, 20, 20));
+                return (INT_PTR)g_hBrPwdHideBtnDark;
             } else {
                 SetBkColor(hdc, GetSysColor(COLOR_BTNFACE)); SetBkMode(hdc, OPAQUE);
-                static HBRUSH hBrHideLight = NULL; if (!hBrHideLight) hBrHideLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-                return (INT_PTR)hBrHideLight;
+                if (!g_hBrPwdHideBtnLight) g_hBrPwdHideBtnLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+                return (INT_PTR)g_hBrPwdHideBtnLight;
             }
         }
         if (hwndBtn == GetDlgItem(hwnd, IDOK) || hwndBtn == GetDlgItem(hwnd, IDCANCEL)) {
             if (g_Settings.theme == 1) {
                 SetBkColor(hdc, RGB(50, 50, 60)); SetTextColor(hdc, RGB(255, 255, 255)); SetBkMode(hdc, OPAQUE);
-                static HBRUSH hBrBtn = NULL; if (!hBrBtn) hBrBtn = CreateSolidBrush(RGB(50, 50, 60));
-                return (INT_PTR)hBrBtn;
+                if (!g_hBrPwdOkCancelBtn) g_hBrPwdOkCancelBtn = CreateSolidBrush(RGB(50, 50, 60));
+                return (INT_PTR)g_hBrPwdOkCancelBtn;
             }
         }
         return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
@@ -5634,6 +5701,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (data) data->confirmed = FALSE;
         DestroyWindow(hwnd); 
         return 0;
+    case WM_DESTROY:
+        // hFontDlg (WM_CREATE) is shared by every control via WM_SETFONT but
+        // was never deleted, leaking one font handle into explorer.exe per
+        // password prompt. Free it once the dialog and its controls are gone.
+        if (g_hFontPwdDlg) { DeleteObject(g_hFontPwdDlg); g_hFontPwdDlg = NULL; }
+        break;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
@@ -5805,6 +5878,9 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
             L"<MSM><security><authEncryption><authentication>open</authentication><encryption>none</encryption><useOneX>false</useOneX></authEncryption></security></MSM></WLANProfile>",
             escapedSsid, escapedSsid, connMode);
     }
+    // escapedPwd holds the plaintext passphrase in clear XML-escaped form;
+    // wipe it before returning since callers only see outXml.
+    SecureZeroMemory(escapedPwd, sizeof(escapedPwd));
 }
 
 static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue) {
@@ -5924,12 +6000,17 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         Wh_Log(L"  returned: %lu (reason: %lu)", dwResult, dwReason);
         
         if (dwResult != ERROR_SUCCESS) {
+            SecureZeroMemory(xmlProfile, sizeof(xmlProfile));
             if (ctx->hWndNotify) {
                 PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)dwResult);
             }
             return 1;
         }
         ctx->hasProfile = TRUE; 
+        // xmlProfile holds the profile's <keyMaterial> in clear text; wipe
+        // it now that WlanSetProfile has consumed it, same as the early
+        // return above.
+        SecureZeroMemory(xmlProfile, sizeof(xmlProfile));
     }
     
     WLAN_CONNECTION_PARAMETERS params;
@@ -6020,6 +6101,7 @@ static BOOL AskForPasswordAndConnect(int index) {
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
             LogSsidSafe(L"User cancelled password for", ctx->ssid);
             g_PendingConnectIndex = -1;
+            SecureZeroMemory(password, sizeof(password));
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return FALSE;
@@ -6036,10 +6118,12 @@ static BOOL AskForPasswordAndConnect(int index) {
             LogSsidSafe(L"Empty password provided for", ctx->ssid);
             MessageBoxW(g_hWndFlyout, LOC(STR_PWD_EMPTY), LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
             g_PendingConnectIndex = -1;
+            SecureZeroMemory(password, sizeof(password));
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return FALSE;
         }
+        SecureZeroMemory(password, sizeof(password));
     } else {
         ctx->password[0] = L'\0';
     }
@@ -6449,7 +6533,7 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
 static BYTE  g_ttAlpha     = 255;
 static BOOL  g_ttFading    = FALSE;
 
-static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR) {
+static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (uMsg == WM_SHOWWINDOW && wParam) {
         g_ttAlpha  = 0;
         g_ttFading = TRUE;
@@ -7192,7 +7276,7 @@ static BOOL BringProfileDialogToForeground() {
         HWND hwnd;
     } data = {};
 
-    EnumThreadWindows(tid, [](HWND h, LPARAM lp) -> BOOL {
+    EnumThreadWindows(tid, [](HWND h, LPARAM lp) WINAPI -> BOOL {
         EnumData* data = reinterpret_cast<EnumData*>(lp);
         if (!IsWindowVisible(h))
             return TRUE;
@@ -8337,27 +8421,23 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, chkText);
-                static HBRUSH hBrushCheckbox = NULL;
-                static COLORREF lastChkBg = (COLORREF)-1;
-                if (!hBrushCheckbox || lastChkBg != chkBg) {
-                    if (hBrushCheckbox) DeleteObject(hBrushCheckbox);
-                    hBrushCheckbox = CreateSolidBrush(chkBg);
-                    lastChkBg = chkBg;
+                if (!g_hBrFlyoutCheckboxStatic || g_lastFlyoutChkBg != chkBg) {
+                    if (g_hBrFlyoutCheckboxStatic) DeleteObject(g_hBrFlyoutCheckboxStatic);
+                    g_hBrFlyoutCheckboxStatic = CreateSolidBrush(chkBg);
+                    g_lastFlyoutChkBg = chkBg;
                 }
-                return (INT_PTR)hBrushCheckbox;
+                return (INT_PTR)g_hBrFlyoutCheckboxStatic;
             } else if (g_Settings.theme == 1) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, RGB(255, 255, 255));
-                static HBRUSH hBrushCheckboxDark = NULL;
-                static COLORREF lastChkBgDark = (COLORREF)-1;
-                if (!hBrushCheckboxDark || lastChkBgDark != chkBg) {
-                    if (hBrushCheckboxDark) DeleteObject(hBrushCheckboxDark);
-                    hBrushCheckboxDark = CreateSolidBrush(chkBg);
-                    lastChkBgDark = chkBg;
+                if (!g_hBrFlyoutCheckboxStaticDark || g_lastFlyoutChkBgDark != chkBg) {
+                    if (g_hBrFlyoutCheckboxStaticDark) DeleteObject(g_hBrFlyoutCheckboxStaticDark);
+                    g_hBrFlyoutCheckboxStaticDark = CreateSolidBrush(chkBg);
+                    g_lastFlyoutChkBgDark = chkBg;
                 }
-                return (INT_PTR)hBrushCheckboxDark;
+                return (INT_PTR)g_hBrFlyoutCheckboxStaticDark;
             } else {
                 SetBkMode(hdc, TRANSPARENT);
                 SetTextColor(hdc, RGB(255, 255, 255));
@@ -8368,15 +8448,13 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             SetBkColor(hdc, RGB(20, 20, 20));
             SetTextColor(hdc, RGB(100, 200, 255));
             SetBkMode(hdc, OPAQUE);
-            static HBRUSH hBrPwdStatic = NULL;
-            static COLORREF lastBg = (COLORREF)-1;
             COLORREF bg = RGB(20, 20, 20);
-            if (!hBrPwdStatic || lastBg != bg) {
-                if (hBrPwdStatic) DeleteObject(hBrPwdStatic);
-                hBrPwdStatic = CreateSolidBrush(bg);
-                lastBg = bg;
+            if (!g_hBrFlyoutLabelStatic || g_lastFlyoutLabelBg != bg) {
+                if (g_hBrFlyoutLabelStatic) DeleteObject(g_hBrFlyoutLabelStatic);
+                g_hBrFlyoutLabelStatic = CreateSolidBrush(bg);
+                g_lastFlyoutLabelBg = bg;
             }
-            return (INT_PTR)hBrPwdStatic;
+            return (INT_PTR)g_hBrFlyoutLabelStatic;
         } else {
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(14, 75, 184));
@@ -8394,27 +8472,23 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, chkText);
-                static HBRUSH hBrushCheckboxBtn = NULL;
-                static COLORREF lastChkBtnBg = (COLORREF)-1;
-                if (!hBrushCheckboxBtn || lastChkBtnBg != chkBg) {
-                    if (hBrushCheckboxBtn) DeleteObject(hBrushCheckboxBtn);
-                    hBrushCheckboxBtn = CreateSolidBrush(chkBg);
-                    lastChkBtnBg = chkBg;
+                if (!g_hBrFlyoutCheckboxBtn || g_lastFlyoutChkBtnBg != chkBg) {
+                    if (g_hBrFlyoutCheckboxBtn) DeleteObject(g_hBrFlyoutCheckboxBtn);
+                    g_hBrFlyoutCheckboxBtn = CreateSolidBrush(chkBg);
+                    g_lastFlyoutChkBtnBg = chkBg;
                 }
-                return (INT_PTR)hBrushCheckboxBtn;
+                return (INT_PTR)g_hBrFlyoutCheckboxBtn;
             } else if (g_Settings.theme == 1) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, RGB(255, 255, 255));
-                static HBRUSH hBrushCheckboxBtnDark = NULL;
-                static COLORREF lastChkBtnBgDark = (COLORREF)-1;
-                if (!hBrushCheckboxBtnDark || lastChkBtnBgDark != chkBg) {
-                    if (hBrushCheckboxBtnDark) DeleteObject(hBrushCheckboxBtnDark);
-                    hBrushCheckboxBtnDark = CreateSolidBrush(chkBg);
-                    lastChkBtnBgDark = chkBg;
+                if (!g_hBrFlyoutCheckboxBtnDark || g_lastFlyoutChkBtnBgDark != chkBg) {
+                    if (g_hBrFlyoutCheckboxBtnDark) DeleteObject(g_hBrFlyoutCheckboxBtnDark);
+                    g_hBrFlyoutCheckboxBtnDark = CreateSolidBrush(chkBg);
+                    g_lastFlyoutChkBtnBgDark = chkBg;
                 }
-                return (INT_PTR)hBrushCheckboxBtnDark;
+                return (INT_PTR)g_hBrFlyoutCheckboxBtnDark;
             } else {
                 SetBkMode(hdc, TRANSPARENT);
                 SetTextColor(hdc, RGB(255, 255, 255));
@@ -8688,7 +8762,7 @@ static void HandleNetworkIconClick() {
     }
 }
 
-LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
       // 5.0.0: nothing in this subclass may throw into Explorer's window
       // procedure (an unwinding exception on the taskbar thread would kill
@@ -9668,7 +9742,7 @@ void SafeCleanup() {
         // while the thread can still be executing code in this mod image.
         while (WaitForSingleObject(g_hProfileDialogThread, 250) == WAIT_TIMEOUT) {
             if (tid) {
-                EnumThreadWindows(tid, [](HWND h, LPARAM) -> BOOL {
+                EnumThreadWindows(tid, [](HWND h, LPARAM) WINAPI -> BOOL {
                     PostMessageW(h, WM_CLOSE, 0, 0);
                     return TRUE;
                 }, 0);
@@ -10757,7 +10831,7 @@ static void UnadviseConnectivityEvents() {
 // up fresh each time a page is parsed.
 
 static LRESULT CALLBACK NcHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                            UINT_PTR uIdSubclass) {
+                                            DWORD_PTR uIdSubclass) {
     if (uMsg == WM_NCDESTROY) {
         // The subclass wrapper removes itself before dispatching WM_NCDESTROY.
         if (g_ncHostWindow == hWnd) {
@@ -11914,6 +11988,19 @@ void Wh_ModSettingsChanged() {
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
                      || (oldTheme          != g_Settings.theme);
 
+    // Update hotkey registration when the setting changes. This must not
+    // depend on the flyout window existing: refCount (and therefore
+    // SafeToAccessUI()) is only incremented in the flyout's WM_CREATE, so on
+    // a fresh session - where the user is enabling the hotkey specifically
+    // in order to open the flyout for the first time - the guard below would
+    // never be true and the hotkey would silently stay unregistered. Posted
+    // unconditionally, before the needRecreate early return below, so
+    // saving the hotkey setting together with an unrelated setting like
+    // theme or rounded corners (or with no flyout open at all) doesn't
+    // silently drop it.
+    if (g_Ctx.dwHotkeyThreadId)
+        PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
+
     if (needRecreate) {
         if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             BOOL wasVisible = IsWindowVisible(g_hWndFlyout);
@@ -11922,14 +12009,6 @@ void Wh_ModSettingsChanged() {
         }
         return;
     }
-    // Update hotkey registration when the setting changes. This must not
-    // depend on the flyout window existing: refCount (and therefore
-    // SafeToAccessUI()) is only incremented in the flyout's WM_CREATE, so on
-    // a fresh session - where the user is enabling the hotkey specifically
-    // in order to open the flyout for the first time - the guard below would
-    // never be true and the hotkey would silently stay unregistered.
-    if (g_Ctx.dwHotkeyThreadId)
-        PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
 
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_dwFlyoutOwnerThreadId) {
@@ -12025,6 +12104,7 @@ void Wh_ModUninit() {
         }
         ShutdownGdiPlusRendering();
         FreeSystemIcons();
+        FreeCachedThemeBrushes();
         DeleteCriticalSection(&g_Ctx.csLock);
         return;
     }
@@ -12071,4 +12151,5 @@ void Wh_ModUninit() {
             Wh_Log(L"UnregisterClassW(Win7NetPwdClass) failed (%lu)", GetLastError());
         }
     }
+    FreeCachedThemeBrushes();
 }
