@@ -10,11 +10,22 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-// Restores classic 3D taskbar buttons.
-//
-// - Horizontal taskbar: 2px gap on the right (visual only, no layout shift - fixes staircase)
-// - Vertical taskbar: no cuts at all, no right, no bottom
-// - Fixes pressed state offset
+/*
+# Classic Taskbar 3D buttons
+Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme. 
+The idea is based on the mod by Aubymori (https://github.com/aubymori).
+
+Before:
+
+![Before](https://i.imgur.com/jupSjfl.png)
+
+After:
+
+![After](https://i.imgur.com/Jz4EkRQ.png)
+
+Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod. 
+
+*/
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
