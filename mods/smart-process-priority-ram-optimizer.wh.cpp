@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.0.1
+// @version         1.0.2
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Smart Process Priority & RAM Optimizer (v1.0.1)
+# Smart Process Priority & RAM Optimizer
 
 Boosts the responsiveness of the active foreground application, protects
 real-time audio and local AI engines from throttling or trimming, throttles
@@ -115,9 +115,9 @@ adaptive threshold triggers and gaming memory management.
   $name: Cleanup Trigger Mode
   $description: Choose when memory optimization should automatically trigger.
   $options:
-    - "smartThreshold": Smart Threshold (When Free RAM drops below threshold %)
-    - "periodic": Periodic Timer (Clean at regular time intervals)
-    - "smartAndPeriodic": Smart Threshold + Periodic (Recommended)
+    - "smartThreshold": Smart RAM Threshold (Recommended - Trims only under memory pressure)
+    - "periodic": Periodic Timer (Gated by Free RAM threshold)
+    - "smartAndPeriodic": Smart Threshold + Periodic (Gated by Free RAM threshold)
 - freeRamThresholdPercent: 20
   $name: Free RAM Trigger Threshold (%)
   $description: Triggers cleanup when available physical RAM drops below this percentage (5% to 50%).
@@ -188,6 +188,8 @@ adaptive threshold triggers and gaming memory management.
 #define _WIN32_WINNT 0x0A00
 #endif
 
+#include <windows.h>
+
 #include <windhawk_utils.h>
 
 #include <appmodel.h>
@@ -196,7 +198,6 @@ adaptive threshold triggers and gaming memory management.
 #include <psapi.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
-#include <windows.h>
 
 #include <algorithm>
 #include <atomic>
@@ -326,7 +327,7 @@ struct ModSettings {
   bool enableAudioShielding = true;
   bool enableMultitaskingAdaptation = true;
   bool enableGameModeDetection = true;
-  CleanMode cleanMode = CleanMode::SmartAndPeriodic;
+  CleanMode cleanMode = CleanMode::SmartThreshold;
   int freeRamThresholdPercent = 20;
   bool enableIdleBoost = true;
   int idleThresholdMinutes = 15;
@@ -391,6 +392,7 @@ struct ThrottledProcessInfo {
   HANDLE hProcess = nullptr;
   DWORD originalPriority = NORMAL_PRIORITY_CLASS;
   ULONG originalIoPriority = IoPriorityNormal;
+  bool ecoQosApplied = false;
 };
 static std::map<DWORD, ThrottledProcessInfo>
     g_throttledProcesses; // pid -> info
@@ -836,7 +838,6 @@ static void RestoreForegroundBoostLocked() {
       SetPriorityClass(g_boostedProcessHandle, g_originalBoostedPriority);
       SetProcessIoPriorityHint(g_boostedProcessHandle,
                                g_originalBoostedIoPriority);
-      ResetProcessEcoQoS(g_boostedProcessHandle);
     }
     CloseHandle(g_boostedProcessHandle);
     g_boostedProcessHandle = nullptr;
@@ -880,12 +881,22 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
       if (itThrottled != g_throttledProcesses.end()) {
         origPriority = itThrottled->second.originalPriority;
         origIoPriority = itThrottled->second.originalIoPriority;
+        bool ecoQosWasApplied = itThrottled->second.ecoQosApplied;
         if (itThrottled->second.hProcess) {
           CloseHandle(itThrottled->second.hProcess);
         }
         g_throttledProcesses.erase(itThrottled);
         g_throttleStaleSampleCount.erase(newForegroundPid);
-        ResetProcessEcoQoS(hNew);
+
+        // Restore first: revert the process back to its pre-throttled original
+        // state immediately so that even if the boost is declined (e.g. app was
+        // already above normal) or SetPriorityClass fails, it is never left
+        // stuck throttled.
+        SetPriorityClass(hNew, origPriority);
+        SetProcessIoPriorityHint(hNew, origIoPriority);
+        if (ecoQosWasApplied) {
+          ResetProcessEcoQoS(hNew);
+        }
       } else {
         DWORD prevPriority = GetPriorityClass(hNew);
         origPriority =
@@ -1000,26 +1011,25 @@ static std::vector<ProcessSnapshotEntry> CaptureProcessSnapshotCached() {
 }
 
 static bool RestoreAndEraseThrottledProcess(DWORD pid) {
-  HANDLE hSaved = nullptr;
-  DWORD originalPriority = NORMAL_PRIORITY_CLASS;
-  ULONG originalIoPriority = IoPriorityNormal;
-  {
-    std::lock_guard<std::mutex> lock(g_priorityMutex);
-    auto it = g_throttledProcesses.find(pid);
-    if (it == g_throttledProcesses.end()) {
-      return false;
-    }
-    hSaved = it->second.hProcess;
-    originalPriority = it->second.originalPriority;
-    originalIoPriority = it->second.originalIoPriority;
-    g_throttledProcesses.erase(it);
-    g_throttleStaleSampleCount.erase(pid);
+  std::lock_guard<std::mutex> lock(g_priorityMutex);
+  auto it = g_throttledProcesses.find(pid);
+  if (it == g_throttledProcesses.end()) {
+    return false;
   }
+  HANDLE hSaved = it->second.hProcess;
+  DWORD originalPriority = it->second.originalPriority;
+  ULONG originalIoPriority = it->second.originalIoPriority;
+  bool ecoQosApplied = it->second.ecoQosApplied;
+  g_throttledProcesses.erase(it);
+  g_throttleStaleSampleCount.erase(pid);
+
   if (hSaved) {
     if (WaitForSingleObject(hSaved, 0) != WAIT_OBJECT_0) {
       SetPriorityClass(hSaved, originalPriority);
       SetProcessIoPriorityHint(hSaved, originalIoPriority);
-      ResetProcessEcoQoS(hSaved);
+      if (ecoQosApplied) {
+        ResetProcessEcoQoS(hSaved);
+      }
     }
     CloseHandle(hSaved);
   }
@@ -1027,25 +1037,22 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
 }
 
 static void RestoreAllThrottledProcesses() {
-  std::vector<ThrottledProcessInfo> toRestore;
-  {
-    std::lock_guard<std::mutex> lock(g_priorityMutex);
-    for (auto &kv : g_throttledProcesses) {
-      toRestore.push_back(kv.second);
-    }
-    g_throttledProcesses.clear();
-    g_throttleStaleSampleCount.clear();
-  }
-  for (auto &info : toRestore) {
+  std::lock_guard<std::mutex> lock(g_priorityMutex);
+  for (auto &kv : g_throttledProcesses) {
+    auto &info = kv.second;
     if (info.hProcess) {
       if (WaitForSingleObject(info.hProcess, 0) != WAIT_OBJECT_0) {
         SetPriorityClass(info.hProcess, info.originalPriority);
         SetProcessIoPriorityHint(info.hProcess, info.originalIoPriority);
-        ResetProcessEcoQoS(info.hProcess);
+        if (info.ecoQosApplied) {
+          ResetProcessEcoQoS(info.hProcess);
+        }
       }
       CloseHandle(info.hProcess);
     }
   }
+  g_throttledProcesses.clear();
+  g_throttleStaleSampleCount.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -1281,29 +1288,36 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     if (isCpuHeavy && !isThrottled) {
       DWORD prevPriority = GetPriorityClass(hProc);
       if (PriorityClassToRank(prevPriority) >
-          PriorityClassToRank(IDLE_PRIORITY_CLASS)) {
+              PriorityClassToRank(IDLE_PRIORITY_CLASS) &&
+          PriorityClassToRank(prevPriority) <=
+              PriorityClassToRank(NORMAL_PRIORITY_CLASS)) {
         DWORD targetThrottlePrio = BELOW_NORMAL_PRIORITY_CLASS;
-        if (!isMultiTasking &&
-            settings.backgroundThrottlePriorityLevel ==
-                ThrottlePrioritySetting::Idle) {
+        if (!isMultiTasking && settings.backgroundThrottlePriorityLevel ==
+                                   ThrottlePrioritySetting::Idle) {
           targetThrottlePrio = IDLE_PRIORITY_CLASS;
         }
 
         if (PriorityClassToRank(prevPriority) >
             PriorityClassToRank(targetThrottlePrio)) {
           ULONG prevIo = GetProcessIoPriorityHint(hProc);
-          if (SetPriorityClass(hProc, targetThrottlePrio)) {
-            SetProcessIoPriorityHint(hProc, IoPriorityLow);
-            if (settings.enableEcoQosManagement) {
-              SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
+          bool appliedEcoQos = false;
+          {
+            std::lock_guard<std::mutex> lock(g_priorityMutex);
+            if (pid != g_currentBoostedPid &&
+                g_throttledProcesses.count(pid) == 0) {
+              if (SetPriorityClass(hProc, targetThrottlePrio)) {
+                SetProcessIoPriorityHint(hProc, IoPriorityLow);
+                if (settings.enableEcoQosManagement) {
+                  SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
+                  appliedEcoQos = true;
+                }
+                g_throttledProcesses[pid] = {hProc, prevPriority, prevIo,
+                                             appliedEcoQos};
+                g_throttleStaleSampleCount.erase(pid);
+                hProc = nullptr; // Transferred ownership to
+                                 // g_throttledProcesses: blocks PID reuse!
+              }
             }
-            {
-              std::lock_guard<std::mutex> lock(g_priorityMutex);
-              g_throttledProcesses[pid] = {hProc, prevPriority, prevIo};
-              g_throttleStaleSampleCount.erase(pid);
-            }
-            hProc = nullptr; // Transferred ownership to g_throttledProcesses:
-                             // blocks PID reuse!
           }
         }
       }
@@ -1545,9 +1559,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
       settings.enableMultitaskingAdaptation && IsActiveMultiTaskingMode();
 
   int effectiveGraceMinutes = settings.recentActivityGraceMinutes;
-  if (systemIdle) {
-    effectiveGraceMinutes = 0;
-  } else if (isMultiTasking) {
+  if (isMultiTasking) {
     effectiveGraceMinutes *= 4;
   } else if (freeRamPercent >= 30.0) {
     effectiveGraceMinutes *= 2;
@@ -1936,7 +1948,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
 static void MemoryOptimizerWorker() {
   HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-  Wh_Log(L"[SmartOptimizer] Adaptive Memory & Priority Optimizer engine"
+  Wh_Log(L"[SmartOptimizer] Adaptive Memory & Priority Optimizer engine "
          L"started "
          L"(0.00%% CPU passive wait).");
 
@@ -2005,7 +2017,7 @@ static void MemoryOptimizerWorker() {
           }
         }
 
-        // 2. Periodic timer trigger.
+        // 2. Periodic timer trigger (gated on memory pressure).
         if (!shouldClean &&
             (settings.cleanMode == CleanMode::Periodic ||
              settings.cleanMode == CleanMode::SmartAndPeriodic)) {
@@ -2014,18 +2026,24 @@ static void MemoryOptimizerWorker() {
                   now - g_lastPeriodicCleanTime)
                   .count();
           if (elapsedMinutes >= settings.periodicIntervalMinutes) {
-            shouldClean = true;
-            wchar_t buf[128];
-            swprintf_s(buf, L"[Periodic Trigger: %d min interval]",
-                       settings.periodicIntervalMinutes);
-            reason = buf;
+            if (freePercent <= settings.freeRamThresholdPercent) {
+              shouldClean = true;
+              wchar_t buf[128];
+              swprintf_s(buf,
+                         L"[Periodic Trigger: %d min interval (Free RAM %.1f%% "
+                         L"<= %d%%)]",
+                         settings.periodicIntervalMinutes, freePercent,
+                         settings.freeRamThresholdPercent);
+              reason = buf;
+            }
             g_lastPeriodicCleanTime = now;
           }
         }
 
-        // 3. Smart Idle Trigger: triggers once upon entering idle state,
-        // then throttles subsequent sweeps to a relaxed 10-15 minute cadence
-        // (preventing 30s log spam).
+        // 3. Smart Idle Trigger: triggers upon entering idle state,
+        // then throttles subsequent sweeps to a relaxed 10-15 minute cadence,
+        // gated on memory pressure to prevent SSD churn when plenty of RAM is
+        // free.
         DWORD idleSec = GetSystemIdleSeconds();
         DWORD idleThresholdSec =
             static_cast<DWORD>(settings.idleThresholdMinutes) * 60;
@@ -2040,12 +2058,18 @@ static void MemoryOptimizerWorker() {
           int idleIntervalMin =
               (std::max)(10, settings.periodicIntervalMinutes);
           if (!g_wasIdle || elapsedSinceIdleClean >= idleIntervalMin) {
-            shouldClean = true;
-            wchar_t buf[128];
-            swprintf_s(buf, L"[Idle Trigger: idle for %u min]", idleSec / 60);
-            reason = buf;
-            g_lastIdleCleanTime = now;
-            g_lastTriggerCleanTime = now;
+            if (freePercent <= settings.freeRamThresholdPercent) {
+              shouldClean = true;
+              wchar_t buf[128];
+              swprintf_s(buf,
+                         L"[Idle Trigger: idle for %u min (Free RAM %.1f%% <= "
+                         L"%d%%)]",
+                         idleSec / 60, freePercent,
+                         settings.freeRamThresholdPercent);
+              reason = buf;
+              g_lastIdleCleanTime = now;
+              g_lastTriggerCleanTime = now;
+            }
           }
         }
 
@@ -2138,12 +2162,12 @@ static void LoadSettings() {
       Wh_GetIntSetting(L"enableGameModeDetection") != 0;
 
   PCWSTR modeStr = Wh_GetStringSetting(L"cleanMode");
-  if (modeStr && wcscmp(modeStr, L"smartThreshold") == 0) {
-    g_settings.cleanMode = CleanMode::SmartThreshold;
-  } else if (modeStr && wcscmp(modeStr, L"periodic") == 0) {
+  if (modeStr && wcscmp(modeStr, L"periodic") == 0) {
     g_settings.cleanMode = CleanMode::Periodic;
-  } else {
+  } else if (modeStr && wcscmp(modeStr, L"smartAndPeriodic") == 0) {
     g_settings.cleanMode = CleanMode::SmartAndPeriodic;
+  } else {
+    g_settings.cleanMode = CleanMode::SmartThreshold;
   }
   Wh_FreeStringSetting(modeStr);
 
@@ -2209,7 +2233,7 @@ static void LoadSettings() {
 BOOL WhTool_ModInit() {
   Wh_Log(
       L"[SmartOptimizer] Initializing Smart Process Priority & RAM Optimizer "
-      L"v1.0.1 (Dedicated Tool Process)...");
+      L"(Dedicated Tool Process)...");
 
   HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
   if (hNtdll) {
@@ -2255,7 +2279,7 @@ BOOL WhTool_ModInit() {
   g_workerRunning.store(true);
   g_workerThread.emplace(MemoryOptimizerWorker);
 
-  Wh_Log(L"[SmartOptimizer] Mod v1.0.1 initialized successfully.");
+  Wh_Log(L"[SmartOptimizer] Mod initialized successfully.");
   return TRUE;
 }
 
@@ -2287,15 +2311,18 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-  Wh_Log(L"[SmartOptimizer] Deinitializing mod v1.0.1...");
+  Wh_Log(L"[SmartOptimizer] Deinitializing mod...");
 
   if (g_hookThreadRunning.load()) {
     g_hookThreadRunning.store(false);
-    if (g_hookThreadId != 0) {
-      PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-    }
     if (g_hookThreadHandle) {
-      WaitForSingleObject(g_hookThreadHandle, INFINITE);
+      if (g_hookThreadId != 0) {
+        while (WaitForSingleObject(g_hookThreadHandle, 100) == WAIT_TIMEOUT) {
+          PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        }
+      } else {
+        WaitForSingleObject(g_hookThreadHandle, INFINITE);
+      }
       CloseHandle(g_hookThreadHandle);
       g_hookThreadHandle = nullptr;
     }
@@ -2358,10 +2385,7 @@ void WhTool_ModUninit() {
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
-void WINAPI EntryPoint_Hook() {
-  Wh_Log(L">");
-  ExitThread(0);
-}
+void WINAPI EntryPoint_Hook() { ExitThread(0); }
 
 BOOL Wh_ModInit() {
   DWORD sessionId;
