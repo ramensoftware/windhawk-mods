@@ -234,12 +234,12 @@ BOOL Wh_ModInit(void)
     if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
         return FALSE;
 
-    WindhawkUtils::SYMBOL_HOOK user32Hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
         { {L"BeginPaint"}, (void **)&BeginPaint_orig, (void *)BeginPaint_hook, FALSE },
         { {L"EndPaint"}, (void **)&EndPaint_orig, (void *)EndPaint_hook, FALSE },
     };
 
-    WindhawkUtils::HookSymbols(hUser32, user32Hooks, ARRAYSIZE(user32Hooks));
+    WindhawkUtils::HookSymbols(hUser32, user32DllHooks, ARRAYSIZE(user32DllHooks));
 
     SubclassAllTaskLists();
 
