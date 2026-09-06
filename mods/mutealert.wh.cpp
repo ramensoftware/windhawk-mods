@@ -129,7 +129,7 @@ volume control, call state, and headset integration.
   $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
 - showCallStateIcon: false
   $name: Show active-call app icon
-  $description: Shows a secondary Slack, Teams, Zoom, or Google Meet logo while a supported call is active. Left-clicking it focuses the call window.
+  $description: Shows a secondary Slack, Teams, Zoom, or Google Meet logo while a supported call is active. Left-clicking it focuses the call window. Google Meet requires Enable Google Meet integration.
 - headsetSyncMode: off
   $name: Headset mute synchronization
   $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
@@ -142,6 +142,7 @@ volume control, call state, and headset integration.
   $name: Synchronize headset mute with Windows input
 - headsetSyncCalls: false
   $name: Synchronize headset mute with active calls
+  $description: Google Meet requires Enable Google Meet integration. Headset synchronization must be in full or mute-only mode to change call mute states.
 - headsetPollInterval: 500
   $name: Headset status interval (ms)
   $description: "How often to query vendor device state. Range: 200-2000 ms."
@@ -225,7 +226,7 @@ volume control, call state, and headset integration.
   $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
 - meetEnabled: false
   $name: Enable Google Meet integration
-  $description: Opt in to browser accessibility scanning. Enabling accessibility can increase browser CPU and memory usage until the browser exits.
+  $description: Opt in to browser accessibility scanning. Also enable the call icon, Meet warning, Meet right-click control, or headset call synchronization to use it. Enabling accessibility can increase browser CPU and memory usage until the browser exits.
 - meetWindowTitle: "meet -|meet –|meet —"
   $name: Google Meet window title text
   $description: Case-insensitive title fragments. Separate alternatives with a vertical bar. Customize for localized titles or installed Meet app windows.
@@ -234,13 +235,13 @@ volume control, call state, and headset integration.
   $description: Exact executable filenames separated with a vertical bar. Add your browser if absent. Opera GX uses opera.exe.
 - meetWarning: false
   $name: Warn when speaking while Google Meet is muted
-  $description: Uses Windows UI Automation to detect a muted Google Meet in the active, visible tab of a supported browser. No Google credentials or network access are used.
+  $description: Requires Enable Google Meet integration. Uses Windows UI Automation to detect a muted Google Meet in the active, visible tab of a supported browser. No Google credentials or network access are used.
 - meetAudioCue: false
   $name: Play Google Meet muted audio cue
-  $description: Plays the Windows exclamation sound once when the Google Meet speaking-while-muted warning begins.
+  $description: Requires Enable Google Meet integration and Warn when speaking while Google Meet is muted. Plays the Windows exclamation sound once when the warning begins.
 - meetRightClickUnmute: false
   $name: Right-click to toggle Google Meet microphone
-  $description: Invokes Google Meet's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+  $description: Requires Enable Google Meet integration. Invokes Google Meet's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
 - meetMutedButtonText: "turn on microphone"
   $name: Google Meet muted-button text
   $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is muted. Separate alternatives with a vertical bar.
@@ -641,6 +642,22 @@ static void LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"meetSpeechThreshold"), 1, 100);
     g_settings.meetSpeechDelay =
         std::clamp(Wh_GetIntSetting(L"meetSpeechDelay"), 100, 3000);
+
+    if (!g_settings.meetEnabled &&
+        (g_settings.meetWarning || g_settings.meetRightClickToggle ||
+         g_settings.meetAudioCue)) {
+        Wh_Log(L"[Google Meet] Meet features are configured, but Enable Google "
+               L"Meet integration is off; Meet is not monitored.");
+    } else if (g_settings.meetEnabled && !MeetMonitoringEnabled()) {
+        Wh_Log(L"[Google Meet] Integration is enabled, but no feature uses it. "
+               L"Enable the call icon, Meet warning, right-click control, "
+               L"or headset call synchronization; Meet is not monitored.");
+    }
+    if (g_settings.meetEnabled && g_settings.meetAudioCue &&
+        !g_settings.meetWarning) {
+        Wh_Log(L"[Google Meet] The audio cue requires the speaking-while-muted "
+               L"warning to be enabled.");
+    }
 
     g_audioRole.store(static_cast<int>(g_settings.deviceRole));
     g_updateInterval.store(g_settings.updateInterval);
