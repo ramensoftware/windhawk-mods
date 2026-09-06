@@ -17,6 +17,13 @@
 This mod adds a Minecraft styled overlay for the current thing playing on your computer.
 It does use a nine-patch rect for it's background sizing, and it can use your default, system font, if a custom isn't provided.
 The modification uses some of Mojang assets compacted in Base64 links, so please support Mojang by buying their original game.
+
+Here's how the mod does look like:
+
+![Mod Display](https://raw.githubusercontent.com/MaxURhino/PublicAssets/main/Zrzut%20ekranu%202026-09-06%20080951.png)
+
+_(the mod doesn't come with the custom font, you can download it here: https://github.com/tryashtar/minecraft-ttf/releases/download/v1.6/MinecraftDefaultUniformBMP-Regular.ttf)_
+
 # Settings
 You can change a bunch of the mod settings, like:
 - Overlay scale
@@ -54,7 +61,6 @@ You can change a bunch of the mod settings, like:
 
 #include <string>
 #include <vector>
-#include <algorithm>
 #include <gdiplus.h>
 
 #include <winrt/base.h>
@@ -202,7 +208,7 @@ bool g_defaultFont = false;
 int g_baseWidth = 160;
 int g_baseHeight = 30;
 
-int g_moveFrame = 0;
+float g_moveElapsedMs = 0.0f;
 int g_moveDirection = -1;
 
 int g_overlayY = -30;
@@ -425,8 +431,10 @@ enum class SlideState {
 SlideState g_slideState =
     SlideState::Hidden;
 
-const int kSlideDurationFrames = 50;
-const int kHoldDurationFrames = 250;
+const float kSlideDurationMs = 50.0f * kRenderIntervalMs; // ~800ms
+const float kHoldDurationMs  = 250.0f * kRenderIntervalMs; // ~4000ms
+
+ULONGLONG g_lastAnimTick = 0;
 
 const int kHiddenY = -30;
 const int kVisibleY = 0;
@@ -493,8 +501,8 @@ DWORD WINAPI FontChangeThread(
     return 0;
 }
 
-void AdvanceAnimation() {
-    g_moveFrame++;
+void AdvanceAnimation(float deltaMs) {
+    g_moveElapsedMs += deltaMs;
 
     if (!g_showToast) {
         g_overlayY = kHiddenY;
@@ -504,14 +512,9 @@ void AdvanceAnimation() {
     if (!g_showAnimation) {
         g_overlayY = kVisibleY;
 
-        if (
-            g_moveFrame >=
-            kHoldDurationFrames
-        ) {
-            g_slideState =
-                SlideState::SlidingOut;
-
-            g_moveFrame = 0;
+        if (g_moveElapsedMs >= kHoldDurationMs) {
+            g_slideState = SlideState::SlidingOut;
+            g_moveElapsedMs = 0.0f;
         }
 
         return;
@@ -519,60 +522,38 @@ void AdvanceAnimation() {
 
     switch (g_slideState) {
         case SlideState::SlidingIn:
-            g_overlayY =
-                kHiddenY +
-                (int)(
-                    (float)g_moveFrame /
-                    kSlideDurationFrames *
-                    (kVisibleY - kHiddenY)
-                );
+            g_overlayY = kHiddenY + (int)(
+                (g_moveElapsedMs / kSlideDurationMs) *
+                (kVisibleY - kHiddenY)
+            );
 
-            if (
-                g_moveFrame >=
-                kSlideDurationFrames
-            ) {
+            if (g_moveElapsedMs >= kSlideDurationMs) {
                 g_overlayY = kVisibleY;
-                g_slideState =
-                    SlideState::Holding;
-                g_moveFrame = 0;
+                g_slideState = SlideState::Holding;
+                g_moveElapsedMs = 0.0f;
             }
-
             break;
 
         case SlideState::Holding:
             g_overlayY = kVisibleY;
 
-            if (
-                g_moveFrame >=
-                kHoldDurationFrames
-            ) {
-                g_slideState =
-                    SlideState::SlidingOut;
-
-                g_moveFrame = 0;
+            if (g_moveElapsedMs >= kHoldDurationMs) {
+                g_slideState = SlideState::SlidingOut;
+                g_moveElapsedMs = 0.0f;
             }
-
             break;
 
         case SlideState::SlidingOut:
-            g_overlayY =
-                kVisibleY -
-                (int)(
-                    (float)g_moveFrame /
-                    kSlideDurationFrames *
-                    (kVisibleY - kHiddenY)
-                );
+            g_overlayY = kVisibleY - (int)(
+                (g_moveElapsedMs / kSlideDurationMs) *
+                (kVisibleY - kHiddenY)
+            );
 
-            if (
-                g_moveFrame >=
-                kSlideDurationFrames
-            ) {
+            if (g_moveElapsedMs >= kSlideDurationMs) {
                 g_overlayY = kHiddenY;
-                g_slideState =
-                    SlideState::Hidden;
-                g_moveFrame = 0;
+                g_slideState = SlideState::Hidden;
+                g_moveElapsedMs = 0.0f;
             }
-
             break;
 
         case SlideState::Hidden:
@@ -789,13 +770,9 @@ void RenderAndUpdateWindow(
     songName =
         createSongName();
 
-    if (
-        songName != lastSongName
-    ) {
-        g_slideState =
-            SlideState::SlidingIn;
-
-        g_moveFrame = 0;
+    if (songName != lastSongName) {
+        g_slideState = SlideState::SlidingIn;
+        g_moveElapsedMs = 0.0f; // was g_moveFrame = 0;
     }
 
     lastSongName =
@@ -1026,9 +1003,19 @@ void RenderAndUpdateWindow(
             textColor
         );
 
+        UINT16 emHeight = g_systemFontFamily->GetEmHeight(titleFont->GetStyle());
+        UINT16 cellAscent = g_systemFontFamily->GetCellAscent(titleFont->GetStyle());
+
+        float ascentPx = titleFont->GetSize() * dpiScale
+                        * (float)cellAscent / (float)emHeight;
+
+        // vertically center the actual cap-height-ish box in your toast,
+        // instead of trusting DrawString's line-box origin blindly
+        float textY = (height - ascentPx) / 2.0f; // tune the 2.0f centering logic to taste
+
         Gdiplus::PointF textPos(
             30.0f * g_scale * dpiScale,
-            10.5f * g_scale * dpiScale
+            textY
         );
 
         Gdiplus::SolidBrush shadowBrush(
@@ -1200,43 +1187,29 @@ LRESULT CALLBACK WndProc(
 
         case WM_TIMER: {
             if (wp == kRenderTimerId) {
-                ULONGLONG now =
-                    GetTickCount64();
+                ULONGLONG now = GetTickCount64();
 
-                if (
-                    now -
-                    g_lastSpriteAdvance >=
-                    kSpriteFrameIntervalMs
-                ) {
+                if (g_lastAnimTick == 0) {
+                    g_lastAnimTick = now; // first tick, avoid a huge initial delta
+                }
+
+                float deltaMs = (float)(now - g_lastAnimTick);
+                g_lastAnimTick = now;
+
+                if (now - g_lastSpriteAdvance >= kSpriteFrameIntervalMs) {
                     g_musicNotes_currentFrame =
-                        (
-                            g_musicNotes_currentFrame +
-                            1
-                        ) %
-                        g_musicNotes_frameCount;
-
-                    g_lastSpriteAdvance =
-                        now;
+                        (g_musicNotes_currentFrame + 1) % g_musicNotes_frameCount;
+                    g_lastSpriteAdvance = now;
                 }
 
-                if (
-                    now -
-                    g_lastNowPlayingPoll >=
-                    kNowPlayingPollIntervalMs
-                ) {
-                    g_nowPlaying =
-                        GetNowPlayingInfo();
-
-                    g_lastNowPlayingPoll =
-                        now;
+                if (now - g_lastNowPlayingPoll >= kNowPlayingPollIntervalMs) {
+                    g_nowPlaying = GetNowPlayingInfo();
+                    g_lastNowPlayingPoll = now;
                 }
 
-                AdvanceAnimation();
+                AdvanceAnimation(deltaMs);
 
-                RenderAndUpdateWindow(
-                    hwnd,
-                    g_musicNotes_currentHeight
-                );
+                RenderAndUpdateWindow(hwnd, g_musicNotes_currentHeight);
             }
 
             return 0;
@@ -1292,6 +1265,12 @@ void parseModSettings() {
     g_customFont = stringNCF;
 
     if (shouldChangeFont) {
+        delete g_privateFonts;
+        delete g_customFontFamily;
+        
+        g_privateFonts = nullptr;
+        g_customFontFamily = nullptr;
+
         CreateThread(
             nullptr,
             0,
