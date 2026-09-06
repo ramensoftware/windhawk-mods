@@ -2,13 +2,13 @@
 // @id              taskbar-network-lounge
 // @name            Taskbar Network Lounge
 // @description     Live network speed and traffic totals on the taskbar, in a native acrylic widget
-// @version         1.1.1
+// @version         1.2.0
 // @author          cracken7
 // @github          https://github.com/cracken7
 // @homepage        https://github.com/cracken7/TaskbarNetworkLounge
 // @include         explorer.exe
 // @license         MIT
-// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lshcore -lgdiplus -lshell32 -lcomctl32 -liphlpapi -lws2_32
+// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lgdiplus -lshell32 -lcomctl32 -liphlpapi -lws2_32
 // @name:ar         مؤشر الشبكة لشريط المهام
 // @description:ar  سرعة الشبكة الحيّة وإجمالي الترافيك على شريط المهام في ودجت أصلية بمظهر زجاجي
 // ==/WindhawkMod==
@@ -63,6 +63,10 @@ Taskbar Settings → Widgets.
 
 ## Notes
 
+* The widget runs in a dedicated `explorer.exe` helper process (Windhawk's
+  "mods as tools" pattern), so a fault in it cannot take down the real shell. Two
+  visible consequences: a second "Windows Explorer" entry appears in Task Manager,
+  and other mods that target `explorer.exe` are injected into the helper too.
 * Attaches to the primary taskbar (`Shell_TrayWnd`).
 * Speeds are sampled, so a single reading can differ from Task Manager by a few
   percent; the average over a second matches (measured 0.06 % over 22 s).
@@ -110,6 +114,10 @@ Taskbar Settings → Widgets.
 
 ## ملاحظات
 
+* يعمل الودجت في عملية `explorer.exe` مساعدة مخصّصة (نمط "المودات كأدوات" في
+  Windhawk)، فلا يستطيع أي خطأ فيه إسقاط الشل الحقيقي. ولهذا أثران ظاهران: يظهر
+  سطر ثانٍ باسم "Windows Explorer" في مدير المهام، وأي مود آخر يستهدف
+  `explorer.exe` يُحمَّل في العملية المساعدة أيضًا.
 * يرتبط بشريط المهام الأساسي (`Shell_TrayWnd`).
 * السرعات تُقاس بالتقطيع الزمني، فقراءة واحدة قد تختلف عن مدير المهام بنسبة قليلة،
   لكن المتوسط خلال ثانية مطابق (المقيس: فرق 0.06% خلال 22 ثانية).
@@ -138,11 +146,6 @@ Taskbar Settings → Widgets.
     $description: 13 is the sharpest default (measured); 11-12 for a smaller widget.
     $name:ar: حجم الخط
     $description:ar: 13 هو الأوضح (بالقياس الفعلي)؛ 11-12 لودجت أصغر.
-  - BoldText: true
-    $name: Bold text
-    $description: Bold is much sharper at small sizes. Off = regular weight.
-    $name:ar: خط عريض
-    $description:ar: العريض أوضح بكثير في المقاسات الصغيرة. إيقاف = وزن عادي.
   - TextWeight: bold
     $name: Text weight
     $options:
@@ -235,7 +238,7 @@ Taskbar Settings → Widgets.
     $description: Follow the Windows light/dark theme.
     $name:ar: الثيم التلقائي
     $description:ar: يتبع ثيم ويندوز الفاتح/الغامق.
-  - TextColor: 0xFFFFFF
+  - TextColor: "0xFFFFFF"
     $name: Manual text color (hex)
     $description: Used only when Auto theme is off.
     $name:ar: لون النص اليدوي (hex)
@@ -382,12 +385,12 @@ Taskbar Settings → Widgets.
 #include <gdiplus.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <shobjidl.h>
 #include <windowsx.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <climits>
 #include <cstdio>
 #include <cwctype>
 #include <memory>
@@ -402,16 +405,23 @@ using namespace Gdiplus;
 static const WCHAR* kFontName = L"Segoe UI";
 static const WCHAR* kWidgetClass = L"WindhawkNetworkLoungeWidget";
 static const WCHAR* kPanelClass = L"WindhawkNetworkLoungePanel";
-static const WCHAR* kStorageDirName = L"TaskbarNetworkLounge";
-static const WCHAR* kStorageFileName = L"traffic.dat";
 
 // Timers / messages
 #define IDT_WATCHDOG 1001
 #define IDT_ANIM 1002
+// Polls for a click outside the details panel. SetForegroundWindow is routinely
+// refused for a process that isn't already in the foreground (the widget is
+// WS_EX_NOACTIVATE, so clicking it grants no foreground rights), and without
+// activation the panel never gets WM_ACTIVATE/WA_INACTIVE - so "click elsewhere to
+// dismiss" cannot rely on activation alone.
+#define IDT_PANEL_DISMISS 1003
 #define APP_WM_CLOSE (WM_APP + 0)
 #define APP_WM_REPOSITION (WM_APP + 10)
 #define APP_WM_DATA_UPDATED (WM_APP + 11)
 #define APP_WM_TOGGLE_PANEL (WM_APP + 12)
+// Own message for "settings changed", rather than synthesizing a system
+// WM_SETTINGCHANGE broadcast whose wParam/lParam would then have to be ignored.
+#define APP_WM_SETTINGS_CHANGED (WM_APP + 13)
 
 // Context menu ids
 #define IDM_REFRESH 100
@@ -496,7 +506,6 @@ struct ModSettings {
     int width = 220;
     int height = 52;
     int fontSize = 13;
-    bool boldText = true;
     TextWeight textWeight = TextWeight::Bold;
     ArrowStyle arrowStyle = ArrowStyle::Rounded;
     int arrowScale = 120;       // percent of font size
@@ -559,12 +568,21 @@ static HWND g_hPanel = nullptr;
 static HWND g_hTooltip = nullptr;
 static std::thread* g_uiThread = nullptr;
 static std::thread* g_workerThread = nullptr;
+// The UI thread's own id, published before it creates any window. Shutdown posts
+// WM_QUIT to the THREAD, not to a window: if uninit runs before the window exists
+// (mod disabled or reloaded right after start), a window-targeted message would go
+// nowhere and join() would block forever.
+static std::atomic<DWORD> g_uiThreadId{0};
 static HANDLE g_stopEvent = nullptr;   // manual reset: shut worker down
 static HANDLE g_wakeEvent = nullptr;   // auto reset: sample immediately
-static std::atomic<bool> g_running{false};
 static std::atomic<bool> g_panelVisible{false};
 static std::atomic<unsigned long long> g_panelHiddenAt{0};  // GetTickCount64
-static std::atomic<int> g_hoverState{0};  // 0 none, 1 widget, 2 reset button
+// Hover state is split per window so moving the mouse over one cannot clear the
+// other's highlight.
+// Widget: 0 = none, 1 = body, 2 = divider grab zone.
+static std::atomic<int> g_widgetHover{0};
+// Details panel: 0 = none, 1 = Reset button.
+static std::atomic<int> g_panelHover{0};
 static std::atomic<bool> g_hiddenByUser{false};
 static std::atomic<unsigned long long> g_pendingReset{0};  // bit0 dl, bit1 ul
 // Divider drag state. g_dividerHitX is written by the painter every frame so the
@@ -615,7 +633,6 @@ static void LoadSettings() {
     s.width = ClampInt(Wh_GetIntSetting(L"Appearance.PanelWidth"), 80, 1200);
     s.height = ClampInt(Wh_GetIntSetting(L"Appearance.PanelHeight"), 20, 200);
     s.fontSize = ClampInt(Wh_GetIntSetting(L"Appearance.FontSize"), 6, 40);
-    s.boldText = Wh_GetIntSetting(L"Appearance.BoldText") != 0;
 
     std::wstring weight = ReadStringSetting(L"Appearance.TextWeight");
     if (StringSettingIs(weight, L"black")) {
@@ -626,10 +643,6 @@ static void LoadSettings() {
         s.textWeight = TextWeight::Regular;
     } else {
         s.textWeight = TextWeight::Bold;
-    }
-    // BoldText=false still forces regular, so the old switch keeps working.
-    if (!s.boldText) {
-        s.textWeight = TextWeight::Regular;
     }
 
     std::wstring arrow = ReadStringSetting(L"Appearance.ArrowStyle");
@@ -883,130 +896,27 @@ static std::wstring FormatBytes(unsigned long long bytes, const ModSettings& s) 
 }
 
 // --- Persistent traffic counters ------------------------------------------
-// Stored as a tiny text file in %LOCALAPPDATA%\TaskbarNetworkLounge so that it
-// survives Explorer / Windhawk / Windows restarts. Writes are batched (every 30
-// seconds and on unload) and atomic (temp file + MoveFileEx).
+// Stored in Windhawk's per-mod storage so the totals survive Explorer / Windhawk
+// / Windows restarts and disappear with the mod - a mod's own state does not
+// belong in a directory that outlives its uninstall. Writes are batched (every 30
+// seconds and on unload).
 struct PersistentTotals {
     unsigned long long down = 0;
     unsigned long long up = 0;
 };
 
-static std::wstring GetStorageDir() {
-    std::wstring dir;
-    WCHAR buffer[MAX_PATH];
-    DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer,
-                                          ARRAYSIZE(buffer));
-    if (length > 0 && length < ARRAYSIZE(buffer)) {
-        dir = buffer;
-    } else if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
-                                          0, buffer))) {
-        dir = buffer;
-    }
-
-    if (dir.empty()) {
-        return dir;
-    }
-
-    if (dir.back() != L'\\') {
-        dir += L'\\';
-    }
-    dir += kStorageDirName;
-    return dir;
-}
-
-static std::wstring GetStorageFile() {
-    std::wstring dir = GetStorageDir();
-    if (dir.empty()) {
-        return dir;
-    }
-    return dir + L"\\" + kStorageFileName;
-}
-
 static bool LoadPersistentTotals(PersistentTotals* out) {
-    std::wstring path = GetStorageFile();
-    if (path.empty()) {
+    PersistentTotals stored;
+    size_t read = Wh_GetBinaryValue(L"TrafficTotals", &stored, sizeof(stored));
+    if (read != sizeof(stored)) {
         return false;
     }
-
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
-                              nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-
-    char buffer[256] = {};
-    DWORD read = 0;
-    BOOL ok = ReadFile(file, buffer, sizeof(buffer) - 1, &read, nullptr);
-    CloseHandle(file);
-    if (!ok || read == 0) {
-        return false;
-    }
-    buffer[read] = '\0';
-
-    unsigned long long down = 0, up = 0, checksum = 0;
-    int version = 0;
-    // Format: "TNLv<version> <down> <up> <checksum>"
-    if (sscanf(buffer, "TNLv%d %llu %llu %llu", &version, &down, &up,
-               &checksum) != 4) {
-        Wh_Log(L"Traffic counter file is corrupt, ignoring it");
-        return false;
-    }
-    if (version != 1 || checksum != (down ^ up ^ 0x5A5AA5A5ULL)) {
-        Wh_Log(L"Traffic counter file failed validation, ignoring it");
-        return false;
-    }
-
-    out->down = down;
-    out->up = up;
+    *out = stored;
     return true;
 }
 
 static bool SavePersistentTotals(const PersistentTotals& totals) {
-    std::wstring dir = GetStorageDir();
-    std::wstring path = GetStorageFile();
-    if (dir.empty() || path.empty()) {
-        return false;
-    }
-
-    CreateDirectoryW(dir.c_str(), nullptr);
-
-    std::wstring tempPath = path + L".tmp";
-    HANDLE file = CreateFileW(tempPath.c_str(), GENERIC_WRITE, 0, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-
-    char buffer[256];
-    int length = _snprintf_s(buffer, sizeof(buffer), _TRUNCATE,
-                             "TNLv1 %llu %llu %llu\n", totals.down, totals.up,
-                             totals.down ^ totals.up ^ 0x5A5AA5A5ULL);
-    if (length <= 0) {
-        CloseHandle(file);
-        DeleteFileW(tempPath.c_str());
-        return false;
-    }
-
-    DWORD written = 0;
-    BOOL ok = WriteFile(file, buffer, (DWORD)length, &written, nullptr) &&
-              written == (DWORD)length;
-    if (ok) {
-        FlushFileBuffers(file);
-    }
-    CloseHandle(file);
-
-    if (!ok) {
-        DeleteFileW(tempPath.c_str());
-        return false;
-    }
-
-    if (!MoveFileExW(tempPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING |
-                                                        MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(tempPath.c_str());
-        return false;
-    }
-    return true;
+    return Wh_SetBinaryValue(L"TrafficTotals", &totals, sizeof(totals)) != FALSE;
 }
 // --- Network monitoring ----------------------------------------------------
 // One GetIfTable2 call per interval on a worker thread. Speed comes from the
@@ -1318,7 +1228,7 @@ class NetworkMonitor {
             L"tunnel",      L"vpn",         L"zerotier",   L"tailscale",
             L"nordlynx",    L"proton",      L"expressvpn", L"hamachi",
             L"radmin",      L"pseudo",      L"teredo",     L"isatap",
-            L"6to4",        L"npcap",       L"wan minipor", L"bluetooth",
+            L"6to4",        L"npcap",       L"wan miniport", L"bluetooth",
             L"virtual",
         };
         for (const wchar_t* marker : kVirtualMarkers) {
@@ -1584,17 +1494,22 @@ class NetworkMonitor {
     }
 
     bool SnapshotDiffers(const NetSnapshot& snapshot) const {
-        auto differsBy = [](double a, double b) {
-            double diff = a > b ? a - b : b - a;
-            double scale = a > b ? a : b;
-            return diff > 512.0 || diff > scale * 0.01;
-        };
-        return differsBy(snapshot.downBytesPerSec,
-                         m_lastPublished.downBytesPerSec) ||
-               differsBy(snapshot.upBytesPerSec, m_lastPublished.upBytesPerSec) ||
-               snapshot.totalDown != m_lastPublished.totalDown ||
-               snapshot.totalUp != m_lastPublished.totalUp ||
-               snapshot.connected != m_lastPublished.connected ||
+        // Compare what is actually drawn: the formatted strings carry 2-3
+        // significant digits, so a sub-digit wobble in the raw rate no longer
+        // forces a repaint. A numeric threshold could not do this - any absolute
+        // or relative epsilon still fires on changes the user cannot see.
+        ModSettings s = GetSettings();
+        if (FormatSpeed(snapshot.downBytesPerSec, s) !=
+                FormatSpeed(m_lastPublished.downBytesPerSec, s) ||
+            FormatSpeed(snapshot.upBytesPerSec, s) !=
+                FormatSpeed(m_lastPublished.upBytesPerSec, s) ||
+            FormatBytes(snapshot.totalDown, s) !=
+                FormatBytes(m_lastPublished.totalDown, s) ||
+            FormatBytes(snapshot.totalUp, s) !=
+                FormatBytes(m_lastPublished.totalUp, s)) {
+            return true;
+        }
+        return snapshot.connected != m_lastPublished.connected ||
                snapshot.ifName != m_lastPublished.ifName ||
                snapshot.ipv4 != m_lastPublished.ipv4;
     }
@@ -1628,11 +1543,8 @@ class NetworkMonitor {
     // on unload / reset.
     void FlushTotals(bool force) {
         ModSettings s = GetSettings();
-        if (s.counterMode != CounterMode::Persistent && !force) {
-            return;
-        }
-        if (s.counterMode != CounterMode::Persistent && force) {
-            return;  // session mode never touches the file
+        if (s.counterMode != CounterMode::Persistent) {
+            return;  // session mode never touches storage
         }
 
         ULONGLONG now = GetTickCount64();
@@ -1795,28 +1707,37 @@ static void AddRoundedRect(GraphicsPath& path,
 
 // DPI of the monitor the widget lives on; used to scale everything so the widget
 // looks identical at 100% / 125% / 150% / 175% / 200%.
+//
+// The DPI entry points are resolved once into function-local statics: this runs on
+// every paint and on every WM_MOUSEMOVE (twice, via the divider hit test), so a
+// GetProcAddress per call would be pure overhead.
 static double GetScaleForWindow(HWND hwnd) {
     ModSettings s = GetSettings();
     if (!s.dpiScaling) {
         return 1.0;
     }
-    UINT dpi = 0;
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (user32) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        auto getDpiForWindow =
-            (GetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow");
-        if (getDpiForWindow && hwnd) {
-            dpi = getDpiForWindow(hwnd);
-        }
-        if (!dpi) {
-            using GetDpiForSystem_t = UINT(WINAPI*)();
-            auto getDpiForSystem =
+
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    using GetDpiForSystem_t = UINT(WINAPI*)();
+    static GetDpiForWindow_t getDpiForWindow = nullptr;
+    static GetDpiForSystem_t getDpiForSystem = nullptr;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+            getDpiForWindow =
+                (GetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow");
+            getDpiForSystem =
                 (GetDpiForSystem_t)GetProcAddress(user32, "GetDpiForSystem");
-            if (getDpiForSystem) {
-                dpi = getDpiForSystem();
-            }
         }
+    }
+
+    UINT dpi = 0;
+    if (getDpiForWindow && hwnd) {
+        dpi = getDpiForWindow(hwnd);
+    }
+    if (!dpi && getDpiForSystem) {
+        dpi = getDpiForSystem();
     }
     if (!dpi) {
         HDC screen = GetDC(nullptr);
@@ -2113,9 +2034,9 @@ static void DrawNetworkPanel(HDC hdc, int width, int height, HWND hwnd) {
         upColor = light ? Color(255, 13, 106, 13) : Color(255, 138, 238, 158);
     }
 
-    // Hover background (only for the widget's own hover state, not the panel's
-    // Reset button hover, which shares the same variable).
-    if (g_hoverState.load() == 1) {
+    // Hover background for the widget body only - not for the divider grab zone,
+    // which gets its own highlight on the line itself.
+    if (g_widgetHover.load() == 1) {
         GraphicsPath hoverPath;
         AddRoundedRect(hoverPath, 1.0f, 1.0f, (REAL)width - 2.0f,
                        (REAL)height - 2.0f, (REAL)(8.0 * scale));
@@ -2262,7 +2183,7 @@ static void DrawNetworkPanel(HDC hdc, int width, int height, HWND hwnd) {
     }
     g_dividerHitX = (float)dividerX;
 
-    if (s.dividerOpacity > 0 || (s.dividerDraggable && g_hoverState.load() == 3)) {
+    if (s.dividerOpacity > 0 || (s.dividerDraggable && g_widgetHover.load() == 2)) {
         // While being dragged (or hovered) the line brightens, so it is obvious
         // that it is the thing being grabbed even at opacity 0.
         BYTE alpha = (BYTE)s.dividerOpacity;
@@ -2270,7 +2191,7 @@ static void DrawNetworkPanel(HDC hdc, int width, int height, HWND hwnd) {
         if (g_dividerDragging.load()) {
             alpha = 220;
             thickness = (REAL)(2.0 * scale);
-        } else if (g_hoverState.load() == 3) {
+        } else if (g_widgetHover.load() == 2) {
             alpha = (BYTE)(alpha < 140 ? 140 : alpha);
             thickness = (REAL)(2.0 * scale);
         }
@@ -2573,7 +2494,7 @@ static void DrawDetailsPanel(HDC hdc, int width, int height, HWND hwnd) {
     AddRoundedRect(buttonPath, (REAL)button.left, (REAL)button.top,
                    (REAL)(button.right - button.left),
                    (REAL)(button.bottom - button.top), (REAL)(6.0 * scale));
-    bool hoverReset = g_hoverState.load() == 2;
+    bool hoverReset = g_panelHover.load() == 1;
     SolidBrush buttonBrush(BlendColor(textColor, hoverReset ? 56 : 30));
     graphics.FillPath(&buttonBrush, &buttonPath);
     Pen buttonPen(BlendColor(textColor, hoverReset ? 110 : 70), (REAL)(1.0 * scale));
@@ -2781,14 +2702,20 @@ static bool IsTaskbarWindow(HWND hwnd) {
            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
+// EVENT_OBJECT_LOCATIONCHANGE fires very often on the taskbar thread, so the cheap
+// checks come first: the hooked window itself and the window object. Only then is
+// the cross-process GetClassNameW inside IsTaskbarWindow worth paying for.
 static void CALLBACK TaskbarEventProc(HWINEVENTHOOK,
                                       DWORD,
                                       HWND hwnd,
-                                      LONG,
+                                      LONG idObject,
                                       LONG,
                                       DWORD,
                                       DWORD) {
-    if (!IsTaskbarWindow(hwnd) || !g_hWidget) {
+    if (!g_hWidget || idObject != OBJID_WINDOW) {
+        return;
+    }
+    if (hwnd != g_hookedTaskbar && !IsTaskbarWindow(hwnd)) {
         return;
     }
     PostMessage(g_hWidget, APP_WM_REPOSITION, 0, 0);
@@ -2928,6 +2855,7 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd,
 
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
+                KillTimer(hwnd, IDT_PANEL_DISMISS);
                 ShowWindow(hwnd, SW_HIDE);
                 g_panelVisible = false;
                 // Clicking the widget while the panel is open deactivates the
@@ -2937,13 +2865,45 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd,
             }
             return 0;
 
+        case WM_TIMER:
+            if (wParam == IDT_PANEL_DISMISS) {
+                // Dismiss on a mouse-down anywhere outside the panel and outside
+                // the widget (the widget's own click toggles the panel itself).
+                // This is the path that actually runs, because a background
+                // process is normally refused foreground activation.
+                if (!g_panelVisible.load()) {
+                    KillTimer(hwnd, IDT_PANEL_DISMISS);
+                    return 0;
+                }
+                if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 &&
+                    (GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0) {
+                    return 0;
+                }
+                POINT cursor{};
+                GetCursorPos(&cursor);
+                RECT panelRect{}, widgetRect{};
+                GetWindowRect(hwnd, &panelRect);
+                if (PtInRect(&panelRect, cursor)) {
+                    return 0;
+                }
+                if (g_hWidget && GetWindowRect(g_hWidget, &widgetRect) &&
+                    PtInRect(&widgetRect, cursor)) {
+                    return 0;
+                }
+                KillTimer(hwnd, IDT_PANEL_DISMISS);
+                ShowWindow(hwnd, SW_HIDE);
+                g_panelVisible = false;
+                g_panelHiddenAt = GetTickCount64();
+            }
+            return 0;
+
         case WM_MOUSEMOVE: {
             double scale = GetScaleForWindow(hwnd);
             PanelMetrics metrics = ComputePanelMetrics(scale);
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            int newState = PtInRect(&metrics.resetButton, point) ? 2 : 0;
-            if (newState != g_hoverState.load()) {
-                g_hoverState = newState;
+            int newState = PtInRect(&metrics.resetButton, point) ? 1 : 0;
+            if (newState != g_panelHover.load()) {
+                g_panelHover = newState;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             TRACKMOUSEEVENT track{sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
@@ -2952,8 +2912,8 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd,
         }
 
         case WM_MOUSELEAVE:
-            if (g_hoverState.load() == 2) {
-                g_hoverState = 0;
+            if (g_panelHover.load() != 0) {
+                g_panelHover = 0;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -3017,6 +2977,7 @@ static void TogglePanel(HWND widget) {
     }
 
     if (g_panelVisible.load()) {
+        KillTimer(g_hPanel, IDT_PANEL_DISMISS);
         ShowWindow(g_hPanel, SW_HIDE);
         g_panelVisible = false;
         g_panelHiddenAt = GetTickCount64();
@@ -3082,7 +3043,11 @@ static void TogglePanel(HWND widget) {
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     g_panelVisible = true;
     InvalidateRect(g_hPanel, nullptr, TRUE);
-    SetForegroundWindow(g_hPanel);  // so WM_ACTIVATE can dismiss it
+    // Try for activation (it makes WM_ACTIVATE dismissal work when it succeeds),
+    // but do not depend on it: SetForegroundWindow is normally refused for a
+    // background process, so a timer polls the mouse as the reliable path.
+    SetForegroundWindow(g_hPanel);
+    SetTimer(g_hPanel, IDT_PANEL_DISMISS, 120, nullptr);
 }
 
 // --- Divider drag hit testing ----------------------------------------------
@@ -3153,6 +3118,10 @@ static void ShowContextMenu(HWND hwnd) {
     UINT command = TrackPopupMenu(menu,
                                   TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
                                   cursor.x, cursor.y, 0, hwnd, nullptr);
+    // The classic TrackPopupMenu fix: SetForegroundWindow may be refused on a
+    // WS_EX_NOACTIVATE window, and the menu then lingers after a click elsewhere.
+    // A dummy message to the owner nudges it out of menu mode.
+    PostMessage(hwnd, WM_NULL, 0, 0);
     DestroyMenu(menu);
 
     switch (command) {
@@ -3182,9 +3151,12 @@ static void ShowContextMenu(HWND hwnd) {
                           nullptr, SW_SHOWNORMAL);
             break;
         case IDM_WH_SETTINGS: {
+            // The helper process is an explorer.exe image, so
+            // GetModuleFileNameW(nullptr, ...) would return explorer.exe and just
+            // open a File Explorer window. Resolve Windhawk's own path instead.
             WCHAR path[MAX_PATH];
-            if (GetModuleFileNameW(nullptr, path, ARRAYSIZE(path)) &&
-                GetModuleFileNameW(nullptr, path, ARRAYSIZE(path)) < MAX_PATH) {
+            if (ExpandEnvironmentStringsW(L"%ProgramFiles%\\Windhawk\\windhawk.exe",
+                                          path, ARRAYSIZE(path))) {
                 ShellExecuteW(nullptr, L"open", path, nullptr, nullptr,
                               SW_SHOWNORMAL);
             }
@@ -3240,6 +3212,7 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd,
         case WM_SETTINGCHANGE:
         case WM_THEMECHANGED:
         case WM_DWMCOMPOSITIONCHANGED:
+        case APP_WM_SETTINGS_CHANGED:
             UpdateAppearance(hwnd);
             InvalidateRect(hwnd, nullptr, TRUE);
             if (g_hPanel) {
@@ -3302,9 +3275,9 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd,
                 return 0;
             }
 
-            const int state = DividerHover(hwnd, mouseX, settings) ? 3 : 1;
-            if (g_hoverState.load() != state) {
-                g_hoverState = state;
+            const int state = DividerHover(hwnd, mouseX, settings) ? 2 : 1;
+            if (g_widgetHover.load() != state) {
+                g_widgetHover = state;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             TRACKMOUSEEVENT track{sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
@@ -3316,15 +3289,15 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd,
             // A west-east cursor over the grab zone is the only affordance that
             // says "this line can be dragged".
             if (LOWORD(lParam) == HTCLIENT &&
-                (g_dividerDragging.load() || g_hoverState.load() == 3)) {
+                (g_dividerDragging.load() || g_widgetHover.load() == 2)) {
                 SetCursor(LoadCursorW(nullptr, IDC_SIZEWE));
                 return TRUE;
             }
             break;
 
         case WM_MOUSELEAVE:
-            if (g_hoverState.load() != 0 && !g_dividerDragging.load()) {
-                g_hoverState = 0;
+            if (g_widgetHover.load() != 0 && !g_dividerDragging.load()) {
+                g_widgetHover = 0;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -3399,6 +3372,10 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd,
 // Owns both windows, the GDI+ token and the message loop. All window handling
 // happens here; the network worker only posts messages.
 static void UiThread() {
+    // Publish the thread id first: shutdown posts WM_QUIT here, and it must work
+    // even if the mod is torn down before any window exists.
+    g_uiThreadId = GetCurrentThreadId();
+
     // Per-monitor DPI so GetDpiForWindow reports the real monitor scaling.
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (user32) {
@@ -3513,13 +3490,20 @@ static void UiThread() {
         DispatchMessageW(&msg);
     }
 
-    // Ordered teardown: panel, tooltip, widget, classes, GDI+, COM.
+    // Ordered teardown: panel, tooltip, widget, classes, GDI+, COM. The widget is
+    // destroyed explicitly because the loop can also exit via WM_QUIT (see
+    // WhTool_ModUninit), in which case WM_DESTROY never ran - and a surviving
+    // window keeps its timer and WinEvent hook alive and makes UnregisterClassW
+    // fail.
     if (g_hPanel) {
         DestroyWindow(g_hPanel);
         g_hPanel = nullptr;
     }
     DestroyTooltip();
-    g_hWidget = nullptr;
+    if (g_hWidget) {
+        DestroyWindow(g_hWidget);
+        g_hWidget = nullptr;
+    }
 
     UnregisterClassW(kPanelClass, instance);
     UnregisterClassW(kWidgetClass, instance);
@@ -3559,8 +3543,6 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    g_running = true;
-
     try {
         g_uiThread = new std::thread(UiThread);
         g_workerThread = new std::thread(NetworkWorkerThread);
@@ -3574,8 +3556,6 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     Wh_Log(L"Taskbar Network Lounge stopping");
-    g_running = false;
-
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -3591,8 +3571,14 @@ void WhTool_ModUninit() {
         g_workerThread = nullptr;
     }
 
-    if (g_hWidget) {
-        PostMessage(g_hWidget, APP_WM_CLOSE, 0, 0);
+    // End the UI thread's message loop. WM_QUIT goes to the THREAD rather than to
+    // the widget: if uninit runs before UiThread created its window (mod disabled
+    // or reloaded immediately after start) a window-targeted message would be
+    // dropped and the join() below would block forever. The loop may also have
+    // exited already; PostThreadMessageW simply fails then, which is harmless.
+    DWORD uiThreadId = g_uiThreadId.load();
+    if (uiThreadId != 0) {
+        PostThreadMessageW(uiThreadId, WM_QUIT, 0, 0);
     }
 
     if (g_uiThread) {
@@ -3602,6 +3588,7 @@ void WhTool_ModUninit() {
         delete g_uiThread;
         g_uiThread = nullptr;
     }
+    g_uiThreadId = 0;
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
@@ -3623,7 +3610,7 @@ void WhTool_ModSettingsChanged() {
     }
 
     if (g_hWidget) {
-        PostMessage(g_hWidget, WM_SETTINGCHANGE, 0, 0);
+        PostMessage(g_hWidget, APP_WM_SETTINGS_CHANGED, 0, 0);
         PostMessage(g_hWidget, APP_WM_REPOSITION, 0, 0);
         PostMessage(g_hWidget, APP_WM_DATA_UPDATED, 0, 0);
     }
