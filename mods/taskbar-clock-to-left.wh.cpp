@@ -55,7 +55,7 @@ using namespace winrt::Windows::UI::Xaml;
 
 struct MovedClockData {
     winrt::weak_ref<FrameworkElement> clock;
-    winrt::weak_ref<Controls::Grid> originalParent;
+    winrt::weak_ref<Controls::Panel> originalParent;
     winrt::weak_ref<Controls::Grid> taskbarRoot;
     winrt::weak_ref<FrameworkElement> widgets;
     Controls::Grid leftHost{nullptr};
@@ -610,7 +610,7 @@ void RestoreMovedClockData(MovedClockData& data) {
 
         if (currentParent &&
             (!originalParent ||
-             currentParent != originalParent.as<Controls::Panel>())) {
+             currentParent != originalParent)) {
             uint32_t index = 0;
             if (currentParent.Children().IndexOf(element, index)) {
                 currentParent.Children().RemoveAt(index);
@@ -702,7 +702,7 @@ bool MoveClock(FrameworkElement content) {
     }
 
     auto originalParent = Media::VisualTreeHelper::GetParent(clock)
-                              .try_as<Controls::Grid>();
+                              .try_as<Controls::Panel>();
     if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
         Wh_Log(L"Unexpected clock parent");
         return false;
@@ -719,7 +719,8 @@ bool MoveClock(FrameworkElement content) {
 
     auto root = Media::VisualTreeHelper::GetParent(systemTrayFrame)
                     .try_as<Controls::Grid>();
-    if (!root || root == originalParent) {
+    if (!root || root.as<winrt::Windows::Foundation::IInspectable>() ==
+                     originalParent.as<winrt::Windows::Foundation::IInspectable>()) {
         Wh_Log(L"Taskbar root Grid not found");
         return false;
     }
@@ -969,7 +970,7 @@ bool ClockLayoutIsReady(FrameworkElement content, bool logFailure = false) {
     }
 
     auto originalParent = Media::VisualTreeHelper::GetParent(clock)
-                              .try_as<Controls::Grid>();
+                              .try_as<Controls::Panel>();
     if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
         if (logFailure) {
             auto parent = Media::VisualTreeHelper::GetParent(clock)
