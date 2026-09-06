@@ -2,7 +2,7 @@
 // @id              taskbar-centered-start-split-icons
 // @name            Taskbar Start Button Centered Origin
 // @description     Pins the Start button to true screen-center and splits running-app taskbar buttons into two groups flanking it by which side of the screen each window is on (Windows 11 only; incompatible with "Start button always on the left")
-// @version         0.1.0
+// @version         1.0.0
 // @author          rick
 // @github          https://github.com/rycalvo
 // @include         explorer.exe
@@ -3437,9 +3437,31 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
             break;
         }
         if (msg.message == kArmResolveNowMsg) {
-            KillTimer(nullptr, g_buttonHwndResolveTimerId);
-            g_buttonHwndResolveTimerId =
-                SetTimer(nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
+            // Arm the replacement before killing the old one - the same
+            // ordering, and for the same reason, as
+            // SetDragFollowPollInterval: killing first and then failing to
+            // arm would leave no resolve timer at all. Less severe here
+            // than for the drag-follow poll, since the taskbar thread
+            // re-arms this from several places (a real click, an
+            // ArrangeOverride count change, a subclass install) so it
+            // would recover eventually rather than never - but keeping the
+            // old timer means it recovers on its own schedule instead of
+            // waiting on an unrelated caller, and the failure no longer
+            // passes silently. Killing the old one afterward is safe even
+            // when it is the timer whose callback queued this message:
+            // this thread's own message loop is what dispatches both.
+            UINT_PTR newResolveTimerId = SetTimer(
+                nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
+            if (!newResolveTimerId) {
+                Wh_Log(L"kArmResolveNowMsg: SetTimer failed, error=%lu - "
+                       L"keeping the existing resolve timer",
+                       GetLastError());
+                continue;
+            }
+            if (g_buttonHwndResolveTimerId) {
+                KillTimer(nullptr, g_buttonHwndResolveTimerId);
+            }
+            g_buttonHwndResolveTimerId = newResolveTimerId;
             continue;
         }
         TranslateMessage(&msg);
