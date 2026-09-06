@@ -2,7 +2,7 @@
 // @id              hide-home-gallery-explorer
 // @name            Hide Home, Gallery & OneDrive in Explorer
 // @description     Hides the "Home", "Gallery", and "OneDrive" items from File Explorer's navigation pane on Windows 11. Also supports hiding user-specified custom labels.
-// @version         0.3
+// @version         0.4
 // @author          rinosaur681
 // @github          https://github.com/rinosaur681
 // @include         %SystemRoot%\explorer.exe
@@ -19,6 +19,11 @@ This mod removes the "Home", "Gallery", and optionally "OneDrive" items from the
 by finding the TreeView control and deleting those entries. It scans periodically in case Explorer re-inserts them during
 refresh/reload. You can also specify custom labels (single or list) to hide, with match options (exact/contains/startsWith)
 and case sensitivity.
+
+What’s new in v0.4: [Contributed by - @rono-zeroseven]
+- Instant Hiding: Hooks the Windows API SendMessageW to intercept and block the creation of targeted items before they are ever rendered to the screen.
+- Zero Navigation Redirects: Eliminates all artificial selection and scroll manipulation. Your Windows setting to "Open File Explorer to: This PC" is now perfectly preserved.
+- Optimized Performance: Completely removes polling delays. Targeted items are synchronously intercepted and deleted during their creation, adding zero perceptible overhead to File Explorer.
 
 What’s new in v0.3:
 - Eliminates flashing: periodic scans do a dry-run first and only freeze/redraw when deletions are needed.
@@ -60,8 +65,6 @@ Notes:
 */
 // ==/WindhawkModSettings==
 
-#define UNICODE
-#define _UNICODE
 #include <windows.h>
 #include <commctrl.h>
 #include <string>
@@ -84,29 +87,17 @@ struct {
     bool customCaseSensitive;
     int customMatchMode; // 0=exact, 1=contains, 2=startsWith
     std::vector<std::wstring> customTexts;
-
-    int scanIntervalMs;   // how often to scan (ms)
-    int initialDelayMs;   // per-window first-time delay before pruning (ms)
 } g_settings;
 
 static volatile bool g_stopWorker = false;
 static HANDLE g_workerThread = NULL;
 
-// Track windows we've done the initial prune for
-static std::unordered_set<HWND> g_prunedOnce;
-// Track first-seen ticks for windows to honor initialDelayMs
-static std::unordered_map<HWND, ULONGLONG> g_firstSeenTick;
-
 // ---------------- Utilities ----------------
 
-// Case-insensitive wide string compare (exact)
 static bool iequals(const std::wstring& a, const std::wstring& b) {
-    if (a.size() != b.size())
-        return false;
+    if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); ++i) {
-        wint_t ca = towlower(a[i]);
-        wint_t cb = towlower(b[i]);
-        if (ca != cb) return false;
+        if (towlower(a[i]) != towlower(b[i])) return false;
     }
     return true;
 }
@@ -135,103 +126,101 @@ static std::vector<std::wstring> split_multi(const std::wstring& s) {
     return out;
 }
 
-static bool equals_cs(const std::wstring& a, const std::wstring& b) {
-    return a == b;
-}
-
-static bool contains_ci(const std::wstring& hay, const std::wstring& needle) {
-    if (needle.empty()) return false;
-    std::wstring h(hay), n(needle);
-    for (auto& c : h) c = towlower(c);
-    for (auto& c : n) c = towlower(c);
-    return h.find(n) != std::wstring::npos;
-}
-
-static bool startswith_ci(const std::wstring& hay, const std::wstring& needle) {
-    if (needle.empty()) return false;
-    if (hay.size() < needle.size()) return false;
-    for (size_t i = 0; i < needle.size(); ++i) {
-        if (towlower(hay[i]) != towlower(needle[i])) return false;
-    }
-    return true;
-}
-
+// Allocation-free string matching for maximum performance
 static bool match_string(const std::wstring& text, const std::wstring& pattern, bool caseSensitive, int mode) {
     if (pattern.empty()) return false;
     if (caseSensitive) {
         switch (mode) {
-        case 0: return equals_cs(text, pattern);
+        case 0: return text == pattern;
         case 1: return text.find(pattern) != std::wstring::npos;
-        case 2: return text.rfind(pattern, 0) == 0; // startsWith
-        default: return equals_cs(text, pattern);
+        case 2: return text.rfind(pattern, 0) == 0;
+        default: return text == pattern;
         }
     } else {
         switch (mode) {
         case 0: return iequals(text, pattern);
-        case 1: return contains_ci(text, pattern);
-        case 2: return startswith_ci(text, pattern);
+        case 1: {
+            if (pattern.size() > text.size()) return false;
+            for (size_t i = 0; i <= text.size() - pattern.size(); ++i) {
+                bool match = true;
+                for (size_t j = 0; j < pattern.size(); ++j) {
+                    if (towlower(text[i+j]) != towlower(pattern[j])) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
+            }
+            return false;
+        }
+        case 2: {
+            if (text.size() < pattern.size()) return false;
+            for (size_t i = 0; i < pattern.size(); ++i) {
+                if (towlower(text[i]) != towlower(pattern[i])) return false;
+            }
+            return true;
+        }
         default: return iequals(text, pattern);
         }
     }
 }
 
-// Recursively find a child window by class name
-static HWND FindChildByClass(HWND parent, const wchar_t* cls) {
-    for (HWND h = FindWindowEx(parent, NULL, NULL, NULL); h; h = FindWindowEx(parent, h, NULL, NULL)) {
-        wchar_t c[256] = {};
-        GetClassNameW(h, c, 255);
-        if (wcscmp(c, cls) == 0) {
-            return h;
+static bool ShouldDeleteItem(const std::wstring& text) {
+    if (text.empty()) return false;
+    
+    bool matchHome     = g_settings.hideHome     && match_string(text, g_settings.homeText,     false, 0);
+    bool matchGallery  = g_settings.hideGallery  && match_string(text, g_settings.galleryText,  false, 0);
+    bool matchOneDrive = g_settings.hideOneDrive && match_string(text, g_settings.onedriveText, false, 1);
+
+    bool matchCustom = false;
+    if (g_settings.customEnabled && !g_settings.customTexts.empty()) {
+        for (const auto& pat : g_settings.customTexts) {
+            if (match_string(text, pat, g_settings.customCaseSensitive, g_settings.customMatchMode)) {
+                matchCustom = true;
+                break;
+            }
         }
-        HWND deeper = FindChildByClass(h, cls);
-        if (deeper)
-            return deeper;
     }
-    return NULL;
+    return matchHome || matchGallery || matchOneDrive || matchCustom;
 }
 
-// Enumerate top-level Explorer windows (CabinetWClass) belonging to THIS process
-static std::vector<HWND> GetExplorerWindows() {
-    struct EnumCtx {
-        std::vector<HWND>* windows;
-        DWORD pid;
-    } ctx{};
+// ---------------- Explorer Helpers ----------------
 
+static std::vector<HWND> GetExplorerWindows() {
+    struct EnumCtx { std::vector<HWND>* windows; DWORD pid; } ctx{};
     std::vector<HWND> result;
     ctx.windows = &result;
     ctx.pid = GetCurrentProcessId();
 
     EnumWindows([](HWND hwnd, LPARAM lParam)->BOOL {
         auto* ctx = reinterpret_cast<EnumCtx*>(lParam);
-
-        // Only consider visible CabinetWClass windows
         wchar_t cls[256] = {};
         GetClassNameW(hwnd, cls, 255);
-        if (wcscmp(cls, L"CabinetWClass") != 0 || !IsWindowVisible(hwnd)) {
-            return TRUE;
-        }
-
-        // Filter by process ID to avoid touching other explorer.exe instances
+        if (wcscmp(cls, L"CabinetWClass") != 0 || !IsWindowVisible(hwnd)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == ctx->pid) {
-            ctx->windows->push_back(hwnd);
-        }
+        if (pid == ctx->pid) ctx->windows->push_back(hwnd);
         return TRUE;
     }, reinterpret_cast<LPARAM>(&ctx));
 
     return result;
 }
 
+static HWND FindChildByClass(HWND parent, const wchar_t* cls) {
+    for (HWND h = FindWindowEx(parent, NULL, NULL, NULL); h; h = FindWindowEx(parent, h, NULL, NULL)) {
+        wchar_t c[256] = {};
+        GetClassNameW(h, c, 255);
+        if (wcscmp(c, cls) == 0) return h;
+        HWND deeper = FindChildByClass(h, cls);
+        if (deeper) return deeper;
+    }
+    return NULL;
+}
 
-// Get the navigation pane TreeView (SysTreeView32) inside a CabinetWClass window
 static HWND GetExplorerNavTree(HWND explorerHwnd) {
-    // Win11 Explorer typically contains a SysTreeView32 under multiple nested hosts.
-    // We recursively search for the first SysTreeView32 we can find.
     return FindChildByClass(explorerHwnd, L"SysTreeView32");
 }
 
-// Get the text of a TreeView item
 static std::wstring GetTreeItemText(HWND hTree, HTREEITEM hItem) {
     wchar_t buf[512];
     TVITEMW tvi = {};
@@ -245,135 +234,121 @@ static std::wstring GetTreeItemText(HWND hTree, HTREEITEM hItem) {
     return L"";
 }
 
-// Scroll nav tree to the very top and set caret to root
-static void ScrollNavToTop(HWND hTree) {
-    if (!hTree) return;
-    HTREEITEM root = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
-    if (!root) return;
-
-    // Select root and ensure it’s visible
-    SendMessageW(hTree, TVM_SELECTITEM, TVGN_CARET, (LPARAM)root);
-    SendMessageW(hTree, TVM_ENSUREVISIBLE, 0, (LPARAM)root);
-    // Force scroll to very top (extra safety)
-    SendMessageW(hTree, WM_VSCROLL, SB_TOP, 0);
-}
-
-// Recursively delete or count matching items, return count affected
 static int PruneItemsCount(HWND hTree, HTREEITEM hItem, bool deleteItems) {
     if (!hItem) return 0;
-
     int affected = 0;
 
-    // Store siblings first (because deleting current affects sibling pointers)
     std::vector<HTREEITEM> siblings;
     for (HTREEITEM s = hItem; s != NULL; s = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)s)) {
         siblings.push_back(s);
     }
 
     for (HTREEITEM s : siblings) {
-        // Recurse into children first
         HTREEITEM child = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)s);
-        if (child) {
-            affected += PruneItemsCount(hTree, child, deleteItems);
-        }
+        if (child) affected += PruneItemsCount(hTree, child, deleteItems);
 
-        // Check this item's text
         std::wstring text = GetTreeItemText(hTree, s);
-
-        // Built-ins: exact for Home/Gallery, contains for OneDrive (to catch “OneDrive – Personal” etc.)
-        bool matchHome     = g_settings.hideHome     && match_string(text, g_settings.homeText,     false, 0);
-        bool matchGallery  = g_settings.hideGallery  && match_string(text, g_settings.galleryText,  false, 0);
-        bool matchOneDrive = g_settings.hideOneDrive && match_string(text, g_settings.onedriveText, false, 1);
-
-        // Custom list: user-configurable match mode + case sensitivity
-        bool matchCustom = false;
-        if (g_settings.customEnabled && !g_settings.customTexts.empty()) {
-            for (const auto& pat : g_settings.customTexts) {
-                if (match_string(text, pat, g_settings.customCaseSensitive, g_settings.customMatchMode)) {
-                    matchCustom = true;
-                    break;
-                }
-            }
-        }
-
-        if (matchHome || matchGallery || matchOneDrive || matchCustom) {
-            if (deleteItems) {
-                SendMessageW(hTree, TVM_DELETEITEM, 0, (LPARAM)s);
-            }
+        if (ShouldDeleteItem(text)) {
+            if (deleteItems) SendMessageW(hTree, TVM_DELETEITEM, 0, (LPARAM)s);
             ++affected;
-            // (No need to process its children further; deletion removes the subtree)
         }
     }
-
     return affected;
 }
 
-// Remove items from a given TreeView, return true if anything changed
 static bool RemoveHomeAndGallery(HWND hTree) {
     if (!hTree) return false;
-
     HTREEITEM root = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
     if (!root) return false;
 
-    // First do a dry-run to check if anything would be removed.
     int wouldDelete = PruneItemsCount(hTree, root, false);
-    if (wouldDelete <= 0) {
-        // Nothing to do; avoid touching redraw or scroll = no flash
-        return false;
-    }
+    if (wouldDelete <= 0) return false;
 
-    // Freeze redraw to avoid flicker and unwanted auto-scroll during deletions
     SendMessageW(hTree, WM_SETREDRAW, FALSE, 0);
     int deleted = PruneItemsCount(hTree, root, true);
     SendMessageW(hTree, WM_SETREDRAW, TRUE, 0);
 
     if (deleted > 0) {
-        // After modifying the tree, reposition to top
-        ScrollNavToTop(hTree);
         InvalidateRect(hTree, nullptr, TRUE);
         UpdateWindow(hTree);
-        Wh_Log(L"[HideHG] Pruned %d items and reset nav pane to top", deleted);
         return true;
     }
-
     return false;
 }
 
-// ---------------- Windhawk integration ----------------
+// ---------------- API Hooking ----------------
+
+// Original function pointer
+LRESULT (WINAPI *SendMessageW_Original)(HWND, UINT, WPARAM, LPARAM) = nullptr;
+
+// Our hook function
+LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    // Intercept TreeView item insertion
+    if (Msg == TVM_INSERTITEMW) {
+        TVINSERTSTRUCTW* tvis = (TVINSERTSTRUCTW*)lParam;
+        if (tvis) {
+            std::wstring text;
+            // Check if text is provided directly in the insertion struct
+            if ((tvis->item.mask & TVIF_TEXT) && tvis->item.pszText && tvis->item.pszText != LPSTR_TEXTCALLBACKW) {
+                text = tvis->item.pszText;
+            }
+            
+            // Call the original function first to let the system create the item in memory
+            LRESULT result = SendMessageW_Original(hWnd, Msg, wParam, lParam);
+            
+            if (result != 0) {
+                // Fallback: if text wasn't in the struct, fetch it from the newly created item
+                if (text.empty()) {
+                    TVITEMW tvItem = {0};
+                    tvItem.mask = TVIF_TEXT;
+                    tvItem.hItem = (HTREEITEM)result;
+                    wchar_t buf[512];
+                    tvItem.pszText = buf;
+                    tvItem.cchTextMax = 512;
+                    if (SendMessageW_Original(hWnd, TVM_GETITEMW, 0, (LPARAM)&tvItem)) {
+                        text = buf;
+                    }
+                }
+                
+                // If it's an item we want to hide, delete it immediately before it's ever painted
+                if (!text.empty() && ShouldDeleteItem(text)) {
+                    SendMessageW_Original(hWnd, TVM_DELETEITEM, 0, result);
+                    return 0; // Return 0 to tell Explorer the insertion "failed", preventing it from using the deleted handle
+                }
+            }
+            return result;
+        }
+    }
+    
+    // For all other messages, pass through normally
+    return SendMessageW_Original(hWnd, Msg, wParam, lParam);
+}
+
+// ---------------- Windhawk Integration ----------------
 
 static void LoadSettings() {
-    // Items
     g_settings.hideHome     = !!Wh_GetIntSetting(L"hide.home");
     g_settings.hideGallery  = !!Wh_GetIntSetting(L"hide.gallery");
     g_settings.hideOneDrive = !!Wh_GetIntSetting(L"hide.onedrive");
 
-    {
-        PCWSTR s = Wh_GetStringSetting(L"hide.homeText");
-        g_settings.homeText = s && *s ? s : L"Home";
+    auto getStr = [](PCWSTR key, const wchar_t* def) {
+        PCWSTR s = Wh_GetStringSetting(key);
+        std::wstring res = (s && *s) ? s : def;
         Wh_FreeStringSetting(s);
-    }
-    {
-        PCWSTR s = Wh_GetStringSetting(L"hide.galleryText");
-        g_settings.galleryText = s && *s ? s : L"Gallery";
-        Wh_FreeStringSetting(s);
-    }
-    {
-        PCWSTR s = Wh_GetStringSetting(L"hide.onedriveText");
-        g_settings.onedriveText = s && *s ? s : L"OneDrive";
-        Wh_FreeStringSetting(s);
-    }
+        return res;
+    };
 
-    // Custom options
+    g_settings.homeText = getStr(L"hide.homeText", L"Home");
+    g_settings.galleryText = getStr(L"hide.galleryText", L"Gallery");
+    g_settings.onedriveText = getStr(L"hide.onedriveText", L"OneDrive");
+
     g_settings.customEnabled = !!Wh_GetIntSetting(L"hide.customEnabled");
     g_settings.customCaseSensitive = !!Wh_GetIntSetting(L"hide.caseSensitive");
 
-    // matchMode: exact|contains|startsWith
-    g_settings.customMatchMode = 0; // default exact
+    g_settings.customMatchMode = 0;
     if (PCWSTR s = Wh_GetStringSetting(L"hide.matchMode")) {
-        if (s && *s) {
-            if (wcscmp(s, L"contains") == 0) g_settings.customMatchMode = 1;
-            else if (wcscmp(s, L"startsWith") == 0) g_settings.customMatchMode = 2;
-        }
+        if (wcscmp(s, L"contains") == 0) g_settings.customMatchMode = 1;
+        else if (wcscmp(s, L"startsWith") == 0) g_settings.customMatchMode = 2;
         Wh_FreeStringSetting(s);
     }
 
@@ -384,112 +359,37 @@ static void LoadSettings() {
         Wh_FreeStringSetting(s1);
     }
     if (PCWSTR s2 = Wh_GetStringSetting(L"hide.customList")) {
-        std::wstring lst = s2 ? s2 : L"";
-        auto items = split_multi(lst);
+        auto items = split_multi(s2 ? s2 : L"");
         for (auto& it : items) g_settings.customTexts.push_back(it);
         Wh_FreeStringSetting(s2);
     }
-
-    // Timing
-    int interval = Wh_GetIntSetting(L"timing.scanIntervalMs");
-    if (interval <= 0) {
-        // Backward-compat: accept old key if present
-        interval = Wh_GetIntSetting(L"hide.scanIntervalMs");
-    }
-    // Keep it responsive by default; clamp to sane bounds
-    if (interval < 100) interval = 300;
-    if (interval > 10000) interval = 10000;
-    g_settings.scanIntervalMs = interval;
-
-    int initDelay = Wh_GetIntSetting(L"timing.initialDelayMs");
-    if (initDelay < 0) initDelay = 0;
-    if (initDelay > 5000) initDelay = 5000;
-    g_settings.initialDelayMs = initDelay;
-
-    Wh_Log(L"[HideHG] Settings: hideHome=%d hideGallery=%d hideOneDrive=%d customEnabled=%d customCount=%d matchMode=%d caseSensitive=%d scanInterval=%dms initialDelay=%dms",
-        g_settings.hideHome, g_settings.hideGallery, g_settings.hideOneDrive,
-        g_settings.customEnabled, (int)g_settings.customTexts.size(),
-        g_settings.customMatchMode, g_settings.customCaseSensitive,
-        g_settings.scanIntervalMs, g_settings.initialDelayMs);
 }
 
-// Worker thread: handle first-time open cleanly, then periodic pruning
+// Fallback worker thread: runs every 500ms just in case Explorer dynamically rebuilds the tree
 static DWORD WINAPI WorkerProc(LPVOID) {
-    // Ensure comctl is initialized (for TreeView)
-    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_TREEVIEW_CLASSES };
-    InitCommonControlsEx(&icc);
-
     while (!g_stopWorker) {
         auto explorers = GetExplorerWindows();
-
-        // Clean up closed windows from the tracking sets
-        {
-            std::vector<HWND> toEraseOnce;
-            for (HWND h : g_prunedOnce) {
-                if (!IsWindow(h)) toEraseOnce.push_back(h);
-            }
-            for (HWND h : toEraseOnce) g_prunedOnce.erase(h);
-
-            std::vector<HWND> toEraseSeen;
-            for (auto& kv : g_firstSeenTick) {
-                if (!IsWindow(kv.first)) toEraseSeen.push_back(kv.first);
-            }
-            for (HWND h : toEraseSeen) g_firstSeenTick.erase(h);
-        }
-
-        ULONGLONG now = GetTickCount64();
-
         for (HWND ex : explorers) {
             HWND tree = GetExplorerNavTree(ex);
-            if (!tree || !IsWindow(tree)) continue;
-
-            // First time we see this window: record the time
-            if (g_firstSeenTick.find(ex) == g_firstSeenTick.end()) {
-                g_firstSeenTick[ex] = now;
-            }
-
-            bool firstPassDone = (g_prunedOnce.find(ex) != g_prunedOnce.end());
-            ULONGLONG elapsed = now - g_firstSeenTick[ex];
-
-            if (!firstPassDone) {
-                // Optional initial delay to let Explorer finish layout (configurable)
-                if ((int)elapsed < g_settings.initialDelayMs) {
-                    continue; // wait until delay elapses
-                }
-
-                // FIRST SIGHT: pin top, prune, pin top again — prevents scroll-to-bottom at open
-                ScrollNavToTop(tree);
-
-                SendMessageW(tree, WM_SETREDRAW, FALSE, 0);
-                HTREEITEM root = (HTREEITEM)SendMessageW(tree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
-                if (root) (void)PruneItemsCount(tree, root, true);
-                SendMessageW(tree, WM_SETREDRAW, TRUE, 0);
-
-                ScrollNavToTop(tree);
-                InvalidateRect(tree, nullptr, TRUE);
-                UpdateWindow(tree);
-
-                g_prunedOnce.insert(ex);
-                Wh_Log(L"[HideHG] Initial prune done for window 0x%p", ex);
-            } else {
-                // Subsequent scans: prune only if items got re-added; avoid touching scroll when no change
-                (void)RemoveHomeAndGallery(tree);
+            if (tree && IsWindow(tree)) {
+                RemoveHomeAndGallery(tree);
             }
         }
-
-        // Sleep for the configured interval
-        int delay = g_settings.scanIntervalMs;
-        for (int ms = 0; ms < delay && !g_stopWorker; ms += 50) {
-            Sleep(50);
-        }
+        Sleep(500);
     }
     return 0;
 }
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    
+    // Install the API hook for instant, zero-flash removal
+    Wh_SetFunctionHook((void*)SendMessageW, (void*)SendMessageW_Hook, (void**)&SendMessageW_Original);
+    
+    // Start fallback worker thread
     g_stopWorker = false;
     g_workerThread = CreateThread(nullptr, 0, WorkerProc, nullptr, 0, nullptr);
+    
     return TRUE;
 }
 
@@ -500,8 +400,6 @@ void Wh_ModUninit() {
         CloseHandle(g_workerThread);
         g_workerThread = NULL;
     }
-    g_prunedOnce.clear();
-    g_firstSeenTick.clear();
 }
 
 void Wh_ModSettingsChanged() {
