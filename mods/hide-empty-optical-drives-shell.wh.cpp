@@ -35,9 +35,9 @@ reports media insertion, a background worker retries briefly while an optical
 disc spins up.
 
 Detection is conservative:
-- readable/mounted media -> show;
-- confirmed empty drive -> hide;
-- inconclusive state after media insertion -> show (fail open).
+- media confirmed present -> show;
+- media confirmed absent -> hide;
+- inconclusive device state -> show (fail open).
 */
 // ==/WindhawkModReadme==
 
@@ -46,8 +46,8 @@ Detection is conservative:
 - driveLetters: ""
   $name: Optical drive letters
   $description: >-
-    Optional uppercase drive letters to manage, for example G or DE.
-    Use only A-Z without spaces, separators, or duplicate letters.
+    Optional drive letters to manage, for example G or DE.
+    Spaces and separators (comma, semicolon, colon) are allowed.
     Leave empty to manage all optical drives.
 */
 // ==/WindhawkModSettings==
@@ -58,6 +58,7 @@ Detection is conservative:
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <winioctl.h>
 #include <atomic>
 #include <cwctype>
 
@@ -77,17 +78,15 @@ constexpr UINT kMsgQuit = WM_APP + 3;
 
 std::atomic<DWORD> g_managedMask{kAllDriveBits};
 std::atomic<DWORD> g_opticalMask{0};
-std::atomic<LONG> g_mediaState[26];
+std::atomic<MediaState> g_mediaState[26];
 
 std::atomic<DWORD> g_arrivalRequestMask{0};
 std::atomic<DWORD> g_removalRequestMask{0};
 std::atomic<bool> g_initialScanRequested{false};
 
 HANDLE g_notificationThread = nullptr;
-HANDLE g_notificationReadyEvent = nullptr;
 DWORD g_notificationThreadId = 0;
 std::atomic<HWND> g_notificationWindow{nullptr};
-std::atomic<bool> g_notificationThreadReady{false};
 
 HANDLE g_workerThread = nullptr;
 HANDLE g_workerWakeEvent = nullptr;
@@ -133,19 +132,19 @@ static MediaState GetCachedMediaState(WCHAR letter) {
         return MediaState::Unknown;
     }
 
-    return static_cast<MediaState>(
-        g_mediaState[letter - L'A'].load(std::memory_order_acquire));
+    return g_mediaState[letter - L'A'].load(std::memory_order_acquire);
 }
 
 static bool SetCachedMediaState(WCHAR letter, MediaState state) {
-    LONG old = g_mediaState[letter - L'A'].exchange(static_cast<LONG>(state),
-                                                    std::memory_order_acq_rel);
+    MediaState old =
+        g_mediaState[letter - L'A'].exchange(state, std::memory_order_acq_rel);
 
-    if (old == static_cast<LONG>(state)) {
+    if (old == state) {
         return false;
     }
 
-    Wh_Log(L"%c: state %d -> %d", letter, old, static_cast<LONG>(state));
+    Wh_Log(L"%c: state %d -> %d", letter, static_cast<LONG>(old),
+           static_cast<LONG>(state));
     return true;
 }
 
@@ -176,40 +175,41 @@ static MediaState ProbeOpticalMediaState(WCHAR letter) {
         return MediaState::Unknown;
     }
 
-    DWORD previousErrorMode = 0;
-    bool errorModeChanged =
-        SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previousErrorMode) != FALSE;
+    WCHAR devicePath[] = L"\\\\.\\X:";
+    devicePath[4] = letter;
 
-    WCHAR volumeName[MAX_PATH + 1] = {};
-    WCHAR fileSystemName[MAX_PATH + 1] = {};
-    DWORD serial = 0;
-    DWORD maxComponentLength = 0;
-    DWORD fileSystemFlags = 0;
+    HANDLE device = CreateFileW(
+        devicePath, FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0,
+        nullptr);
 
-    SetLastError(ERROR_SUCCESS);
-
-    BOOL ok = GetVolumeInformationW(
-        root, volumeName, ARRAYSIZE(volumeName), &serial, &maxComponentLength,
-        &fileSystemFlags, fileSystemName, ARRAYSIZE(fileSystemName));
-
-    DWORD error = ok ? ERROR_SUCCESS : GetLastError();
-
-    if (errorModeChanged) {
-        SetThreadErrorMode(previousErrorMode, nullptr);
+    if (device == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        Wh_Log(L"%c: unable to open device, error=%u", letter, error);
+        return MediaState::Unknown;
     }
 
-    if (ok) {
-        Wh_Log(L"%c: media present, volume=\"%s\", fs=\"%s\"", letter,
-               volumeName, fileSystemName);
-        return MediaState::Present;
+    DWORD bytesReturned = 0;
+    BOOL present = DeviceIoControl(
+        device, IOCTL_STORAGE_CHECK_VERIFY2, nullptr, 0, nullptr, 0,
+        &bytesReturned, nullptr);
+
+    DWORD error = present ? ERROR_SUCCESS : GetLastError();
+
+    CloseHandle(device);
+
+    if (!present) {
+        if (error == ERROR_NOT_READY ||
+            error == ERROR_NO_MEDIA_IN_DRIVE) {
+            return MediaState::Empty;
+        }
+
+        Wh_Log(L"%c: media probe inconclusive, error=%u", letter, error);
+        return MediaState::Unknown;
     }
 
-    if (error == ERROR_NOT_READY || error == ERROR_NO_MEDIA_IN_DRIVE) {
-        return MediaState::Empty;
-    }
-
-    Wh_Log(L"%c: media probe inconclusive, error=%u", letter, error);
-    return MediaState::Unknown;
+    Wh_Log(L"%c: media present", letter);
+    return MediaState::Present;
 }
 
 static void RequestThisPcRefresh() {
@@ -299,14 +299,18 @@ static void QueueInitialScan() {
     SetEvent(g_workerWakeEvent);
 }
 
-static bool ProcessInitialScan() {
+static bool ProcessInitialScan(DWORD* retryMask,
+                               int (&retryAttempts)[26]) {
     bool changed = false;
     DWORD managedMask = g_managedMask.load(std::memory_order_acquire);
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
         DWORD bit = LetterBit(letter);
+        int index = letter - L'A';
 
         if (!(managedMask & bit)) {
+            *retryMask &= ~bit;
+            retryAttempts[index] = 0;
             changed |= SetOpticalDrivePresent(letter, false);
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
@@ -320,11 +324,23 @@ static bool ProcessInitialScan() {
         changed |= SetOpticalDrivePresent(letter, optical);
 
         if (!optical) {
+            *retryMask &= ~bit;
+            retryAttempts[index] = 0;
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
 
-        changed |= SetCachedMediaState(letter, ProbeOpticalMediaState(letter));
+        MediaState state = ProbeOpticalMediaState(letter);
+
+        if (state == MediaState::Unknown) {
+            *retryMask |= bit;
+            retryAttempts[index] = 0;
+        } else {
+            *retryMask &= ~bit;
+            retryAttempts[index] = 0;
+        }
+
+        changed |= SetCachedMediaState(letter, state);
     }
 
     return changed;
@@ -384,20 +400,17 @@ static bool ProcessArrivalMask(DWORD mask,
 
         MediaState state = ProbeOpticalMediaState(letter);
 
-        if (state == MediaState::Present) {
+        if (state != MediaState::Unknown) {
             *retryMask &= ~bit;
             retryAttempts[letter - L'A'] = 0;
 
-            changed |= SetCachedMediaState(letter, MediaState::Present);
+            changed |= SetCachedMediaState(letter, state);
             continue;
         }
 
-        // A media-arrival event tells us that something changed at the drive.
-        // GetVolumeInformationW can report ERROR_NOT_READY both for an empty
-        // tray and for blank/unmountable/still-spinning media, so after arrival
-        // any non-Present result is treated as Unknown (fail open).
+        // The device query was inconclusive. Fail open while retrying briefly
+        // in case the drive is still becoming ready.
         changed |= SetCachedMediaState(letter, MediaState::Unknown);
-
         *retryMask |= bit;
         retryAttempts[letter - L'A'] = 0;
     }
@@ -438,17 +451,14 @@ static bool ProcessRetryMask(DWORD* retryMask, int (&retryAttempts)[26]) {
 
         MediaState state = ProbeOpticalMediaState(letter);
 
-        if (state == MediaState::Present) {
+        if (state != MediaState::Unknown) {
             *retryMask &= ~bit;
             retryAttempts[index] = 0;
 
-            changed |= SetCachedMediaState(letter, MediaState::Present);
+            changed |= SetCachedMediaState(letter, state);
             continue;
         }
 
-        // Keep the drive visible for every inconclusive insertion result.
-        // Empty is committed by actual removal handling, not by a filesystem
-        // probe that can't distinguish an empty tray from blank media.
         changed |= SetCachedMediaState(letter, MediaState::Unknown);
 
         if (++retryAttempts[index] >= kMaxRetryAttempts) {
@@ -490,7 +500,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             retryMask = 0;
             ZeroMemory(retryAttempts, sizeof(retryAttempts));
 
-            refresh |= ProcessInitialScan();
+            refresh |= ProcessInitialScan(&retryMask, retryAttempts);
         }
 
         DWORD removalMask =
@@ -599,7 +609,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     bool uninitializeCom = coHr == S_OK || coHr == S_FALSE;
 
     MSG msg = {};
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     PIDLIST_ABSOLUTE thisPcPidl = nullptr;
 
@@ -608,10 +617,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
     if (FAILED(hr) || !thisPcPidl) {
         Wh_Log(L"SHGetKnownFolderIDList failed: 0x%08X", hr);
-
-        g_notificationThreadReady.store(false, std::memory_order_release);
-        SetEvent(g_notificationReadyEvent);
-
         if (uninitializeCom) {
             CoUninitialize();
         }
@@ -627,10 +632,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         Wh_Log(L"Notification window creation failed: %u", GetLastError());
 
         CoTaskMemFree(thisPcPidl);
-
-        g_notificationThreadReady.store(false, std::memory_order_release);
-        SetEvent(g_notificationReadyEvent);
-
         if (uninitializeCom) {
             CoUninitialize();
         }
@@ -644,10 +645,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
         DestroyWindow(hwnd);
         CoTaskMemFree(thisPcPidl);
-
-        g_notificationThreadReady.store(false, std::memory_order_release);
-        SetEvent(g_notificationReadyEvent);
-
         if (uninitializeCom) {
             CoUninitialize();
         }
@@ -656,8 +653,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     }
 
     g_notificationWindow.store(hwnd, std::memory_order_release);
-    g_notificationThreadReady.store(true, std::memory_order_release);
-    SetEvent(g_notificationReadyEvent);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         DispatchMessageW(&msg);
@@ -690,26 +685,23 @@ static bool TryLoadManagedMask(DWORD* mask) {
     DWORD parsedMask = 0;
 
     for (size_t i = 0; value[i]; i++) {
-        WCHAR ch = value[i];
+        WCHAR ch = static_cast<WCHAR>(towupper(value[i]));
+
+        if (ch == L' ' || ch == L',' || ch == L';' || ch == L':') {
+            continue;
+        }
 
         if (ch < L'A' || ch > L'Z') {
-            Wh_Log(
-                L"Invalid driveLetters setting: only uppercase A-Z "
-                L"are allowed, without spaces or separators");
+            Wh_Log(L"Invalid driveLetters character: %c", ch);
             return false;
         }
 
-        DWORD bit = LetterBit(ch);
+        parsedMask |= LetterBit(ch);
+    }
 
-        if (parsedMask & bit) {
-            Wh_Log(
-                L"Invalid driveLetters setting: duplicate drive "
-                L"letter %c",
-                ch);
-            return false;
-        }
-
-        parsedMask |= bit;
+    if (!parsedMask) {
+        Wh_Log(L"Invalid driveLetters setting: no drive letters found");
+        return false;
     }
 
     *mask = parsedMask;
@@ -792,8 +784,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Hide Empty Optical Drives");
 
     for (auto& state : g_mediaState) {
-        state.store(static_cast<LONG>(MediaState::Unknown),
-                    std::memory_order_relaxed);
+        state.store(MediaState::Unknown, std::memory_order_relaxed);
     }
 
     g_opticalMask.store(0, std::memory_order_relaxed);
@@ -813,13 +804,6 @@ BOOL Wh_ModInit() {
     g_removalRequestMask.store(0, std::memory_order_relaxed);
     g_initialScanRequested.store(false, std::memory_order_relaxed);
 
-    g_notificationReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    if (!g_notificationReadyEvent) {
-        Wh_Log(L"CreateEvent(notification ready) failed: %u", GetLastError());
-        return FALSE;
-    }
-
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     g_workerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -827,8 +811,6 @@ BOOL Wh_ModInit() {
     if (!g_workerWakeEvent || !g_workerStopEvent) {
         Wh_Log(L"CreateEvent(worker) failed: %u", GetLastError());
 
-        CloseHandle(g_notificationReadyEvent);
-        g_notificationReadyEvent = nullptr;
         CloseWorkerObjects();
         return FALSE;
     }
@@ -839,19 +821,6 @@ BOOL Wh_ModInit() {
     if (!g_notificationThread) {
         Wh_Log(L"CreateThread(notification) failed: %u", GetLastError());
 
-        CloseHandle(g_notificationReadyEvent);
-        g_notificationReadyEvent = nullptr;
-        CloseWorkerObjects();
-        return FALSE;
-    }
-
-    WaitForSingleObject(g_notificationReadyEvent, INFINITE);
-
-    CloseHandle(g_notificationReadyEvent);
-    g_notificationReadyEvent = nullptr;
-
-    if (!g_notificationThreadReady.load(std::memory_order_acquire)) {
-        StopNotificationThread(false);
         CloseWorkerObjects();
         return FALSE;
     }
