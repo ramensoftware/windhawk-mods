@@ -952,8 +952,13 @@ bool ClockIsAlreadyMoved(FrameworkElement clock) {
     return false;
 }
 
-bool ClockLayoutIsReady(FrameworkElement content) {
+bool ClockLayoutIsReady(FrameworkElement content, bool logFailure = false) {
     if (!content.IsLoaded()) {
+        if (logFailure) {
+            Wh_Log(L"Clock layout not ready: content is not loaded; "
+                   L"size=%.1fx%.1f",
+                   content.ActualWidth(), content.ActualHeight());
+        }
         return false;
     }
 
@@ -966,6 +971,14 @@ bool ClockLayoutIsReady(FrameworkElement content) {
     auto originalParent = Media::VisualTreeHelper::GetParent(clock)
                               .try_as<Controls::Grid>();
     if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
+        if (logFailure) {
+            auto parent = Media::VisualTreeHelper::GetParent(clock)
+                              .try_as<FrameworkElement>();
+            Wh_Log(L"Clock layout not ready: unexpected clock parent; "
+                   L"class=%s, name=%s",
+                   parent ? winrt::get_class_name(parent).c_str() : L"<null>",
+                   parent ? parent.Name().c_str() : L"<null>");
+        }
         return false;
     }
 
@@ -977,12 +990,33 @@ bool ClockLayoutIsReady(FrameworkElement content) {
                     : nullptr;
     if (!root || !root.XamlRoot() || root.ActualWidth() <= 0 ||
         root.ActualHeight() <= 0) {
+        if (logFailure) {
+            Wh_Log(L"Clock layout not ready: taskbar root state; "
+                   L"frame=%s, root=%s, xamlRoot=%d, size=%.1fx%.1f",
+                   systemTrayFrame
+                       ? winrt::get_class_name(systemTrayFrame).c_str()
+                       : L"<null>",
+                   root ? winrt::get_class_name(root).c_str() : L"<null>",
+                   root && root.XamlRoot() ? 1 : 0,
+                   root ? root.ActualWidth() : 0,
+                   root ? root.ActualHeight() : 0);
+        }
         return false;
     }
 
     auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
-    return !widgets || widgets.Visibility() != Visibility::Visible ||
-           widgets.ActualWidth() > 0;
+    bool widgetsReady = !widgets ||
+                        widgets.Visibility() != Visibility::Visible ||
+                        widgets.ActualWidth() > 0;
+    if (!widgetsReady && logFailure) {
+        Wh_Log(L"Clock layout not ready: Widgets is visible with zero width; "
+               L"loaded=%d, actual=%.1fx%.1f, desired=%.1fx%.1f",
+               widgets.IsLoaded() ? 1 : 0, widgets.ActualWidth(),
+               widgets.ActualHeight(), widgets.DesiredSize().Width,
+               widgets.DesiredSize().Height);
+    }
+
+    return widgetsReady;
 }
 
 bool LayoutUpdatedWaitExpired(FrameworkElement content) {
@@ -1035,6 +1069,9 @@ void RegisterLayoutUpdatedHandler(FrameworkElement content) {
                     try {
                         if (!ClockLayoutIsReady(content)) {
                             if (LayoutUpdatedWaitExpired(content)) {
+                                // Record only the terminal wait state to keep
+                                // normal taskbar layout logging quiet.
+                                ClockLayoutIsReady(content, true);
                                 RemoveLayoutUpdatedHandler(content);
                                 Wh_Log(L"Clock layout wait expired; relocation "
                                        L"will retry after the next template "
