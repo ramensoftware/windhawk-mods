@@ -72,6 +72,10 @@ Taskbar Settings → Widgets.
   percent; the average over a second matches (measured 0.06 % over 22 s).
 * Source, tests and full documentation:
   [github.com/cracken7/TaskbarNetworkLounge](https://github.com/cracken7/TaskbarNetworkLounge)
+* Design references: the window creation, z-band placement and acrylic treatment
+  follow the approach used by **Taskbar Music Lounge** and **Taskbar Network Speed
+  Indicator** (`net-speed-taskbar` by NarayanChetri), both read while building this.
+  No code was copied from either.
 
 ---
 
@@ -125,6 +129,10 @@ Taskbar Settings → Widgets.
   واجهة ويندوز عربية.
 * الكود والاختبارات والشرح الكامل:
   [github.com/cracken7/TaskbarNetworkLounge](https://github.com/cracken7/TaskbarNetworkLounge)
+* مراجع التصميم: طريقة إنشاء النافذة ووضعها في نطاق الـz والمظهر الزجاجي تتبع ما
+  يفعله مودَا **Taskbar Music Lounge** و**Taskbar Network Speed Indicator**
+  (`net-speed-taskbar` لـNarayanChetri)، وقد قرأتُهما أثناء بناء هذا المود، ولم
+  يُنسَخ أي كود منهما.
 */
 // ==/WindhawkModReadme==
 
@@ -359,10 +367,13 @@ Taskbar Settings → Widgets.
 // Taskbar Network Lounge - implementation
 //
 // Design notes:
-//  * Architecture mirrors Taskbar Music Lounge: a Windhawk *tool mod* that owns
-//    a native layered popup window docked over Shell_TrayWnd, drawn with GDI+,
-//    acrylic via SetWindowCompositionAttribute, rounded via DWM.
-//  * All media/GSMTC logic is replaced by IP Helper network counters.
+//  * This is a Windhawk *tool mod* that owns a native layered popup window docked
+//    over Shell_TrayWnd, drawn with GDI+, acrylic via
+//    SetWindowCompositionAttribute, rounded via DWM. That window/z-band/acrylic
+//    approach follows what taskbar-music-lounge and net-speed-taskbar do; both
+//    were read as references while building this, no code was taken from either.
+//  * The network measurement, adapter selection, traffic totals and details panel
+//    are specific to this mod.
 //  * winsock2.h MUST be included before iphlpapi.h/netioapi.h, otherwise
 //    mingw-w64 hides MIB_IF_ROW2 / GetIfTable2 (they are only declared when
 //    _WS2IPDEF_ is defined).
