@@ -58,6 +58,7 @@ and make sure that `LogonUI.exe` is in the list.
     * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
 * To see the mod log output during a logoff, run `"C:\Program Files\Windhawk\UI\resources\app\extensions\windhawk\files\DbgViewMini.exe" --pattern "[WH] *" --no-buffering` and open another blocking window (e.g. unsaved mspaint).
     * It survives longer than the Windhawk UI, and it usually stays alive when Cancel is pressed.
+    * Replace the `C:\Program Files\Windhawk` part with your Windhawk installation directory.
 */
 // ==/WindhawkModReadme==
 
