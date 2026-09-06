@@ -55,7 +55,9 @@ and make sure that `LogonUI.exe` is in the list.
 ### Notes for advanced users
 * Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
 * This mod has safety checks before enabling the classic logoff behavior, such as checking if `LogonUI.exe` is added to the global inclusion list properly as stated above, to prevent the logoff sequence from appearing stuck when misconfigured.
-* You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
+    * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
+* To see the mod log output during a logoff, run `"C:\Program Files\Windhawk\UI\resources\app\extensions\windhawk\files\DbgViewMini.exe" --pattern "[WH] *" --no-buffering` and open another blocking window (e.g. unsaved mspaint).
+    * It survives longer than the Windhawk UI, and it usually stays alive when Cancel is pressed.
 */
 // ==/WindhawkModReadme==
 
@@ -2403,7 +2405,12 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
     if (isVista && isRed) {
         HBITMAP hIconBitmap = _logonUIState == LogonUIState_ShuttingDown ? btnIconShutdown : btnIconLogoffRestart;
         BITMAP bmIcon = {};
-        if (hIconBitmap && GetObjectW(hIconBitmap, sizeof(bmIcon), &bmIcon)) {
+        const int buttonWidth = rcButton.right - rcButton.left;
+        const int buttonHeight = rcButton.bottom - rcButton.top;
+        if (hIconBitmap && GetObjectW(hIconBitmap, sizeof(bmIcon), &bmIcon) &&
+            bmIcon.bmWidth > 0 && bmIcon.bmHeight > 0 &&
+            MulDiv(bmIcon.bmWidth, dpi, 96) <= buttonWidth &&
+            MulDiv(bmIcon.bmHeight, dpi, 96) <= buttonHeight) {
             const int srcW = bmIcon.bmWidth;
             const int srcH = bmIcon.bmHeight;
             const int dstW = MulDiv(srcW, dpi, 96);
@@ -2933,7 +2940,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return FALSE;
         }
 
-        if (!hWarningText && !hYesButton && !hNoButton) {
+        if (!hWarningText && !hYesButton && !hNoButton && g_hResDll) {
             // Extra probes using 7-specific strings (Vista includes warning messages in description texts but 7 uses separate strings)
             // Note: Vista bitmaps also exist in 7 winsrv (just unused) so they are not appropriate for probing
             wchar_t probeText[256] = {};
