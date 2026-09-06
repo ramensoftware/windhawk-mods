@@ -2408,31 +2408,30 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
         BITMAP bmIcon = {};
         const int buttonWidth = rcButton.right - rcButton.left;
         const int buttonHeight = rcButton.bottom - rcButton.top;
-        if (hIconBitmap && GetObjectW(hIconBitmap, sizeof(bmIcon), &bmIcon) &&
-            bmIcon.bmWidth > 0 && bmIcon.bmHeight > 0 &&
-            MulDiv(bmIcon.bmWidth, dpi, 96) <= buttonWidth &&
-            MulDiv(bmIcon.bmHeight, dpi, 96) <= buttonHeight) {
+        if (hIconBitmap && GetObjectW(hIconBitmap, sizeof(bmIcon), &bmIcon) && bmIcon.bmWidth > 0 && bmIcon.bmHeight > 0) {
             const int srcW = bmIcon.bmWidth;
             const int srcH = bmIcon.bmHeight;
             const int dstW = MulDiv(srcW, dpi, 96);
             const int dstH = MulDiv(srcH, dpi, 96);
 
-            const int iconMargin = std::max(0, (buttonHeight - dstH) / 2);
+            if (dstW > 0 && dstH > 0 && dstH <= buttonHeight) {
+                const int iconMargin = std::max(0, (buttonHeight - dstH) / 2);
 
-            const int iconX = rcButton.left + iconMargin;
-            const int iconY = rcButton.top + iconMargin;
+                const int iconX = rcButton.left + iconMargin;
+                const int iconY = rcButton.top + iconMargin;
 
-            if (iconMargin + dstW <= buttonWidth) {
-                HDC hdcSrc = CreateCompatibleDC(hdc);
-                HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
+                if (iconMargin + dstW <= buttonWidth) {
+                    HDC hdcSrc = CreateCompatibleDC(hdc);
+                    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, hIconBitmap);
 
-                // Vista didn't apply HALFTONE, etc. for HiDPI on this either
-                AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
+                    // Vista didn't apply HALFTONE, etc. for HiDPI on this either
+                    AlphaBlend(hdc, iconX, iconY, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
 
-                SelectObject(hdcSrc, hOldSrc);
-                DeleteDC(hdcSrc);
+                    SelectObject(hdcSrc, hOldSrc);
+                    DeleteDC(hdcSrc);
 
-                rcButton.left = iconX + dstW;
+                    rcButton.left = iconX + dstW;
+                }
             }
         }
     }
@@ -3797,19 +3796,20 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                             }
                             RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
                         }
-                        if (hDlg && msg.message == WM_KEYDOWN && (msg.hwnd == hDlg || IsChild(hDlg, msg.hwnd))) {
+                        // Windows 7 allowed scrolling with these keys, even when the focus was on buttons
+                        if (hDlg && hScrollBar && msg.message == WM_KEYDOWN && (msg.hwnd == hDlg || IsChild(hDlg, msg.hwnd))) {
                             switch (msg.wParam) {
                             case VK_PRIOR:
-                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEUP, 0);
+                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEUP, (LPARAM)hScrollBar);
                                 continue;
                             case VK_NEXT:
-                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEDOWN, 0);
+                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEDOWN, (LPARAM)hScrollBar);
                                 continue;
                             case VK_HOME:
-                                SendMessageW(hDlg, WM_VSCROLL, SB_TOP, 0);
+                                SendMessageW(hDlg, WM_VSCROLL, SB_TOP, (LPARAM)hScrollBar);
                                 continue;
                             case VK_END:
-                                SendMessageW(hDlg, WM_VSCROLL, SB_BOTTOM, 0);
+                                SendMessageW(hDlg, WM_VSCROLL, SB_BOTTOM, (LPARAM)hScrollBar);
                                 continue;
                             }
                         }
