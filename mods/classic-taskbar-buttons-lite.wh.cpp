@@ -132,7 +132,7 @@ BOOL Wh_ModInit(void)
 {
     HMODULE hExplorer = GetModuleHandleW(NULL);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {L"private: void " SCALCON L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"},
             (void **)&CTaskBtnGroup__DrawBar_orig,
@@ -147,5 +147,5 @@ BOOL Wh_ModInit(void)
         },
     };
 
-    return WindhawkUtils::HookSymbols(hExplorer, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks));
 }
