@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.0.2
+// @version         1.0.3
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -411,8 +411,9 @@ static std::map<DWORD, std::chrono::steady_clock::time_point>
     g_aiLastInferenceTime;
 // Last known working-set size per AI pid; a meaningful change is used as a
 // second "still active" signal alongside CPU usage (see
-// ApplyBackgroundThrottling).
+// UpdateAiProcessActivity).
 static std::map<DWORD, SIZE_T> g_aiLastWorkingSetSize;
+static std::map<DWORD, CpuSample> g_aiCpuSamples;
 
 // Focus / Trim Bookkeeping & Multitasking Tracker
 static std::mutex g_focusMapMutex;
@@ -535,13 +536,29 @@ static bool IsInList(const std::wstring &name,
 
 static bool IsKnownAiProcess(const std::wstring &name) {
   static const std::vector<std::wstring> kAiProcesses = {
-      L"llama-server.exe", L"lm studio.exe",
-      L"ollama.exe",       L"ollama_llama_server.exe",
-      L"koboldcpp.exe",    L"jan.exe",
-      L"cortex.exe",       L"text-generation-webui.exe",
-      L"comfyui.exe",      L"vllm.exe",
-      L"tabby.exe"};
-  return IsInList(name, kAiProcesses);
+      L"llama-server.exe",          L"llama-cli.exe",
+      L"lm studio.exe",             L"lmstudio.exe",
+      L"lms.exe",                   L"ollama.exe",
+      L"ollama_llama_server.exe",   L"ollama runner.exe",
+      L"koboldcpp.exe",             L"jan.exe",
+      L"cortex.exe",                L"nitro.exe",
+      L"text-generation-webui.exe", L"oobabooga.exe",
+      L"comfyui.exe",               L"comfyui-electron.exe",
+      L"fooocus.exe",               L"invokeai.exe",
+      L"anythingllm.exe",           L"anythingllm-desktop.exe",
+      L"msty.exe",                  L"msty-app.exe",
+      L"gpt4all.exe",               L"backyard.exe",
+      L"faraday.exe",               L"local-ai.exe",
+      L"localai.exe",               L"vllm.exe",
+      L"tabby.exe",                 L"aphrodite.exe",
+      L"exllama.exe"};
+  if (IsInList(name, kAiProcesses))
+    return true;
+
+  if (name.starts_with(L"koboldcpp"))
+    return true;
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -934,7 +951,9 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
 // Background CPU/I/O Throttling with Audio & AI Workload Protection
 // ---------------------------------------------------------------------------
 
-static double SampleCpuPercent(DWORD pid, HANDLE hProcess) {
+static double
+SampleCpuPercent(DWORD pid, HANDLE hProcess,
+                 std::map<DWORD, CpuSample> &sampleMap = g_cpuSamples) {
   FILETIME creation, exit, kernel, user;
   if (!GetProcessTimes(hProcess, &creation, &exit, &kernel, &user))
     return -1.0;
@@ -948,8 +967,8 @@ static double SampleCpuPercent(DWORD pid, HANDLE hProcess) {
   auto now = std::chrono::steady_clock::now();
 
   double cpuPercent = -1.0;
-  auto it = g_cpuSamples.find(pid);
-  if (it != g_cpuSamples.end()) {
+  auto it = sampleMap.find(pid);
+  if (it != sampleMap.end()) {
     ULONGLONG delta100ns =
         (totalTime100ns > it->second.kernelPlusUser100ns)
             ? (totalTime100ns - it->second.kernelPlusUser100ns)
@@ -964,7 +983,7 @@ static double SampleCpuPercent(DWORD pid, HANDLE hProcess) {
     }
   }
 
-  g_cpuSamples[pid] = {totalTime100ns, now};
+  sampleMap[pid] = {totalTime100ns, now};
   return cpuPercent;
 }
 
@@ -1140,6 +1159,80 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD> &rawAudioPids,
   return activeAudioPids;
 }
 
+// ---------------------------------------------------------------------------
+// Dedicated AI Activity Tracker (Independent of Window & Throttle State)
+// ---------------------------------------------------------------------------
+
+static void UpdateAiProcessActivity(const ModSettings &settings) {
+  if (!settings.enableSmartAiOptimization)
+    return;
+
+  auto now = std::chrono::steady_clock::now();
+  std::vector<ProcessSnapshotEntry> processList = CaptureProcessSnapshotCached();
+  std::unordered_set<DWORD> alivePids;
+  alivePids.reserve(processList.size());
+  for (const auto &entry : processList) {
+    alivePids.insert(entry.pid);
+  }
+
+  for (const auto &entry : processList) {
+    if (!IsKnownAiProcess(entry.name))
+      continue;
+
+    DWORD pid = entry.pid;
+    if (pid == 0 || pid == 4)
+      continue;
+
+    // Brand new AI process: initialize timestamp so it starts protected
+    if (g_aiLastInferenceTime.find(pid) == g_aiLastInferenceTime.end()) {
+      g_aiLastInferenceTime[pid] = now;
+    }
+
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc)
+      continue;
+
+    double cpuPercent = SampleCpuPercent(pid, hProc, g_aiCpuSamples);
+    if (cpuPercent >= 2.0) {
+      g_aiLastInferenceTime[pid] = now;
+    }
+
+    PROCESS_MEMORY_COUNTERS_EX pmc{};
+    pmc.cb = sizeof(pmc);
+    if (GetProcessMemoryInfo(
+            hProc, reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&pmc),
+            sizeof(pmc))) {
+      auto itWs = g_aiLastWorkingSetSize.find(pid);
+      if (itWs != g_aiLastWorkingSetSize.end()) {
+        SIZE_T delta = (pmc.WorkingSetSize > itWs->second)
+                           ? (pmc.WorkingSetSize - itWs->second)
+                           : (itWs->second - pmc.WorkingSetSize);
+        if (delta > 8ull * 1024 * 1024) {
+          g_aiLastInferenceTime[pid] = now;
+        }
+      }
+      g_aiLastWorkingSetSize[pid] = pmc.WorkingSetSize;
+    }
+    CloseHandle(hProc);
+  }
+
+  // Prune dead AI processes even if background throttling is disabled
+  for (auto it = g_aiLastInferenceTime.begin();
+       it != g_aiLastInferenceTime.end();) {
+    it = (alivePids.count(it->first) == 0) ? g_aiLastInferenceTime.erase(it)
+                                           : std::next(it);
+  }
+  for (auto it = g_aiLastWorkingSetSize.begin();
+       it != g_aiLastWorkingSetSize.end();) {
+    it = (alivePids.count(it->first) == 0) ? g_aiLastWorkingSetSize.erase(it)
+                                           : std::next(it);
+  }
+  for (auto it = g_aiCpuSamples.begin(); it != g_aiCpuSamples.end();) {
+    it = (alivePids.count(it->first) == 0) ? g_aiCpuSamples.erase(it)
+                                           : std::next(it);
+  }
+}
+
 static void ApplyBackgroundThrottling(const ModSettings &settings,
                                       DWORD foregroundPid) {
   if (!settings.enableBackgroundThrottling) {
@@ -1210,9 +1303,7 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
          !wsIt->second.isMinimized);
 
     // Visible Window Protection:
-    // An application with a visible non-minimized window (e.g. 2nd monitor
-    // Twitch stream, video playback, or side-by-side app) must NEVER be
-    // throttled.
+    // An application with a visible non-minimized window must NEVER be throttled.
     if (hasVisibleWindow) {
       RestoreAndEraseThrottledProcess(pid);
       continue;
@@ -1236,32 +1327,6 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
     {
       std::lock_guard<std::mutex> lock(g_priorityMutex);
       isThrottled = (g_throttledProcesses.count(pid) != 0);
-    }
-
-    // Track AI token generation activity. CPU usage alone misses
-    // GPU-offloaded inference (CUDA/Vulkan), where the host process can
-    // stay near 0% CPU while still actively serving requests - so a
-    // working-set change (KV cache growth, etc.) also counts as activity.
-    if (isAi) {
-      if (cpuPercent >= 2.0) {
-        g_aiLastInferenceTime[pid] = now;
-      }
-      PROCESS_MEMORY_COUNTERS_EX pmc{};
-      pmc.cb = sizeof(pmc);
-      if (GetProcessMemoryInfo(
-              hProc, reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&pmc),
-              sizeof(pmc))) {
-        auto itWs = g_aiLastWorkingSetSize.find(pid);
-        if (itWs != g_aiLastWorkingSetSize.end()) {
-          SIZE_T delta = (pmc.WorkingSetSize > itWs->second)
-                             ? (pmc.WorkingSetSize - itWs->second)
-                             : (itWs->second - pmc.WorkingSetSize);
-          if (delta > 8ull * 1024 * 1024) {
-            g_aiLastInferenceTime[pid] = now;
-          }
-        }
-        g_aiLastWorkingSetSize[pid] = pmc.WorkingSetSize;
-      }
     }
 
     // AI Engine Sanctuary: Never throttle local AI during token generation.
@@ -1510,6 +1575,13 @@ TryTrimProcess(DWORD pid, const ModSettings &settings,
   if (!hProc)
     return result;
 
+  // Packaged (UWP/MSIX) apps are managed by Windows' Process Lifetime Manager;
+  // leave them alone rather than fighting the OS and causing Start/Search latency.
+  if (IsPackagedApp(hProc)) {
+    CloseHandle(hProc);
+    return result;
+  }
+
   PROCESS_MEMORY_COUNTERS_EX pmc;
   ZeroMemory(&pmc, sizeof(pmc));
   pmc.cb = sizeof(pmc);
@@ -1589,7 +1661,6 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
   }
 
   // Expand audio shielding to the whole process tree & executable family
-  // (Zen, Chrome, Spotify, Firefox, etc.)
   std::unordered_set<DWORD> activeAudioPids =
       ExpandAudioProcessShield(rawAudioPids, processList, childrenOf, parentOf);
 
@@ -1644,20 +1715,22 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
         settings.enableSmartAiOptimization && IsKnownAiProcess(procName);
     if (isAi) {
       auto itAi = g_aiLastInferenceTime.find(pid);
-      if (itAi != g_aiLastInferenceTime.end()) {
-        auto inactiveAiSec =
-            std::chrono::duration_cast<std::chrono::seconds>(now - itAi->second)
-                .count();
-        if (inactiveAiSec <
-            static_cast<int64_t>(settings.aiInactivityGraceMinutes) * 60) {
-          // AI model generated tokens recently: keep memory 100% warm.
-          continue;
-        }
+      if (itAi == g_aiLastInferenceTime.end()) {
+        // AI process with no activity record: protect it
+        continue;
+      }
+      auto inactiveAiSec =
+          std::chrono::duration_cast<std::chrono::seconds>(now - itAi->second)
+              .count();
+      if (inactiveAiSec <
+          static_cast<int64_t>(settings.aiInactivityGraceMinutes) * 60) {
+        // AI model generated tokens recently: keep memory 100% warm.
+        continue;
       }
     }
 
     bool isTargetListed = IsInList(procName, settings.customTargetList);
-    if (settings.targetProcessesOnly && !isTargetListed && !isAi)
+    if (settings.targetProcessesOnly && !isTargetListed)
       continue;
 
     auto wsIt = windowStates.find(pid);
@@ -1673,12 +1746,12 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
 
     bool isMinimized = isWindowMinimized;
 
-    if (isMultiTasking && hasVisibleWindow && !isMinimized && !isAi) {
+    if (isMultiTasking && hasVisibleWindow && !isMinimized) {
       continue;
     }
 
     bool graceEligible = true;
-    if (!isMinimized && settings.enableProcessAging && !isAi) {
+    if (!isMinimized && settings.enableProcessAging) {
       std::lock_guard<std::mutex> lock(g_focusMapMutex);
       auto itFocus = g_processLastFocusedTime.find(pid);
       if (itFocus != g_processLastFocusedTime.end()) {
@@ -1711,7 +1784,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
       }
     }
 
-    if (!graceEligible && !capEligible && !isAi) {
+    if (!graceEligible && !capEligible) {
       stats.processesSkippedRecent++;
       continue;
     }
@@ -1740,6 +1813,22 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
         const std::wstring &childName = childIt->second->name;
         if (IsInList(childName, settings.excludedProcesses))
           continue;
+
+        // Smart AI Engine Sanctuary for child processes
+        if (settings.enableSmartAiOptimization && IsKnownAiProcess(childName)) {
+          auto itAi = g_aiLastInferenceTime.find(childPid);
+          if (itAi == g_aiLastInferenceTime.end()) {
+            continue;
+          }
+          auto inactiveAiSec =
+              std::chrono::duration_cast<std::chrono::seconds>(now - itAi->second)
+                  .count();
+          if (inactiveAiSec <
+              static_cast<int64_t>(settings.aiInactivityGraceMinutes) * 60) {
+            continue;
+          }
+        }
+
         handledPids.insert(childPid);
         tryTrimAndRecord(childPid, childName);
       }
@@ -1981,6 +2070,7 @@ static void MemoryOptimizerWorker() {
       }
     }
 
+    UpdateAiProcessActivity(settings);
     ApplyBackgroundThrottling(settings, GetForegroundProcessId());
 
     bool onBattery = settings.pauseOnBattery && IsRunningOnBattery();
@@ -2041,7 +2131,8 @@ static void MemoryOptimizerWorker() {
         }
 
         // 3. Smart Idle Trigger: triggers upon entering idle state,
-        // then throttles subsequent sweeps to a relaxed 10-15 minute cadence,
+        // then throttles subsequent sweeps to a relaxed cadence of at least
+        // 10 minutes (or the configured periodic interval if higher),
         // gated on memory pressure to prevent SSD churn when plenty of RAM is
         // free.
         DWORD idleSec = GetSystemIdleSeconds();
@@ -2368,19 +2459,14 @@ void WhTool_ModUninit() {
   Wh_Log(L"[SmartOptimizer] Mod unloaded cleanly.");
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
+// ---------------------------------------------------------------------------
+// Tool Mod Process Bootstrap
+// ---------------------------------------------------------------------------
+// This mod runs as a dedicated tool-mod process rather than injecting into
+// other processes: Wh_ModInit re-launches windhawk.exe with "-tool-mod
+// <mod-id>" and hooks its entry point, and that relaunched process drives the
+// actual WhTool_ModInit / WhTool_ModSettingsChanged / WhTool_ModUninit
+// lifecycle defined above.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
