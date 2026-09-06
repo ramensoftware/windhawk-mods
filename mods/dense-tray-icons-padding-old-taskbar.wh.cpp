@@ -12,10 +12,11 @@
 // ==WindhawkModReadme==
 /*
 
-# Dense tray icons padding for Win10 taskbar
+# Adjustable tray icons padding for Win10 taskbar
 
 This is a port of functionality of 7+ Taskbar Tweaker that allows to adjust the padding of the tray icons
-in legacy (Win10) taskbar (running either under Windows 10 or Windows 11).
+in legacy (Win10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
+use the mod `Taskbar tray icon spacing and grid`.
 
 ![screenshot](https://i.imgur.com/NjGhXuc.png)
 
