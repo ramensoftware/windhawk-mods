@@ -2,12 +2,12 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.2
+// @version         0.9.3
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lpropsys -luuid -lshell32 -ladvapi32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -55,10 +55,9 @@ plate, hybrid (plate for rank 1, title tint for the rest), or a ring.
   thickness / size / fill, optional icon scale
 - **Previews** — on/off, how many windows, style, intensities, separate
   min-focus and decay
-- **Advanced** — verbose debug log
 
-All of those are in the Windhawk settings panel. Turn **Enabled** off to
-clear highlights without unloading the mod.
+All of those are in the Windhawk settings panel. Disable the mod in Windhawk
+to clear highlights.
 
 ## Notes
 
@@ -67,32 +66,31 @@ clear highlights without unloading the mod.
 - Icon matching uses the process path / AppUserModelID from the taskband
   (not the localized button label). If that resolve is unavailable, the icon
   is left unhighlighted rather than guessed from its name.
+- Preview cards prefer the flyout’s thumbnail index. If that is unavailable,
+  a unique window title is used as a last resort. Title cleanup understands
+  English “N running windows” / “pinned” suffixes; on other languages that
+  strip is a no-op, so two cards with the same stem may stay unmatched
+  instead of guessing.
 - Multi-monitor: the same rank is applied on every taskbar that shows that
   app.
+- Verbose bind / preview-resolve lines go to Windhawk’s **Mod logs** (Advanced
+  tab). There is no extra in-mod debug toggle.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-# Windhawk shows settings in this list order (no section headers — $group is
-# not allowed by the settings schema). Names use [General] / [Icons] /
-# [Previews] / [Advanced] prefixes so groups stay obvious in a flat list.
-
-# --- General ---
-- enabled: true
-  $name: "[General] Enabled"
-  $description: Master toggle for all highlighting (icons and previews)
 - highlightCount: 3
-  $name: "[General] Number of highlighted apps"
+  $name: Number of highlighted apps
   $description: How many recent apps to boost on the taskbar (1–6 recommended)
 - minFocusSeconds: 8
-  $name: "[General] Minimum focus time (seconds)"
+  $name: Minimum focus time (seconds)
   $description: >-
     Only count an app as recent if it stays focused at least this long.
     Filters Alt+Tab noise. (Preview windows use a separate timer under Previews.)
     See “When to skip min-focus” for re-focus of apps already in the list.
 - promoteMode: immediateTracked
-  $name: "[General] When to skip min-focus"
+  $name: When to skip min-focus
   $description: >-
     Controls instant promotion when you re-focus an app (confirmed apps still
     become rank 1 once promoted — this only skips the wait timer).
@@ -109,17 +107,17 @@ clear highlights without unloading the mod.
   - immediateTopN: Immediate only if already highlighted (top N)
   - alwaysWait: Always wait min-focus time
 - decayMinutes: 30
-  $name: "[General] Decay time (minutes)"
+  $name: Decay time (minutes)
   $description: >-
     Time after last focus before an app drops out of the taskbar highlight
     list. (Preview windows use a separate decay under Previews.)
 - requireTaskbarButton: true
-  $name: "[General] Only apps on the taskbar"
+  $name: Only apps on the taskbar
   $description: >-
     Ignore tray-only / tool windows that take focus but have no taskbar button
     (e.g. desktop widgets that open a popup then hide to the tray).
 - excludedPrograms: [""]
-  $name: "[General] Exclude list"
+  $name: Exclude list
   $description: >-
     Apps that should never be highlighted (icons or previews). Entries can be
     process names, paths or application IDs, for example:
@@ -129,140 +127,133 @@ clear highlights without unloading the mod.
     C:\Windows\System32\notepad.exe
 
     Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
-
-# --- Taskbar icons ---
-- glowStyle: leftBar
-  $name: "[Icons] Highlight style"
-  $description: >-
-    How ranked apps look on the taskbar. Bars rotate with the taskbar edge
-    (bottom / left / top / right). Side bar = beside the icon (left on a
-    bottom or top taskbar, under the icon on a left or right taskbar). Edge
-    bar = same side as the native running indicator (screen edge). Frame/Full
-    = rounded rectangle. Edge bar paints our own pill and does not restyle
-    the native running indicator permanently.
-  $options:
-  - leftBar: Side bar (left on bottom/top, under icon on left/right)
-  - frame: Frame (hollow rounded rectangle)
-  - full: Full (filled rounded rectangle)
-  - bottomBar: Edge bar (follows the screen edge)
-- glowColor: accent
-  $name: "[Icons] Glow color"
-  $description: Base color for icon highlights (and previews)
-  $options:
-  - accent: System accent color
-  - green: Green
-  - blue: Blue
-  - orange: Orange
-  - white: White
-  - custom: Custom (see custom glow color)
-- customGlowColor: "#00C853"
-  $name: "[Icons] Custom glow color"
-  $description: Used when glow color is Custom (hex, e.g. #00C853)
-- glowIntensityRank1: 100
-  $name: "[Icons] Intensity rank 1"
-  $description: Strength for the most recent app (0–100)
-- glowIntensityRank2: 70
-  $name: "[Icons] Intensity rank 2"
-  $description: Strength for the 2nd most recent app (0–100)
-- glowIntensityRank3: 45
-  $name: "[Icons] Intensity rank 3"
-  $description: Strength for the 3rd most recent app (0–100); also used for ranks 4+
-- glowThickness: 3
-  $name: "[Icons] Thickness (px)"
-  $description: >-
-    Frame/Full border width, or bar thickness (1–16). For side/edge bars this
-    is the bar’s short dimension.
-- glowRoundness: 28
-  $name: "[Icons] Roundness (%)"
-  $description: >-
-    Corner radius for Frame/Full (0 = square, ~25–35 = Win11, 50 ≈ pill).
-    Side bar uses this for pill rounding; edge bar ignores it.
-- glowSize: 92
-  $name: "[Icons] Size (%)"
-  $description: >-
-    Frame/Full: box size vs icon panel (≤100). Side bar: bar length along the
-    icon. Edge bar: pill length % of the icon’s long side (try 70–100).
-- glowLayers: 2
-  $name: "[Icons] Layers"
-  $description: >-
-    Frame/Full: nested frames (1–3). Side bar: soft outer glow layers. Edge
-    bar: ignored.
-- glowFillOpacity: 40
-  $name: "[Icons] Fill opacity"
-  $description: >-
-    0–100. Plate fill for Full; solid bar opacity for Side/Edge. Frame uses
-    stroke only. (Thumbnail tints use [Previews] Tint opacity.)
-- sizeBoostRank1: 10
-  $name: "[Icons] Size boost rank 1 (%)"
-  $description: Subtle icon scale for rank 1 (0 = disabled)
-- sizeBoostRank2: 6
-  $name: "[Icons] Size boost rank 2 (%)"
-  $description: Subtle icon scale for rank 2 (0 = disabled)
-- sizeBoostRank3: 3
-  $name: "[Icons] Size boost rank 3 (%)"
-  $description: Subtle icon scale for rank 3 (0 = disabled)
-
-# --- Thumbnail previews ---
-- previewHighlightEnabled: true
-  $name: "[Previews] Highlight recent windows"
-  $description: >-
-    When hovering a multi-window taskbar icon, rank that flyout’s thumbnails
-    by window recency and mark the top N. Single-window flyouts are never
-    highlighted.
-- previewHighlightCount: 3
-  $name: "[Previews] Number of highlighted windows"
-  $description: >-
-    How many recent windows to mark in a multi-window flyout (1–6 recommended).
-    Ranking is local to that flyout: the last focused window of this app is
-    rank 1 even if other apps were used more recently. Set to 1 to mark only
-    the latest window.
-- previewStyle: titleBar
-  $name: "[Previews] Highlight style"
-  $description: >-
-    How to mark ranked windows. Title bar = thin line under the title.
-    Title background = soft wash behind the title. Plate = tint the whole card.
-    Hybrid = whole plate for rank 1, title wash for ranks 2+.
-    Ring = hollow border around the card.
-  $options:
-  - titleBar: Bar under window title
-  - titleBg: Title background tint
-  - plate: Whole preview plate
-  - plateTitle: Hybrid (plate rank 1, title tint 2+)
-  - ring: Ring / frame
-- previewIntensityRank1: 100
-  $name: "[Previews] Intensity rank 1"
-  $description: Strength for the most recent window in the flyout (0–100)
-- previewIntensityRank2: 70
-  $name: "[Previews] Intensity rank 2"
-  $description: Strength for the 2nd most recent window in the flyout (0–100)
-- previewIntensityRank3: 45
-  $name: "[Previews] Intensity rank 3"
-  $description: >-
-    Strength for the 3rd most recent window in the flyout (0–100); also used
-    for ranks 4+
-- previewFillOpacity: 40
-  $name: "[Previews] Tint opacity"
-  $description: >-
-    0–100. Strength of title-background wash and whole-preview plate. Title bar
-    line uses full accent and ignores this. Independent of [Icons] Fill opacity.
-    Per-rank intensity still scales the result.
-- previewMinFocusSeconds: 1
-  $name: "[Previews] Minimum focus (seconds)"
-  $description: >-
-    How long a window must stay focused before it enters that flyout’s
-    recency list. Separate from app ranking min focus (0 = immediate).
-- previewDecayMinutes: 15
-  $name: "[Previews] Decay (minutes)"
-  $description: >-
-    Drop a window from preview recency after this idle time (0 = never).
-    Separate from app ranking decay.
-
-# --- Advanced ---
-- glowDebugLog: false
-  $name: "[Advanced] Debug log (verbose)"
-  $description: >-
-    Logs glow metrics, path binds, and preview resolve details. Leave off for
-    normal use; turn on when diagnosing matches.
+- icons:
+    - glowStyle: leftBar
+      $name: Highlight style
+      $description: >-
+        How ranked apps look on the taskbar. Bars rotate with the taskbar edge
+        (bottom / left / top / right). Side bar = beside the icon (left on a
+        bottom or top taskbar, under the icon on a left or right taskbar). Edge
+        bar = same side as the native running indicator (screen edge). Frame/Full
+        = rounded rectangle. Edge bar paints our own pill and does not restyle
+        the native running indicator permanently.
+      $options:
+      - leftBar: Side bar (left on bottom/top, under icon on left/right)
+      - frame: Frame (hollow rounded rectangle)
+      - full: Full (filled rounded rectangle)
+      - bottomBar: Edge bar (follows the screen edge)
+    - glowColor: accent
+      $name: Glow color
+      $description: Base color for icon highlights (and previews)
+      $options:
+      - accent: System accent color
+      - green: Green
+      - blue: Blue
+      - orange: Orange
+      - white: White
+      - custom: Custom (see custom glow color)
+    - customGlowColor: "#00C853"
+      $name: Custom glow color
+      $description: Used when glow color is Custom (hex, e.g. #00C853)
+    - glowIntensityRank1: 100
+      $name: Intensity rank 1
+      $description: Strength for the most recent app (0–100)
+    - glowIntensityRank2: 70
+      $name: Intensity rank 2
+      $description: Strength for the 2nd most recent app (0–100)
+    - glowIntensityRank3: 45
+      $name: Intensity rank 3
+      $description: Strength for the 3rd most recent app (0–100); also used for ranks 4+
+    - glowThickness: 3
+      $name: Thickness (px)
+      $description: >-
+        Frame/Full border width, or bar thickness (1–16). For side/edge bars this
+        is the bar’s short dimension.
+    - glowRoundness: 28
+      $name: Roundness (%)
+      $description: >-
+        Corner radius for Frame/Full (0 = square, ~25–35 = Win11, 50 ≈ pill).
+        Side bar uses this for pill rounding; edge bar ignores it.
+    - glowSize: 92
+      $name: Size (%)
+      $description: >-
+        Frame/Full: box size vs icon panel (≤100). Side bar: bar length along the
+        icon. Edge bar: pill length % of the icon’s long side (try 70–100).
+    - glowLayers: 2
+      $name: Layers
+      $description: >-
+        Frame/Full: nested frames (1–3). Side bar: soft outer glow layers. Edge
+        bar: ignored.
+    - glowFillOpacity: 40
+      $name: Fill opacity
+      $description: >-
+        0–100. Plate fill for Full; solid bar opacity for Side/Edge. Frame uses
+        stroke only. (Thumbnail tints use Previews → Tint opacity.)
+    - sizeBoostRank1: 10
+      $name: Size boost rank 1 (%)
+      $description: Subtle icon scale for rank 1 (0 = disabled)
+    - sizeBoostRank2: 6
+      $name: Size boost rank 2 (%)
+      $description: Subtle icon scale for rank 2 (0 = disabled)
+    - sizeBoostRank3: 3
+      $name: Size boost rank 3 (%)
+      $description: Subtle icon scale for rank 3 (0 = disabled)
+  $name: Taskbar icons
+- previews:
+    - highlightEnabled: true
+      $name: Highlight recent windows
+      $description: >-
+        When hovering a multi-window taskbar icon, rank that flyout’s thumbnails
+        by window recency and mark the top N. Single-window flyouts are never
+        highlighted.
+    - highlightCount: 3
+      $name: Number of highlighted windows
+      $description: >-
+        How many recent windows to mark in a multi-window flyout (1–6 recommended).
+        Ranking is local to that flyout: the last focused window of this app is
+        rank 1 even if other apps were used more recently. Set to 1 to mark only
+        the latest window.
+    - style: titleBar
+      $name: Highlight style
+      $description: >-
+        How to mark ranked windows. Title bar = thin line under the title.
+        Title background = soft wash behind the title. Plate = tint the whole card.
+        Hybrid = whole plate for rank 1, title wash for ranks 2+.
+        Ring = hollow border around the card.
+      $options:
+      - titleBar: Bar under window title
+      - titleBg: Title background tint
+      - plate: Whole preview plate
+      - plateTitle: Hybrid (plate rank 1, title tint 2+)
+      - ring: Ring / frame
+    - intensityRank1: 100
+      $name: Intensity rank 1
+      $description: Strength for the most recent window in the flyout (0–100)
+    - intensityRank2: 70
+      $name: Intensity rank 2
+      $description: Strength for the 2nd most recent window in the flyout (0–100)
+    - intensityRank3: 45
+      $name: Intensity rank 3
+      $description: >-
+        Strength for the 3rd most recent window in the flyout (0–100); also used
+        for ranks 4+
+    - fillOpacity: 40
+      $name: Tint opacity
+      $description: >-
+        0–100. Strength of title-background wash and whole-preview plate. Title bar
+        line uses full accent and ignores this. Independent of Icons → Fill opacity.
+        Per-rank intensity still scales the result.
+    - minFocusSeconds: 1
+      $name: Minimum focus (seconds)
+      $description: >-
+        How long a window must stay focused before it enters that flyout’s
+        recency list. Separate from app ranking min focus (0 = immediate).
+    - decayMinutes: 15
+      $name: Decay (minutes)
+      $description: >-
+        Drop a window from preview recency after this idle time (0 = never).
+        Separate from app ranking decay.
+  $name: Thumbnail previews
 */
 // ==/WindhawkModSettings==
 
@@ -271,7 +262,6 @@ clear highlights without unloading the mod.
 #include <commctrl.h>
 #include <initguid.h>
 #include <propkey.h>
-#include <propsys.h>
 #include <objbase.h>
 #include <shellapi.h>
 #include <shobjidl.h>
@@ -289,7 +279,6 @@ clear highlights without unloading the mod.
 // WinUI 2 ItemsRepeater (thumbnail flyout). Same as taskbar-thumbnail-reorder.
 #define WH_WINRT_WINUI2
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
@@ -297,6 +286,7 @@ clear highlights without unloading the mod.
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -385,7 +375,6 @@ enum class PreviewStyle {
 };
 
 struct Settings {
-    bool enabled = true;
     int highlightCount = 3;
     int minFocusSeconds = 8;
     PromoteMode promoteMode = PromoteMode::ImmediateTracked;
@@ -400,7 +389,6 @@ struct Settings {
     int glowLayers = 2;         // 1–3
     int glowFillOpacity = 40;   // % for Full / left / bottom icon styles
     int previewFillOpacity = 40;  // % for thumbnail plate / titleBg only
-    bool glowDebugLog = false;
     int decayMinutes = 30;
     bool requireTaskbarButton = true;  // skip tray-only focus targets
     bool previewHighlightEnabled = true;
@@ -410,8 +398,11 @@ struct Settings {
     int previewDecayMinutes = 15;
     PreviewStyle previewStyle = PreviewStyle::TitleBar;
     std::unordered_set<std::wstring> excludedPrograms;
-    // Resolved once in LoadSettings (Accent mode). Not queried on every paint.
+    // Resolved on the focus-thread STA (and on DWM/SETTINGCHANGE). Not
+    // queried on every paint.
     winrt::Windows::UI::Color cachedAccent{255, 0, 120, 215};
+    // Bumped in PublishSettings so UVS can skip a no-op repaint.
+    uint32_t generation = 0;
 };
 
 // Published as a whole. LoadSettings builds a local Settings, then stores it
@@ -428,6 +419,8 @@ std::shared_ptr<const Settings> SettingsSnap() {
 }
 
 void PublishSettings(Settings s) {
+    static std::atomic<uint32_t> seq{0};
+    s.generation = seq.fetch_add(1, std::memory_order_relaxed) + 1;
     auto next = std::make_shared<const Settings>(std::move(s));
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settingsPtr = std::move(next);
@@ -535,12 +528,13 @@ struct ButtonPathCacheEntry {
     ULONGLONG lastRunningTick = 0;  // IsRunning grace (Alt-Tab flicker)
     // Last ApplyAllHighlights assignment: -1 unknown, 0 none, >0 1-based rank.
     int lastPaintRank = -1;
+    uint32_t lastPaintSettingsGen = 0;
     // ScaleTransform we applied for size boost. Clear only this instance so
     // other mods (taskbar-dock-animation) keep their hover scale.
     winrt::weak_ref<Media::ScaleTransform> ourIconScale;
 };
 std::mutex g_buttonPathMutex;
-std::vector<ButtonPathCacheEntry> g_buttonPathCache;
+std::unordered_map<void*, ButtonPathCacheEntry> g_buttonPathCache;
 std::atomic<bool> g_taskbandResolveReady{false};
 
 // XAML TaskItemThumbnail (model) → native task item (optional hooks).
@@ -552,7 +546,6 @@ struct ThumbnailTaskItemMapping {
 };
 std::mutex g_thumbnailMapMutex;
 std::vector<ThumbnailTaskItemMapping> g_thumbnailTaskItemMapping;
-std::atomic<bool> g_previewHooksReady{false};
 
 // Live thumbnail views for unload / re-apply while flyout is open.
 std::mutex g_thumbViewsMutex;
@@ -590,10 +583,23 @@ bool OnHookThread() {
     return id != 0 && GetCurrentThreadId() == id;
 }
 
-// UI-thread tracking of task list buttons (weak refs).
+// Canonical COM identity for hash maps. The weak_ref in the value is the
+// liveness token; recycled pointers are dropped when the weak_ref dies.
+void* InspectableIdentity(winrt::Windows::Foundation::IInspectable const& obj) {
+    if (!obj) {
+        return nullptr;
+    }
+    try {
+        auto unk = obj.as<::IUnknown>();
+        return winrt::get_abi(unk);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// UI-thread tracking of task list buttons (weak refs, keyed by IUnknown*).
 std::mutex g_buttonsMutex;
-std::vector<winrt::weak_ref<FrameworkElement>> g_trackedButtons;
-winrt::weak_ref<FrameworkElement> g_dispatcherAnchor;
+std::unordered_map<void*, winrt::weak_ref<FrameworkElement>> g_trackedButtons;
 
 // Agile CoreDispatcher list — captured on the UI thread when we first see a
 // button/thumb/panel. CollectUiDispatchers must not weak.get() XAML objects
@@ -604,26 +610,28 @@ std::mutex g_dispatchersMutex;
     std::vector<winrt::Windows::UI::Core::CoreDispatcher>>
     g_uiDispatchers{std::in_place};
 
-void RememberUiDispatcher(FrameworkElement el) {
+bool RememberUiDispatcher(FrameworkElement el) {
     if (!el || g_unloading.load()) {
-        return;
+        return false;
     }
     try {
         auto dispatcher = el.Dispatcher();
         if (!dispatcher) {
-            return;
+            return false;
         }
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
         if (!g_uiDispatchers) {
-            return;
+            return false;
         }
         for (const auto& existing : *g_uiDispatchers) {
             if (existing == dispatcher) {
-                return;
+                return true;
             }
         }
         g_uiDispatchers->push_back(dispatcher);
+        return true;
     } catch (...) {
+        return false;
     }
 }
 
@@ -631,6 +639,7 @@ constexpr UINT WM_APP_FOREGROUND_CHANGED = WM_APP + 1;
 constexpr UINT WM_APP_DESKTOP_SWITCHED = WM_APP + 2;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 3;
 constexpr UINT WM_APP_REQUEST_APPLY_DEBOUNCED = WM_APP + 4;
+constexpr UINT WM_APP_REFRESH_ACCENT = WM_APP + 5;
 
 // Identity scores. Only exact identity may bind the same rank to many buttons
 // (secondary taskbar / Never Combine). Score 900 is same filename, different
@@ -657,8 +666,6 @@ constexpr PCWSTR kGlowLayerNames[] = {
 };
 constexpr int kGlowMaxLayers = 3;
 constexpr PCWSTR kBackgroundElementName = L"BackgroundElement";
-// Present while edge-bar (bottomBar) style is applied — we hid RunningIndicator.
-constexpr PCWSTR kBottomBarMarkerName = L"WhRecentFocusBottomBar";
 // Thumbnail preview glow (own named overlays on TaskItemThumbnailView).
 constexpr PCWSTR kThumbGlowElementName = L"WhRecentFocusThumbGlow";
 constexpr PCWSTR kThumbGlowLayerNames[] = {
@@ -694,7 +701,7 @@ struct IconPanelLayoutWatch {
     bool haveEdge = false;
 };
 std::mutex g_layoutWatchMutex;
-std::vector<IconPanelLayoutWatch> g_layoutWatches;
+std::unordered_map<void*, IconPanelLayoutWatch> g_layoutWatches;
 thread_local int g_iconPanelRelayoutDepth = 0;
 thread_local ULONGLONG g_lastFullRefreshTick = 0;
 
@@ -824,7 +831,7 @@ DesktopRecencyState& CurrentDeskLocked() {
 
 void ClearButtonRunningGrace() {
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
+    for (auto& [id, e] : g_buttonPathCache) {
         e.lastRunningTick = 0;
     }
 }
@@ -1413,7 +1420,7 @@ bool PathAppearsOnTaskbar(const std::wstring& keyOrPath,
     }
 
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (const auto& e : g_buttonPathCache) {
+    for (const auto& [id, e] : g_buttonPathCache) {
         if (!wantAppId.empty()) {
             std::wstring id = e.appIdUpper.empty() ? e.autoIdUpper : e.appIdUpper;
             if (CanonicalAppId(id) == wantAppId) {
@@ -1440,7 +1447,7 @@ void RecomputeRanksForDesktopLocked(DesktopRecencyState& desk) {
     desk.rankedApps.clear();
 
     auto settings = SettingsSnap();
-    if (!settings->enabled || g_unloading.load()) {
+    if (g_unloading.load()) {
         return;
     }
 
@@ -1504,7 +1511,7 @@ void StampWindowRecencyLocked(DesktopRecencyState& desk,
                               ULONGLONG now);
 
 void ConfirmPreviewFocusNow(HWND hwnd) {
-    if (!hwnd || g_unloading.load() || !SettingsSnap()->enabled ||
+    if (!hwnd || g_unloading.load() ||
         !SettingsSnap()->previewHighlightEnabled) {
         return;
     }
@@ -1712,6 +1719,20 @@ winrt::Windows::UI::Color QuerySystemAccentColor() {
     }
 }
 
+void RefreshCachedAccent() {
+    winrt::Windows::UI::Color accent = QuerySystemAccentColor();
+    auto cur = SettingsSnap();
+    if (cur->cachedAccent.A == accent.A && cur->cachedAccent.R == accent.R &&
+        cur->cachedAccent.G == accent.G && cur->cachedAccent.B == accent.B) {
+        return;
+    }
+    Settings next = *cur;
+    next.cachedAccent = accent;
+    PublishSettings(std::move(next));
+    Wh_Log(L"System accent updated: #%02X%02X%02X", accent.R, accent.G,
+           accent.B);
+}
+
 winrt::Windows::UI::Color ResolveGlowBaseColor(const Settings& settings) {
     winrt::Windows::UI::Color c{255, 0, 200, 83};  // default green-ish
 
@@ -1740,21 +1761,6 @@ winrt::Windows::UI::Color ResolveGlowBaseColor(const Settings& settings) {
     return c;
 }
 
-int RankIntensity(int rankZeroBased) {
-    int idx = rankZeroBased < 3 ? rankZeroBased : 2;
-    return SettingsSnap()->glowIntensity[idx];
-}
-
-int PreviewRankIntensity(int rankZeroBased) {
-    int idx = rankZeroBased < 3 ? rankZeroBased : 2;
-    return SettingsSnap()->previewIntensity[idx];
-}
-
-int RankSizeBoost(int rankZeroBased) {
-    int idx = rankZeroBased < 3 ? rankZeroBased : 2;
-    return SettingsSnap()->sizeBoostPercent[idx];
-}
-
 // Defined with option-C resolve stack (button → process path).
 std::wstring EnsureButtonPathCached(FrameworkElement button, bool force);
 struct ButtonIdentity {
@@ -1767,8 +1773,16 @@ struct ButtonIdentity {
     std::vector<HWND> groupHwnds;
 };
 ButtonIdentity GetCachedButtonIdentity(FrameworkElement button);
+struct PaintCacheState {
+    int rank = -1;
+    uint32_t settingsGen = 0;
+};
+PaintCacheState GetCachedPaintState(FrameworkElement button);
+void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen);
+TaskbarEdge CachedTaskbarEdge(FrameworkElement iconPanel);
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale);
 void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button);
+void RefreshCachedAccent();
 bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler);
 void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb);
 
@@ -1798,22 +1812,19 @@ bool TaskListButton_IsRunning(FrameworkElement taskListButtonElement) {
 bool ButtonCountsAsRunning(FrameworkElement button) {
     const bool running = TaskListButton_IsRunning(button);
     const ULONGLONG now = GetTickCount64();
+    void* id = InspectableIdentity(button);
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
-        try {
-            if (e.button.get() != button) {
-                continue;
-            }
-            if (running) {
-                e.lastRunningTick = now;
-                return true;
-            }
-            return e.lastRunningTick != 0 &&
-                   now - e.lastRunningTick < kIsRunningGraceMs;
-        } catch (...) {
-        }
+    auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
+    if (it == g_buttonPathCache.end()) {
+        return running;
     }
-    return running;
+    auto& e = it->second;
+    if (running) {
+        e.lastRunningTick = now;
+        return true;
+    }
+    return e.lastRunningTick != 0 &&
+           now - e.lastRunningTick < kIsRunningGraceMs;
 }
 
 std::wstring GetButtonAutomationName(FrameworkElement button) {
@@ -2499,13 +2510,10 @@ bool ButtonHasOurChrome(FrameworkElement button) {
     }
     auto iconPanel = GetIconPanel(button);
     if (!iconPanel) {
-        return FindDescendantByName(button, kGlowElementName) != nullptr ||
-               FindDescendantByName(button, kBottomBarMarkerName) != nullptr;
+        return FindDescendantByName(button, kGlowElementName) != nullptr;
     }
     return FindChildByName(iconPanel, kGlowElementName) != nullptr ||
-           FindDescendantByName(iconPanel, kGlowElementName) != nullptr ||
-           FindChildByName(iconPanel, kBottomBarMarkerName) != nullptr ||
-           FindDescendantByName(iconPanel, kBottomBarMarkerName) != nullptr;
+           FindDescendantByName(iconPanel, kGlowElementName) != nullptr;
 }
 
 void ClearButtonHighlight(FrameworkElement button) {
@@ -2515,12 +2523,11 @@ void ClearButtonHighlight(FrameworkElement button) {
 
     auto iconPanelEarly = GetIconPanel(button);
 
-    // Skip no-op clears on every mouse-over (UpdateVisualStates storms).
-    // Still heal z-order: after a timed-out glow, our host is gone but
-    // BackgroundElement can remain in front of RunningIndicator (Discord
-    // ping + decay left a red plate and no underscore).
+    // Skip no-op clears on every mouse-over. Do not reorder native children
+    // on buttons we never painted — that fights Taskbar Styler / badges and
+    // is not undone on unload. Z-order heal runs only after we remove our host.
     if (!ButtonHasOurChrome(button) && !g_pendingOverlaySweep.load()) {
-        RestoreIconPanelNativeZOrder(iconPanelEarly);
+        SetCachedPaintState(button, 0, SettingsSnap()->generation);
         return;
     }
 
@@ -2530,8 +2537,8 @@ void ClearButtonHighlight(FrameworkElement button) {
             // Still try to strip our named overlay from the button root.
             if (auto panel = button.try_as<Controls::Panel>()) {
                 RemoveNamedChild(panel, kGlowElementName);
-                RemoveNamedChild(panel, kBottomBarMarkerName);
             }
+            SetCachedPaintState(button, 0, SettingsSnap()->generation);
             return;
         }
 
@@ -2562,7 +2569,6 @@ void ClearButtonHighlight(FrameworkElement button) {
                     }
                 }
             }
-            RemoveNamedChild(panel, kBottomBarMarkerName);
         }
 
         if (RunningIndicatorHasLocalCollapsed(iconPanel)) {
@@ -2576,6 +2582,7 @@ void ClearButtonHighlight(FrameworkElement button) {
         }
 
         RestoreIconPanelNativeZOrder(iconPanel);
+        SetCachedPaintState(button, 0, SettingsSnap()->generation);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"ClearButtonHighlight error %08X", hr);
@@ -3053,7 +3060,7 @@ void RevokeIconPanelLayoutWatchesOnThisDispatcher() {
         for (auto it = g_layoutWatches.begin(); it != g_layoutWatches.end();) {
             bool take = false;
             try {
-                auto panel = it->panel.get();
+                auto panel = it->second.panel.get();
                 if (!panel) {
                     take = true;
                 } else {
@@ -3064,7 +3071,7 @@ void RevokeIconPanelLayoutWatchesOnThisDispatcher() {
                 take = true;
             }
             if (take) {
-                mine.push_back(std::move(*it));
+                mine.push_back(std::move(it->second));
                 it = g_layoutWatches.erase(it);
             } else {
                 ++it;
@@ -3085,6 +3092,27 @@ void RevokeIconPanelLayoutWatchesOnThisDispatcher() {
     }
 }
 
+TaskbarEdge CachedTaskbarEdge(FrameworkElement iconPanel) {
+    void* id = InspectableIdentity(iconPanel);
+    {
+        std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
+        auto it = id ? g_layoutWatches.find(id) : g_layoutWatches.end();
+        if (it != g_layoutWatches.end() && it->second.haveEdge) {
+            return it->second.lastEdge;
+        }
+    }
+    const TaskbarEdge edge = DetectTaskbarEdge(iconPanel);
+    if (id) {
+        std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
+        auto it = g_layoutWatches.find(id);
+        if (it != g_layoutWatches.end()) {
+            it->second.lastEdge = edge;
+            it->second.haveEdge = true;
+        }
+    }
+    return edge;
+}
+
 void EnsureIconPanelLayoutWatch(FrameworkElement button) {
     if (!button || g_unloading.load()) {
         return;
@@ -3093,13 +3121,20 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
     if (!iconPanel) {
         return;
     }
-    RememberUiDispatcher(iconPanel);
+    if (!RememberUiDispatcher(iconPanel)) {
+        return;
+    }
 
+    void* id = InspectableIdentity(iconPanel);
+    if (!id) {
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
-        for (auto& w : g_layoutWatches) {
+        auto it = g_layoutWatches.find(id);
+        if (it != g_layoutWatches.end()) {
             try {
-                if (w.panel.get() == iconPanel) {
+                if (it->second.panel.get() == iconPanel) {
                     return;
                 }
             } catch (...) {
@@ -3152,6 +3187,15 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
                     Wh_Log(L"IconPanel relayout: %.0fx%.0f -> %.0fx%.0f", ow,
                            oh, nw, nh);
                 }
+                const TaskbarEdge edgeNow = DetectTaskbarEdge(panel);
+                if (void* pid = InspectableIdentity(panel)) {
+                    std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
+                    auto it = g_layoutWatches.find(pid);
+                    if (it != g_layoutWatches.end()) {
+                        it->second.lastEdge = edgeNow;
+                        it->second.haveEdge = true;
+                    }
+                }
                 ++g_iconPanelRelayoutDepth;
                 try {
                     HealRunningIndicatorAfterRelayout(panel);
@@ -3168,17 +3212,19 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
     }
 
     std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
-    g_layoutWatches.erase(
-        std::remove_if(g_layoutWatches.begin(), g_layoutWatches.end(),
-                       [](IconPanelLayoutWatch& w) {
-                           try {
-                               return !w.panel.get();
-                           } catch (...) {
-                               return true;
-                           }
-                       }),
-        g_layoutWatches.end());
-    g_layoutWatches.push_back(std::move(watch));
+    for (auto it = g_layoutWatches.begin(); it != g_layoutWatches.end();) {
+        try {
+            if (!it->second.panel.get()) {
+                it = g_layoutWatches.erase(it);
+                continue;
+            }
+        } catch (...) {
+            it = g_layoutWatches.erase(it);
+            continue;
+        }
+        ++it;
+    }
+    g_layoutWatches[id] = std::move(watch);
 }
 
 void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
@@ -3187,9 +3233,18 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
     }
 
     auto settings = SettingsSnap();
-    if (rankOneBased <= 0 || g_unloading.load() || !settings->enabled) {
+    if (rankOneBased <= 0 || g_unloading.load()) {
         ClearButtonHighlight(button);
         return;
+    }
+
+    {
+        auto painted = GetCachedPaintState(button);
+        if (painted.rank == rankOneBased &&
+            painted.settingsGen == settings->generation &&
+            ButtonHasOurChrome(button)) {
+            return;
+        }
     }
 
     try {
@@ -3197,6 +3252,7 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         if (!iconPanel) {
             return;
         }
+        EnsureIconPanelLayoutWatch(button);
 
         auto panel = iconPanel.try_as<Controls::Panel>();
         if (!panel) {
@@ -3248,7 +3304,7 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         double boxH = panelH;
         GlowContentBoxSize(host, iconPanel, panelW, panelH, boxW, boxH);
 
-        const TaskbarEdge edge = DetectTaskbarEdge(iconPanel);
+        const TaskbarEdge edge = CachedTaskbarEdge(iconPanel);
         const BarSide barSide = BarSideForGlowStyle(style, edge);
 
         // Heal native stacking first (Discord overlay / leftover attention
@@ -3262,16 +3318,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
 
         HideAllGlowLayers(host);
 
-        // Strip leftover Edge-bar marker from older builds. Do not touch
-        // RunningIndicator unless we actually left Visibility=Collapsed —
-        // ClearValue(Visible) is what killed the short inactive pills.
-        if (style != GlowStyle::BottomBar) {
-            if (FindChildByName(iconPanel, kBottomBarMarkerName)) {
-                if (auto p = iconPanel.try_as<Controls::Panel>()) {
-                    RemoveNamedChild(p, kBottomBarMarkerName);
-                }
-            }
-        }
         if (RunningIndicatorHasLocalCollapsed(iconPanel)) {
             RestoreNativeRunningIndicator(iconPanel, button);
         }
@@ -3340,7 +3386,7 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
             // Edge bar on the native RunningIndicator side. Cover the pill
             // by z-order (host after RI). Never set Visibility/Width/Height
             // on the native indicator.
-            if (settings->glowDebugLog && !FindRunningIndicator(iconPanel)) {
+            if (!FindRunningIndicator(iconPanel)) {
                 Wh_Log(L"EdgeBar: RunningIndicator not found on \"%s\"",
                        GetButtonAutomationName(button).c_str());
             }
@@ -3375,15 +3421,14 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
             }
         }
 
-        if (settings->glowDebugLog) {
-            Wh_Log(L"Glow rank %d \"%s\" style=%s edge=%s bar=%s box=%.0fx%.0f "
-                   L"th=%.0f round=%d%% size=%d%% layers=%d intensity=%d",
-                   rankOneBased, GetButtonAutomationName(button).c_str(),
-                   GlowStyleName(style), TaskbarEdgeName(edge),
-                   BarSideName(barSide), boxW, boxH, thickness,
-                   settings->glowRoundness, settings->glowSize, layers,
-                   intensity);
-        }
+        Wh_Log(L"Glow rank %d \"%s\" style=%s edge=%s bar=%s box=%.0fx%.0f "
+               L"th=%.0f round=%d%% size=%d%% layers=%d intensity=%d",
+               rankOneBased, GetButtonAutomationName(button).c_str(),
+               GlowStyleName(style), TaskbarEdgeName(edge),
+               BarSideName(barSide), boxW, boxH, thickness,
+               settings->glowRoundness, settings->glowSize, layers,
+               intensity);
+        SetCachedPaintState(button, rankOneBased, settings->generation);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"ApplyButtonHighlight error %08X", hr);
@@ -3392,16 +3437,17 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
 
 void PruneTrackedButtons_UIThread() {
     std::lock_guard<std::mutex> lock(g_buttonsMutex);
-    g_trackedButtons.erase(
-        std::remove_if(g_trackedButtons.begin(), g_trackedButtons.end(),
-                       [](winrt::weak_ref<FrameworkElement>& weak) {
-                           try {
-                               return !weak.get();
-                           } catch (...) {
-                               return true;
-                           }
-                       }),
-        g_trackedButtons.end());
+    for (auto it = g_trackedButtons.begin(); it != g_trackedButtons.end();) {
+        try {
+            if (!it->second.get()) {
+                it = g_trackedButtons.erase(it);
+            } else {
+                ++it;
+            }
+        } catch (...) {
+            it = g_trackedButtons.erase(it);
+        }
+    }
 }
 
 void TrackButton_UIThread(FrameworkElement button) {
@@ -3410,26 +3456,11 @@ void TrackButton_UIThread(FrameworkElement button) {
     }
 
     RememberUiDispatcher(button);
-    {
+    if (void* id = InspectableIdentity(button)) {
         std::lock_guard<std::mutex> lock(g_buttonsMutex);
-        g_dispatcherAnchor = winrt::make_weak(button);
-
-        bool tracked = false;
-        for (auto& weak : g_trackedButtons) {
-            try {
-                if (weak.get() == button) {
-                    tracked = true;
-                    break;
-                }
-            } catch (...) {
-            }
-        }
-        if (!tracked) {
-            g_trackedButtons.push_back(winrt::make_weak(button));
-        }
+        g_trackedButtons[id] = winrt::make_weak(button);
     }
     EnsureButtonPathCached(button, /*force=*/false);
-    EnsureIconPanelLayoutWatch(button);
 }
 
 // ---------------------------------------------------------------------------
@@ -3701,22 +3732,13 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
     }
 
     const ULONGLONG now = GetTickCount64();
+    void* id = InspectableIdentity(button);
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-        for (auto& e : g_buttonPathCache) {
-            FrameworkElement b = nullptr;
-            try {
-                b = e.button.get();
-            } catch (...) {
-                continue;
-            }
-            if (b != button) {
-                continue;
-            }
-            if (!force && e.resolveAttempted) {
-                return e.pathUpper;
-            }
-            break;
+        auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
+        if (it != g_buttonPathCache.end() && !force &&
+            it->second.resolveAttempted) {
+            return it->second.pathUpper;
         }
     }
 
@@ -3791,67 +3813,49 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
 
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-        bool found = false;
-        for (auto& e : g_buttonPathCache) {
-            FrameworkElement b = nullptr;
-            try {
-                b = e.button.get();
-            } catch (...) {
-                continue;
+        ButtonPathCacheEntry* e = nullptr;
+        if (id) {
+            auto it = g_buttonPathCache.find(id);
+            if (it == g_buttonPathCache.end()) {
+                ButtonPathCacheEntry created;
+                created.button = winrt::make_weak(button);
+                it = g_buttonPathCache.emplace(id, std::move(created)).first;
             }
-            if (b != button) {
-                continue;
-            }
-            e.pathUpper = pathUpper;
-            e.appIdUpper = appIdUpper;
-            e.classUpper = classUpper;
-            e.autoIdUpper = autoIdUpper;
-            e.pid = pid;
-            e.sampleHwnd = hwnd;
-            e.groupHwnds = groupHwnds;
-            e.resolveAttempted = true;
-            e.lastResolveTick = now;
-            found = true;
-            break;
+            e = &it->second;
         }
-        if (!found) {
-            ButtonPathCacheEntry e;
-            e.button = winrt::make_weak(button);
-            e.pathUpper = pathUpper;
-            e.appIdUpper = appIdUpper;
-            e.classUpper = classUpper;
-            e.autoIdUpper = autoIdUpper;
-            e.pid = pid;
-            e.sampleHwnd = hwnd;
-            e.groupHwnds = std::move(groupHwnds);
-            e.resolveAttempted = true;
-            e.lastResolveTick = now;
-            g_buttonPathCache.push_back(std::move(e));
+        if (e) {
+            e->pathUpper = pathUpper;
+            e->appIdUpper = appIdUpper;
+            e->classUpper = classUpper;
+            e->autoIdUpper = autoIdUpper;
+            e->pid = pid;
+            e->sampleHwnd = hwnd;
+            e->groupHwnds = std::move(groupHwnds);
+            e->resolveAttempted = true;
+            e->lastResolveTick = now;
         }
-        // Prune dead weaks occasionally.
         if (g_buttonPathCache.size() > 128) {
-            g_buttonPathCache.erase(
-                std::remove_if(
-                    g_buttonPathCache.begin(), g_buttonPathCache.end(),
-                    [](ButtonPathCacheEntry& e) {
-                        try {
-                            return !e.button.get();
-                        } catch (...) {
-                            return true;
-                        }
-                    }),
-                g_buttonPathCache.end());
+            for (auto it = g_buttonPathCache.begin();
+                 it != g_buttonPathCache.end();) {
+                try {
+                    if (!it->second.button.get()) {
+                        it = g_buttonPathCache.erase(it);
+                    } else {
+                        ++it;
+                    }
+                } catch (...) {
+                    it = g_buttonPathCache.erase(it);
+                }
+            }
         }
     }
 
-    if (SettingsSnap()->glowDebugLog) {
-        Wh_Log(L"Button path cache: pid=%u path=%s class=%s appId=%s force=%d "
-               L"name=\"%s\"",
-               pid, pathUpper.empty() ? L"(none)" : pathUpper.c_str(),
-               classUpper.empty() ? L"?" : classUpper.c_str(),
-               appIdUpper.empty() ? L"?" : appIdUpper.c_str(), force ? 1 : 0,
-               GetButtonAutomationName(button).c_str());
-    }
+    Wh_Log(L"Button path cache: pid=%u path=%s class=%s appId=%s force=%d "
+           L"name=\"%s\"",
+           pid, pathUpper.empty() ? L"(none)" : pathUpper.c_str(),
+           classUpper.empty() ? L"?" : classUpper.c_str(),
+           appIdUpper.empty() ? L"?" : appIdUpper.c_str(), force ? 1 : 0,
+           GetButtonAutomationName(button).c_str());
     return pathUpper;
 }
 
@@ -3860,82 +3864,83 @@ ButtonIdentity GetCachedButtonIdentity(FrameworkElement button) {
     if (!button) {
         return out;
     }
+    void* id = InspectableIdentity(button);
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
-        try {
-            if (e.button.get() == button) {
-                out.pathUpper = e.pathUpper;
-                out.appIdUpper = e.appIdUpper;
-                out.classUpper = e.classUpper;
-                out.autoIdUpper = e.autoIdUpper;
-                out.pid = e.pid;
-                out.sampleHwnd = e.sampleHwnd;
-                out.groupHwnds = e.groupHwnds;
-                return out;
-            }
-        } catch (...) {
-        }
+    auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
+    if (it == g_buttonPathCache.end()) {
+        return out;
     }
+    const auto& e = it->second;
+    out.pathUpper = e.pathUpper;
+    out.appIdUpper = e.appIdUpper;
+    out.classUpper = e.classUpper;
+    out.autoIdUpper = e.autoIdUpper;
+    out.pid = e.pid;
+    out.sampleHwnd = e.sampleHwnd;
+    out.groupHwnds = e.groupHwnds;
     return out;
 }
 
-int GetCachedPaintRank(FrameworkElement button) {
+PaintCacheState GetCachedPaintState(FrameworkElement button) {
+    PaintCacheState out;
     if (!button) {
-        return -1;
+        return out;
     }
+    void* id = InspectableIdentity(button);
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
-        try {
-            if (e.button.get() == button) {
-                return e.lastPaintRank;
-            }
-        } catch (...) {
-        }
+    auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
+    if (it == g_buttonPathCache.end()) {
+        return out;
     }
-    return -1;
+    out.rank = it->second.lastPaintRank;
+    out.settingsGen = it->second.lastPaintSettingsGen;
+    return out;
 }
 
-void SetCachedPaintRank(FrameworkElement button, int rank) {
+void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen) {
     if (!button) {
         return;
     }
-    std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
-        try {
-            if (e.button.get() == button) {
-                e.lastPaintRank = rank;
-                return;
-            }
-        } catch (...) {
-        }
+    void* id = InspectableIdentity(button);
+    if (!id) {
+        return;
     }
-    ButtonPathCacheEntry stub;
-    stub.button = winrt::make_weak(button);
-    stub.lastPaintRank = rank;
-    g_buttonPathCache.push_back(std::move(stub));
+    std::lock_guard<std::mutex> lock(g_buttonPathMutex);
+    auto it = g_buttonPathCache.find(id);
+    if (it == g_buttonPathCache.end()) {
+        ButtonPathCacheEntry stub;
+        stub.button = winrt::make_weak(button);
+        stub.lastPaintRank = rank;
+        stub.lastPaintSettingsGen = gen;
+        g_buttonPathCache.emplace(id, std::move(stub));
+        return;
+    }
+    it->second.lastPaintRank = rank;
+    it->second.lastPaintSettingsGen = gen;
 }
 
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale) {
     if (!button) {
         return;
     }
+    void* id = InspectableIdentity(button);
+    if (!id) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (auto& e : g_buttonPathCache) {
-        try {
-            if (e.button.get() == button) {
-                e.ourIconScale = scale ? winrt::make_weak(scale)
-                                       : winrt::weak_ref<Media::ScaleTransform>{};
-                return;
-            }
-        } catch (...) {
+    auto it = g_buttonPathCache.find(id);
+    if (it == g_buttonPathCache.end()) {
+        ButtonPathCacheEntry stub;
+        stub.button = winrt::make_weak(button);
+        if (scale) {
+            stub.ourIconScale = winrt::make_weak(scale);
         }
+        g_buttonPathCache.emplace(id, std::move(stub));
+        return;
     }
-    ButtonPathCacheEntry stub;
-    stub.button = winrt::make_weak(button);
-    if (scale) {
-        stub.ourIconScale = winrt::make_weak(scale);
-    }
-    g_buttonPathCache.push_back(std::move(stub));
+    it->second.ourIconScale =
+        scale ? winrt::make_weak(scale)
+              : winrt::weak_ref<Media::ScaleTransform>{};
 }
 
 void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button) {
@@ -3953,15 +3958,14 @@ void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button) {
         }
         Media::ScaleTransform ours = nullptr;
         {
+            void* id = InspectableIdentity(button);
             std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-            for (auto& e : g_buttonPathCache) {
+            auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
+            if (it != g_buttonPathCache.end()) {
                 try {
-                    if (e.button.get() == button) {
-                        ours = e.ourIconScale.get();
-                        if (ours && current == ours) {
-                            e.ourIconScale = {};
-                        }
-                        break;
+                    ours = it->second.ourIconScale.get();
+                    if (ours && current == ours) {
+                        it->second.ourIconScale = {};
                     }
                 } catch (...) {
                 }
@@ -4006,7 +4010,10 @@ std::vector<FrameworkElement> CollectLiveButtonsOnThisDispatcher() {
     std::vector<winrt::weak_ref<FrameworkElement>> buttons;
     {
         std::lock_guard<std::mutex> lock(g_buttonsMutex);
-        buttons = g_trackedButtons;
+        buttons.reserve(g_trackedButtons.size());
+        for (auto& [id, weak] : g_trackedButtons) {
+            buttons.push_back(weak);
+        }
     }
     std::vector<FrameworkElement> live;
     live.reserve(buttons.size());
@@ -4026,23 +4033,19 @@ void ApplyAllHighlights_UIThread() {
 
     std::vector<FrameworkElement> live = CollectLiveButtonsOnThisDispatcher();
 
-    if (SettingsSnap()->glowDebugLog) {
-        for (size_t i = 0; i < ranks.size(); ++i) {
-            Wh_Log(L"  rank list[%zu]: %s", i + 1, ranks[i].displayName.c_str());
-        }
-        Wh_Log(L"ApplyAllHighlights: %zu tracked buttons, %zu ranks, enabled=%d "
-               L"desktop=%s",
-               live.size(), ranks.size(), SettingsSnap()->enabled ? 1 : 0,
-               GuidToLogString(g_currentDesktopId).c_str());
+    for (size_t i = 0; i < ranks.size(); ++i) {
+        Wh_Log(L"  rank list[%zu]: %s", i + 1, ranks[i].displayName.c_str());
     }
+    Wh_Log(L"ApplyAllHighlights: %zu tracked buttons, %zu ranks desktop=%s",
+           live.size(), ranks.size(),
+           GuidToLogString(g_currentDesktopId).c_str());
 
-    if (!SettingsSnap()->enabled || g_unloading.load() || ranks.empty()) {
+    if (g_unloading.load() || ranks.empty()) {
         for (auto& button : live) {
-            SetCachedPaintRank(button, 0);
             ClearButtonHighlight(button);
         }
         g_pendingOverlaySweep = false;
-        if (SettingsSnap()->glowDebugLog && ranks.empty()) {
+        if (ranks.empty()) {
             Wh_Log(L"ApplyAllHighlights: no ranks — cleared overlays on %zu "
                    L"tracked buttons",
                    live.size());
@@ -4050,15 +4053,13 @@ void ApplyAllHighlights_UIThread() {
         return;
     }
 
-    if (SettingsSnap()->glowDebugLog) {
-        int dumped = 0;
-        for (auto& button : live) {
-            Wh_Log(L"  button[%d]: running=%d name=\"%s\"", dumped,
-                   TaskListButton_IsRunning(button) ? 1 : 0,
-                   GetButtonAutomationName(button).c_str());
-            if (++dumped >= 24) {
-                break;
-            }
+    int dumped = 0;
+    for (auto& button : live) {
+        Wh_Log(L"  button[%d]: running=%d name=\"%s\"", dumped,
+               TaskListButton_IsRunning(button) ? 1 : 0,
+               GetButtonAutomationName(button).c_str());
+        if (++dumped >= 24) {
+            break;
         }
     }
 
@@ -4110,18 +4111,15 @@ void ApplyAllHighlights_UIThread() {
                 it->second.seenOnTaskbar = true;
             }
         }
-        if (SettingsSnap()->glowDebugLog) {
-            Wh_Log(L"  bind rank %zu %s -> \"%s\" (score=%d path=%s)",
-                   c.rankIdx + 1, ranks[c.rankIdx].displayName.c_str(),
-                   GetButtonAutomationName(live[c.buttonIdx]).c_str(), c.score,
-                   buttonPaths[c.buttonIdx].empty()
-                       ? L"?"
-                       : buttonPaths[c.buttonIdx].c_str());
-        }
+        Wh_Log(L"  bind rank %zu %s -> \"%s\" (score=%d path=%s)",
+               c.rankIdx + 1, ranks[c.rankIdx].displayName.c_str(),
+               GetButtonAutomationName(live[c.buttonIdx]).c_str(), c.score,
+               buttonPaths[c.buttonIdx].empty()
+                   ? L"?"
+                   : buttonPaths[c.buttonIdx].c_str());
     }
 
     for (size_t bi = 0; bi < live.size(); ++bi) {
-        SetCachedPaintRank(live[bi], buttonRank[bi]);
         if (buttonRank[bi] > 0) {
             ApplyButtonHighlight(live[bi], buttonRank[bi]);
         } else {
@@ -4141,15 +4139,13 @@ void ApplyAllHighlights_UIThread() {
         if (rankTaken[ri]) {
             continue;
         }
-        if (SettingsSnap()->glowDebugLog) {
-            Wh_Log(L"  UNMATCHED rank %zu: %s (title=\"%s\")", ri + 1,
-                   ranks[ri].displayName.c_str(),
-                   ranks[ri].lastWindowTitle.c_str());
-        }
+        Wh_Log(L"  UNMATCHED rank %zu: %s (title=\"%s\")", ri + 1,
+               ranks[ri].displayName.c_str(),
+               ranks[ri].lastWindowTitle.c_str());
         size_t resolvedButtons = 0;
         {
             std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-            for (const auto& e : g_buttonPathCache) {
+            for (const auto& [id, e] : g_buttonPathCache) {
                 if (!e.pathUpper.empty()) {
                     ++resolvedButtons;
                 }
@@ -4178,7 +4174,6 @@ void ApplyAllHighlights_UIThread() {
 
 void ClearAllHighlights_UIThread() {
     for (auto& button : CollectLiveButtonsOnThisDispatcher()) {
-        SetCachedPaintRank(button, 0);
         ClearButtonHighlight(button);
     }
 }
@@ -4467,9 +4462,15 @@ FrameworkElement FindAncestorItemsRepeater(FrameworkElement el) {
 
 // Repeater index is the flyout visual order (unlike PositionInSet, which the
 // automation peer may not refresh after a thumbnail reorder).
+// outSourceIndex is parallel to the returned views and holds the ItemsSource
+// index (skips of unrealized elements must not shift GetAt).
 std::vector<FrameworkElement> CollectRepeaterThumbnailViews(
-    FrameworkElement thumbView) {
+    FrameworkElement thumbView,
+    std::vector<int>* outSourceIndex) {
     std::vector<FrameworkElement> out;
+    if (outSourceIndex) {
+        outSourceIndex->clear();
+    }
     auto repeaterEl = FindAncestorItemsRepeater(thumbView);
     if (!repeaterEl) {
         return out;
@@ -4494,6 +4495,9 @@ std::vector<FrameworkElement> CollectRepeaterThumbnailViews(
             if (winrt::get_class_name(child) ==
                 L"Taskbar.TaskItemThumbnailView") {
                 out.push_back(child);
+                if (outSourceIndex) {
+                    outSourceIndex->push_back(i);
+                }
             }
         }
     } catch (...) {
@@ -5106,7 +5110,7 @@ void ScheduleThumbnailRelayout(FrameworkElement thumbView) {
 void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
     auto settings = SettingsSnap();
     if (!thumbView || rankOneBased <= 0 || g_unloading.load() ||
-        !settings->enabled || !settings->previewHighlightEnabled) {
+        !settings->previewHighlightEnabled) {
         ClearThumbnailHighlight(thumbView);
         return;
     }
@@ -5233,14 +5237,12 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
                 }
             }
 
-            if (settings->glowDebugLog) {
-                Wh_Log(L"Preview glow rank %d style=%s paint=%s intensity=%d "
-                       L"on \"%s\"",
-                       rankOneBased, PreviewStyleName(style),
-                       PreviewStyleName(paintStyle), intensity,
-                       Automation::AutomationProperties::GetName(thumbView)
-                           .c_str());
-            }
+            Wh_Log(L"Preview glow rank %d style=%s paint=%s intensity=%d "
+                   L"on \"%s\"",
+                   rankOneBased, PreviewStyleName(style),
+                   PreviewStyleName(paintStyle), intensity,
+                   Automation::AutomationProperties::GetName(thumbView)
+                       .c_str());
             return;
         }
 
@@ -5345,14 +5347,12 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
             }
         }
 
-        if (settings->glowDebugLog) {
-            Wh_Log(L"Preview glow rank %d style=%s paint=%s intensity=%d "
-                   L"card=%.0fx%.0f on \"%s\"",
-                   rankOneBased, PreviewStyleName(style),
-                   PreviewStyleName(paintStyle), intensity, cardW, cardH,
-                   Automation::AutomationProperties::GetName(thumbView)
-                       .c_str());
-        }
+        Wh_Log(L"Preview glow rank %d style=%s paint=%s intensity=%d "
+               L"card=%.0fx%.0f on \"%s\"",
+               rankOneBased, PreviewStyleName(style),
+               PreviewStyleName(paintStyle), intensity, cardW, cardH,
+               Automation::AutomationProperties::GetName(thumbView)
+                   .c_str());
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"ApplyThumbnailHighlight error %08X", hr);
@@ -5365,13 +5365,14 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     }
     TrackThumbView_UIThread(anyThumb);
 
-    auto repeaterViews = CollectRepeaterThumbnailViews(anyThumb);
+    std::vector<int> repeaterSourceIndex;
+    auto repeaterViews =
+        CollectRepeaterThumbnailViews(anyThumb, &repeaterSourceIndex);
     const bool usedRepeater = !repeaterViews.empty();
     auto allViews =
         usedRepeater ? std::move(repeaterViews)
                      : CollectSiblingThumbnailViews(anyThumb);
-    if (!SettingsSnap()->enabled || !SettingsSnap()->previewHighlightEnabled ||
-        g_unloading.load()) {
+    if (!SettingsSnap()->previewHighlightEnabled || g_unloading.load()) {
         for (auto& s : allViews) {
             ClearThumbnailHighlight(s);
         }
@@ -5412,6 +5413,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         FrameworkElement view{nullptr};
         HWND hwnd = nullptr;
         ULONGLONG tick = 0;
+        ULONGLONG confirmSeq = 0;
         ResolveHow how = ResolveHow::None;
         int rank = 0;  // 1-based flyout rank; 0 = not highlighted
     };
@@ -5442,6 +5444,12 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         return it->second.confirmSeq;
     };
 
+    auto stampRecency = [&](size_t i, HWND hwnd) {
+        scored[i].hwnd = hwnd;
+        scored[i].tick = tickFor(hwnd);
+        scored[i].confirmSeq = seqFor(hwnd);
+    };
+
     for (size_t i = 0; i < siblings.size(); ++i) {
         TrackThumbView_UIThread(siblings[i]);
         scored[i].view = siblings[i];
@@ -5456,10 +5464,13 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
             if (IsSnapGroupThumbnailView(allViews[ri])) {
                 continue;
             }
-            HWND hwnd = HwndFromThumbnailsGetAt(static_cast<int>(ri));
+            const int srcIndex =
+                (ri < repeaterSourceIndex.size())
+                    ? repeaterSourceIndex[ri]
+                    : static_cast<int>(ri);
+            HWND hwnd = HwndFromThumbnailsGetAt(srcIndex);
             if (hwnd && IsWindow(hwnd) && !usedHwnds.count(hwnd)) {
-                scored[si].hwnd = hwnd;
-                scored[si].tick = tickFor(hwnd);
+                stampRecency(si, hwnd);
                 scored[si].how = ResolveHow::Repeater;
                 usedHwnds.insert(hwnd);
             }
@@ -5474,8 +5485,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         }
         HWND hwnd = ResolveHwndForThumbnailView(siblings[i]);
         if (hwnd && IsWindow(hwnd) && !usedHwnds.count(hwnd)) {
-            scored[i].hwnd = hwnd;
-            scored[i].tick = tickFor(hwnd);
+            stampRecency(i, hwnd);
             scored[i].how = ResolveHow::TaskItem;
             usedHwnds.insert(hwnd);
         }
@@ -5491,8 +5501,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
             }
             HWND h = MatchTitleToUnusedRecent(cardTitles[i], recent, usedHwnds);
             if (h) {
-                scored[i].hwnd = h;
-                scored[i].tick = tickFor(h);
+                stampRecency(i, h);
                 if (scored[i].tick == 0) {
                     for (const auto& info : recent) {
                         if (info.hwnd == h && info.lastConfirmedTick > 0) {
@@ -5507,7 +5516,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         }
     }
 
-    // Pass 3: ITaskItem HWND and EVENT_SYSTEM_FOREGROUND HWND can differ
+    // Pass 4: ITaskItem HWND and EVENT_SYSTEM_FOREGROUND HWND can differ
     // (owned Lister windows, tab proxies). Copy recency from a same-PID
     // recent window when the card's HWND itself has tick 0.
     for (size_t i = 0; i < scored.size(); ++i) {
@@ -5568,10 +5577,8 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         if (scored[a].tick != scored[b].tick) {
             return scored[a].tick > scored[b].tick;
         }
-        const ULONGLONG sa = seqFor(scored[a].hwnd);
-        const ULONGLONG sb = seqFor(scored[b].hwnd);
-        if (sa != sb) {
-            return sa > sb;
+        if (scored[a].confirmSeq != scored[b].confirmSeq) {
+            return scored[a].confirmSeq > scored[b].confirmSeq;
         }
         const bool aFg = scored[a].hwnd == foreground;
         const bool bFg = scored[b].hwnd == foreground;
@@ -5586,7 +5593,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         scored[order[r]].rank = static_cast<int>(r) + 1;
     }
 
-    if (SettingsSnap()->glowDebugLog) {
+    {
         size_t mapCount = 0;
         {
             std::lock_guard<std::mutex> lock(g_thumbnailMapMutex);
@@ -5775,15 +5782,12 @@ void RequestApplyVisuals() {
     }
     if (!RunOnUiThread([]() { ApplyAllHighlights_UIThread(); })) {
         // Buttons not tracked yet — will apply on next UpdateVisualStates.
-        // Avoid rank dump spam at startup (preview + app both request apply).
-        if (SettingsSnap()->glowDebugLog) {
-            std::lock_guard<std::mutex> lock(g_stateMutex);
-            const auto& ranks = CurrentDeskLocked().rankedApps;
-            Wh_Log(L"Ranks ready (%zu) — waiting for TaskListButton hooks",
-                   ranks.size());
-            for (size_t i = 0; i < ranks.size(); i++) {
-                Wh_Log(L"  Rank %zu: %s", i + 1, ranks[i].displayName.c_str());
-            }
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        const auto& ranks = CurrentDeskLocked().rankedApps;
+        Wh_Log(L"Ranks ready (%zu) — waiting for TaskListButton hooks",
+               ranks.size());
+        for (size_t i = 0; i < ranks.size(); i++) {
+            Wh_Log(L"  Rank %zu: %s", i + 1, ranks[i].displayName.c_str());
         }
     }
 }
@@ -5811,12 +5815,12 @@ void RefreshButtonHighlight(FrameworkElement button) {
         return;
     }
 
-    if (g_pendingOverlaySweep.load() || !SettingsSnap()->enabled) {
+    if (g_pendingOverlaySweep.load()) {
         ClearButtonHighlight(button);
         return;
     }
 
-    int rank = GetCachedPaintRank(button);
+    int rank = GetCachedPaintState(button).rank;
     if (rank < 0) {
         std::vector<AppFocusInfo> ranks;
         {
@@ -5824,18 +5828,22 @@ void RefreshButtonHighlight(FrameworkElement button) {
             ranks = CurrentDeskLocked().rankedApps;
         }
         if (ranks.empty()) {
-            SetCachedPaintRank(button, 0);
-            ClearButtonHighlight(button);
+            if (ButtonHasOurChrome(button)) {
+                ClearButtonHighlight(button);
+            } else {
+                SetCachedPaintState(button, 0, SettingsSnap()->generation);
+            }
             return;
         }
         rank = FindRankForButton(button, ranks, /*requireRunning=*/true);
-        SetCachedPaintRank(button, rank);
     }
 
     if (rank > 0) {
         ApplyButtonHighlight(button, rank);
-    } else {
+    } else if (ButtonHasOurChrome(button)) {
         ClearButtonHighlight(button);
+    } else {
+        SetCachedPaintState(button, 0, SettingsSnap()->generation);
     }
 }
 
@@ -5896,7 +5904,10 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 
     TrackButton_UIThread(button);
     RefreshButtonHighlight(button);
-    ScheduleRefreshAllHighlights(button);
+    const int rank = GetCachedPaintState(button).rank;
+    if (rank > 0 || g_pendingOverlaySweep.load()) {
+        ScheduleRefreshAllHighlights(button);
+    }
 }
 
 // XAML thumbnail view template — apply preview glow when flyout builds items.
@@ -5907,8 +5918,7 @@ void WINAPI TaskItemThumbnailView_OnApplyTemplate_Hook(void* pThis) {
     if (TaskItemThumbnailView_OnApplyTemplate_Original) {
         TaskItemThumbnailView_OnApplyTemplate_Original(pThis);
     }
-    if (g_unloading.load() || !SettingsSnap()->enabled ||
-        !SettingsSnap()->previewHighlightEnabled) {
+    if (g_unloading.load() || !SettingsSnap()->previewHighlightEnabled) {
         return;
     }
     try {
@@ -6183,6 +6193,9 @@ void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
     g_inHoverFlyoutModel_TargetItemKey = true;
     HoverFlyoutModel_TargetItemKey_Original(pThis, param1);
     g_inHoverFlyoutModel_TargetItemKey = false;
+    if (SettingsSnap()->previewHighlightEnabled) {
+        RequestApplyPreviewVisuals();
+    }
 }
 
 bool HookTaskbarDllSymbols() {
@@ -6282,10 +6295,10 @@ bool HookTaskbarDllSymbols() {
     }
 
     g_taskbandResolveReady = true;
-    g_previewHooksReady =
+    const bool previewHooksReady =
         TaskItemThumbnail_TaskItemThumbnail_Original != nullptr ||
         TaskItemThumbnail_TaskItemThumbnail_2_Original != nullptr;
-    if (g_previewHooksReady) {
+    if (previewHooksReady) {
         Wh_Log(L"Hooked taskbar.dll identity + thumbnail model symbols");
     } else {
         Wh_Log(L"Hooked taskbar.dll identity symbols (preview HWND mapping "
@@ -6380,8 +6393,7 @@ bool StillPendingForeground(const PendingFocus& pending,
 
 void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     auto settings = SettingsSnap();
-    if (!settings->enabled || !settings->previewHighlightEnabled ||
-        g_unloading.load()) {
+    if (!settings->previewHighlightEnabled || g_unloading.load()) {
         return;
     }
 
@@ -6483,12 +6495,10 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                 remaining = 200;
             }
             ArmHookTimer(kMinFocusTimerId, remaining);
-            if (settings->glowDebugLog) {
-                Wh_Log(L"Min-focus timer: transient FG, still waiting on %s "
-                       L"(%llums left)",
-                       pending.displayName.c_str(),
-                       static_cast<unsigned long long>(remaining));
-            }
+            Wh_Log(L"Min-focus timer: transient FG, still waiting on %s "
+                   L"(%llums left)",
+                   pending.displayName.c_str(),
+                   static_cast<unsigned long long>(remaining));
             return;
         }
         Wh_Log(L"Min-focus timer: focus left %s before confirmation",
@@ -6585,7 +6595,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         size_t resolvedButtons = 0;
         {
             std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-            for (const auto& e : g_buttonPathCache) {
+            for (const auto& [id, e] : g_buttonPathCache) {
                 if (!e.pathUpper.empty()) {
                     ++resolvedButtons;
                 }
@@ -6645,7 +6655,7 @@ void EnsurePendingAppTimer() {
 }
 
 void SchedulePreviewConfirm(bool windowAlreadyTracked) {
-    if (!SettingsSnap()->previewHighlightEnabled || !SettingsSnap()->enabled) {
+    if (!SettingsSnap()->previewHighlightEnabled) {
         return;
     }
     CancelPreviewMinFocusTimer();
@@ -6659,7 +6669,7 @@ void SchedulePreviewConfirm(bool windowAlreadyTracked) {
 }
 
 void HandleForegroundChanged(HWND hWnd) {
-    if (g_unloading.load() || !SettingsSnap()->enabled) {
+    if (g_unloading.load()) {
         return;
     }
 
@@ -6901,6 +6911,26 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             SetTimer(hWnd, kFullRebindTimerId,
                      static_cast<UINT>(kFullRebindDebounceMs), nullptr);
             return 0;
+        case WM_APP_REFRESH_ACCENT:
+            RefreshCachedAccent();
+            RequestApplyVisuals();
+            RequestApplyPreviewVisuals();
+            return 0;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            RefreshCachedAccent();
+            RequestApplyVisuals();
+            RequestApplyPreviewVisuals();
+            return 0;
+        case WM_SETTINGCHANGE:
+            if (!lParam ||
+                _wcsicmp(reinterpret_cast<PCWSTR>(lParam),
+                         L"ImmersiveColorSet") == 0) {
+                RefreshCachedAccent();
+                RequestApplyVisuals();
+                RequestApplyPreviewVisuals();
+                return 0;
+            }
+            break;
         case WM_TIMER:
             if (wParam == kMinFocusTimerId) {
                 KillTimer(hWnd, kMinFocusTimerId);
@@ -6993,6 +7023,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
 
     SetTimer(hwnd, kDecayTimerId, kDecayCheckIntervalMs, nullptr);
     RefreshCurrentDesktopId();
+    RefreshCachedAccent();
 
     if (HWND fg = GetForegroundWindow()) {
         PostMessage(hwnd, WM_APP_FOREGROUND_CHANGED,
@@ -7058,6 +7089,10 @@ void StartWinEventHookThread() {
         Wh_Log(L"WinEvent hook thread started");
     } else {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
+        if (g_hookThreadReadyEvent) {
+            CloseHandle(g_hookThreadReadyEvent);
+            g_hookThreadReadyEvent = nullptr;
+        }
     }
 }
 
@@ -7099,7 +7134,6 @@ void StopWinEventHookThread() {
 void LoadSettings() {
     Settings s;
 
-    s.enabled = Wh_GetIntSetting(L"enabled") != 0;
     s.highlightCount = Wh_GetIntSetting(L"highlightCount");
     if (s.highlightCount < 0) {
         s.highlightCount = 0;
@@ -7113,41 +7147,38 @@ void LoadSettings() {
         s.minFocusSeconds = 0;
     }
 
-    PCWSTR promoteMode = Wh_GetStringSetting(L"promoteMode");
+    auto promoteMode = WindhawkUtils::StringSetting::make(L"promoteMode");
     s.promoteMode = PromoteMode::ImmediateTracked;
-    if (wcscmp(promoteMode, L"immediateTopN") == 0) {
+    if (wcscmp(promoteMode.get(), L"immediateTopN") == 0) {
         s.promoteMode = PromoteMode::ImmediateTopN;
-    } else if (wcscmp(promoteMode, L"alwaysWait") == 0) {
+    } else if (wcscmp(promoteMode.get(), L"alwaysWait") == 0) {
         s.promoteMode = PromoteMode::AlwaysWait;
-    } else if (wcscmp(promoteMode, L"immediateTracked") == 0) {
+    } else if (wcscmp(promoteMode.get(), L"immediateTracked") == 0) {
         s.promoteMode = PromoteMode::ImmediateTracked;
     }
-    Wh_FreeStringSetting(promoteMode);
 
-    PCWSTR glowColor = Wh_GetStringSetting(L"glowColor");
+    auto glowColor = WindhawkUtils::StringSetting::make(L"icons.glowColor");
     s.glowColor = GlowColorMode::Accent;
-    if (*glowColor) {
-        if (wcscmp(glowColor, L"green") == 0) {
-            s.glowColor = GlowColorMode::Green;
-        } else if (wcscmp(glowColor, L"blue") == 0) {
-            s.glowColor = GlowColorMode::Blue;
-        } else if (wcscmp(glowColor, L"orange") == 0) {
-            s.glowColor = GlowColorMode::Orange;
-        } else if (wcscmp(glowColor, L"white") == 0) {
-            s.glowColor = GlowColorMode::White;
-        } else if (wcscmp(glowColor, L"custom") == 0) {
-            s.glowColor = GlowColorMode::Custom;
-        }
+    if (wcscmp(glowColor.get(), L"green") == 0) {
+        s.glowColor = GlowColorMode::Green;
+    } else if (wcscmp(glowColor.get(), L"blue") == 0) {
+        s.glowColor = GlowColorMode::Blue;
+    } else if (wcscmp(glowColor.get(), L"orange") == 0) {
+        s.glowColor = GlowColorMode::Orange;
+    } else if (wcscmp(glowColor.get(), L"white") == 0) {
+        s.glowColor = GlowColorMode::White;
+    } else if (wcscmp(glowColor.get(), L"custom") == 0) {
+        s.glowColor = GlowColorMode::Custom;
     }
-    Wh_FreeStringSetting(glowColor);
 
-    PCWSTR customColor = Wh_GetStringSetting(L"customGlowColor");
-    s.customGlowColor = *customColor ? customColor : L"#00C853";
-    Wh_FreeStringSetting(customColor);
+    auto customColor =
+        WindhawkUtils::StringSetting::make(L"icons.customGlowColor");
+    s.customGlowColor =
+        customColor.get() && *customColor.get() ? customColor.get() : L"#00C853";
 
-    s.glowIntensity[0] = Wh_GetIntSetting(L"glowIntensityRank1");
-    s.glowIntensity[1] = Wh_GetIntSetting(L"glowIntensityRank2");
-    s.glowIntensity[2] = Wh_GetIntSetting(L"glowIntensityRank3");
+    s.glowIntensity[0] = Wh_GetIntSetting(L"icons.glowIntensityRank1");
+    s.glowIntensity[1] = Wh_GetIntSetting(L"icons.glowIntensityRank2");
+    s.glowIntensity[2] = Wh_GetIntSetting(L"icons.glowIntensityRank3");
     for (int& v : s.glowIntensity) {
         if (v < 0) {
             v = 0;
@@ -7157,9 +7188,9 @@ void LoadSettings() {
         }
     }
 
-    s.sizeBoostPercent[0] = Wh_GetIntSetting(L"sizeBoostRank1");
-    s.sizeBoostPercent[1] = Wh_GetIntSetting(L"sizeBoostRank2");
-    s.sizeBoostPercent[2] = Wh_GetIntSetting(L"sizeBoostRank3");
+    s.sizeBoostPercent[0] = Wh_GetIntSetting(L"icons.sizeBoostRank1");
+    s.sizeBoostPercent[1] = Wh_GetIntSetting(L"icons.sizeBoostRank2");
+    s.sizeBoostPercent[2] = Wh_GetIntSetting(L"icons.sizeBoostRank3");
     for (int& v : s.sizeBoostPercent) {
         if (v < 0) {
             v = 0;
@@ -7169,22 +7200,19 @@ void LoadSettings() {
         }
     }
 
-    PCWSTR glowStyle = Wh_GetStringSetting(L"glowStyle");
+    auto glowStyle = WindhawkUtils::StringSetting::make(L"icons.glowStyle");
     s.glowStyle = GlowStyle::LeftBar;
-    if (*glowStyle) {
-        if (wcscmp(glowStyle, L"full") == 0) {
-            s.glowStyle = GlowStyle::Full;
-        } else if (wcscmp(glowStyle, L"frame") == 0) {
-            s.glowStyle = GlowStyle::Frame;
-        } else if (wcscmp(glowStyle, L"leftBar") == 0) {
-            s.glowStyle = GlowStyle::LeftBar;
-        } else if (wcscmp(glowStyle, L"bottomBar") == 0) {
-            s.glowStyle = GlowStyle::BottomBar;
-        }
+    if (wcscmp(glowStyle.get(), L"full") == 0) {
+        s.glowStyle = GlowStyle::Full;
+    } else if (wcscmp(glowStyle.get(), L"frame") == 0) {
+        s.glowStyle = GlowStyle::Frame;
+    } else if (wcscmp(glowStyle.get(), L"leftBar") == 0) {
+        s.glowStyle = GlowStyle::LeftBar;
+    } else if (wcscmp(glowStyle.get(), L"bottomBar") == 0) {
+        s.glowStyle = GlowStyle::BottomBar;
     }
-    Wh_FreeStringSetting(glowStyle);
 
-    s.glowThickness = Wh_GetIntSetting(L"glowThickness");
+    s.glowThickness = Wh_GetIntSetting(L"icons.glowThickness");
     if (s.glowThickness < 1) {
         s.glowThickness = 1;
     }
@@ -7192,7 +7220,7 @@ void LoadSettings() {
         s.glowThickness = 16;
     }
 
-    s.glowRoundness = Wh_GetIntSetting(L"glowRoundness");
+    s.glowRoundness = Wh_GetIntSetting(L"icons.glowRoundness");
     if (s.glowRoundness < 0) {
         s.glowRoundness = 0;
     }
@@ -7200,7 +7228,7 @@ void LoadSettings() {
         s.glowRoundness = 50;
     }
 
-    s.glowSize = Wh_GetIntSetting(L"glowSize");
+    s.glowSize = Wh_GetIntSetting(L"icons.glowSize");
     if (s.glowSize < 40) {
         s.glowSize = 40;
     }
@@ -7208,7 +7236,7 @@ void LoadSettings() {
         s.glowSize = 100;
     }
 
-    s.glowLayers = Wh_GetIntSetting(L"glowLayers");
+    s.glowLayers = Wh_GetIntSetting(L"icons.glowLayers");
     if (s.glowLayers < 1) {
         s.glowLayers = 1;
     }
@@ -7216,7 +7244,7 @@ void LoadSettings() {
         s.glowLayers = 3;
     }
 
-    s.glowFillOpacity = Wh_GetIntSetting(L"glowFillOpacity");
+    s.glowFillOpacity = Wh_GetIntSetting(L"icons.glowFillOpacity");
     if (s.glowFillOpacity < 0) {
         s.glowFillOpacity = 0;
     }
@@ -7224,15 +7252,13 @@ void LoadSettings() {
         s.glowFillOpacity = 100;
     }
 
-    s.previewFillOpacity = Wh_GetIntSetting(L"previewFillOpacity");
+    s.previewFillOpacity = Wh_GetIntSetting(L"previews.fillOpacity");
     if (s.previewFillOpacity < 0) {
         s.previewFillOpacity = 0;
     }
     if (s.previewFillOpacity > 100) {
         s.previewFillOpacity = 100;
     }
-
-    s.glowDebugLog = Wh_GetIntSetting(L"glowDebugLog") != 0;
 
     s.decayMinutes = Wh_GetIntSetting(L"decayMinutes");
     if (s.decayMinutes < 0) {
@@ -7242,9 +7268,9 @@ void LoadSettings() {
     s.requireTaskbarButton = Wh_GetIntSetting(L"requireTaskbarButton") != 0;
 
     s.previewHighlightEnabled =
-        Wh_GetIntSetting(L"previewHighlightEnabled") != 0;
+        Wh_GetIntSetting(L"previews.highlightEnabled") != 0;
 
-    s.previewHighlightCount = Wh_GetIntSetting(L"previewHighlightCount");
+    s.previewHighlightCount = Wh_GetIntSetting(L"previews.highlightCount");
     if (s.previewHighlightCount < 0) {
         s.previewHighlightCount = 0;
     }
@@ -7252,9 +7278,9 @@ void LoadSettings() {
         s.previewHighlightCount = 16;
     }
 
-    s.previewIntensity[0] = Wh_GetIntSetting(L"previewIntensityRank1");
-    s.previewIntensity[1] = Wh_GetIntSetting(L"previewIntensityRank2");
-    s.previewIntensity[2] = Wh_GetIntSetting(L"previewIntensityRank3");
+    s.previewIntensity[0] = Wh_GetIntSetting(L"previews.intensityRank1");
+    s.previewIntensity[1] = Wh_GetIntSetting(L"previews.intensityRank2");
+    s.previewIntensity[2] = Wh_GetIntSetting(L"previews.intensityRank3");
     for (int& v : s.previewIntensity) {
         if (v < 0) {
             v = 0;
@@ -7264,61 +7290,56 @@ void LoadSettings() {
         }
     }
 
-    s.previewMinFocusSeconds = Wh_GetIntSetting(L"previewMinFocusSeconds");
+    s.previewMinFocusSeconds = Wh_GetIntSetting(L"previews.minFocusSeconds");
     if (s.previewMinFocusSeconds < 0) {
         s.previewMinFocusSeconds = 0;
     }
-    s.previewDecayMinutes = Wh_GetIntSetting(L"previewDecayMinutes");
+    s.previewDecayMinutes = Wh_GetIntSetting(L"previews.decayMinutes");
     if (s.previewDecayMinutes < 0) {
         s.previewDecayMinutes = 0;
     }
 
-    PCWSTR previewStyle = Wh_GetStringSetting(L"previewStyle");
+    auto previewStyle = WindhawkUtils::StringSetting::make(L"previews.style");
     s.previewStyle = PreviewStyle::TitleBar;
-    if (*previewStyle) {
-        if (wcscmp(previewStyle, L"ring") == 0) {
-            s.previewStyle = PreviewStyle::Ring;
-        } else if (wcscmp(previewStyle, L"titleBg") == 0) {
-            s.previewStyle = PreviewStyle::TitleBg;
-        } else if (wcscmp(previewStyle, L"plate") == 0) {
-            s.previewStyle = PreviewStyle::Plate;
-        } else if (wcscmp(previewStyle, L"plateTitle") == 0) {
-            s.previewStyle = PreviewStyle::PlateTitle;
-        } else if (wcscmp(previewStyle, L"titleBar") == 0) {
-            s.previewStyle = PreviewStyle::TitleBar;
-        }
+    if (wcscmp(previewStyle.get(), L"ring") == 0) {
+        s.previewStyle = PreviewStyle::Ring;
+    } else if (wcscmp(previewStyle.get(), L"titleBg") == 0) {
+        s.previewStyle = PreviewStyle::TitleBg;
+    } else if (wcscmp(previewStyle.get(), L"plate") == 0) {
+        s.previewStyle = PreviewStyle::Plate;
+    } else if (wcscmp(previewStyle.get(), L"plateTitle") == 0) {
+        s.previewStyle = PreviewStyle::PlateTitle;
+    } else if (wcscmp(previewStyle.get(), L"titleBar") == 0) {
+        s.previewStyle = PreviewStyle::TitleBar;
     }
-    Wh_FreeStringSetting(previewStyle);
 
     s.excludedPrograms.clear();
     for (int i = 0;; i++) {
-        PCWSTR program = Wh_GetStringSetting(L"excludedPrograms[%d]", i);
-        bool hasProgram = *program;
-        if (hasProgram) {
-            s.excludedPrograms.insert(ToUpper(program));
-        }
-        Wh_FreeStringSetting(program);
-        if (!hasProgram) {
+        auto program =
+            WindhawkUtils::StringSetting::make(L"excludedPrograms[%d]", i);
+        if (!program.get() || !*program.get()) {
             break;
         }
+        s.excludedPrograms.insert(ToUpper(program.get()));
     }
 
-    Wh_Log(L"Settings: enabled=%d style=%s th=%d round=%d%% size=%d%% "
-           L"layers=%d fillOp=%d previewFillOp=%d debug=%d decay=%dmin "
+    s.cachedAccent = SettingsSnap()->cachedAccent;
+
+    Wh_Log(L"Settings: style=%s th=%d round=%d%% size=%d%% "
+           L"layers=%d fillOp=%d previewFillOp=%d decay=%dmin "
            L"minFocus=%ds promote=%s preview=%d previewCount=%d "
            L"previewI=%d/%d/%d previewStyle=%s previewMin=%ds previewDecay=%dmin",
-           s.enabled ? 1 : 0, GlowStyleName(s.glowStyle), s.glowThickness,
+           GlowStyleName(s.glowStyle), s.glowThickness,
            s.glowRoundness, s.glowSize, s.glowLayers, s.glowFillOpacity,
-           s.previewFillOpacity, s.glowDebugLog ? 1 : 0, s.decayMinutes,
+           s.previewFillOpacity, s.decayMinutes,
            s.minFocusSeconds, PromoteModeName(s.promoteMode),
            s.previewHighlightEnabled ? 1 : 0, s.previewHighlightCount,
            s.previewIntensity[0], s.previewIntensity[1], s.previewIntensity[2],
            PreviewStyleName(s.previewStyle), s.previewMinFocusSeconds,
            s.previewDecayMinutes);
 
-    s.cachedAccent = QuerySystemAccentColor();
-
     PublishSettings(std::move(s));
+    PostToHookThread(WM_APP_REFRESH_ACCENT);
 }
 
 // ---------------------------------------------------------------------------
@@ -7326,7 +7347,7 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.2");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.3");
 
     g_unloading = false;
     LoadSettings();
@@ -7388,7 +7409,6 @@ void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
     g_taskbandResolveReady = false;
-    g_previewHooksReady = false;
 
     // Stop the worker first so it cannot TryRunAsync after the UI drain.
     StopWinEventHookThread();
@@ -7419,7 +7439,6 @@ void Wh_ModUninit() {
     {
         std::lock_guard<std::mutex> lock(g_buttonsMutex);
         g_trackedButtons.clear();
-        g_dispatcherAnchor = {};
     }
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
