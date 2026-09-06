@@ -26,8 +26,6 @@ shell.
 
 ![Widget](https://raw.githubusercontent.com/cracken7/TaskbarNetworkLounge/main/docs/widget.png)
 
-![Details panel](https://raw.githubusercontent.com/cracken7/TaskbarNetworkLounge/main/docs/panel.png)
-
 ## Features
 
 **Live speed and traffic totals.** Read from the real interface counters
