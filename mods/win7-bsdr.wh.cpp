@@ -3318,12 +3318,19 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             visibleHeight = rcContainer.bottom - rcContainer.top;
         }
 
+        const int itemHeightNoReason = MulDiv(62, dpi, 96);
+
+        int maxScroll = totalContentHeight - visibleHeight;
+        if (maxScroll < 0) maxScroll = 0;
+
         const int oldPos = scrollPos;
         switch (LOWORD(wParam)) {
-        case SB_LINEUP: scrollPos -= MulDiv(20, dpi, 96); break;
-        case SB_LINEDOWN: scrollPos += MulDiv(20, dpi, 96); break;
-        case SB_PAGEUP: scrollPos -= MulDiv(100, dpi, 96); break;
-        case SB_PAGEDOWN: scrollPos += MulDiv(100, dpi, 96); break;
+        case SB_LINEUP: scrollPos -= itemHeightNoReason; break;
+        case SB_LINEDOWN: scrollPos += itemHeightNoReason; break;
+        case SB_PAGEUP: scrollPos -= visibleHeight; break;
+        case SB_PAGEDOWN: scrollPos += visibleHeight; break;
+        case SB_TOP: scrollPos = 0; break;
+        case SB_BOTTOM: scrollPos = maxScroll; break;
         case SB_THUMBTRACK:
         case SB_THUMBPOSITION: {
             SCROLLINFO si = {0};
@@ -3337,8 +3344,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (scrollPos < 0) scrollPos = 0;
-        int maxScroll = totalContentHeight - visibleHeight;
-        if (maxScroll < 0) maxScroll = 0;
         if (scrollPos > maxScroll) scrollPos = maxScroll;
 
         if (oldPos != scrollPos) {
@@ -3791,6 +3796,22 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
                                 SetPropW(hNoButton, L"CustomBSDR_HideAccel", (HANDLE)FALSE);
                             }
                             RedrawWindow(hDlg, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
+                        }
+                        if (hDlg && msg.message == WM_KEYDOWN && (msg.hwnd == hDlg || IsChild(hDlg, msg.hwnd))) {
+                            switch (msg.wParam) {
+                            case VK_PRIOR:
+                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEUP, 0);
+                                continue;
+                            case VK_NEXT:
+                                SendMessageW(hDlg, WM_VSCROLL, SB_PAGEDOWN, 0);
+                                continue;
+                            case VK_HOME:
+                                SendMessageW(hDlg, WM_VSCROLL, SB_TOP, 0);
+                                continue;
+                            case VK_END:
+                                SendMessageW(hDlg, WM_VSCROLL, SB_BOTTOM, 0);
+                                continue;
+                            }
                         }
                         if (!hDlg || !IsDialogMessageW(hDlg, &msg)) {
                             TranslateMessage(&msg);
