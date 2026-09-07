@@ -45,7 +45,9 @@ Time can use **12-hour or 24-hour format**, with optional seconds.
 
 ## Compatibility
 
-This mod uses XAML diagnostics, which allows only one diagnostics consumer per Explorer process. Known conflicts include **Windows 11 File Explorer Styler**, **ExplorerBlurMica**, **TranslucentTB**, and other tools/mods that attach to File Explorer XAML diagnostics. If another consumer blocks the connection, the label will not appear.
+This mod does not use XAML Diagnostics, so it can be used together with **Windows 11 File Explorer Styler** and other tools/mods that consume File Explorer XAML diagnostics.
+
+If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.
 */
 // ==/WindhawkModReadme==
 
@@ -166,9 +168,7 @@ This mod uses XAML diagnostics, which allows only one diagnostics consumer per E
 
 #undef GetCurrentTime
 
-#include <xamlom.h>
 #include <Unknwn.h>
-#include <ocidl.h>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -178,6 +178,8 @@ This mod uses XAML diagnostics, which allows only one diagnostics consumer per E
 
 #include <winrt/Microsoft.UI.h>
 #include <winrt/Microsoft.UI.Content.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -190,6 +192,8 @@ This mod uses XAML diagnostics, which allows only one diagnostics consumer per E
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <windhawk_utils.h>
 
 namespace wf = winrt::Windows::Foundation;
 namespace mux = winrt::Microsoft::UI::Xaml;
@@ -302,10 +306,6 @@ static std::atomic<uint64_t> g_settingsGeneration{1};
 static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_diagnosticsConnected{false};
-static std::mutex g_connectorMutex;
-static HANDLE g_connectorThread = nullptr;
-static HANDLE g_tapReadyEvent = nullptr;
 
 // ============================================================================
 // Settings helpers
@@ -1404,737 +1404,512 @@ static bool RunFromWindowThread(HWND hwnd,
     return true;
 }
 
-static void EnsureConnectorStarted();
+// ============================================================================
+// Title-bar discovery without XAML Diagnostics
+// ============================================================================
 
-// Connect only after a real File Explorer top-level window exists. This avoids
-// occupying the XAML diagnostics slot in shell-only explorer.exe processes and
-// means a File Explorer window opened long after login still triggers setup.
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-static CreateWindowExW_t CreateWindowExW_Original = nullptr;
-
-static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle,
-                                        LPCWSTR className,
-                                        LPCWSTR windowName,
-                                        DWORD style,
-                                        int x,
-                                        int y,
-                                        int width,
-                                        int height,
-                                        HWND parent,
-                                        HMENU menu,
-                                        HINSTANCE instance,
-                                        PVOID param)
+static void TryInsertTitleText(muxc::Grid const &grid)
 {
-    HWND hwnd = CreateWindowExW_Original(
-        exStyle, className, windowName, style, x, y, width, height, parent,
-        menu, instance, param);
+    if (!grid || g_unloading.load())
+        return;
 
-    if (hwnd && !g_unloading.load() && IsFileExplorerWindow(hwnd))
+    auto children = grid.Children();
+    mux::FrameworkElement rightAnchor{nullptr};
+    for (uint32_t i = 0; i < children.Size(); ++i)
     {
-        EnsureConnectorStarted();
+        auto child = children.GetAt(i).try_as<mux::FrameworkElement>();
+        if (!child)
+            continue;
+        if (child.Name() == L"WindhawkExplorerTitleBarLabel")
+            return;
+        if (child.Name() == L"RightContentPresenter")
+            rightAnchor = child;
     }
+    if (!rightAnchor)
+        return;
 
-    return hwnd;
+    PruneReleasedLabelEntries();
+    SettingsSnapshot initialSnapshot = GetSettingsSnapshot();
+
+    muxc::TextBlock text;
+    text.Name(L"WindhawkExplorerTitleBarLabel");
+    ApplyTextSettings(text, initialSnapshot.settings);
+    muxc::Grid::SetColumn(text, muxc::Grid::GetColumn(rightAnchor));
+    muxc::Grid::SetRow(text, muxc::Grid::GetRow(rightAnchor));
+    muxc::Canvas::SetZIndex(text, 100);
+    children.Append(text);
+
+    try
+    {
+        grid.UpdateLayout();
+    }
+    catch (...)
+    {
+    }
+    UpdateLabelPosition(text, grid, initialSnapshot.settings.verticalOffset);
+
+    auto entry = std::make_shared<LabelEntry>();
+    entry->text = winrt::make_weak(text);
+    entry->grid = winrt::make_weak(grid);
+    entry->seenGeneration = initialSnapshot.generation;
+    entry->currentSettings = initialSnapshot.settings;
+    entry->lastText = BuildDisplayText(initialSnapshot.settings);
+    g_labelEntries.push_back(entry);
+    std::weak_ptr<LabelEntry> weakEntry = entry;
+
+    try
+    {
+        entry->sizeChangedToken = grid.SizeChanged(
+            [weakEntry](auto const &, mux::SizeChangedEventArgs const &)
+            {
+                auto entry = weakEntry.lock();
+                if (!entry || entry->cleaned || g_unloading.load())
+                    return;
+                auto text = entry->text.get();
+                auto grid = entry->grid.get();
+                if (!text || !grid)
+                    return;
+                SettingsSnapshot snapshot = GetSettingsSnapshot();
+                UpdateLabelPosition(text, grid, snapshot.settings.verticalOffset);
+            });
+        entry->sizeChangedRegistered = true;
+
+        mux::DispatcherTimer timer;
+        timer.Interval(std::chrono::seconds(1));
+        entry->timer = timer;
+        entry->tickToken = timer.Tick([weakEntry](auto const &, auto const &)
+                                      {
+            auto entry = weakEntry.lock();
+            if (!entry || entry->cleaned) return;
+            auto text = entry->text.get();
+            if (!text) { ReleaseLabelEntry(entry, false); return; }
+            if (g_unloading.load()) { ReleaseLabelEntry(entry, true); return; }
+
+            uint64_t generation = g_settingsGeneration.load(std::memory_order_acquire);
+            if (generation != entry->seenGeneration) {
+                SettingsSnapshot snapshot = GetSettingsSnapshot();
+                entry->seenGeneration = snapshot.generation;
+                entry->currentSettings = snapshot.settings;
+                ApplyTextSettings(text, entry->currentSettings);
+                entry->lastText = BuildDisplayText(entry->currentSettings);
+                if (auto grid = entry->grid.get())
+                    UpdateLabelPosition(text, grid, entry->currentSettings.verticalOffset);
+            }
+
+            std::wstring current = BuildDisplayText(entry->currentSettings);
+            if (current != entry->lastText) {
+                text.Text(current);
+                entry->lastText = std::move(current);
+                if (auto grid = entry->grid.get())
+                    UpdateLabelPosition(text, grid, entry->currentSettings.verticalOffset);
+            } });
+        entry->tickRegistered = true;
+        timer.Start();
+        Wh_Log(L"Title-bar label attached");
+    }
+    catch (...)
+    {
+        ReleaseLabelEntry(entry, true);
+        PruneReleasedLabelEntries();
+        throw;
+    }
 }
 
-// ============================================================================
-// Visual Tree Watcher
-// ============================================================================
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2,
-                               winrt::non_agile>
+static void CollectTitleBarGrids(mux::DependencyObject const &root, int depth,
+                                 std::vector<muxc::Grid> *grids)
 {
-public:
-    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()),
-          m_visualTreeService(site.as<IVisualTreeService3>())
+    if (!root || depth > 64)
+        return;
+    int count = muxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i)
     {
-        // AdviseVisualTreeChange must be made from a separate thread in
-        // Explorer. Keep the handle so shutdown can wait for it safely.
-        AddRef();
-        m_adviseThread = CreateThread(
-            nullptr, 0,
-            [](LPVOID parameter) -> DWORD
+        auto child = muxm::VisualTreeHelper::GetChild(root, i);
+        if (auto element = child.try_as<mux::FrameworkElement>();
+            element && element.Name() == L"TabContainerGrid")
+        {
+            if (auto grid = child.try_as<muxc::Grid>())
             {
-                auto watcher = static_cast<VisualTreeWatcher *>(parameter);
-                HRESULT hr =
-                    watcher->m_visualTreeService->AdviseVisualTreeChange(watcher);
-                if (FAILED(hr))
-                {
-                    Wh_Log(L"AdviseVisualTreeChange failed hr=0x%08X", hr);
-                }
-                watcher->Release();
-                return 0;
-            },
-            this, 0, nullptr);
-
-        if (!m_adviseThread)
-        {
-            Wh_Log(L"CreateThread for XAML visual tree watcher failed: %u",
-                   GetLastError());
-            Release();
-        }
-    }
-
-    ~VisualTreeWatcher()
-    {
-        // Normally Disconnect() has already joined and closed this handle. If
-        // destruction happens on the advise thread itself, only close it here.
-        if (m_adviseThread)
-        {
-            CloseHandle(m_adviseThread);
-            m_adviseThread = nullptr;
-        }
-    }
-
-    void Disconnect()
-    {
-        if (m_disconnected)
-        {
-            return;
-        }
-        m_disconnected = true;
-
-        WaitForAdviseThread();
-
-        if (!m_visualTreeService)
-        {
-            return;
-        }
-
-        HRESULT hr = m_visualTreeService->UnadviseVisualTreeChange(this);
-        if (FAILED(hr))
-        {
-            Wh_Log(L"UnadviseVisualTreeChange failed hr=0x%08X", hr);
-        }
-    }
-
-private:
-    void WaitForAdviseThread()
-    {
-        if (!m_adviseThread)
-        {
-            return;
-        }
-
-        DWORD threadId = GetThreadId(m_adviseThread);
-        if (threadId != 0 && threadId != GetCurrentThreadId())
-        {
-            WaitForSingleObject(m_adviseThread, INFINITE);
-        }
-
-        CloseHandle(m_adviseThread);
-        m_adviseThread = nullptr;
-    }
-
-    wf::IInspectable FromHandle(InstanceHandle handle)
-    {
-        wf::IInspectable object{nullptr};
-
-        HRESULT hr = m_xamlDiagnostics->GetIInspectableFromHandle(
-            handle, reinterpret_cast<::IInspectable **>(winrt::put_abi(object)));
-        if (FAILED(hr))
-        {
-            return nullptr;
-        }
-
-        return object;
-    }
-
-    void TryInsertTitleText(InstanceHandle handle)
-    {
-        auto inspectable = FromHandle(handle);
-        if (!inspectable)
-        {
-            return;
-        }
-
-        auto frameworkElement = inspectable.try_as<mux::FrameworkElement>();
-        if (!frameworkElement ||
-            frameworkElement.Name() != L"TabContainerGrid")
-        {
-            return;
-        }
-
-        auto grid = inspectable.try_as<muxc::Grid>();
-        if (!grid)
-        {
-            return;
-        }
-
-        auto children = grid.Children();
-        mux::FrameworkElement rightAnchor{nullptr};
-
-        for (uint32_t i = 0; i < children.Size(); ++i)
-        {
-            auto child = children.GetAt(i).try_as<mux::FrameworkElement>();
-            if (!child)
-            {
+                grids->push_back(std::move(grid));
                 continue;
             }
+        }
+        CollectTitleBarGrids(child, depth + 1, grids);
+    }
+}
 
-            if (child.Name() == L"WindhawkExplorerTitleBarLabel")
+static void ScanXamlRootForTitleBars(mux::UIElement const &element)
+try
+{
+    if (g_unloading.load() || !element)
+        return;
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot)
+        return;
+    auto content = xamlRoot.Content();
+    if (!content)
+        return;
+    std::vector<muxc::Grid> grids;
+    CollectTitleBarGrids(content, 0, &grids);
+    for (auto const &grid : grids)
+        TryInsertTitleText(grid);
+}
+catch (...)
+{
+    Wh_Log(L"ScanXamlRootForTitleBars exception hr=0x%08X", winrt::to_hresult());
+}
+
+static void ScheduleXamlRootScan(mux::UIElement const &element)
+try
+{
+    if (g_unloading.load() || !element)
+        return;
+    auto queue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+    if (!queue)
+    {
+        ScanXamlRootForTitleBars(element);
+        return;
+    }
+    queue.TryEnqueue([weak = winrt::make_weak(element)]()
+                     {
+        if (auto element = weak.get()) ScanXamlRootForTitleBars(element); });
+}
+catch (...)
+{
+}
+
+static void ScanCurrentThreadForTitleBars()
+try
+{
+    if (g_unloading.load())
+        return;
+    for (auto const &entry : g_labelEntries)
+    {
+        if (entry && !entry->cleaned)
+        {
+            if (auto grid = entry->grid.get())
             {
+                ScanXamlRootForTitleBars(grid);
                 return;
             }
-
-            if (child.Name() == L"RightContentPresenter")
-            {
-                rightAnchor = child;
-            }
-        }
-
-        if (!rightAnchor)
-        {
-            Wh_Log(L"RightContentPresenter not found");
-            return;
-        }
-
-        PruneReleasedLabelEntries();
-
-        int32_t targetColumn = muxc::Grid::GetColumn(rightAnchor);
-        int32_t targetRow = muxc::Grid::GetRow(rightAnchor);
-
-        SettingsSnapshot initialSnapshot = GetSettingsSnapshot();
-
-        muxc::TextBlock text;
-        text.Name(L"WindhawkExplorerTitleBarLabel");
-        ApplyTextSettings(text, initialSnapshot.settings);
-        muxc::Grid::SetColumn(text, targetColumn);
-        muxc::Grid::SetRow(text, targetRow);
-        muxc::Canvas::SetZIndex(text, 100);
-        children.Append(text);
-
-        try
-        {
-            grid.UpdateLayout();
-        }
-        catch (...)
-        {
-            Wh_Log(L"Initial title-bar layout update failed hr=0x%08X",
-                   winrt::to_hresult());
-        }
-
-        UpdateLabelPosition(text, grid,
-                            initialSnapshot.settings.verticalOffset);
-
-        auto entry = std::make_shared<LabelEntry>();
-        entry->text = winrt::make_weak(text);
-        entry->grid = winrt::make_weak(grid);
-        entry->seenGeneration = initialSnapshot.generation;
-        entry->currentSettings = initialSnapshot.settings;
-        entry->lastText = BuildDisplayText(initialSnapshot.settings);
-
-        // Track the entry before registering any delegate whose callback lives
-        // in this DLL, so shutdown can always revoke partially initialized
-        // handlers.
-        g_labelEntries.push_back(entry);
-        std::weak_ptr<LabelEntry> weakEntry = entry;
-
-        try
-        {
-            entry->sizeChangedToken = grid.SizeChanged(
-                [weakEntry](auto const &, mux::SizeChangedEventArgs const &)
-                {
-                    auto entry = weakEntry.lock();
-                    if (!entry || entry->cleaned || g_unloading.load())
-                    {
-                        return;
-                    }
-
-                    auto text = entry->text.get();
-                    auto grid = entry->grid.get();
-                    if (!text || !grid)
-                    {
-                        return;
-                    }
-
-                    SettingsSnapshot snapshot = GetSettingsSnapshot();
-                    UpdateLabelPosition(text, grid,
-                                        snapshot.settings.verticalOffset);
-                });
-            entry->sizeChangedRegistered = true;
-
-            mux::DispatcherTimer timer;
-            timer.Interval(std::chrono::seconds(1));
-
-            entry->timer = timer;
-            entry->tickToken = timer.Tick(
-                [weakEntry](auto const &, auto const &)
-                {
-                    auto entry = weakEntry.lock();
-                    if (!entry || entry->cleaned)
-                    {
-                        return;
-                    }
-
-                    auto text = entry->text.get();
-                    if (!text)
-                    {
-                        ReleaseLabelEntry(entry, false);
-                        return;
-                    }
-
-                    if (g_unloading.load())
-                    {
-                        ReleaseLabelEntry(entry, true);
-                        return;
-                    }
-
-                    uint64_t generation =
-                        g_settingsGeneration.load(std::memory_order_acquire);
-                    bool settingsChanged =
-                        generation != entry->seenGeneration;
-
-                    if (settingsChanged)
-                    {
-                        SettingsSnapshot snapshot = GetSettingsSnapshot();
-                        entry->seenGeneration = snapshot.generation;
-                        entry->currentSettings = snapshot.settings;
-
-                        ApplyTextSettings(text, entry->currentSettings);
-                        entry->lastText =
-                            BuildDisplayText(entry->currentSettings);
-
-                        if (auto grid = entry->grid.get())
-                        {
-                            UpdateLabelPosition(
-                                text, grid,
-                                entry->currentSettings.verticalOffset);
-                        }
-                    }
-
-                    std::wstring current =
-                        BuildDisplayText(entry->currentSettings);
-                    if (current != entry->lastText)
-                    {
-                        text.Text(current);
-                        entry->lastText = std::move(current);
-
-                        if (auto grid = entry->grid.get())
-                        {
-                            UpdateLabelPosition(
-                                text, grid,
-                                entry->currentSettings.verticalOffset);
-                        }
-                    }
-                });
-            entry->tickRegistered = true;
-
-            timer.Start();
-        }
-        catch (...)
-        {
-            ReleaseLabelEntry(entry, true);
-            PruneReleasedLabelEntries();
-            throw;
         }
     }
-
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
-        ParentChildRelation,
-        VisualElement element,
-        VisualMutationType mutationType) override
-    {
-        try
-        {
-            if (!g_unloading.load() && mutationType == Add)
-            {
-                TryInsertTitleText(element.Handle);
-            }
-        }
-        catch (...)
-        {
-            Wh_Log(L"OnVisualTreeChange exception hr=0x%08X",
-                   winrt::to_hresult());
-        }
-
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle,
-                                                    VisualElementState,
-                                                    LPCWSTR) noexcept override
-    {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
-    winrt::com_ptr<IVisualTreeService3> m_visualTreeService;
-    HANDLE m_adviseThread = nullptr;
-    bool m_disconnected = false;
-};
-
-static winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// ============================================================================
-// TAP
-// ============================================================================
-
-static constexpr CLSID CLSID_WindhawkTitleBarLabelTAP = {
-    0x48b7eb40,
-    0xd62d,
-    0x49c0,
-    {0x9f, 0x13, 0x27, 0x41, 0xa7, 0x9b, 0xb4, 0x11},
-};
-
-class WindhawkTAP
-    : public winrt::implements<WindhawkTAP, IObjectWithSite,
-                               winrt::non_agile>
+    auto focused = mux::Input::FocusManager::GetFocusedElement();
+    if (auto element = focused ? focused.try_as<mux::UIElement>() : nullptr)
+        ScanXamlRootForTitleBars(element);
+}
+catch (...)
 {
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown *site) override
-    {
-        try
-        {
-            if (g_visualTreeWatcher)
-            {
-                g_visualTreeWatcher->Disconnect();
-                g_visualTreeWatcher = nullptr;
-            }
-            g_diagnosticsConnected.store(false, std::memory_order_release);
+}
 
-            m_site.copy_from(site);
-
-            if (m_site)
-            {
-                // Balance the module reference added by
-                // InitializeXamlDiagnosticsEx even during shutdown.
-                HMODULE module = GetCurrentModuleHandle();
-                if (module)
-                {
-                    FreeLibrary(module);
-                }
-
-                if (!g_unloading.load())
-                {
-                    g_visualTreeWatcher =
-                        winrt::make_self<VisualTreeWatcher>(m_site);
-                    g_diagnosticsConnected.store(
-                        true, std::memory_order_release);
-
-                    if (g_tapReadyEvent)
-                    {
-                        SetEvent(g_tapReadyEvent);
-                    }
-                }
-            }
-
-            return S_OK;
-        }
-        catch (...)
-        {
-            HRESULT hr = winrt::to_hresult();
-            Wh_Log(L"SetSite exception hr=0x%08X", hr);
-            return hr;
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void **result) noexcept override
-    {
-        if (!result)
-        {
-            return E_POINTER;
-        }
-
-        *result = nullptr;
-        if (!m_site)
-        {
-            return E_FAIL;
-        }
-
-        return m_site.as(riid, result);
-    }
-
-private:
-    winrt::com_ptr<IUnknown> m_site;
-};
-
-// ============================================================================
-// COM factory and exports
-// ============================================================================
-
-template <typename T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile>
+static void ScheduleCurrentThreadScan()
+try
 {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown *outer,
-                                             REFIID riid,
-                                             void **object) override
+    if (g_unloading.load())
+        return;
+    auto queue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+    if (!queue)
     {
-        if (!object)
-        {
-            return E_POINTER;
-        }
-
-        *object = nullptr;
-        if (outer)
-        {
-            return CLASS_E_NOAGGREGATION;
-        }
-
-        try
-        {
-            return winrt::make<T>().as(riid, object);
-        }
-        catch (...)
-        {
-            return winrt::to_hresult();
-        }
+        ScanCurrentThreadForTitleBars();
+        return;
     }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override
-    {
-        return S_OK;
-    }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(
-    REFCLSID clsid,
-    REFIID riid,
-    LPVOID *result)
+    queue.TryEnqueue([]()
+                     { ScanCurrentThreadForTitleBars(); });
+}
+catch (...)
 {
-    if (!result)
-    {
-        return E_POINTER;
-    }
+}
 
-    *result = nullptr;
-    if (clsid != CLSID_WindhawkTitleBarLabelTAP)
+static void DiscoverFromElement(mux::UIElement const &element)
+{
+    if (!g_unloading.load() && element)
     {
-        return CLASS_E_CLASSNOTAVAILABLE;
+        ScheduleXamlRootScan(element);
+    }
+}
+
+static void DiscoverFromInspectableParameter(void *parameter)
+{
+    if (g_unloading.load() || !parameter)
+    {
+        return;
     }
 
     try
     {
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, result);
+        auto const &inspectable =
+            *reinterpret_cast<wf::IInspectable const *>(parameter);
+
+        if (auto element =
+                inspectable ? inspectable.try_as<mux::UIElement>() : nullptr)
+        {
+            DiscoverFromElement(element);
+        }
     }
     catch (...)
     {
-        return winrt::to_hresult();
+        Wh_Log(L"XAML discovery failed hr=0x%08X",
+               winrt::to_hresult());
     }
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow()
+using CommandBarManager_CommandBar_t =
+    void(WINAPI *)(void *pThis, void *commandBar);
+static CommandBarManager_CommandBar_t CommandBarManager_CommandBar_Original;
+
+static void WINAPI CommandBarManager_CommandBar_Hook(void *pThis,
+                                                     void *commandBar)
 {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
+    CommandBarManager_CommandBar_Original(pThis, commandBar);
 
-#pragma clang diagnostic pop
-
-// ============================================================================
-// XAML diagnostics connection
-// ============================================================================
-
-using InitializeXamlDiagnosticsEx_t = decltype(&InitializeXamlDiagnosticsEx);
-
-static HRESULT ConnectToExplorerXaml()
-{
-    HMODULE self = GetCurrentModuleHandle();
-    if (!self)
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    wchar_t modulePath[MAX_PATH]{};
-    DWORD length =
-        GetModuleFileNameW(self, modulePath, ARRAYSIZE(modulePath));
-    if (!length || length >= ARRAYSIZE(modulePath))
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    HMODULE framework =
-        GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll");
-    if (!framework)
-    {
-        return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
-    }
-
-    auto initialize = reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
-        GetProcAddress(framework, "InitializeXamlDiagnosticsEx"));
-    if (!initialize)
-    {
-        return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
-    }
-
-    HRESULT hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-
-    for (int i = 1; i <= 10000 && !g_unloading.load(); ++i)
-    {
-        wchar_t connection[128]{};
-        swprintf_s(connection, L"WinUIVisualDiagConnection%d", i);
-
-        hr = initialize(connection, GetCurrentProcessId(), L"", modulePath,
-                        CLSID_WindhawkTitleBarLabelTAP, nullptr);
-
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
-        {
-            break;
-        }
-    }
-
-    return hr;
-}
-
-// ============================================================================
-// Connector thread
-// ============================================================================
-
-static bool SleepWhileLoaded(DWORD milliseconds)
-{
-    constexpr DWORD kSliceMs = 50;
-
-    while (milliseconds > 0 && !g_unloading.load())
-    {
-        DWORD slice = milliseconds < kSliceMs ? milliseconds : kSliceMs;
-        Sleep(slice);
-        milliseconds -= slice;
-    }
-
-    return !g_unloading.load();
-}
-
-static DWORD WINAPI ConnectorThread(LPVOID)
-{
-    // This thread starts only after a real File Explorer window exists. Give
-    // WinUI a bounded startup window instead of polling forever in unsupported
-    // Explorer processes.
-    constexpr int kMaxAttempts = 120;
-    constexpr DWORD kRetryDelayMs = 500;
-
-    for (int attempt = 0;
-         attempt < kMaxAttempts && !g_unloading.load();
-         ++attempt)
-    {
-        HMODULE framework =
-            GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll");
-
-        if (framework)
-        {
-            HRESULT hr = ConnectToExplorerXaml();
-            if (SUCCEEDED(hr))
-            {
-                // Some XAML-diagnostics consumers intentionally return S_OK
-                // while blocking the caller. Only report success after our
-                // TAP's SetSite actually runs.
-                DWORD waitResult =
-                    g_tapReadyEvent
-                        ? WaitForSingleObject(g_tapReadyEvent, 2000)
-                        : WAIT_FAILED;
-
-                if (waitResult == WAIT_OBJECT_0)
-                {
-                    Wh_Log(L"Connected to Explorer XAML diagnostics");
-                }
-                else if (!g_unloading.load())
-                {
-                    Wh_Log(
-                        L"XAML diagnostics returned success, but the title-bar "
-                        L"TAP was not initialized. Another XAML diagnostics "
-                        L"consumer may have blocked the connection.");
-                }
-
-                return 0;
-            }
-
-            if (g_unloading.load())
-            {
-                return 0;
-            }
-
-            if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND) &&
-                hr != HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
-            {
-                Wh_Log(L"Diagnostics connection failed hr=0x%08X", hr);
-                return 0;
-            }
-        }
-
-        if (!SleepWhileLoaded(kRetryDelayMs))
-        {
-            return 0;
-        }
-    }
-
-    if (!g_unloading.load())
-    {
-        Wh_Log(L"Explorer WinUI diagnostics did not become available");
-    }
-
-    return 0;
-}
-
-static void EnsureConnectorStarted()
-{
-    if (g_unloading.load() ||
-        g_diagnosticsConnected.load(std::memory_order_acquire))
+    if (g_unloading.load() || !commandBar)
     {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(g_connectorMutex);
-    if (g_unloading.load() ||
-        g_diagnosticsConnected.load(std::memory_order_acquire))
+    try
     {
-        return;
-    }
+        auto const &element =
+            *reinterpret_cast<muxc::CommandBar const *>(commandBar);
 
-    if (g_connectorThread)
-    {
-        if (WaitForSingleObject(g_connectorThread, 0) == WAIT_OBJECT_0)
+        if (element)
         {
-            CloseHandle(g_connectorThread);
-            g_connectorThread = nullptr;
-        }
-        else
-        {
-            return;
+            DiscoverFromElement(element);
         }
     }
-
-    if (g_tapReadyEvent)
+    catch (...)
     {
-        ResetEvent(g_tapReadyEvent);
-    }
-
-    g_connectorThread =
-        CreateThread(nullptr, 0, ConnectorThread, nullptr, 0, nullptr);
-    if (!g_connectorThread)
-    {
-        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        Wh_Log(L"CommandBar discovery failed hr=0x%08X",
+               winrt::to_hresult());
     }
 }
 
-static void StopConnectorThread()
+using CommandBarControl_GotFocusHandler_t =
+    void(WINAPI *)(void *pThis, void *sender, void *args);
+static CommandBarControl_GotFocusHandler_t
+    CommandBarControl_GotFocusHandler_Original;
+
+static void WINAPI CommandBarControl_GotFocusHandler_Hook(
+    void *pThis, void *sender, void *args)
 {
-    HANDLE thread = nullptr;
+    CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
 
-    {
-        std::lock_guard<std::mutex> lock(g_connectorMutex);
-        thread = g_connectorThread;
-    }
-
-    if (!thread)
+    if (g_unloading.load() || !sender)
     {
         return;
     }
 
-    if (GetThreadId(thread) != GetCurrentThreadId())
+    try
     {
-        WaitForSingleObject(thread, INFINITE);
+        auto const &inspectable =
+            *reinterpret_cast<wf::IInspectable const *>(sender);
+
+        if (auto element =
+                inspectable ? inspectable.try_as<mux::UIElement>() : nullptr)
+        {
+            Wh_Log(L"GotFocus fired, thread=%u",
+                   GetCurrentThreadId());
+            ScheduleXamlRootScan(element);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"GotFocus access failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+using ThreeParameterEvent_t =
+    void(WINAPI *)(void *pThis, void *sender, void *args);
+
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_Loaded_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_GotFocus_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_SelectionChanged_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_TabItemsChanged_Original;
+
+static void WINAPI FileExplorerTabControl_TabView_Loaded_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_Loaded_Original(pThis, sender, args);
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_GotFocus_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_GotFocus_Original(pThis, sender, args);
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_SelectionChanged_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_SelectionChanged_Original(
+        pThis, sender, args);
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_TabItemsChanged_Hook(
+    void *pThis, void *tabView, void *args)
+{
+    FileExplorerTabControl_TabView_TabItemsChanged_Original(
+        pThis, tabView, args);
+
+    if (g_unloading.load() || !tabView)
+    {
+        return;
     }
 
-    std::lock_guard<std::mutex> lock(g_connectorMutex);
-    if (g_connectorThread == thread)
+    try
     {
-        CloseHandle(g_connectorThread);
-        g_connectorThread = nullptr;
+        auto const &typedTabView =
+            *reinterpret_cast<muxc::TabView const *>(tabView);
+
+        if (typedTabView)
+        {
+            DiscoverFromElement(typedTabView);
+        }
     }
+    catch (...)
+    {
+        Wh_Log(L"TabView items discovery failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+static std::atomic<bool> g_symbolsHooked{false};
+enum class SymbolHookResult
+{
+    Success,
+    ResolutionFailed,
+    NoSymbolFound
+};
+
+static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
+{
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const & __ptr64) __ptr64)",
+            },
+            &CommandBarManager_CommandBar_Original,
+            CommandBarManager_CommandBar_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
+            },
+            &FileExplorerTabControl_TabView_Loaded_Original,
+            FileExplorerTabControl_TabView_Loaded_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
+            },
+            &FileExplorerTabControl_TabView_GotFocus_Original,
+            FileExplorerTabControl_TabView_GotFocus_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const & __ptr64) __ptr64)",
+            },
+            &FileExplorerTabControl_TabView_SelectionChanged_Original,
+            FileExplorerTabControl_TabView_SelectionChanged_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const &,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const & __ptr64,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const & __ptr64) __ptr64)",
+            },
+            &FileExplorerTabControl_TabView_TabItemsChanged_Original,
+            FileExplorerTabControl_TabView_TabItemsChanged_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
+            },
+            &CommandBarControl_GotFocusHandler_Original,
+            CommandBarControl_GotFocusHandler_Hook,
+            true,
+        },
+    };
+
+    Wh_Log(L"Resolving FileExplorerExtensions hooks");
+
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
+    {
+        Wh_Log(L"HookSymbols(FileExplorerExtensions.dll) failed");
+        return SymbolHookResult::ResolutionFailed;
+    }
+
+    if (!CommandBarManager_CommandBar_Original &&
+        !FileExplorerTabControl_TabView_Loaded_Original &&
+        !FileExplorerTabControl_TabView_GotFocus_Original &&
+        !FileExplorerTabControl_TabView_SelectionChanged_Original &&
+        !FileExplorerTabControl_TabView_TabItemsChanged_Original)
+    {
+        Wh_Log(L"No typed File Explorer discovery hook was found");
+        return SymbolHookResult::NoSymbolFound;
+    }
+
+    Wh_Log(L"FileExplorerExtensions hooks registered");
+    return SymbolHookResult::Success;
+}
+
+static HMODULE GetFileExplorerExtensionsModuleHandle() { return GetModuleHandleW(L"FileExplorerExtensions.dll"); }
+static bool HookFileExplorerExtensionsIfLoaded(bool applyHooks)
+{
+    if (g_symbolsHooked.load())
+        return true;
+    HMODULE module = GetFileExplorerExtensionsModuleHandle();
+    if (!module)
+        return true;
+    if (g_symbolsHooked.exchange(true))
+        return true;
+    Wh_Log(L"Hooking FileExplorerExtensions.dll");
+    switch (HookFileExplorerExtensionsSymbols(module))
+    {
+    case SymbolHookResult::Success:
+        break;
+    case SymbolHookResult::ResolutionFailed:
+        g_symbolsHooked.store(false);
+        return false;
+    case SymbolHookResult::NoSymbolFound:
+        return false;
+    }
+    if (applyHooks)
+        Wh_ApplyHookOperations();
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original;
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags)
+{
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+    if (!module || g_unloading.load() || !fileName)
+        return module;
+    PCWSTR baseName = fileName;
+    for (PCWSTR p = fileName; *p; ++p)
+        if (*p == L'\\' || *p == L'/')
+            baseName = p + 1;
+    if (_wcsicmp(baseName, L"FileExplorerExtensions.dll") == 0 ||
+        _wcsicmp(baseName, L"FileExplorerExtensions") == 0)
+        HookFileExplorerExtensionsIfLoaded(true);
+    return module;
 }
 
 // ============================================================================
@@ -2144,88 +1919,54 @@ static void StopConnectorThread()
 BOOL Wh_ModInit()
 {
     Wh_Log(L"Explorer Title Bar Label 1.0.0 init");
-
     g_unloading.store(false);
-    g_diagnosticsConnected.store(false, std::memory_order_release);
+    g_symbolsHooked.store(false);
     LoadSettings(false);
 
-    g_tapReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_tapReadyEvent)
+    if (GetFileExplorerExtensionsModuleHandle())
     {
-        Wh_Log(L"CreateEvent failed: %u", GetLastError());
-        return FALSE;
+        if (!HookFileExplorerExtensionsIfLoaded(false))
+            return FALSE;
     }
-
-    if (!Wh_SetFunctionHook(
-            reinterpret_cast<void *>(CreateWindowExW),
-            reinterpret_cast<void *>(CreateWindowExW_Hook),
-            reinterpret_cast<void **>(&CreateWindowExW_Original)))
+    else
     {
-        Wh_Log(L"Failed to hook CreateWindowExW");
-        CloseHandle(g_tapReadyEvent);
-        g_tapReadyEvent = nullptr;
-        return FALSE;
+        Wh_Log(L"FileExplorerExtensions.dll isn't loaded yet");
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+        if (!loadLibraryExW)
+            return FALSE;
+        if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original))
+            return FALSE;
     }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit()
 {
-    // Hooks become active after Wh_ModInit. Handle windows which were already
-    // open before that point.
-    if (!GetFileExplorerWindows().empty())
+    HookFileExplorerExtensionsIfLoaded(true);
+    for (HWND hwnd : GetFileExplorerWindows())
     {
-        EnsureConnectorStarted();
+        RunFromWindowThread(hwnd, [](PVOID)
+                            { ScanCurrentThreadForTitleBars(); }, nullptr);
     }
 }
 
-void Wh_ModSettingsChanged()
-{
-    LoadSettings(true);
-}
-
-// Function hooks are removed before Wh_ModUninit, but XAML delegates can still
-// be alive until explicit UI-thread teardown below. Stop them from doing new
-// work as early as Windhawk allows.
-void Wh_ModBeforeUninit()
-{
-    g_unloading.store(true);
-    g_diagnosticsConnected.store(false, std::memory_order_release);
-}
+void Wh_ModSettingsChanged() { LoadSettings(true); }
+void Wh_ModBeforeUninit() { g_unloading.store(true); }
 
 void Wh_ModUninit()
 {
     Wh_Log(L"Explorer Title Bar Label 1.0.0 uninit");
-
     g_unloading.store(true);
-
-    StopConnectorThread();
-
-    // Every XAML delegate is revoked synchronously on the thread which owns it
-    // before this DLL can be unloaded.
     for (HWND hwnd : GetFileExplorerWindows())
     {
-        if (!RunFromWindowThread(
-                hwnd, [](PVOID)
-                { RemoveLabelsForCurrentThread(); },
-                nullptr))
+        if (!RunFromWindowThread(hwnd, [](PVOID)
+                                 { RemoveLabelsForCurrentThread(); }, nullptr))
         {
             Wh_Log(L"Couldn't reach Explorer UI thread for window %08X",
                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
         }
-    }
-
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->Disconnect();
-        g_visualTreeWatcher = nullptr;
-    }
-    g_diagnosticsConnected.store(false, std::memory_order_release);
-
-    if (g_tapReadyEvent)
-    {
-        CloseHandle(g_tapReadyEvent);
-        g_tapReadyEvent = nullptr;
     }
 }
