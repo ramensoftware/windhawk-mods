@@ -771,7 +771,7 @@ static bool HookTaskbarDllSymbols()
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"
@@ -800,8 +800,8 @@ static bool HookTaskbarDllSymbols()
 
     return WindhawkUtils::HookSymbols(
         module,
-        hooks,
-        ARRAYSIZE(hooks)
+        taskbarDllHooks,
+        ARRAYSIZE(taskbarDllHooks)
     );
 }
 
@@ -3099,7 +3099,7 @@ static void* WINAPI IconView_IconView_Hook(
 static bool HookSystemTraySymbols(
     HMODULE module)
 {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
         {
             LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
         },
@@ -3109,8 +3109,8 @@ static bool HookSystemTraySymbols(
 
     return WindhawkUtils::HookSymbols(
         module,
-        hooks,
-        ARRAYSIZE(hooks)
+        systemTrayDllHooks,
+        ARRAYSIZE(systemTrayDllHooks)
     );
 }
 
