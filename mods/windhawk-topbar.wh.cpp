@@ -36,7 +36,7 @@ More themes, stylings, etc can be found and contributed from:
 ## Features
 
 - **Task list** — window icons, titles, click-to-activate, double-click maximize
-- **Control centre** — Display (brightness, Night Light, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)
+- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)
 - **Full styling** via Control styles
 - **Background translucency** with acrylic/blur
 
@@ -2518,7 +2518,7 @@ bool Available() {
 }  // namespace brightness
 
 // ============================================================================
-// Dark mode / Night Light
+// Dark mode
 // ============================================================================
 
 bool IsAppsDarkMode() {
@@ -2553,13 +2553,6 @@ void SetAppsDarkMode(bool dark) {
                        reinterpret_cast<LPARAM>(L"ImmersiveColorSet"), SMTO_ABORTIFHUNG, 200,
                        &result);
 }
-
-// Night Light has no public API at all. Its state lives in a CloudStore blob
-// whose layout is undocumented: a 2-byte "enabled" marker sits at offset 18 and
-// is simply absent when it's off. Every third-party toggle does this same
-// insert/remove. The blob is sanity-checked before writing and the original is
-// put back if the write fails, so a format change on a future build degrades to
-// "the toggle does nothing" rather than corrupting the value.
 
 
 constexpr PCWSTR kStateKey =
@@ -3902,7 +3895,7 @@ wuxc::Button MakeListRow(FrameworkElement leading,
     return button;
 }
 
-// The square accent tile used for Night light / Dark mode: filled when on,
+// The square accent tile used for Dark mode: filled when on,
 // ghost when off, so state is readable without a separate label.
 wuxc::Button MakeToggleTile(std::wstring_view label,
                             std::wstring_view iconFill,
