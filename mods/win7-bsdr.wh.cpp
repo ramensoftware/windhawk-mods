@@ -53,11 +53,11 @@ and make sure that `LogonUI.exe` is in the list.
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 ### Notes for advanced users
 * Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
-* This mod has safety checks before enabling the classic logoff behavior, such as checking if `LogonUI.exe` is added to the global inclusion list properly as stated above, to prevent the logoff sequence from appearing stuck when misconfigured.
+* This mod includes safety checks before enabling classic logoff behavior, such as verifying that the mod loaded successfully into LogonUI.exe, to prevent the logoff sequence from getting stuck when misconfigured.
     * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
 * To see the mod log output during a logoff, run `"C:\Program Files\Windhawk\UI\resources\app\extensions\windhawk\files\DbgViewMini.exe" --pattern "[WH] *" --no-buffering` and open another blocking window (e.g. unsaved mspaint).
     * It survives longer than the Windhawk UI, and it usually stays alive when Cancel is pressed.
-    * Replace the `C:\Program Files\Windhawk` part with your Windhawk installation directory.
+    * Replace the `C:\Program Files\Windhawk` part with your Windhawk installation directory if you installed it elsewhere.
 */
 // ==/WindhawkModReadme==
 
@@ -125,6 +125,8 @@ and make sure that `LogonUI.exe` is in the list.
 #define BSDR_CANCEL_TIMER 1
 #define BSDR_CANCEL_TIMER_MS 700
 
+#define LOGONUI_READY_EVENT L"Local\\WHCustomBSDR_LogonUiReady"
+
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
 
@@ -135,6 +137,8 @@ std::mutex g_doModalExitEventMutex;
 HANDLE g_hDoModalExitEventDup = nullptr;
 
 std::atomic<bool> g_isExiting = false;
+
+HANDLE g_hLogonUiReadyEvent = nullptr;
 
 #pragma region resources
 // Resource IDs
@@ -4112,6 +4116,7 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
     if (!scaleFactor)
         return E_POINTER;
 
+    // This function's output controls the quality of app icons that the BSDR backend sends
     *scaleFactor = CustomBSDR::GetScaleFactor();
     return S_OK;
 }
@@ -4379,9 +4384,9 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
 
 #pragma region Winlogon hooks (disable async logoff)
 bool g_isWinlogon = false;
-bool g_noSafetyChecks = false;
 int* p_g_fShutdownResolverDisabled = nullptr;
 int g_origResolverDisabledState = 0;
+bool g_resolverDisabledByMod = false;
 
 // Check if non-default BSDR (e.g. AuthUX BSDR) is installed
 bool IsAuthUxInstalled() {
@@ -4403,120 +4408,12 @@ bool IsAuthUxInstalled() {
     return false;
 }
 
-// Safeguard: check if user read the readme
-// The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
-// it will get stuck in the invisible secure desktop, and users can become clueless.
-// Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
-//
-// Can't think of better appraoch because of the execution sequence mentioned in CustomBSDR::Start
-// ShutdownWindowsWorkerThread (which uses g_fShutdownResolverDisabled) runs before LogonUI exec so checking live LUI injection status is tricky
-// and will be always one step behind (e.g. will detect as LUI not injected on first logoff after mod install)
-// I know the global inclusion key is not everything that affects that injection but this is minimal safeguard anyway
-// Note: the global include key is honored over the global exclusions. Mod specific exclusions have more priority but checking it overcomplicates stuff
-// (Checking for mod specific exclusion needs checking two keys, and asking users to add LogonUI to the mod specific inclusion is unnecessary and too much burden)
-// So let's just hope users don't mess with mod specific advanced settings to force exclude LogonUI.exe lol
-// Note 2: applying the global inclusion setting fully restarts Windhawk and reloads every mods; there's no need to tell users to disable and reenable the mod
-bool IsLogonUiInjectionEnabled() {
-    // Skip by user choice
-    if (g_noSafetyChecks) {
-        return true;
+void RestoreShutdownResolverState() {
+    if (g_resolverDisabledByMod && p_g_fShutdownResolverDisabled) {
+        *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
+        g_resolverDisabledByMod = false;
+        Wh_Log(L"Restored g_fShutdownResolverDisabled to %d", g_origResolverDisabledState);
     }
-
-    // Skip if AuthUX is installed
-    if (IsAuthUxInstalled()) {
-        return true;
-    }
-
-    // Check for the global WH inclusion settings (only for non portable)
-    HKEY hKey;
-    int res = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Windhawk\\Engine\\Settings", 0, KEY_READ, &hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"WH inclusion check failed (RegOpenKeyExW), error=%d", res);
-        return false;
-    }
-
-    DWORD size = 0;
-    // WH inclusion key: pipe separated REG_SZ
-    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, nullptr, &size);
-    if (res != ERROR_SUCCESS && res != ERROR_MORE_DATA) {
-        Wh_Log(L"WH inclusion check failed (size query), GLE=%d", res);
-        RegCloseKey(hKey);
-        return false;
-    }
-
-    wchar_t* inclData = new wchar_t[size / sizeof(wchar_t) + 1];
-    res = RegQueryValueExW(hKey, L"Include", nullptr, nullptr, (LPBYTE)inclData, &size);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"WH inclusion check failed, error=%d", res);
-        delete[] inclData;
-        RegCloseKey(hKey);
-        return false;
-    }
-
-    inclData[size / sizeof(wchar_t)] = L'\0';
-    int isLogonUiInInclusion = wcsstr(_wcsupr(inclData), L"LOGONUI.EXE") != NULL;
-    delete[] inclData;
-
-    Wh_Log(L"WH inclusion check: isLogonUiInInclusion=%d", isLogonUiInInclusion);
-
-    if (!isLogonUiInInclusion) {
-        size = sizeof(DWORD);
-        DWORD type = 0;
-
-        DWORD inclCritSysData;
-        res = RegQueryValueExW(hKey, L"InjectIntoCriticalProcesses", nullptr, &type, (LPBYTE)&inclCritSysData, &size);
-        RegCloseKey(hKey);
-        if (res != ERROR_SUCCESS || type != REG_DWORD || size != sizeof(DWORD)) {
-            Wh_Log(L"WH inclusion check failed, error=%d, type=%lu, size=%lu", res, type, size);
-            return false;
-        }
-
-        Wh_Log(L"WH inclusion check: inclCritSysData=%d", inclCritSysData);
-
-        // Deny if LogonUI isn't explicitly included and critical-process injection is disabled.
-        if (inclCritSysData == 0) {
-            return false;
-        }
-    } else {
-        RegCloseKey(hKey);
-    }
-
-    // Check if Windhawk service is running, to deny the portable version
-    // One of these happens on portable (depending on the Windhawk.exe exit timing):
-    //   The active probe below succeeds as WH is still running, but it dies early during the logoff sequence, so actual LUI hook fails
-    //   LogonUI hooks try to initialize but gets unloaded immediately (resulting in the bail-out force resolve path)
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) {
-        Wh_Log(L"Failed to open SCM, GLE=%d", GetLastError());
-        return false;
-    }
-
-    SC_HANDLE hService = OpenServiceW(hSCM, L"Windhawk", SERVICE_QUERY_STATUS);
-    if (!hService) {
-        // Serivce not installed, portable
-        CloseServiceHandle(hSCM);
-        return false;
-    }
-
-    SERVICE_STATUS_PROCESS ssp;
-    DWORD bytesNeeded;
-    if (QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&ssp), sizeof(SERVICE_STATUS_PROCESS), &bytesNeeded)) {
-        if (ssp.dwCurrentState != SERVICE_RUNNING) {
-            // Service not running, portable
-            CloseServiceHandle(hService);
-            CloseServiceHandle(hSCM);
-            return false;
-        }
-    } else {
-        Wh_Log(L"Windhawk service query failed, GLE=%d", GetLastError());
-        CloseServiceHandle(hService);
-        CloseServiceHandle(hSCM);
-        return false;
-    }
-
-    CloseServiceHandle(hService);
-    CloseServiceHandle(hSCM);
-    return true;
 }
 
 /*
@@ -4532,6 +4429,8 @@ void ShutdownWindowsWorkerThread(...)
     if (!g_fShutdownResolverDisabled)
         CSession::AsyncSwitchDesktop(...);
     ...
+    if (...)
+        info = WluiGetShutdownResolverInfo(...);
 }
 So, write a value on LogonUI ModInit, check it in WluiInformLogonUI, and if the value is found, set g_fShutdownResolverDisabled to 1, and ignore the call
 This should have the same effect as having g_fShutdownResolverDisabled == 1 at the beginning of ShutdownWindowsWorkerThread
@@ -4540,23 +4439,37 @@ typedef __int64 (__fastcall *WluiInformLogonUI_t)(int a1, int a2, int a3);
 WluiInformLogonUI_t WluiInformLogonUI_original;
 __int64 __fastcall WluiInformLogonUI_hook(int a1, int a2, int a3) {
     Wh_Log(L"WluiInformLogonUI(%d, %d, %d)", a1, a2, a3);
-    if (Wh_GetIntValue(L"LogonUiLoadOk", 0)) {
-        Wh_Log(L"LogonUI load check OK!");
+    if (a1 == 0 && a3 == 0 && p_g_fShutdownResolverDisabled) {
+        const bool noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
+        HANDLE readyEvent = noSafetyChecks ? nullptr : OpenEventW(SYNCHRONIZE, FALSE, LOGONUI_READY_EVENT);
+
+        if (readyEvent || noSafetyChecks) {
+            if (readyEvent) {
+                CloseHandle(readyEvent);
+                Wh_Log(L"LogonUI load check OK!");
+            } else {
+                Wh_Log(L"Skipped LogonUI load check");
+            }
+
+            g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
+            *p_g_fShutdownResolverDisabled = 1;
+            g_resolverDisabledByMod = true;
+        } else {
+            Wh_Log(L"LogonUI load check failed!");
+        }
+        return 0;
     }
     return WluiInformLogonUI_original(a1, a2, a3);
 }
 
-// Delete LogonUiLoadOk before this function gets called, as this function executes LogonUI.exe
-// (This function has more usage than WluiInformLogonUI so it's hard to distinguish calls from ShutdownWindowsWorkerThread)
-// Note: we shouldn't hook ShutdownWindowsWorkerThread as it's a long-running function that keeps running until shutdown finishes/gets canceled
-// so hooking it may make unloading mod problematic
-typedef __int64 (__fastcall *WluiiWaitForServer_t)();
-WluiiWaitForServer_t WluiiWaitForServer_original;
-__int64 __fastcall WluiiWaitForServer_hook() {
-    Wh_Log(L"WluiiWaitForServer");
-    Wh_DeleteValue(L"LogonUiLoadOk");
-    int ret = WluiiWaitForServer_original();
-    Wh_Log(L"WluiiWaitForServer end");
+// This runs for a short amount of time, after resolving from LogonUI. So restore the original value in here
+typedef __int64 (__fastcall *WluiGetShutdownResolverInfo_t)(DWORD *a1, DWORD *a2, DWORD *a3);
+WluiGetShutdownResolverInfo_t WluiGetShutdownResolverInfo_original;
+__int64 __fastcall WluiGetShutdownResolverInfo_hook(DWORD *a1, DWORD *a2, DWORD *a3) {
+    Wh_Log(L"WluiGetShutdownResolverInfo");
+    __int64 ret = WluiGetShutdownResolverInfo_original(a1, a2, a3);
+    RestoreShutdownResolverState();
+    Wh_Log(L"WluiGetShutdownResolverInfo end");
     return ret;
 }
 
@@ -4579,10 +4492,10 @@ WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
     },
     {
         {
-            L"static  WluiiWaitForServer()",
+            L"WluiGetShutdownResolverInfo",
         },
-        (void**)&WluiiWaitForServer_original,
-        (void*)WluiiWaitForServer_hook,
+        (void**)&WluiGetShutdownResolverInfo_original,
+        (void*)WluiGetShutdownResolverInfo_hook,
         FALSE
     }
 };
@@ -4611,7 +4524,6 @@ BOOL Wh_ModInit() {
             Wh_Log(L"GetModuleHandleW(NULL) == NULL??");
             return FALSE;
         }
-        g_noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
         return TRUE;
     }
 
@@ -4696,28 +4608,12 @@ BOOL Wh_ModInit() {
 
     CustomBSDR::modernScrolling = Wh_GetIntSetting(L"modernScrolling");
 
-    Wh_SetIntValue(L"LogonUiLoadOk", 1);
+    g_hLogonUiReadyEvent = CreateEventW(nullptr, TRUE, TRUE, LOGONUI_READY_EVENT);
+    if (!g_hLogonUiReadyEvent) {
+        Wh_Log(L"CreateEventW failed, GLE=%d", GetLastError());
+    }
 
     return TRUE;
-}
-
-void ApplyResolverDisabledState() {
-    if (g_isWinlogon && p_g_fShutdownResolverDisabled) {
-        g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
-        if (g_origResolverDisabledState) { // Maybe the allowblockingappsatshutdown registry is set
-            Wh_Log(L"g_fShutdownResolverDisabled is already set to 1");
-        } else if (IsLogonUiInjectionEnabled()) {
-            *p_g_fShutdownResolverDisabled = 1; // Disable the async logoff resolver
-            Wh_Log(L"Set g_fShutdownResolverDisabled to 1");
-        } else {
-            // User did not read the instruction and LogonUI is not added to the inclusion list
-            Wh_Log(L"Not setting g_fShutdownResolverDisabled as LogonUI hooks are not ready");
-        }
-    }
-}
-
-void Wh_ModAfterInit() {
-    ApplyResolverDisabledState();
 }
 
 void Wh_ModBeforeUninit() {
@@ -4726,6 +4622,11 @@ void Wh_ModBeforeUninit() {
     }
 
     g_isExiting.store(true);
+
+    if (g_hLogonUiReadyEvent) {
+        CloseHandle(g_hLogonUiReadyEvent);
+        g_hLogonUiReadyEvent = nullptr;
+    }
 
     using namespace CustomBSDR;
 
@@ -4764,9 +4665,7 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
     if (g_isWinlogon) {
-        if (p_g_fShutdownResolverDisabled) {
-            *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
-        }
+        RestoreShutdownResolverState();
         return;
     }
 
@@ -4809,16 +4708,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
             // The global injection is enabled or disabled, need to unload the mod
             // (Reloading unloaded mod on mod setting change is automatically handled by Windhawk)
             return FALSE;
-        } else {
-            bool newNoSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
-            if (g_noSafetyChecks != newNoSafetyChecks) {
-                // Only update the winlogon variable instead of reloading the whole mod
-                if (p_g_fShutdownResolverDisabled) {
-                    *p_g_fShutdownResolverDisabled = g_origResolverDisabledState;
-                }
-                g_noSafetyChecks = newNoSafetyChecks;
-                ApplyResolverDisabledState();
-            }
         }
     }
 
