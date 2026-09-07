@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-05T17:20:33.000Z</updated>
+    <updated>2026-09-07T19:03:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
+        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
+        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
+        <updated>2026-09-07T19:03:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="adjustabletrayiconspaddingforwin10taskbar">Adjustable tray icons padding for Win10 taskbar</h1>
+<p>This is a port of functionality of 7+ Taskbar Tweaker that allows to adjust the padding of the tray icons
+in legacy (Win10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
+use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
+<p><img src="https://i.imgur.com/NjGhXuc.png" alt="screenshot" /></p>
+<p>The default padding value is set to 2, the same as under Windows 95-Windows XP, more dense than under Windows 7, but can be changed in mod's options.</p>
+<p>Explorer should be restarted after enabling this mod.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome Native UI Tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/chrome-native-ui-tweaks#6075adc388cffe962678b6dd3c3d35618d4595df</id>
@@ -1242,26 +1259,6 @@ Inert, not broken: the stock highlight simply comes back.</p>]]></content>
         <author>
             <name>RiteshK</name>
             <uri>https://github.com/RiteshKhandekar</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Action Center on Active Display 1.1.1]]></title>
-        <id>https://windhawk.net/mods/action-center-active-display#69c690341417623064c34f367305fa71072824ac</id>
-        <link href="https://windhawk.net/mods/action-center-active-display"/>
-        <updated>2026-08-26T11:42:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="actioncenteronactivedisplay">Action Center on Active Display</h1>
-<p>Opens the Windows Action Center (Quick Settings, <code>Win + A</code>), Cast pane (<code>Win + K</code>), and Project pane (<code>Win + P</code>) on the monitor where your mouse cursor is currently located.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>SetWindowPos</code> inside ShellExperienceHost.exe (pre-24H2) and ShellHost.exe (24H2+). 
-When any of these windows are positioned, the mod intercepts the call, 
-determines the target monitor using the cursor position, and repositions the window with proper DPI scaling to the active display.</p>
-<h2 id="supportedwindowsbuilds">Supported Windows Builds</h2>
-<ul>
-<li>Windows 11 22H2 and 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>ereinaimer</name>
-            <uri>https://github.com/ereinaimer</uri>
         </author>
     </entry>
 </feed>

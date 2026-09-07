@@ -3502,6 +3502,34 @@
         "version": "1.0"
       }
     },
+    "dense-tray-icons-padding-old-taskbar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788807824000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788807824000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anixx",
+        "compilerOptions": "-lcomctl32 -lpsapi",
+        "description": "Makes padding of tray icons adjustable in legacy taskbar",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Adjustable tray icons padding for Win10 taskbar",
+        "version": "1.0"
+      }
+    },
     "desktop-audio-visualizer": {
       "details": {
         "defaultSorting": 2583,

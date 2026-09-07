@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-07T18:02:10.000Z</updated>
+    <updated>2026-09-07T19:03:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
+        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
+        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
+        <updated>2026-09-07T19:03:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="adjustabletrayiconspaddingforwin10taskbar">Adjustable tray icons padding for Win10 taskbar</h1>
+<p>This is a port of functionality of 7+ Taskbar Tweaker that allows to adjust the padding of the tray icons
+in legacy (Win10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
+use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
+<p><img src="https://i.imgur.com/NjGhXuc.png" alt="screenshot" /></p>
+<p>The default padding value is set to 2, the same as under Windows 95-Windows XP, more dense than under Windows 7, but can be changed in mod's options.</p>
+<p>Explorer should be restarted after enabling this mod.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.8]]></title>
         <id>https://windhawk.net/mods/mutealert#96af7a4c23f66842ccc6aa627b8cb0d611d81df4</id>
@@ -556,17 +573,6 @@ attribution look busier than expected.</li>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.5]]></title>
-        <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#9547257f6e615dc30a528040b02b9def90181b7b</id>
-        <link href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe"/>
-        <updated>2026-09-04T19:26:37.000Z</updated>
-        <content type="html"><![CDATA[<p>Add address bar</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
