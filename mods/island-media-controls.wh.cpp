@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.40
+// @version         0.10.41
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -1963,6 +1963,15 @@ bool RunFromWindowThread(HWND hwnd,
         return true;
     }
 
+    // Probe responsiveness before installing the hook. The probe carries no
+    // pointer, so a timeout can't leave caller-owned memory queued elsewhere.
+    if (!SendMessageTimeoutW(hwnd, WM_NULL, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                             200, nullptr)) {
+        Wh_Log(L"Island: taskbar thread is unresponsive");
+        return false;
+    }
+
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
         [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
@@ -1991,18 +2000,12 @@ bool RunFromWindowThread(HWND hwnd,
     }
 
     Payload payload{proc, param};
-    // The payload lives on this stack. SMTO_NOTIMEOUTIFNOTHUNG allows the
-    // timeout to abort a thread which never starts dispatching, but once the
-    // hook callback begins it keeps this call blocked until the payload is no
-    // longer in use.
-    DWORD_PTR ignoredResult = 0;
-    BOOL dispatched = SendMessageTimeoutW(
-        hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
-        1500, &ignoredResult);
+    // The stack payload is safe only with a fully synchronous send: this call
+    // can't return while the hook callback is still using it.
+    SendMessageW(hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload));
     UnhookWindowsHookEx(hook);
-    if (!dispatched && !payload.invoked) {
-        Wh_Log(L"Island: taskbar-thread dispatch timed out or failed");
+    if (!payload.invoked) {
+        Wh_Log(L"Island: taskbar-thread dispatch failed");
     }
     if (callbackInvoked) {
         *callbackInvoked = payload.invoked;
@@ -14962,9 +14965,9 @@ void MediaThreadProc() {
 }
 
 void StartMediaThread() {
-    // The worker is started once during mod initialization and owned by the
-    // unload path from then on. Never join or replace it from the taskbar UI
-    // thread: the worker can be synchronously dispatching to that same thread.
+    // The worker is created only for a process that owns the taskbar. Serialize
+    // the thread object with teardown, but never wait while holding this mutex.
+    std::lock_guard lock(g_mediaCommandMutex);
     if (g_unloading.load() || g_mediaThread) {
         return;
     }
@@ -14981,17 +14984,19 @@ void StartMediaThread() {
 }
 
 void StopMediaThread() {
+    std::optional<std::thread> mediaThread;
     {
         std::lock_guard lock(g_mediaCommandMutex);
         g_mediaThreadRunning = false;
         g_mediaRefreshRequested = false;
+        if (g_mediaThread) {
+            mediaThread.emplace(std::move(*g_mediaThread));
+            g_mediaThread.reset();
+        }
     }
     g_mediaCommandCv.notify_all();
-    if (g_mediaThread) {
-        if (g_mediaThread->joinable()) {
-            g_mediaThread->join();
-        }
-        g_mediaThread.reset();
+    if (mediaThread && mediaThread->joinable()) {
+        mediaThread->join();
     }
     {
         std::lock_guard lock(g_mediaCommandMutex);
@@ -17552,6 +17557,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (g_taskbarWnd) {
+        StartMediaThread();
         RunFromWindowThread(
             g_taskbarWnd,
             [](void*) { ApplyPendingSettingsAndInject(); },
@@ -17606,9 +17612,13 @@ void Wh_ModAfterInit() {
     }
     g_modActive = true;
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (g_taskbarWnd) {
+        StartMediaThread();
+    }
     ApplySettingsOnTaskbarThread();
-    StartMediaThread();
-    RequestMediaRefresh();
+    if (g_taskbarWnd) {
+        RequestMediaRefresh();
+    }
 }
 
 void Wh_ModUninit() {
@@ -17697,7 +17707,7 @@ void Wh_ModSettingsChanged() {
     }
 
     if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0) &&
-        GetStringSetting(L"Main.Material", L"acrylic") == L"mica_like") {
+        GetStringSetting(L"Main.Material", L"liquid_glass") == L"mica_like") {
         // A settings-page change makes the current material an explicit user
         // choice. Stop applying the one-time old-default migration so
         // Mica-like can be selected normally after the update.
